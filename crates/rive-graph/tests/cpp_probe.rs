@@ -1166,6 +1166,150 @@ fn cpp_stroke_path_builder_dependency_method_is_tracked_by_graph_model() {
 }
 
 #[test]
+fn graph_dependency_order_includes_fill_and_feather_path_dependencies() {
+    let parent_id_key = property_key_for_name("Component", "parentId");
+
+    let bytes = synthetic_runtime_file(7114, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object(bytes, "Shape", &[(parent_id_key, 0)]);
+        push_object(bytes, "Fill", &[(parent_id_key, 1)]);
+        push_object(bytes, "Fill", &[(parent_id_key, 1)]);
+        push_object(bytes, "DashPath", &[(parent_id_key, 3)]);
+        push_object(bytes, "Feather", &[(parent_id_key, 3)]);
+        push_object(bytes, "LayoutComponent", &[(parent_id_key, 0)]);
+        push_object(bytes, "Fill", &[(parent_id_key, 6)]);
+        push_object(bytes, "DashPath", &[(parent_id_key, 7)]);
+        push_object(bytes, "Feather", &[(parent_id_key, 7)]);
+    });
+
+    let (_, rust) = read_graph_from_bytes(&bytes, "synthetic/fill_feather_dependency.riv");
+    let artboard = &rust.artboards[0];
+
+    let shape_path_composer_node = dependency_node_for_path_composer(artboard, 1);
+    let no_effect_fill_node = dependency_node_for_component(artboard, 2);
+    let effect_fill_node = dependency_node_for_component(artboard, 3);
+    let shape_feather_node = dependency_node_for_component(artboard, 5);
+    let layout_node = dependency_node_for_component(artboard, 6);
+    let layout_fill_node = dependency_node_for_component(artboard, 7);
+    let layout_feather_node = dependency_node_for_component(artboard, 9);
+
+    assert!(
+        !artboard
+            .dependency_node_edges
+            .iter()
+            .any(|edge| edge.dependent_node == no_effect_fill_node
+                && edge.kind == DependencyKind::FillPathBuilder),
+        "Fill::buildDependencies does not add a path-builder dependency when the fill has no registered stroke effects"
+    );
+    assert!(
+        artboard.dependency_node_edges.contains(&node_edge(
+            shape_path_composer_node,
+            effect_fill_node,
+            DependencyKind::FillPathBuilder
+        )),
+        "effect-bearing Fill::buildDependencies makes fills under Shape depend on the Shape's PathComposer"
+    );
+    assert!(
+        artboard.dependency_node_edges.contains(&node_edge(
+            layout_node,
+            layout_fill_node,
+            DependencyKind::FillPathBuilder
+        )),
+        "effect-bearing Fill::buildDependencies makes fills under non-Shape containers depend on that container's path builder"
+    );
+    assert!(
+        artboard.dependency_node_edges.contains(&node_edge(
+            shape_path_composer_node,
+            shape_feather_node,
+            DependencyKind::FeatherPathBuilder
+        )),
+        "Feather::buildDependencies makes feathers under Shape paints depend on the Shape's PathComposer"
+    );
+    assert!(
+        artboard.dependency_node_edges.contains(&node_edge(
+            layout_node,
+            layout_feather_node,
+            DependencyKind::FeatherPathBuilder
+        )),
+        "Feather::buildDependencies makes feathers under non-Shape paint containers depend on the container component"
+    );
+    assert_node_order_before(artboard, shape_path_composer_node, effect_fill_node);
+    assert_node_order_before(artboard, layout_node, layout_fill_node);
+    assert_node_order_before(artboard, shape_path_composer_node, shape_feather_node);
+    assert_node_order_before(artboard, layout_node, layout_feather_node);
+    assert!(artboard.dependency_cycles.is_empty());
+}
+
+#[test]
+fn cpp_fill_and_feather_dependency_methods_are_tracked_by_graph_model() {
+    let runtime_dir = reference_runtime_dir();
+    assert!(
+        runtime_dir.exists(),
+        "reference runtime not found at {}; set RIVE_RUNTIME_DIR",
+        runtime_dir.display()
+    );
+
+    let fill_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/shapes/paint/fill.cpp"))
+            .expect("read C++ fill.cpp"),
+    );
+    let fill_body = cpp_function_body(&fill_source, "voidFill::buildDependencies()");
+    assert!(
+        !fill_body.contains("Super::buildDependencies("),
+        "Fill::buildDependencies started calling Super; audit paint parent dependency modeling"
+    );
+    assert!(
+        fill_body.contains("effects()->size()>0"),
+        "Fill::buildDependencies no longer gates path-builder dependencies on registered effects"
+    );
+    assert!(
+        fill_body.contains("autocontainer=ShapePaintContainer::from(parent());"),
+        "Fill::buildDependencies no longer resolves its parent through ShapePaintContainer::from"
+    );
+    assert!(
+        fill_body.contains("container->pathBuilder()->addDependent(this);"),
+        "Fill::buildDependencies no longer depends on the container path builder"
+    );
+
+    let feather_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/shapes/paint/feather.cpp"))
+            .expect("read C++ feather.cpp"),
+    );
+    let feather_body = cpp_function_body(&feather_source, "voidFeather::buildDependencies()");
+    assert!(
+        !feather_body.contains("Super::buildDependencies("),
+        "Feather::buildDependencies started calling Super; audit paint parent dependency modeling"
+    );
+    assert!(
+        feather_body.contains("autoshape=parent()->as<ShapePaint>()->parent();"),
+        "Feather::buildDependencies no longer resolves the owning paint container"
+    );
+    assert!(
+        feather_body.contains("shape->as<Shape>()->pathComposer()->addDependent(this);"),
+        "Feather::buildDependencies no longer depends on Shape path composers"
+    );
+    assert!(
+        feather_body.contains("shape->addDependent(this);"),
+        "Feather::buildDependencies no longer falls back to direct non-Shape container dependencies"
+    );
+
+    let dash_path_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/shapes/paint/dash_path.cpp"))
+            .expect("read C++ dash_path.cpp"),
+    );
+    let dash_path_body = cpp_function_body(&dash_path_source, "StatusCodeDashPath::onAddedClean");
+    assert!(
+        dash_path_body.contains("EffectsContainer::from(parent());"),
+        "DashPath::onAddedClean no longer resolves parent effects containers"
+    );
+    assert!(
+        dash_path_body.contains("effectsContainer->addStrokeEffect(this);"),
+        "DashPath::onAddedClean no longer registers as a stroke effect"
+    );
+}
+
+#[test]
 fn graph_dependency_order_reports_targeted_constraint_cycles() {
     let parent_id_key = property_key_for_name("Component", "parentId");
     let target_id_key = property_key_for_name("TargetedConstraint", "targetId");

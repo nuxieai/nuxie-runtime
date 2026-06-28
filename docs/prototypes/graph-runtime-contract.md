@@ -139,7 +139,7 @@ The existing `rive-graph` prototype already covers:
   custom-handle dependencies, path-composer shape/path prerequisites,
   clipping-shape-to-source-path-composer prerequisites, follow-path target and
   constrained-parent prerequisites, text-follow-path target and text
-  prerequisites, stroke path-builder prerequisites, and the static
+  prerequisites, stroke/fill/feather path-builder prerequisites, and the static
   `ScrollConstraint -> ScrollBarConstraint` and
   `ScrollConstraint -> layout-provider content child` dependencies.
 - Topological dependency order and dependency-cycle diagnostics.

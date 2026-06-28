@@ -277,6 +277,8 @@ pub enum DependencyKind {
     TextFollowPathModifierTargetPathComposer,
     TextFollowPathModifierTargetPath,
     StrokePathBuilder,
+    FillPathBuilder,
+    FeatherPathBuilder,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -1129,6 +1131,34 @@ fn build_dependency_node_edges(
         });
     }
 
+    for (source_node, fill_node) in fill_path_builder_node_dependencies(
+        file,
+        local_objects,
+        dependency_nodes,
+        &component_node_by_local,
+        &path_composer_node_by_shape,
+    ) {
+        edges.push(DependencyNodeEdge {
+            source_node,
+            dependent_node: fill_node,
+            kind: DependencyKind::FillPathBuilder,
+        });
+    }
+
+    for (source_node, feather_node) in feather_path_builder_node_dependencies(
+        file,
+        local_objects,
+        dependency_nodes,
+        &component_node_by_local,
+        &path_composer_node_by_shape,
+    ) {
+        edges.push(DependencyNodeEdge {
+            source_node,
+            dependent_node: feather_node,
+            kind: DependencyKind::FeatherPathBuilder,
+        });
+    }
+
     edges.sort_by_key(|edge| {
         (
             edge.source_node,
@@ -1361,6 +1391,8 @@ fn dependency_kind_sort_key(kind: DependencyKind) -> u8 {
         DependencyKind::TextFollowPathModifierTargetPathComposer => 21,
         DependencyKind::TextFollowPathModifierTargetPath => 22,
         DependencyKind::StrokePathBuilder => 23,
+        DependencyKind::FillPathBuilder => 24,
+        DependencyKind::FeatherPathBuilder => 25,
     }
 }
 
@@ -1623,6 +1655,104 @@ fn stroke_path_builder_node_dependencies(
     edges
 }
 
+fn fill_path_builder_node_dependencies(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+    dependency_nodes: &[DependencyNode],
+    component_node_by_local: &BTreeMap<usize, usize>,
+    path_composer_node_by_shape: &BTreeMap<usize, usize>,
+) -> Vec<(usize, usize)> {
+    let mut edges = Vec::new();
+    for node in dependency_nodes {
+        let DependencyNodeKind::Component { local_id, .. } = &node.kind else {
+            continue;
+        };
+        let fill_local = *local_id;
+        let Some(fill) = runtime_object_for_local(file, local_objects, fill_local) else {
+            continue;
+        };
+        if fill.type_name != "Fill"
+            || !shape_paint_has_registered_stroke_effect(file, local_objects, fill_local)
+        {
+            continue;
+        }
+
+        let Some(fill_node) = component_node_by_local.get(&fill_local).copied() else {
+            continue;
+        };
+        let Some((container_local, container)) =
+            local_object_reference_with_local_id(file, local_objects, object_parent_id(fill))
+        else {
+            continue;
+        };
+        let Some(path_builder_node) = shape_paint_container_path_builder_node(
+            file,
+            local_objects,
+            container_local,
+            container,
+            component_node_by_local,
+            path_composer_node_by_shape,
+        ) else {
+            continue;
+        };
+
+        edges.push((path_builder_node, fill_node));
+    }
+    edges
+}
+
+fn feather_path_builder_node_dependencies(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+    dependency_nodes: &[DependencyNode],
+    component_node_by_local: &BTreeMap<usize, usize>,
+    path_composer_node_by_shape: &BTreeMap<usize, usize>,
+) -> Vec<(usize, usize)> {
+    let mut edges = Vec::new();
+    for node in dependency_nodes {
+        let DependencyNodeKind::Component { local_id, .. } = &node.kind else {
+            continue;
+        };
+        let feather_local = *local_id;
+        let Some(feather) = runtime_object_for_local(file, local_objects, feather_local) else {
+            continue;
+        };
+        if feather.type_name != "Feather" {
+            continue;
+        }
+
+        let Some(feather_node) = component_node_by_local.get(&feather_local).copied() else {
+            continue;
+        };
+        let Some((_, shape_paint)) =
+            local_object_reference_with_local_id(file, local_objects, object_parent_id(feather))
+        else {
+            continue;
+        };
+        if !is_shape_paint(shape_paint) {
+            continue;
+        }
+        let Some((container_local, container)) = local_object_reference_with_local_id(
+            file,
+            local_objects,
+            object_parent_id(shape_paint),
+        ) else {
+            continue;
+        };
+        let Some(path_builder_node) = shape_paint_container_dependency_node(
+            container_local,
+            container,
+            component_node_by_local,
+            path_composer_node_by_shape,
+        ) else {
+            continue;
+        };
+
+        edges.push((path_builder_node, feather_node));
+    }
+    edges
+}
+
 fn shape_paint_container_path_builder_node(
     file: &RuntimeFile,
     local_objects: &[LocalObject],
@@ -1648,6 +1778,19 @@ fn shape_paint_container_path_builder_node(
     None
 }
 
+fn shape_paint_container_dependency_node(
+    container_local: usize,
+    container: &RuntimeObject,
+    component_node_by_local: &BTreeMap<usize, usize>,
+    path_composer_node_by_shape: &BTreeMap<usize, usize>,
+) -> Option<usize> {
+    if container.type_name == "Shape" {
+        path_composer_node_by_shape.get(&container_local).copied()
+    } else {
+        component_node_by_local.get(&container_local).copied()
+    }
+}
+
 fn shape_paint_container_path_builder_is_parent(container: &RuntimeObject) -> bool {
     matches!(
         container.type_name,
@@ -1657,6 +1800,28 @@ fn shape_paint_container_path_builder_is_parent(container: &RuntimeObject) -> bo
             | "TextInputSelection"
             | "TextInputText"
             | "TextInputSelectedText"
+    )
+}
+
+fn shape_paint_has_registered_stroke_effect(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+    shape_paint_local: usize,
+) -> bool {
+    local_objects.iter().any(|local_object| {
+        let Some(effect) = runtime_object_for_local(file, local_objects, local_object.local_id)
+        else {
+            return false;
+        };
+        object_parent_id(effect) == Some(shape_paint_local as u64)
+            && is_registered_stroke_effect(effect)
+    })
+}
+
+fn is_registered_stroke_effect(object: &RuntimeObject) -> bool {
+    matches!(
+        object.type_name,
+        "DashPath" | "TargetEffect" | "TrimPath" | "ScriptedPathEffect"
     )
 }
 

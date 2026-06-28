@@ -485,6 +485,90 @@ fn cpp_probe_matches_rust_draw_graph_resolution_when_available() {
 }
 
 #[test]
+fn graph_projects_shape_render_path_deformers() {
+    let parent_id_key = property_key_for_name("Component", "parentId");
+
+    let bytes = synthetic_runtime_file(7145, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object(bytes, "NSlicedNode", &[(parent_id_key, 0)]);
+        push_object(bytes, "Shape", &[(parent_id_key, 1)]);
+        push_object(bytes, "NSlicedNode", &[(parent_id_key, 1)]);
+        push_object(bytes, "Shape", &[(parent_id_key, 3)]);
+        push_object(bytes, "Shape", &[(parent_id_key, 0)]);
+    });
+
+    let (_, rust) = read_graph_from_bytes(&bytes, "synthetic/shape_deformers.riv");
+    let artboard = &rust.artboards[0];
+
+    assert_eq!(
+        artboard
+            .shape_deformers
+            .iter()
+            .map(|node| (
+                node.shape_local,
+                node.deformer_local,
+                node.deformer_type_name
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            (2, Some(1), Some("NSlicedNode")),
+            (4, Some(3), Some("NSlicedNode")),
+            (5, None, None)
+        ],
+        "Shape::onAddedClean caches the first RenderPathDeformer ancestor, currently exact NSlicedNode"
+    );
+}
+
+#[test]
+fn cpp_shape_deformer_resolution_is_tracked_by_graph_model() {
+    let runtime_dir = reference_runtime_dir();
+    assert!(
+        runtime_dir.exists(),
+        "reference runtime not found at {}; set RIVE_RUNTIME_DIR",
+        runtime_dir.display()
+    );
+
+    let shape_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/shapes/shape.cpp"))
+            .expect("read C++ shape.cpp"),
+    );
+    let on_added_clean_body = cpp_function_body(&shape_source, "StatusCodeShape::onAddedClean");
+    assert!(
+        on_added_clean_body.contains(
+            "for(autocurrentParent=parent();currentParent!=nullptr;currentParent=currentParent->parent())"
+        ),
+        "Shape::onAddedClean no longer walks parent ancestors for a render-path deformer"
+    );
+    assert!(
+        on_added_clean_body
+            .contains("RenderPathDeformer*deformer=RenderPathDeformer::from(currentParent);"),
+        "Shape::onAddedClean no longer resolves render-path deformers through RenderPathDeformer::from"
+    );
+    assert!(
+        on_added_clean_body.contains("m_deformer=deformer;"),
+        "Shape::onAddedClean no longer caches the resolved render-path deformer"
+    );
+
+    let deformer_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/shapes/deformer.cpp"))
+            .expect("read C++ deformer.cpp"),
+    );
+    let from_body = cpp_function_body(
+        &deformer_source,
+        "RenderPathDeformer*RenderPathDeformer::from(Component*component)",
+    );
+    assert!(
+        from_body.contains("caseNSlicedNode::typeKey:"),
+        "RenderPathDeformer::from no longer recognizes exact NSlicedNode"
+    );
+    assert!(
+        !from_body.contains("caseNSlicer::typeKey:"),
+        "RenderPathDeformer::from started recognizing NSlicer; audit shape deformer projection"
+    );
+}
+
+#[test]
 fn graph_projects_initialized_drawable_order() {
     let parent_id_key = property_key_for_name("Component", "parentId");
     let drawable_id_key = property_key_for_name("DrawTarget", "drawableId");

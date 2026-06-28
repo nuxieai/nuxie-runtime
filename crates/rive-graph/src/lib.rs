@@ -55,6 +55,7 @@ pub struct ArtboardGraph {
     pub drawable_order: Vec<DrawableOrderNode>,
     pub clipping_shapes: Vec<ClippingShapeNode>,
     pub path_composers: Vec<PathComposerNode>,
+    pub shape_deformers: Vec<ShapeDeformerNode>,
     pub text_variation_helpers: Vec<TextVariationHelperNode>,
     pub list_constraint_registrations: Vec<ListConstraintRegistrationNode>,
     pub nested_artboards: Vec<NestedArtboardNode>,
@@ -149,6 +150,7 @@ impl ArtboardGraph {
         let clipping_shapes =
             clipping_shapes(file, &local_objects, &components, &component_by_local);
         let path_composers = path_composers(file, artboard_index, &local_objects);
+        let shape_deformers = shape_deformers(file, &local_objects);
         let text_variation_helpers = text_variation_helpers(file, &local_objects);
         let list_constraint_registrations = list_constraint_registrations(file, &local_objects);
         let nested_artboards = nested_artboards(file, &local_objects);
@@ -219,6 +221,7 @@ impl ArtboardGraph {
             drawable_order,
             clipping_shapes,
             path_composers,
+            shape_deformers,
             text_variation_helpers,
             list_constraint_registrations,
             nested_artboards,
@@ -437,6 +440,15 @@ pub struct PathComposerNode {
     pub shape_global: u32,
     pub path_locals: Vec<usize>,
     pub path_globals: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ShapeDeformerNode {
+    pub shape_local: usize,
+    pub shape_global: u32,
+    pub deformer_local: Option<usize>,
+    pub deformer_global: Option<u32>,
+    pub deformer_type_name: Option<&'static str>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1580,6 +1592,55 @@ fn path_composers(
             })
         })
         .collect()
+}
+
+fn shape_deformers(file: &RuntimeFile, local_objects: &[LocalObject]) -> Vec<ShapeDeformerNode> {
+    local_objects
+        .iter()
+        .filter_map(|local_object| {
+            let shape = runtime_object_for_local(file, local_objects, local_object.local_id)?;
+            if !is_shape(shape) {
+                return None;
+            }
+
+            let (deformer_local, deformer_type_name) =
+                render_path_deformer_for_shape(file, local_objects, shape);
+            Some(ShapeDeformerNode {
+                shape_local: local_object.local_id,
+                shape_global: local_object.global_id,
+                deformer_local,
+                deformer_global: deformer_local
+                    .and_then(|local_id| local_object_global_id(local_objects, local_id)),
+                deformer_type_name,
+            })
+        })
+        .collect()
+}
+
+fn render_path_deformer_for_shape(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+    shape: &RuntimeObject,
+) -> (Option<usize>, Option<&'static str>) {
+    let mut current_local = object_parent_id(shape).and_then(|parent| usize::try_from(parent).ok());
+    let mut visited = Vec::new();
+    while let Some(local_id) = current_local {
+        if visited.contains(&local_id) {
+            return (None, None);
+        }
+        visited.push(local_id);
+
+        let Some(object) = runtime_object_for_local(file, local_objects, local_id) else {
+            return (None, None);
+        };
+        if object.type_name == "NSlicedNode" {
+            return (Some(local_id), Some(object.type_name));
+        }
+
+        current_local = object_parent_id(object).and_then(|parent| usize::try_from(parent).ok());
+    }
+
+    (None, None)
 }
 
 fn text_variation_helpers(

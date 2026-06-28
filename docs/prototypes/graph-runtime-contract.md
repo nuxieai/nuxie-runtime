@@ -157,6 +157,11 @@ The existing `rive-graph` prototype already covers:
   scheduling.
 - Synthetic path composer projections for each imported `Shape`, with path inputs
   sourced from `rive-binary`'s C++-equivalent shape registration facts.
+- Static `Shape::onAddedClean` render-path deformer projections for each
+  imported `Shape`, recording the first ancestor accepted by
+  `RenderPathDeformer::from`, currently exact `NSlicedNode`, without admitting
+  `NSlicer` deformation math, `Path::buildPath` deformer application, gradient
+  deformer updates, or point-deformation runtime behavior.
 - Dependency nodes for real imported components plus synthetic path composers
   and text variation helpers, with a topological node order and a filtered
   real-component local-ID order.

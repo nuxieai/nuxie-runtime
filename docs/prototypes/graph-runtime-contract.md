@@ -162,6 +162,13 @@ The existing `rive-graph` prototype already covers:
   `RenderPathDeformer::from`, currently exact `NSlicedNode`, without admitting
   `NSlicer` deformation math, `Path::buildPath` deformer application, gradient
   deformer updates, or point-deformation runtime behavior.
+- Static skeletal registration projections: `skeletal_bones` records exact
+  `Bone::onAddedClean` child-bone caches plus `IKConstraint::onAddedClean` peer
+  constraints on ancestor bones, and `skeletal_skins` records exact
+  `Skin::onAddedDirty` skinnable parents plus valid
+  `Tendon::onAddedClean -> Skin::addTendon` registration order, without
+  admitting bone transform solving, IK solving, skin matrices, vertex
+  deformation, or skin/transform dirt propagation.
 - Dependency nodes for real imported components plus synthetic path composers
   and text variation helpers, with a topological node order and a filtered
   real-component local-ID order.

@@ -56,6 +56,8 @@ pub struct ArtboardGraph {
     pub clipping_shapes: Vec<ClippingShapeNode>,
     pub path_composers: Vec<PathComposerNode>,
     pub shape_deformers: Vec<ShapeDeformerNode>,
+    pub skeletal_bones: Vec<SkeletalBoneNode>,
+    pub skeletal_skins: Vec<SkeletalSkinNode>,
     pub text_variation_helpers: Vec<TextVariationHelperNode>,
     pub list_constraint_registrations: Vec<ListConstraintRegistrationNode>,
     pub nested_artboards: Vec<NestedArtboardNode>,
@@ -151,6 +153,8 @@ impl ArtboardGraph {
             clipping_shapes(file, &local_objects, &components, &component_by_local);
         let path_composers = path_composers(file, artboard_index, &local_objects);
         let shape_deformers = shape_deformers(file, &local_objects);
+        let skeletal_bones = skeletal_bones(file, &local_objects);
+        let skeletal_skins = skeletal_skins(file, &local_objects);
         let text_variation_helpers = text_variation_helpers(file, &local_objects);
         let list_constraint_registrations = list_constraint_registrations(file, &local_objects);
         let nested_artboards = nested_artboards(file, &local_objects);
@@ -222,6 +226,8 @@ impl ArtboardGraph {
             clipping_shapes,
             path_composers,
             shape_deformers,
+            skeletal_bones,
+            skeletal_skins,
             text_variation_helpers,
             list_constraint_registrations,
             nested_artboards,
@@ -449,6 +455,36 @@ pub struct ShapeDeformerNode {
     pub deformer_local: Option<usize>,
     pub deformer_global: Option<u32>,
     pub deformer_type_name: Option<&'static str>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SkeletalBoneNode {
+    pub local_id: usize,
+    pub global_id: u32,
+    pub type_name: &'static str,
+    pub child_bone_locals: Vec<usize>,
+    pub child_bone_globals: Vec<u32>,
+    pub peer_constraint_locals: Vec<usize>,
+    pub peer_constraint_globals: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SkeletalSkinNode {
+    pub skin_local: usize,
+    pub skin_global: u32,
+    pub skinnable_local: Option<usize>,
+    pub skinnable_global: Option<u32>,
+    pub skinnable_type_name: Option<&'static str>,
+    pub tendons: Vec<SkeletalTendonNode>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SkeletalTendonNode {
+    pub tendon_local: usize,
+    pub tendon_global: u32,
+    pub bone_local: Option<usize>,
+    pub bone_global: Option<u32>,
+    pub bone_type_name: Option<&'static str>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1641,6 +1677,135 @@ fn render_path_deformer_for_shape(
     }
 
     (None, None)
+}
+
+fn skeletal_bones(file: &RuntimeFile, local_objects: &[LocalObject]) -> Vec<SkeletalBoneNode> {
+    let peer_constraints = ik_peer_constraints_by_bone(file, local_objects);
+
+    local_objects
+        .iter()
+        .filter_map(|local_object| {
+            let bone = runtime_object_for_local(file, local_objects, local_object.local_id)?;
+            if !is_bone(bone) {
+                return None;
+            }
+
+            let child_bone_locals = child_bone_locals(file, local_objects, local_object.local_id);
+            let child_bone_globals = local_globals(local_objects, &child_bone_locals);
+            let peer_constraint_locals = peer_constraints
+                .get(&local_object.local_id)
+                .cloned()
+                .unwrap_or_default();
+            let peer_constraint_globals = local_globals(local_objects, &peer_constraint_locals);
+
+            Some(SkeletalBoneNode {
+                local_id: local_object.local_id,
+                global_id: local_object.global_id,
+                type_name: bone.type_name,
+                child_bone_locals,
+                child_bone_globals,
+                peer_constraint_locals,
+                peer_constraint_globals,
+            })
+        })
+        .collect()
+}
+
+fn child_bone_locals(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+    bone_local: usize,
+) -> Vec<usize> {
+    local_objects
+        .iter()
+        .filter_map(|local_object| {
+            let child = runtime_object_for_local(file, local_objects, local_object.local_id)?;
+            if child.type_name == "Bone" && object_parent_id(child) == Some(bone_local as u64) {
+                Some(local_object.local_id)
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+fn skeletal_skins(file: &RuntimeFile, local_objects: &[LocalObject]) -> Vec<SkeletalSkinNode> {
+    local_objects
+        .iter()
+        .filter_map(|local_object| {
+            let skin = runtime_object_for_local(file, local_objects, local_object.local_id)?;
+            if skin.type_name != "Skin" {
+                return None;
+            }
+
+            let (skinnable_local, skinnable_type_name) =
+                local_object_reference_with_local_id(file, local_objects, object_parent_id(skin))
+                    .and_then(|(local_id, object)| {
+                        if is_cpp_skinnable(object) {
+                            Some((Some(local_id), Some(object.type_name)))
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or((None, None));
+
+            Some(SkeletalSkinNode {
+                skin_local: local_object.local_id,
+                skin_global: local_object.global_id,
+                skinnable_local,
+                skinnable_global: skinnable_local
+                    .and_then(|local_id| local_object_global_id(local_objects, local_id)),
+                skinnable_type_name,
+                tendons: skeletal_skin_tendons(file, local_objects, local_object.local_id),
+            })
+        })
+        .collect()
+}
+
+fn skeletal_skin_tendons(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+    skin_local: usize,
+) -> Vec<SkeletalTendonNode> {
+    local_objects
+        .iter()
+        .filter_map(|local_object| {
+            let tendon = runtime_object_for_local(file, local_objects, local_object.local_id)?;
+            if tendon.type_name != "Tendon" || object_parent_id(tendon) != Some(skin_local as u64) {
+                return None;
+            }
+
+            let (bone_local, bone_type_name) = local_object_reference_with_local_id(
+                file,
+                local_objects,
+                tendon.uint_property("boneId"),
+            )
+            .and_then(|(local_id, object)| {
+                if is_bone(object) {
+                    Some((Some(local_id), Some(object.type_name)))
+                } else {
+                    None
+                }
+            })
+            .unwrap_or((None, None));
+
+            Some(SkeletalTendonNode {
+                tendon_local: local_object.local_id,
+                tendon_global: local_object.global_id,
+                bone_local,
+                bone_global: bone_local
+                    .and_then(|local_id| local_object_global_id(local_objects, local_id)),
+                bone_type_name,
+            })
+        })
+        .collect()
+}
+
+fn local_globals(local_objects: &[LocalObject], local_ids: &[usize]) -> Vec<u32> {
+    local_ids
+        .iter()
+        .filter_map(|local_id| local_object_global_id(local_objects, *local_id))
+        .collect()
 }
 
 fn text_variation_helpers(
@@ -3906,6 +4071,10 @@ fn is_text_follow_path_modifier(object: &RuntimeObject) -> bool {
 
 fn is_bone(object: &RuntimeObject) -> bool {
     definition_by_type_key(object.type_key).is_some_and(|definition| definition.is_a("Bone"))
+}
+
+fn is_cpp_skinnable(object: &RuntimeObject) -> bool {
+    matches!(object.type_name, "Mesh" | "PointsPath")
 }
 
 fn targeted_constraint_requires_target(type_name: &str) -> bool {

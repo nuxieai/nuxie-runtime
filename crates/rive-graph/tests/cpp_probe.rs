@@ -3240,6 +3240,123 @@ fn graph_dependency_order_includes_skinning_dependencies() {
 }
 
 #[test]
+fn graph_projects_skeletal_registration_facts() {
+    let root_bone_parent_id_key = property_key_for_name("RootBone", "parentId");
+    let bone_parent_id_key = property_key_for_name("Bone", "parentId");
+    let node_parent_id_key = property_key_for_name("Node", "parentId");
+    let ik_parent_id_key = property_key_for_name("IKConstraint", "parentId");
+    let target_id_key = property_key_for_name("IKConstraint", "targetId");
+    let parent_bone_count_key = property_key_for_name("IKConstraint", "parentBoneCount");
+    let mesh_vertex_parent_id_key = property_key_for_name("MeshVertex", "parentId");
+    let skin_parent_id_key = property_key_for_name("Skin", "parentId");
+    let tendon_parent_id_key = property_key_for_name("Tendon", "parentId");
+    let bone_id_key = property_key_for_name("Tendon", "boneId");
+    let points_path_parent_id_key = property_key_for_name("PointsPath", "parentId");
+
+    let bytes = synthetic_runtime_file(7146, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object(bytes, "RootBone", &[(root_bone_parent_id_key, 0)]);
+        push_object(bytes, "Bone", &[(bone_parent_id_key, 1)]);
+        push_object(bytes, "Bone", &[(bone_parent_id_key, 2)]);
+        push_object(bytes, "Bone", &[(bone_parent_id_key, 1)]);
+        push_object(bytes, "Node", &[(node_parent_id_key, 0)]);
+        push_object(
+            bytes,
+            "IKConstraint",
+            &[
+                (ik_parent_id_key, 3),
+                (target_id_key, 5),
+                (parent_bone_count_key, 2),
+            ],
+        );
+        push_object_with_properties(bytes, "Mesh", |bytes| {
+            push_uint_property(bytes, "Mesh", "parentId", 0);
+            push_bytes_property(bytes, "Mesh", "triangleIndexBytes", &[0]);
+        });
+        push_object(bytes, "MeshVertex", &[(mesh_vertex_parent_id_key, 7)]);
+        push_object(bytes, "Skin", &[(skin_parent_id_key, 7)]);
+        push_object(
+            bytes,
+            "Tendon",
+            &[(tendon_parent_id_key, 9), (bone_id_key, 1)],
+        );
+        push_object(
+            bytes,
+            "Tendon",
+            &[(tendon_parent_id_key, 9), (bone_id_key, 3)],
+        );
+        push_object(bytes, "PointsPath", &[(points_path_parent_id_key, 0)]);
+        push_object(bytes, "Skin", &[(skin_parent_id_key, 12)]);
+        push_object(
+            bytes,
+            "Tendon",
+            &[(tendon_parent_id_key, 13), (bone_id_key, 2)],
+        );
+    });
+
+    let (_, rust) = read_graph_from_bytes(&bytes, "synthetic/skeletal_graph.riv");
+    let artboard = &rust.artboards[0];
+
+    assert_eq!(
+        artboard
+            .skeletal_bones
+            .iter()
+            .map(|bone| (
+                bone.local_id,
+                bone.type_name,
+                bone.child_bone_locals.as_slice(),
+                bone.peer_constraint_locals.as_slice()
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            (1, "RootBone", &[2, 4][..], &[6][..]),
+            (2, "Bone", &[3][..], &[6][..]),
+            (3, "Bone", &[][..], &[][..]),
+            (4, "Bone", &[][..], &[][..])
+        ],
+        "Bone::onAddedClean records exact Bone children, and IKConstraint::onAddedClean records peer constraints on ancestor bones"
+    );
+
+    assert_eq!(
+        artboard
+            .skeletal_skins
+            .iter()
+            .map(|skin| (
+                skin.skin_local,
+                skin.skinnable_local,
+                skin.skinnable_type_name,
+                skin.tendons
+                    .iter()
+                    .map(|tendon| {
+                        (
+                            tendon.tendon_local,
+                            tendon.bone_local,
+                            tendon.bone_type_name,
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                9,
+                Some(7),
+                Some("Mesh"),
+                vec![(10, Some(1), Some("RootBone")), (11, Some(3), Some("Bone"))]
+            ),
+            (
+                13,
+                Some(12),
+                Some("PointsPath"),
+                vec![(14, Some(2), Some("Bone"))]
+            )
+        ],
+        "Skin::onAddedDirty caches exact skinnables and Tendon::onAddedClean registers valid tendons in Skin order"
+    );
+}
+
+#[test]
 fn graph_dependency_order_includes_ik_tip_child_dependencies() {
     let parent_id_key = property_key_for_name("Component", "parentId");
     let target_id_key = property_key_for_name("TargetedConstraint", "targetId");
@@ -3545,6 +3662,76 @@ fn cpp_skinning_dependency_methods_are_tracked_by_graph_model() {
     assert!(
         skin_body.contains("constraint->parent()->addDependent(this);"),
         "Skin::buildDependencies no longer depends on IK peer constraint parents; audit skin dependency modeling"
+    );
+    let skin_on_added_dirty_body = cpp_function_body(&skin_source, "StatusCodeSkin::onAddedDirty");
+    assert!(
+        skin_on_added_dirty_body.contains("m_Skinnable=Skinnable::from(parent());"),
+        "Skin::onAddedDirty no longer resolves the parent through Skinnable::from"
+    );
+    assert!(
+        skin_on_added_dirty_body.contains("m_Skinnable->skin(this);"),
+        "Skin::onAddedDirty no longer registers itself on the skinnable parent"
+    );
+    let skin_add_tendon_body = cpp_function_body(&skin_source, "voidSkin::addTendon");
+    assert!(
+        skin_add_tendon_body.contains("m_Tendons.push_back(tendon);"),
+        "Skin::addTendon no longer preserves Tendon registration order"
+    );
+
+    let bone_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/bones/bone.cpp"))
+            .expect("read C++ bone.cpp"),
+    );
+    let bone_on_added_clean_body = cpp_function_body(&bone_source, "StatusCodeBone::onAddedClean");
+    assert!(
+        bone_on_added_clean_body.contains("if(!parent()->is<Bone>())"),
+        "Bone::onAddedClean no longer requires a Bone parent before child registration"
+    );
+    assert!(
+        bone_on_added_clean_body.contains("parent()->as<Bone>()->addChildBone(this);"),
+        "Bone::onAddedClean no longer registers itself as a child bone"
+    );
+    let bone_add_child_body = cpp_function_body(&bone_source, "voidBone::addChildBone");
+    assert!(
+        bone_add_child_body.contains("m_ChildBones.push_back(bone);"),
+        "Bone::addChildBone no longer appends child bones in import order"
+    );
+    let bone_add_peer_body = cpp_function_body(&bone_source, "voidBone::addPeerConstraint");
+    assert!(
+        bone_add_peer_body.contains("m_PeerConstraints.push_back(peer);"),
+        "Bone::addPeerConstraint no longer records IK peer constraints"
+    );
+
+    let root_bone_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/bones/root_bone.cpp"))
+            .expect("read C++ root_bone.cpp"),
+    );
+    let root_bone_on_added_clean_body =
+        cpp_function_body(&root_bone_source, "StatusCodeRootBone::onAddedClean");
+    assert!(
+        root_bone_on_added_clean_body.contains("returnTransformComponent::onAddedClean(context);"),
+        "RootBone::onAddedClean no longer bypasses Bone::onAddedClean"
+    );
+    assert!(
+        !root_bone_on_added_clean_body.contains("Bone::onAddedClean"),
+        "RootBone::onAddedClean started calling Bone::onAddedClean; audit child-bone registration"
+    );
+
+    let tendon_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/bones/tendon.cpp"))
+            .expect("read C++ tendon.cpp"),
+    );
+    let tendon_on_added_dirty_body =
+        cpp_function_body(&tendon_source, "StatusCodeTendon::onAddedDirty");
+    assert!(
+        tendon_on_added_dirty_body.contains("m_Bone=static_cast<Bone*>(coreObject);"),
+        "Tendon::onAddedDirty no longer caches the resolved Bone"
+    );
+    let tendon_on_added_clean_body =
+        cpp_function_body(&tendon_source, "StatusCodeTendon::onAddedClean");
+    assert!(
+        tendon_on_added_clean_body.contains("parent()->as<Skin>()->addTendon(this);"),
+        "Tendon::onAddedClean no longer registers itself with the parent Skin"
     );
 
     let ik_source = compact_cpp_source(

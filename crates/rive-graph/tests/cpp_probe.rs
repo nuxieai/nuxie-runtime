@@ -523,7 +523,7 @@ fn cpp_targeted_constraint_dependency_method_is_tracked_by_graph_model() {
 }
 
 #[test]
-fn graph_dependency_order_includes_mesh_skin_dependencies() {
+fn graph_dependency_order_includes_skinning_dependencies() {
     let bytes = synthetic_runtime_file(7106, |bytes| {
         push_object(bytes, "Backboard", &[]);
         push_object(bytes, "Artboard", &[]);
@@ -573,9 +573,19 @@ fn graph_dependency_order_includes_mesh_skin_dependencies() {
                 (property_key_for_name("Tendon", "boneId"), 1),
             ],
         );
+        push_object(
+            bytes,
+            "PointsPath",
+            &[(property_key_for_name("PointsPath", "parentId"), 0)],
+        );
+        push_object(
+            bytes,
+            "Skin",
+            &[(property_key_for_name("Skin", "parentId"), 9)],
+        );
     });
 
-    let (_, rust) = read_graph_from_bytes(&bytes, "synthetic/mesh_skin_dependency.riv");
+    let (_, rust) = read_graph_from_bytes(&bytes, "synthetic/skinning_dependency.riv");
     let artboard = &rust.artboards[0];
 
     assert!(
@@ -585,10 +595,34 @@ fn graph_dependency_order_includes_mesh_skin_dependencies() {
         "Mesh::buildDependencies makes a skinned mesh depend on its Skin"
     );
     assert!(
+        artboard
+            .dependency_edges
+            .contains(&edge(10, 9, DependencyKind::SkinPointsPath)),
+        "PointsPath::buildDependencies makes a skinned points path depend on its Skin"
+    );
+    assert!(
         !artboard
             .dependency_edges
             .contains(&edge(5, 7, DependencyKind::ParentChild)),
         "Skin::buildDependencies does not call Super::buildDependencies, so the mesh parent should not also depend on its Skin child"
+    );
+    assert!(
+        !artboard
+            .dependency_edges
+            .contains(&edge(9, 10, DependencyKind::ParentChild)),
+        "Skin::buildDependencies does not call Super::buildDependencies for PointsPath skins either"
+    );
+    assert!(
+        !artboard
+            .dependency_edges
+            .contains(&edge(10, 9, DependencyKind::SkinMesh)),
+        "skinned PointsPath dependencies are classified separately from Mesh dependencies"
+    );
+    assert!(
+        !artboard
+            .dependency_edges
+            .contains(&edge(7, 5, DependencyKind::SkinPointsPath)),
+        "skinned Mesh dependencies are classified separately from PointsPath dependencies"
     );
     assert!(
         artboard
@@ -619,6 +653,7 @@ fn graph_dependency_order_includes_mesh_skin_dependencies() {
     assert_order_before(artboard, 2, 7);
     assert_order_before(artboard, 3, 4);
     assert_order_before(artboard, 3, 2);
+    assert_order_before(artboard, 10, 9);
     assert!(artboard.dependency_cycles.is_empty());
 }
 
@@ -832,7 +867,7 @@ fn graph_dependency_order_includes_scroll_constraint_layout_children() {
 }
 
 #[test]
-fn cpp_skin_mesh_dependency_methods_are_tracked_by_graph_model() {
+fn cpp_skinning_dependency_methods_are_tracked_by_graph_model() {
     let runtime_dir = reference_runtime_dir();
     assert!(
         runtime_dir.exists(),
@@ -888,6 +923,38 @@ fn cpp_skin_mesh_dependency_methods_are_tracked_by_graph_model() {
     assert!(
         mesh_body.contains("parent()->addDependent(this);"),
         "Mesh::buildDependencies no longer adds the explicit parent dependency"
+    );
+
+    let points_path_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/shapes/points_path.cpp"))
+            .expect("read C++ points_path.cpp"),
+    );
+    let points_path_body =
+        cpp_function_body(&points_path_source, "voidPointsPath::buildDependencies()");
+    assert!(
+        points_path_body.contains("Super::buildDependencies();"),
+        "PointsPath::buildDependencies stopped preserving inherited path dependency edges"
+    );
+    assert!(
+        points_path_body.contains("skin()->addDependent(this);"),
+        "PointsPath::buildDependencies no longer makes skinned points paths depend on Skin"
+    );
+
+    let skinnable_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/bones/skinnable.cpp"))
+            .expect("read C++ skinnable.cpp"),
+    );
+    let skinnable_body = cpp_function_body(
+        &skinnable_source,
+        "Skinnable*Skinnable::from(Component*component)",
+    );
+    assert!(
+        skinnable_body.contains("casePointsPath::typeKey:"),
+        "Skinnable::from no longer accepts exact PointsPath objects"
+    );
+    assert!(
+        skinnable_body.contains("caseMesh::typeKey:"),
+        "Skinnable::from no longer accepts exact Mesh objects"
     );
 }
 

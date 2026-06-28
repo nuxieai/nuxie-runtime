@@ -211,6 +211,7 @@ pub enum DependencyKind {
     DrawRulesTarget,
     ClippingSource,
     SkinMesh,
+    SkinPointsPath,
     SkinBone,
     SkinBoneConstraintParent,
     JoystickParent,
@@ -963,11 +964,11 @@ fn build_dependency_edges(
         }
     }
 
-    for (skin_local, mesh_local) in skin_mesh_dependencies(file, local_objects) {
+    for (skin_local, skinnable_local, kind) in skin_skinnable_dependencies(file, local_objects) {
         edges.push(DependencyEdge {
             source_local: skin_local,
-            dependent_local: mesh_local,
-            kind: DependencyKind::SkinMesh,
+            dependent_local: skinnable_local,
+            kind,
         });
     }
 
@@ -1046,12 +1047,13 @@ fn dependency_kind_sort_key(kind: DependencyKind) -> u8 {
         DependencyKind::DrawRulesTarget => 4,
         DependencyKind::ClippingSource => 5,
         DependencyKind::SkinMesh => 6,
-        DependencyKind::SkinBone => 7,
-        DependencyKind::SkinBoneConstraintParent => 8,
-        DependencyKind::JoystickParent => 9,
-        DependencyKind::JoystickHandleSource => 10,
-        DependencyKind::ScrollBarConstraint => 11,
-        DependencyKind::ScrollConstraintLayoutChild => 12,
+        DependencyKind::SkinPointsPath => 7,
+        DependencyKind::SkinBone => 8,
+        DependencyKind::SkinBoneConstraintParent => 9,
+        DependencyKind::JoystickParent => 10,
+        DependencyKind::JoystickHandleSource => 11,
+        DependencyKind::ScrollBarConstraint => 12,
+        DependencyKind::ScrollConstraintLayoutChild => 13,
     }
 }
 
@@ -1083,10 +1085,10 @@ fn ik_constraint_target_dependencies(
     edges
 }
 
-fn skin_mesh_dependencies(
+fn skin_skinnable_dependencies(
     file: &RuntimeFile,
     local_objects: &[LocalObject],
-) -> Vec<(usize, usize)> {
+) -> Vec<(usize, usize, DependencyKind)> {
     let mut edges = Vec::new();
     for local_object in local_objects {
         let Some(skin) = runtime_object_for_local(file, local_objects, local_object.local_id)
@@ -1102,9 +1104,12 @@ fn skin_mesh_dependencies(
         else {
             continue;
         };
-        if parent.type_name == "Mesh" {
-            edges.push((local_object.local_id, parent_local));
-        }
+        let kind = match parent.type_name {
+            "Mesh" => DependencyKind::SkinMesh,
+            "PointsPath" => DependencyKind::SkinPointsPath,
+            _ => continue,
+        };
+        edges.push((local_object.local_id, parent_local, kind));
     }
     edges
 }

@@ -1060,6 +1060,18 @@ fn graph_dependency_order_includes_stroke_path_builder_dependencies() {
         )),
         "Stroke::buildDependencies makes strokes under non-Shape ShapePaintContainer depend on that container's path builder"
     );
+    assert!(
+        !artboard
+            .dependency_edges
+            .contains(&edge(1, 2, DependencyKind::ParentChild)),
+        "Stroke::buildDependencies does not inherit a generic parent-child dependency under Shape"
+    );
+    assert!(
+        !artboard
+            .dependency_edges
+            .contains(&edge(3, 4, DependencyKind::ParentChild)),
+        "Stroke::buildDependencies does not inherit a generic parent-child dependency under non-Shape paint containers"
+    );
     assert_node_order_before(artboard, shape_path_composer_node, shape_stroke_node);
     assert_node_order_before(artboard, layout_node, layout_stroke_node);
     assert!(artboard.dependency_cycles.is_empty());
@@ -1203,6 +1215,12 @@ fn graph_dependency_order_includes_fill_and_feather_path_dependencies() {
         "Fill::buildDependencies does not add a path-builder dependency when the fill has no registered stroke effects"
     );
     assert!(
+        !artboard
+            .dependency_edges
+            .contains(&edge(1, 2, DependencyKind::ParentChild)),
+        "Fill::buildDependencies does not inherit a generic parent-child dependency when it has no effects"
+    );
+    assert!(
         artboard.dependency_node_edges.contains(&node_edge(
             shape_path_composer_node,
             effect_fill_node,
@@ -1233,6 +1251,24 @@ fn graph_dependency_order_includes_fill_and_feather_path_dependencies() {
             DependencyKind::FeatherPathBuilder
         )),
         "Feather::buildDependencies makes feathers under non-Shape paint containers depend on the container component"
+    );
+    assert!(
+        !artboard
+            .dependency_edges
+            .contains(&edge(1, 3, DependencyKind::ParentChild)),
+        "effect-bearing Fill::buildDependencies does not inherit a generic parent-child dependency"
+    );
+    assert!(
+        !artboard
+            .dependency_edges
+            .contains(&edge(3, 5, DependencyKind::ParentChild)),
+        "DashPath does not add a buildDependencies parent edge after registering as a stroke effect"
+    );
+    assert!(
+        !artboard
+            .dependency_edges
+            .contains(&edge(3, 6, DependencyKind::ParentChild)),
+        "Feather::buildDependencies does not inherit a generic parent-child dependency"
     );
     assert_node_order_before(artboard, shape_path_composer_node, effect_fill_node);
     assert_node_order_before(artboard, layout_node, layout_fill_node);
@@ -1306,6 +1342,91 @@ fn cpp_fill_and_feather_dependency_methods_are_tracked_by_graph_model() {
     assert!(
         dash_path_body.contains("effectsContainer->addStrokeEffect(this);"),
         "DashPath::onAddedClean no longer registers as a stroke effect"
+    );
+    assert!(
+        !dash_path_source.contains("DashPath::buildDependencies"),
+        "DashPath added buildDependencies; audit stroke-effect parent dependency modeling"
+    );
+}
+
+#[test]
+fn graph_dependency_order_includes_effect_parent_dependencies() {
+    let parent_id_key = property_key_for_name("Component", "parentId");
+
+    let bytes = synthetic_runtime_file(7115, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object(bytes, "Shape", &[(parent_id_key, 0)]);
+        push_object(bytes, "Stroke", &[(parent_id_key, 1)]);
+        push_object(bytes, "GroupEffect", &[(parent_id_key, 2)]);
+    });
+
+    let (_, rust) = read_graph_from_bytes(&bytes, "synthetic/effect_parent_dependency.riv");
+    let artboard = &rust.artboards[0];
+
+    assert!(
+        artboard
+            .dependency_edges
+            .contains(&edge(2, 3, DependencyKind::GroupEffectParent)),
+        "GroupEffect::buildDependencies makes the effect depend on its parent effects container"
+    );
+    assert!(
+        !artboard
+            .dependency_edges
+            .contains(&edge(2, 3, DependencyKind::ParentChild)),
+        "GroupEffect::buildDependencies uses its explicit parent dependency, not generic parent-child inheritance"
+    );
+    assert_order_before(artboard, 2, 3);
+    assert!(artboard.dependency_cycles.is_empty());
+}
+
+#[test]
+fn cpp_effect_parent_dependency_methods_are_tracked_by_graph_model() {
+    let runtime_dir = reference_runtime_dir();
+    assert!(
+        runtime_dir.exists(),
+        "reference runtime not found at {}; set RIVE_RUNTIME_DIR",
+        runtime_dir.display()
+    );
+
+    let group_effect_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/shapes/paint/group_effect.cpp"))
+            .expect("read C++ group_effect.cpp"),
+    );
+    let group_effect_body =
+        cpp_function_body(&group_effect_source, "voidGroupEffect::buildDependencies()");
+    assert!(
+        group_effect_body.contains("Super::buildDependencies();"),
+        "GroupEffect::buildDependencies stopped preserving inherited dependencies"
+    );
+    assert!(
+        group_effect_body.contains("parent()->addDependent(this);"),
+        "GroupEffect::buildDependencies no longer makes effects depend on their parent"
+    );
+
+    let scripted_effect_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/scripted/scripted_path_effect.cpp"))
+            .expect("read C++ scripted_path_effect.cpp"),
+    );
+    let scripted_effect_body = cpp_function_body(
+        &scripted_effect_source,
+        "voidScriptedPathEffect::buildDependencies()",
+    );
+    assert!(
+        scripted_effect_body.contains("Super::buildDependencies();"),
+        "ScriptedPathEffect::buildDependencies stopped preserving inherited dependencies"
+    );
+    assert!(
+        scripted_effect_body.contains("parent()->addDependent(this);"),
+        "ScriptedPathEffect::buildDependencies no longer makes effects depend on their parent"
+    );
+    let scripted_on_added_clean_body = cpp_function_body(
+        &scripted_effect_source,
+        "StatusCodeScriptedPathEffect::onAddedClean",
+    );
+    assert!(
+        scripted_on_added_clean_body.contains("effectsContainer->addStrokeEffect(this);"),
+        "ScriptedPathEffect::onAddedClean no longer registers as a stroke effect"
     );
 }
 

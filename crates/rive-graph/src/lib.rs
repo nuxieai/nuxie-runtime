@@ -279,6 +279,8 @@ pub enum DependencyKind {
     StrokePathBuilder,
     FillPathBuilder,
     FeatherPathBuilder,
+    GroupEffectParent,
+    ScriptedPathEffectParent,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -1257,6 +1259,15 @@ fn build_dependency_edges(
         });
     }
 
+    for (parent_local, effect_local, kind) in group_effect_parent_dependencies(file, local_objects)
+    {
+        edges.push(DependencyEdge {
+            source_local: parent_local,
+            dependent_local: effect_local,
+            kind,
+        });
+    }
+
     for target in draw_targets {
         if let Some(drawable_local) = target.drawable_local {
             edges.push(DependencyEdge {
@@ -1359,6 +1370,9 @@ fn component_skips_parent_child_dependency(
     if object.type_name == "TextModifierGroup" {
         return true;
     }
+    if paint_effect_skips_generic_parent_child_dependency(object) {
+        return true;
+    }
 
     definition_by_type_key(object.type_key).is_some_and(|definition| {
         definition.is_a("TargetedConstraint") || definition.is_a("TextModifier")
@@ -1393,6 +1407,8 @@ fn dependency_kind_sort_key(kind: DependencyKind) -> u8 {
         DependencyKind::StrokePathBuilder => 23,
         DependencyKind::FillPathBuilder => 24,
         DependencyKind::FeatherPathBuilder => 25,
+        DependencyKind::GroupEffectParent => 26,
+        DependencyKind::ScriptedPathEffectParent => 27,
     }
 }
 
@@ -1611,6 +1627,32 @@ fn text_component_local_for_modifier(
     (text.type_name == "Text").then_some(text_local)
 }
 
+fn group_effect_parent_dependencies(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+) -> Vec<(usize, usize, DependencyKind)> {
+    let mut edges = Vec::new();
+    for local_object in local_objects {
+        let Some(effect) = runtime_object_for_local(file, local_objects, local_object.local_id)
+        else {
+            continue;
+        };
+        let kind = match effect.type_name {
+            "GroupEffect" => DependencyKind::GroupEffectParent,
+            "ScriptedPathEffect" => DependencyKind::ScriptedPathEffectParent,
+            _ => continue,
+        };
+
+        let Some((parent_local, _)) =
+            local_object_reference_with_local_id(file, local_objects, object_parent_id(effect))
+        else {
+            continue;
+        };
+        edges.push((parent_local, local_object.local_id, kind));
+    }
+    edges
+}
+
 fn stroke_path_builder_node_dependencies(
     file: &RuntimeFile,
     local_objects: &[LocalObject],
@@ -1822,6 +1864,20 @@ fn is_registered_stroke_effect(object: &RuntimeObject) -> bool {
     matches!(
         object.type_name,
         "DashPath" | "TargetEffect" | "TrimPath" | "ScriptedPathEffect"
+    )
+}
+
+fn paint_effect_skips_generic_parent_child_dependency(object: &RuntimeObject) -> bool {
+    matches!(
+        object.type_name,
+        "Fill"
+            | "Stroke"
+            | "Feather"
+            | "DashPath"
+            | "TargetEffect"
+            | "TrimPath"
+            | "GroupEffect"
+            | "ScriptedPathEffect"
     )
 }
 

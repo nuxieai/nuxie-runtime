@@ -767,6 +767,71 @@ fn graph_dependency_order_includes_scroll_bar_constraint_dependency() {
 }
 
 #[test]
+fn graph_dependency_order_includes_scroll_constraint_layout_children() {
+    let parent_id_key = property_key_for_name("Component", "parentId");
+
+    let bytes = synthetic_runtime_file(7109, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object(bytes, "LayoutComponent", &[(parent_id_key, 0)]);
+        push_object(bytes, "ScrollConstraint", &[(parent_id_key, 1)]);
+        push_object(bytes, "LayoutComponent", &[(parent_id_key, 1)]);
+        push_object(bytes, "NestedArtboardLayout", &[(parent_id_key, 1)]);
+        push_object(bytes, "ArtboardComponentList", &[(parent_id_key, 1)]);
+        push_object(bytes, "Node", &[(parent_id_key, 1)]);
+        push_object(bytes, "LayoutComponent", &[(parent_id_key, 0)]);
+    });
+
+    let (_, rust) = read_graph_from_bytes(&bytes, "synthetic/scroll_constraint_children.riv");
+    let artboard = &rust.artboards[0];
+
+    assert!(
+        artboard.dependency_edges.contains(&edge(
+            2,
+            3,
+            DependencyKind::ScrollConstraintLayoutChild
+        )),
+        "ScrollConstraint::buildDependencies makes layout-provider content children depend on the scroll constraint"
+    );
+    assert!(
+        artboard.dependency_edges.contains(&edge(
+            2,
+            4,
+            DependencyKind::ScrollConstraintLayoutChild
+        )),
+        "NestedArtboardLayout is a C++ LayoutNodeProvider child"
+    );
+    assert!(
+        artboard.dependency_edges.contains(&edge(
+            2,
+            5,
+            DependencyKind::ScrollConstraintLayoutChild
+        )),
+        "ArtboardComponentList is a C++ LayoutNodeProvider child"
+    );
+    assert!(
+        !artboard.dependency_edges.contains(&edge(
+            2,
+            6,
+            DependencyKind::ScrollConstraintLayoutChild
+        )),
+        "non-layout-provider content children do not receive scroll constraint dependency edges"
+    );
+    assert!(
+        !artboard.dependency_edges.contains(&edge(
+            2,
+            7,
+            DependencyKind::ScrollConstraintLayoutChild
+        )),
+        "layout providers outside the scroll constraint content children are not registered"
+    );
+    assert_order_before(artboard, 2, 3);
+    assert_order_before(artboard, 2, 4);
+    assert_order_before(artboard, 2, 5);
+    assert!(artboard.dependency_cycles.is_empty());
+}
+
+#[test]
 fn cpp_skin_mesh_dependency_methods_are_tracked_by_graph_model() {
     let runtime_dir = reference_runtime_dir();
     assert!(
@@ -884,6 +949,69 @@ fn cpp_scroll_bar_constraint_dependency_method_is_tracked_by_graph_model() {
     assert!(
         scroll_bar_body.contains("Super::buildDependencies();"),
         "ScrollBarConstraint::buildDependencies stopped preserving its Super dependency edges"
+    );
+}
+
+#[test]
+fn cpp_scroll_constraint_dependency_method_is_tracked_by_graph_model() {
+    let runtime_dir = reference_runtime_dir();
+    assert!(
+        runtime_dir.exists(),
+        "reference runtime not found at {}; set RIVE_RUNTIME_DIR",
+        runtime_dir.display()
+    );
+
+    let scroll_constraint_source = compact_cpp_source(
+        &std::fs::read_to_string(
+            runtime_dir.join("src/constraints/scrolling/scroll_constraint.cpp"),
+        )
+        .expect("read C++ scroll_constraint.cpp"),
+    );
+    let scroll_constraint_body = cpp_function_body(
+        &scroll_constraint_source,
+        "voidScrollConstraint::buildDependencies()",
+    );
+    assert!(
+        scroll_constraint_body.contains("Super::buildDependencies();"),
+        "ScrollConstraint::buildDependencies stopped preserving inherited constraint edges"
+    );
+    assert!(
+        scroll_constraint_body.contains("for(autochild:content()->children())"),
+        "ScrollConstraint::buildDependencies no longer walks content children"
+    );
+    assert!(
+        scroll_constraint_body.contains("autolayout=LayoutNodeProvider::from(child);"),
+        "ScrollConstraint::buildDependencies no longer gates child dependencies through LayoutNodeProvider::from"
+    );
+    assert!(
+        scroll_constraint_body.contains("addDependent(child);"),
+        "ScrollConstraint::buildDependencies no longer makes layout children depend on the scroll constraint"
+    );
+    assert!(
+        scroll_constraint_body
+            .contains("layout->addLayoutConstraint(static_cast<LayoutConstraint*>(this));"),
+        "ScrollConstraint::buildDependencies no longer registers itself on layout children"
+    );
+
+    let layout_provider_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/layout/layout_node_provider.cpp"))
+            .expect("read C++ layout_node_provider.cpp"),
+    );
+    let layout_provider_body = cpp_function_body(
+        &layout_provider_source,
+        "LayoutNodeProvider*LayoutNodeProvider::from(Component*component)",
+    );
+    assert!(
+        layout_provider_body.contains("caseLayoutComponent::typeKey:"),
+        "LayoutNodeProvider::from no longer accepts exact LayoutComponent objects"
+    );
+    assert!(
+        layout_provider_body.contains("caseNestedArtboardLayout::typeKey:"),
+        "LayoutNodeProvider::from no longer accepts exact NestedArtboardLayout objects"
+    );
+    assert!(
+        layout_provider_body.contains("caseArtboardComponentListBase::typeKey:"),
+        "LayoutNodeProvider::from no longer accepts ArtboardComponentList objects"
     );
 }
 

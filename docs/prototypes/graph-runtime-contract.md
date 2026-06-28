@@ -107,7 +107,8 @@ The slice should extend the existing edge list toward the audited C++
 - Layout dependencies.
 - Data-binding graph dependencies that are static graph facts.
 - Remaining scroll/layout dependencies beyond the covered
-  `ScrollConstraint -> ScrollBarConstraint` edge.
+  `ScrollConstraint -> ScrollBarConstraint` and
+  `ScrollConstraint -> layout-provider content child` edges.
 - Paint/effect graph dependencies.
 
 Each edge family should have:
@@ -131,7 +132,8 @@ The existing `rive-graph` prototype already covers:
 - Dependency edges for parent-child, targeted constraints, IK constraints,
   draw-target drawable references, draw-rule target references, clipping sources,
   skinning, Joystick custom-handle dependencies, and the static
-  `ScrollConstraint -> ScrollBarConstraint` dependency.
+  `ScrollConstraint -> ScrollBarConstraint` and
+  `ScrollConstraint -> layout-provider content child` dependencies.
 - Topological dependency order and dependency-cycle diagnostics.
 - C++ probe comparison through `make cpp-compare`.
 

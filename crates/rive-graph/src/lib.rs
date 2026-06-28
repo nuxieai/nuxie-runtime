@@ -216,6 +216,7 @@ pub enum DependencyKind {
     JoystickParent,
     JoystickHandleSource,
     ScrollBarConstraint,
+    ScrollConstraintLayoutChild,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -996,6 +997,16 @@ fn build_dependency_edges(
         });
     }
 
+    for (scroll_constraint_local, child_local) in
+        scroll_constraint_layout_child_dependencies(file, local_objects, components)
+    {
+        edges.push(DependencyEdge {
+            source_local: scroll_constraint_local,
+            dependent_local: child_local,
+            kind: DependencyKind::ScrollConstraintLayoutChild,
+        });
+    }
+
     edges.sort_by_key(|edge| {
         (
             edge.source_local,
@@ -1040,6 +1051,7 @@ fn dependency_kind_sort_key(kind: DependencyKind) -> u8 {
         DependencyKind::JoystickParent => 9,
         DependencyKind::JoystickHandleSource => 10,
         DependencyKind::ScrollBarConstraint => 11,
+        DependencyKind::ScrollConstraintLayoutChild => 12,
     }
 }
 
@@ -1277,6 +1289,47 @@ fn scroll_bar_constraint_dependencies(
         };
         if is_scroll_constraint(scroll_constraint) {
             edges.push((scroll_constraint_local, local_object.local_id));
+        }
+    }
+    edges
+}
+
+fn scroll_constraint_layout_child_dependencies(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+    components: &[ComponentNode],
+) -> Vec<(usize, usize)> {
+    let component_by_local = components
+        .iter()
+        .map(|component| (component.local_id, component))
+        .collect::<BTreeMap<_, _>>();
+    let mut edges = Vec::new();
+    for local_object in local_objects {
+        let Some(scroll_constraint) =
+            runtime_object_for_local(file, local_objects, local_object.local_id)
+        else {
+            continue;
+        };
+        if !is_scroll_constraint(scroll_constraint) {
+            continue;
+        }
+
+        let Some(content_local) =
+            object_parent_id(scroll_constraint).and_then(|parent| usize::try_from(parent).ok())
+        else {
+            continue;
+        };
+        let Some(content) = component_by_local.get(&content_local) else {
+            continue;
+        };
+
+        for child_local in &content.children {
+            let Some(child) = runtime_object_for_local(file, local_objects, *child_local) else {
+                continue;
+            };
+            if is_layout_node_provider(child) {
+                edges.push((local_object.local_id, *child_local));
+            }
         }
     }
     edges
@@ -1640,6 +1693,13 @@ fn is_text_interface(object: &RuntimeObject) -> bool {
 fn is_scroll_constraint(object: &RuntimeObject) -> bool {
     definition_by_type_key(object.type_key)
         .is_some_and(|definition| definition.name == "ScrollConstraint")
+}
+
+fn is_layout_node_provider(object: &RuntimeObject) -> bool {
+    matches!(
+        object.type_name,
+        "LayoutComponent" | "NestedArtboardLayout" | "ArtboardComponentList"
+    )
 }
 
 fn is_shape_paint(object: &RuntimeObject) -> bool {

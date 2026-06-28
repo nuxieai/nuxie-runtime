@@ -1,6 +1,7 @@
 use rive_binary::{RuntimeFile, read_runtime_file};
 use rive_graph::{
-    AdvancingComponentKind, ArtboardHostKind, DependencyKind, GraphFile, ResettingComponentKind,
+    AdvancingComponentKind, ArtboardHostKind, DependencyKind, DrawableOrderKind, GraphFile,
+    ResettingComponentKind,
 };
 use rive_schema::definition_by_name;
 use serde::Deserialize;
@@ -469,6 +470,154 @@ fn cpp_probe_matches_rust_draw_graph_resolution_when_available() {
     assert_order_before(artboard, 1, 6);
     assert_node_order_before(artboard, shape_path_composer_node, clipping_shape_node);
     assert!(artboard.dependency_cycles.is_empty());
+}
+
+#[test]
+fn graph_projects_initialized_drawable_order() {
+    let parent_id_key = property_key_for_name("Component", "parentId");
+    let drawable_id_key = property_key_for_name("DrawTarget", "drawableId");
+    let draw_target_id_key = property_key_for_name("DrawRules", "drawTargetId");
+
+    let bytes = synthetic_runtime_file(7141, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object(bytes, "LayoutComponent", &[(parent_id_key, 0)]);
+        push_object(bytes, "Shape", &[(parent_id_key, 1)]);
+        push_object(bytes, "Shape", &[(parent_id_key, 0)]);
+        push_object(bytes, "ForegroundLayoutDrawable", &[(parent_id_key, 1)]);
+        push_object(
+            bytes,
+            "DrawTarget",
+            &[(parent_id_key, 0), (drawable_id_key, 3)],
+        );
+        push_object(
+            bytes,
+            "DrawRules",
+            &[(parent_id_key, 1), (draw_target_id_key, 5)],
+        );
+        push_object(bytes, "Node", &[(parent_id_key, 0)]);
+    });
+
+    let (_, rust) = read_graph_from_bytes(&bytes, "synthetic/drawable_order.riv");
+    let artboard = &rust.artboards[0];
+
+    assert_eq!(
+        artboard
+            .drawable_order
+            .iter()
+            .map(|node| (
+                node.kind,
+                node.local_id,
+                node.type_name,
+                node.layout_local,
+                node.flattened_draw_rules_local,
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                DrawableOrderKind::Drawable,
+                Some(4),
+                "ForegroundLayoutDrawable",
+                None,
+                Some(6),
+            ),
+            (
+                DrawableOrderKind::Drawable,
+                Some(1),
+                "LayoutComponent",
+                None,
+                Some(6),
+            ),
+            (DrawableOrderKind::Drawable, Some(2), "Shape", None, Some(6),),
+            (
+                DrawableOrderKind::LayoutProxy,
+                None,
+                "DrawableProxy",
+                Some(1),
+                None,
+            ),
+            (DrawableOrderKind::Drawable, Some(3), "Shape", None, None,),
+        ],
+        "m_Drawables moves foreground layout drawables before their parent, injects layout proxies after layout children, and records inherited flattened draw rules"
+    );
+    assert!(
+        artboard
+            .drawable_order
+            .iter()
+            .all(|node| !matches!(node.local_id, Some(5 | 6 | 7))),
+        "DrawTarget, DrawRules, and non-drawable nodes are not entries in m_Drawables"
+    );
+}
+
+#[test]
+fn cpp_drawable_order_initialization_is_tracked_by_graph_model() {
+    let runtime_dir = reference_runtime_dir();
+    assert!(
+        runtime_dir.exists(),
+        "reference runtime not found at {}; set RIVE_RUNTIME_DIR",
+        runtime_dir.display()
+    );
+
+    let artboard_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/artboard.cpp"))
+            .expect("read C++ artboard.cpp"),
+    );
+    let initialize_body = cpp_function_body(&artboard_source, "StatusCodeArtboard::initialize()");
+    assert!(
+        initialize_body.contains("m_Drawables.push_back(drawable);"),
+        "Artboard::initialize no longer collects imported drawable objects"
+    );
+    assert!(
+        initialize_body.contains("drawable->is<ForegroundLayoutDrawable>()"),
+        "Artboard::initialize no longer special-cases ForegroundLayoutDrawable order"
+    );
+    assert!(
+        initialize_body.contains("std::swap(m_Drawables[index-1],m_Drawables[index]);"),
+        "Artboard::initialize no longer swaps foreground drawables backward"
+    );
+    assert!(
+        initialize_body.contains("if(swappingDrawable==parent)"),
+        "Artboard::initialize no longer stops foreground reordering at the parent"
+    );
+    assert!(
+        initialize_body.contains(
+            "for(ContainerComponent*parent=drawable;parent!=nullptr;parent=parent->parent())"
+        ),
+        "Artboard::initialize no longer walks drawable parents for flattened draw rules"
+    );
+    assert!(
+        initialize_body.contains("drawable->flattenedDrawRules=itr->second;"),
+        "Artboard::initialize no longer assigns flattened draw rules"
+    );
+    assert!(
+        initialize_body
+            .contains("m_Drawables.insert(m_Drawables.begin()+i,currentLayout->proxy());"),
+        "Artboard::initialize no longer inserts layout drawable proxies"
+    );
+    assert!(
+        initialize_body.contains("m_Drawables.push_back(layout->proxy());"),
+        "Artboard::initialize no longer appends trailing layout drawable proxies"
+    );
+
+    let drawable_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/drawable.cpp"))
+            .expect("read C++ drawable.cpp"),
+    );
+    let is_child_body = cpp_function_body(
+        &drawable_source,
+        "boolDrawable::isChildOfLayout(LayoutComponent*layout)",
+    );
+    assert!(
+        is_child_body.contains(
+            "for(ContainerComponent*parent=this;parent!=nullptr;parent=parent->parent())"
+        ),
+        "Drawable::isChildOfLayout no longer walks the parent chain"
+    );
+    assert!(
+        is_child_body
+            .contains("parent->is<LayoutComponent>()&&parent->as<LayoutComponent>()==layout"),
+        "Drawable::isChildOfLayout no longer matches layout ancestors by identity"
+    );
 }
 
 #[test]

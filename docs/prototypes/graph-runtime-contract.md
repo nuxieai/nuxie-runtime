@@ -128,6 +128,11 @@ The existing `rive-graph` prototype already covers:
 - Component parent resolution and child indexing.
 - Capability flags for artboard/container/world-transform/transform/drawable.
 - Draw target, draw rules, and clipping source relationships.
+- Static drawable-order initialization projection matching C++ `m_Drawables`:
+  imported drawable collection, `ForegroundLayoutDrawable` reordering, layout
+  `DrawableProxy` injection, and flattened draw-rule ownership, without
+  admitting `sortDrawOrder()`, render linked-list mutation, clipping-stack
+  operations, renderer commands, or GPU work.
 - Clipping source/clipped drawable projections.
 - Static `on_added_clean` artboard host registries for exact C++
   `NestedArtboard`, `NestedArtboardLeaf`, `NestedArtboardLayout`, and

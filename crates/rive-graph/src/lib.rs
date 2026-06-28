@@ -49,6 +49,7 @@ pub struct ArtboardGraph {
     pub dependency_node_cycles: Vec<DependencyNodeCycle>,
     pub draw_targets: Vec<DrawTargetNode>,
     pub draw_rules: Vec<DrawRulesNode>,
+    pub drawable_order: Vec<DrawableOrderNode>,
     pub clipping_shapes: Vec<ClippingShapeNode>,
     pub path_composers: Vec<PathComposerNode>,
     pub text_variation_helpers: Vec<TextVariationHelperNode>,
@@ -136,6 +137,7 @@ impl ArtboardGraph {
         lifecycle.on_added_clean_indexed = index_children(&mut components, &component_by_local);
         let draw_targets = draw_targets(file, &local_objects);
         let draw_rules = draw_rules(file, &local_objects);
+        let drawable_order = drawable_order(file, &local_objects);
         let clipping_shapes =
             clipping_shapes(file, &local_objects, &components, &component_by_local);
         let path_composers = path_composers(file, artboard_index, &local_objects);
@@ -203,6 +205,7 @@ impl ArtboardGraph {
             dependency_node_cycles: dependency_order.node_cycles,
             draw_targets,
             draw_rules,
+            drawable_order,
             clipping_shapes,
             path_composers,
             text_variation_helpers,
@@ -365,6 +368,25 @@ pub struct DrawRulesNode {
     pub global_id: u32,
     pub draw_target_id: u64,
     pub active_target_local: Option<usize>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DrawableOrderKind {
+    Drawable,
+    LayoutProxy,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DrawableOrderNode {
+    pub kind: DrawableOrderKind,
+    pub local_id: Option<usize>,
+    pub global_id: Option<u32>,
+    pub type_name: &'static str,
+    pub layout_local: Option<usize>,
+    pub layout_global: Option<u32>,
+    pub flattened_draw_rules_local: Option<usize>,
+    pub flattened_draw_rules_global: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1050,6 +1072,185 @@ fn draw_rules(file: &RuntimeFile, local_objects: &[LocalObject]) -> Vec<DrawRule
             })
         })
         .collect()
+}
+
+fn drawable_order(file: &RuntimeFile, local_objects: &[LocalObject]) -> Vec<DrawableOrderNode> {
+    let component_draw_rules = component_draw_rules_by_parent(file, local_objects);
+    let mut order = Vec::new();
+
+    for local_object in local_objects {
+        let Some(object) = runtime_object_for_local(file, local_objects, local_object.local_id)
+        else {
+            continue;
+        };
+        if object.type_name == "Artboard" || !is_drawable(object) {
+            continue;
+        }
+
+        order.push(drawable_order_node(
+            file,
+            local_objects,
+            local_object.local_id,
+            object,
+            &component_draw_rules,
+        ));
+
+        if object.type_name == "ForegroundLayoutDrawable" {
+            move_foreground_layout_drawable_before_parent(
+                &mut order,
+                object_parent_id(object).and_then(|parent| usize::try_from(parent).ok()),
+            );
+        }
+    }
+
+    inject_layout_proxy_drawables(file, local_objects, &mut order);
+    order
+}
+
+fn component_draw_rules_by_parent(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+) -> BTreeMap<usize, usize> {
+    local_objects
+        .iter()
+        .filter_map(|local_object| {
+            let object = runtime_object_for_local(file, local_objects, local_object.local_id)?;
+            if object.type_name != "DrawRules" {
+                return None;
+            }
+            let (parent_local, _) = local_object_reference_with_local_id(
+                file,
+                local_objects,
+                object_parent_id(object),
+            )?;
+            Some((parent_local, local_object.local_id))
+        })
+        .collect()
+}
+
+fn drawable_order_node(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+    local_id: usize,
+    object: &RuntimeObject,
+    component_draw_rules: &BTreeMap<usize, usize>,
+) -> DrawableOrderNode {
+    let flattened_draw_rules_local =
+        flattened_draw_rules_local(file, local_objects, local_id, component_draw_rules);
+    DrawableOrderNode {
+        kind: DrawableOrderKind::Drawable,
+        local_id: Some(local_id),
+        global_id: local_object_global_id(local_objects, local_id),
+        type_name: object.type_name,
+        layout_local: None,
+        layout_global: None,
+        flattened_draw_rules_local,
+        flattened_draw_rules_global: flattened_draw_rules_local
+            .and_then(|rules_local| local_object_global_id(local_objects, rules_local)),
+    }
+}
+
+fn flattened_draw_rules_local(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+    drawable_local: usize,
+    component_draw_rules: &BTreeMap<usize, usize>,
+) -> Option<usize> {
+    let mut current_local = drawable_local;
+    loop {
+        if let Some(draw_rules_local) = component_draw_rules.get(&current_local).copied() {
+            return Some(draw_rules_local);
+        }
+
+        let current = runtime_object_for_local(file, local_objects, current_local)?;
+        let (parent_local, _) =
+            local_object_reference_with_local_id(file, local_objects, object_parent_id(current))?;
+        if parent_local == current_local {
+            return None;
+        }
+        current_local = parent_local;
+    }
+}
+
+fn move_foreground_layout_drawable_before_parent(
+    order: &mut [DrawableOrderNode],
+    parent_local: Option<usize>,
+) {
+    if order.len() < 2 {
+        return;
+    }
+
+    let mut index = order.len() - 1;
+    while index >= 1 {
+        let swapped_local = order[index - 1].local_id;
+        order.swap(index - 1, index);
+        if swapped_local == parent_local {
+            break;
+        }
+        index -= 1;
+    }
+}
+
+fn inject_layout_proxy_drawables(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+    order: &mut Vec<DrawableOrderNode>,
+) {
+    let mut layouts = Vec::<usize>::new();
+    let mut index = 0usize;
+    while index < order.len() {
+        let Some(drawable_local) = order[index].local_id else {
+            index += 1;
+            continue;
+        };
+
+        if let Some(mut current_layout) = layouts.last().copied() {
+            if !drawable_is_child_of_layout(file, local_objects, drawable_local, current_layout) {
+                loop {
+                    order.insert(index, layout_proxy_node(local_objects, current_layout));
+                    index += 1;
+                    layouts.pop();
+                    let Some(next_layout) = layouts.last().copied() else {
+                        break;
+                    };
+                    current_layout = next_layout;
+                    if drawable_is_child_of_layout(
+                        file,
+                        local_objects,
+                        drawable_local,
+                        current_layout,
+                    ) {
+                        break;
+                    }
+                }
+            }
+        }
+
+        if runtime_object_for_local(file, local_objects, drawable_local)
+            .is_some_and(|object| object.type_name == "LayoutComponent")
+        {
+            layouts.push(drawable_local);
+        }
+
+        index += 1;
+    }
+
+    while let Some(layout_local) = layouts.pop() {
+        order.push(layout_proxy_node(local_objects, layout_local));
+    }
+}
+
+fn layout_proxy_node(local_objects: &[LocalObject], layout_local: usize) -> DrawableOrderNode {
+    DrawableOrderNode {
+        kind: DrawableOrderKind::LayoutProxy,
+        local_id: None,
+        global_id: None,
+        type_name: "DrawableProxy",
+        layout_local: Some(layout_local),
+        layout_global: local_object_global_id(local_objects, layout_local),
+        flattened_draw_rules_local: None,
+        flattened_draw_rules_global: None,
+    }
 }
 
 fn clipping_shapes(
@@ -2848,6 +3049,29 @@ fn collect_descendant_component_locals(
     for child in &components[*index].children {
         collect_descendant_component_locals(*child, components, component_by_local, locals);
     }
+}
+
+fn drawable_is_child_of_layout(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+    drawable_local: usize,
+    layout_local: usize,
+) -> bool {
+    let mut current_local = Some(drawable_local);
+    while let Some(local_id) = current_local {
+        let Some(object) = runtime_object_for_local(file, local_objects, local_id) else {
+            return false;
+        };
+        if object.type_name == "LayoutComponent" && local_id == layout_local {
+            return true;
+        }
+        let parent_local = object_parent_id(object).and_then(|parent| usize::try_from(parent).ok());
+        if parent_local == Some(local_id) {
+            return false;
+        }
+        current_local = parent_local;
+    }
+    false
 }
 
 fn listener_action_parent_kind_is_listener(action: &RuntimeObject) -> bool {

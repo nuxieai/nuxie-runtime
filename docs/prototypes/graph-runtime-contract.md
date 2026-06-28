@@ -134,6 +134,11 @@ The existing `rive-graph` prototype already covers:
   `ArtboardComponentList` objects, matching `m_NestedArtboards`,
   `m_ComponentLists`, and `m_ArtboardHosts` without admitting nested-artboard,
   component-list, cloning, layout, or advance behavior.
+- Static `on_added_clean` joystick registration facts, matching `m_Joysticks`,
+  `m_JoysticksApplyBeforeUpdate`, resolved x/y animations, and the nested remap
+  animation dependents collected by `Joystick::addDependents` without admitting
+  `Joystick::apply`, component updates, data-bind scheduling, or animation
+  advancement.
 - Synthetic path composer projections for each imported `Shape`, with path inputs
   sourced from `rive-binary`'s C++-equivalent shape registration facts.
 - Dependency nodes for real imported components plus synthetic path composers

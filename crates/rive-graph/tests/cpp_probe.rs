@@ -1095,6 +1095,171 @@ fn cpp_artboard_host_registration_is_tracked_by_graph_model() {
 }
 
 #[test]
+fn graph_projects_joystick_registration_and_schedule_facts() {
+    let parent_id_key = property_key_for_name("Component", "parentId");
+    let handle_source_id_key = property_key_for_name("Joystick", "handleSourceId");
+    let x_id_key = property_key_for_name("Joystick", "xId");
+    let y_id_key = property_key_for_name("Joystick", "yId");
+    let object_id_key = property_key_for_name("KeyedObject", "objectId");
+
+    let bytes = synthetic_runtime_file(7139, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object(bytes, "Node", &[(parent_id_key, 0)]);
+        push_object(bytes, "Node", &[(parent_id_key, 0)]);
+        push_object(bytes, "NestedArtboard", &[(parent_id_key, 0)]);
+        push_object(bytes, "NestedRemapAnimation", &[(parent_id_key, 3)]);
+        push_object(
+            bytes,
+            "Joystick",
+            &[
+                (parent_id_key, 1),
+                (handle_source_id_key, 2),
+                (x_id_key, 0),
+                (y_id_key, 1),
+            ],
+        );
+        push_object(bytes, "Joystick", &[(parent_id_key, 1)]);
+        push_object(bytes, "LinearAnimation", &[]);
+        push_object(bytes, "KeyedObject", &[(object_id_key, 4)]);
+        push_object(bytes, "LinearAnimation", &[]);
+        push_object(bytes, "KeyedObject", &[(object_id_key, 1)]);
+        push_object(bytes, "KeyedObject", &[(object_id_key, 4)]);
+    });
+
+    let (_, rust) = read_graph_from_bytes(&bytes, "synthetic/joystick_registration.riv");
+    let artboard = &rust.artboards[0];
+
+    assert!(
+        !artboard.joysticks_apply_before_update,
+        "one custom-handle joystick makes Artboard update joysticks after component update"
+    );
+    assert_eq!(
+        artboard
+            .joysticks
+            .iter()
+            .map(|joystick| (
+                joystick.local_id,
+                joystick.handle_source_local,
+                joystick.can_apply_before_update,
+                joystick.x_animation_global,
+                joystick.y_animation_global,
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            (5, Some(2), false, Some(8), Some(10)),
+            (6, None, true, None, None),
+        ],
+        "m_Joysticks preserves artboard-local order and records resolved schedule inputs"
+    );
+    assert_eq!(
+        artboard.joysticks[0]
+            .nested_remap_dependents
+            .iter()
+            .map(|dependent| (dependent.local_id, dependent.global_id))
+            .collect::<Vec<_>>(),
+        vec![(4, 5), (4, 5)],
+        "Joystick::addDependents scans y animation before x animation and preserves duplicate nested remap dependents"
+    );
+    assert!(
+        artboard.joysticks[1].nested_remap_dependents.is_empty(),
+        "joysticks without resolved animations do not collect nested remap dependents"
+    );
+}
+
+#[test]
+fn cpp_joystick_registration_methods_are_tracked_by_graph_model() {
+    let runtime_dir = reference_runtime_dir();
+    assert!(
+        runtime_dir.exists(),
+        "reference runtime not found at {}; set RIVE_RUNTIME_DIR",
+        runtime_dir.display()
+    );
+
+    let artboard_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/artboard.cpp"))
+            .expect("read C++ artboard.cpp"),
+    );
+    let initialize_body = cpp_function_body(&artboard_source, "StatusCodeArtboard::initialize()");
+    assert!(
+        initialize_body.contains("caseJoystickBase::typeKey:"),
+        "Artboard::initialize no longer registers exact Joystick objects"
+    );
+    assert!(
+        initialize_body.contains("if(!joystick->canApplyBeforeUpdate())"),
+        "Artboard::initialize no longer checks joystick schedule ordering"
+    );
+    assert!(
+        initialize_body.contains("m_JoysticksApplyBeforeUpdate=false;"),
+        "Artboard::initialize no longer records the custom-handle joystick schedule flag"
+    );
+    assert!(
+        initialize_body.contains("joystick->addDependents(this);"),
+        "Artboard::initialize no longer asks joysticks to collect dependent nested remap animations"
+    );
+    assert!(
+        initialize_body.contains("m_Joysticks.push_back(joystick);"),
+        "Artboard::initialize no longer stores joysticks in m_Joysticks"
+    );
+
+    let joystick_header = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("include/rive/joystick.hpp"))
+            .expect("read C++ joystick.hpp"),
+    );
+    assert!(
+        joystick_header.contains("boolcanApplyBeforeUpdate()const{returnm_handleSource==nullptr;}"),
+        "Joystick::canApplyBeforeUpdate no longer depends only on resolved handle source state"
+    );
+
+    let joystick_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/joystick.cpp"))
+            .expect("read C++ joystick.cpp"),
+    );
+    let on_added_clean_body =
+        cpp_function_body(&joystick_source, "StatusCodeJoystick::onAddedClean");
+    assert!(
+        on_added_clean_body.contains("m_xAnimation=artboard()->animation(xId());"),
+        "Joystick::onAddedClean no longer resolves x animation through Artboard::animation"
+    );
+    assert!(
+        on_added_clean_body.contains("m_yAnimation=artboard()->animation(yId());"),
+        "Joystick::onAddedClean no longer resolves y animation through Artboard::animation"
+    );
+    let add_dependents_body = cpp_function_body(
+        &joystick_source,
+        "voidJoystick::addDependents(Artboard*artboard)",
+    );
+    assert!(
+        add_dependents_body
+            .contains("if(m_yAnimation!=nullptr){addAnimationDependents(artboard,m_yAnimation);}"),
+        "Joystick::addDependents no longer scans y animation first"
+    );
+    assert!(
+        add_dependents_body
+            .contains("if(m_xAnimation!=nullptr){addAnimationDependents(artboard,m_xAnimation);}"),
+        "Joystick::addDependents no longer scans x animation after y"
+    );
+    let add_animation_dependents_body = cpp_function_body(
+        &joystick_source,
+        "voidJoystick::addAnimationDependents(Artboard*artboard,LinearAnimation*animation)",
+    );
+    assert!(
+        add_animation_dependents_body.contains("autoobject=animation->getObject(i);"),
+        "Joystick::addAnimationDependents no longer scans keyed animation objects"
+    );
+    assert!(
+        add_animation_dependents_body
+            .contains("coreObject!=nullptr&&coreObject->is<NestedRemapAnimation>()"),
+        "Joystick::addAnimationDependents no longer filters keyed targets to NestedRemapAnimation"
+    );
+    assert!(
+        add_animation_dependents_body
+            .contains("m_dependents.push_back(coreObject->as<NestedRemapAnimation>());"),
+        "Joystick::addAnimationDependents no longer stores nested remap dependents"
+    );
+}
+
+#[test]
 fn cpp_follow_path_dependency_methods_are_tracked_by_graph_model() {
     let runtime_dir = reference_runtime_dir();
     assert!(

@@ -56,6 +56,8 @@ pub struct ArtboardGraph {
     pub nested_artboards: Vec<NestedArtboardNode>,
     pub component_lists: Vec<ComponentListNode>,
     pub artboard_hosts: Vec<ArtboardHostNode>,
+    pub joysticks: Vec<JoystickNode>,
+    pub joysticks_apply_before_update: bool,
     pub animations: Vec<AnimationGraph>,
     pub state_machines: Vec<StateMachineGraph>,
     pub dependency_order: Vec<usize>,
@@ -176,6 +178,10 @@ impl ArtboardGraph {
             .context("artboard range does not start with an artboard")?;
 
         let animations = animations(file, range, &local_objects);
+        let joysticks = joysticks(file, &local_objects, &animations);
+        let joysticks_apply_before_update = joysticks
+            .iter()
+            .all(|joystick| joystick.can_apply_before_update);
         let mut state_machines = state_machines(file, range);
         if animations.is_empty() && state_machines.is_empty() {
             state_machines.push(StateMachineGraph::auto_generated());
@@ -200,6 +206,8 @@ impl ArtboardGraph {
             nested_artboards,
             component_lists,
             artboard_hosts,
+            joysticks,
+            joysticks_apply_before_update,
             animations,
             state_machines,
             dependency_order: dependency_order.component_order,
@@ -422,6 +430,25 @@ pub struct ArtboardHostNode {
     pub type_name: &'static str,
     pub name: Option<String>,
     pub kind: ArtboardHostKind,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct JoystickNode {
+    pub local_id: usize,
+    pub global_id: u32,
+    pub name: Option<String>,
+    pub handle_source_local: Option<usize>,
+    pub handle_source_global: Option<u32>,
+    pub can_apply_before_update: bool,
+    pub x_animation_global: Option<u32>,
+    pub y_animation_global: Option<u32>,
+    pub nested_remap_dependents: Vec<JoystickNestedRemapDependentNode>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct JoystickNestedRemapDependentNode {
+    pub local_id: usize,
+    pub global_id: u32,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1217,6 +1244,97 @@ fn artboard_hosts(file: &RuntimeFile, local_objects: &[LocalObject]) -> Vec<Artb
                 type_name: object.type_name,
                 name: object_name(object),
                 kind,
+            })
+        })
+        .collect()
+}
+
+fn joysticks(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+    animations: &[AnimationGraph],
+) -> Vec<JoystickNode> {
+    local_objects
+        .iter()
+        .filter_map(|local_object| {
+            let joystick = runtime_object_for_local(file, local_objects, local_object.local_id)?;
+            if joystick.type_name != "Joystick" {
+                return None;
+            }
+
+            let handle_source_local = local_object_reference_with_local_id(
+                file,
+                local_objects,
+                joystick.uint_property("handleSourceId"),
+            )
+            .filter(|(_, source)| is_transform_component(source))
+            .map(|(local_id, _)| local_id);
+            let handle_source_global = handle_source_local
+                .and_then(|local_id| local_object_global_id(local_objects, local_id));
+            let x_animation = joystick_axis_animation(joystick, "xId", animations);
+            let y_animation = joystick_axis_animation(joystick, "yId", animations);
+
+            let mut nested_remap_dependents = Vec::new();
+            nested_remap_dependents.extend(joystick_nested_remap_dependents(
+                file,
+                local_objects,
+                y_animation,
+            ));
+            nested_remap_dependents.extend(joystick_nested_remap_dependents(
+                file,
+                local_objects,
+                x_animation,
+            ));
+
+            Some(JoystickNode {
+                local_id: local_object.local_id,
+                global_id: local_object.global_id,
+                name: object_name(joystick),
+                handle_source_local,
+                handle_source_global,
+                can_apply_before_update: handle_source_local.is_none(),
+                x_animation_global: x_animation.map(|animation| animation.global_id),
+                y_animation_global: y_animation.map(|animation| animation.global_id),
+                nested_remap_dependents,
+            })
+        })
+        .collect()
+}
+
+fn joystick_axis_animation<'a>(
+    joystick: &RuntimeObject,
+    property_name: &str,
+    animations: &'a [AnimationGraph],
+) -> Option<&'a AnimationGraph> {
+    let index = usize::try_from(joystick.uint_property(property_name)?).ok()?;
+    animations.get(index)
+}
+
+fn joystick_nested_remap_dependents(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+    animation: Option<&AnimationGraph>,
+) -> Vec<JoystickNestedRemapDependentNode> {
+    let Some(animation) = animation else {
+        return Vec::new();
+    };
+
+    animation
+        .keyed_objects
+        .iter()
+        .filter_map(|keyed_object| {
+            let (local_id, target) = local_object_reference_with_local_id(
+                file,
+                local_objects,
+                Some(keyed_object.object_id),
+            )?;
+            if target.type_name != "NestedRemapAnimation" {
+                return None;
+            }
+
+            Some(JoystickNestedRemapDependentNode {
+                local_id,
+                global_id: local_object_global_id(local_objects, local_id)?,
             })
         })
         .collect()

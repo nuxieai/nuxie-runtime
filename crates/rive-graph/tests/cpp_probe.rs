@@ -645,6 +645,190 @@ fn cpp_clipping_shape_dependency_method_is_tracked_by_graph_model() {
 }
 
 #[test]
+fn graph_dependency_order_includes_follow_path_dependencies() {
+    let parent_id_key = property_key_for_name("Component", "parentId");
+    let target_id_key = property_key_for_name("TargetedConstraint", "targetId");
+
+    let bytes = synthetic_runtime_file(7111, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object(bytes, "Node", &[(parent_id_key, 0)]);
+        push_object(bytes, "Shape", &[(parent_id_key, 0)]);
+        push_object(bytes, "PointsPath", &[(parent_id_key, 2)]);
+        push_object(
+            bytes,
+            "FollowPathConstraint",
+            &[(parent_id_key, 1), (target_id_key, 2)],
+        );
+        push_object(
+            bytes,
+            "ListFollowPathConstraint",
+            &[(parent_id_key, 1), (target_id_key, 3)],
+        );
+        push_object(bytes, "Node", &[(parent_id_key, 0)]);
+        push_object(
+            bytes,
+            "FollowPathConstraint",
+            &[(parent_id_key, 1), (target_id_key, 6)],
+        );
+    });
+
+    let (_, rust) = read_graph_from_bytes(&bytes, "synthetic/follow_path_dependency.riv");
+    let artboard = &rust.artboards[0];
+
+    let path_composer_node = dependency_node_for_path_composer(artboard, 2);
+    let shape_constraint_node = dependency_node_for_component(artboard, 4);
+    let path_constraint_node = dependency_node_for_component(artboard, 5);
+    let node_target_constraint_node = dependency_node_for_component(artboard, 7);
+
+    assert!(
+        artboard.dependency_node_edges.contains(&node_edge(
+            path_composer_node,
+            shape_constraint_node,
+            DependencyKind::FollowPathConstraintTargetPathComposer
+        )),
+        "FollowPathConstraint::buildDependencies makes shape-target constraints depend on the target Shape's PathComposer"
+    );
+    assert!(
+        artboard.dependency_node_edges.contains(&node_edge(
+            path_composer_node,
+            path_constraint_node,
+            DependencyKind::FollowPathConstraintTargetPathComposer
+        )),
+        "ListFollowPathConstraint inherits the path-owned-shape PathComposer dependency"
+    );
+    assert!(
+        artboard
+            .dependency_edges
+            .contains(&edge(4, 1, DependencyKind::FollowPathConstraintParent)),
+        "FollowPathConstraint::buildDependencies makes the constrained parent depend on the constraint"
+    );
+    assert!(
+        artboard
+            .dependency_edges
+            .contains(&edge(5, 1, DependencyKind::FollowPathConstraintParent)),
+        "ListFollowPathConstraint::buildDependencies preserves the inherited parent dependency"
+    );
+    assert!(
+        artboard
+            .dependency_edges
+            .contains(&edge(7, 1, DependencyKind::FollowPathConstraintParent)),
+        "FollowPathConstraint adds the parent dependency even when the target is not a Shape or Path"
+    );
+    assert!(
+        !artboard
+            .dependency_edges
+            .contains(&edge(2, 1, DependencyKind::TargetedConstraint)),
+        "FollowPathConstraint::buildDependencies does not call TargetedConstraint::buildDependencies for shape targets"
+    );
+    assert!(
+        !artboard
+            .dependency_edges
+            .contains(&edge(3, 1, DependencyKind::TargetedConstraint)),
+        "FollowPathConstraint::buildDependencies does not call TargetedConstraint::buildDependencies for path targets"
+    );
+    assert!(
+        !artboard
+            .dependency_edges
+            .contains(&edge(6, 1, DependencyKind::TargetedConstraint)),
+        "FollowPathConstraint::buildDependencies does not call TargetedConstraint::buildDependencies for other transform targets"
+    );
+    assert!(
+        !artboard
+            .dependency_node_edges
+            .iter()
+            .any(|edge| edge.dependent_node == node_target_constraint_node
+                && matches!(
+                    edge.kind,
+                    DependencyKind::FollowPathConstraintTargetPathComposer
+                        | DependencyKind::FollowPathConstraintTargetPath
+                )),
+        "non-shape/path follow-path targets do not add target path prerequisites"
+    );
+    assert_node_order_before(artboard, path_composer_node, shape_constraint_node);
+    assert_node_order_before(artboard, path_composer_node, path_constraint_node);
+    assert_order_before(artboard, 4, 1);
+    assert_order_before(artboard, 5, 1);
+    assert_order_before(artboard, 7, 1);
+    assert!(artboard.dependency_cycles.is_empty());
+}
+
+#[test]
+fn cpp_follow_path_dependency_methods_are_tracked_by_graph_model() {
+    let runtime_dir = reference_runtime_dir();
+    assert!(
+        runtime_dir.exists(),
+        "reference runtime not found at {}; set RIVE_RUNTIME_DIR",
+        runtime_dir.display()
+    );
+
+    let follow_path_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/constraints/follow_path_constraint.cpp"))
+            .expect("read C++ follow_path_constraint.cpp"),
+    );
+    let on_added_clean_body = cpp_function_body(
+        &follow_path_source,
+        "StatusCodeFollowPathConstraint::onAddedClean",
+    );
+    assert!(
+        on_added_clean_body.contains("shape->addFlags(PathFlags::followPath);"),
+        "FollowPathConstraint::onAddedClean no longer marks target shapes for follow-path updates"
+    );
+    assert!(
+        on_added_clean_body.contains("path->addFlags(PathFlags::followPath);"),
+        "FollowPathConstraint::onAddedClean no longer marks target paths for follow-path updates"
+    );
+    assert!(
+        on_added_clean_body.contains("returnSuper::onAddedClean(context);"),
+        "FollowPathConstraint::onAddedClean stopped preserving inherited clean behavior"
+    );
+
+    let build_dependencies_body = cpp_function_body(
+        &follow_path_source,
+        "voidFollowPathConstraint::buildDependencies()",
+    );
+    assert!(
+        !build_dependencies_body.contains("Super::buildDependencies("),
+        "FollowPathConstraint::buildDependencies started calling Super; audit targeted and parent dependency modeling"
+    );
+    assert!(
+        build_dependencies_body.contains("shape->pathComposer()->addDependent(this);"),
+        "FollowPathConstraint::buildDependencies no longer depends on target shape path composers"
+    );
+    assert!(
+        build_dependencies_body.contains("Shape*shape=path->shape();"),
+        "FollowPathConstraint::buildDependencies no longer checks path ownership"
+    );
+    assert!(
+        build_dependencies_body.contains("path->addDependent(this);"),
+        "FollowPathConstraint::buildDependencies no longer falls back to direct path dependencies"
+    );
+    assert!(
+        build_dependencies_body.contains("addDependent(parent());"),
+        "FollowPathConstraint::buildDependencies no longer makes the constrained parent depend on the constraint"
+    );
+
+    let list_follow_path_source = compact_cpp_source(
+        &std::fs::read_to_string(
+            runtime_dir.join("src/constraints/list_follow_path_constraint.cpp"),
+        )
+        .expect("read C++ list_follow_path_constraint.cpp"),
+    );
+    let list_follow_path_body = cpp_function_body(
+        &list_follow_path_source,
+        "voidListFollowPathConstraint::buildDependencies()",
+    );
+    assert!(
+        list_follow_path_body.contains("Super::buildDependencies();"),
+        "ListFollowPathConstraint::buildDependencies stopped preserving FollowPathConstraint dependencies"
+    );
+    assert!(
+        list_follow_path_body.contains("constrainableList->addListConstraint(this);"),
+        "ListFollowPathConstraint::buildDependencies no longer registers on constrainable lists"
+    );
+}
+
+#[test]
 fn graph_dependency_order_reports_targeted_constraint_cycles() {
     let parent_id_key = property_key_for_name("Component", "parentId");
     let target_id_key = property_key_for_name("TargetedConstraint", "targetId");

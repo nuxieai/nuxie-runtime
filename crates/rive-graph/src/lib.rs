@@ -142,6 +142,8 @@ impl ArtboardGraph {
         let dependency_nodes = build_dependency_nodes(&components, &path_composers);
         lifecycle.build_dependencies_nodes = dependency_nodes.len();
         let dependency_node_edges = build_dependency_node_edges(
+            file,
+            &local_objects,
             &dependency_nodes,
             &dependency_edges,
             &path_composers,
@@ -268,6 +270,9 @@ pub enum DependencyKind {
     PathComposerShape,
     PathComposerPath,
     ClippingShapePathComposer,
+    FollowPathConstraintParent,
+    FollowPathConstraintTargetPathComposer,
+    FollowPathConstraintTargetPath,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -1005,6 +1010,8 @@ fn build_dependency_nodes(
 }
 
 fn build_dependency_node_edges(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
     dependency_nodes: &[DependencyNode],
     dependency_edges: &[DependencyEdge],
     path_composers: &[PathComposerNode],
@@ -1075,6 +1082,21 @@ fn build_dependency_node_edges(
         }
     }
 
+    for (source_node, constraint_node, kind) in follow_path_constraint_target_node_dependencies(
+        file,
+        local_objects,
+        dependency_nodes,
+        path_composers,
+        &component_node_by_local,
+        &path_composer_node_by_shape,
+    ) {
+        edges.push(DependencyNodeEdge {
+            source_node,
+            dependent_node: constraint_node,
+            kind,
+        });
+    }
+
     edges.sort_by_key(|edge| {
         (
             edge.source_node,
@@ -1120,6 +1142,9 @@ fn build_dependency_edges(
         if !definition.is_a("TargetedConstraint") {
             continue;
         }
+        if definition.is_a("FollowPathConstraint") {
+            continue;
+        }
 
         let Some((target_local, target)) = local_object_reference_with_local_id(
             file,
@@ -1147,6 +1172,16 @@ fn build_dependency_edges(
             source_local: target_local,
             dependent_local: constraint_local,
             kind: DependencyKind::IkConstraintTarget,
+        });
+    }
+
+    for (constraint_local, parent_local) in
+        follow_path_constraint_parent_dependencies(file, local_objects)
+    {
+        edges.push(DependencyEdge {
+            source_local: constraint_local,
+            dependent_local: parent_local,
+            kind: DependencyKind::FollowPathConstraintParent,
         });
     }
 
@@ -1273,6 +1308,9 @@ fn dependency_kind_sort_key(kind: DependencyKind) -> u8 {
         DependencyKind::PathComposerShape => 14,
         DependencyKind::PathComposerPath => 15,
         DependencyKind::ClippingShapePathComposer => 16,
+        DependencyKind::FollowPathConstraintParent => 17,
+        DependencyKind::FollowPathConstraintTargetPathComposer => 18,
+        DependencyKind::FollowPathConstraintTargetPath => 19,
     }
 }
 
@@ -1299,6 +1337,99 @@ fn ik_constraint_target_dependencies(
         };
         if is_transform_component(target) {
             edges.push((target_local, local_object.local_id));
+        }
+    }
+    edges
+}
+
+fn follow_path_constraint_parent_dependencies(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+) -> Vec<(usize, usize)> {
+    let mut edges = Vec::new();
+    for local_object in local_objects {
+        let Some(constraint) = runtime_object_for_local(file, local_objects, local_object.local_id)
+        else {
+            continue;
+        };
+        if !is_follow_path_constraint(constraint) {
+            continue;
+        }
+
+        let Some((parent_local, parent)) =
+            local_object_reference_with_local_id(file, local_objects, object_parent_id(constraint))
+        else {
+            continue;
+        };
+        if is_transform_component(parent) {
+            edges.push((local_object.local_id, parent_local));
+        }
+    }
+    edges
+}
+
+fn follow_path_constraint_target_node_dependencies(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+    dependency_nodes: &[DependencyNode],
+    path_composers: &[PathComposerNode],
+    component_node_by_local: &BTreeMap<usize, usize>,
+    path_composer_node_by_shape: &BTreeMap<usize, usize>,
+) -> Vec<(usize, usize, DependencyKind)> {
+    let mut edges = Vec::new();
+    for node in dependency_nodes {
+        let DependencyNodeKind::Component { local_id, .. } = &node.kind else {
+            continue;
+        };
+        let constraint_local = *local_id;
+        let Some(constraint) = runtime_object_for_local(file, local_objects, constraint_local)
+        else {
+            continue;
+        };
+        if !is_follow_path_constraint(constraint) {
+            continue;
+        }
+
+        let Some(constraint_node) = component_node_by_local.get(&constraint_local).copied() else {
+            continue;
+        };
+        let Some((target_local, target)) = local_object_reference_with_local_id(
+            file,
+            local_objects,
+            constraint.uint_property("targetId"),
+        ) else {
+            continue;
+        };
+
+        if is_shape(target) {
+            if let Some(path_composer_node) =
+                path_composer_node_by_shape.get(&target_local).copied()
+            {
+                edges.push((
+                    path_composer_node,
+                    constraint_node,
+                    DependencyKind::FollowPathConstraintTargetPathComposer,
+                ));
+            }
+            continue;
+        }
+
+        if is_path(target) {
+            if let Some(path_composer_node) = shape_local_for_path(path_composers, target_local)
+                .and_then(|shape_local| path_composer_node_by_shape.get(&shape_local).copied())
+            {
+                edges.push((
+                    path_composer_node,
+                    constraint_node,
+                    DependencyKind::FollowPathConstraintTargetPathComposer,
+                ));
+            } else if let Some(path_node) = component_node_by_local.get(&target_local).copied() {
+                edges.push((
+                    path_node,
+                    constraint_node,
+                    DependencyKind::FollowPathConstraintTargetPath,
+                ));
+            }
         }
     }
     edges
@@ -1684,6 +1815,13 @@ fn path_composer_dependency_node_by_shape(
         .collect()
 }
 
+fn shape_local_for_path(path_composers: &[PathComposerNode], path_local: usize) -> Option<usize> {
+    path_composers
+        .iter()
+        .find(|composer| composer.path_locals.contains(&path_local))
+        .map(|composer| composer.shape_local)
+}
+
 fn dependency_component_cycles(
     node_cycles: &[DependencyNodeCycle],
     component_local_by_node: &BTreeMap<usize, usize>,
@@ -2016,6 +2154,15 @@ fn is_node(object: &RuntimeObject) -> bool {
 
 fn is_shape(object: &RuntimeObject) -> bool {
     definition_by_type_key(object.type_key).is_some_and(|definition| definition.is_a("Shape"))
+}
+
+fn is_path(object: &RuntimeObject) -> bool {
+    definition_by_type_key(object.type_key).is_some_and(|definition| definition.is_a("Path"))
+}
+
+fn is_follow_path_constraint(object: &RuntimeObject) -> bool {
+    definition_by_type_key(object.type_key)
+        .is_some_and(|definition| definition.is_a("FollowPathConstraint"))
 }
 
 fn is_bone(object: &RuntimeObject) -> bool {

@@ -189,6 +189,7 @@ Resolved in `docs/prototypes/artboard-graph.md`. Added `crates/rive-graph`, `gra
 
 Blocked by: #6
 Type: Prototype
+Contract: `docs/prototypes/graph-runtime-contract.md`
 
 ### Question
 

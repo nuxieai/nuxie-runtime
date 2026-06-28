@@ -142,7 +142,8 @@ The existing `rive-graph` prototype already covers:
   clipping-shape-to-source-path-composer prerequisites, follow-path target and
   constrained-parent prerequisites, text-follow-path target and text
   prerequisites, text variation helper prerequisites, stroke/fill/feather
-  path-builder prerequisites, audited paint/effect parent-dependency skips and
+  path-builder prerequisites, audited `ClippingShape`/paint/effect
+  parent-dependency skips and
   explicit `GroupEffect`/`ScriptedPathEffect` parent prerequisites,
   linear/radial gradient paint container prerequisites, and the static
   `ScrollConstraint -> ScrollBarConstraint` and

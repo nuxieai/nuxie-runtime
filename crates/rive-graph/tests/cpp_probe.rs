@@ -413,14 +413,16 @@ fn cpp_probe_matches_rust_draw_graph_resolution_when_available() {
             .contains(&edge(0, 5, DependencyKind::ParentChild))
     );
     assert!(
-        artboard
+        !artboard
             .dependency_edges
-            .contains(&edge(0, 6, DependencyKind::ParentChild))
+            .contains(&edge(0, 6, DependencyKind::ParentChild)),
+        "ClippingShape::buildDependencies does not call Super, so resolved clipping shapes do not inherit parent-child dependencies"
     );
     assert!(
-        artboard
+        !artboard
             .dependency_edges
-            .contains(&edge(0, 7, DependencyKind::ParentChild))
+            .contains(&edge(0, 7, DependencyKind::ParentChild)),
+        "ClippingShape::buildDependencies does not call Super, so unresolved clipping shapes do not inherit parent-child dependencies"
     );
     assert!(
         artboard

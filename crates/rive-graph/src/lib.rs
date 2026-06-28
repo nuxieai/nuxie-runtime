@@ -1567,6 +1567,9 @@ fn component_skips_parent_child_dependency(
     if object.type_name == "TextModifierGroup" {
         return true;
     }
+    if object.type_name == "ClippingShape" {
+        return true;
+    }
     if paint_effect_skips_generic_parent_child_dependency(object) {
         return true;
     }

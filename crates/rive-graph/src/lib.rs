@@ -141,8 +141,12 @@ impl ArtboardGraph {
         lifecycle.build_dependencies_edges = dependency_edges.len();
         let dependency_nodes = build_dependency_nodes(&components, &path_composers);
         lifecycle.build_dependencies_nodes = dependency_nodes.len();
-        let dependency_node_edges =
-            build_dependency_node_edges(&dependency_nodes, &dependency_edges, &path_composers);
+        let dependency_node_edges = build_dependency_node_edges(
+            &dependency_nodes,
+            &dependency_edges,
+            &path_composers,
+            &clipping_shapes,
+        );
         lifecycle.build_dependencies_node_edges = dependency_node_edges.len();
         let dependency_order = build_dependency_order(
             &mut components,
@@ -263,6 +267,7 @@ pub enum DependencyKind {
     ScrollConstraintLayoutChild,
     PathComposerShape,
     PathComposerPath,
+    ClippingShapePathComposer,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -1003,6 +1008,7 @@ fn build_dependency_node_edges(
     dependency_nodes: &[DependencyNode],
     dependency_edges: &[DependencyEdge],
     path_composers: &[PathComposerNode],
+    clipping_shapes: &[ClippingShapeNode],
 ) -> Vec<DependencyNodeEdge> {
     let component_node_by_local = component_dependency_node_by_local(dependency_nodes);
     let path_composer_node_by_shape = path_composer_dependency_node_by_shape(dependency_nodes);
@@ -1045,6 +1051,26 @@ fn build_dependency_node_edges(
                 source_node: path_node,
                 dependent_node: path_composer_node,
                 kind: DependencyKind::PathComposerPath,
+            });
+        }
+    }
+
+    for clipping_shape in clipping_shapes {
+        let Some(clipping_shape_node) = component_node_by_local
+            .get(&clipping_shape.local_id)
+            .copied()
+        else {
+            continue;
+        };
+        for shape_local in &clipping_shape.shape_locals {
+            let Some(path_composer_node) = path_composer_node_by_shape.get(shape_local).copied()
+            else {
+                continue;
+            };
+            edges.push(DependencyNodeEdge {
+                source_node: path_composer_node,
+                dependent_node: clipping_shape_node,
+                kind: DependencyKind::ClippingShapePathComposer,
             });
         }
     }
@@ -1246,6 +1272,7 @@ fn dependency_kind_sort_key(kind: DependencyKind) -> u8 {
         DependencyKind::ScrollConstraintLayoutChild => 13,
         DependencyKind::PathComposerShape => 14,
         DependencyKind::PathComposerPath => 15,
+        DependencyKind::ClippingShapePathComposer => 16,
     }
 }
 

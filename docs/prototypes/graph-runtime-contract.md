@@ -136,7 +136,8 @@ The existing `rive-graph` prototype already covers:
 - Dependency edges for parent-child, targeted constraints, IK constraints,
   draw-target drawable references, draw-rule target references, clipping sources,
   skinning for exact C++ skinnables (`Mesh` and `PointsPath`), Joystick
-  custom-handle dependencies, path-composer shape/path prerequisites, and the static
+  custom-handle dependencies, path-composer shape/path prerequisites,
+  clipping-shape-to-source-path-composer prerequisites, and the static
   `ScrollConstraint -> ScrollBarConstraint` and
   `ScrollConstraint -> layout-provider content child` dependencies.
 - Topological dependency order and dependency-cycle diagnostics.

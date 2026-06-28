@@ -437,9 +437,29 @@ fn cpp_probe_matches_rust_draw_graph_resolution_when_available() {
             .dependency_edges
             .contains(&edge(1, 6, DependencyKind::ClippingSource))
     );
+    let shape_path_composer_node = dependency_node_for_path_composer(artboard, 1);
+    let clipping_shape_node = dependency_node_for_component(artboard, 6);
+    let unresolved_clipping_shape_node = dependency_node_for_component(artboard, 7);
+    assert!(
+        artboard.dependency_node_edges.contains(&node_edge(
+            shape_path_composer_node,
+            clipping_shape_node,
+            DependencyKind::ClippingShapePathComposer
+        )),
+        "ClippingShape::buildDependencies makes clipping shapes depend on each source shape's PathComposer"
+    );
+    assert!(
+        !artboard
+            .dependency_node_edges
+            .iter()
+            .any(|edge| edge.dependent_node == unresolved_clipping_shape_node
+                && edge.kind == DependencyKind::ClippingShapePathComposer),
+        "clipping shapes without resolved source shapes do not receive path-composer prerequisites"
+    );
     assert_order_before(artboard, 1, 2);
     assert_order_before(artboard, 2, 4);
     assert_order_before(artboard, 1, 6);
+    assert_node_order_before(artboard, shape_path_composer_node, clipping_shape_node);
     assert!(artboard.dependency_cycles.is_empty());
 }
 
@@ -569,6 +589,58 @@ fn cpp_path_composer_dependency_methods_are_tracked_by_graph_model() {
     assert!(
         path_composer_call < super_call,
         "Shape::buildDependencies changed the PathComposer dependency build order; audit graph projection ordering"
+    );
+}
+
+#[test]
+fn cpp_clipping_shape_dependency_method_is_tracked_by_graph_model() {
+    let runtime_dir = reference_runtime_dir();
+    assert!(
+        runtime_dir.exists(),
+        "reference runtime not found at {}; set RIVE_RUNTIME_DIR",
+        runtime_dir.display()
+    );
+
+    let clipping_shape_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/shapes/clipping_shape.cpp"))
+            .expect("read C++ clipping_shape.cpp"),
+    );
+    let on_added_clean_body = cpp_function_body(
+        &clipping_shape_source,
+        "StatusCodeClippingShape::onAddedClean",
+    );
+    assert!(
+        on_added_clean_body.contains("m_Source->forAll([this](Component*component)->bool{"),
+        "ClippingShape::onAddedClean no longer walks the resolved source subtree; audit shape_locals projection"
+    );
+    assert!(
+        on_added_clean_body.contains("component->is<Shape>()"),
+        "ClippingShape::onAddedClean no longer filters source descendants to Shape"
+    );
+    assert!(
+        on_added_clean_body.contains("shape->addFlags(PathFlags::world|PathFlags::clipping);"),
+        "ClippingShape::onAddedClean no longer marks source shapes for clipping paths"
+    );
+    assert!(
+        on_added_clean_body.contains("m_Shapes.push_back(shape);"),
+        "ClippingShape::onAddedClean no longer stores source shapes for buildDependencies"
+    );
+
+    let build_dependencies_body = cpp_function_body(
+        &clipping_shape_source,
+        "voidClippingShape::buildDependencies()",
+    );
+    assert!(
+        !build_dependencies_body.contains("Super::buildDependencies("),
+        "ClippingShape::buildDependencies started calling Super; audit clipping parent/source dependency modeling"
+    );
+    assert!(
+        build_dependencies_body.contains("for(autoshape:m_Shapes)"),
+        "ClippingShape::buildDependencies no longer walks collected source shapes"
+    );
+    assert!(
+        build_dependencies_body.contains("shape->pathComposer()->addDependent(this);"),
+        "ClippingShape::buildDependencies no longer depends on source shape path composers"
     );
 }
 

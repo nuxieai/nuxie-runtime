@@ -53,6 +53,9 @@ pub struct ArtboardGraph {
     pub path_composers: Vec<PathComposerNode>,
     pub text_variation_helpers: Vec<TextVariationHelperNode>,
     pub list_constraint_registrations: Vec<ListConstraintRegistrationNode>,
+    pub nested_artboards: Vec<NestedArtboardNode>,
+    pub component_lists: Vec<ComponentListNode>,
+    pub artboard_hosts: Vec<ArtboardHostNode>,
     pub animations: Vec<AnimationGraph>,
     pub state_machines: Vec<StateMachineGraph>,
     pub dependency_order: Vec<usize>,
@@ -134,6 +137,9 @@ impl ArtboardGraph {
         let path_composers = path_composers(file, artboard_index, &local_objects);
         let text_variation_helpers = text_variation_helpers(file, &local_objects);
         let list_constraint_registrations = list_constraint_registrations(file, &local_objects);
+        let nested_artboards = nested_artboards(file, &local_objects);
+        let component_lists = component_lists(file, &local_objects);
+        let artboard_hosts = artboard_hosts(file, &local_objects);
         let dependency_edges = build_dependency_edges(
             file,
             &local_objects,
@@ -191,6 +197,9 @@ impl ArtboardGraph {
             path_composers,
             text_variation_helpers,
             list_constraint_registrations,
+            nested_artboards,
+            component_lists,
+            artboard_hosts,
             animations,
             state_machines,
             dependency_order: dependency_order.component_order,
@@ -381,6 +390,38 @@ pub struct ListConstraintRegistrationNode {
     pub constraint_local: usize,
     pub constraint_global: u32,
     pub constraint_type_name: &'static str,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct NestedArtboardNode {
+    pub local_id: usize,
+    pub global_id: u32,
+    pub type_name: &'static str,
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ComponentListNode {
+    pub local_id: usize,
+    pub global_id: u32,
+    pub type_name: &'static str,
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ArtboardHostKind {
+    NestedArtboard,
+    ComponentList,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ArtboardHostNode {
+    pub local_id: usize,
+    pub global_id: u32,
+    pub type_name: &'static str,
+    pub name: Option<String>,
+    pub kind: ArtboardHostKind,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1114,6 +1155,68 @@ fn list_constraint_registrations(
                 constraint_local: local_object.local_id,
                 constraint_global: local_object.global_id,
                 constraint_type_name: constraint.type_name,
+            })
+        })
+        .collect()
+}
+
+fn nested_artboards(file: &RuntimeFile, local_objects: &[LocalObject]) -> Vec<NestedArtboardNode> {
+    local_objects
+        .iter()
+        .filter_map(|local_object| {
+            let object = runtime_object_for_local(file, local_objects, local_object.local_id)?;
+            if !is_exact_nested_artboard_host(object) {
+                return None;
+            }
+
+            Some(NestedArtboardNode {
+                local_id: local_object.local_id,
+                global_id: local_object.global_id,
+                type_name: object.type_name,
+                name: object_name(object),
+            })
+        })
+        .collect()
+}
+
+fn component_lists(file: &RuntimeFile, local_objects: &[LocalObject]) -> Vec<ComponentListNode> {
+    local_objects
+        .iter()
+        .filter_map(|local_object| {
+            let object = runtime_object_for_local(file, local_objects, local_object.local_id)?;
+            if !is_artboard_component_list(object) {
+                return None;
+            }
+
+            Some(ComponentListNode {
+                local_id: local_object.local_id,
+                global_id: local_object.global_id,
+                type_name: object.type_name,
+                name: object_name(object),
+            })
+        })
+        .collect()
+}
+
+fn artboard_hosts(file: &RuntimeFile, local_objects: &[LocalObject]) -> Vec<ArtboardHostNode> {
+    local_objects
+        .iter()
+        .filter_map(|local_object| {
+            let object = runtime_object_for_local(file, local_objects, local_object.local_id)?;
+            let kind = if is_exact_nested_artboard_host(object) {
+                ArtboardHostKind::NestedArtboard
+            } else if is_artboard_component_list(object) {
+                ArtboardHostKind::ComponentList
+            } else {
+                return None;
+            };
+
+            Some(ArtboardHostNode {
+                local_id: local_object.local_id,
+                global_id: local_object.global_id,
+                type_name: object.type_name,
+                name: object_name(object),
+                kind,
             })
         })
         .collect()
@@ -2966,6 +3069,13 @@ fn is_nested_artboard(object: &RuntimeObject) -> bool {
         .is_some_and(|definition| definition.is_a("NestedArtboard"))
 }
 
+fn is_exact_nested_artboard_host(object: &RuntimeObject) -> bool {
+    matches!(
+        object.type_name,
+        "NestedArtboard" | "NestedArtboardLeaf" | "NestedArtboardLayout"
+    )
+}
+
 fn is_text_interface(object: &RuntimeObject) -> bool {
     definition_by_type_key(object.type_key)
         .is_some_and(|definition| matches!(definition.name, "Text" | "TextInput"))
@@ -2980,6 +3090,10 @@ fn is_list_constraint(object: &RuntimeObject) -> bool {
 }
 
 fn is_constrainable_list(object: &RuntimeObject) -> bool {
+    matches!(object.type_name, "ArtboardComponentList")
+}
+
+fn is_artboard_component_list(object: &RuntimeObject) -> bool {
     matches!(object.type_name, "ArtboardComponentList")
 }
 

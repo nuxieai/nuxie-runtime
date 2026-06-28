@@ -1,5 +1,5 @@
 use rive_binary::{RuntimeFile, read_runtime_file};
-use rive_graph::{DependencyKind, GraphFile};
+use rive_graph::{ArtboardHostKind, DependencyKind, GraphFile};
 use rive_schema::definition_by_name;
 use serde::Deserialize;
 use std::collections::BTreeMap;
@@ -980,6 +980,117 @@ fn graph_projects_list_constraint_registrations() {
             .iter()
             .any(|registration| registration.constraint_local == 7),
         "plain FollowPathConstraint does not implement C++ ListConstraint"
+    );
+}
+
+#[test]
+fn graph_projects_artboard_hosts_and_component_lists() {
+    let parent_id_key = property_key_for_name("Component", "parentId");
+
+    let bytes = synthetic_runtime_file(7138, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object(bytes, "NestedArtboard", &[(parent_id_key, 0)]);
+        push_object(bytes, "NestedArtboardLeaf", &[(parent_id_key, 0)]);
+        push_object(bytes, "NestedArtboardLayout", &[(parent_id_key, 0)]);
+        push_object(bytes, "ArtboardComponentList", &[(parent_id_key, 0)]);
+        push_object(bytes, "Node", &[(parent_id_key, 0)]);
+    });
+
+    let (_, rust) = read_graph_from_bytes(&bytes, "synthetic/artboard_hosts.riv");
+    let artboard = &rust.artboards[0];
+
+    assert_eq!(
+        artboard
+            .nested_artboards
+            .iter()
+            .map(|nested| (nested.local_id, nested.type_name))
+            .collect::<Vec<_>>(),
+        vec![
+            (1, "NestedArtboard"),
+            (2, "NestedArtboardLeaf"),
+            (3, "NestedArtboardLayout"),
+        ],
+        "Artboard::initialize registers exact NestedArtboard host variants"
+    );
+    assert_eq!(
+        artboard
+            .component_lists
+            .iter()
+            .map(|component_list| (component_list.local_id, component_list.type_name))
+            .collect::<Vec<_>>(),
+        vec![(4, "ArtboardComponentList")],
+        "Artboard::initialize stores ArtboardComponentList in m_ComponentLists"
+    );
+    assert_eq!(
+        artboard
+            .artboard_hosts
+            .iter()
+            .map(|host| (host.local_id, host.type_name, host.kind))
+            .collect::<Vec<_>>(),
+        vec![
+            (1, "NestedArtboard", ArtboardHostKind::NestedArtboard),
+            (2, "NestedArtboardLeaf", ArtboardHostKind::NestedArtboard),
+            (3, "NestedArtboardLayout", ArtboardHostKind::NestedArtboard),
+            (4, "ArtboardComponentList", ArtboardHostKind::ComponentList),
+        ],
+        "m_ArtboardHosts preserves artboard-local object order across nested artboards and component lists"
+    );
+    assert!(
+        !artboard
+            .artboard_hosts
+            .iter()
+            .any(|host| host.local_id == 5),
+        "ordinary components are not ArtboardHost objects"
+    );
+}
+
+#[test]
+fn cpp_artboard_host_registration_is_tracked_by_graph_model() {
+    let runtime_dir = reference_runtime_dir();
+    assert!(
+        runtime_dir.exists(),
+        "reference runtime not found at {}; set RIVE_RUNTIME_DIR",
+        runtime_dir.display()
+    );
+
+    let artboard_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/artboard.cpp"))
+            .expect("read C++ artboard.cpp"),
+    );
+    let initialize_body = cpp_function_body(&artboard_source, "StatusCodeArtboard::initialize()");
+    assert!(
+        initialize_body.contains("caseNestedArtboardBase::typeKey:"),
+        "Artboard::initialize no longer registers base NestedArtboard hosts"
+    );
+    assert!(
+        initialize_body.contains("caseNestedArtboardLeafBase::typeKey:"),
+        "Artboard::initialize no longer registers NestedArtboardLeaf hosts"
+    );
+    assert!(
+        initialize_body.contains("caseNestedArtboardLayoutBase::typeKey:"),
+        "Artboard::initialize no longer registers NestedArtboardLayout hosts"
+    );
+    assert!(
+        initialize_body.contains("m_NestedArtboards.push_back(object->as<NestedArtboard>());"),
+        "Artboard::initialize no longer stores nested artboards in m_NestedArtboards"
+    );
+    assert!(
+        initialize_body.contains("m_ArtboardHosts.push_back(object->as<NestedArtboard>());"),
+        "Artboard::initialize no longer stores nested artboards in m_ArtboardHosts"
+    );
+    assert!(
+        initialize_body.contains("caseArtboardComponentListBase::typeKey:"),
+        "Artboard::initialize no longer registers ArtboardComponentList hosts"
+    );
+    assert!(
+        initialize_body
+            .contains("m_ComponentLists.push_back(object->as<ArtboardComponentList>());"),
+        "Artboard::initialize no longer stores component lists in m_ComponentLists"
+    );
+    assert!(
+        initialize_body.contains("m_ArtboardHosts.push_back(object->as<ArtboardComponentList>());"),
+        "Artboard::initialize no longer stores component lists in m_ArtboardHosts"
     );
 }
 

@@ -129,6 +129,11 @@ The existing `rive-graph` prototype already covers:
 - Capability flags for artboard/container/world-transform/transform/drawable.
 - Draw target, draw rules, and clipping source relationships.
 - Clipping source/clipped drawable projections.
+- Static `on_added_clean` artboard host registries for exact C++
+  `NestedArtboard`, `NestedArtboardLeaf`, `NestedArtboardLayout`, and
+  `ArtboardComponentList` objects, matching `m_NestedArtboards`,
+  `m_ComponentLists`, and `m_ArtboardHosts` without admitting nested-artboard,
+  component-list, cloning, layout, or advance behavior.
 - Synthetic path composer projections for each imported `Shape`, with path inputs
   sourced from `rive-binary`'s C++-equivalent shape registration facts.
 - Dependency nodes for real imported components plus synthetic path composers

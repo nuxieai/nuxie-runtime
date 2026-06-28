@@ -131,10 +131,12 @@ The existing `rive-graph` prototype already covers:
 - Clipping source/clipped drawable projections.
 - Synthetic path composer projections for each imported `Shape`, with path inputs
   sourced from `rive-binary`'s C++-equivalent shape registration facts.
+- Dependency nodes for real imported components plus synthetic path composers,
+  with a topological node order and a filtered real-component local-ID order.
 - Dependency edges for parent-child, targeted constraints, IK constraints,
   draw-target drawable references, draw-rule target references, clipping sources,
   skinning for exact C++ skinnables (`Mesh` and `PointsPath`), Joystick
-  custom-handle dependencies, and the static
+  custom-handle dependencies, path-composer shape/path prerequisites, and the static
   `ScrollConstraint -> ScrollBarConstraint` and
   `ScrollConstraint -> layout-provider content child` dependencies.
 - Topological dependency order and dependency-cycle diagnostics.

@@ -477,6 +477,52 @@ fn graph_projects_shape_path_composers_from_imported_shape_paths() {
         ],
         "every imported Shape owns one synthetic PathComposer projection, with paths coming from the C++-equivalent shape registration list"
     );
+
+    let shape_node = dependency_node_for_component(artboard, 1);
+    let points_path_node = dependency_node_for_component(artboard, 2);
+    let ellipse_node = dependency_node_for_component(artboard, 3);
+    let composer_node = dependency_node_for_path_composer(artboard, 1);
+    let empty_composer_node = dependency_node_for_path_composer(artboard, 4);
+
+    assert!(
+        artboard.dependency_node_edges.contains(&node_edge(
+            shape_node,
+            composer_node,
+            DependencyKind::PathComposerShape
+        )),
+        "PathComposer::buildDependencies makes the synthetic composer depend on its owning Shape"
+    );
+    assert!(
+        artboard.dependency_node_edges.contains(&node_edge(
+            points_path_node,
+            composer_node,
+            DependencyKind::PathComposerPath
+        )),
+        "PathComposer::buildDependencies makes the synthetic composer depend on registered PointsPath children"
+    );
+    assert!(
+        artboard.dependency_node_edges.contains(&node_edge(
+            ellipse_node,
+            composer_node,
+            DependencyKind::PathComposerPath
+        )),
+        "PathComposer::buildDependencies makes the synthetic composer depend on registered ParametricPath children"
+    );
+    assert!(
+        !artboard
+            .dependency_node_edges
+            .iter()
+            .any(|edge| edge.dependent_node == empty_composer_node
+                && edge.kind == DependencyKind::PathComposerPath),
+        "non-path children do not become PathComposer path prerequisites"
+    );
+    assert_node_order_before(artboard, shape_node, composer_node);
+    assert_node_order_before(artboard, points_path_node, composer_node);
+    assert_node_order_before(artboard, ellipse_node, composer_node);
+    assert!(
+        !artboard.dependency_order.contains(&composer_node),
+        "the compatibility component order remains local-object IDs, not synthetic dependency node IDs"
+    );
 }
 
 #[test]
@@ -1177,6 +1223,51 @@ fn edge(
     }
 }
 
+fn node_edge(
+    source_node: usize,
+    dependent_node: usize,
+    kind: DependencyKind,
+) -> rive_graph::DependencyNodeEdge {
+    rive_graph::DependencyNodeEdge {
+        source_node,
+        dependent_node,
+        kind,
+    }
+}
+
+fn dependency_node_for_component(artboard: &rive_graph::ArtboardGraph, local_id: usize) -> usize {
+    artboard
+        .dependency_nodes
+        .iter()
+        .find_map(|node| match &node.kind {
+            rive_graph::DependencyNodeKind::Component {
+                local_id: component_local_id,
+                ..
+            } if *component_local_id == local_id => Some(node.node_id),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("missing dependency node for component local {local_id}"))
+}
+
+fn dependency_node_for_path_composer(
+    artboard: &rive_graph::ArtboardGraph,
+    shape_local: usize,
+) -> usize {
+    artboard
+        .dependency_nodes
+        .iter()
+        .find_map(|node| match &node.kind {
+            rive_graph::DependencyNodeKind::PathComposer {
+                shape_local: composer_shape_local,
+                ..
+            } if *composer_shape_local == shape_local => Some(node.node_id),
+            _ => None,
+        })
+        .unwrap_or_else(|| {
+            panic!("missing dependency node for path composer shape local {shape_local}")
+        })
+}
+
 fn assert_order_before(artboard: &rive_graph::ArtboardGraph, source: usize, dependent: usize) {
     let source_position = artboard
         .dependency_order
@@ -1192,6 +1283,24 @@ fn assert_order_before(artboard: &rive_graph::ArtboardGraph, source: usize, depe
         source_position < dependent_position,
         "expected local {source} to be ordered before local {dependent}; order = {:?}",
         artboard.dependency_order
+    );
+}
+
+fn assert_node_order_before(artboard: &rive_graph::ArtboardGraph, source: usize, dependent: usize) {
+    let source_position = artboard
+        .dependency_node_order
+        .iter()
+        .position(|node| *node == source)
+        .unwrap_or_else(|| panic!("missing source node {source} in dependency node order"));
+    let dependent_position = artboard
+        .dependency_node_order
+        .iter()
+        .position(|node| *node == dependent)
+        .unwrap_or_else(|| panic!("missing dependent node {dependent} in dependency node order"));
+    assert!(
+        source_position < dependent_position,
+        "expected dependency node {source} to be ordered before node {dependent}; order = {:?}",
+        artboard.dependency_node_order
     );
 }
 

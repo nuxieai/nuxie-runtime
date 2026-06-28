@@ -42,8 +42,11 @@ pub struct ArtboardGraph {
     pub global_id: u32,
     pub local_objects: Vec<LocalObject>,
     pub components: Vec<ComponentNode>,
+    pub dependency_nodes: Vec<DependencyNode>,
     pub dependency_edges: Vec<DependencyEdge>,
+    pub dependency_node_edges: Vec<DependencyNodeEdge>,
     pub dependency_cycles: Vec<DependencyCycle>,
+    pub dependency_node_cycles: Vec<DependencyNodeCycle>,
     pub draw_targets: Vec<DrawTargetNode>,
     pub draw_rules: Vec<DrawRulesNode>,
     pub clipping_shapes: Vec<ClippingShapeNode>,
@@ -51,6 +54,7 @@ pub struct ArtboardGraph {
     pub animations: Vec<AnimationGraph>,
     pub state_machines: Vec<StateMachineGraph>,
     pub dependency_order: Vec<usize>,
+    pub dependency_node_order: Vec<usize>,
     pub lifecycle: LifecycleSummary,
 }
 
@@ -135,9 +139,19 @@ impl ArtboardGraph {
             &clipping_shapes,
         );
         lifecycle.build_dependencies_edges = dependency_edges.len();
-        let dependency_order =
-            build_dependency_order(&mut components, &component_by_local, &dependency_edges);
+        let dependency_nodes = build_dependency_nodes(&components, &path_composers);
+        lifecycle.build_dependencies_nodes = dependency_nodes.len();
+        let dependency_node_edges =
+            build_dependency_node_edges(&dependency_nodes, &dependency_edges, &path_composers);
+        lifecycle.build_dependencies_node_edges = dependency_node_edges.len();
+        let dependency_order = build_dependency_order(
+            &mut components,
+            &component_by_local,
+            &dependency_nodes,
+            &dependency_node_edges,
+        );
         lifecycle.dependency_cycles = dependency_order.cycles.len();
+        lifecycle.dependency_node_cycles = dependency_order.node_cycles.len();
 
         let artboard = file.objects[range.start]
             .as_ref()
@@ -154,15 +168,19 @@ impl ArtboardGraph {
             global_id: range.start as u32,
             local_objects,
             components,
+            dependency_nodes,
             dependency_edges,
+            dependency_node_edges,
             dependency_cycles: dependency_order.cycles,
+            dependency_node_cycles: dependency_order.node_cycles,
             draw_targets,
             draw_rules,
             clipping_shapes,
             path_composers,
             animations,
             state_machines,
-            dependency_order: dependency_order.order,
+            dependency_order: dependency_order.component_order,
+            dependency_node_order: dependency_order.node_order,
             lifecycle,
         })
     }
@@ -205,6 +223,27 @@ pub struct ComponentCapabilities {
     pub container: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DependencyNode {
+    pub node_id: usize,
+    pub kind: DependencyNodeKind,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum DependencyNodeKind {
+    Component {
+        local_id: usize,
+        global_id: u32,
+        type_name: &'static str,
+        name: Option<String>,
+    },
+    PathComposer {
+        shape_local: usize,
+        shape_global: u32,
+    },
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DependencyKind {
@@ -222,6 +261,8 @@ pub enum DependencyKind {
     JoystickHandleSource,
     ScrollBarConstraint,
     ScrollConstraintLayoutChild,
+    PathComposerShape,
+    PathComposerPath,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -231,9 +272,21 @@ pub struct DependencyEdge {
     pub kind: DependencyKind,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct DependencyNodeEdge {
+    pub source_node: usize,
+    pub dependent_node: usize,
+    pub kind: DependencyKind,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct DependencyCycle {
     pub local_ids: Vec<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DependencyNodeCycle {
+    pub node_ids: Vec<usize>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -416,8 +469,11 @@ pub struct LifecycleSummary {
     pub imported_slots: usize,
     pub on_added_dirty_resolved: usize,
     pub on_added_clean_indexed: usize,
+    pub build_dependencies_nodes: usize,
     pub build_dependencies_edges: usize,
+    pub build_dependencies_node_edges: usize,
     pub dependency_cycles: usize,
+    pub dependency_node_cycles: usize,
 }
 
 fn artboard_ranges(file: &RuntimeFile) -> Vec<ArtboardRange> {
@@ -912,6 +968,98 @@ fn path_composers(
         .collect()
 }
 
+fn build_dependency_nodes(
+    components: &[ComponentNode],
+    path_composers: &[PathComposerNode],
+) -> Vec<DependencyNode> {
+    let mut nodes = Vec::new();
+
+    for component in components {
+        nodes.push(DependencyNode {
+            node_id: nodes.len(),
+            kind: DependencyNodeKind::Component {
+                local_id: component.local_id,
+                global_id: component.global_id,
+                type_name: component.type_name,
+                name: component.name.clone(),
+            },
+        });
+    }
+
+    for composer in path_composers {
+        nodes.push(DependencyNode {
+            node_id: nodes.len(),
+            kind: DependencyNodeKind::PathComposer {
+                shape_local: composer.shape_local,
+                shape_global: composer.shape_global,
+            },
+        });
+    }
+
+    nodes
+}
+
+fn build_dependency_node_edges(
+    dependency_nodes: &[DependencyNode],
+    dependency_edges: &[DependencyEdge],
+    path_composers: &[PathComposerNode],
+) -> Vec<DependencyNodeEdge> {
+    let component_node_by_local = component_dependency_node_by_local(dependency_nodes);
+    let path_composer_node_by_shape = path_composer_dependency_node_by_shape(dependency_nodes);
+    let mut edges = Vec::new();
+
+    for edge in dependency_edges {
+        let Some(source_node) = component_node_by_local.get(&edge.source_local).copied() else {
+            continue;
+        };
+        let Some(dependent_node) = component_node_by_local.get(&edge.dependent_local).copied()
+        else {
+            continue;
+        };
+        edges.push(DependencyNodeEdge {
+            source_node,
+            dependent_node,
+            kind: edge.kind,
+        });
+    }
+
+    for composer in path_composers {
+        let Some(path_composer_node) = path_composer_node_by_shape
+            .get(&composer.shape_local)
+            .copied()
+        else {
+            continue;
+        };
+        if let Some(shape_node) = component_node_by_local.get(&composer.shape_local).copied() {
+            edges.push(DependencyNodeEdge {
+                source_node: shape_node,
+                dependent_node: path_composer_node,
+                kind: DependencyKind::PathComposerShape,
+            });
+        }
+        for path_local in &composer.path_locals {
+            let Some(path_node) = component_node_by_local.get(path_local).copied() else {
+                continue;
+            };
+            edges.push(DependencyNodeEdge {
+                source_node: path_node,
+                dependent_node: path_composer_node,
+                kind: DependencyKind::PathComposerPath,
+            });
+        }
+    }
+
+    edges.sort_by_key(|edge| {
+        (
+            edge.source_node,
+            edge.dependent_node,
+            dependency_kind_sort_key(edge.kind),
+        )
+    });
+    edges.dedup();
+    edges
+}
+
 fn build_dependency_edges(
     file: &RuntimeFile,
     local_objects: &[LocalObject],
@@ -1096,6 +1244,8 @@ fn dependency_kind_sort_key(kind: DependencyKind) -> u8 {
         DependencyKind::JoystickHandleSource => 11,
         DependencyKind::ScrollBarConstraint => 12,
         DependencyKind::ScrollConstraintLayoutChild => 13,
+        DependencyKind::PathComposerShape => 14,
+        DependencyKind::PathComposerPath => 15,
     }
 }
 
@@ -1469,97 +1619,167 @@ fn index_children(
     edges.len()
 }
 
+fn component_dependency_node_by_local(
+    dependency_nodes: &[DependencyNode],
+) -> BTreeMap<usize, usize> {
+    dependency_nodes
+        .iter()
+        .filter_map(|node| match &node.kind {
+            DependencyNodeKind::Component { local_id, .. } => Some((*local_id, node.node_id)),
+            DependencyNodeKind::PathComposer { .. } => None,
+        })
+        .collect()
+}
+
+fn component_local_by_dependency_node(
+    dependency_nodes: &[DependencyNode],
+) -> BTreeMap<usize, usize> {
+    dependency_nodes
+        .iter()
+        .filter_map(|node| match &node.kind {
+            DependencyNodeKind::Component { local_id, .. } => Some((node.node_id, *local_id)),
+            DependencyNodeKind::PathComposer { .. } => None,
+        })
+        .collect()
+}
+
+fn path_composer_dependency_node_by_shape(
+    dependency_nodes: &[DependencyNode],
+) -> BTreeMap<usize, usize> {
+    dependency_nodes
+        .iter()
+        .filter_map(|node| match &node.kind {
+            DependencyNodeKind::PathComposer { shape_local, .. } => {
+                Some((*shape_local, node.node_id))
+            }
+            DependencyNodeKind::Component { .. } => None,
+        })
+        .collect()
+}
+
+fn dependency_component_cycles(
+    node_cycles: &[DependencyNodeCycle],
+    component_local_by_node: &BTreeMap<usize, usize>,
+) -> Vec<DependencyCycle> {
+    let mut cycles = Vec::new();
+    for node_cycle in node_cycles {
+        let mut local_ids = Vec::new();
+        for node_id in &node_cycle.node_ids {
+            let Some(local_id) = component_local_by_node.get(node_id).copied() else {
+                local_ids.clear();
+                break;
+            };
+            local_ids.push(local_id);
+        }
+        if !local_ids.is_empty() {
+            let cycle = DependencyCycle { local_ids };
+            if !cycles.contains(&cycle) {
+                cycles.push(cycle);
+            }
+        }
+    }
+    cycles
+}
+
 struct DependencyOrder {
-    order: Vec<usize>,
+    component_order: Vec<usize>,
+    node_order: Vec<usize>,
     cycles: Vec<DependencyCycle>,
+    node_cycles: Vec<DependencyNodeCycle>,
 }
 
 fn build_dependency_order(
     components: &mut [ComponentNode],
     component_by_local: &BTreeMap<usize, usize>,
-    dependency_edges: &[DependencyEdge],
+    dependency_nodes: &[DependencyNode],
+    dependency_node_edges: &[DependencyNodeEdge],
 ) -> DependencyOrder {
-    let mut order = Vec::new();
-    let mut cycles = Vec::new();
+    let mut node_order = Vec::new();
+    let mut node_cycles = Vec::new();
     let mut permanent = BTreeSet::new();
     let mut temporary = BTreeSet::new();
     let mut visiting = Vec::new();
-    let component_locals = components
-        .iter()
-        .map(|component| component.local_id)
-        .collect::<BTreeSet<_>>();
+    let component_node_by_local = component_dependency_node_by_local(dependency_nodes);
+    let component_local_by_node = component_local_by_dependency_node(dependency_nodes);
     let roots = components
         .iter()
         .filter(|component| component.parent_local.is_none() || component.missing_parent)
-        .map(|component| component.local_id)
+        .filter_map(|component| component_node_by_local.get(&component.local_id).copied())
         .collect::<Vec<_>>();
     let mut dependents_by_source = BTreeMap::<usize, Vec<usize>>::new();
 
-    for edge in dependency_edges {
-        if !component_locals.contains(&edge.source_local)
-            || !component_locals.contains(&edge.dependent_local)
-        {
-            continue;
-        }
+    for edge in dependency_node_edges {
         push_unique(
-            dependents_by_source.entry(edge.source_local).or_default(),
-            edge.dependent_local,
+            dependents_by_source.entry(edge.source_node).or_default(),
+            edge.dependent_node,
         );
     }
 
     for root in roots {
-        visit_dependency_component(
+        visit_dependency_node(
             root,
             &dependents_by_source,
             &mut permanent,
             &mut temporary,
             &mut visiting,
-            &mut order,
-            &mut cycles,
+            &mut node_order,
+            &mut node_cycles,
         );
     }
 
-    for component in components.iter() {
-        visit_dependency_component(
-            component.local_id,
+    for node in dependency_nodes {
+        visit_dependency_node(
+            node.node_id,
             &dependents_by_source,
             &mut permanent,
             &mut temporary,
             &mut visiting,
-            &mut order,
-            &mut cycles,
+            &mut node_order,
+            &mut node_cycles,
         );
     }
+
+    let component_order = node_order
+        .iter()
+        .filter_map(|node_id| component_local_by_node.get(node_id).copied())
+        .collect::<Vec<_>>();
 
     for component in components.iter_mut() {
         component.graph_order = None;
     }
-    for (graph_order, local_id) in order.iter().enumerate() {
+    for (graph_order, local_id) in component_order.iter().enumerate() {
         if let Some(index) = component_by_local.get(local_id) {
             components[*index].graph_order = Some(graph_order);
         }
     }
 
-    DependencyOrder { order, cycles }
+    let cycles = dependency_component_cycles(&node_cycles, &component_local_by_node);
+
+    DependencyOrder {
+        component_order,
+        node_order,
+        cycles,
+        node_cycles,
+    }
 }
 
-fn visit_dependency_component(
-    local_id: usize,
+fn visit_dependency_node(
+    node_id: usize,
     dependents_by_source: &BTreeMap<usize, Vec<usize>>,
     permanent: &mut BTreeSet<usize>,
     temporary: &mut BTreeSet<usize>,
     visiting: &mut Vec<usize>,
     order: &mut Vec<usize>,
-    cycles: &mut Vec<DependencyCycle>,
+    cycles: &mut Vec<DependencyNodeCycle>,
 ) {
-    if permanent.contains(&local_id) {
+    if permanent.contains(&node_id) {
         return;
     }
-    if temporary.contains(&local_id) {
-        if let Some(start) = visiting.iter().position(|visited| *visited == local_id) {
-            let mut local_ids = visiting[start..].to_vec();
-            local_ids.push(local_id);
-            let cycle = DependencyCycle { local_ids };
+    if temporary.contains(&node_id) {
+        if let Some(start) = visiting.iter().position(|visited| *visited == node_id) {
+            let mut node_ids = visiting[start..].to_vec();
+            node_ids.push(node_id);
+            let cycle = DependencyNodeCycle { node_ids };
             if !cycles.contains(&cycle) {
                 cycles.push(cycle);
             }
@@ -1567,12 +1787,12 @@ fn visit_dependency_component(
         return;
     }
 
-    temporary.insert(local_id);
-    visiting.push(local_id);
+    temporary.insert(node_id);
+    visiting.push(node_id);
 
-    if let Some(dependents) = dependents_by_source.get(&local_id) {
+    if let Some(dependents) = dependents_by_source.get(&node_id) {
         for dependent in dependents {
-            visit_dependency_component(
+            visit_dependency_node(
                 *dependent,
                 dependents_by_source,
                 permanent,
@@ -1585,9 +1805,9 @@ fn visit_dependency_component(
     }
 
     visiting.pop();
-    temporary.remove(&local_id);
-    permanent.insert(local_id);
-    order.insert(0, local_id);
+    temporary.remove(&node_id);
+    permanent.insert(node_id);
+    order.insert(0, node_id);
 }
 
 fn push_unique(values: &mut Vec<usize>, value: usize) {

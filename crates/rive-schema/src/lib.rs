@@ -1,0 +1,342 @@
+//! Runtime schema metadata generated from Rive's `dev/defs` JSON files.
+//!
+//! This crate intentionally contains metadata, not runtime behavior. Later
+//! crates can use it to create objects by type key, route property keys to
+//! deserializers, and answer inheritance checks without mirroring the C++
+//! pointer hierarchy.
+
+pub mod generated;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FieldKind {
+    Bool,
+    Bytes,
+    Callback,
+    Color,
+    Double,
+    String,
+    Uint,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CoreRegistryFieldKind {
+    Uint,
+    StringOrBytes,
+    Double,
+    Color,
+    Bool,
+}
+
+impl CoreRegistryFieldKind {
+    pub fn from_field_kind(kind: FieldKind) -> Option<Self> {
+        match kind {
+            FieldKind::Uint => Some(Self::Uint),
+            FieldKind::String | FieldKind::Bytes => Some(Self::StringOrBytes),
+            FieldKind::Double => Some(Self::Double),
+            FieldKind::Color => Some(Self::Color),
+            FieldKind::Bool => Some(Self::Bool),
+            FieldKind::Callback => None,
+        }
+    }
+
+    pub fn from_property(property: &Property) -> Option<Self> {
+        if property.bitmask_passthrough.is_some() {
+            return None;
+        }
+        Self::from_field_kind(property.runtime_type)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Key {
+    pub int: u16,
+    pub name: &'static str,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BitmaskPassthrough {
+    pub target: &'static str,
+    pub bit: u8,
+    pub width: u8,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum StoredFieldInitializer {
+    Bool(bool),
+    Color(u32),
+    Double(f32),
+    String(&'static str),
+    Uint(u32),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Property {
+    pub name: &'static str,
+    pub key: Key,
+    pub alternates: &'static [Key],
+    pub declared_type: &'static str,
+    pub runtime_type: FieldKind,
+    pub description: Option<&'static str>,
+    pub initial_value: Option<&'static str>,
+    pub initial_value_runtime: Option<&'static str>,
+    pub group: Option<&'static str>,
+    pub nullable: bool,
+    pub override_set: bool,
+    pub override_get: bool,
+    pub virtual_: bool,
+    pub editor_only: bool,
+    pub coop: bool,
+    pub with_rive_tools_only: bool,
+    pub stores_data: bool,
+    pub deserializes: bool,
+    pub stores_field: bool,
+    pub encoded: bool,
+    pub bindable: bool,
+    pub animates: bool,
+    pub computed: bool,
+    pub journal: Option<bool>,
+    pub parentable: Option<u64>,
+    pub records: Option<bool>,
+    pub exports_to_runtime_conditionally: bool,
+    pub pure_virtual: bool,
+    pub passthrough: bool,
+    pub bitmask_passthrough: Option<BitmaskPassthrough>,
+}
+
+impl Property {
+    pub fn cpp_generates_changed_hook(self) -> bool {
+        self.stores_data && self.bitmask_passthrough.is_none()
+    }
+
+    pub fn cpp_generates_value_setter_body(self) -> bool {
+        self.cpp_generates_changed_hook()
+            && !self.encoded
+            && !self.pure_virtual
+            && self.runtime_type != FieldKind::Callback
+    }
+
+    pub fn cpp_generates_stored_field_getter_body(self) -> bool {
+        self.stores_field
+    }
+
+    pub fn cpp_generates_passthrough_getter_declaration(self) -> bool {
+        self.cpp_setter_uses_passthrough()
+    }
+
+    pub fn cpp_generates_pure_virtual_value_setter_declaration(self) -> bool {
+        self.bitmask_passthrough.is_none()
+            && !self.encoded
+            && !self.passthrough
+            && !self.cpp_generates_value_setter_body()
+    }
+
+    pub fn cpp_generates_encoded_decode_hook(self) -> bool {
+        self.encoded
+    }
+
+    pub fn cpp_generates_encoded_copy_hook(self) -> bool {
+        self.encoded
+    }
+
+    pub fn cpp_bitmask_passthrough_bitmask_constant(self) -> Option<u32> {
+        let bitmask = self.bitmask_passthrough?;
+        (self.runtime_type == FieldKind::Bool).then(|| 1u32 << bitmask.bit)
+    }
+
+    pub fn cpp_bitmask_passthrough_bit_offset_constant(self) -> Option<u32> {
+        let bitmask = self.bitmask_passthrough?;
+        (self.runtime_type == FieldKind::Uint).then_some(u32::from(bitmask.bit))
+    }
+
+    pub fn cpp_bitmask_passthrough_field_mask_constant(self) -> Option<u32> {
+        let bitmask = self.bitmask_passthrough?;
+        (self.runtime_type == FieldKind::Uint).then(|| {
+            let shifted_mask = ((1u64 << bitmask.width) - 1) << bitmask.bit;
+            u32::try_from(shifted_mask).expect("validated bitmask passthrough field mask fits u32")
+        })
+    }
+
+    pub fn cpp_setter_uses_stored_field(self) -> bool {
+        self.cpp_generates_value_setter_body() && !self.passthrough
+    }
+
+    pub fn cpp_setter_uses_passthrough(self) -> bool {
+        self.cpp_generates_value_setter_body() && self.passthrough
+    }
+
+    pub fn stored_field_initializer(self) -> Option<StoredFieldInitializer> {
+        if !self.stores_field {
+            return None;
+        }
+
+        let value = self.initial_value_runtime.or(self.initial_value);
+        match self.runtime_type {
+            FieldKind::Bool => Some(StoredFieldInitializer::Bool(
+                value.map(parse_bool_initializer).unwrap_or(false),
+            )),
+            FieldKind::Color => Some(StoredFieldInitializer::Color(
+                value.map(parse_color_initializer).unwrap_or(0),
+            )),
+            FieldKind::Double => Some(StoredFieldInitializer::Double(
+                value.map(parse_double_initializer).unwrap_or(0.0),
+            )),
+            FieldKind::String => Some(StoredFieldInitializer::String(
+                value.map(parse_string_initializer).unwrap_or(""),
+            )),
+            FieldKind::Uint => Some(StoredFieldInitializer::Uint(
+                value.map(parse_uint_initializer).unwrap_or(0),
+            )),
+            FieldKind::Bytes | FieldKind::Callback => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Definition {
+    pub name: &'static str,
+    pub rust_variant: &'static str,
+    pub file: &'static str,
+    pub type_key: Key,
+    pub runtime_parent: Option<&'static str>,
+    pub raw_parent_file: Option<&'static str>,
+    pub mixins: &'static [&'static str],
+    pub generic: Option<&'static str>,
+    pub generic_pass_through: Option<&'static str>,
+    pub exports_with_context: bool,
+    pub abstract_: bool,
+    pub cloneable: bool,
+    pub properties: &'static [Property],
+    pub ancestors: &'static [&'static str],
+}
+
+impl Definition {
+    pub fn is_a(self, type_name: &str) -> bool {
+        self.name == type_name || self.ancestors.iter().any(|name| *name == type_name)
+    }
+
+    pub fn property_by_key(self, key: u16) -> Option<&'static Property> {
+        self.properties.iter().find(|property| {
+            property.key.int == key || property.alternates.iter().any(|alt| alt.int == key)
+        })
+    }
+
+    pub fn property_by_key_in_hierarchy(self, key: u16) -> Option<&'static Property> {
+        self.property_by_key(key).or_else(|| {
+            self.ancestors.iter().find_map(|ancestor| {
+                definition_by_name(ancestor).and_then(|definition| definition.property_by_key(key))
+            })
+        })
+    }
+}
+
+pub fn definition_by_type_key(key: u16) -> Option<&'static Definition> {
+    generated::DEFINITIONS
+        .iter()
+        .find(|definition| definition.type_key.int == key)
+}
+
+pub fn is_callback_property_key(key: u16) -> bool {
+    generated::is_callback_property_key(key)
+}
+
+pub fn object_supports_property(type_key: u16, property_key: u16) -> bool {
+    match definition_by_type_key(type_key) {
+        Some(definition) => match definition.property_by_key_in_hierarchy(property_key) {
+            Some(property) => !property.encoded,
+            None => false,
+        },
+        None => false,
+    }
+}
+
+pub fn definition_by_name(name: &str) -> Option<&'static Definition> {
+    generated::DEFINITIONS
+        .iter()
+        .find(|definition| definition.name == name)
+}
+
+pub fn core_registry_field_kind_by_property_key(key: u16) -> Option<CoreRegistryFieldKind> {
+    generated::DEFINITIONS
+        .iter()
+        .find_map(|definition| definition.property_by_key(key))
+        .and_then(CoreRegistryFieldKind::from_property)
+}
+
+pub fn core_registry_setter_field_kind_by_property_key(key: u16) -> Option<FieldKind> {
+    let property = generated::DEFINITIONS
+        .iter()
+        .find_map(|definition| definition.property_by_key(key))?;
+
+    if property.encoded || property.runtime_type == FieldKind::Bytes {
+        None
+    } else {
+        Some(property.runtime_type)
+    }
+}
+
+pub fn core_registry_getter_field_kind_by_property_key(key: u16) -> Option<FieldKind> {
+    let property = generated::DEFINITIONS
+        .iter()
+        .find_map(|definition| definition.property_by_key(key))?;
+
+    if property.encoded
+        || property.runtime_type == FieldKind::Bytes
+        || property.runtime_type == FieldKind::Callback
+        || (property.runtime_type == FieldKind::Bool && property.bitmask_passthrough.is_some())
+    {
+        None
+    } else {
+        Some(property.runtime_type)
+    }
+}
+
+fn parse_bool_initializer(value: &'static str) -> bool {
+    match value {
+        "true" => true,
+        "false" => false,
+        other => panic!("unsupported bool initializer {other:?}"),
+    }
+}
+
+fn parse_color_initializer(value: &'static str) -> u32 {
+    if let Some(hex) = value
+        .strip_prefix("0x")
+        .or_else(|| value.strip_prefix("0X"))
+    {
+        u32::from_str_radix(hex, 16)
+            .unwrap_or_else(|err| panic!("unsupported color initializer {value:?}: {err}"))
+    } else {
+        value
+            .parse::<u32>()
+            .unwrap_or_else(|err| panic!("unsupported color initializer {value:?}: {err}"))
+    }
+}
+
+fn parse_double_initializer(value: &'static str) -> f32 {
+    value
+        .strip_suffix('f')
+        .unwrap_or(value)
+        .parse::<f32>()
+        .unwrap_or_else(|err| panic!("unsupported double initializer {value:?}: {err}"))
+}
+
+fn parse_string_initializer(value: &'static str) -> &'static str {
+    if value == "''" || value == "\"\"" {
+        return "";
+    }
+
+    value
+        .strip_prefix('\'')
+        .and_then(|value| value.strip_suffix('\''))
+        .unwrap_or(value)
+}
+
+fn parse_uint_initializer(value: &'static str) -> u32 {
+    match value {
+        "-1" | "Core.missingId" => u32::MAX,
+        "CoreContext.invalidPropertyKey" | "Core::invalidPropertyKey" => 0,
+        other => other
+            .parse::<u32>()
+            .unwrap_or_else(|err| panic!("unsupported uint initializer {value:?}: {err}")),
+    }
+}

@@ -1,0 +1,316 @@
+# Rive Rust Porting Map
+
+Working directory: `/Users/levi/dev/rive-rust`
+
+Reference runtime: `/Users/levi/dev/oss/rive-runtime`
+
+Goal: build a Rust runtime that can load `.riv` files, instantiate artboards, maintain the runtime graph, advance animations and state machines, and eventually render through a Rust renderer API or compatibility bridge.
+
+Initial constraint: do not begin with GPU rendering. Prove the headless schema, binary import, and runtime graph first.
+
+## #1: Compatibility Target
+
+Blocked by: none
+Type: Discuss
+
+### Question
+
+Are we targeting full C++ runtime parity from the start, or a graph-first subset that can grow toward parity?
+
+### Answer
+
+Resolved for now: use a graph-first subset. The first milestone is a headless runtime that can load a simple `.riv`, build the artboard graph, instantiate it, and advance transforms deterministically. Rendering, text, scripting, audio, and platform integrations come later.
+
+## #2: Repository Shape
+
+Blocked by: #1
+Type: Discuss
+
+### Question
+
+What crate layout should the Rust port use?
+
+### Answer
+
+Tentative layout:
+
+```text
+crates/
+  rive-schema/        # generated schema metadata from dev/defs
+  rive-binary/        # .riv reader, runtime header, property decoding
+  rive-core/          # object arena, generated object enum, typed IDs
+  rive-graph/         # artboard runtime graph, dirt, dependencies
+  rive-animation/     # linear animations and state machines
+  rive-render-api/    # renderer-agnostic draw commands
+  rive-ffi/           # C ABI / Swift / Kotlin / wasm later
+tools/
+  rive-codegen/
+  rive-compare/
+fixtures/
+  minimal/
+  graph/
+  animation/
+docs/
+  porting-map.md
+```
+
+This should stay flexible until the first prototype proves which boundaries are real.
+
+## #3: Fixture And Comparison Harness
+
+Blocked by: #1
+Type: Research
+
+### Question
+
+What minimal `.riv` fixture corpus and C++ comparison harness do we need before implementing Rust behavior?
+
+### Answer
+
+Resolved in `docs/research/fixture-harness.md`. A starter fixture corpus was copied into `fixtures/minimal`, `fixtures/graph`, and `fixtures/animation`. `tools/cpp-probe` now imports fixtures through the C++ runtime and emits JSON for artboard names/counts, compact artboard-local object IDs, type keys, parent IDs, resolved parent IDs, graph order, and world transforms. `make cpp-compare` compares the current Rust graph projection against this C++ output.
+
+## #4: Schema Generation
+
+Blocked by: #2
+Type: Prototype
+
+### Question
+
+How should Rust types be generated from `dev/defs`?
+
+### Answer
+
+Resolved in `docs/prototypes/schema-generation.md`. Added a Rust workspace with `crates/rive-schema` and `tools/rive-codegen`. `make schema` reads the C++ `dev/defs` JSON, writes a formatted generated schema, validates duplicate/reserved keys and bitmask passthrough invariants like the C++ generator, and generates `ObjectKind`, type-key metadata, runtime parent/ancestor metadata for `is_a`, definition mixin/generic/export-context metadata, abstract/cloneable flags, callback-key metadata matching `CoreRegistry::isCallback`, `object_supports_property` metadata matching `CoreRegistry::objectSupportsProperty`, CoreRegistry setter/getter family metadata, typed effective stored-field initializers, generated C++ value-accessor/change-hook/declaration/bitmask-constant helper metadata, and property-key metadata including alternates, runtime field kinds, descriptions, explicit and runtime initial values, C++ generator flags, bindable/animates/passthrough flags, raw annotations such as journal/records/parentable/conditional export, bitmask passthroughs, and deserialization/storage flags. Current output: 336 runtime definitions and 588 runtime properties. Tests now verify generated schema invariants, byte-compare formatted `rive-codegen` output with the checked-in generated schema, reject synthetic invalid key/bitmask metadata, compare Rust type/property keys against the generated C++ `*_base.hpp` headers, compare stored-field member presence, effective stored-field initializers, generated value-setter body presence and stored-field/passthrough body shape, pure-virtual value setter declarations, generated stored-field getter bodies and passthrough getter declarations, encoded `decode*`/`copy*` declarations, generated bitmask passthrough `Bitmask`/`BitOffset`/`FieldMask` constants, generated `Changed()` hook presence, generated `copy(...)` member assignments, and encoded-property copy hooks against C++ generated members, compare schema ancestors against C++ generated `isTypeOf` switches, compare abstract/cloneable flags against `CoreRegistry::makeCoreInstance` constructibility, generated `clone()` declarations, and generated clone implementation bodies, compare schema `deserializes` flags against C++ generated `deserialize` switches, compare every schema property against C++ `CoreRegistry::propertyFieldId` fallback families, including the fact that bitmask passthrough properties are not globally skippable, compare callback keys against C++ `CoreRegistry::isCallback`, compare object/property support against C++ `CoreRegistry::objectSupportsProperty`, including the exclusion of encoded bytes payload fields, and compare setter/getter families against C++ `CoreRegistry::set*`/`get*`, including the fact that semantic boolean bitmask passthroughs are settable but not getter-backed. Concrete object structs remain deferred until `rive-core`; ticket `#5` can now consume this metadata for binary import.
+
+## #5: Binary Import
+
+Blocked by: #4
+Type: Prototype
+Completion contract: `docs/prototypes/binary-import-completion-contract.md`
+
+### Question
+
+Can Rust decode `.riv` files into a stable object arena while preserving C++ compatibility behavior?
+
+### Answer
+
+Resolved in `docs/prototypes/binary-import.md`. Added `crates/rive-binary` and `riv-inspect`. Rust now parses runtime headers, LEB128 varuints, primitive field values, property ToC data, inherited properties, abstract/null object slots, and unknown object/property skipping using schema-modeled C++ `CoreRegistry::propertyFieldId` fallback families first and the file header ToC second, so conflicting header ToC entries cannot override generated registry field kinds, including after known-object generated-deserialize misses. Header integer and malformed-header semantics now match C++ `RuntimeHeader`: same-major newer minor versions are accepted, unsupported major versions are rejected as `unsupportedVersion`, bad/truncated fingerprints and incomplete required header segments are malformed, noncanonical and overwide LEB128 encodings are accepted, signed-`int` range overflows are malformed, signed-`int` boundary values such as `i32::MAX` ToC keys are accepted, duplicate ToC property keys overwrite earlier field ids with later field ids, truncated varuints are malformed, truncated packed ToC field-id words and missing property-ToC terminators are malformed, and ToC keys are preserved as 32-bit values. Length-prefixed string/bytes payloads also accept noncanonical LEB128 lengths while rejecting truncated length varuints. Object type-key reads also follow C++ signed-`int` behavior, allowing unknown keys above `u16` through `i32::MAX` to be skipped as null object slots when their properties are skippable; abstract known type keys also import as null slots according to `CoreRegistry::makeCoreInstance`, while object property keys follow C++ `uint16_t` range semantics, accepting `u16::MAX` and rejecting one-past max. Known-object property dispatch uses primary keys only like the generated C++ `deserialize` switches; alternate keys and schema-known properties absent from the generated C++ switch fall through to global/header fallback skipping instead of direct schema decoding, while duplicate stored properties expose the same final member state as C++ by letting the last serialized value win. Output is a stable `Vec<Option<RuntimeObject>>` preserving serialized object indexes, plus `import_statuses` metadata that tracks whether C++ would keep, drop, or null each slot after `object->import(importStack)`. C++ import-time mutations now include duplicate `FileAsset.assetId` normalization, matching `BackboardImporter::addFileAsset`, and only successfully imported assets participate in that mutation. Omitted stored scalar/string properties now expose generated C++ member defaults through typed helpers, including raw bytes for default strings and the C++ `Artboard` constructor override that makes inherited `clip` default to `true`, while keeping the serialized property list sparse. Runtime `uint` field values now match C++ `unsigned int` range semantics. String values now preserve raw bytes with an optional UTF-8 view instead of forcing lossy decoding, bool values match C++'s `byte == 1` decoding, and bytes fields preserve the full raw payload for future typed decoders while treating truncated declared payloads as malformed. Unknown string and bytes properties share the same global fallback field id like C++, so bytes payloads are skippable through the string/bytes path. Fixed-width primitive truncation for float32/double, color, and bool is also malformed. Missing-ToC fallback failures now match C++'s `nullptr` behavior when the reader has not errored, and synthetic tests cover the bool-field, callback, and bitmask-passthrough fallback quirks, including known-object callback/bitmask-passthrough EOF cases. Known non-stored properties now preserve skip metadata and decoded values for passthrough fields and header-ToC-backed bitmask passthrough schema fields, while bitmask passthrough keys are not treated as globally skippable for unknown-object fallback. Tests import the full starter fixture corpus, lock in C++-anchored expectations for `dependency_test.riv`, `two_artboards.riv`, and `smi_test.riv`, and include synthetic binary cases for exact C++ import result categories, header integer and malformed-header behavior, duplicate header-ToC overwrite behavior, noncanonical/overwide/truncated varuints, noncanonical string/bytes length prefixes, truncated packed ToC field ids, unknown object type keys, abstract known-object null slots, object property-key range behavior, alternate-key fallback behavior, duplicate stored-property overwrite behavior, duplicate file-asset id normalization, omitted stored-property defaults, `uint` value ranges, raw string/bytes payloads, noncanonical bool byte decoding, CoreRegistry-over-header fallback priority, string/bytes fallback id sharing, truncated bytes and fixed-width primitive payloads, missing-ToC behavior, bool/callback/bitmask-passthrough fallback behavior, known-object callback/bitmask-passthrough fallback behavior, import-stack keep/drop status, dropped-asset mutation exclusion, and passthrough/header-ToC-backed bitmask passthrough decoding. `make cpp-compare` now also runs `crates/rive-binary/tests/cpp_import.rs`, which compares exact Rust and C++ import result categories for synthetic forward-compatibility cases, compares C++ failed-import diagnostics against Rust dropped statuses for synthetic streams and every C++-accepted corpus fixture, compares decoded artboard names and dimensions against C++ probe JSON for the starter fixtures, compares `File::assets()` order/type/name/asset-id/CDN-base-url metadata for asset-heavy reference fixtures, compares `File::viewModel(i)` and `File::enums()` order/type/name plus view-model property/instance and data-enum value ownership, compares artboard-local object slots and component metadata against C++ `Artboard::objects()`/`Component` state, compares `Artboard::animation(i)` and `Artboard::stateMachine(i)` metadata including linear animation scalar fields, validated keyed-object/keyed-property ownership, first-keyframe metadata, ordered state-machine layer/input/listener/data-bind child lists, layer state counts, listener target/action/input-type counts, and data-bind property/converter fields, compares file-level and non-root artboard-local getter-backed stored property values against C++ `CoreRegistry` getters when those getters directly expose stored members, including file assets, view models, enums, and artboard-owned `KeyFrameInterpolator` descendants, and excludes virtual/override/pure-virtual runtime-state getters from that stored-value comparison. It also runs a corpus-wide structural summary comparison for every C++-accepted unit fixture, covering artboard names/bounds/object slots, file assets, view-model properties/instances, and data-enum values while matching C++ import ownership details such as manifest assets, user inputs, and scripted inputs, script/shader asset-content behavior in the non-scripting probe build, formula-token importer context, and scroll-physics backboard ownership. The full starter fixture corpus imports successfully; `dependency_test.riv` imports as 19 slots, 18 known objects, with artboard `Blue`.
+
+The C++ constructor stored-field default override audit currently pins `Artboard.clip` as the only known object-specific default that differs from generated member initializers.
+
+The file-asset helper source audit pins C++ `uniqueName()`, `uniqueFilename()`, `cdnUuidStr()`, and concrete asset extension overrides against the Rust binary metadata helpers.
+
+The failed-import comparison is stricter than count parity: it compares the ordered C++ failed type-key diagnostics against the Rust dropped import-status type keys for synthetic streams and every C++-accepted corpus fixture.
+
+The corpus comparison now also checks `CoreRegistry` getter-backed stored property values before artboard advance for every C++-accepted fixture, covering file assets, view models, view-model properties/instances, data enums, enum values, and non-root artboard-local stored fields whose getters directly expose stored members. Virtual, override, and pure-virtual getter families are excluded because they can report resolved runtime state instead of imported member values.
+
+The import-status model now tracks explicit C++ `ImportStack` latest-importer keys and `lastAdded` order instead of context booleans, so tests can pin keyed ownership and `readNullObject()` routing. Synthetic Rust and C++ probe coverage now verifies that a null object after a state-machine layer is consumed by the latest `StateMachineLayerImporter` as a null state slot rather than leaking back to the older `StateMachineImporter` as an input placeholder, and that a latest importer whose `readNullObject()` returns false is skipped while searching backward for an older null-object consumer.
+
+The corpus structural summary now checks every artboard-local object slot's null/type-key shape, compares component core types, names, parent IDs, and resolved parent slots for every accepted fixture, compares file asset indexes/core types/names/asset IDs/CDN base URLs/helper-derived strings, view-model and child indexes/core types/names/instance IDs/value children/list items/property links, data-enum/value indexes/core types/names/keys/values, linear-animation indexes/core types/names/scalar fields/keyed-object identities/keyed-property lists/first-keyframe metadata, artboard skin/skinnable/tendon relationships, mesh/path vertex weight relationships, shape-owned path/paint relationships including parametric paths and forward-referenced paint mutators, artboard `ShapePaintContainer` registration lists plus paint/mutator, feather, gradient-stop, stroke-effect, and target-effect identities, artboard-owned data-bind indexes/core types/property keys/flags/converter IDs/resolved converter core types/converter interpolator core types/converter-group item core types/interpolator core types/target core types/target locals, and state-machine/layer/input/listener/data-bind indexes/core types/names/counts plus listener targets, listener action/input-type child records, listener view-model path buffers, and state-machine data-bind property/converter fields including resolved converter-group item and interpolator core types. Selected animation/state-machine probe fixtures now also compare `CoreRegistry` getter-backed stored values for animation, artboard data-bind, and state-machine child objects. The summary models C++ import-stack ownership details such as listener actions staying attached across intervening data-bind records, listener input type importers gating keyboard/semantic/gamepad user inputs, scripted inputs requiring the latest `ScriptedObjectImporter` instead of generic component context, listener input-change invalid-object drops when a resolved state-machine input has the wrong kind while null/out-of-range inputs are accepted, listener input-change nested-input validation against artboard-local `NestedBool`/`NestedNumber`/`NestedTrigger` slots before state-machine fallback, transition condition/comparator importers requiring the matching state-transition, view-model-condition, and bindable-property context, transition input-condition invalid-object drops when input IDs are out of range or point at the wrong state-machine input kind, blend-state/direct-blend invalid-object drops when input IDs do not resolve to number inputs or blend animations attach to non-blend states, `StateMachineImporter::readNullObject` adding null input placeholders, `StateMachineLayerImporter::readNullObject` adding placeholder states that participate in `StateTransition.stateToId` resolution, required Any/Entry/Exit state-machine layer scaffold validation, fatal constraint initialization checks for `TransformComponent`/`Bone` parentage, fatal object-import failures preserving null artboard-local slots, recoverable NSlicer/Axis/TileMode wrong-parent `MissingObject` lifecycle failures that keep slots while skipping invalid registrations, fatal paint/effect initialization checks for `DashPath`/effects-container parentage, duplicate shape-paint mutators, and TrimPath mode values, fatal text initialization checks for `TextStyle` and `TextInput` parentage, `DataBind` targets determining whether a bind is artboard-owned or state-machine-owned, data-converter IDs resolving through the imported backboard converter list, converter interpolator IDs resolving through the pre-artboard backboard `KeyFrameInterpolator` list, `DataConverterGroupItem` objects attaching to the latest `DataConverterGroupImporter`, failed non-`DataBind` imports clearing C++ `lastBindableObject`, `KeyedObject::onAddedDirty` removing keyed objects whose target cannot resolve and removing keyed properties whose resolved target object does not support the property key, C++ auto-generated empty state machines, and `Artboard::validateObjects` nulling invalid targeted constraints, text styles, nested animations, scroll-bar constraints, and feather effects while preserving slot positions.
+
+`Joystick.handleSourceId`, `xId`, and `yId` are now pinned at the binary import boundary: Rust decodes and preserves default, valid, missing, and wrong-type explicit ids without rejecting the file, matching C++ `File::import`. Rust also exposes `RuntimeFile::resolved_handle_source_for_joystick(_object)`, mirroring C++ `Joystick::onAddedDirty` by resolving against validated artboard-local slots and accepting only `TransformComponent` handle sources, plus `resolved_x_animation_for_joystick(_object)` and `resolved_y_animation_for_joystick(_object)`, mirroring C++ `Joystick::onAddedClean` axis animation lookup through `Artboard::animation(...)`.
+
+View-model asset-value snapshot comparisons now include the same file-asset helper-derived fields as the `File::assets()` comparison, covering copied CDN URL/UUID and unique-name metadata.
+
+The corpus comparison now also checks `File::dataResolver()` manifest name/path tables against `RuntimeFile::manifest()`, so manifest-backed data-bind path expansion has a C++-verified decoded source. Synthetic C++ probe coverage also pins signed `ManifestAsset` map keys, including wrapped high-bit IDs such as `u32::MAX -> -1`, plus the partial manifest map state C++ keeps when malformed manifest bytes make `ManifestAsset::decode()` return false but `FileAssetImporter::resolve()` still returns success.
+
+Manifest-backed `DataBindPath::resolvedPath()` behavior is pinned for the C++ single-id expansion case, missing manifest ids resolving to an empty path, wrapped `uint32_t` IDs resolving through signed manifest keys, and multi-id paths remaining unexpanded.
+
+Name-based `DataBindContext::resolvePath()` behavior is also pinned through the C++ probe: Rust exposes both the raw decoded `sourcePathIds` buffer and the lazily resolved buffer that expands the first manifest id only when the manifest lookup is non-empty, including the C++ behavior where multi-id name-based context buffers are replaced by the first id's manifest path.
+
+`DataConverterNumberToList` file-backed `viewModelId` resolution is pinned through the C++ probe as well. Rust exposes `RuntimeFile::resolved_view_model_for_number_to_list_converter(_object)`, matching the `file(this)` assignment in C++ `File::read` and `File::viewModel(index)` null behavior for missing ids.
+
+`DataConverter::outputType()` parity is pinned through the C++ probe. Rust exposes `RuntimeFile::data_converter_output_type(_for_object)` with C++ enum discriminants, including inherited operation converters returning `number`, interpolators returning `input`, `ScriptedDataConverter` returning `any`, and `DataConverterGroup` resolving from the last group item backward until a non-`input` child output type is found, otherwise returning `none`.
+
+`DataConverter::bindFromContext()` parity has started at the binary layer. Rust exposes `RuntimeFile::data_converter_bind_context_effect(_for_object)`, modeling parent-data-bind storage, owned `DataBindContext` rebinding, `DataConverterGroup` child dispatch, `DataConverterOperationViewModel` number-source lookup/dependency registration, and `DataConverterFormula` parent-source binding. The helper takes live context, parent-source, and lookup-result state explicitly because those pointers are runtime state, not serialized fields. A C++ source audit pins the base method plus the group, operation-view-model, and formula overrides.
+
+Data-converter lifecycle side effects are now partially pinned as well. Rust exposes `RuntimeFile::data_converter_unbind_effect(_for_object)`, `data_converter_update_effect(_for_object)`, `data_converter_reset_effect(_for_object)`, `data_converter_mark_dirty_effect(_for_object)`, `data_converter_property_change_effect(_for_object)`, `data_converter_add_dirty_data_bind_effect(_for_object)`, `data_converter_formula_add_dirt_effect(_for_object)`, and `data_bind_container_add_dirty_effect()`, matching C++ base converter owned-bind unbind/update delegation, `DataConverterGroup` child forwarding without base delegation, `DataConverterFormula` source-dependent cleanup, base reset no-op, group reset forwarding, `DataConverterInterpolator` advance-count/advancer reset, parent `DataBind` dirt propagation, dirty-queue selection for converter-owned binds, property-change dirty hooks for the audited converter fields, `DataConverterNumberToList.viewModelId` cache clearing, and formula random-cache clearing for `RandomMode::sourceChange`.
+
+Imported `DataBind::sourceOutputType()`/`outputType()` parity is pinned through the C++ probe as well. Rust exposes `RuntimeFile::data_bind_source_output_type(_for_object)` and `data_bind_output_type(_for_object)` for the unbound binary graph: source output is `none`, and bind output returns a concrete converter output unless that converter reports `input` or `none`.
+
+Data-bind lifecycle classification has started at the binary layer. Rust exposes `RuntimeFile::data_bind_to_source(_for_object)`, `data_bind_to_target(_for_object)`, `data_bind_binds_once(_for_object)`, `data_bind_is_main_to_source(_for_object)`, `data_bind_source_to_target_runs_first(_for_object)`, `data_bind_is_name_based(_for_object)`, `data_bind_target_supports_push(_for_object)`, `data_bind_uses_persisting_list(_for_object)`, `data_bind_can_skip(_for_object)`, `data_bind_collapse_effect(_for_object)`, `data_bind_add_dirt_effect(_for_object)`, `data_bind_add_effect(_for_object)`, `data_bind_source_effect(_for_object)`, `data_bind_clear_source_effect(_for_object)`, `data_bind_bind_effect(_for_object)`, `data_bind_target_effect(_for_object)`, `data_bind_unbind_effect(_for_object)`, `data_bind_initialize_effect(_for_object)`, `data_bind_relink_effect(_for_object)`, `data_bind_context_bind_effect(_for_object)`, `data_bind_update_effect(_for_object)`, `data_bind_remove_effect(_for_object)`, `data_bind_container_bind_context_effect()`, `data_bind_container_unbind_effect()`, `data_bind_container_advance_effect()`, `data_bind_container_update_effect()`, `data_bind_stateful_advance(_for_object)`, `data_bind_update_queue(_for_object)`, and `sorted_data_bind_ids()`, matching C++ `DataBind` flag helpers, `DataBind::targetSupportsPush()`, `DataBind::canSkip()`, `DataBind::collapse()`, `DataBind::addDirt()`, `DataBind::source()`, `DataBind::clearSource()`, `DataBind::bind()`, `DataBind::target()`, `DataBind::unbind()`, `DataBind::initialize()`, `DataBind::relinkDataBind()`, `DataBindContext::bindFromContext()`, `DataBind::update()`, `DataBind::updateSourceBinding()`, `DataBind::updateDependents()`, `DataBind::advance()`, the `DataBindContainer::addDataBind()` deferred-add gate, persisting-list enrollment, and existing-context bind/update branch, `DataBindContainer::addDirtyDataBind()` queue selection, `DataBindContainer::updateDataBind()` ordering, `DataBindContainer::removeDataBind()` deferred/immediate cleanup, `DataBindContainer::bindDataBindsFromContext()` context assignment, `DataBindContainer::unbindDataBinds()` unbind/clear behavior, `DataBindContainer::advanceDataBinds()` aggregation, `DataBindContainer::updateDataBinds()` scheduler behavior, and `DataBindContainer::sortDataBinds()` swap partitioning. `data_bind_can_skip` takes target collapsed state explicitly because C++ reads mutable `ComponentDirt::Collapsed` state rather than a serialized field, `data_bind_collapse_effect` takes current/requested collapsed state plus dirt/container presence explicitly because C++ mutates packed live flags and may call `addDirtyDataBind`, `data_bind_add_dirt_effect` takes current/added `RuntimeComponentDirt` plus live suppress/collapsed/context/container state explicitly because C++ ORs packed dirt bits, invalidates context values when `Dependents` is present after the OR, and queues only when contained and not collapsed, `data_bind_add_effect` takes live processing/data-context presence explicitly because C++ either queues pending additions or immediately appends, sets persisting/container state, and for `DataBindContext` binds an existing data context before running `updateDataBind(dataBind, true)`, `data_bind_source_effect` and `data_bind_clear_source_effect` take live source data explicitly because C++ mutates `m_Source`, adds/removes view-model dependents unless `Once` is set, and toggles `ArtboardComponentList::shouldResetInstances` only for number sources, `data_bind_bind_effect`, `data_bind_target_effect`, and `data_bind_unbind_effect` take live source/context/target/observer/dirt/container state explicitly because C++ creates/deletes context values from `outputType()`, resets/unbinds converters, removes/re-adds target property observers, and calls `addDirt(ComponentDirt::Bindings, true)` during bind, `data_bind_initialize_effect` and `data_bind_relink_effect` take live collapsable/container/data-context state explicitly because C++ registers Component targets with `pushUnique` semantics, immediately calls `collapse(isCollapsed())` on first registration, and container rebuilds only bind `DataBindContext` children, `data_bind_context_bind_effect` takes live data-context/source-lookup/current-source/context-value/observer/dirt state explicitly because C++ resolves name-based paths once, chooses relative versus absolute view-model property lookup, binds new sources, unbinds missing sources, dirties unchanged sources, and always calls converter `bindFromContext` when a converter exists and the incoming data context is non-null, `data_bind_update_effect` takes current dirt plus live source/context/target/apply-target-to-source state explicitly because C++ clears dirt, conditionally updates converter dependents, applies target-to-source before or after the update based on `SourceToTargetRunsFirst`, and suppresses dirt around source-to-target writes, `data_bind_remove_effect` takes live processing/persisting/dirty membership explicitly because C++ either queues pending removals during `updateDataBinds` processing or immediately erases from the primary, persisting, and dirty lists before clearing membership/container state, the container bind/unbind/advance/update helpers take ordered queue ids plus explicit live skip/advance results because C++ iterates mutable vectors directly while the binary layer does not own live bind state, and `data_bind_stateful_advance` takes source-bound/collapsed state explicitly because C++ checks live `m_Source` plus `DataBind::Flag::Collapsed` before delegating to the resolved converter's `advance()`. C++ probe comparisons now cover the push/persisting flags for imported artboard and state-machine data binds, while synthetic Rust coverage pins the flag combinations, computed-property, `Solo.activeComponentId`, `Shape.length`, scroll-derived property, bindable asset/view-model target exceptions, collapsed-target can-skip/display exceptions, collapse dirty-update requests, add-dirt suppression/duplicate/context-invalidation/collapsed-queue branches, addDataBind deferred/persisting/context branches, source/clearSource dependent and `ArtboardComponentList` reset branches, bind/target/unbind context creation, converter reset/unbind, observer removal/subscription, null target assignment, dirt scheduling branches, initialize/relink collapsable and container-rebuild branches, DataBindContext bind-from-context no-context/source-change/source-match/missing-source/name-based/converter branches, container bind/unbind/advance ordering, updateDataBinds early-return/drain/pending-flush behavior, updateDataBind ordering/source-context-target guards, removeDataBind deferred/immediate cleanup, sort-order swaps, to-target queue branch, and two-way-to-source branch. A hand-built Rust test pins converter-dependent update, non-stable sort tail behavior, and `DataBind::advance()` guard/delegation behavior. C++ source audits now pin the `DataBindFlags` bit layout, `ComponentDirt` bit layout, internal data-bind flag layout, helper bodies, `canSkip()`/`collapse()`/`addDirt()`/`source()`/`clearSource()`/`bind()`/`target()`/`unbind()`/`initialize()`/`relinkDataBind()`/`update()`/`updateSourceBinding()`/`updateDependents()`/`advance()` bodies, `DataBindContext::resolvePath()`/`bindFromContext()`, `Component::addCollapsable()`, artboard/state-machine `rebuildDataBind()`, container queue members, add behavior, remove cleanup, context bind/unbind, container advance, dirty queue selection, update order, sort order, and drain/flush order for future scheduler work. Full artboard/data-bind lifecycle scheduling remains a future runtime-state slice.
+
+Artboard-backed view-model resolution is pinned through the C++ probe. Rust exposes `RuntimeFile::resolved_view_model_for_artboard(_object)`, matching the `File::viewModel(Artboard.viewModelId)` lookup used by C++ `File::createViewModelInstance(Artboard*)` and `createDefaultViewModelInstance(Artboard*)`.
+
+View-model name lookup semantics are pinned through the C++ probe. Rust exposes `RuntimeFile::view_model_property_named(_bytes)`, `view_model_instance_named(_bytes)`, and `view_model_instance_value_named(_for_object)`, matching C++ linear first-match behavior for `ViewModel::property(name)`, `ViewModel::instance(name)`, and completed `ViewModelInstance::propertyValue(name)`, including duplicate names.
+
+View-model symbol lookup semantics are pinned through the C++ probe. Rust exposes `RuntimeFile::view_model_property_for_symbol` and `view_model_instance_value_for_symbol(_object)`, matching C++ `SymbolType` lookup behavior, including first-match property scans by `symbolTypeValue`, last-wins instance-value symbol maps, and `ViewModelPropertySymbolListIndex` mapping to `itemIndex` for values.
+
+View-model default-instance semantics are pinned through the C++ probe. Rust exposes `RuntimeFile::view_model_default_instance`, matching C++ `ViewModel::defaultInstance()` by resolving the first imported instance for a view model or no instance when the C++ vector is empty.
+
+View-model instance property-id lookup semantics are pinned through the C++ probe. Rust exposes `RuntimeFile::view_model_instance_value_for_property_id(_object)`, matching C++ `ViewModelInstance::propertyValue(uint32_t)` first-match behavior over imported values, including duplicate property IDs and missing IDs.
+
+`ViewModelInstanceListItem` target instance resolution is pinned through the C++ probe. Rust exposes `RuntimeFile::referenced_view_model_instance_for_list_item(_object)`, matching the `viewModelId`/`viewModelInstanceId` lookup C++ performs while completing view-model properties.
+
+`ArtboardComponentList` list-item artboard selection is pinned through the C++ probe. Rust exposes `RuntimeFile::artboard_component_list_map_rules(_for_object)` and `resolved_artboard_for_artboard_component_list_item(_objects)`, matching `ArtboardListMapRule::onAddedDirty` registration plus `ArtboardComponentList::findArtboard` explicit-rule/fallback/null behavior.
+
+`ViewModelInstance::propertyFromPath` semantics are pinned through the C++ probe. Rust exposes `RuntimeFile::view_model_instance_property_from_path(_for_object)`, matching direct property-id path traversal and nested `ViewModelInstanceViewModel` reference traversal.
+
+`DataContext` view-model lookup semantics are now pinned through the C++ probe. Rust exposes absolute and relative property/instance lookup helpers over current-plus-parent view-model instance chains, including manifest-name relative paths, `ViewModelInstanceViewModel` traversal, and C++ parent fallback behavior.
+
+`DataEnum` lookup semantics are pinned through the C++ probe. Rust exposes key and index lookup helpers matching C++ `DataEnum::value(...)` and `DataEnum::valueIndex(...)`, including empty-value fallback to the key, duplicate-key first-match behavior, and missing/out-of-range results.
+
+`ViewModelPropertyEnumCustom` data-enum resolution is pinned through the C++ probe. Rust exposes property-level enum lookup helpers that match C++ `dataEnum(m_Enums[enumId])` timing, including invalid enum IDs and the case where a property appears before the enum it references and therefore is not backfilled later. `ViewModelPropertyEnumSystem` is modeled as C++'s static empty enum.
+
+`ViewModelInstanceEnumRuntime` imported-data views are pinned through the C++ probe. Rust exposes helpers for current enum key, runtime value index, available keys, and enum type, including C++'s out-of-range fallback to an empty key and index `0` and the system enum static-empty behavior.
+
+`ViewModelInstance*Runtime` imported value views are now pinned through the C++ probe. Rust exposes `RuntimeFile::view_model_instance_value_data_type(_for_object)` plus typed helpers for number, string, boolean, color, list size, trigger count, view-model index, symbol-list-index value, asset index, and artboard index, matching C++ runtime wrapper data types where wrappers exist and the data-bind graph's data-type mapping for view-model and symbol-list-index values.
+
+Source-side data-binding values are pinned through the C++ probe as well. Rust exposes `RuntimeFile::view_model_instance_source_data_value(_for_object)`, matching the `DataValue*` payload shape produced by C++ `DataBindContextValue::syncSourceValue()` before converter execution.
+
+Imported converter execution has started at the binary layer. Rust exposes `RuntimeFile::data_converter_convert(_for_object)` and a `RuntimeConvertedDataValue` result shape for forward `DataConverter::convert()` overrides, with direct C++ sample coverage for boolean negate, trigger increment, `ToNumber` raw-byte `std::atof`-style decimal and hex string numeric-prefix parsing, `ToString` including custom color-format markers, rounder, string trim/pad/remove-zeros, operation-value arithmetic, operation-view-model arithmetic against imported view-model instance chains, the abstract `DataConverter` base method's pass-through dispatch, concrete `DataConverterOperation` inherited pass-through, non-scripting `ScriptedDataConverter` inherited pass-through, list-to-length, number-to-list list-size outputs plus file-backed generated item shapes, range mapper flags plus imported cubic/elastic interpolator transforms, fresh first-run `DataConverterInterpolator` pass-through, direct elapsed `DataConverterInterpolator` state for number/color smoothing, deterministic formula functions plus supplied-random formula ranges over imported output queues, and forward group composition. `RuntimeFile::data_converter_bind_context_effect(_for_object)`, `data_converter_unbind_effect(_for_object)`, `data_converter_update_effect(_for_object)`, `data_converter_reset_effect(_for_object)`, `data_converter_mark_dirty_effect(_for_object)`, `data_converter_property_change_effect(_for_object)`, and `data_converter_add_dirty_data_bind_effect(_for_object)` cover adjacent C++ converter lifecycle entry points before and around conversion, including group child dispatch, operation-view-model/formula source binding effects, owned data-bind update/unbind behavior, reset propagation, dirty propagation, and the audited property-change dirty hooks. `RuntimeConvertedDataValue::GeneratedList` carries the generated list item view-model id and value core types for valid `DataConverterNumberToList` converters, while still returning an empty generated list for missing file/view-model cases like C++. `RuntimeFile::data_converter_convert_with_context(_for_object)` and `data_bind_convert_with_context(_for_object)` pass a C++-style `DataContext` view-model instance chain for context-aware converters, including bound, missing-source, and unbound `DataConverterOperationViewModel` behavior. `RuntimeFile::data_bind_convert(_for_object)` covers data-bind-aware system converters by passing imported `DataBind.flags` through the C++ direction-sensitive operation-value branch. Formulas needing random values return explicit `None` through the ordinary stateless API and evaluate through `data_converter_convert_with_formula_randoms`/`data_converter_reverse_convert_with_formula_randoms` when the caller supplies random values. Direct interpolator smoothing uses `RuntimeDataConverterInterpolatorState` with explicit `convert`/`reverse_convert`/`advance` calls; grouped stateful converter execution now uses `RuntimeDataConverterState` with explicit stateful forward/reverse/advance calls for `DataConverterGroup` pipelines containing interpolators, and data-bind advance delegates to the same state via `data_bind_stateful_advance(_for_object)` once the caller supplies live source/collapsed state. Full artboard/data-bind lifecycle scheduling around converter state remains a future runtime-state slice. Unknown future converter subclasses return `None` so future parity gaps remain explicit.
+
+Reverse converter execution is pinned for the deterministic, supplied-random, and stateful interpolator/group subset as well. `RuntimeFile::data_converter_reverse_convert(_for_object)` matches C++ reverse group order, boolean negate, operation-value inverse arithmetic, context-aware operation-view-model inverse arithmetic, range-mapper reverse mapping including imported cubic/elastic interpolator transforms, fresh first-run `DataConverterInterpolator` pass-through, formula reverse conversion through C++'s forward formula evaluator, and base pass-through reverse behavior for converters that do not override `reverseConvert()`. `RuntimeFile::data_converter_reverse_convert_with_formula_randoms` mirrors random formula reverse evaluation when supplied random values are available, `RuntimeFile::data_converter_interpolator_reverse_convert` mirrors C++ `DataConverterInterpolator::reverseConvert()` delegating to the same stateful smoothing path as forward conversion, and `RuntimeFile::data_converter_stateful_reverse_convert` shares interpolator state across reverse `DataConverterGroup` pipelines. `RuntimeFile::data_bind_reverse_convert(_for_object)` covers the same direction-sensitive system converter branch, while `data_converter_reverse_convert_with_context(_for_object)` and `data_bind_reverse_convert_with_context(_for_object)` pass the imported view-model instance chain for context-aware reverse conversion.
+
+The corpus sweep also compares exact Rust/C++ import-result categories for fixtures that C++ rejects with a classified `ImportResult`. This pinned `solar-system.riv`: C++ decodes all objects, then rejects the file as `malformed` during final import-stack resolution because a surviving `Drawable` has an invalid `blendModeValue`. Rust now mirrors that C++ artboard-local validation path, including `Mesh::onAddedClean` rejection of missing triangle index buffers and triangle indices outside the attached `MeshVertex`/subclass list.
+
+The binary arena now keeps raw bytes for encoded fields while also exposing typed C++ byte-decoder views: encoded `List<Id>` fields such as `DataBindPath.path`, `DataBindContext.sourcePathIds`, and `DataConverterOperationViewModel.sourcePathIds` decode as `uint32_t` ID buffers, `RuntimeFile::data_bind_path_for_referencer(_object)` models C++ `DataBindPathImporter` latest-unclaimed claim semantics plus inline path fallback, `Mesh.triangleIndexBytes` decodes as the `uint16_t` index buffer C++ uses for mesh validation, `FileAsset.cdnUuid` formats through the same byte-reordered `cdnUuidStr()` shape as C++, FileAsset extension/unique-name/unique-filename helpers mirror C++ including raw-byte asset names, and `RuntimeFile::manifest()` decodes `ManifestAsset` name/path tables from attached in-band `FileAssetContents`, including signed-key and partial malformed decode state. Later graph/runtime layers can consume these without reimplementing embedded byte parsing at each call site.
+
+File-level runtime graph support has started with C++ artboard, authored animation/state-machine, enum, view-model, and asset ownership. `RuntimeFile::artboards()`/`artboard(index)`/`default_artboard()`/`artboard_named(_bytes)` mirror `File::artboard(...)` accessors by returning imported artboards in file order, `resolved_artboard_for_referencer(_object)` mirrors `BackboardImporter::resolve()` for `NestedArtboard` and `ScriptInputArtboard` `artboardId` references, `resolved_handle_source_for_joystick(_object)` mirrors `Joystick::onAddedDirty` handle-source resolution, `resolved_x_animation_for_joystick(_object)` and `resolved_y_animation_for_joystick(_object)` mirror `Joystick::onAddedClean` axis animation resolution, `data_bind_path_for_referencer(_object)` mirrors `DataBindPathImporter` claim order for path referencers while preserving inline path-byte fallback, `scroll_physics()`/`scroll_physics_object(index)` and `resolved_scroll_physics_for_constraint(_object)` mirror `BackboardImporter::addPhysics` plus `ScrollConstraint.physicsId` resolution, `artboard_animations()`/`artboard_animation(index)`/`artboard_animation_named(_bytes)` and `artboard_state_machines()`/`artboard_state_machine(index)`/`artboard_state_machine_named(_bytes)` mirror authored `Artboard::animation(...)` and explicit `Artboard::stateMachine(...)` binary collections, `artboard_linear_animations()` exposes C++ keyed-object/keyed-property pruning plus first-keyframe grouping for validated linear animations, `artboard_state_machine_graphs()` exposes C++ state-machine layer/input/listener/action/listener-input-type/data-bind child ownership for authored state machines, `artboard_data_binds()` exposes C++ artboard-owned data binds with resolved converter, target object, and target-local IDs when the target is an artboard-local component, `data_converters()`/`data_converter(index)` expose the imported backboard converter list, `data_converter_interpolators()` exposes the pre-artboard backboard `KeyFrameInterpolator` list, `resolved_data_converter_for_data_bind(_object)`, `resolved_data_converter_for_group_item(_object)`, `resolved_interpolator_for_data_converter(_object)`, and `resolved_view_model_for_number_to_list_converter(_object)` model C++ converter, interpolator, and number-to-list view-model resolution, `data_converter_group_items()` models latest-`DataConverterGroupImporter` item ownership, `data_enums()`/`data_enum(index)` mirror `File::enums()` exact membership and latest-`DataEnumCustom` value ownership, data-enum lookup helpers mirror C++ `DataEnum::value(...)`/`valueIndex(...)`, enum-property lookup helpers mirror C++ import-time `ViewModelPropertyEnumCustom` enum pointer resolution, enum instance helpers mirror `ViewModelInstanceEnumRuntime` imported-data views, `view_models()`/`view_model(index)`/`view_model_named(_bytes)` mirror `File::viewModel(...)` order, raw-byte name lookup, latest-`ViewModelImporter` property ownership, import-time `ViewModelInstance` attachment by existing view-model id, and latest-importer ownership for `ViewModelInstanceValue` plus `ViewModelInstanceListItem` children, while `file_assets()`/`file_asset(index)` mirror `File::assets()` by returning imported backboard file assets while excluding `ManifestAsset`; `resolved_file_asset_for_object()` models `BackboardImporter::resolve()` index lookup plus the concrete `setAsset()` type filters for `Image`, `AudioEvent`, `TextStyle`, and scripted object referencers.
+
+Scroll-physics import behavior is now source-audited at the C++ method-body level: `ScrollPhysics::import` must add to the latest `BackboardImporter`, and `ScrollConstraint::import` must clone the indexed physics object before delegating to `Component::import`.
+
+Artboard skinning, vertex deformation, NSlicer, and shape paint relationships are now exposed from `rive-binary` as well: `artboard_skins()`/`artboard_skin()` report imported `Skin` objects, their resolved skinnable `Mesh`/`PointsPath`, owned `Tendon` records, and each tendon's resolved `Bone`; `artboard_meshes()`/`artboard_mesh()` report `Mesh` objects, their `MeshVertex` children, and each vertex's resolved `Weight`, including duplicate-weight overwrite order; `artboard_paths()`/`artboard_path()` report `Path` objects, their `PathVertex` children, and resolved `Weight`/`CubicWeight` attachments; `artboard_n_slicer_details()`/`artboard_n_slicer_detail()` report `NSlicerDetails` implementers (`NSlicer` and `NSlicedNode`), ordered `AxisX`/`AxisY` registrations, and patch-indexed `NSlicerTileMode` registrations with C++ duplicate overwrite behavior; `artboard_shapes()`/`artboard_shape()` report `Shape` objects, their C++-registered paths including parametric path subclasses, registered shape paints with resolved mutators including forward-referenced mutators, linear/radial gradient stops before update-time sorting, attached `Feather` records, registered stroke effects, and `TargetEffect` links to `GroupEffect` targets; `artboard_shape_paint_containers()`/`artboard_shape_paint_container()` report non-empty exact `ShapePaintContainer` registrations beyond `Shape`, such as root `Artboard` and `TextStylePaint`. These surfaces are backed by synthetic C++ probe comparisons plus corpus structural comparisons for every C++-accepted fixture, and the probe now emits `NSlicerDetails` registration state directly rather than relying only on Rust-side lifecycle tests.
+
+## #6: Minimal Artboard Graph Lifecycle
+
+Blocked by: #5
+Type: Prototype
+
+### Question
+
+What is the smallest useful Rust implementation of the artboard runtime graph?
+
+### Answer
+
+Resolved in `docs/prototypes/artboard-graph.md`. Added `crates/rive-graph`, `graph-inspect`, and the C++ probe comparison. The graph projection now builds compact artboard-local object slots matching C++ `Artboard::objects()`: component objects, artboard-owned user-input/interpolator objects, null/abstract slots, and validation-null slots for invalid targeted constraints, text styles, nested animations, scroll-bar constraints, and feather effects, excluding concrete non-components routed to other runtime lists. It also projects file-level assets/view-models/data-enums through `rive-binary`'s public `RuntimeFile` collection helpers and projects artboard animation/state-machine groupings, including C++'s auto-generated empty state machine for artboards with no authored animations or state machines. It resolves local `parentId` links, builds child indexes, emits topological dependency order with cycle diagnostics, records capability flags for artboard/container/world-transform/transform/drawable categories, and exposes C++-style nullable draw relationships for `DrawTarget`, `DrawRules`, and `ClippingShape`, including source shape locals and clipped drawable locals. This maps the first lifecycle phases as `import`, `on_added_dirty`, `on_added_clean`, and a minimal `build_dependencies`, now including audited Joystick custom-handle dependencies. `make cpp-compare` validates object counts, local type keys, names, parent IDs, resolved parent local IDs, draw target/rule/clipping relationships, file-owned collections, and animation/state-machine grouping against C++.
+
+## #7: Parent/Child And Dependency Graph
+
+Blocked by: #6
+Type: Prototype
+
+### Question
+
+How should Rust represent hierarchy and dependency ordering without pointer graphs?
+
+### Answer
+
+In progress. The graph projection uses stable local/global IDs, derived component indexes, child indexes, explicit dependency edges for parent-child links, targeted constraints, IK target dependencies, draw-target drawable references, draw-rule target references, clipping sources, skinning dependencies, and Joystick custom-handle dependencies, plus a topological dependency order with cycle diagnostics. Targeted-constraint edges now follow C++ `TargetedConstraint::buildDependencies()` by ordering the constrained component after the target and by skipping the generic parent-child dependency because that override does not call `Super::buildDependencies`; `IKConstraint::buildDependencies()` adds the target-to-constraint edge; `Skin::buildDependencies()` is modeled by skipping its generic parent-child edge, making skinned meshes depend on their skin, and making skins depend on tendon bones plus IK peer constraint parents; `Joystick::buildDependencies()` is modeled by skipping its generic parent-child edge and adding parent/handle-source edges only when a custom handle source resolves to a `TransformComponent`. Next, expand the edge list toward the full C++ `buildDependencies()` surface, including path-composer, follow-path, text, layout, data-binding, scroll-constraint, and paint/effect runtime edge families. Avoid `Rc<RefCell<dyn Core>>`; all cross-object relationships should remain IDs resolved through graph context.
+
+## #8: Dirt Propagation And Transform Update
+
+Blocked by: #7
+Type: Prototype
+
+### Question
+
+Can Rust reproduce the C++ dirt scheduler and transform update semantics?
+
+### Answer
+
+Open. Implement dirt bitflags, dependent dirtying, dirty-depth restart semantics, max-pass guard behavior, local transform update, world transform update, and render opacity propagation. This is the first meaningful headless parity checkpoint.
+
+## #9: Artboard Instancing And Cloning
+
+Blocked by: #8
+Type: Prototype
+
+### Question
+
+How should source artboards and mutable artboard instances be separated?
+
+### Answer
+
+Open. Preserve serialized object order. Keep source definitions distinct from mutable instances. Clone instance-owned runtime objects, share animation and state-machine definitions, and retarget cloned object references. Later, data binds will need special retargeting behavior.
+
+## #10: Draw Graph Without Rendering
+
+Blocked by: #9
+Type: Prototype
+
+### Question
+
+Can Rust produce the same derived draw order without implementing a renderer?
+
+### Answer
+
+Open. `crates/rive-graph` now exposes draw target/rule/clipping relationships, but it does not yet reproduce C++'s final drawable linked list. Implement drawable ordering, draw-rule reordering, layout/clipping proxy operations, and a renderer-independent draw command stream. This should remain headless and comparable in tests before any GPU work begins.
+
+## #11: Animation And State Machine Integration
+
+Blocked by: #8, #9
+Type: Prototype
+
+### Question
+
+How should animations and state machines drive the graph scheduler?
+
+### Answer
+
+Open. Implement linear animation application first, then state machine inputs, layer stepping, transition evaluation, event collection, and integration with `ArtboardInstance::advance(dt)`.
+
+## #12: Data Binding Graph
+
+Blocked by: #9, #11
+Type: Prototype
+
+### Question
+
+How should Rust model data binding as a graph over the object graph?
+
+### Answer
+
+Open. Data binding should likely be its own scheduler/module, not fields scattered through components. It must support source-to-target and target-to-source updates, observer push vs polling fallback, dirty queues, converters, context values, pending add/remove during processing, and re-entry protection.
+
+## #13: Nested Artboards And Hosts
+
+Blocked by: #9, #12
+Type: Prototype
+
+### Question
+
+What nested artboard and host behavior must exist before runtime parity is credible?
+
+### Answer
+
+Open. Support nested artboard instance ownership, host transforms, data contexts, view model binding, hit testing hooks, focusable behavior, and advancement of nested animations/state machines.
+
+## #14: Layout, Text, Scripting, Audio Scope
+
+Blocked by: #10, #12, #13
+Type: Research
+
+### Question
+
+Which optional runtime systems should be native Rust, feature-gated wrappers, or deferred?
+
+### Answer
+
+Open. Research C++ feature flags and dependency boundaries for Yoga layout, text shaping/bidi, scripting, and audio. Decide which can be deferred, which need compatibility shims, and which should be reimplemented in Rust.
+
+## #15: Public API And FFI Surface
+
+Blocked by: #11, #12, #13
+Type: Discuss
+
+### Question
+
+What public Rust and C-compatible API should the runtime expose?
+
+### Answer
+
+Open. Define the ergonomic Rust API first, then the FFI layer. The public surface should probably expose file loading, artboard instancing, animation/state-machine control, inputs/events, advancement, draw command extraction, and asset hooks.
+
+## #16: Renderer Strategy
+
+Blocked by: #10, #15
+Type: Research
+
+### Question
+
+Should Rust eventually own rendering, emit draw commands to platform renderers, or bridge into the existing C++ renderer?
+
+### Answer
+
+Open. Defer until the headless graph and draw command stream are stable. The near-term renderer strategy is renderer-independent command output. A temporary C++ bridge may be useful for parity tests, but should not shape the core graph design.

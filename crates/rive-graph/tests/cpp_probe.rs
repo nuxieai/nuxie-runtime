@@ -322,7 +322,73 @@ fn graph_projects_artboard_data_bind_registrations() {
 }
 
 #[test]
-fn cpp_artboard_data_bind_registration_methods_are_tracked_by_graph_model() {
+fn graph_projects_state_machine_data_bind_registrations() {
+    let parent_id_key = property_key_for_name("Component", "parentId");
+    let data_bind_property_key = property_key_for_name("DataBind", "propertyKey");
+    let state_machine_property_key =
+        property_key_for_name("BindablePropertyNumber", "propertyValue");
+    let node_x_key = property_key_for_name("Node", "x");
+    let bytes = synthetic_runtime_file(7107, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object(bytes, "StateMachine", &[]);
+        push_object(bytes, "BindablePropertyNumber", &[]);
+        push_object(
+            bytes,
+            "DataBind",
+            &[(
+                data_bind_property_key,
+                u64::from(state_machine_property_key),
+            )],
+        );
+        push_object(bytes, "Node", &[(parent_id_key, 0)]);
+        push_object(
+            bytes,
+            "DataBind",
+            &[(data_bind_property_key, u64::from(node_x_key))],
+        );
+    });
+
+    let (_runtime, graph) = read_graph_from_bytes(&bytes, "synthetic/state_machine_data_bind.riv");
+    let artboard = &graph.artboards[0];
+
+    assert_eq!(
+        artboard.state_machines.len(),
+        1,
+        "synthetic fixture should expose the authored state machine"
+    );
+    assert_eq!(
+        artboard.state_machines[0]
+            .data_binds
+            .iter()
+            .map(|data_bind| (
+                data_bind.global_id,
+                data_bind.type_name,
+                data_bind.property_key
+            ))
+            .collect::<Vec<_>>(),
+        vec![(4, "DataBind", u64::from(state_machine_property_key))],
+        "StateMachine::addDataBind only records state-machine-owned bindable-property targets"
+    );
+    assert_eq!(
+        artboard
+            .data_binds
+            .iter()
+            .map(|data_bind| (
+                data_bind.global_id,
+                data_bind.type_name,
+                data_bind.property_key,
+                data_bind.target_local,
+                data_bind.target_type_name
+            ))
+            .collect::<Vec<_>>(),
+        vec![(6, "DataBind", u64::from(node_x_key), Some(1), Some("Node"))],
+        "Artboard::addDataBind keeps component-target binds out of the state-machine registration list"
+    );
+}
+
+#[test]
+fn cpp_data_bind_registration_methods_are_tracked_by_graph_model() {
     let runtime_dir = reference_runtime_dir();
     assert!(
         runtime_dir.exists(),
@@ -346,6 +412,17 @@ fn cpp_artboard_data_bind_registration_methods_are_tracked_by_graph_model() {
     assert!(
         import_body.contains("stateMachineImporter->addDataBind(std::unique_ptr<DataBind>(this));"),
         "DataBind::import no longer routes bindable-property targets to StateMachineImporter"
+    );
+
+    let state_machine_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/animation/state_machine.cpp"))
+            .expect("read C++ state_machine.cpp"),
+    );
+    let state_machine_add_body =
+        cpp_function_body(&state_machine_source, "voidStateMachine::addDataBind");
+    assert!(
+        state_machine_add_body.contains("m_dataBinds.push_back(std::move(dataBind));"),
+        "StateMachine::addDataBind no longer stores state-machine-owned data binds"
     );
 
     let data_bind_container_source = compact_cpp_source(
@@ -4540,6 +4617,40 @@ fn compare_artboard_import_collections(
             rust_machine.data_binds.len(),
             "artboard {artboard_index} state machine {machine_index} data bind count mismatch for {label}"
         );
+        assert_eq!(
+            cpp_machine.data_binds.len(),
+            rust_machine.data_binds.len(),
+            "artboard {artboard_index} state machine {machine_index} data bind list mismatch for {label}"
+        );
+        for (data_bind_index, (cpp_data_bind, rust_data_bind)) in cpp_machine
+            .data_binds
+            .iter()
+            .zip(&rust_machine.data_binds)
+            .enumerate()
+        {
+            assert_eq!(
+                cpp_data_bind.core_type,
+                type_key_for_name(rust_data_bind.type_name),
+                "artboard {artboard_index} state machine {machine_index} data bind {data_bind_index} type mismatch for {label}"
+            );
+            assert_eq!(
+                cpp_data_bind.property_key, rust_data_bind.property_key,
+                "artboard {artboard_index} state machine {machine_index} data bind {data_bind_index} property key mismatch for {label}"
+            );
+            assert_eq!(
+                cpp_data_bind.flags, rust_data_bind.flags,
+                "artboard {artboard_index} state machine {machine_index} data bind {data_bind_index} flags mismatch for {label}"
+            );
+            assert_eq!(
+                cpp_data_bind.converter_id, rust_data_bind.converter_id,
+                "artboard {artboard_index} state machine {machine_index} data bind {data_bind_index} converter id mismatch for {label}"
+            );
+            assert_eq!(
+                cpp_data_bind.converter_core_type,
+                rust_data_bind.converter_type_name.map(type_key_for_name),
+                "artboard {artboard_index} state machine {machine_index} data bind {data_bind_index} converter type mismatch for {label}"
+            );
+        }
     }
 
     assert_eq!(
@@ -4974,6 +5085,8 @@ struct CppStateMachine {
     listener_count: usize,
     #[serde(rename = "dataBindCount")]
     data_bind_count: usize,
+    #[serde(default, rename = "dataBinds")]
+    data_binds: Vec<CppDataBind>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -4987,8 +5100,10 @@ struct CppDataBind {
     converter_id: u64,
     #[serde(rename = "converterCoreType")]
     converter_core_type: Option<u16>,
+    #[serde(default)]
     #[serde(rename = "targetCoreType")]
     target_core_type: Option<u16>,
+    #[serde(default)]
     #[serde(rename = "targetLocal")]
     target_local: Option<usize>,
 }

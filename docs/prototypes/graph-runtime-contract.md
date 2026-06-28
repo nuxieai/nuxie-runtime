@@ -155,12 +155,14 @@ The existing `rive-graph` prototype already covers:
   `AdvancingComponent::from` without admitting `reset()`,
   `advanceComponent()`, data-bind advancement, component updates, or frame
   scheduling.
-- Static artboard-owned data-bind container registrations, exposed through
-  `data_binds` in C++ initialized container order and matching
-  `DataBind::import`, `DataBindContainer::addDataBind`, and
-  `DataBindContainer::sortDataBinds` without admitting data-context binding,
-  dirty queues, property observers, converter execution, source/target mutation,
-  or data-bind advancement.
+- Static artboard-owned and state-machine-owned data-bind container
+  registrations, exposed through `ArtboardGraph::data_binds` and
+  `StateMachineGraph::data_binds`; artboard-owned binds use C++ initialized
+  `DataBindContainer::sortDataBinds` order, while state-machine-owned binds
+  match `StateMachine::addDataBind` ownership for bindable-property targets.
+  These facts do not admit data-context binding, dirty queues, property
+  observers, converter execution, source/target mutation, state-machine
+  execution, or data-bind advancement.
 - Synthetic path composer projections for each imported `Shape`, with path inputs
   sourced from `rive-binary`'s C++-equivalent shape registration facts.
 - Static `Shape::onAddedClean` render-path deformer projections for each

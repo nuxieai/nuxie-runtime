@@ -207,7 +207,7 @@ impl ArtboardGraph {
         let joysticks_apply_before_update = joysticks
             .iter()
             .all(|joystick| joystick.can_apply_before_update);
-        let mut state_machines = state_machines(file, range);
+        let mut state_machines = state_machines(file, artboard_index);
         if animations.is_empty() && state_machines.is_empty() {
             state_machines.push(StateMachineGraph::auto_generated());
         }
@@ -1005,116 +1005,49 @@ fn keyed_object_supports_property(
     object_supports_property(target.type_key, property_key)
 }
 
-fn state_machines(file: &RuntimeFile, range: ArtboardRange) -> Vec<StateMachineGraph> {
-    let mut state_machines = Vec::<StateMachineGraph>::new();
-    let mut current_state_machine = None;
-    let mut current_layer = None;
-    let mut current_listener = None;
-
-    for (global_id, object) in file.objects[range.start..range.end]
-        .iter()
-        .enumerate()
-        .filter_map(|(offset, object)| Some((range.start + offset, object.as_ref()?)))
-    {
-        let Some(definition) = definition_by_type_key(object.type_key) else {
-            continue;
-        };
-
-        if definition.name == "StateMachine" {
-            state_machines.push(StateMachineGraph {
-                global_id: Some(global_id as u32),
-                name: object_name(object),
-                layers: Vec::new(),
-                inputs: Vec::new(),
-                listeners: Vec::new(),
-                data_binds: Vec::new(),
-            });
-            current_state_machine = Some(state_machines.len() - 1);
-            current_layer = None;
-            current_listener = None;
-            continue;
-        }
-
-        let Some(state_machine_index) = current_state_machine else {
-            continue;
-        };
-
-        if definition.name == "StateMachineLayer" {
-            state_machines[state_machine_index]
+fn state_machines(file: &RuntimeFile, artboard_index: usize) -> Vec<StateMachineGraph> {
+    file.artboard_state_machine_graphs(artboard_index)
+        .into_iter()
+        .map(|state_machine| StateMachineGraph {
+            global_id: Some(state_machine.object.id),
+            name: object_name(state_machine.object),
+            layers: state_machine
                 .layers
-                .push(StateMachineLayerGraph {
-                    global_id: global_id as u32,
-                    name: object_name(object),
-                    state_count: 0,
-                });
-            current_layer = Some(state_machines[state_machine_index].layers.len() - 1);
-            current_listener = None;
-            continue;
-        }
-
-        if definition.is_a("LayerState") {
-            if let Some(layer_index) = current_layer {
-                state_machines[state_machine_index].layers[layer_index].state_count += 1;
-            }
-            current_listener = None;
-            continue;
-        }
-
-        if definition.is_a("StateMachineInput") {
-            state_machines[state_machine_index]
+                .into_iter()
+                .map(|layer| StateMachineLayerGraph {
+                    global_id: layer.object.id,
+                    name: object_name(layer.object),
+                    state_count: layer.state_count,
+                })
+                .collect(),
+            inputs: state_machine
                 .inputs
-                .push(StateMachineInputNode {
-                    global_id: global_id as u32,
-                    type_name: object.type_name,
-                    name: object_name(object),
-                });
-            current_layer = None;
-            current_listener = None;
-            continue;
-        }
-
-        if definition.is_a("StateMachineListener") {
-            state_machines[state_machine_index]
+                .into_iter()
+                .map(|input| StateMachineInputNode {
+                    global_id: input.id,
+                    type_name: input.type_name,
+                    name: object_name(input),
+                })
+                .collect(),
+            listeners: state_machine
                 .listeners
-                .push(StateMachineListenerGraph {
-                    global_id: global_id as u32,
-                    type_name: object.type_name,
-                    name: object_name(object),
-                    target_id: object.uint_property("targetId").unwrap_or(0),
-                    action_count: 0,
-                    listener_input_type_count: 0,
-                });
-            current_layer = None;
-            current_listener = Some(state_machines[state_machine_index].listeners.len() - 1);
-            continue;
-        }
-
-        if definition.is_a("ListenerAction") {
-            if let Some(listener_index) = current_listener {
-                if listener_action_parent_kind_is_listener(object) {
-                    state_machines[state_machine_index].listeners[listener_index].action_count += 1;
-                }
-            }
-            continue;
-        }
-
-        if definition.is_a("ListenerInputType") {
-            if let Some(listener_index) = current_listener {
-                state_machines[state_machine_index].listeners[listener_index]
-                    .listener_input_type_count += 1;
-            }
-            continue;
-        }
-
-        if definition.is_a("DataBind") {
-            state_machines[state_machine_index]
+                .into_iter()
+                .map(|listener| StateMachineListenerGraph {
+                    global_id: listener.object.id,
+                    type_name: listener.object.type_name,
+                    name: object_name(listener.object),
+                    target_id: listener.object.uint_property("targetId").unwrap_or(0),
+                    action_count: listener.actions.len(),
+                    listener_input_type_count: listener.listener_input_types.len(),
+                })
+                .collect(),
+            data_binds: state_machine
                 .data_binds
-                .push(data_bind_node(file, object, None, None));
-            current_listener = None;
-        }
-    }
-
-    state_machines
+                .into_iter()
+                .map(|data_bind| data_bind_node(file, data_bind, None, None))
+                .collect(),
+        })
+        .collect()
 }
 
 fn artboard_data_binds(file: &RuntimeFile, artboard_index: usize) -> Vec<DataBindNode> {
@@ -3633,11 +3566,6 @@ fn drawable_is_child_of_layout(
         current_local = parent_local;
     }
     false
-}
-
-fn listener_action_parent_kind_is_listener(action: &RuntimeObject) -> bool {
-    let raw = (action.uint_property("flags").unwrap_or(0) >> 1) & 0x3;
-    raw == 0 || raw > 2
 }
 
 fn resolve_parents(components: &mut [ComponentNode]) -> usize {

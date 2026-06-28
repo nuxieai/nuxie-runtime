@@ -201,7 +201,7 @@ In progress. The graph projection uses stable local/global IDs, derived componen
 
 Current #7 scope also includes `layout_constraint_registrations`, which records the reciprocal `LayoutNodeProvider::addLayoutConstraint` and `ScrollConstraint::addLayoutChild` facts for exact `ScrollConstraint` layout-provider content children. This is still a static graph projection: layout solving, virtualization, Yoga updates, `constrainChild`, and scroll execution remain future runtime work.
 
-Current #7 scope also includes artboard-owned `data_binds`, which records C++ `DataBindContainer` membership and initialized `sortDataBinds()` ordering for imported artboard binds while keeping data-context binding, dirty queues, property observers, converter execution, source/target mutation, and data-bind advancement out of `rive-graph`.
+Current #7 scope also includes artboard-owned and state-machine-owned `data_binds`: artboard-owned binds record C++ `DataBindContainer` membership and initialized `sortDataBinds()` ordering, while state-machine-owned binds now consume the verified `RuntimeFile::artboard_state_machine_graphs` ownership so bindable-property targets stay out of artboard registrations and component-target binds stay out of state-machine registrations. Data-context binding, dirty queues, property observers, converter execution, source/target mutation, state-machine execution, and data-bind advancement remain out of `rive-graph`.
 
 ## #8: Dirt Propagation And Transform Update
 

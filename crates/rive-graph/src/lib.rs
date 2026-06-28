@@ -269,6 +269,7 @@ pub enum DependencyKind {
     ParentChild,
     TargetedConstraint,
     IkConstraintTarget,
+    IkConstraintTipChild,
     DrawTargetDrawable,
     DrawRulesTarget,
     ClippingSource,
@@ -1377,6 +1378,16 @@ fn build_dependency_edges(
         });
     }
 
+    for (tip_local, child_local) in
+        ik_constraint_tip_child_dependencies(file, local_objects, components)
+    {
+        edges.push(DependencyEdge {
+            source_local: tip_local,
+            dependent_local: child_local,
+            kind: DependencyKind::IkConstraintTipChild,
+        });
+    }
+
     for (constraint_local, parent_local) in
         follow_path_constraint_parent_dependencies(file, local_objects)
     {
@@ -1525,34 +1536,35 @@ fn dependency_kind_sort_key(kind: DependencyKind) -> u8 {
         DependencyKind::ParentChild => 0,
         DependencyKind::TargetedConstraint => 1,
         DependencyKind::IkConstraintTarget => 2,
-        DependencyKind::DrawTargetDrawable => 3,
-        DependencyKind::DrawRulesTarget => 4,
-        DependencyKind::ClippingSource => 5,
-        DependencyKind::SkinMesh => 6,
-        DependencyKind::SkinPointsPath => 7,
-        DependencyKind::SkinBone => 8,
-        DependencyKind::SkinBoneConstraintParent => 9,
-        DependencyKind::JoystickParent => 10,
-        DependencyKind::JoystickHandleSource => 11,
-        DependencyKind::ScrollBarConstraint => 12,
-        DependencyKind::ScrollConstraintLayoutChild => 13,
-        DependencyKind::PathComposerShape => 14,
-        DependencyKind::PathComposerPath => 15,
-        DependencyKind::ClippingShapePathComposer => 16,
-        DependencyKind::FollowPathConstraintParent => 17,
-        DependencyKind::FollowPathConstraintTargetPathComposer => 18,
-        DependencyKind::FollowPathConstraintTargetPath => 19,
-        DependencyKind::TextFollowPathModifierText => 20,
-        DependencyKind::TextFollowPathModifierTargetPathComposer => 21,
-        DependencyKind::TextFollowPathModifierTargetPath => 22,
-        DependencyKind::StrokePathBuilder => 23,
-        DependencyKind::FillPathBuilder => 24,
-        DependencyKind::FeatherPathBuilder => 25,
-        DependencyKind::GroupEffectParent => 26,
-        DependencyKind::ScriptedPathEffectParent => 27,
-        DependencyKind::LinearGradientPaintContainer => 28,
-        DependencyKind::TextVariationHelperArtboard => 29,
-        DependencyKind::TextVariationHelperText => 30,
+        DependencyKind::IkConstraintTipChild => 3,
+        DependencyKind::DrawTargetDrawable => 4,
+        DependencyKind::DrawRulesTarget => 5,
+        DependencyKind::ClippingSource => 6,
+        DependencyKind::SkinMesh => 7,
+        DependencyKind::SkinPointsPath => 8,
+        DependencyKind::SkinBone => 9,
+        DependencyKind::SkinBoneConstraintParent => 10,
+        DependencyKind::JoystickParent => 11,
+        DependencyKind::JoystickHandleSource => 12,
+        DependencyKind::ScrollBarConstraint => 13,
+        DependencyKind::ScrollConstraintLayoutChild => 14,
+        DependencyKind::PathComposerShape => 15,
+        DependencyKind::PathComposerPath => 16,
+        DependencyKind::ClippingShapePathComposer => 17,
+        DependencyKind::FollowPathConstraintParent => 18,
+        DependencyKind::FollowPathConstraintTargetPathComposer => 19,
+        DependencyKind::FollowPathConstraintTargetPath => 20,
+        DependencyKind::TextFollowPathModifierText => 21,
+        DependencyKind::TextFollowPathModifierTargetPathComposer => 22,
+        DependencyKind::TextFollowPathModifierTargetPath => 23,
+        DependencyKind::StrokePathBuilder => 24,
+        DependencyKind::FillPathBuilder => 25,
+        DependencyKind::FeatherPathBuilder => 26,
+        DependencyKind::GroupEffectParent => 27,
+        DependencyKind::ScriptedPathEffectParent => 28,
+        DependencyKind::LinearGradientPaintContainer => 29,
+        DependencyKind::TextVariationHelperArtboard => 30,
+        DependencyKind::TextVariationHelperText => 31,
     }
 }
 
@@ -1581,6 +1593,80 @@ fn ik_constraint_target_dependencies(
             edges.push((target_local, local_object.local_id));
         }
     }
+    edges
+}
+
+fn ik_constraint_tip_child_dependencies(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+    components: &[ComponentNode],
+) -> Vec<(usize, usize)> {
+    let component_by_local = components
+        .iter()
+        .enumerate()
+        .map(|(index, component)| (component.local_id, index))
+        .collect::<BTreeMap<_, _>>();
+    let mut edges = Vec::new();
+
+    for local_object in local_objects {
+        let Some(constraint) = runtime_object_for_local(file, local_objects, local_object.local_id)
+        else {
+            continue;
+        };
+        if constraint.type_name != "IKConstraint" {
+            continue;
+        }
+
+        let Some((tip_local, tip)) =
+            local_object_reference_with_local_id(file, local_objects, object_parent_id(constraint))
+        else {
+            continue;
+        };
+        if !is_bone(tip) {
+            continue;
+        }
+
+        let mut chain_locals = vec![tip_local];
+        let mut current = tip;
+        let mut remaining = constraint.uint_property("parentBoneCount").unwrap_or(0);
+        while remaining > 0 {
+            let Some((parent_local, parent)) = local_object_reference_with_local_id(
+                file,
+                local_objects,
+                object_parent_id(current),
+            ) else {
+                break;
+            };
+            if !is_bone(parent) {
+                break;
+            }
+            remaining -= 1;
+            chain_locals.push(parent_local);
+            current = parent;
+        }
+
+        for window in chain_locals.windows(2) {
+            let chain_child_local = window[0];
+            let ancestor_local = window[1];
+            let Some(ancestor_index) = component_by_local.get(&ancestor_local).copied() else {
+                continue;
+            };
+
+            for child_local in &components[ancestor_index].children {
+                if *child_local == chain_child_local {
+                    continue;
+                }
+                let Some(child) = runtime_object_for_local(file, local_objects, *child_local)
+                else {
+                    continue;
+                };
+                if is_transform_component(child) {
+                    edges.push((tip_local, *child_local));
+                }
+            }
+        }
+    }
+
     edges
 }
 

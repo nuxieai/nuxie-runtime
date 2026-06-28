@@ -1980,6 +1980,78 @@ fn graph_dependency_order_includes_skinning_dependencies() {
 }
 
 #[test]
+fn graph_dependency_order_includes_ik_tip_child_dependencies() {
+    let parent_id_key = property_key_for_name("Component", "parentId");
+    let target_id_key = property_key_for_name("TargetedConstraint", "targetId");
+    let parent_bone_count_key = property_key_for_name("IKConstraint", "parentBoneCount");
+
+    let bytes = synthetic_runtime_file(7118, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object(bytes, "RootBone", &[(parent_id_key, 0)]);
+        push_object(bytes, "Bone", &[(parent_id_key, 1)]);
+        push_object(bytes, "Bone", &[(parent_id_key, 1)]);
+        push_object(bytes, "Node", &[(parent_id_key, 1)]);
+        push_object(bytes, "Node", &[(parent_id_key, 2)]);
+        push_object(bytes, "Node", &[(parent_id_key, 0)]);
+        push_object(
+            bytes,
+            "IKConstraint",
+            &[
+                (parent_id_key, 2),
+                (target_id_key, 6),
+                (parent_bone_count_key, 1),
+            ],
+        );
+    });
+
+    let (_, rust) = read_graph_from_bytes(&bytes, "synthetic/ik_tip_child_dependency.riv");
+    let artboard = &rust.artboards[0];
+
+    assert!(
+        artboard
+            .dependency_edges
+            .contains(&edge(2, 3, DependencyKind::IkConstraintTipChild)),
+        "IKConstraint::onAddedClean makes off-chain child bones depend on the constrained tip bone"
+    );
+    assert!(
+        artboard
+            .dependency_edges
+            .contains(&edge(2, 4, DependencyKind::IkConstraintTipChild)),
+        "IKConstraint::onAddedClean makes off-chain transform children depend on the constrained tip bone"
+    );
+    assert!(
+        !artboard
+            .dependency_edges
+            .contains(&edge(2, 5, DependencyKind::IkConstraintTipChild)),
+        "IKConstraint::onAddedClean only rewires direct children of IK chain ancestors"
+    );
+    assert!(
+        !artboard
+            .dependency_edges
+            .contains(&edge(2, 2, DependencyKind::IkConstraintTipChild)),
+        "IKConstraint::onAddedClean skips the chain child when walking ancestor children"
+    );
+    assert!(
+        artboard
+            .dependency_edges
+            .contains(&edge(6, 7, DependencyKind::IkConstraintTarget)),
+        "IKConstraint::buildDependencies still makes the constraint depend on its target"
+    );
+    assert!(
+        artboard
+            .dependency_edges
+            .contains(&edge(6, 2, DependencyKind::TargetedConstraint)),
+        "IKConstraint::buildDependencies still makes the constrained tip depend on its target"
+    );
+    assert_order_before(artboard, 2, 3);
+    assert_order_before(artboard, 2, 4);
+    assert_order_before(artboard, 6, 2);
+    assert_order_before(artboard, 6, 7);
+    assert!(artboard.dependency_cycles.is_empty());
+}
+
+#[test]
 fn graph_dependency_order_includes_joystick_handle_source_dependencies() {
     let parent_id_key = property_key_for_name("Component", "parentId");
     let handle_source_id_key = property_key_for_name("Joystick", "handleSourceId");
@@ -2227,6 +2299,44 @@ fn cpp_skinning_dependency_methods_are_tracked_by_graph_model() {
     assert!(
         ik_body.contains("m_Target->addDependent(this);"),
         "IKConstraint::buildDependencies no longer makes IK constraints depend on their targets"
+    );
+    let ik_on_added_clean_body =
+        cpp_function_body(&ik_source, "StatusCodeIKConstraint::onAddedClean");
+    assert!(
+        ik_on_added_clean_body.contains("while(bone->parent()->is<Bone>()&&boneCount>0)"),
+        "IKConstraint::onAddedClean no longer walks the parent bone chain"
+    );
+    assert!(
+        ik_on_added_clean_body.contains("bone->addPeerConstraint(this);"),
+        "IKConstraint::onAddedClean no longer registers peer constraints on ancestor bones"
+    );
+    assert!(
+        ik_on_added_clean_body.contains("autotip=parent()->as<Bone>();"),
+        "IKConstraint::onAddedClean no longer resolves the constrained tip bone"
+    );
+    assert!(
+        ik_on_added_clean_body.contains("for(inti=1;i<numBones;i++)"),
+        "IKConstraint::onAddedClean no longer walks FK-chain ancestors"
+    );
+    assert!(
+        ik_on_added_clean_body.contains("Bone*ancestor=bones[i];"),
+        "IKConstraint::onAddedClean no longer identifies ancestor bones for child dependency rewiring"
+    );
+    assert!(
+        ik_on_added_clean_body.contains("Bone*chainChild=bones[i-1];"),
+        "IKConstraint::onAddedClean no longer identifies the chain child to skip"
+    );
+    assert!(
+        ik_on_added_clean_body.contains("for(Component*child:ancestor->children())"),
+        "IKConstraint::onAddedClean no longer walks ancestor children"
+    );
+    assert!(
+        ik_on_added_clean_body.contains("!child->is<TransformComponent>()||child==chainChild"),
+        "IKConstraint::onAddedClean no longer filters to off-chain transform children"
+    );
+    assert!(
+        ik_on_added_clean_body.contains("tip->addDependent(child->as<TransformComponent>());"),
+        "IKConstraint::onAddedClean no longer makes off-chain transform children depend on the tip"
     );
 
     let mesh_source = compact_cpp_source(

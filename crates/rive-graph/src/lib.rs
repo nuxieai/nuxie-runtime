@@ -58,6 +58,8 @@ pub struct ArtboardGraph {
     pub artboard_hosts: Vec<ArtboardHostNode>,
     pub joysticks: Vec<JoystickNode>,
     pub joysticks_apply_before_update: bool,
+    pub resetting_components: Vec<ResettingComponentNode>,
+    pub advancing_components: Vec<AdvancingComponentNode>,
     pub animations: Vec<AnimationGraph>,
     pub state_machines: Vec<StateMachineGraph>,
     pub dependency_order: Vec<usize>,
@@ -142,6 +144,8 @@ impl ArtboardGraph {
         let nested_artboards = nested_artboards(file, &local_objects);
         let component_lists = component_lists(file, &local_objects);
         let artboard_hosts = artboard_hosts(file, &local_objects);
+        let resetting_components = resetting_components(file, &local_objects);
+        let advancing_components = advancing_components(file, &local_objects);
         let dependency_edges = build_dependency_edges(
             file,
             &local_objects,
@@ -208,6 +212,8 @@ impl ArtboardGraph {
             artboard_hosts,
             joysticks,
             joysticks_apply_before_update,
+            resetting_components,
+            advancing_components,
             animations,
             state_machines,
             dependency_order: dependency_order.component_order,
@@ -449,6 +455,47 @@ pub struct JoystickNode {
 pub struct JoystickNestedRemapDependentNode {
     pub local_id: usize,
     pub global_id: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ResettingComponentKind {
+    NestedArtboard,
+    ArtboardComponentList,
+    CustomPropertyTrigger,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ResettingComponentNode {
+    pub local_id: usize,
+    pub global_id: u32,
+    pub type_name: &'static str,
+    pub name: Option<String>,
+    pub kind: ResettingComponentKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AdvancingComponentKind {
+    Artboard,
+    NestedArtboard,
+    LayoutComponent,
+    ArtboardComponentList,
+    ScrollConstraint,
+    TextInput,
+    ScriptedDataConverter,
+    ScriptedDrawable,
+    ScriptedLayout,
+    ScriptedPathEffect,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct AdvancingComponentNode {
+    pub local_id: usize,
+    pub global_id: u32,
+    pub type_name: &'static str,
+    pub name: Option<String>,
+    pub kind: AdvancingComponentKind,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1335,6 +1382,46 @@ fn joystick_nested_remap_dependents(
             Some(JoystickNestedRemapDependentNode {
                 local_id,
                 global_id: local_object_global_id(local_objects, local_id)?,
+            })
+        })
+        .collect()
+}
+
+fn resetting_components(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+) -> Vec<ResettingComponentNode> {
+    local_objects
+        .iter()
+        .filter_map(|local_object| {
+            let object = runtime_object_for_local(file, local_objects, local_object.local_id)?;
+            let kind = resetting_component_kind(object)?;
+            Some(ResettingComponentNode {
+                local_id: local_object.local_id,
+                global_id: local_object.global_id,
+                type_name: object.type_name,
+                name: object_name(object),
+                kind,
+            })
+        })
+        .collect()
+}
+
+fn advancing_components(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+) -> Vec<AdvancingComponentNode> {
+    local_objects
+        .iter()
+        .filter_map(|local_object| {
+            let object = runtime_object_for_local(file, local_objects, local_object.local_id)?;
+            let kind = advancing_component_kind(object)?;
+            Some(AdvancingComponentNode {
+                local_id: local_object.local_id,
+                global_id: local_object.global_id,
+                type_name: object.type_name,
+                name: object_name(object),
+                kind,
             })
         })
         .collect()
@@ -3213,6 +3300,35 @@ fn is_constrainable_list(object: &RuntimeObject) -> bool {
 
 fn is_artboard_component_list(object: &RuntimeObject) -> bool {
     matches!(object.type_name, "ArtboardComponentList")
+}
+
+fn resetting_component_kind(object: &RuntimeObject) -> Option<ResettingComponentKind> {
+    match object.type_name {
+        "NestedArtboard" | "NestedArtboardLeaf" | "NestedArtboardLayout" => {
+            Some(ResettingComponentKind::NestedArtboard)
+        }
+        "ArtboardComponentList" => Some(ResettingComponentKind::ArtboardComponentList),
+        "CustomPropertyTrigger" => Some(ResettingComponentKind::CustomPropertyTrigger),
+        _ => None,
+    }
+}
+
+fn advancing_component_kind(object: &RuntimeObject) -> Option<AdvancingComponentKind> {
+    match object.type_name {
+        "Artboard" => Some(AdvancingComponentKind::Artboard),
+        "NestedArtboard" | "NestedArtboardLeaf" | "NestedArtboardLayout" => {
+            Some(AdvancingComponentKind::NestedArtboard)
+        }
+        "LayoutComponent" => Some(AdvancingComponentKind::LayoutComponent),
+        "ArtboardComponentList" => Some(AdvancingComponentKind::ArtboardComponentList),
+        "ScrollConstraint" => Some(AdvancingComponentKind::ScrollConstraint),
+        "TextInput" => Some(AdvancingComponentKind::TextInput),
+        "ScriptedDataConverter" => Some(AdvancingComponentKind::ScriptedDataConverter),
+        "ScriptedDrawable" => Some(AdvancingComponentKind::ScriptedDrawable),
+        "ScriptedLayout" => Some(AdvancingComponentKind::ScriptedLayout),
+        "ScriptedPathEffect" => Some(AdvancingComponentKind::ScriptedPathEffect),
+        _ => None,
+    }
 }
 
 fn is_scroll_constraint(object: &RuntimeObject) -> bool {

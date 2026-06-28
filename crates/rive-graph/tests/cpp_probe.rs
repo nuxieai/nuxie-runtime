@@ -1,5 +1,7 @@
 use rive_binary::{RuntimeFile, read_runtime_file};
-use rive_graph::{ArtboardHostKind, DependencyKind, GraphFile};
+use rive_graph::{
+    AdvancingComponentKind, ArtboardHostKind, DependencyKind, GraphFile, ResettingComponentKind,
+};
 use rive_schema::definition_by_name;
 use serde::Deserialize;
 use std::collections::BTreeMap;
@@ -1257,6 +1259,222 @@ fn cpp_joystick_registration_methods_are_tracked_by_graph_model() {
             .contains("m_dependents.push_back(coreObject->as<NestedRemapAnimation>());"),
         "Joystick::addAnimationDependents no longer stores nested remap dependents"
     );
+}
+
+#[test]
+fn graph_projects_resetting_and_advancing_component_registrations() {
+    let parent_id_key = property_key_for_name("Component", "parentId");
+
+    let bytes = synthetic_runtime_file(7140, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object(bytes, "NestedArtboard", &[(parent_id_key, 0)]);
+        push_object(bytes, "NestedArtboardLeaf", &[(parent_id_key, 0)]);
+        push_object(bytes, "NestedArtboardLayout", &[(parent_id_key, 0)]);
+        push_object(bytes, "ArtboardComponentList", &[(parent_id_key, 0)]);
+        push_object(bytes, "CustomPropertyTrigger", &[(parent_id_key, 0)]);
+        push_object(bytes, "LayoutComponent", &[(parent_id_key, 0)]);
+        push_object(bytes, "ScrollConstraint", &[(parent_id_key, 0)]);
+        push_object(bytes, "TextInput", &[(parent_id_key, 0)]);
+        push_object(bytes, "ScriptedDrawable", &[(parent_id_key, 0)]);
+        push_object(bytes, "ScriptedLayout", &[(parent_id_key, 0)]);
+        push_object(bytes, "Shape", &[(parent_id_key, 0)]);
+        push_object(bytes, "Stroke", &[(parent_id_key, 11)]);
+        push_object(bytes, "ScriptedPathEffect", &[(parent_id_key, 12)]);
+        push_object(bytes, "Node", &[(parent_id_key, 0)]);
+    });
+
+    let (_, rust) = read_graph_from_bytes(&bytes, "synthetic/lifecycle_registries.riv");
+    let artboard = &rust.artboards[0];
+
+    assert_eq!(
+        artboard
+            .resetting_components
+            .iter()
+            .map(|node| (node.local_id, node.type_name, node.kind))
+            .collect::<Vec<_>>(),
+        vec![
+            (1, "NestedArtboard", ResettingComponentKind::NestedArtboard),
+            (
+                2,
+                "NestedArtboardLeaf",
+                ResettingComponentKind::NestedArtboard,
+            ),
+            (
+                3,
+                "NestedArtboardLayout",
+                ResettingComponentKind::NestedArtboard,
+            ),
+            (
+                4,
+                "ArtboardComponentList",
+                ResettingComponentKind::ArtboardComponentList,
+            ),
+            (
+                5,
+                "CustomPropertyTrigger",
+                ResettingComponentKind::CustomPropertyTrigger,
+            ),
+        ],
+        "m_Resettables preserves artboard-local order for ResettingComponent::from matches"
+    );
+    assert_eq!(
+        artboard
+            .advancing_components
+            .iter()
+            .map(|node| (node.local_id, node.type_name, node.kind))
+            .collect::<Vec<_>>(),
+        vec![
+            (0, "Artboard", AdvancingComponentKind::Artboard),
+            (1, "NestedArtboard", AdvancingComponentKind::NestedArtboard),
+            (
+                2,
+                "NestedArtboardLeaf",
+                AdvancingComponentKind::NestedArtboard,
+            ),
+            (
+                3,
+                "NestedArtboardLayout",
+                AdvancingComponentKind::NestedArtboard,
+            ),
+            (
+                4,
+                "ArtboardComponentList",
+                AdvancingComponentKind::ArtboardComponentList,
+            ),
+            (
+                6,
+                "LayoutComponent",
+                AdvancingComponentKind::LayoutComponent
+            ),
+            (
+                7,
+                "ScrollConstraint",
+                AdvancingComponentKind::ScrollConstraint
+            ),
+            (8, "TextInput", AdvancingComponentKind::TextInput),
+            (
+                9,
+                "ScriptedDrawable",
+                AdvancingComponentKind::ScriptedDrawable
+            ),
+            (10, "ScriptedLayout", AdvancingComponentKind::ScriptedLayout),
+            (
+                13,
+                "ScriptedPathEffect",
+                AdvancingComponentKind::ScriptedPathEffect,
+            ),
+        ],
+        "m_advancingComponents preserves artboard-local order for AdvancingComponent::from matches"
+    );
+    assert!(
+        !artboard
+            .advancing_components
+            .iter()
+            .any(|node| matches!(node.local_id, 5 | 11 | 12 | 14)),
+        "CustomPropertyTrigger, shape paint objects, and plain Node are not C++ AdvancingComponent matches"
+    );
+}
+
+#[test]
+fn cpp_lifecycle_registration_methods_are_tracked_by_graph_model() {
+    let runtime_dir = reference_runtime_dir();
+    assert!(
+        runtime_dir.exists(),
+        "reference runtime not found at {}; set RIVE_RUNTIME_DIR",
+        runtime_dir.display()
+    );
+
+    let artboard_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/artboard.cpp"))
+            .expect("read C++ artboard.cpp"),
+    );
+    let initialize_body = cpp_function_body(&artboard_source, "StatusCodeArtboard::initialize()");
+    assert!(
+        initialize_body
+            .contains("autoresettable=ResettingComponent::from(object->as<Component>());"),
+        "Artboard::initialize no longer asks ResettingComponent::from for imported components"
+    );
+    assert!(
+        initialize_body.contains("m_Resettables.push_back(resettable);"),
+        "Artboard::initialize no longer stores ResettingComponent matches in m_Resettables"
+    );
+    assert!(
+        initialize_body.contains("autoadvancingComponent=AdvancingComponent::from(object);"),
+        "Artboard::initialize no longer asks AdvancingComponent::from for imported objects"
+    );
+    assert!(
+        initialize_body.contains("m_advancingComponents.push_back(advancingComponent);"),
+        "Artboard::initialize no longer stores AdvancingComponent matches"
+    );
+    let advance_internal_body =
+        cpp_function_body(&artboard_source, "boolArtboard::advanceInternal");
+    assert!(
+        advance_internal_body.contains("for(autoadv:m_advancingComponents)"),
+        "Artboard::advanceInternal no longer iterates m_advancingComponents"
+    );
+    assert!(
+        advance_internal_body.contains("adv->advanceComponent(elapsedSeconds,flags)"),
+        "Artboard::advanceInternal no longer delegates to AdvancingComponent::advanceComponent"
+    );
+    let reset_body = cpp_function_body(&artboard_source, "voidArtboard::reset()");
+    assert!(
+        reset_body.contains("for(autoobj:m_Resettables)"),
+        "Artboard::reset no longer iterates m_Resettables"
+    );
+    assert!(
+        reset_body.contains("obj->reset();"),
+        "Artboard::reset no longer delegates to ResettingComponent::reset"
+    );
+
+    let resetting_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/resetting_component.cpp"))
+            .expect("read C++ resetting_component.cpp"),
+    );
+    let resetting_body = cpp_function_body(
+        &resetting_source,
+        "ResettingComponent*ResettingComponent::from(Component*component)",
+    );
+    for expected in [
+        "caseNestedArtboardLeaf::typeKey:",
+        "caseNestedArtboardLayout::typeKey:",
+        "caseNestedArtboard::typeKey:",
+        "caseArtboardComponentListBase::typeKey:",
+        "caseCustomPropertyTriggerBase::typeKey:",
+    ] {
+        assert!(
+            resetting_body.contains(expected),
+            "ResettingComponent::from no longer contains {expected}"
+        );
+    }
+
+    let advancing_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/advancing_component.cpp"))
+            .expect("read C++ advancing_component.cpp"),
+    );
+    let advancing_body = cpp_function_body(
+        &advancing_source,
+        "AdvancingComponent*AdvancingComponent::from(Core*component)",
+    );
+    for expected in [
+        "caseNestedArtboardLeaf::typeKey:",
+        "caseNestedArtboardLayout::typeKey:",
+        "caseNestedArtboard::typeKey:",
+        "caseLayoutComponent::typeKey:",
+        "caseArtboard::typeKey:",
+        "caseArtboardComponentListBase::typeKey:",
+        "caseScrollConstraint::typeKey:",
+        "caseTextInputBase::typeKey:",
+        "caseScriptedDataConverter::typeKey:",
+        "caseScriptedDrawable::typeKey:",
+        "caseScriptedLayout::typeKey:",
+        "caseScriptedPathEffect::typeKey:",
+    ] {
+        assert!(
+            advancing_body.contains(expected),
+            "AdvancingComponent::from no longer contains {expected}"
+        );
+    }
 }
 
 #[test]

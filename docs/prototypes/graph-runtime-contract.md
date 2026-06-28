@@ -139,6 +139,11 @@ The existing `rive-graph` prototype already covers:
   animation dependents collected by `Joystick::addDependents` without admitting
   `Joystick::apply`, component updates, data-bind scheduling, or animation
   advancement.
+- Static reset and advance lifecycle registries, matching `m_Resettables` from
+  `ResettingComponent::from` and `m_advancingComponents` from
+  `AdvancingComponent::from` without admitting `reset()`,
+  `advanceComponent()`, data-bind advancement, component updates, or frame
+  scheduling.
 - Synthetic path composer projections for each imported `Shape`, with path inputs
   sourced from `rive-binary`'s C++-equivalent shape registration facts.
 - Dependency nodes for real imported components plus synthetic path composers

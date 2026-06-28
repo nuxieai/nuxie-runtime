@@ -276,6 +276,7 @@ pub enum DependencyKind {
     TextFollowPathModifierText,
     TextFollowPathModifierTargetPathComposer,
     TextFollowPathModifierTargetPath,
+    StrokePathBuilder,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -1114,6 +1115,20 @@ fn build_dependency_node_edges(
         });
     }
 
+    for (source_node, stroke_node) in stroke_path_builder_node_dependencies(
+        file,
+        local_objects,
+        dependency_nodes,
+        &component_node_by_local,
+        &path_composer_node_by_shape,
+    ) {
+        edges.push(DependencyNodeEdge {
+            source_node,
+            dependent_node: stroke_node,
+            kind: DependencyKind::StrokePathBuilder,
+        });
+    }
+
     edges.sort_by_key(|edge| {
         (
             edge.source_node,
@@ -1345,6 +1360,7 @@ fn dependency_kind_sort_key(kind: DependencyKind) -> u8 {
         DependencyKind::TextFollowPathModifierText => 20,
         DependencyKind::TextFollowPathModifierTargetPathComposer => 21,
         DependencyKind::TextFollowPathModifierTargetPath => 22,
+        DependencyKind::StrokePathBuilder => 23,
     }
 }
 
@@ -1561,6 +1577,87 @@ fn text_component_local_for_modifier(
     let (text_local, text) =
         local_object_reference_with_local_id(file, local_objects, object_parent_id(group))?;
     (text.type_name == "Text").then_some(text_local)
+}
+
+fn stroke_path_builder_node_dependencies(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+    dependency_nodes: &[DependencyNode],
+    component_node_by_local: &BTreeMap<usize, usize>,
+    path_composer_node_by_shape: &BTreeMap<usize, usize>,
+) -> Vec<(usize, usize)> {
+    let mut edges = Vec::new();
+    for node in dependency_nodes {
+        let DependencyNodeKind::Component { local_id, .. } = &node.kind else {
+            continue;
+        };
+        let stroke_local = *local_id;
+        let Some(stroke) = runtime_object_for_local(file, local_objects, stroke_local) else {
+            continue;
+        };
+        if stroke.type_name != "Stroke" {
+            continue;
+        }
+
+        let Some(stroke_node) = component_node_by_local.get(&stroke_local).copied() else {
+            continue;
+        };
+        let Some((container_local, container)) =
+            local_object_reference_with_local_id(file, local_objects, object_parent_id(stroke))
+        else {
+            continue;
+        };
+        let Some(path_builder_node) = shape_paint_container_path_builder_node(
+            file,
+            local_objects,
+            container_local,
+            container,
+            component_node_by_local,
+            path_composer_node_by_shape,
+        ) else {
+            continue;
+        };
+
+        edges.push((path_builder_node, stroke_node));
+    }
+    edges
+}
+
+fn shape_paint_container_path_builder_node(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+    container_local: usize,
+    container: &RuntimeObject,
+    component_node_by_local: &BTreeMap<usize, usize>,
+    path_composer_node_by_shape: &BTreeMap<usize, usize>,
+) -> Option<usize> {
+    if container.type_name == "Shape" {
+        return path_composer_node_by_shape.get(&container_local).copied();
+    }
+
+    if matches!(container.type_name, "Artboard" | "LayoutComponent") {
+        return component_node_by_local.get(&container_local).copied();
+    }
+
+    if shape_paint_container_path_builder_is_parent(container) {
+        let (parent_local, _) =
+            local_object_reference_with_local_id(file, local_objects, object_parent_id(container))?;
+        return component_node_by_local.get(&parent_local).copied();
+    }
+
+    None
+}
+
+fn shape_paint_container_path_builder_is_parent(container: &RuntimeObject) -> bool {
+    matches!(
+        container.type_name,
+        "TextStylePaint"
+            | "ForegroundLayoutDrawable"
+            | "TextInputCursor"
+            | "TextInputSelection"
+            | "TextInputText"
+            | "TextInputSelectedText"
+    )
 }
 
 fn skin_skinnable_dependencies(

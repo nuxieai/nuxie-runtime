@@ -273,6 +273,9 @@ pub enum DependencyKind {
     FollowPathConstraintParent,
     FollowPathConstraintTargetPathComposer,
     FollowPathConstraintTargetPath,
+    TextFollowPathModifierText,
+    TextFollowPathModifierTargetPathComposer,
+    TextFollowPathModifierTargetPath,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -1097,6 +1100,20 @@ fn build_dependency_node_edges(
         });
     }
 
+    for (source_node, modifier_node, kind) in text_follow_path_modifier_target_node_dependencies(
+        file,
+        local_objects,
+        dependency_nodes,
+        &component_node_by_local,
+        &path_composer_node_by_shape,
+    ) {
+        edges.push(DependencyNodeEdge {
+            source_node,
+            dependent_node: modifier_node,
+            kind,
+        });
+    }
+
     edges.sort_by_key(|edge| {
         (
             edge.source_node,
@@ -1182,6 +1199,16 @@ fn build_dependency_edges(
             source_local: constraint_local,
             dependent_local: parent_local,
             kind: DependencyKind::FollowPathConstraintParent,
+        });
+    }
+
+    for (modifier_local, text_local) in
+        text_follow_path_modifier_text_dependencies(file, local_objects)
+    {
+        edges.push(DependencyEdge {
+            source_local: modifier_local,
+            dependent_local: text_local,
+            kind: DependencyKind::TextFollowPathModifierText,
         });
     }
 
@@ -1284,9 +1311,13 @@ fn component_skips_parent_child_dependency(
     if object.type_name == "Joystick" {
         return true;
     }
+    if object.type_name == "TextModifierGroup" {
+        return true;
+    }
 
-    definition_by_type_key(object.type_key)
-        .is_some_and(|definition| definition.is_a("TargetedConstraint"))
+    definition_by_type_key(object.type_key).is_some_and(|definition| {
+        definition.is_a("TargetedConstraint") || definition.is_a("TextModifier")
+    })
 }
 
 fn dependency_kind_sort_key(kind: DependencyKind) -> u8 {
@@ -1311,6 +1342,9 @@ fn dependency_kind_sort_key(kind: DependencyKind) -> u8 {
         DependencyKind::FollowPathConstraintParent => 17,
         DependencyKind::FollowPathConstraintTargetPathComposer => 18,
         DependencyKind::FollowPathConstraintTargetPath => 19,
+        DependencyKind::TextFollowPathModifierText => 20,
+        DependencyKind::TextFollowPathModifierTargetPathComposer => 21,
+        DependencyKind::TextFollowPathModifierTargetPath => 22,
     }
 }
 
@@ -1433,6 +1467,100 @@ fn follow_path_constraint_target_node_dependencies(
         }
     }
     edges
+}
+
+fn text_follow_path_modifier_text_dependencies(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+) -> Vec<(usize, usize)> {
+    let mut edges = Vec::new();
+    for local_object in local_objects {
+        let Some(modifier) = runtime_object_for_local(file, local_objects, local_object.local_id)
+        else {
+            continue;
+        };
+        if !is_text_follow_path_modifier(modifier) {
+            continue;
+        }
+
+        if let Some(text_local) = text_component_local_for_modifier(file, local_objects, modifier) {
+            edges.push((local_object.local_id, text_local));
+        }
+    }
+    edges
+}
+
+fn text_follow_path_modifier_target_node_dependencies(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+    dependency_nodes: &[DependencyNode],
+    component_node_by_local: &BTreeMap<usize, usize>,
+    path_composer_node_by_shape: &BTreeMap<usize, usize>,
+) -> Vec<(usize, usize, DependencyKind)> {
+    let mut edges = Vec::new();
+    for node in dependency_nodes {
+        let DependencyNodeKind::Component { local_id, .. } = &node.kind else {
+            continue;
+        };
+        let modifier_local = *local_id;
+        let Some(modifier) = runtime_object_for_local(file, local_objects, modifier_local) else {
+            continue;
+        };
+        if !is_text_follow_path_modifier(modifier) {
+            continue;
+        }
+
+        let Some(modifier_node) = component_node_by_local.get(&modifier_local).copied() else {
+            continue;
+        };
+        let Some((target_local, target)) = local_object_reference_with_local_id(
+            file,
+            local_objects,
+            modifier.uint_property("targetId"),
+        ) else {
+            continue;
+        };
+
+        if is_shape(target) {
+            if let Some(path_composer_node) =
+                path_composer_node_by_shape.get(&target_local).copied()
+            {
+                edges.push((
+                    path_composer_node,
+                    modifier_node,
+                    DependencyKind::TextFollowPathModifierTargetPathComposer,
+                ));
+            }
+            continue;
+        }
+
+        if is_path(target) {
+            if let Some(path_node) = component_node_by_local.get(&target_local).copied() {
+                edges.push((
+                    path_node,
+                    modifier_node,
+                    DependencyKind::TextFollowPathModifierTargetPath,
+                ));
+            }
+        }
+    }
+    edges
+}
+
+fn text_component_local_for_modifier(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+    modifier: &RuntimeObject,
+) -> Option<usize> {
+    let (_, group) =
+        local_object_reference_with_local_id(file, local_objects, object_parent_id(modifier))?;
+    if group.type_name != "TextModifierGroup" {
+        return None;
+    }
+
+    let (text_local, text) =
+        local_object_reference_with_local_id(file, local_objects, object_parent_id(group))?;
+    (text.type_name == "Text").then_some(text_local)
 }
 
 fn skin_skinnable_dependencies(
@@ -2163,6 +2291,11 @@ fn is_path(object: &RuntimeObject) -> bool {
 fn is_follow_path_constraint(object: &RuntimeObject) -> bool {
     definition_by_type_key(object.type_key)
         .is_some_and(|definition| definition.is_a("FollowPathConstraint"))
+}
+
+fn is_text_follow_path_modifier(object: &RuntimeObject) -> bool {
+    definition_by_type_key(object.type_key)
+        .is_some_and(|definition| definition.name == "TextFollowPathModifier")
 }
 
 fn is_bone(object: &RuntimeObject) -> bool {

@@ -829,6 +829,201 @@ fn cpp_follow_path_dependency_methods_are_tracked_by_graph_model() {
 }
 
 #[test]
+fn graph_dependency_order_includes_text_follow_path_dependencies() {
+    let parent_id_key = property_key_for_name("Component", "parentId");
+    let target_id_key = property_key_for_name("TextTargetModifier", "targetId");
+
+    let bytes = synthetic_runtime_file(7112, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object(bytes, "Text", &[(parent_id_key, 0)]);
+        push_object(bytes, "TextModifierGroup", &[(parent_id_key, 1)]);
+        push_object(bytes, "Shape", &[(parent_id_key, 0)]);
+        push_object(bytes, "PointsPath", &[(parent_id_key, 3)]);
+        push_object(
+            bytes,
+            "TextFollowPathModifier",
+            &[(parent_id_key, 2), (target_id_key, 3)],
+        );
+        push_object(
+            bytes,
+            "TextFollowPathModifier",
+            &[(parent_id_key, 2), (target_id_key, 4)],
+        );
+        push_object(bytes, "Node", &[(parent_id_key, 0)]);
+        push_object(
+            bytes,
+            "TextFollowPathModifier",
+            &[(parent_id_key, 2), (target_id_key, 7)],
+        );
+    });
+
+    let (_, rust) = read_graph_from_bytes(&bytes, "synthetic/text_follow_path_dependency.riv");
+    let artboard = &rust.artboards[0];
+
+    let path_composer_node = dependency_node_for_path_composer(artboard, 3);
+    let path_node = dependency_node_for_component(artboard, 4);
+    let shape_modifier_node = dependency_node_for_component(artboard, 5);
+    let path_modifier_node = dependency_node_for_component(artboard, 6);
+    let node_target_modifier_node = dependency_node_for_component(artboard, 8);
+
+    assert!(
+        artboard.dependency_node_edges.contains(&node_edge(
+            path_composer_node,
+            shape_modifier_node,
+            DependencyKind::TextFollowPathModifierTargetPathComposer
+        )),
+        "TextFollowPathModifier::buildDependencies makes shape-target modifiers depend on the target Shape's PathComposer"
+    );
+    assert!(
+        artboard.dependency_node_edges.contains(&node_edge(
+            path_node,
+            path_modifier_node,
+            DependencyKind::TextFollowPathModifierTargetPath
+        )),
+        "TextFollowPathModifier::buildDependencies makes path-target modifiers depend directly on the target Path"
+    );
+    assert!(
+        !artboard.dependency_node_edges.contains(&node_edge(
+            path_composer_node,
+            path_modifier_node,
+            DependencyKind::TextFollowPathModifierTargetPathComposer
+        )),
+        "TextFollowPathModifier does not swap path targets to their owning Shape's PathComposer"
+    );
+    assert!(
+        artboard
+            .dependency_edges
+            .contains(&edge(5, 1, DependencyKind::TextFollowPathModifierText)),
+        "TextFollowPathModifier::buildDependencies makes the Text depend on the modifier"
+    );
+    assert!(
+        artboard
+            .dependency_edges
+            .contains(&edge(6, 1, DependencyKind::TextFollowPathModifierText)),
+        "path-target TextFollowPathModifier keeps the modifier-to-Text dependency"
+    );
+    assert!(
+        artboard
+            .dependency_edges
+            .contains(&edge(8, 1, DependencyKind::TextFollowPathModifierText)),
+        "TextFollowPathModifier adds the Text dependency even when the target is not a Shape or Path"
+    );
+    assert!(
+        !artboard
+            .dependency_edges
+            .contains(&edge(1, 2, DependencyKind::ParentChild)),
+        "TextModifierGroup does not inherit TransformComponent::buildDependencies"
+    );
+    assert!(
+        !artboard
+            .dependency_edges
+            .contains(&edge(2, 5, DependencyKind::ParentChild)),
+        "TextFollowPathModifier does not inherit TransformComponent::buildDependencies"
+    );
+    assert!(
+        !artboard
+            .dependency_node_edges
+            .iter()
+            .any(|edge| edge.dependent_node == node_target_modifier_node
+                && matches!(
+                    edge.kind,
+                    DependencyKind::TextFollowPathModifierTargetPathComposer
+                        | DependencyKind::TextFollowPathModifierTargetPath
+                )),
+        "non-shape/path text follow-path targets do not add target path prerequisites"
+    );
+    assert_node_order_before(artboard, path_composer_node, shape_modifier_node);
+    assert_node_order_before(artboard, path_node, path_modifier_node);
+    assert_order_before(artboard, 5, 1);
+    assert_order_before(artboard, 6, 1);
+    assert_order_before(artboard, 8, 1);
+    assert!(artboard.dependency_cycles.is_empty());
+}
+
+#[test]
+fn cpp_text_follow_path_dependency_method_is_tracked_by_graph_model() {
+    let runtime_dir = reference_runtime_dir();
+    assert!(
+        runtime_dir.exists(),
+        "reference runtime not found at {}; set RIVE_RUNTIME_DIR",
+        runtime_dir.display()
+    );
+
+    let text_follow_path_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/text/text_follow_path_modifier.cpp"))
+            .expect("read C++ text_follow_path_modifier.cpp"),
+    );
+    let build_dependencies_body = cpp_function_body(
+        &text_follow_path_source,
+        "voidTextFollowPathModifier::buildDependencies()",
+    );
+    assert!(
+        !build_dependencies_body.contains("Super::buildDependencies("),
+        "TextFollowPathModifier::buildDependencies started calling Super; audit parent dependency modeling"
+    );
+    assert!(
+        build_dependencies_body.contains("shape->pathComposer()->addDependent(this);"),
+        "TextFollowPathModifier::buildDependencies no longer depends on target shape path composers"
+    );
+    assert!(
+        build_dependencies_body.contains("path->addDependent(this);"),
+        "TextFollowPathModifier::buildDependencies no longer depends directly on target paths"
+    );
+    assert!(
+        build_dependencies_body.contains("Text*text=textComponent();"),
+        "TextFollowPathModifier::buildDependencies no longer resolves the owning text component"
+    );
+    assert!(
+        build_dependencies_body.contains("addDependent(text);"),
+        "TextFollowPathModifier::buildDependencies no longer makes the Text depend on the modifier"
+    );
+
+    let on_added_clean_body = cpp_function_body(
+        &text_follow_path_source,
+        "StatusCodeTextFollowPathModifier::onAddedClean",
+    );
+    assert!(
+        on_added_clean_body.contains("shape->addFlags(PathFlags::followPath);"),
+        "TextFollowPathModifier::onAddedClean no longer marks target shapes for follow-path updates"
+    );
+    assert!(
+        on_added_clean_body.contains("path->addFlags(PathFlags::followPath);"),
+        "TextFollowPathModifier::onAddedClean no longer marks target paths for follow-path updates"
+    );
+    assert!(
+        on_added_clean_body.contains("returnSuper::onAddedClean(context);"),
+        "TextFollowPathModifier::onAddedClean stopped preserving inherited target resolution"
+    );
+
+    let text_target_modifier_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/text/text_target_modifier.cpp"))
+            .expect("read C++ text_target_modifier.cpp"),
+    );
+    let text_component_body = cpp_function_body(
+        &text_target_modifier_source,
+        "Text*TextTargetModifier::textComponent()const",
+    );
+    assert!(
+        text_component_body.contains("parent()->as<TextModifierGroup>()->textComponent();"),
+        "TextTargetModifier::textComponent no longer resolves through TextModifierGroup"
+    );
+
+    let text_modifier_group_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/text/text_modifier_group.cpp"))
+            .expect("read C++ text_modifier_group.cpp"),
+    );
+    let text_group_component_body = cpp_function_body(
+        &text_modifier_group_source,
+        "Text*TextModifierGroup::textComponent()const",
+    );
+    assert!(
+        text_group_component_body.contains("parent()->is<Text>()"),
+        "TextModifierGroup::textComponent no longer requires an owning Text parent"
+    );
+}
+
+#[test]
 fn graph_dependency_order_reports_targeted_constraint_cycles() {
     let parent_id_key = property_key_for_name("Component", "parentId");
     let target_id_key = property_key_for_name("TargetedConstraint", "targetId");

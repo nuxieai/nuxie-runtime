@@ -191,6 +191,12 @@ The existing `rive-graph` prototype already covers:
   `ListFollowPathConstraint` children under exact `ArtboardComponentList`
   parents, matching `ConstrainableList::addListConstraint` without admitting
   `constrainList()`, list layout, or virtualization behavior.
+- Static layout-constraint registrations for exact C++
+  `LayoutNodeProvider` content children under `ScrollConstraint` content,
+  exposed through `layout_constraint_registrations` and matching
+  `LayoutNodeProvider::addLayoutConstraint` plus
+  `ScrollConstraint::addLayoutChild` without admitting layout solving,
+  virtualization, Yoga updates, or scroll-constraint execution.
 - Topological dependency order and dependency-cycle diagnostics.
 - C++ probe comparison through `make cpp-compare`.
 

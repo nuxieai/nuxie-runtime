@@ -60,6 +60,7 @@ pub struct ArtboardGraph {
     pub skeletal_skins: Vec<SkeletalSkinNode>,
     pub text_variation_helpers: Vec<TextVariationHelperNode>,
     pub list_constraint_registrations: Vec<ListConstraintRegistrationNode>,
+    pub layout_constraint_registrations: Vec<LayoutConstraintRegistrationNode>,
     pub nested_artboards: Vec<NestedArtboardNode>,
     pub component_lists: Vec<ComponentListNode>,
     pub artboard_hosts: Vec<ArtboardHostNode>,
@@ -157,6 +158,8 @@ impl ArtboardGraph {
         let skeletal_skins = skeletal_skins(file, &local_objects);
         let text_variation_helpers = text_variation_helpers(file, &local_objects);
         let list_constraint_registrations = list_constraint_registrations(file, &local_objects);
+        let layout_constraint_registrations =
+            layout_constraint_registrations(file, &local_objects, &components);
         let nested_artboards = nested_artboards(file, &local_objects);
         let component_lists = component_lists(file, &local_objects);
         let artboard_hosts = artboard_hosts(file, &local_objects);
@@ -230,6 +233,7 @@ impl ArtboardGraph {
             skeletal_skins,
             text_variation_helpers,
             list_constraint_registrations,
+            layout_constraint_registrations,
             nested_artboards,
             component_lists,
             artboard_hosts,
@@ -501,6 +505,16 @@ pub struct TextVariationHelperNode {
 pub struct ListConstraintRegistrationNode {
     pub constrainable_list_local: usize,
     pub constrainable_list_global: u32,
+    pub constraint_local: usize,
+    pub constraint_global: u32,
+    pub constraint_type_name: &'static str,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct LayoutConstraintRegistrationNode {
+    pub layout_provider_local: usize,
+    pub layout_provider_global: u32,
+    pub layout_provider_type_name: &'static str,
     pub constraint_local: usize,
     pub constraint_global: u32,
     pub constraint_type_name: &'static str,
@@ -1896,6 +1910,32 @@ fn list_constraint_registrations(
                 )?,
                 constraint_local: local_object.local_id,
                 constraint_global: local_object.global_id,
+                constraint_type_name: constraint.type_name,
+            })
+        })
+        .collect()
+}
+
+fn layout_constraint_registrations(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+    components: &[ComponentNode],
+) -> Vec<LayoutConstraintRegistrationNode> {
+    scroll_constraint_layout_child_dependencies(file, local_objects, components)
+        .into_iter()
+        .filter_map(|(constraint_local, layout_provider_local)| {
+            let constraint = runtime_object_for_local(file, local_objects, constraint_local)?;
+            let layout_provider =
+                runtime_object_for_local(file, local_objects, layout_provider_local)?;
+            Some(LayoutConstraintRegistrationNode {
+                layout_provider_local,
+                layout_provider_global: local_object_global_id(
+                    local_objects,
+                    layout_provider_local,
+                )?,
+                layout_provider_type_name: layout_provider.type_name,
+                constraint_local,
+                constraint_global: local_object_global_id(local_objects, constraint_local)?,
                 constraint_type_name: constraint.type_name,
             })
         })

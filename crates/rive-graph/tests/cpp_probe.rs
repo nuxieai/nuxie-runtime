@@ -3591,6 +3591,25 @@ fn graph_dependency_order_includes_scroll_constraint_layout_children() {
     let (_, rust) = read_graph_from_bytes(&bytes, "synthetic/scroll_constraint_children.riv");
     let artboard = &rust.artboards[0];
 
+    assert_eq!(
+        artboard
+            .layout_constraint_registrations
+            .iter()
+            .map(|registration| (
+                registration.layout_provider_local,
+                registration.layout_provider_type_name,
+                registration.constraint_local,
+                registration.constraint_type_name
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            (3, "LayoutComponent", 2, "ScrollConstraint"),
+            (4, "NestedArtboardLayout", 2, "ScrollConstraint"),
+            (5, "ArtboardComponentList", 2, "ScrollConstraint")
+        ],
+        "LayoutNodeProvider::addLayoutConstraint registers ScrollConstraint on exact layout-provider content children"
+    );
+
     assert!(
         artboard.dependency_edges.contains(&edge(
             2,
@@ -3958,6 +3977,27 @@ fn cpp_scroll_constraint_dependency_method_is_tracked_by_graph_model() {
     assert!(
         layout_provider_body.contains("caseArtboardComponentListBase::typeKey:"),
         "LayoutNodeProvider::from no longer accepts ArtboardComponentList objects"
+    );
+    let add_layout_constraint_body = cpp_function_body(
+        &layout_provider_source,
+        "voidLayoutNodeProvider::addLayoutConstraint",
+    );
+    assert!(
+        add_layout_constraint_body.contains("m_layoutConstraints.push_back(constraint);"),
+        "LayoutNodeProvider::addLayoutConstraint no longer stores registered layout constraints"
+    );
+    assert!(
+        add_layout_constraint_body.contains("constraint->addLayoutChild(this);"),
+        "LayoutNodeProvider::addLayoutConstraint no longer registers the provider on the constraint"
+    );
+
+    let add_layout_child_body = cpp_function_body(
+        &scroll_constraint_source,
+        "voidScrollConstraint::addLayoutChild",
+    );
+    assert!(
+        add_layout_child_body.contains("m_layoutChildren.push_back(child);"),
+        "ScrollConstraint::addLayoutChild no longer stores registered layout children"
     );
 }
 

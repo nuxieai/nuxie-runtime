@@ -699,6 +699,74 @@ fn graph_dependency_order_includes_joystick_handle_source_dependencies() {
 }
 
 #[test]
+fn graph_dependency_order_includes_scroll_bar_constraint_dependency() {
+    let parent_id_key = property_key_for_name("Component", "parentId");
+    let scroll_constraint_id_key =
+        property_key_for_name("ScrollBarConstraint", "scrollConstraintId");
+
+    let bytes = synthetic_runtime_file(7108, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object(bytes, "LayoutComponent", &[(parent_id_key, 0)]);
+        push_object(bytes, "LayoutComponent", &[(parent_id_key, 1)]);
+        push_object(bytes, "ScrollConstraint", &[(parent_id_key, 2)]);
+        push_object(
+            bytes,
+            "ScrollBarConstraint",
+            &[(parent_id_key, 2), (scroll_constraint_id_key, 3)],
+        );
+        push_object(bytes, "Node", &[(parent_id_key, 0)]);
+        push_object(
+            bytes,
+            "ScrollBarConstraint",
+            &[(parent_id_key, 2), (scroll_constraint_id_key, 5)],
+        );
+        push_object(bytes, "ScrollBarConstraint", &[(parent_id_key, 2)]);
+    });
+
+    let (_, rust) = read_graph_from_bytes(&bytes, "synthetic/scroll_bar_dependency.riv");
+    let artboard = &rust.artboards[0];
+
+    assert!(
+        artboard
+            .dependency_edges
+            .contains(&edge(3, 4, DependencyKind::ScrollBarConstraint)),
+        "ScrollBarConstraint::buildDependencies makes the scroll bar depend on its ScrollConstraint"
+    );
+    assert!(
+        artboard
+            .dependency_edges
+            .contains(&edge(2, 4, DependencyKind::ParentChild)),
+        "ScrollBarConstraint::buildDependencies delegates to Super, preserving the parent dependency"
+    );
+    assert!(
+        !artboard
+            .dependency_edges
+            .iter()
+            .any(|edge| edge.dependent_local == 6
+                && matches!(
+                    edge.kind,
+                    DependencyKind::ParentChild | DependencyKind::ScrollBarConstraint
+                )),
+        "scroll bars with non-ScrollConstraint references are rejected before dependency projection"
+    );
+    assert!(
+        !artboard
+            .dependency_edges
+            .iter()
+            .any(|edge| edge.dependent_local == 7
+                && matches!(
+                    edge.kind,
+                    DependencyKind::ParentChild | DependencyKind::ScrollBarConstraint
+                )),
+        "scroll bars without a resolved ScrollConstraint do not add dependency edges"
+    );
+    assert_order_before(artboard, 3, 4);
+    assert_order_before(artboard, 2, 4);
+    assert!(artboard.dependency_cycles.is_empty());
+}
+
+#[test]
 fn cpp_skin_mesh_dependency_methods_are_tracked_by_graph_model() {
     let runtime_dir = reference_runtime_dir();
     assert!(
@@ -787,6 +855,35 @@ fn cpp_joystick_dependency_method_is_tracked_by_graph_model() {
     assert!(
         joystick_body.contains("m_handleSource->addDependent(this);"),
         "Joystick::buildDependencies no longer makes custom-handle joysticks depend on their handle source"
+    );
+}
+
+#[test]
+fn cpp_scroll_bar_constraint_dependency_method_is_tracked_by_graph_model() {
+    let runtime_dir = reference_runtime_dir();
+    assert!(
+        runtime_dir.exists(),
+        "reference runtime not found at {}; set RIVE_RUNTIME_DIR",
+        runtime_dir.display()
+    );
+
+    let scroll_bar_source = compact_cpp_source(
+        &std::fs::read_to_string(
+            runtime_dir.join("src/constraints/scrolling/scroll_bar_constraint.cpp"),
+        )
+        .expect("read C++ scroll_bar_constraint.cpp"),
+    );
+    let scroll_bar_body = cpp_function_body(
+        &scroll_bar_source,
+        "voidScrollBarConstraint::buildDependencies()",
+    );
+    assert!(
+        scroll_bar_body.contains("m_scrollConstraint->addDependent(this);"),
+        "ScrollBarConstraint::buildDependencies no longer depends on the resolved ScrollConstraint"
+    );
+    assert!(
+        scroll_bar_body.contains("Super::buildDependencies();"),
+        "ScrollBarConstraint::buildDependencies stopped preserving its Super dependency edges"
     );
 }
 

@@ -215,6 +215,7 @@ pub enum DependencyKind {
     SkinBoneConstraintParent,
     JoystickParent,
     JoystickHandleSource,
+    ScrollBarConstraint,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -985,6 +986,16 @@ fn build_dependency_edges(
         });
     }
 
+    for (scroll_constraint_local, scroll_bar_local) in
+        scroll_bar_constraint_dependencies(file, local_objects)
+    {
+        edges.push(DependencyEdge {
+            source_local: scroll_constraint_local,
+            dependent_local: scroll_bar_local,
+            kind: DependencyKind::ScrollBarConstraint,
+        });
+    }
+
     edges.sort_by_key(|edge| {
         (
             edge.source_local,
@@ -1028,6 +1039,7 @@ fn dependency_kind_sort_key(kind: DependencyKind) -> u8 {
         DependencyKind::SkinBoneConstraintParent => 8,
         DependencyKind::JoystickParent => 9,
         DependencyKind::JoystickHandleSource => 10,
+        DependencyKind::ScrollBarConstraint => 11,
     }
 }
 
@@ -1236,6 +1248,36 @@ fn joystick_dependencies(
             local_object.local_id,
             DependencyKind::JoystickHandleSource,
         ));
+    }
+    edges
+}
+
+fn scroll_bar_constraint_dependencies(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+) -> Vec<(usize, usize)> {
+    let mut edges = Vec::new();
+    for local_object in local_objects {
+        let Some(scroll_bar) = runtime_object_for_local(file, local_objects, local_object.local_id)
+        else {
+            continue;
+        };
+        if scroll_bar.type_name != "ScrollBarConstraint" {
+            continue;
+        }
+
+        let Some((scroll_constraint_local, scroll_constraint)) =
+            local_object_reference_with_local_id(
+                file,
+                local_objects,
+                scroll_bar.uint_property("scrollConstraintId"),
+            )
+        else {
+            continue;
+        };
+        if is_scroll_constraint(scroll_constraint) {
+            edges.push((scroll_constraint_local, local_object.local_id));
+        }
     }
     edges
 }

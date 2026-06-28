@@ -393,24 +393,28 @@ fn cpp_probe_matches_rust_draw_graph_resolution_when_available() {
             .contains(&edge(0, 1, DependencyKind::ParentChild))
     );
     assert!(
-        artboard
+        !artboard
             .dependency_edges
-            .contains(&edge(0, 2, DependencyKind::ParentChild))
+            .contains(&edge(0, 2, DependencyKind::ParentChild)),
+        "DrawTarget has import-time references but no C++ buildDependencies parent edge"
     );
     assert!(
-        artboard
+        !artboard
             .dependency_edges
-            .contains(&edge(0, 3, DependencyKind::ParentChild))
+            .contains(&edge(0, 3, DependencyKind::ParentChild)),
+        "unresolved DrawTarget has no C++ buildDependencies parent edge"
     );
     assert!(
-        artboard
+        !artboard
             .dependency_edges
-            .contains(&edge(0, 4, DependencyKind::ParentChild))
+            .contains(&edge(0, 4, DependencyKind::ParentChild)),
+        "DrawRules has import-time references but no C++ buildDependencies parent edge"
     );
     assert!(
-        artboard
+        !artboard
             .dependency_edges
-            .contains(&edge(0, 5, DependencyKind::ParentChild))
+            .contains(&edge(0, 5, DependencyKind::ParentChild)),
+        "unresolved DrawRules has no C++ buildDependencies parent edge"
     );
     assert!(
         !artboard
@@ -463,6 +467,163 @@ fn cpp_probe_matches_rust_draw_graph_resolution_when_available() {
     assert_order_before(artboard, 1, 6);
     assert_node_order_before(artboard, shape_path_composer_node, clipping_shape_node);
     assert!(artboard.dependency_cycles.is_empty());
+}
+
+#[test]
+fn graph_parent_child_dependencies_follow_cpp_build_dependency_hooks() {
+    let parent_id_key = property_key_for_name("Component", "parentId");
+    let drawable_id_key = property_key_for_name("DrawTarget", "drawableId");
+    let draw_target_id_key = property_key_for_name("DrawRules", "drawTargetId");
+    let style_id_key = property_key_for_name("TextValueRun", "styleId");
+
+    let bytes = synthetic_runtime_file(7120, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object(bytes, "Text", &[(parent_id_key, 0)]);
+        push_object(bytes, "TextStyle", &[(parent_id_key, 1)]);
+        push_object(bytes, "FocusData", &[(parent_id_key, 0)]);
+        push_object(bytes, "SemanticData", &[(parent_id_key, 0)]);
+        push_object(bytes, "Image", &[(parent_id_key, 0)]);
+        push_object(bytes, "NSlicer", &[(parent_id_key, 5)]);
+        push_object(bytes, "AxisX", &[(parent_id_key, 6)]);
+        push_object(
+            bytes,
+            "DrawTarget",
+            &[(parent_id_key, 0), (drawable_id_key, 5)],
+        );
+        push_object(
+            bytes,
+            "DrawRules",
+            &[(parent_id_key, 0), (draw_target_id_key, 8)],
+        );
+        push_object(
+            bytes,
+            "TextValueRun",
+            &[(parent_id_key, 1), (style_id_key, 2)],
+        );
+    });
+
+    let (_, rust) = read_graph_from_bytes(&bytes, "synthetic/parent_dependency_hooks.riv");
+    let artboard = &rust.artboards[0];
+
+    for (source, dependent, label) in [
+        (0, 1, "TransformComponent::buildDependencies for Text"),
+        (1, 2, "TextStyle::buildDependencies"),
+        (0, 3, "FocusData::buildDependencies"),
+        (0, 4, "SemanticData::buildDependencies"),
+        (0, 5, "TransformComponent::buildDependencies for Image"),
+        (5, 6, "NSlicer::buildDependencies"),
+    ] {
+        assert!(
+            artboard.dependency_edges.contains(&edge(
+                source,
+                dependent,
+                DependencyKind::ParentChild
+            )),
+            "{label} should project a parent dependency"
+        );
+    }
+
+    for (source, dependent, label) in [
+        (6, 7, "AxisX"),
+        (0, 8, "DrawTarget"),
+        (0, 9, "DrawRules"),
+        (1, 10, "TextValueRun"),
+    ] {
+        assert!(
+            !artboard.dependency_edges.contains(&edge(
+                source,
+                dependent,
+                DependencyKind::ParentChild
+            )),
+            "{label} does not implement a C++ parent build dependency"
+        );
+    }
+}
+
+#[test]
+fn cpp_parent_dependency_hooks_are_tracked_by_graph_model() {
+    let runtime_dir = reference_runtime_dir();
+    assert!(
+        runtime_dir.exists(),
+        "reference runtime not found at {}; set RIVE_RUNTIME_DIR",
+        runtime_dir.display()
+    );
+
+    let component_header = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("include/rive/component.hpp"))
+            .expect("read C++ component.hpp"),
+    );
+    assert!(
+        component_header.contains("virtualvoidbuildDependencies(){}"),
+        "Component::buildDependencies is no longer empty; audit generic parent dependency projection"
+    );
+
+    let transform_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/transform_component.cpp"))
+            .expect("read C++ transform_component.cpp"),
+    );
+    let transform_body = cpp_function_body(
+        &transform_source,
+        "voidTransformComponent::buildDependencies()",
+    );
+    assert!(
+        transform_body.contains("parent()->addDependent(this);"),
+        "TransformComponent::buildDependencies no longer registers parent dependencies"
+    );
+
+    let text_style_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/text/text_style.cpp"))
+            .expect("read C++ text_style.cpp"),
+    );
+    let text_style_body =
+        cpp_function_body(&text_style_source, "voidTextStyle::buildDependencies()");
+    assert!(
+        text_style_body.contains("parent()->addDependent(this);"),
+        "TextStyle::buildDependencies no longer registers parent dependencies"
+    );
+
+    for (path, signature, label) in [
+        (
+            "src/focus_data.cpp",
+            "voidFocusData::buildDependencies()",
+            "FocusData",
+        ),
+        (
+            "src/semantic/semantic_data.cpp",
+            "voidSemanticData::buildDependencies()",
+            "SemanticData",
+        ),
+        (
+            "src/layout/n_slicer.cpp",
+            "voidNSlicer::buildDependencies()",
+            "NSlicer",
+        ),
+    ] {
+        let source = compact_cpp_source(
+            &std::fs::read_to_string(runtime_dir.join(path)).expect("read C++ parent hook source"),
+        );
+        let body = cpp_function_body(&source, signature);
+        assert!(
+            body.contains("parent") && body.contains("addDependent(this);"),
+            "{label}::buildDependencies no longer registers a parent dependency"
+        );
+    }
+
+    for (path, label) in [
+        ("src/draw_target.cpp", "DrawTarget"),
+        ("src/draw_rules.cpp", "DrawRules"),
+        ("src/layout/axis_x.cpp", "AxisX"),
+        ("src/text/text_value_run.cpp", "TextValueRun"),
+    ] {
+        let source = compact_cpp_source(
+            &std::fs::read_to_string(runtime_dir.join(path)).expect("read C++ no-parent source"),
+        );
+        assert!(
+            !source.contains("buildDependencies("),
+            "{label} added buildDependencies; audit parent dependency projection"
+        );
+    }
 }
 
 #[test]

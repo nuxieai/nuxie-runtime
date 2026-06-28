@@ -1558,28 +1558,40 @@ fn component_skips_parent_child_dependency(
     let Some(object) = runtime_object_for_local(file, local_objects, local_id) else {
         return false;
     };
+    !component_has_parent_child_dependency(object)
+}
+
+fn component_has_parent_child_dependency(object: &RuntimeObject) -> bool {
+    let Some(definition) = definition_by_type_key(object.type_key) else {
+        return false;
+    };
+
     if object.type_name == "Skin" {
-        return true;
+        return false;
     }
     if object.type_name == "Joystick" {
-        return true;
+        return false;
     }
     if object.type_name == "TextModifierGroup" {
-        return true;
+        return false;
     }
     if object.type_name == "ClippingShape" {
-        return true;
+        return false;
     }
     if paint_effect_skips_generic_parent_child_dependency(object) {
-        return true;
+        return false;
     }
     if text_variation_child_skips_generic_parent_child_dependency(object) {
-        return true;
+        return false;
+    }
+    if definition.is_a("TargetedConstraint") || definition.is_a("TextModifier") {
+        return false;
     }
 
-    definition_by_type_key(object.type_key).is_some_and(|definition| {
-        definition.is_a("TargetedConstraint") || definition.is_a("TextModifier")
-    })
+    definition.is_a("TransformComponent")
+        || definition.is_a("Constraint")
+        || definition.is_a("TextStyle")
+        || matches!(object.type_name, "FocusData" | "SemanticData" | "NSlicer")
 }
 
 fn dependency_kind_sort_key(kind: DependencyKind) -> u8 {

@@ -134,9 +134,10 @@ The existing `rive-graph` prototype already covers:
 - Dependency nodes for real imported components plus synthetic path composers
   and text variation helpers, with a topological node order and a filtered
   real-component local-ID order.
-- Dependency edges for parent-child, targeted constraints, IK constraints,
-  IK chain off-branch children, draw-target drawable references, draw-rule
-  target references, clipping sources, skinning for exact C++ skinnables
+- Dependency edges for C++ `parent()->addDependent(this)` parent relationships,
+  targeted constraints, IK constraints, IK chain off-branch children,
+  draw-target drawable references, draw-rule target references, clipping sources,
+  skinning for exact C++ skinnables
   (`Mesh` and `PointsPath`), Joystick custom-handle dependencies,
   path-composer shape/path prerequisites,
   clipping-shape-to-source-path-composer prerequisites, follow-path target and

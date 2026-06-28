@@ -1024,6 +1024,202 @@ fn cpp_text_follow_path_dependency_method_is_tracked_by_graph_model() {
 }
 
 #[test]
+fn graph_dependency_order_includes_text_variation_helper_dependencies() {
+    let parent_id_key = property_key_for_name("Component", "parentId");
+
+    let bytes = synthetic_runtime_file(7117, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object(bytes, "Text", &[(parent_id_key, 0)]);
+        push_object(bytes, "TextStyle", &[(parent_id_key, 1)]);
+        push_object(bytes, "TextStyle", &[(parent_id_key, 1)]);
+        push_object(bytes, "TextStyleAxis", &[(parent_id_key, 3)]);
+        push_object(bytes, "TextStylePaint", &[(parent_id_key, 1)]);
+        push_object(bytes, "TextStyleFeature", &[(parent_id_key, 5)]);
+    });
+
+    let (_, rust) = read_graph_from_bytes(&bytes, "synthetic/text_variation_helper.riv");
+    let artboard = &rust.artboards[0];
+
+    assert_eq!(
+        artboard
+            .text_variation_helpers
+            .iter()
+            .map(|helper| (
+                helper.text_style_local,
+                helper.text_local,
+                helper.artboard_local
+            ))
+            .collect::<Vec<_>>(),
+        vec![(3, 1, 0), (5, 1, 0)],
+        "TextVariationHelper exists only for TextStyle descendants with axis/feature children"
+    );
+
+    let artboard_node = dependency_node_for_component(artboard, 0);
+    let text_node = dependency_node_for_component(artboard, 1);
+    let axis_helper_node = dependency_node_for_text_variation_helper(artboard, 3);
+    let feature_helper_node = dependency_node_for_text_variation_helper(artboard, 5);
+
+    assert!(
+        artboard.dependency_node_edges.contains(&node_edge(
+            artboard_node,
+            axis_helper_node,
+            DependencyKind::TextVariationHelperArtboard
+        )),
+        "TextVariationHelper::buildDependencies makes variation helpers depend on the owning artboard"
+    );
+    assert!(
+        artboard.dependency_node_edges.contains(&node_edge(
+            axis_helper_node,
+            text_node,
+            DependencyKind::TextVariationHelperText
+        )),
+        "TextVariationHelper::buildDependencies makes text depend on the variation helper"
+    );
+    assert!(
+        artboard.dependency_node_edges.contains(&node_edge(
+            artboard_node,
+            feature_helper_node,
+            DependencyKind::TextVariationHelperArtboard
+        )),
+        "TextStylePaint inherits TextStyle variation helper construction"
+    );
+    assert!(
+        artboard.dependency_node_edges.contains(&node_edge(
+            feature_helper_node,
+            text_node,
+            DependencyKind::TextVariationHelperText
+        )),
+        "TextStylePaint variation helpers feed the owning text like TextStyle helpers"
+    );
+    assert!(
+        !artboard
+            .dependency_edges
+            .contains(&edge(3, 4, DependencyKind::ParentChild)),
+        "TextStyleAxis registers variation state but does not add a C++ buildDependencies parent edge"
+    );
+    assert!(
+        !artboard
+            .dependency_edges
+            .contains(&edge(5, 6, DependencyKind::ParentChild)),
+        "TextStyleFeature registers feature state but does not add a C++ buildDependencies parent edge"
+    );
+    assert_node_order_before(artboard, artboard_node, axis_helper_node);
+    assert_node_order_before(artboard, axis_helper_node, text_node);
+    assert_node_order_before(artboard, artboard_node, feature_helper_node);
+    assert_node_order_before(artboard, feature_helper_node, text_node);
+    assert!(artboard.dependency_cycles.is_empty());
+}
+
+#[test]
+fn cpp_text_variation_helper_dependency_methods_are_tracked_by_graph_model() {
+    let runtime_dir = reference_runtime_dir();
+    assert!(
+        runtime_dir.exists(),
+        "reference runtime not found at {}; set RIVE_RUNTIME_DIR",
+        runtime_dir.display()
+    );
+
+    let text_style_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/text/text_style.cpp"))
+            .expect("read C++ text_style.cpp"),
+    );
+    let on_added_clean_body =
+        cpp_function_body(&text_style_source, "StatusCodeTextStyle::onAddedClean");
+    assert!(
+        on_added_clean_body.contains("!m_variations.empty()||!m_styleFeatures.empty()"),
+        "TextStyle::onAddedClean no longer gates variation helpers on axis/feature children"
+    );
+    assert!(
+        on_added_clean_body
+            .contains("m_variationHelper=std::make_unique<TextVariationHelper>(this);"),
+        "TextStyle::onAddedClean no longer creates TextVariationHelper"
+    );
+
+    let text_style_body =
+        cpp_function_body(&text_style_source, "voidTextStyle::buildDependencies()");
+    assert!(
+        text_style_body.contains("m_variationHelper->buildDependencies();"),
+        "TextStyle::buildDependencies no longer delegates to TextVariationHelper"
+    );
+    assert!(
+        text_style_body.contains("parent()->addDependent(this);"),
+        "TextStyle::buildDependencies no longer keeps the parent-to-style dependency"
+    );
+    assert!(
+        text_style_body.contains("Super::buildDependencies();"),
+        "TextStyle::buildDependencies stopped preserving inherited dependencies"
+    );
+
+    let helper_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/text/text_variation_helper.cpp"))
+            .expect("read C++ text_variation_helper.cpp"),
+    );
+    let helper_body = cpp_function_body(
+        &helper_source,
+        "voidTextVariationHelper::buildDependencies()",
+    );
+    assert!(
+        helper_body.contains("autotext=m_textStyle->parent();"),
+        "TextVariationHelper::buildDependencies no longer resolves text through its owning style"
+    );
+    assert!(
+        helper_body.contains("text->artboard()->addDependent(this);"),
+        "TextVariationHelper::buildDependencies no longer depends on the owning artboard"
+    );
+    assert!(
+        helper_body.contains("addDependent(text);"),
+        "TextVariationHelper::buildDependencies no longer makes text depend on the helper"
+    );
+    let helper_update_body = cpp_function_body(&helper_source, "voidTextVariationHelper::update");
+    assert!(
+        helper_update_body.contains("m_textStyle->updateVariableFont();"),
+        "TextVariationHelper::update no longer owns variable-font update behavior; audit graph/runtime scope"
+    );
+
+    let axis_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/text/text_style_axis.cpp"))
+            .expect("read C++ text_style_axis.cpp"),
+    );
+    assert!(
+        !axis_source.contains("TextStyleAxis::buildDependencies"),
+        "TextStyleAxis added buildDependencies; audit text variation child dependency modeling"
+    );
+    let axis_on_added_body =
+        cpp_function_body(&axis_source, "StatusCodeTextStyleAxis::onAddedDirty");
+    assert!(
+        axis_on_added_body.contains("style->addVariation(this);"),
+        "TextStyleAxis::onAddedDirty no longer registers variations with TextStyle"
+    );
+
+    let feature_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/text/text_style_feature.cpp"))
+            .expect("read C++ text_style_feature.cpp"),
+    );
+    assert!(
+        !feature_source.contains("TextStyleFeature::buildDependencies"),
+        "TextStyleFeature added buildDependencies; audit text variation child dependency modeling"
+    );
+    let feature_on_added_body =
+        cpp_function_body(&feature_source, "StatusCodeTextStyleFeature::onAddedDirty");
+    assert!(
+        feature_on_added_body.contains("style->addFeature(this);"),
+        "TextStyleFeature::onAddedDirty no longer registers features with TextStyle"
+    );
+
+    let text_style_paint_header = compact_cpp_source(
+        &std::fs::read_to_string(
+            runtime_dir.join("include/rive/generated/text/text_style_paint_base.hpp"),
+        )
+        .expect("read C++ text_style_paint_base.hpp"),
+    );
+    assert!(
+        text_style_paint_header.contains("classTextStylePaintBase:publicTextStyle"),
+        "TextStylePaint no longer inherits TextStyle variation helper behavior"
+    );
+}
+
+#[test]
 fn graph_dependency_order_includes_stroke_path_builder_dependencies() {
     let parent_id_key = property_key_for_name("Component", "parentId");
 
@@ -2262,6 +2458,25 @@ fn dependency_node_for_path_composer(
         })
         .unwrap_or_else(|| {
             panic!("missing dependency node for path composer shape local {shape_local}")
+        })
+}
+
+fn dependency_node_for_text_variation_helper(
+    artboard: &rive_graph::ArtboardGraph,
+    text_style_local: usize,
+) -> usize {
+    artboard
+        .dependency_nodes
+        .iter()
+        .find_map(|node| match &node.kind {
+            rive_graph::DependencyNodeKind::TextVariationHelper {
+                text_style_local: helper_text_style_local,
+                ..
+            } if *helper_text_style_local == text_style_local => Some(node.node_id),
+            _ => None,
+        })
+        .unwrap_or_else(|| {
+            panic!("missing dependency node for text variation helper local {text_style_local}")
         })
 }
 

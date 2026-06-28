@@ -51,6 +51,7 @@ pub struct ArtboardGraph {
     pub draw_rules: Vec<DrawRulesNode>,
     pub clipping_shapes: Vec<ClippingShapeNode>,
     pub path_composers: Vec<PathComposerNode>,
+    pub text_variation_helpers: Vec<TextVariationHelperNode>,
     pub animations: Vec<AnimationGraph>,
     pub state_machines: Vec<StateMachineGraph>,
     pub dependency_order: Vec<usize>,
@@ -130,6 +131,7 @@ impl ArtboardGraph {
         let clipping_shapes =
             clipping_shapes(file, &local_objects, &components, &component_by_local);
         let path_composers = path_composers(file, artboard_index, &local_objects);
+        let text_variation_helpers = text_variation_helpers(file, &local_objects);
         let dependency_edges = build_dependency_edges(
             file,
             &local_objects,
@@ -139,7 +141,8 @@ impl ArtboardGraph {
             &clipping_shapes,
         );
         lifecycle.build_dependencies_edges = dependency_edges.len();
-        let dependency_nodes = build_dependency_nodes(&components, &path_composers);
+        let dependency_nodes =
+            build_dependency_nodes(&components, &path_composers, &text_variation_helpers);
         lifecycle.build_dependencies_nodes = dependency_nodes.len();
         let dependency_node_edges = build_dependency_node_edges(
             file,
@@ -148,6 +151,7 @@ impl ArtboardGraph {
             &dependency_edges,
             &path_composers,
             &clipping_shapes,
+            &text_variation_helpers,
         );
         lifecycle.build_dependencies_node_edges = dependency_node_edges.len();
         let dependency_order = build_dependency_order(
@@ -183,6 +187,7 @@ impl ArtboardGraph {
             draw_rules,
             clipping_shapes,
             path_composers,
+            text_variation_helpers,
             animations,
             state_machines,
             dependency_order: dependency_order.component_order,
@@ -248,6 +253,14 @@ pub enum DependencyNodeKind {
         shape_local: usize,
         shape_global: u32,
     },
+    TextVariationHelper {
+        text_style_local: usize,
+        text_style_global: u32,
+        text_local: usize,
+        text_global: u32,
+        artboard_local: usize,
+        artboard_global: u32,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -282,6 +295,8 @@ pub enum DependencyKind {
     GroupEffectParent,
     ScriptedPathEffectParent,
     LinearGradientPaintContainer,
+    TextVariationHelperArtboard,
+    TextVariationHelperText,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -343,6 +358,16 @@ pub struct PathComposerNode {
     pub shape_global: u32,
     pub path_locals: Vec<usize>,
     pub path_globals: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TextVariationHelperNode {
+    pub text_style_local: usize,
+    pub text_style_global: u32,
+    pub text_local: usize,
+    pub text_global: u32,
+    pub artboard_local: usize,
+    pub artboard_global: u32,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -987,9 +1012,68 @@ fn path_composers(
         .collect()
 }
 
+fn text_variation_helpers(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+) -> Vec<TextVariationHelperNode> {
+    let Some(artboard_local) = local_objects.iter().find_map(|local_object| {
+        let object = runtime_object_for_local(file, local_objects, local_object.local_id)?;
+        (object.type_name == "Artboard").then_some(local_object.local_id)
+    }) else {
+        return Vec::new();
+    };
+
+    local_objects
+        .iter()
+        .filter_map(|local_object| {
+            let text_style = runtime_object_for_local(file, local_objects, local_object.local_id)?;
+            if !is_text_style(text_style)
+                || !text_style_has_variation_children(file, local_objects, local_object.local_id)
+            {
+                return None;
+            }
+
+            let (text_local, text) = local_object_reference_with_local_id(
+                file,
+                local_objects,
+                object_parent_id(text_style),
+            )?;
+            if !is_text_interface(text) {
+                return None;
+            }
+
+            Some(TextVariationHelperNode {
+                text_style_local: local_object.local_id,
+                text_style_global: local_object.global_id,
+                text_local,
+                text_global: local_object_global_id(local_objects, text_local)?,
+                artboard_local,
+                artboard_global: local_object_global_id(local_objects, artboard_local)
+                    .unwrap_or(artboard_local as u32),
+            })
+        })
+        .collect()
+}
+
+fn text_style_has_variation_children(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+    text_style_local: usize,
+) -> bool {
+    local_objects.iter().any(|local_object| {
+        let Some(child) = runtime_object_for_local(file, local_objects, local_object.local_id)
+        else {
+            return false;
+        };
+        object_parent_id(child) == Some(text_style_local as u64)
+            && matches!(child.type_name, "TextStyleAxis" | "TextStyleFeature")
+    })
+}
+
 fn build_dependency_nodes(
     components: &[ComponentNode],
     path_composers: &[PathComposerNode],
+    text_variation_helpers: &[TextVariationHelperNode],
 ) -> Vec<DependencyNode> {
     let mut nodes = Vec::new();
 
@@ -1015,6 +1099,20 @@ fn build_dependency_nodes(
         });
     }
 
+    for helper in text_variation_helpers {
+        nodes.push(DependencyNode {
+            node_id: nodes.len(),
+            kind: DependencyNodeKind::TextVariationHelper {
+                text_style_local: helper.text_style_local,
+                text_style_global: helper.text_style_global,
+                text_local: helper.text_local,
+                text_global: helper.text_global,
+                artboard_local: helper.artboard_local,
+                artboard_global: helper.artboard_global,
+            },
+        });
+    }
+
     nodes
 }
 
@@ -1025,9 +1123,12 @@ fn build_dependency_node_edges(
     dependency_edges: &[DependencyEdge],
     path_composers: &[PathComposerNode],
     clipping_shapes: &[ClippingShapeNode],
+    text_variation_helpers: &[TextVariationHelperNode],
 ) -> Vec<DependencyNodeEdge> {
     let component_node_by_local = component_dependency_node_by_local(dependency_nodes);
     let path_composer_node_by_shape = path_composer_dependency_node_by_shape(dependency_nodes);
+    let text_variation_helper_node_by_style =
+        text_variation_helper_dependency_node_by_style(dependency_nodes);
     let mut edges = Vec::new();
 
     for edge in dependency_edges {
@@ -1087,6 +1188,29 @@ fn build_dependency_node_edges(
                 source_node: path_composer_node,
                 dependent_node: clipping_shape_node,
                 kind: DependencyKind::ClippingShapePathComposer,
+            });
+        }
+    }
+
+    for helper in text_variation_helpers {
+        let Some(helper_node) = text_variation_helper_node_by_style
+            .get(&helper.text_style_local)
+            .copied()
+        else {
+            continue;
+        };
+        if let Some(artboard_node) = component_node_by_local.get(&helper.artboard_local).copied() {
+            edges.push(DependencyNodeEdge {
+                source_node: artboard_node,
+                dependent_node: helper_node,
+                kind: DependencyKind::TextVariationHelperArtboard,
+            });
+        }
+        if let Some(text_node) = component_node_by_local.get(&helper.text_local).copied() {
+            edges.push(DependencyNodeEdge {
+                source_node: helper_node,
+                dependent_node: text_node,
+                kind: DependencyKind::TextVariationHelperText,
             });
         }
     }
@@ -1387,6 +1511,9 @@ fn component_skips_parent_child_dependency(
     if paint_effect_skips_generic_parent_child_dependency(object) {
         return true;
     }
+    if text_variation_child_skips_generic_parent_child_dependency(object) {
+        return true;
+    }
 
     definition_by_type_key(object.type_key).is_some_and(|definition| {
         definition.is_a("TargetedConstraint") || definition.is_a("TextModifier")
@@ -1424,6 +1551,8 @@ fn dependency_kind_sort_key(kind: DependencyKind) -> u8 {
         DependencyKind::GroupEffectParent => 26,
         DependencyKind::ScriptedPathEffectParent => 27,
         DependencyKind::LinearGradientPaintContainer => 28,
+        DependencyKind::TextVariationHelperArtboard => 29,
+        DependencyKind::TextVariationHelperText => 30,
     }
 }
 
@@ -1979,6 +2108,10 @@ fn paint_effect_skips_generic_parent_child_dependency(object: &RuntimeObject) ->
     )
 }
 
+fn text_variation_child_skips_generic_parent_child_dependency(object: &RuntimeObject) -> bool {
+    matches!(object.type_name, "TextStyleAxis" | "TextStyleFeature")
+}
+
 fn skin_skinnable_dependencies(
     file: &RuntimeFile,
     local_objects: &[LocalObject],
@@ -2328,7 +2461,8 @@ fn component_dependency_node_by_local(
         .iter()
         .filter_map(|node| match &node.kind {
             DependencyNodeKind::Component { local_id, .. } => Some((*local_id, node.node_id)),
-            DependencyNodeKind::PathComposer { .. } => None,
+            DependencyNodeKind::PathComposer { .. }
+            | DependencyNodeKind::TextVariationHelper { .. } => None,
         })
         .collect()
 }
@@ -2340,7 +2474,8 @@ fn component_local_by_dependency_node(
         .iter()
         .filter_map(|node| match &node.kind {
             DependencyNodeKind::Component { local_id, .. } => Some((node.node_id, *local_id)),
-            DependencyNodeKind::PathComposer { .. } => None,
+            DependencyNodeKind::PathComposer { .. }
+            | DependencyNodeKind::TextVariationHelper { .. } => None,
         })
         .collect()
 }
@@ -2354,7 +2489,22 @@ fn path_composer_dependency_node_by_shape(
             DependencyNodeKind::PathComposer { shape_local, .. } => {
                 Some((*shape_local, node.node_id))
             }
-            DependencyNodeKind::Component { .. } => None,
+            DependencyNodeKind::Component { .. }
+            | DependencyNodeKind::TextVariationHelper { .. } => None,
+        })
+        .collect()
+}
+
+fn text_variation_helper_dependency_node_by_style(
+    dependency_nodes: &[DependencyNode],
+) -> BTreeMap<usize, usize> {
+    dependency_nodes
+        .iter()
+        .filter_map(|node| match &node.kind {
+            DependencyNodeKind::TextVariationHelper {
+                text_style_local, ..
+            } => Some((*text_style_local, node.node_id)),
+            DependencyNodeKind::Component { .. } | DependencyNodeKind::PathComposer { .. } => None,
         })
         .collect()
 }
@@ -2670,6 +2820,10 @@ fn is_nested_artboard(object: &RuntimeObject) -> bool {
 fn is_text_interface(object: &RuntimeObject) -> bool {
     definition_by_type_key(object.type_key)
         .is_some_and(|definition| matches!(definition.name, "Text" | "TextInput"))
+}
+
+fn is_text_style(object: &RuntimeObject) -> bool {
+    definition_by_type_key(object.type_key).is_some_and(|definition| definition.is_a("TextStyle"))
 }
 
 fn is_scroll_constraint(object: &RuntimeObject) -> bool {

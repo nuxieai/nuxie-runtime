@@ -253,6 +253,143 @@ fn graph_excludes_backboard_scroll_physics_from_artboard_locals() {
 }
 
 #[test]
+fn graph_projects_artboard_data_bind_registrations() {
+    let parent_id_key = property_key_for_name("Component", "parentId");
+    let data_bind_property_key = property_key_for_name("DataBind", "propertyKey");
+    let data_bind_flags_key = property_key_for_name("DataBind", "flags");
+    let node_x_key = property_key_for_name("Node", "x");
+    let bytes = synthetic_runtime_file(7106, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object(bytes, "Node", &[(parent_id_key, 0)]);
+        push_object(
+            bytes,
+            "DataBind",
+            &[
+                (data_bind_property_key, u64::from(node_x_key)),
+                (data_bind_flags_key, 0),
+            ],
+        );
+        push_object(
+            bytes,
+            "DataBind",
+            &[
+                (data_bind_property_key, u64::from(node_x_key)),
+                (data_bind_flags_key, 1),
+            ],
+        );
+    });
+
+    let (_runtime, graph) = read_graph_from_bytes(&bytes, "synthetic/artboard_data_bind.riv");
+    let artboard = &graph.artboards[0];
+
+    assert_eq!(
+        artboard
+            .data_binds
+            .iter()
+            .map(|data_bind| (
+                data_bind.global_id,
+                data_bind.type_name,
+                data_bind.property_key,
+                data_bind.flags,
+                data_bind.target_local,
+                data_bind.target_type_name,
+                data_bind.converter_type_name
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                4,
+                "DataBind",
+                u64::from(node_x_key),
+                1,
+                Some(1),
+                Some("Node"),
+                None
+            ),
+            (
+                3,
+                "DataBind",
+                u64::from(node_x_key),
+                0,
+                Some(1),
+                Some("Node"),
+                None
+            )
+        ],
+        "Artboard::addDataBind plus sortDataBinds registers imported binds in initialized container order without binding or update execution"
+    );
+}
+
+#[test]
+fn cpp_artboard_data_bind_registration_methods_are_tracked_by_graph_model() {
+    let runtime_dir = reference_runtime_dir();
+    assert!(
+        runtime_dir.exists(),
+        "reference runtime not found at {}; set RIVE_RUNTIME_DIR",
+        runtime_dir.display()
+    );
+
+    let data_bind_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/data_bind/data_bind.cpp"))
+            .expect("read C++ data_bind.cpp"),
+    );
+    let import_body = cpp_function_body(&data_bind_source, "StatusCodeDataBind::import");
+    assert!(
+        import_body.contains("parentArtboard->addDataBind(this);"),
+        "DataBind::import no longer attaches component-target binds to their owning artboard"
+    );
+    assert!(
+        import_body.contains("artboardImporter->addDataBind(this);"),
+        "DataBind::import no longer falls back to the latest ArtboardImporter for artboard-owned binds"
+    );
+    assert!(
+        import_body.contains("stateMachineImporter->addDataBind(std::unique_ptr<DataBind>(this));"),
+        "DataBind::import no longer routes bindable-property targets to StateMachineImporter"
+    );
+
+    let data_bind_container_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/data_bind/data_bind_container.cpp"))
+            .expect("read C++ data_bind_container.cpp"),
+    );
+    let add_data_bind_body = cpp_function_body(
+        &data_bind_container_source,
+        "voidDataBindContainer::addDataBind",
+    );
+    assert!(
+        add_data_bind_body.contains("m_dataBinds.push_back(dataBind);"),
+        "DataBindContainer::addDataBind no longer stores static data-bind registration order"
+    );
+    assert!(
+        add_data_bind_body.contains("dataBind->container(this);"),
+        "DataBindContainer::addDataBind no longer records the owning container on the bind"
+    );
+    let sort_body = cpp_function_body(
+        &data_bind_container_source,
+        "voidDataBindContainer::sortDataBinds()",
+    );
+    assert!(
+        sort_body.contains("if(m_dataBinds[i]->toSource())"),
+        "DataBindContainer::sortDataBinds no longer partitions toSource binds first"
+    );
+    assert!(
+        sort_body.contains("std::iter_swap(m_dataBinds.begin()+currentToSourceIndex,"),
+        "DataBindContainer::sortDataBinds no longer uses iter_swap partition ordering"
+    );
+
+    let artboard_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/artboard.cpp"))
+            .expect("read C++ artboard.cpp"),
+    );
+    let internal_data_context_body =
+        cpp_function_body(&artboard_source, "voidArtboard::internalDataContext");
+    assert!(
+        internal_data_context_body.contains("sortDataBinds();"),
+        "Artboard initialization no longer sorts artboard-owned data binds"
+    );
+}
+
+#[test]
 fn cpp_probe_matches_rust_imported_component_graph_shape_when_available() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ probe comparison; set RIVE_CPP_PROBE or run make cpp-probe");
@@ -4404,6 +4541,50 @@ fn compare_artboard_import_collections(
             "artboard {artboard_index} state machine {machine_index} data bind count mismatch for {label}"
         );
     }
+
+    assert_eq!(
+        cpp_artboard.data_binds.len(),
+        rust_artboard.data_binds.len(),
+        "artboard {artboard_index} data bind count mismatch for {label}"
+    );
+    for (data_bind_index, (cpp_data_bind, rust_data_bind)) in cpp_artboard
+        .data_binds
+        .iter()
+        .zip(&rust_artboard.data_binds)
+        .enumerate()
+    {
+        assert_eq!(
+            cpp_data_bind.core_type,
+            type_key_for_name(rust_data_bind.type_name),
+            "artboard {artboard_index} data bind {data_bind_index} type mismatch for {label}"
+        );
+        assert_eq!(
+            cpp_data_bind.property_key, rust_data_bind.property_key,
+            "artboard {artboard_index} data bind {data_bind_index} property key mismatch for {label}"
+        );
+        assert_eq!(
+            cpp_data_bind.flags, rust_data_bind.flags,
+            "artboard {artboard_index} data bind {data_bind_index} flags mismatch for {label}"
+        );
+        assert_eq!(
+            cpp_data_bind.converter_id, rust_data_bind.converter_id,
+            "artboard {artboard_index} data bind {data_bind_index} converter id mismatch for {label}"
+        );
+        assert_eq!(
+            cpp_data_bind.converter_core_type,
+            rust_data_bind.converter_type_name.map(type_key_for_name),
+            "artboard {artboard_index} data bind {data_bind_index} converter type mismatch for {label}"
+        );
+        assert_eq!(
+            cpp_data_bind.target_core_type,
+            rust_data_bind.target_type_name.map(type_key_for_name),
+            "artboard {artboard_index} data bind {data_bind_index} target type mismatch for {label}"
+        );
+        assert_eq!(
+            cpp_data_bind.target_local, rust_data_bind.target_local,
+            "artboard {artboard_index} data bind {data_bind_index} target local mismatch for {label}"
+        );
+    }
 }
 
 fn compare_artboard_draw_graph(
@@ -4692,6 +4873,8 @@ struct CppArtboard {
     animations: Vec<CppAnimation>,
     #[serde(default, rename = "stateMachines")]
     state_machines: Vec<CppStateMachine>,
+    #[serde(default, rename = "dataBinds")]
+    data_binds: Vec<CppDataBind>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -4791,4 +4974,21 @@ struct CppStateMachine {
     listener_count: usize,
     #[serde(rename = "dataBindCount")]
     data_bind_count: usize,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppDataBind {
+    #[serde(rename = "coreType")]
+    core_type: u16,
+    #[serde(rename = "propertyKey")]
+    property_key: u64,
+    flags: u64,
+    #[serde(rename = "converterId")]
+    converter_id: u64,
+    #[serde(rename = "converterCoreType")]
+    converter_core_type: Option<u16>,
+    #[serde(rename = "targetCoreType")]
+    target_core_type: Option<u16>,
+    #[serde(rename = "targetLocal")]
+    target_local: Option<usize>,
 }

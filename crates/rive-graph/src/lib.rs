@@ -68,6 +68,7 @@ pub struct ArtboardGraph {
     pub joysticks_apply_before_update: bool,
     pub resetting_components: Vec<ResettingComponentNode>,
     pub advancing_components: Vec<AdvancingComponentNode>,
+    pub data_binds: Vec<DataBindNode>,
     pub animations: Vec<AnimationGraph>,
     pub state_machines: Vec<StateMachineGraph>,
     pub dependency_order: Vec<usize>,
@@ -200,6 +201,7 @@ impl ArtboardGraph {
             .as_ref()
             .context("artboard range does not start with an artboard")?;
 
+        let data_binds = artboard_data_binds(file, artboard_index);
         let animations = animations(file, range, &local_objects);
         let joysticks = joysticks(file, &local_objects, &animations);
         let joysticks_apply_before_update = joysticks
@@ -241,6 +243,7 @@ impl ArtboardGraph {
             joysticks_apply_before_update,
             resetting_components,
             advancing_components,
+            data_binds,
             animations,
             state_machines,
             dependency_order: dependency_order.component_order,
@@ -745,9 +748,15 @@ pub struct StateMachineListenerGraph {
 #[derive(Debug, Clone, Serialize)]
 pub struct DataBindNode {
     pub global_id: u32,
+    pub type_name: &'static str,
     pub property_key: u64,
     pub flags: u64,
     pub converter_id: u64,
+    pub converter_global: Option<u32>,
+    pub converter_type_name: Option<&'static str>,
+    pub target_global: Option<u32>,
+    pub target_type_name: Option<&'static str>,
+    pub target_local: Option<usize>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -1100,17 +1109,62 @@ fn state_machines(file: &RuntimeFile, range: ArtboardRange) -> Vec<StateMachineG
         if definition.is_a("DataBind") {
             state_machines[state_machine_index]
                 .data_binds
-                .push(DataBindNode {
-                    global_id: global_id as u32,
-                    property_key: object.uint_property("propertyKey").unwrap_or(0),
-                    flags: object.uint_property("flags").unwrap_or(0),
-                    converter_id: object.uint_property("converterId").unwrap_or(0),
-                });
+                .push(data_bind_node(file, object, None, None));
             current_listener = None;
         }
     }
 
     state_machines
+}
+
+fn artboard_data_binds(file: &RuntimeFile, artboard_index: usize) -> Vec<DataBindNode> {
+    let data_binds = file.artboard_data_binds(artboard_index);
+    let data_bind_ids = data_binds
+        .iter()
+        .map(|data_bind| data_bind.object.id as usize)
+        .collect::<Vec<_>>();
+    let sorted_ids = file
+        .sorted_data_bind_ids(&data_bind_ids)
+        .unwrap_or(data_bind_ids);
+
+    sorted_ids
+        .into_iter()
+        .filter_map(|data_bind_id| {
+            data_binds
+                .iter()
+                .find(|data_bind| data_bind.object.id as usize == data_bind_id)
+        })
+        .map(|data_bind| {
+            data_bind_node(
+                file,
+                data_bind.object,
+                data_bind.target,
+                data_bind.target_local_id,
+            )
+        })
+        .collect()
+}
+
+fn data_bind_node(
+    file: &RuntimeFile,
+    data_bind: &RuntimeObject,
+    target: Option<&RuntimeObject>,
+    target_local: Option<usize>,
+) -> DataBindNode {
+    let converter = file.resolved_data_converter_for_data_bind_object(data_bind);
+
+    DataBindNode {
+        global_id: data_bind.id,
+        type_name: data_bind.type_name,
+        property_key: data_bind.uint_property("propertyKey").unwrap_or(0),
+        flags: data_bind.uint_property("flags").unwrap_or(0),
+        converter_id: data_bind.uint_property("converterId").unwrap_or(0),
+        converter_global: converter.map(|converter| converter.id),
+        converter_type_name: converter.map(|converter| converter.type_name),
+        target_global: target.map(|target| target.id),
+        target_type_name: target.map(|target| target.type_name),
+        target_local,
+    }
 }
 
 fn draw_targets(file: &RuntimeFile, local_objects: &[LocalObject]) -> Vec<DrawTargetNode> {

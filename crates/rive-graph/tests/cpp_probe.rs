@@ -754,6 +754,73 @@ fn graph_dependency_order_includes_follow_path_dependencies() {
 }
 
 #[test]
+fn graph_projects_list_constraint_registrations() {
+    let parent_id_key = property_key_for_name("Component", "parentId");
+    let target_id_key = property_key_for_name("TargetedConstraint", "targetId");
+
+    let bytes = synthetic_runtime_file(7119, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object(bytes, "ArtboardComponentList", &[(parent_id_key, 0)]);
+        push_object(bytes, "Shape", &[(parent_id_key, 0)]);
+        push_object(bytes, "PointsPath", &[(parent_id_key, 2)]);
+        push_object(
+            bytes,
+            "ListFollowPathConstraint",
+            &[(parent_id_key, 1), (target_id_key, 2)],
+        );
+        push_object(bytes, "Node", &[(parent_id_key, 0)]);
+        push_object(
+            bytes,
+            "ListFollowPathConstraint",
+            &[(parent_id_key, 5), (target_id_key, 2)],
+        );
+        push_object(
+            bytes,
+            "FollowPathConstraint",
+            &[(parent_id_key, 1), (target_id_key, 2)],
+        );
+    });
+
+    let (_, rust) = read_graph_from_bytes(&bytes, "synthetic/list_constraint_registration.riv");
+    let artboard = &rust.artboards[0];
+
+    assert_eq!(
+        artboard
+            .list_constraint_registrations
+            .iter()
+            .map(|registration| (
+                registration.constrainable_list_local,
+                registration.constraint_local,
+                registration.constraint_type_name
+            ))
+            .collect::<Vec<_>>(),
+        vec![(1, 4, "ListFollowPathConstraint")],
+        "ConstrainableList::addListConstraint registers exact ListFollowPathConstraint children under ArtboardComponentList"
+    );
+    assert!(
+        artboard
+            .dependency_edges
+            .contains(&edge(4, 1, DependencyKind::FollowPathConstraintParent)),
+        "registered list constraints still use the inherited follow-path dependency edge"
+    );
+    assert!(
+        !artboard
+            .list_constraint_registrations
+            .iter()
+            .any(|registration| registration.constraint_local == 6),
+        "ListFollowPathConstraint under non-ConstrainableList parents is not registered"
+    );
+    assert!(
+        !artboard
+            .list_constraint_registrations
+            .iter()
+            .any(|registration| registration.constraint_local == 7),
+        "plain FollowPathConstraint does not implement C++ ListConstraint"
+    );
+}
+
+#[test]
 fn cpp_follow_path_dependency_methods_are_tracked_by_graph_model() {
     let runtime_dir = reference_runtime_dir();
     assert!(
@@ -825,6 +892,57 @@ fn cpp_follow_path_dependency_methods_are_tracked_by_graph_model() {
     assert!(
         list_follow_path_body.contains("constrainableList->addListConstraint(this);"),
         "ListFollowPathConstraint::buildDependencies no longer registers on constrainable lists"
+    );
+
+    let list_constraint_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/constraints/list_constraint.cpp"))
+            .expect("read C++ list_constraint.cpp"),
+    );
+    let list_constraint_body = cpp_function_body(
+        &list_constraint_source,
+        "ListConstraint*ListConstraint::from(Component*component)",
+    );
+    assert!(
+        list_constraint_body.contains("caseListFollowPathConstraintBase::typeKey:"),
+        "ListConstraint::from no longer accepts exact ListFollowPathConstraint objects"
+    );
+
+    let constrainable_list_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/constraints/constrainable_list.cpp"))
+            .expect("read C++ constrainable_list.cpp"),
+    );
+    let constrainable_list_body = cpp_function_body(
+        &constrainable_list_source,
+        "ConstrainableList*ConstrainableList::from(Component*component)",
+    );
+    assert!(
+        constrainable_list_body.contains("caseArtboardComponentListBase::typeKey:"),
+        "ConstrainableList::from no longer accepts exact ArtboardComponentList objects"
+    );
+    let add_list_constraint_body = cpp_function_body(
+        &constrainable_list_source,
+        "voidConstrainableList::addListConstraint(ListConstraint*constraint)",
+    );
+    assert!(
+        add_list_constraint_body.contains("m_listConstraints.push_back(constraint);"),
+        "ConstrainableList::addListConstraint no longer stores list constraints for update"
+    );
+
+    let component_list_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/artboard_component_list.cpp"))
+            .expect("read C++ artboard_component_list.cpp"),
+    );
+    let update_constraints_body = cpp_function_body(
+        &component_list_source,
+        "voidArtboardComponentList::updateConstraints()",
+    );
+    assert!(
+        update_constraints_body.contains("m_listConstraints.size()>0&&!virtualizationEnabled()"),
+        "ArtboardComponentList::updateConstraints no longer gates list constraints on virtualization"
+    );
+    assert!(
+        update_constraints_body.contains("listConstraint->constrainList(this);"),
+        "ArtboardComponentList::updateConstraints no longer consumes registered list constraints"
     );
 }
 

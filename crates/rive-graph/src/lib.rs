@@ -52,6 +52,7 @@ pub struct ArtboardGraph {
     pub clipping_shapes: Vec<ClippingShapeNode>,
     pub path_composers: Vec<PathComposerNode>,
     pub text_variation_helpers: Vec<TextVariationHelperNode>,
+    pub list_constraint_registrations: Vec<ListConstraintRegistrationNode>,
     pub animations: Vec<AnimationGraph>,
     pub state_machines: Vec<StateMachineGraph>,
     pub dependency_order: Vec<usize>,
@@ -132,6 +133,7 @@ impl ArtboardGraph {
             clipping_shapes(file, &local_objects, &components, &component_by_local);
         let path_composers = path_composers(file, artboard_index, &local_objects);
         let text_variation_helpers = text_variation_helpers(file, &local_objects);
+        let list_constraint_registrations = list_constraint_registrations(file, &local_objects);
         let dependency_edges = build_dependency_edges(
             file,
             &local_objects,
@@ -188,6 +190,7 @@ impl ArtboardGraph {
             clipping_shapes,
             path_composers,
             text_variation_helpers,
+            list_constraint_registrations,
             animations,
             state_machines,
             dependency_order: dependency_order.component_order,
@@ -369,6 +372,15 @@ pub struct TextVariationHelperNode {
     pub text_global: u32,
     pub artboard_local: usize,
     pub artboard_global: u32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ListConstraintRegistrationNode {
+    pub constrainable_list_local: usize,
+    pub constrainable_list_global: u32,
+    pub constraint_local: usize,
+    pub constraint_global: u32,
+    pub constraint_type_name: &'static str,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1069,6 +1081,42 @@ fn text_style_has_variation_children(
         object_parent_id(child) == Some(text_style_local as u64)
             && matches!(child.type_name, "TextStyleAxis" | "TextStyleFeature")
     })
+}
+
+fn list_constraint_registrations(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+) -> Vec<ListConstraintRegistrationNode> {
+    local_objects
+        .iter()
+        .filter_map(|local_object| {
+            let constraint = runtime_object_for_local(file, local_objects, local_object.local_id)?;
+            if !is_list_constraint(constraint) {
+                return None;
+            }
+
+            let (constrainable_list_local, constrainable_list) =
+                local_object_reference_with_local_id(
+                    file,
+                    local_objects,
+                    object_parent_id(constraint),
+                )?;
+            if !is_constrainable_list(constrainable_list) {
+                return None;
+            }
+
+            Some(ListConstraintRegistrationNode {
+                constrainable_list_local,
+                constrainable_list_global: local_object_global_id(
+                    local_objects,
+                    constrainable_list_local,
+                )?,
+                constraint_local: local_object.local_id,
+                constraint_global: local_object.global_id,
+                constraint_type_name: constraint.type_name,
+            })
+        })
+        .collect()
 }
 
 fn build_dependency_nodes(
@@ -2910,6 +2958,14 @@ fn is_text_interface(object: &RuntimeObject) -> bool {
 
 fn is_text_style(object: &RuntimeObject) -> bool {
     definition_by_type_key(object.type_key).is_some_and(|definition| definition.is_a("TextStyle"))
+}
+
+fn is_list_constraint(object: &RuntimeObject) -> bool {
+    matches!(object.type_name, "ListFollowPathConstraint")
+}
+
+fn is_constrainable_list(object: &RuntimeObject) -> bool {
+    matches!(object.type_name, "ArtboardComponentList")
 }
 
 fn is_scroll_constraint(object: &RuntimeObject) -> bool {

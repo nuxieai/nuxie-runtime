@@ -147,6 +147,10 @@ The existing `rive-graph` prototype already covers:
   linear/radial gradient paint container prerequisites, and the static
   `ScrollConstraint -> ScrollBarConstraint` and
   `ScrollConstraint -> layout-provider content child` dependencies.
+- Static list-constraint registrations for exact C++
+  `ListFollowPathConstraint` children under exact `ArtboardComponentList`
+  parents, matching `ConstrainableList::addListConstraint` without admitting
+  `constrainList()`, list layout, or virtualization behavior.
 - Topological dependency order and dependency-cycle diagnostics.
 - C++ probe comparison through `make cpp-compare`.
 

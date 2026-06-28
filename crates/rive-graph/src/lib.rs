@@ -49,6 +49,9 @@ pub struct ArtboardGraph {
     pub dependency_node_cycles: Vec<DependencyNodeCycle>,
     pub draw_targets: Vec<DrawTargetNode>,
     pub draw_rules: Vec<DrawRulesNode>,
+    pub draw_target_dependency_edges: Vec<DrawTargetDependencyEdge>,
+    pub draw_target_order: Vec<usize>,
+    pub draw_target_cycles: Vec<DrawTargetCycle>,
     pub drawable_order: Vec<DrawableOrderNode>,
     pub clipping_shapes: Vec<ClippingShapeNode>,
     pub path_composers: Vec<PathComposerNode>,
@@ -138,6 +141,11 @@ impl ArtboardGraph {
         let draw_targets = draw_targets(file, &local_objects);
         let draw_rules = draw_rules(file, &local_objects);
         let drawable_order = drawable_order(file, &local_objects);
+        let draw_target_order =
+            draw_target_order(file, &local_objects, &draw_targets, &drawable_order);
+        lifecycle.post_build_dependencies_draw_target_edges =
+            draw_target_order.dependency_edges.len();
+        lifecycle.draw_target_cycles = draw_target_order.cycles.len();
         let clipping_shapes =
             clipping_shapes(file, &local_objects, &components, &component_by_local);
         let path_composers = path_composers(file, artboard_index, &local_objects);
@@ -205,6 +213,9 @@ impl ArtboardGraph {
             dependency_node_cycles: dependency_order.node_cycles,
             draw_targets,
             draw_rules,
+            draw_target_dependency_edges: draw_target_order.dependency_edges,
+            draw_target_order: draw_target_order.local_ids,
+            draw_target_cycles: draw_target_order.cycles,
             drawable_order,
             clipping_shapes,
             path_composers,
@@ -368,6 +379,25 @@ pub struct DrawRulesNode {
     pub global_id: u32,
     pub draw_target_id: u64,
     pub active_target_local: Option<usize>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DrawTargetDependencyKind {
+    RootRuleTarget,
+    FlattenedRuleTarget,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct DrawTargetDependencyEdge {
+    pub source_local: Option<usize>,
+    pub dependent_local: usize,
+    pub kind: DrawTargetDependencyKind,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DrawTargetCycle {
+    pub local_ids: Vec<usize>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -668,6 +698,8 @@ pub struct LifecycleSummary {
     pub build_dependencies_node_edges: usize,
     pub dependency_cycles: usize,
     pub dependency_node_cycles: usize,
+    pub post_build_dependencies_draw_target_edges: usize,
+    pub draw_target_cycles: usize,
 }
 
 fn artboard_ranges(file: &RuntimeFile) -> Vec<ArtboardRange> {
@@ -1072,6 +1104,215 @@ fn draw_rules(file: &RuntimeFile, local_objects: &[LocalObject]) -> Vec<DrawRule
             })
         })
         .collect()
+}
+
+#[derive(Debug)]
+struct DrawTargetOrder {
+    dependency_edges: Vec<DrawTargetDependencyEdge>,
+    local_ids: Vec<usize>,
+    cycles: Vec<DrawTargetCycle>,
+}
+
+fn draw_target_order(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+    draw_targets: &[DrawTargetNode],
+    drawable_order: &[DrawableOrderNode],
+) -> DrawTargetOrder {
+    let component_draw_rules = component_draw_rules_by_parent(file, local_objects);
+    let resolved_draw_target_locals = draw_targets
+        .iter()
+        .filter_map(|target| target.drawable_local.map(|_| target.local_id))
+        .collect::<BTreeSet<_>>();
+    let draw_target_locals_by_rules =
+        draw_target_locals_by_parent_rules(file, local_objects, &resolved_draw_target_locals);
+    let flattened_rules_by_drawable = flattened_rules_by_drawable(drawable_order);
+    let draw_targets_by_local = draw_targets
+        .iter()
+        .map(|target| (target.local_id, target))
+        .collect::<BTreeMap<_, _>>();
+    let mut dependency_edges = Vec::new();
+
+    for local_object in local_objects {
+        let Some(rules_local) = component_draw_rules.get(&local_object.local_id).copied() else {
+            continue;
+        };
+        let Some(rule_targets) = draw_target_locals_by_rules.get(&rules_local) else {
+            continue;
+        };
+
+        for target_local in rule_targets {
+            push_draw_target_dependency_edge(
+                &mut dependency_edges,
+                None,
+                *target_local,
+                DrawTargetDependencyKind::RootRuleTarget,
+            );
+
+            let Some(drawable_local) = draw_targets_by_local
+                .get(target_local)
+                .and_then(|target| target.drawable_local)
+            else {
+                continue;
+            };
+            let Some(dependent_rules_local) =
+                flattened_rules_by_drawable.get(&drawable_local).copied()
+            else {
+                continue;
+            };
+            let Some(dependent_targets) = draw_target_locals_by_rules.get(&dependent_rules_local)
+            else {
+                continue;
+            };
+
+            for dependent_target_local in dependent_targets {
+                push_draw_target_dependency_edge(
+                    &mut dependency_edges,
+                    Some(*dependent_target_local),
+                    *target_local,
+                    DrawTargetDependencyKind::FlattenedRuleTarget,
+                );
+            }
+        }
+    }
+
+    let (local_ids, cycles) = sort_draw_target_order(&dependency_edges);
+    DrawTargetOrder {
+        dependency_edges,
+        local_ids,
+        cycles,
+    }
+}
+
+fn draw_target_locals_by_parent_rules(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+    resolved_draw_target_locals: &BTreeSet<usize>,
+) -> BTreeMap<usize, Vec<usize>> {
+    let mut by_parent = BTreeMap::<usize, Vec<usize>>::new();
+    for local_object in local_objects {
+        let Some(object) = runtime_object_for_local(file, local_objects, local_object.local_id)
+        else {
+            continue;
+        };
+        if object.type_name != "DrawTarget" {
+            continue;
+        }
+        if !resolved_draw_target_locals.contains(&local_object.local_id) {
+            continue;
+        }
+        let Some((parent_local, parent)) =
+            local_object_reference_with_local_id(file, local_objects, object_parent_id(object))
+        else {
+            continue;
+        };
+        if parent.type_name == "DrawRules" {
+            push_unique(
+                by_parent.entry(parent_local).or_default(),
+                local_object.local_id,
+            );
+        }
+    }
+    by_parent
+}
+
+fn flattened_rules_by_drawable(drawable_order: &[DrawableOrderNode]) -> BTreeMap<usize, usize> {
+    drawable_order
+        .iter()
+        .filter_map(|node| Some((node.local_id?, node.flattened_draw_rules_local?)))
+        .collect()
+}
+
+fn push_draw_target_dependency_edge(
+    edges: &mut Vec<DrawTargetDependencyEdge>,
+    source_local: Option<usize>,
+    dependent_local: usize,
+    kind: DrawTargetDependencyKind,
+) {
+    let edge = DrawTargetDependencyEdge {
+        source_local,
+        dependent_local,
+        kind,
+    };
+    if !edges.contains(&edge) {
+        edges.push(edge);
+    }
+}
+
+fn sort_draw_target_order(
+    edges: &[DrawTargetDependencyEdge],
+) -> (Vec<usize>, Vec<DrawTargetCycle>) {
+    const DRAW_TARGET_ROOT: usize = usize::MAX;
+
+    let mut dependents_by_source = BTreeMap::<usize, Vec<usize>>::new();
+    for edge in edges {
+        let source = edge.source_local.unwrap_or(DRAW_TARGET_ROOT);
+        push_unique(
+            dependents_by_source.entry(source).or_default(),
+            edge.dependent_local,
+        );
+    }
+
+    let mut order = Vec::new();
+    let mut cycles = Vec::new();
+    visit_draw_target_order_node(
+        DRAW_TARGET_ROOT,
+        &dependents_by_source,
+        &mut BTreeSet::new(),
+        &mut BTreeSet::new(),
+        &mut Vec::new(),
+        &mut order,
+        &mut cycles,
+    );
+    order.retain(|local_id| *local_id != DRAW_TARGET_ROOT);
+    (order, cycles)
+}
+
+fn visit_draw_target_order_node(
+    local_id: usize,
+    dependents_by_source: &BTreeMap<usize, Vec<usize>>,
+    permanent: &mut BTreeSet<usize>,
+    temporary: &mut BTreeSet<usize>,
+    visiting: &mut Vec<usize>,
+    order: &mut Vec<usize>,
+    cycles: &mut Vec<DrawTargetCycle>,
+) {
+    if permanent.contains(&local_id) {
+        return;
+    }
+    if temporary.contains(&local_id) {
+        if let Some(start) = visiting.iter().position(|visited| *visited == local_id) {
+            let mut local_ids = visiting[start..].to_vec();
+            local_ids.push(local_id);
+            let cycle = DrawTargetCycle { local_ids };
+            if !cycles.contains(&cycle) {
+                cycles.push(cycle);
+            }
+        }
+        return;
+    }
+
+    temporary.insert(local_id);
+    visiting.push(local_id);
+
+    if let Some(dependents) = dependents_by_source.get(&local_id) {
+        for dependent in dependents {
+            visit_draw_target_order_node(
+                *dependent,
+                dependents_by_source,
+                permanent,
+                temporary,
+                visiting,
+                order,
+                cycles,
+            );
+        }
+    }
+
+    visiting.pop();
+    temporary.remove(&local_id);
+    permanent.insert(local_id);
+    order.insert(0, local_id);
 }
 
 fn drawable_order(file: &RuntimeFile, local_objects: &[LocalObject]) -> Vec<DrawableOrderNode> {

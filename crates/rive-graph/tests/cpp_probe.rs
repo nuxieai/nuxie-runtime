@@ -1,7 +1,7 @@
 use rive_binary::{RuntimeFile, read_runtime_file};
 use rive_graph::{
-    AdvancingComponentKind, ArtboardHostKind, DependencyKind, DrawableOrderKind, GraphFile,
-    ResettingComponentKind,
+    AdvancingComponentKind, ArtboardHostKind, DependencyKind, DrawTargetDependencyEdge,
+    DrawTargetDependencyKind, DrawableOrderKind, GraphFile, ResettingComponentKind,
 };
 use rive_schema::definition_by_name;
 use serde::Deserialize;
@@ -119,6 +119,18 @@ fn push_uint_property(bytes: &mut Vec<u8>, type_name: &str, property_name: &str,
     let key = property_key_for_name(type_name, property_name);
     push_var_uint(bytes, u64::from(key));
     push_var_uint(bytes, value);
+}
+
+fn draw_target_edge(
+    source_local: Option<usize>,
+    dependent_local: usize,
+    kind: DrawTargetDependencyKind,
+) -> DrawTargetDependencyEdge {
+    DrawTargetDependencyEdge {
+        source_local,
+        dependent_local,
+        kind,
+    }
 }
 
 fn push_bytes_property(bytes: &mut Vec<u8>, type_name: &str, property_name: &str, value: &[u8]) {
@@ -550,6 +562,177 @@ fn graph_projects_initialized_drawable_order() {
 }
 
 #[test]
+fn graph_projects_draw_target_order_from_flattened_rules() {
+    let parent_id_key = property_key_for_name("Component", "parentId");
+    let drawable_id_key = property_key_for_name("DrawTarget", "drawableId");
+    let draw_target_id_key = property_key_for_name("DrawRules", "drawTargetId");
+
+    let bytes = synthetic_runtime_file(7142, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object(bytes, "Node", &[(parent_id_key, 0)]);
+        push_object(bytes, "Node", &[(parent_id_key, 1)]);
+        push_object(bytes, "Shape", &[(parent_id_key, 2)]);
+        push_object(bytes, "Shape", &[(parent_id_key, 0)]);
+        push_object(
+            bytes,
+            "DrawRules",
+            &[(parent_id_key, 1), (draw_target_id_key, 6)],
+        );
+        push_object(
+            bytes,
+            "DrawTarget",
+            &[(parent_id_key, 5), (drawable_id_key, 4)],
+        );
+        push_object(
+            bytes,
+            "DrawRules",
+            &[(parent_id_key, 2), (draw_target_id_key, 8)],
+        );
+        push_object(
+            bytes,
+            "DrawTarget",
+            &[(parent_id_key, 7), (drawable_id_key, 4)],
+        );
+        push_object(
+            bytes,
+            "DrawTarget",
+            &[(parent_id_key, 5), (drawable_id_key, 3)],
+        );
+    });
+
+    let (_, rust) = read_graph_from_bytes(&bytes, "synthetic/draw_target_order.riv");
+    let artboard = &rust.artboards[0];
+
+    assert_eq!(
+        artboard.draw_target_order,
+        vec![8, 9, 6],
+        "m_DrawTargets is dependency-sorted so targets from inherited flattened rules precede the target that depends on them"
+    );
+    assert!(artboard.draw_target_cycles.is_empty());
+    assert!(
+        artboard
+            .draw_target_dependency_edges
+            .contains(&draw_target_edge(
+                None,
+                6,
+                DrawTargetDependencyKind::RootRuleTarget
+            ))
+    );
+    assert!(
+        artboard
+            .draw_target_dependency_edges
+            .contains(&draw_target_edge(
+                None,
+                9,
+                DrawTargetDependencyKind::RootRuleTarget
+            ))
+    );
+    assert!(
+        artboard
+            .draw_target_dependency_edges
+            .contains(&draw_target_edge(
+                None,
+                8,
+                DrawTargetDependencyKind::RootRuleTarget
+            ))
+    );
+    assert!(
+        artboard
+            .draw_target_dependency_edges
+            .contains(&draw_target_edge(
+                Some(8),
+                9,
+                DrawTargetDependencyKind::FlattenedRuleTarget
+            ))
+    );
+}
+
+#[test]
+fn graph_reports_draw_target_order_cycles() {
+    let parent_id_key = property_key_for_name("Component", "parentId");
+    let drawable_id_key = property_key_for_name("DrawTarget", "drawableId");
+    let draw_target_id_key = property_key_for_name("DrawRules", "drawTargetId");
+
+    let bytes = synthetic_runtime_file(7143, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object(bytes, "Node", &[(parent_id_key, 0)]);
+        push_object(bytes, "Node", &[(parent_id_key, 0)]);
+        push_object(bytes, "Shape", &[(parent_id_key, 1)]);
+        push_object(bytes, "Shape", &[(parent_id_key, 2)]);
+        push_object(
+            bytes,
+            "DrawRules",
+            &[(parent_id_key, 1), (draw_target_id_key, 6)],
+        );
+        push_object(
+            bytes,
+            "DrawTarget",
+            &[(parent_id_key, 5), (drawable_id_key, 4)],
+        );
+        push_object(
+            bytes,
+            "DrawRules",
+            &[(parent_id_key, 2), (draw_target_id_key, 8)],
+        );
+        push_object(
+            bytes,
+            "DrawTarget",
+            &[(parent_id_key, 7), (drawable_id_key, 3)],
+        );
+    });
+
+    let (_, rust) = read_graph_from_bytes(&bytes, "synthetic/draw_target_cycle.riv");
+    let artboard = &rust.artboards[0];
+
+    assert_eq!(
+        artboard.draw_target_dependency_edges,
+        vec![
+            draw_target_edge(None, 6, DrawTargetDependencyKind::RootRuleTarget),
+            draw_target_edge(Some(8), 6, DrawTargetDependencyKind::FlattenedRuleTarget),
+            draw_target_edge(None, 8, DrawTargetDependencyKind::RootRuleTarget),
+            draw_target_edge(Some(6), 8, DrawTargetDependencyKind::FlattenedRuleTarget),
+        ]
+    );
+    assert_eq!(artboard.draw_target_cycles.len(), 1);
+    assert_eq!(artboard.draw_target_cycles[0].local_ids, vec![6, 8, 6]);
+    assert_eq!(artboard.lifecycle.draw_target_cycles, 1);
+}
+
+#[test]
+fn graph_excludes_unresolved_draw_targets_from_draw_target_order() {
+    let parent_id_key = property_key_for_name("Component", "parentId");
+    let drawable_id_key = property_key_for_name("DrawTarget", "drawableId");
+    let draw_target_id_key = property_key_for_name("DrawRules", "drawTargetId");
+
+    let bytes = synthetic_runtime_file(7144, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object(bytes, "Shape", &[(parent_id_key, 0)]);
+        push_object(
+            bytes,
+            "DrawRules",
+            &[(parent_id_key, 0), (draw_target_id_key, 3)],
+        );
+        push_object(
+            bytes,
+            "DrawTarget",
+            &[(parent_id_key, 2), (drawable_id_key, 99)],
+        );
+    });
+
+    let (_, rust) = read_graph_from_bytes(&bytes, "synthetic/unresolved_draw_target_order.riv");
+    let artboard = &rust.artboards[0];
+
+    assert_eq!(artboard.draw_targets.len(), 1);
+    assert_eq!(artboard.draw_targets[0].drawable_local, None);
+    assert!(artboard.draw_target_dependency_edges.is_empty());
+    assert!(artboard.draw_target_order.is_empty());
+    assert!(artboard.draw_target_cycles.is_empty());
+}
+
+#[test]
 fn cpp_drawable_order_initialization_is_tracked_by_graph_model() {
     let runtime_dir = reference_runtime_dir();
     assert!(
@@ -617,6 +800,75 @@ fn cpp_drawable_order_initialization_is_tracked_by_graph_model() {
         is_child_body
             .contains("parent->is<LayoutComponent>()&&parent->as<LayoutComponent>()==layout"),
         "Drawable::isChildOfLayout no longer matches layout ancestors by identity"
+    );
+}
+
+#[test]
+fn cpp_draw_target_order_initialization_is_tracked_by_graph_model() {
+    let runtime_dir = reference_runtime_dir();
+    assert!(
+        runtime_dir.exists(),
+        "reference runtime not found at {}; set RIVE_RUNTIME_DIR",
+        runtime_dir.display()
+    );
+
+    let artboard_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/artboard.cpp"))
+            .expect("read C++ artboard.cpp"),
+    );
+    let initialize_body = cpp_function_body(&artboard_source, "StatusCodeArtboard::initialize()");
+    assert!(
+        initialize_body.contains("std::vector<DrawRules*>rulesList;"),
+        "Artboard::initialize no longer builds a parent-ordered draw-rules list"
+    );
+    assert!(
+        initialize_body.contains("autoitr=componentDrawRules.find(object);"),
+        "Artboard::initialize no longer orders draw rules by their owning component"
+    );
+    assert!(
+        initialize_body.contains("DrawTargetroot;"),
+        "Artboard::initialize no longer uses a synthetic draw-target root"
+    );
+    assert!(
+        initialize_body.contains("root.addDependent(target);"),
+        "Artboard::initialize no longer adds rule child targets to the synthetic root"
+    );
+    assert!(
+        initialize_body.contains("autodependentRules=target->drawable()->flattenedDrawRules;"),
+        "Artboard::initialize no longer checks each target drawable's flattened draw rules"
+    );
+    assert!(
+        initialize_body.contains("dependentTarget->parent()==dependentRules"),
+        "Artboard::initialize no longer finds targets owned by dependent flattened rules"
+    );
+    assert!(
+        initialize_body.contains("dependentTarget->addDependent(target);"),
+        "Artboard::initialize no longer creates target-to-target dependencies"
+    );
+    assert!(
+        initialize_body.contains("sorter.sort(&root,drawTargetOrder);"),
+        "Artboard::initialize no longer dependency-sorts draw targets"
+    );
+    assert!(
+        initialize_body.contains("m_DrawTargets.push_back(static_cast<DrawTarget*>(*itr++));"),
+        "Artboard::initialize no longer stores sorted draw targets after the synthetic root"
+    );
+
+    let sorter_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/dependency_sorter.cpp"))
+            .expect("read C++ dependency_sorter.cpp"),
+    );
+    let visit_body = cpp_function_body(
+        &sorter_source,
+        "boolDependencySorter::visit(Component*component,std::vector<Component*>&order)",
+    );
+    assert!(
+        visit_body.contains("for(autodependent:dependents)"),
+        "DependencySorter::visit no longer traverses dependents before inserting the component"
+    );
+    assert!(
+        visit_body.contains("order.insert(order.begin(),component);"),
+        "DependencySorter::visit no longer builds pre-order by inserting visited components at the front"
     );
 }
 

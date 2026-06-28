@@ -133,6 +133,12 @@ The existing `rive-graph` prototype already covers:
   `DrawableProxy` injection, and flattened draw-rule ownership, without
   admitting `sortDrawOrder()`, render linked-list mutation, clipping-stack
   operations, renderer commands, or GPU work.
+- Static draw-target dependency ordering matching C++ `m_DrawTargets`
+  initialization: parent-ordered draw-rule groups, synthetic root target
+  dependents for resolved target drawables, flattened-rule target dependencies,
+  and target-cycle diagnostics, without admitting active target linked lists,
+  placement splicing,
+  clipping-stack operations, renderer commands, or GPU work.
 - Clipping source/clipped drawable projections.
 - Static `on_added_clean` artboard host registries for exact C++
   `NestedArtboard`, `NestedArtboardLeaf`, `NestedArtboardLayout`, and

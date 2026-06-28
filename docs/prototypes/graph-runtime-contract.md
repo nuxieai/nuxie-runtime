@@ -101,7 +101,7 @@ dependency graph surface.
 The slice should extend the existing edge list toward the audited C++
 `buildDependencies()` surface, especially:
 
-- Path composer dependencies.
+- Path composer projections and dependencies.
 - Follow-path dependencies.
 - Text graph dependencies.
 - Layout dependencies.
@@ -129,6 +129,8 @@ The existing `rive-graph` prototype already covers:
 - Capability flags for artboard/container/world-transform/transform/drawable.
 - Draw target, draw rules, and clipping source relationships.
 - Clipping source/clipped drawable projections.
+- Synthetic path composer projections for each imported `Shape`, with path inputs
+  sourced from `rive-binary`'s C++-equivalent shape registration facts.
 - Dependency edges for parent-child, targeted constraints, IK constraints,
   draw-target drawable references, draw-rule target references, clipping sources,
   skinning for exact C++ skinnables (`Mesh` and `PointsPath`), Joystick

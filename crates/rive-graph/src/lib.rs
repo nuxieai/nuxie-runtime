@@ -17,7 +17,8 @@ impl GraphFile {
         let artboard_ranges = artboard_ranges(file);
         let artboards = artboard_ranges
             .into_iter()
-            .map(|range| ArtboardGraph::build(file, range))
+            .enumerate()
+            .map(|(artboard_index, range)| ArtboardGraph::build(file, artboard_index, range))
             .collect::<Result<Vec<_>>>()?;
 
         Ok(Self {
@@ -46,6 +47,7 @@ pub struct ArtboardGraph {
     pub draw_targets: Vec<DrawTargetNode>,
     pub draw_rules: Vec<DrawRulesNode>,
     pub clipping_shapes: Vec<ClippingShapeNode>,
+    pub path_composers: Vec<PathComposerNode>,
     pub animations: Vec<AnimationGraph>,
     pub state_machines: Vec<StateMachineGraph>,
     pub dependency_order: Vec<usize>,
@@ -53,7 +55,7 @@ pub struct ArtboardGraph {
 }
 
 impl ArtboardGraph {
-    fn build(file: &RuntimeFile, range: ArtboardRange) -> Result<Self> {
+    fn build(file: &RuntimeFile, artboard_index: usize, range: ArtboardRange) -> Result<Self> {
         let mut local_objects = Vec::new();
         for global_id in range.start..range.end {
             let object = file
@@ -123,6 +125,7 @@ impl ArtboardGraph {
         let draw_rules = draw_rules(file, &local_objects);
         let clipping_shapes =
             clipping_shapes(file, &local_objects, &components, &component_by_local);
+        let path_composers = path_composers(file, artboard_index, &local_objects);
         let dependency_edges = build_dependency_edges(
             file,
             &local_objects,
@@ -156,6 +159,7 @@ impl ArtboardGraph {
             draw_targets,
             draw_rules,
             clipping_shapes,
+            path_composers,
             animations,
             state_machines,
             dependency_order: dependency_order.order,
@@ -259,6 +263,14 @@ pub struct ClippingShapeNode {
     pub is_visible: bool,
     pub shape_locals: Vec<usize>,
     pub clipped_drawable_locals: Vec<usize>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PathComposerNode {
+    pub shape_local: usize,
+    pub shape_global: u32,
+    pub path_locals: Vec<usize>,
+    pub path_globals: Vec<u32>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -865,6 +877,36 @@ fn clipping_shapes(
                 is_visible: object.bool_property("isVisible").unwrap_or(true),
                 shape_locals,
                 clipped_drawable_locals,
+            })
+        })
+        .collect()
+}
+
+fn path_composers(
+    file: &RuntimeFile,
+    artboard_index: usize,
+    local_objects: &[LocalObject],
+) -> Vec<PathComposerNode> {
+    file.artboard_shapes(artboard_index)
+        .into_iter()
+        .filter_map(|shape| {
+            let shape_global = local_object_global_id(local_objects, shape.local_id)?;
+            let mut path_locals = Vec::new();
+            let mut path_globals = Vec::new();
+
+            for path in shape.paths {
+                let Some(path_global) = local_object_global_id(local_objects, path.local_id) else {
+                    continue;
+                };
+                path_locals.push(path.local_id);
+                path_globals.push(path_global);
+            }
+
+            Some(PathComposerNode {
+                shape_local: shape.local_id,
+                shape_global,
+                path_locals,
+                path_globals,
             })
         })
         .collect()
@@ -1655,6 +1697,12 @@ fn runtime_object_for_local<'a>(
     file.objects
         .get(local_object.global_id as usize)
         .and_then(|object| object.as_ref())
+}
+
+fn local_object_global_id(local_objects: &[LocalObject], local_id: usize) -> Option<u32> {
+    local_objects
+        .get(local_id)
+        .and_then(|local_object| local_object.type_name.map(|_| local_object.global_id))
 }
 
 fn local_object_reference<'a>(

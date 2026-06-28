@@ -1431,6 +1431,145 @@ fn cpp_effect_parent_dependency_methods_are_tracked_by_graph_model() {
 }
 
 #[test]
+fn graph_dependency_order_includes_linear_gradient_paint_container_dependencies() {
+    let parent_id_key = property_key_for_name("Component", "parentId");
+
+    let bytes = synthetic_runtime_file(7116, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object(bytes, "Shape", &[(parent_id_key, 0)]);
+        push_object(bytes, "Fill", &[(parent_id_key, 1)]);
+        push_object(bytes, "LinearGradient", &[(parent_id_key, 2)]);
+        push_object(bytes, "Fill", &[(parent_id_key, 1)]);
+        push_object(bytes, "RadialGradient", &[(parent_id_key, 4)]);
+        push_object(bytes, "Text", &[(parent_id_key, 0)]);
+        push_object(bytes, "TextStylePaint", &[(parent_id_key, 6)]);
+        push_object(bytes, "Fill", &[(parent_id_key, 7)]);
+        push_object(bytes, "LinearGradient", &[(parent_id_key, 8)]);
+    });
+
+    let (_, rust) = read_graph_from_bytes(&bytes, "synthetic/linear_gradient_dependency.riv");
+    let artboard = &rust.artboards[0];
+
+    let shape_node = dependency_node_for_component(artboard, 1);
+    let linear_gradient_node = dependency_node_for_component(artboard, 3);
+    let radial_gradient_node = dependency_node_for_component(artboard, 5);
+    let text_node = dependency_node_for_component(artboard, 6);
+    let text_linear_gradient_node = dependency_node_for_component(artboard, 9);
+
+    assert!(
+        artboard.dependency_node_edges.contains(&node_edge(
+            shape_node,
+            linear_gradient_node,
+            DependencyKind::LinearGradientPaintContainer
+        )),
+        "LinearGradient::buildDependencies makes shape-owned gradients depend on the owning Node"
+    );
+    assert!(
+        artboard.dependency_node_edges.contains(&node_edge(
+            shape_node,
+            radial_gradient_node,
+            DependencyKind::LinearGradientPaintContainer
+        )),
+        "RadialGradient inherits LinearGradient::buildDependencies"
+    );
+    assert!(
+        artboard.dependency_node_edges.contains(&node_edge(
+            text_node,
+            text_linear_gradient_node,
+            DependencyKind::LinearGradientPaintContainer
+        )),
+        "LinearGradient::buildDependencies walks from TextStylePaint to the first owning Node"
+    );
+    assert!(
+        !artboard
+            .dependency_edges
+            .contains(&edge(2, 3, DependencyKind::ParentChild)),
+        "LinearGradient::buildDependencies does not inherit a generic parent-child dependency"
+    );
+    assert!(
+        !artboard
+            .dependency_edges
+            .contains(&edge(4, 5, DependencyKind::ParentChild)),
+        "RadialGradient inherits the LinearGradient no-super dependency behavior"
+    );
+    assert!(
+        !artboard
+            .dependency_edges
+            .contains(&edge(8, 9, DependencyKind::ParentChild)),
+        "LinearGradient under TextStylePaint uses the explicit paint-container dependency"
+    );
+    assert_node_order_before(artboard, shape_node, linear_gradient_node);
+    assert_node_order_before(artboard, shape_node, radial_gradient_node);
+    assert_node_order_before(artboard, text_node, text_linear_gradient_node);
+    assert!(artboard.dependency_cycles.is_empty());
+}
+
+#[test]
+fn cpp_linear_gradient_dependency_method_is_tracked_by_graph_model() {
+    let runtime_dir = reference_runtime_dir();
+    assert!(
+        runtime_dir.exists(),
+        "reference runtime not found at {}; set RIVE_RUNTIME_DIR",
+        runtime_dir.display()
+    );
+
+    let linear_gradient_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/shapes/paint/linear_gradient.cpp"))
+            .expect("read C++ linear_gradient.cpp"),
+    );
+    let linear_gradient_body = cpp_function_body(
+        &linear_gradient_source,
+        "voidLinearGradient::buildDependencies()",
+    );
+    assert!(
+        !linear_gradient_body.contains("Super::buildDependencies("),
+        "LinearGradient::buildDependencies started calling Super; audit paint parent dependency modeling"
+    );
+    assert!(
+        linear_gradient_body.contains("ContainerComponent*grandParent=p->parent();"),
+        "LinearGradient::buildDependencies no longer resolves the owning paint container through the parent paint"
+    );
+    assert!(
+        linear_gradient_body.contains("ShapePaintContainer::from(grandParent)"),
+        "LinearGradient::buildDependencies no longer asserts a shape-paint container parent"
+    );
+    assert!(
+        linear_gradient_body.contains(
+            "for(ContainerComponent*container=grandParent;container!=nullptr;container=container->parent())"
+        ),
+        "LinearGradient::buildDependencies no longer walks the container parent chain"
+    );
+    assert!(
+        linear_gradient_body.contains("container->is<Node>()"),
+        "LinearGradient::buildDependencies no longer searches for the first Node"
+    );
+    assert!(
+        linear_gradient_body.contains("m_shapePaintContainer->addDependent(this);"),
+        "LinearGradient::buildDependencies no longer depends on the first owning Node"
+    );
+    assert!(
+        linear_gradient_body.contains("grandParent->addDependent(this);"),
+        "LinearGradient::buildDependencies no longer falls back to the paint container"
+    );
+    assert!(
+        linear_gradient_body.contains("updateDeformer();"),
+        "LinearGradient::buildDependencies no longer updates deformer state; audit whether this remains out of graph scope"
+    );
+
+    let radial_gradient_header = compact_cpp_source(
+        &std::fs::read_to_string(
+            runtime_dir.join("include/rive/generated/shapes/paint/radial_gradient_base.hpp"),
+        )
+        .expect("read C++ radial_gradient_base.hpp"),
+    );
+    assert!(
+        radial_gradient_header.contains("classRadialGradientBase:publicLinearGradient"),
+        "RadialGradient no longer inherits LinearGradient::buildDependencies"
+    );
+}
+
+#[test]
 fn graph_dependency_order_reports_targeted_constraint_cycles() {
     let parent_id_key = property_key_for_name("Component", "parentId");
     let target_id_key = property_key_for_name("TargetedConstraint", "targetId");

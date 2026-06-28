@@ -141,7 +141,8 @@ The existing `rive-graph` prototype already covers:
   constrained-parent prerequisites, text-follow-path target and text
   prerequisites, stroke/fill/feather path-builder prerequisites, audited
   paint/effect parent-dependency skips and explicit `GroupEffect`/
-  `ScriptedPathEffect` parent prerequisites, and the static
+  `ScriptedPathEffect` parent prerequisites, linear/radial gradient paint
+  container prerequisites, and the static
   `ScrollConstraint -> ScrollBarConstraint` and
   `ScrollConstraint -> layout-provider content child` dependencies.
 - Topological dependency order and dependency-cycle diagnostics.

@@ -281,6 +281,7 @@ pub enum DependencyKind {
     FeatherPathBuilder,
     GroupEffectParent,
     ScriptedPathEffectParent,
+    LinearGradientPaintContainer,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -1161,6 +1162,19 @@ fn build_dependency_node_edges(
         });
     }
 
+    for (source_node, gradient_node) in linear_gradient_paint_container_node_dependencies(
+        file,
+        local_objects,
+        dependency_nodes,
+        &component_node_by_local,
+    ) {
+        edges.push(DependencyNodeEdge {
+            source_node,
+            dependent_node: gradient_node,
+            kind: DependencyKind::LinearGradientPaintContainer,
+        });
+    }
+
     edges.sort_by_key(|edge| {
         (
             edge.source_node,
@@ -1409,6 +1423,7 @@ fn dependency_kind_sort_key(kind: DependencyKind) -> u8 {
         DependencyKind::FeatherPathBuilder => 25,
         DependencyKind::GroupEffectParent => 26,
         DependencyKind::ScriptedPathEffectParent => 27,
+        DependencyKind::LinearGradientPaintContainer => 28,
     }
 }
 
@@ -1795,6 +1810,85 @@ fn feather_path_builder_node_dependencies(
     edges
 }
 
+fn linear_gradient_paint_container_node_dependencies(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+    dependency_nodes: &[DependencyNode],
+    component_node_by_local: &BTreeMap<usize, usize>,
+) -> Vec<(usize, usize)> {
+    let mut edges = Vec::new();
+    for node in dependency_nodes {
+        let DependencyNodeKind::Component { local_id, .. } = &node.kind else {
+            continue;
+        };
+        let gradient_local = *local_id;
+        let Some(gradient) = runtime_object_for_local(file, local_objects, gradient_local) else {
+            continue;
+        };
+        if !is_linear_gradient(gradient) {
+            continue;
+        }
+
+        let Some(gradient_node) = component_node_by_local.get(&gradient_local).copied() else {
+            continue;
+        };
+        let Some((_, shape_paint)) =
+            local_object_reference_with_local_id(file, local_objects, object_parent_id(gradient))
+        else {
+            continue;
+        };
+        if !is_shape_paint(shape_paint) {
+            continue;
+        }
+        let Some((container_local, container)) = local_object_reference_with_local_id(
+            file,
+            local_objects,
+            object_parent_id(shape_paint),
+        ) else {
+            continue;
+        };
+        let Some(container_node) = linear_gradient_paint_container_dependency_node(
+            file,
+            local_objects,
+            container_local,
+            container,
+            component_node_by_local,
+        ) else {
+            continue;
+        };
+
+        edges.push((container_node, gradient_node));
+    }
+    edges
+}
+
+fn linear_gradient_paint_container_dependency_node(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+    container_local: usize,
+    container: &RuntimeObject,
+    component_node_by_local: &BTreeMap<usize, usize>,
+) -> Option<usize> {
+    let mut current_local = container_local;
+    let mut current = container;
+
+    loop {
+        if is_node(current) {
+            return component_node_by_local.get(&current_local).copied();
+        }
+
+        let Some((parent_local, parent)) =
+            local_object_reference_with_local_id(file, local_objects, object_parent_id(current))
+        else {
+            break;
+        };
+        current_local = parent_local;
+        current = parent;
+    }
+
+    component_node_by_local.get(&container_local).copied()
+}
+
 fn shape_paint_container_path_builder_node(
     file: &RuntimeFile,
     local_objects: &[LocalObject],
@@ -1868,6 +1962,10 @@ fn is_registered_stroke_effect(object: &RuntimeObject) -> bool {
 }
 
 fn paint_effect_skips_generic_parent_child_dependency(object: &RuntimeObject) -> bool {
+    if is_linear_gradient(object) {
+        return true;
+    }
+
     matches!(
         object.type_name,
         "Fill"
@@ -2588,6 +2686,11 @@ fn is_layout_node_provider(object: &RuntimeObject) -> bool {
 
 fn is_shape_paint(object: &RuntimeObject) -> bool {
     definition_by_type_key(object.type_key).is_some_and(|definition| definition.is_a("ShapePaint"))
+}
+
+fn is_linear_gradient(object: &RuntimeObject) -> bool {
+    definition_by_type_key(object.type_key)
+        .is_some_and(|definition| definition.is_a("LinearGradient"))
 }
 
 fn is_drawable(object: &RuntimeObject) -> bool {

@@ -604,6 +604,9 @@ pub struct ShapePaintNode {
     pub local_id: usize,
     pub global_id: u32,
     pub type_name: &'static str,
+    pub paint_type: ShapePaintKind,
+    pub is_visible: bool,
+    pub path_kind: Option<ShapePaintPathKind>,
     pub mutator_local: Option<usize>,
     pub mutator_global: Option<u32>,
     pub mutator_type_name: Option<&'static str>,
@@ -612,6 +615,22 @@ pub struct ShapePaintNode {
     pub feather_type_name: Option<&'static str>,
     pub effects: Vec<StrokeEffectNode>,
     pub gradient_stops: Vec<GradientStopNode>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ShapePaintKind {
+    Fill,
+    Stroke,
+    Unknown,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ShapePaintPathKind {
+    Local,
+    LocalClockwise,
+    World,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -2223,11 +2242,15 @@ fn shape_paint_containers(
                     .into_iter()
                     .filter_map(|paint| {
                         let global_id = local_object_global_id(local_objects, paint.local_id)?;
+                        let paint_type = shape_paint_kind(paint.object.type_name);
 
                         Some(ShapePaintNode {
                             local_id: paint.local_id,
                             global_id,
                             type_name: paint.object.type_name,
+                            paint_type,
+                            is_visible: shape_paint_is_visible(&paint.object, paint_type),
+                            path_kind: shape_paint_path_kind(&paint.object, paint_type),
                             mutator_local: paint.mutator_local_id,
                             mutator_global: paint.mutator_local_id.and_then(|local_id| {
                                 local_object_global_id(local_objects, local_id)
@@ -2282,6 +2305,50 @@ fn shape_paint_containers(
             })
         })
         .collect()
+}
+
+fn shape_paint_kind(type_name: &str) -> ShapePaintKind {
+    match type_name {
+        "Fill" => ShapePaintKind::Fill,
+        "Stroke" => ShapePaintKind::Stroke,
+        _ => ShapePaintKind::Unknown,
+    }
+}
+
+fn shape_paint_is_visible(object: &RuntimeObject, paint_type: ShapePaintKind) -> bool {
+    let base_visible = object.bool_property("isVisible").unwrap_or(true);
+    match paint_type {
+        ShapePaintKind::Stroke => {
+            base_visible && object.double_property("thickness").unwrap_or(1.0) > 0.0
+        }
+        ShapePaintKind::Fill | ShapePaintKind::Unknown => base_visible,
+    }
+}
+
+fn shape_paint_path_kind(
+    object: &RuntimeObject,
+    paint_type: ShapePaintKind,
+) -> Option<ShapePaintPathKind> {
+    match paint_type {
+        ShapePaintKind::Fill => {
+            if object.uint_property("fillRule").unwrap_or(0) == 2 {
+                Some(ShapePaintPathKind::LocalClockwise)
+            } else {
+                Some(ShapePaintPathKind::Local)
+            }
+        }
+        ShapePaintKind::Stroke => {
+            if object
+                .bool_property("transformAffectsStroke")
+                .unwrap_or(true)
+            {
+                Some(ShapePaintPathKind::Local)
+            } else {
+                Some(ShapePaintPathKind::World)
+            }
+        }
+        ShapePaintKind::Unknown => None,
+    }
 }
 
 fn n_slicer_details(

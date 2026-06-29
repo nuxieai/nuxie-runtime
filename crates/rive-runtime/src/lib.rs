@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use rive_binary::{RuntimeFile, RuntimeImportStatus, RuntimeObject};
 use rive_graph::{
     ArtboardGraph, ClippingShapeNode, ComponentNode, DrawableOrderKind, PathComposerNode,
-    PathComposerPathNode, SortedDrawableNode,
+    PathComposerPathNode, ShapePaintKind, ShapePaintNode, ShapePaintPathKind, SortedDrawableNode,
 };
 use rive_schema::{definition_by_name, object_supports_property};
 use std::collections::BTreeMap;
@@ -147,11 +147,11 @@ impl ArtboardInstance {
                 commands.extend(
                     pending_clip_operations
                         .drain(..)
-                        .map(runtime_draw_command_for_node),
+                        .map(|pending_clip| runtime_draw_command_for_node(pending_clip, graph)),
                 );
             }
 
-            commands.push(runtime_draw_command_for_node(drawable));
+            commands.push(runtime_draw_command_for_node(drawable, graph));
         }
 
         commands
@@ -507,15 +507,42 @@ pub enum RuntimeDrawCommandKind {
     ClipEnd,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeDrawCommand {
     pub kind: RuntimeDrawCommandKind,
     pub local_id: Option<usize>,
     pub clipping_shape_local: Option<usize>,
     pub needs_save_operation: bool,
+    pub shape_paints: Vec<RuntimeShapePaintCommand>,
 }
 
-fn runtime_draw_command_for_node(drawable: &SortedDrawableNode) -> RuntimeDrawCommand {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeShapePaintKind {
+    Fill,
+    Stroke,
+    Unknown,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeShapePaintPathKind {
+    Local,
+    LocalClockwise,
+    World,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeShapePaintCommand {
+    pub paint_local: usize,
+    pub mutator_local: Option<usize>,
+    pub paint_type: RuntimeShapePaintKind,
+    pub path_kind: RuntimeShapePaintPathKind,
+    pub needs_save_operation: bool,
+}
+
+fn runtime_draw_command_for_node(
+    drawable: &SortedDrawableNode,
+    graph: &ArtboardGraph,
+) -> RuntimeDrawCommand {
     RuntimeDrawCommand {
         kind: match drawable.kind {
             DrawableOrderKind::ClipStartProxy => RuntimeDrawCommandKind::ClipStart,
@@ -527,6 +554,65 @@ fn runtime_draw_command_for_node(drawable: &SortedDrawableNode) -> RuntimeDrawCo
         local_id: drawable.local_id,
         clipping_shape_local: drawable.clipping_shape_local,
         needs_save_operation: drawable.needs_save_operation,
+        shape_paints: runtime_shape_paint_commands(drawable, graph),
+    }
+}
+
+fn runtime_shape_paint_commands(
+    drawable: &SortedDrawableNode,
+    graph: &ArtboardGraph,
+) -> Vec<RuntimeShapePaintCommand> {
+    if drawable.kind != DrawableOrderKind::Drawable || drawable.type_name != "Shape" {
+        return Vec::new();
+    }
+    let Some(shape_local) = drawable.local_id else {
+        return Vec::new();
+    };
+    let Some(container) = graph
+        .shape_paint_containers
+        .iter()
+        .find(|container| container.local_id == shape_local)
+    else {
+        return Vec::new();
+    };
+    let needs_save_operation = drawable.needs_save_operation || container.paints.len() > 1;
+
+    container
+        .paints
+        .iter()
+        .filter_map(|paint| runtime_shape_paint_command(paint, needs_save_operation))
+        .collect()
+}
+
+fn runtime_shape_paint_command(
+    paint: &ShapePaintNode,
+    needs_save_operation: bool,
+) -> Option<RuntimeShapePaintCommand> {
+    if !paint.is_visible {
+        return None;
+    }
+    Some(RuntimeShapePaintCommand {
+        paint_local: paint.local_id,
+        mutator_local: paint.mutator_local,
+        paint_type: runtime_shape_paint_kind(paint.paint_type),
+        path_kind: runtime_shape_paint_path_kind(paint.path_kind?)?,
+        needs_save_operation,
+    })
+}
+
+fn runtime_shape_paint_kind(kind: ShapePaintKind) -> RuntimeShapePaintKind {
+    match kind {
+        ShapePaintKind::Fill => RuntimeShapePaintKind::Fill,
+        ShapePaintKind::Stroke => RuntimeShapePaintKind::Stroke,
+        ShapePaintKind::Unknown => RuntimeShapePaintKind::Unknown,
+    }
+}
+
+fn runtime_shape_paint_path_kind(kind: ShapePaintPathKind) -> Option<RuntimeShapePaintPathKind> {
+    match kind {
+        ShapePaintPathKind::Local => Some(RuntimeShapePaintPathKind::Local),
+        ShapePaintPathKind::LocalClockwise => Some(RuntimeShapePaintPathKind::LocalClockwise),
+        ShapePaintPathKind::World => Some(RuntimeShapePaintPathKind::World),
     }
 }
 

@@ -2,7 +2,7 @@ use rive_binary::{RuntimeFile, read_runtime_file};
 use rive_graph::GraphFile;
 use rive_runtime::{
     ArtboardInstance, ComponentDirt, Mat2D, RuntimeComponent, RuntimeDrawCommandKind,
-    StateMachineInputKind, TransformProperty,
+    RuntimeShapePaintKind, RuntimeShapePaintPathKind, StateMachineInputKind, TransformProperty,
 };
 use rive_schema::definition_by_name;
 use serde::Deserialize;
@@ -1806,6 +1806,113 @@ fn runtime_draw_command_stream_treats_collapsed_clip_paths_as_empty_like_cpp_pro
     assert_eq!(
         rust_commands, cpp_commands,
         "Rust runtime draw command stream should match C++ empty-clip suppression for collapsed source paths"
+    );
+}
+
+#[test]
+fn runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_shape_paint_payloads.riv";
+    let bytes = synthetic_runtime_file(8205, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "Shape", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "Fill", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 1);
+            push_uint_property(bytes, "Fill", "fillRule", 2);
+        });
+        push_object_with_properties(bytes, "SolidColor", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 2);
+        });
+        push_object_with_properties(bytes, "Fill", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 1);
+            push_bool_property(bytes, "ShapePaint", "isVisible", false);
+        });
+        push_object_with_properties(bytes, "SolidColor", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 4);
+        });
+        push_object_with_properties(bytes, "Stroke", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 1);
+            push_bool_property(bytes, "Stroke", "transformAffectsStroke", false);
+        });
+        push_object_with_properties(bytes, "SolidColor", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 6);
+        });
+        push_object_with_properties(bytes, "Stroke", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 1);
+            push_f32_property(bytes, "Stroke", "thickness", 0.0);
+        });
+        push_object_with_properties(bytes, "SolidColor", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 8);
+        });
+    });
+
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let (_, graph, mut rust) = read_rust_graph_instance_from_bytes(&bytes, label);
+    rust.update_components();
+
+    let artboard = graph
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing Rust artboard for {label}"));
+    let rust_payloads = rust
+        .draw_commands(artboard)
+        .into_iter()
+        .flat_map(|command| command.shape_paints)
+        .map(|paint| {
+            (
+                Some(paint.paint_local),
+                paint.mutator_local,
+                paint.paint_type,
+                paint.path_kind,
+                paint.needs_save_operation,
+            )
+        })
+        .collect::<Vec<_>>();
+    let cpp_payloads = cpp.artboards[0]
+        .draw_command_stream
+        .iter()
+        .flat_map(|command| command.shape_paint_commands.iter())
+        .map(|paint| {
+            (
+                paint.paint_local,
+                paint.mutator_local,
+                paint.paint_type(),
+                paint.path_kind(),
+                paint.needs_save_operation,
+            )
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        cpp_payloads,
+        vec![
+            (
+                Some(2),
+                Some(3),
+                RuntimeShapePaintKind::Fill,
+                RuntimeShapePaintPathKind::LocalClockwise,
+                true
+            ),
+            (
+                Some(6),
+                Some(7),
+                RuntimeShapePaintKind::Stroke,
+                RuntimeShapePaintPathKind::World,
+                true
+            ),
+        ],
+        "C++ shape payloads should include visible paints and skip invisible/zero-thickness paints"
+    );
+    assert_eq!(
+        rust_payloads, cpp_payloads,
+        "Rust shape paint command payloads should match C++ Shape::draw paint filtering and path selection"
     );
 }
 
@@ -4553,6 +4660,8 @@ struct CppDrawCommand {
     is_clip_end: bool,
     #[serde(rename = "needsSaveOperation")]
     needs_save_operation: bool,
+    #[serde(default, rename = "shapePaintCommands")]
+    shape_paint_commands: Vec<CppShapePaintCommand>,
 }
 
 impl CppDrawCommand {
@@ -4563,6 +4672,39 @@ impl CppDrawCommand {
             RuntimeDrawCommandKind::ClipEnd
         } else {
             RuntimeDrawCommandKind::Draw
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct CppShapePaintCommand {
+    #[serde(rename = "paintLocal")]
+    paint_local: Option<usize>,
+    #[serde(rename = "mutatorLocal")]
+    mutator_local: Option<usize>,
+    #[serde(rename = "paintType")]
+    paint_type: String,
+    #[serde(rename = "pathKind")]
+    path_kind: String,
+    #[serde(rename = "needsSaveOperation")]
+    needs_save_operation: bool,
+}
+
+impl CppShapePaintCommand {
+    fn paint_type(&self) -> RuntimeShapePaintKind {
+        match self.paint_type.as_str() {
+            "fill" => RuntimeShapePaintKind::Fill,
+            "stroke" => RuntimeShapePaintKind::Stroke,
+            _ => RuntimeShapePaintKind::Unknown,
+        }
+    }
+
+    fn path_kind(&self) -> RuntimeShapePaintPathKind {
+        match self.path_kind.as_str() {
+            "local" => RuntimeShapePaintPathKind::Local,
+            "localClockwise" => RuntimeShapePaintPathKind::LocalClockwise,
+            "world" => RuntimeShapePaintPathKind::World,
+            other => panic!("unexpected C++ shape paint path kind {other}"),
         }
     }
 }

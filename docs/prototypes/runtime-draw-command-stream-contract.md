@@ -38,6 +38,10 @@ The first follow-up empty-clip slice is captured in
 should add one omitted `willDraw()`/empty-clip family at a time, each with a C++
 probe fixture.
 
+The first structural paint payload slice is captured in
+`runtime-shape-paint-command-payload-contract.md`; it remains headless and does
+not allocate renderer-owned paint or path objects.
+
 ## Admission Rule
 
 Before adding behavior to this slice, answer:

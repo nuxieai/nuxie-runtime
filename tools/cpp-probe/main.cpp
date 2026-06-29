@@ -175,10 +175,12 @@
 #include "rive/shapes/path_vertex.hpp"
 #include "rive/shapes/paint/dash_path.hpp"
 #include "rive/shapes/paint/feather.hpp"
+#include "rive/shapes/paint/fill.hpp"
 #include "rive/shapes/paint/gradient_stop.hpp"
 #include "rive/shapes/paint/group_effect.hpp"
 #include "rive/shapes/paint/radial_gradient.hpp"
 #include "rive/shapes/paint/solid_color.hpp"
+#include "rive/shapes/paint/stroke.hpp"
 #include "rive/shapes/paint/trim_path.hpp"
 #include "rive/shapes/points_path.hpp"
 #include "rive/shapes/shape.hpp"
@@ -1331,6 +1333,81 @@ void write_sorted_drawable_order(std::ostream& out,
     out << ']';
 }
 
+const char* shape_paint_type_name(rive::ShapePaint* paint)
+{
+    if (paint->paintType() == rive::ShapePaintType::fill)
+    {
+        return "fill";
+    }
+    if (paint->paintType() == rive::ShapePaintType::stroke)
+    {
+        return "stroke";
+    }
+    return "unknown";
+}
+
+const char* shape_paint_path_kind(rive::Shape* shape,
+                                  rive::ShapePaintPath* path)
+{
+    if (path == shape->localPath())
+    {
+        return "local";
+    }
+    if (path == shape->localClockwisePath())
+    {
+        return "localClockwise";
+    }
+    if (path == shape->worldPath())
+    {
+        return "world";
+    }
+    return "unknown";
+}
+
+void write_shape_paint_commands(std::ostream& out,
+                                const LocalIds& localIds,
+                                rive::Drawable* drawable)
+{
+    out << ",\"shapePaintCommands\":[";
+    if (drawable == nullptr || !drawable->is<rive::Shape>())
+    {
+        out << ']';
+        return;
+    }
+
+    auto shape = drawable->as<rive::Shape>();
+    bool first = true;
+    auto needsSaveOperation =
+        drawable->m_needsSaveOperation || shape->m_ShapePaints.size() > 1;
+    for (auto shapePaint : shape->m_ShapePaints)
+    {
+        if (!shapePaint->isVisible())
+        {
+            continue;
+        }
+        auto path = shapePaint->pickPath(shape);
+        if (path == nullptr)
+        {
+            continue;
+        }
+        if (!first)
+        {
+            out << ',';
+        }
+        first = false;
+        out << "{\"paintLocal\":";
+        write_local_id_or_null(out, localIds, shapePaint);
+        out << ",\"mutatorLocal\":";
+        write_local_id_or_null(out, localIds, shapePaint->paint());
+        out << ",\"paintType\":\"" << shape_paint_type_name(shapePaint) << "\"";
+        out << ",\"pathKind\":\"" << shape_paint_path_kind(shape, path) << "\"";
+        out << ",\"needsSaveOperation\":"
+            << (needsSaveOperation ? "true" : "false");
+        out << '}';
+    }
+    out << ']';
+}
+
 void write_draw_command(std::ostream& out,
                         bool& first,
                         const LocalIds& localIds,
@@ -1349,6 +1426,7 @@ void write_draw_command(std::ostream& out,
     out << ",\"isClipEnd\":" << (drawable->isClipEnd() ? "true" : "false");
     out << ",\"needsSaveOperation\":"
         << (drawable->m_needsSaveOperation ? "true" : "false");
+    write_shape_paint_commands(out, localIds, drawable);
     out << '}';
 }
 

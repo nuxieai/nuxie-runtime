@@ -101,7 +101,7 @@ The remaining C++ `addDependent()` calls should be handled as follows:
 | `DataBind`, `DataConverter*`, `ArtboardComponentList` value dependencies | Deferred runtime work | These need live source/target values, dirty queues, collapse state, or data-context mutation. |
 | `ViewModelInstance*`, `StateMachineInstance`, Lua/script runtime dependents | Deferred runtime work | These are instance/runtime execution relationships, not static artboard graph facts. |
 | `ListPath` y-value dependency | Deferred runtime work | This depends on live view-model/list data evaluation. |
-| Active draw target linked lists and draw-command emission | Partially graph/runtime-owned | Active target grouping, before/after placement, clipping proxy interleaving, save-operation elision, and imported hidden facts are represented by `sorted_drawable_order`; `PathComposerNode` records imported path hidden facts; `ShapePaintNode` records structural Fill/Stroke visibility, path-kind, SolidColor state facts, and authored blend mode values; `rive-runtime` emits the logical draw command stream for simple hidden/render-opacity filtering, pathless/hidden/collapsed source-path empty-clip suppression, shape-paint payloads, SolidColor authored/render-color paint state, authored/resolved blend mode state, and straight/cubic/rounded `PointsPath` raw path commands. Weighted/deformed/parametric path geometry, gradient/effect/feather paint state, and remaining type-specific drawability remain deferred draw runtime work. |
+| Active draw target linked lists and draw-command emission | Partially graph/runtime-owned | Active target grouping, before/after placement, clipping proxy interleaving, save-operation elision, and imported hidden facts are represented by `sorted_drawable_order`; `PathComposerNode` records imported path hidden facts; `ShapePaintNode` records structural Fill/Stroke visibility, path-kind, SolidColor state facts, local-space gradient facts, and authored blend mode values; `rive-runtime` emits the logical draw command stream for simple hidden/render-opacity filtering, pathless/hidden/collapsed source-path empty-clip suppression, shape-paint payloads, SolidColor authored/render-color paint state, local-space gradient paint state, authored/resolved blend mode state, and straight/cubic/rounded `PointsPath` raw path commands. Weighted/deformed/parametric path geometry, effect/feather paint state, and remaining type-specific drawability remain deferred draw runtime work. |
 
 ## Deferred Runtime Work
 
@@ -116,7 +116,7 @@ These are not blockers for completing the current `rive-graph` milestone:
 - State-machine execution and listener/input processing.
 - Lua/script VM initialization and execution.
 - Weighted/deformed/parametric path geometry, renderer paint
-  allocation, gradient/effect/feather paint state, remaining
+  allocation, effect/feather paint state, remaining
   type-specific `willDraw()` families, and GPU work.
 - Text shaping/layout and variable-font mutation.
 - Audio playback.

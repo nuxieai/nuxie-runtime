@@ -1382,6 +1382,40 @@ void write_shape_paint_state(std::ostream& out, rive::ShapePaint* shapePaint)
         out << '}';
         return;
     }
+    if (paint != nullptr && paint->is<rive::LinearGradient>())
+    {
+        auto gradient = paint->as<rive::LinearGradient>();
+        auto renderOpacity = gradient->opacity() * gradient->renderOpacity();
+        out << "{\"kind\":\""
+            << (paint->is<rive::RadialGradient>() ? "radialGradient"
+                                                  : "linearGradient")
+            << "\"";
+        out << ",\"startX\":" << gradient->startX();
+        out << ",\"startY\":" << gradient->startY();
+        out << ",\"endX\":" << gradient->endX();
+        out << ",\"endY\":" << gradient->endY();
+        out << ",\"opacity\":" << gradient->opacity();
+        out << ",\"renderOpacity\":" << gradient->renderOpacity();
+        out << ",\"stops\":[";
+        bool first = true;
+        for (auto stop : gradient->m_stops)
+        {
+            if (!first)
+            {
+                out << ',';
+            }
+            first = false;
+            auto color = static_cast<uint32_t>(stop->colorValue());
+            auto renderColor = rive::colorModulateOpacity(color, renderOpacity);
+            out << "{\"color\":" << color;
+            out << ",\"renderColor\":" << renderColor;
+            out << ",\"position\":"
+                << std::max(0.0f, std::min(stop->position(), 1.0f));
+            out << '}';
+        }
+        out << "]}";
+        return;
+    }
     out << "null";
 }
 

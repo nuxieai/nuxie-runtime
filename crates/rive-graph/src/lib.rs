@@ -648,10 +648,28 @@ pub enum ShapePaintPathKind {
     World,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ShapePaintStateNode {
-    SolidColor { color: u32 },
+    SolidColor {
+        color: u32,
+    },
+    LinearGradient {
+        start_x: f32,
+        start_y: f32,
+        end_x: f32,
+        end_y: f32,
+        opacity: f32,
+        stops: Vec<GradientStopNode>,
+    },
+    RadialGradient {
+        start_x: f32,
+        start_y: f32,
+        end_x: f32,
+        end_y: f32,
+        opacity: f32,
+        stops: Vec<GradientStopNode>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -664,11 +682,13 @@ pub struct StrokeEffectNode {
     pub target_group_effect_type_name: Option<&'static str>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct GradientStopNode {
     pub local_id: usize,
     pub global_id: u32,
     pub type_name: &'static str,
+    pub color: u32,
+    pub position: f32,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -2283,6 +2303,28 @@ fn shape_paint_containers(
                     .filter_map(|paint| {
                         let global_id = local_object_global_id(local_objects, paint.local_id)?;
                         let paint_type = shape_paint_kind(paint.object.type_name);
+                        let gradient_stops = paint
+                            .gradient_stops
+                            .into_iter()
+                            .filter_map(|stop| {
+                                let global_id =
+                                    local_object_global_id(local_objects, stop.local_id)?;
+
+                                Some(GradientStopNode {
+                                    local_id: stop.local_id,
+                                    global_id,
+                                    type_name: stop.object.type_name,
+                                    color: stop
+                                        .object
+                                        .color_property("colorValue")
+                                        .unwrap_or(0xffff_ffff),
+                                    position: stop
+                                        .object
+                                        .double_property("position")
+                                        .unwrap_or(0.0),
+                                })
+                            })
+                            .collect::<Vec<_>>();
 
                         Some(ShapePaintNode {
                             local_id: paint.local_id,
@@ -2292,7 +2334,7 @@ fn shape_paint_containers(
                             is_visible: shape_paint_is_visible(&paint.object, paint_type),
                             blend_mode_value: shape_paint_blend_mode_value(&paint.object),
                             path_kind: shape_paint_path_kind(&paint.object, paint_type),
-                            paint_state: shape_paint_state(paint.mutator),
+                            paint_state: shape_paint_state(paint.mutator, &gradient_stops),
                             mutator_local: paint.mutator_local_id,
                             mutator_global: paint.mutator_local_id.and_then(|local_id| {
                                 local_object_global_id(local_objects, local_id)
@@ -2327,20 +2369,7 @@ fn shape_paint_containers(
                                     })
                                 })
                                 .collect(),
-                            gradient_stops: paint
-                                .gradient_stops
-                                .into_iter()
-                                .filter_map(|stop| {
-                                    let global_id =
-                                        local_object_global_id(local_objects, stop.local_id)?;
-
-                                    Some(GradientStopNode {
-                                        local_id: stop.local_id,
-                                        global_id,
-                                        type_name: stop.object.type_name,
-                                    })
-                                })
-                                .collect(),
+                            gradient_stops,
                         })
                     })
                     .collect(),
@@ -2393,11 +2422,30 @@ fn shape_paint_path_kind(
     }
 }
 
-fn shape_paint_state(mutator: Option<&RuntimeObject>) -> Option<ShapePaintStateNode> {
+fn shape_paint_state(
+    mutator: Option<&RuntimeObject>,
+    gradient_stops: &[GradientStopNode],
+) -> Option<ShapePaintStateNode> {
     let mutator = mutator?;
     match mutator.type_name {
         "SolidColor" => Some(ShapePaintStateNode::SolidColor {
             color: mutator.color_property("colorValue").unwrap_or(0xFF747474),
+        }),
+        "LinearGradient" => Some(ShapePaintStateNode::LinearGradient {
+            start_x: mutator.double_property("startX").unwrap_or(0.0),
+            start_y: mutator.double_property("startY").unwrap_or(0.0),
+            end_x: mutator.double_property("endX").unwrap_or(0.0),
+            end_y: mutator.double_property("endY").unwrap_or(0.0),
+            opacity: mutator.double_property("opacity").unwrap_or(1.0),
+            stops: gradient_stops.to_vec(),
+        }),
+        "RadialGradient" => Some(ShapePaintStateNode::RadialGradient {
+            start_x: mutator.double_property("startX").unwrap_or(0.0),
+            start_y: mutator.double_property("startY").unwrap_or(0.0),
+            end_x: mutator.double_property("endX").unwrap_or(0.0),
+            end_y: mutator.double_property("endY").unwrap_or(0.0),
+            opacity: mutator.double_property("opacity").unwrap_or(1.0),
+            stops: gradient_stops.to_vec(),
         }),
         _ => None,
     }

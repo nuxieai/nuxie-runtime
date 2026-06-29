@@ -1,9 +1,9 @@
 use anyhow::{Context, Result};
 use rive_binary::{RuntimeFile, RuntimeImportStatus, RuntimeObject};
 use rive_graph::{
-    ArtboardGraph, ClippingShapeNode, ComponentNode, DrawableOrderKind, PathComposerNode,
-    PathComposerPathNode, PathGeometryNode, PathVertexNode, ShapePaintKind, ShapePaintNode,
-    ShapePaintPathKind, ShapePaintStateNode, SortedDrawableNode,
+    ArtboardGraph, ClippingShapeNode, ComponentNode, DrawableOrderKind, GradientStopNode,
+    PathComposerNode, PathComposerPathNode, PathGeometryNode, PathVertexNode, ShapePaintKind,
+    ShapePaintNode, ShapePaintPathKind, ShapePaintStateNode, SortedDrawableNode,
 };
 use rive_schema::{definition_by_name, object_supports_property};
 use std::collections::BTreeMap;
@@ -657,9 +657,37 @@ pub struct RuntimeShapePaintCommand {
     pub needs_save_operation: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum RuntimeShapePaintState {
-    SolidColor { color: u32, render_color: u32 },
+    SolidColor {
+        color: u32,
+        render_color: u32,
+    },
+    LinearGradient {
+        start_x: f32,
+        start_y: f32,
+        end_x: f32,
+        end_y: f32,
+        opacity: f32,
+        render_opacity: f32,
+        stops: Vec<RuntimeGradientStop>,
+    },
+    RadialGradient {
+        start_x: f32,
+        start_y: f32,
+        end_x: f32,
+        end_y: f32,
+        opacity: f32,
+        render_opacity: f32,
+        stops: Vec<RuntimeGradientStop>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RuntimeGradientStop {
+    pub color: u32,
+    pub render_color: u32,
+    pub position: f32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -703,7 +731,7 @@ fn runtime_shape_paint_command(
             paint.blend_mode_value,
             container_blend_mode_value,
         ),
-        paint_state: runtime_shape_paint_state(paint.paint_state, render_opacity),
+        paint_state: runtime_shape_paint_state(paint.paint_state.clone(), render_opacity),
         path_commands,
         needs_save_operation,
     })
@@ -745,7 +773,54 @@ fn runtime_shape_paint_state(
             color,
             render_color: color_modulate_opacity(color, render_opacity),
         }),
+        ShapePaintStateNode::LinearGradient {
+            start_x,
+            start_y,
+            end_x,
+            end_y,
+            opacity,
+            stops,
+        } => Some(RuntimeShapePaintState::LinearGradient {
+            start_x,
+            start_y,
+            end_x,
+            end_y,
+            opacity,
+            render_opacity,
+            stops: runtime_gradient_stops(stops, opacity * render_opacity),
+        }),
+        ShapePaintStateNode::RadialGradient {
+            start_x,
+            start_y,
+            end_x,
+            end_y,
+            opacity,
+            stops,
+        } => Some(RuntimeShapePaintState::RadialGradient {
+            start_x,
+            start_y,
+            end_x,
+            end_y,
+            opacity,
+            render_opacity,
+            stops: runtime_gradient_stops(stops, opacity * render_opacity),
+        }),
     }
+}
+
+fn runtime_gradient_stops(
+    mut stops: Vec<GradientStopNode>,
+    opacity: f32,
+) -> Vec<RuntimeGradientStop> {
+    stops.sort_by(|left, right| left.position.total_cmp(&right.position));
+    stops
+        .into_iter()
+        .map(|stop| RuntimeGradientStop {
+            color: stop.color,
+            render_color: color_modulate_opacity(stop.color, opacity),
+            position: stop.position.clamp(0.0, 1.0),
+        })
+        .collect()
 }
 
 fn color_modulate_opacity(color: u32, opacity: f32) -> u32 {

@@ -2,8 +2,8 @@ use rive_binary::{RuntimeFile, read_runtime_file};
 use rive_graph::GraphFile;
 use rive_runtime::{
     ArtboardInstance, ComponentDirt, Mat2D, RuntimeComponent, RuntimeDrawCommandKind,
-    RuntimePathCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind, RuntimeShapePaintState,
-    StateMachineInputKind, TransformProperty,
+    RuntimeGradientStop, RuntimePathCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind,
+    RuntimeShapePaintState, StateMachineInputKind, TransformProperty,
 };
 use rive_schema::definition_by_name;
 use serde::Deserialize;
@@ -2156,6 +2156,123 @@ fn runtime_draw_command_stream_exposes_rounded_point_path_payloads_like_cpp_prob
         &cpp_path_commands,
         "Rust rounded point path commands",
     );
+}
+
+#[test]
+fn runtime_draw_command_stream_exposes_gradient_paint_payloads_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_gradient_paint_payloads.riv";
+    let bytes = synthetic_runtime_file(8215, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "Shape", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+            push_f32_property(bytes, "Node", "opacity", 0.5);
+        });
+        push_object_with_properties(bytes, "Fill", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 1);
+        });
+        push_object_with_properties(bytes, "LinearGradient", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 2);
+            push_f32_property(bytes, "LinearGradient", "startX", 1.0);
+            push_f32_property(bytes, "LinearGradient", "startY", 2.0);
+            push_f32_property(bytes, "LinearGradient", "endX", 11.0);
+            push_f32_property(bytes, "LinearGradient", "endY", 12.0);
+            push_f32_property(bytes, "LinearGradient", "opacity", 0.5);
+        });
+        push_object_with_properties(bytes, "GradientStop", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 3);
+            push_color_property(bytes, "GradientStop", "colorValue", 0xff00_ff00);
+            push_f32_property(bytes, "GradientStop", "position", 1.5);
+        });
+        push_object_with_properties(bytes, "GradientStop", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 3);
+            push_color_property(bytes, "GradientStop", "colorValue", 0x8000_00ff);
+            push_f32_property(bytes, "GradientStop", "position", -0.25);
+        });
+        push_object_with_properties(bytes, "GradientStop", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 3);
+            push_color_property(bytes, "GradientStop", "colorValue", 0xffff_0000);
+            push_f32_property(bytes, "GradientStop", "position", 0.5);
+        });
+        push_object_with_properties(bytes, "PointsPath", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 1);
+            push_bool_property(bytes, "PointsCommonPath", "isClosed", true);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 7);
+            push_f32_property(bytes, "Vertex", "x", 0.0);
+            push_f32_property(bytes, "Vertex", "y", 0.0);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 7);
+            push_f32_property(bytes, "Vertex", "x", 10.0);
+            push_f32_property(bytes, "Vertex", "y", 0.0);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 7);
+            push_f32_property(bytes, "Vertex", "x", 0.0);
+            push_f32_property(bytes, "Vertex", "y", 10.0);
+        });
+    });
+
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let (_, graph, mut rust) = read_rust_graph_instance_from_bytes(&bytes, label);
+    rust.update_components();
+
+    let artboard = graph
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing Rust artboard for {label}"));
+    let rust_paints = rust
+        .draw_commands(artboard)
+        .into_iter()
+        .flat_map(|command| command.shape_paints)
+        .collect::<Vec<_>>();
+    let cpp_paints = cpp.artboards[0]
+        .draw_command_stream
+        .iter()
+        .flat_map(|command| command.shape_paint_commands.iter())
+        .collect::<Vec<_>>();
+
+    assert_eq!(cpp_paints.len(), 1, "C++ should emit one gradient paint");
+    assert_eq!(rust_paints.len(), 1, "Rust should emit one gradient paint");
+
+    let expected_state = RuntimeShapePaintState::LinearGradient {
+        start_x: 1.0,
+        start_y: 2.0,
+        end_x: 11.0,
+        end_y: 12.0,
+        opacity: 0.5,
+        render_opacity: 0.5,
+        stops: vec![
+            RuntimeGradientStop {
+                color: 0x8000_00ff,
+                render_color: 0x2000_00ff,
+                position: 0.0,
+            },
+            RuntimeGradientStop {
+                color: 0xffff_0000,
+                render_color: 0x40ff_0000,
+                position: 0.5,
+            },
+            RuntimeGradientStop {
+                color: 0xff00_ff00,
+                render_color: 0x4000_ff00,
+                position: 1.0,
+            },
+        ],
+    };
+
+    let cpp_paint = cpp_paints[0];
+    let rust_paint = &rust_paints[0];
+    assert_eq!(cpp_paint.paint_state(), Some(expected_state.clone()));
+    assert_eq!(rust_paint.paint_state, Some(expected_state));
+    assert_eq!(rust_paint.paint_state, cpp_paint.paint_state());
 }
 
 #[test]
@@ -5032,6 +5149,32 @@ impl CppShapePaintCommand {
                 color: state.color,
                 render_color: state.render_color,
             }),
+            "linearGradient" => Some(RuntimeShapePaintState::LinearGradient {
+                start_x: state.start_x,
+                start_y: state.start_y,
+                end_x: state.end_x,
+                end_y: state.end_y,
+                opacity: state.opacity,
+                render_opacity: state.render_opacity,
+                stops: state
+                    .stops
+                    .iter()
+                    .map(CppGradientStopState::gradient_stop)
+                    .collect(),
+            }),
+            "radialGradient" => Some(RuntimeShapePaintState::RadialGradient {
+                start_x: state.start_x,
+                start_y: state.start_y,
+                end_x: state.end_x,
+                end_y: state.end_y,
+                opacity: state.opacity,
+                render_opacity: state.render_opacity,
+                stops: state
+                    .stops
+                    .iter()
+                    .map(CppGradientStopState::gradient_stop)
+                    .collect(),
+            }),
             other => panic!("unexpected C++ shape paint state kind {other}"),
         }
     }
@@ -5047,9 +5190,42 @@ impl CppShapePaintCommand {
 #[derive(Debug, Deserialize)]
 struct CppShapePaintState {
     kind: String,
+    #[serde(default, rename = "startX")]
+    start_x: f32,
+    #[serde(default, rename = "startY")]
+    start_y: f32,
+    #[serde(default, rename = "endX")]
+    end_x: f32,
+    #[serde(default, rename = "endY")]
+    end_y: f32,
+    #[serde(default)]
+    opacity: f32,
+    #[serde(default, rename = "renderOpacity")]
+    render_opacity: f32,
+    #[serde(default)]
+    stops: Vec<CppGradientStopState>,
+    #[serde(default)]
+    color: u32,
+    #[serde(default, rename = "renderColor")]
+    render_color: u32,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppGradientStopState {
     color: u32,
     #[serde(rename = "renderColor")]
     render_color: u32,
+    position: f32,
+}
+
+impl CppGradientStopState {
+    fn gradient_stop(&self) -> RuntimeGradientStop {
+        RuntimeGradientStop {
+            color: self.color,
+            render_color: self.render_color,
+            position: self.position,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]

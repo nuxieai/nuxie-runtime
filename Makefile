@@ -1,4 +1,4 @@
-.PHONY: schema check test inspect graph cpp-probe cpp-binary-compare cpp-graph-compare cpp-compare
+.PHONY: schema check test inspect graph cpp-probe cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 DEFS_DIR ?= $(RIVE_RUNTIME_DIR)/dev/defs
@@ -29,4 +29,7 @@ cpp-binary-compare: cpp-probe
 cpp-graph-compare: cpp-probe
 	RIVE_CPP_PROBE="$(CPP_PROBE)" cargo test -p rive-graph --test cpp_probe -- --nocapture
 
-cpp-compare: cpp-binary-compare cpp-graph-compare
+cpp-runtime-compare: cpp-probe
+	RIVE_CPP_PROBE="$(CPP_PROBE)" cargo test -p rive-runtime --test cpp_probe -- --nocapture
+
+cpp-compare: cpp-binary-compare cpp-graph-compare cpp-runtime-compare

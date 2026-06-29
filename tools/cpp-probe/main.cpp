@@ -21,6 +21,9 @@
 #include <unordered_map>
 #include <vector>
 
+#define protected public
+#include "rive/component.hpp"
+#undef protected
 #define private public
 #include "rive/assets/manifest_asset.hpp"
 #undef private
@@ -219,6 +222,7 @@ struct ProbeOptions
     bool propertyValues = false;
     bool artboardPropertyValues = false;
     bool advanceArtboards = true;
+    bool runtimeUpdate = false;
     bool completeViewModelProperties = false;
     bool dataContextLookups = false;
 };
@@ -322,10 +326,8 @@ void write_local_id_or_null(std::ostream& out,
     out << itr->second;
 }
 
-void write_world_transform(std::ostream& out,
-                           const rive::WorldTransformComponent* component)
+void write_mat2d(std::ostream& out, const rive::Mat2D& transform)
 {
-    const rive::Mat2D& transform = component->worldTransform();
     out << '[';
     for (size_t i = 0; i < 6; ++i)
     {
@@ -336,6 +338,12 @@ void write_world_transform(std::ostream& out,
         out << transform[i];
     }
     out << ']';
+}
+
+void write_world_transform(std::ostream& out,
+                           const rive::WorldTransformComponent* component)
+{
+    write_mat2d(out, component->worldTransform());
 }
 
 void write_component_fields(std::ostream& out,
@@ -420,6 +428,83 @@ void write_component_fields(std::ostream& out,
     {
         out << "null";
     }
+}
+
+void write_runtime_update_component(std::ostream& out,
+                                    const LocalIds& localIds,
+                                    const rive::Component* component)
+{
+    auto itr = localIds.find(component);
+    if (itr == localIds.end())
+    {
+        out << "null";
+        return;
+    }
+
+    out << "{\"localId\":" << itr->second;
+    out << ",\"coreType\":" << component->coreType();
+    out << ",\"graphOrder\":" << component->graphOrder();
+    out << ",\"dirt\":" << static_cast<unsigned int>(component->m_Dirt);
+    out << ",\"collapsed\":"
+        << (component->isCollapsed() ? "true" : "false");
+    out << ",\"worldTransform\":";
+    if (component->is<rive::WorldTransformComponent>())
+    {
+        write_world_transform(out,
+                              component->as<rive::WorldTransformComponent>());
+    }
+    else
+    {
+        out << "null";
+    }
+    out << ",\"localTransform\":";
+    if (component->is<rive::TransformComponent>())
+    {
+        write_mat2d(out, component->as<rive::TransformComponent>()->transform());
+    }
+    else
+    {
+        out << "null";
+    }
+    out << ",\"renderOpacity\":";
+    if (component->is<rive::TransformComponent>())
+    {
+        out << component->as<rive::TransformComponent>()->renderOpacity();
+    }
+    else
+    {
+        out << "null";
+    }
+    out << '}';
+}
+
+void write_runtime_update(std::ostream& out,
+                          const LocalIds& localIds,
+                          const std::vector<rive::Core*>& objects,
+                          bool didUpdate,
+                          const rive::Artboard* artboard)
+{
+    out << "{\"didUpdate\":" << (didUpdate ? "true" : "false");
+    out << ",\"hasComponentsDirt\":"
+        << (artboard->hasDirt(rive::ComponentDirt::Components) ? "true"
+                                                               : "false");
+    out << ",\"components\":[";
+    bool first = true;
+    for (auto* object : objects)
+    {
+        if (object == nullptr || !object->is<rive::Component>())
+        {
+            continue;
+        }
+        if (!first)
+        {
+            out << ',';
+        }
+        first = false;
+        write_runtime_update_component(
+            out, localIds, object->as<rive::Component>());
+    }
+    out << "]}";
 }
 
 void write_file_artboard_index_or_null(std::ostream& out,
@@ -4539,6 +4624,12 @@ void write_artboard(std::ostream& out,
         }
     }
 
+    bool runtimeUpdateDidUpdate = false;
+    if (options.runtimeUpdate)
+    {
+        runtimeUpdateDidUpdate = artboard->updateComponents();
+    }
+
     out << "{\"index\":" << index;
     out << ",\"name\":";
     write_json_string(out, artboard->name());
@@ -4561,6 +4652,13 @@ void write_artboard(std::ostream& out,
         out << ",\"name\":";
         write_json_string(out, viewModel->name());
         out << '}';
+    }
+
+    if (options.runtimeUpdate)
+    {
+        out << ",\"runtimeUpdate\":";
+        write_runtime_update(
+            out, localIds, objects, runtimeUpdateDidUpdate, artboard);
     }
 
     out << ",\"objects\":[";
@@ -6011,6 +6109,12 @@ int main(int argc, const char* argv[])
             continue;
         }
 
+        if (is_arg(argv[i], "--runtime-update"))
+        {
+            options.runtimeUpdate = true;
+            continue;
+        }
+
         if (is_arg(argv[i], "--complete-view-model-properties"))
         {
             options.completeViewModelProperties = true;
@@ -6041,7 +6145,7 @@ int main(int argc, const char* argv[])
 
     if (filename == nullptr)
     {
-        std::cerr << "usage: rive_cpp_probe [--converter-samples] [--number-to-list-samples] [--property-values] [--file-property-values] [--no-advance] [--complete-view-model-properties] [--data-context-lookups] --file "
+        std::cerr << "usage: rive_cpp_probe [--converter-samples] [--number-to-list-samples] [--property-values] [--file-property-values] [--no-advance] [--runtime-update] [--complete-view-model-properties] [--data-context-lookups] --file "
                      "path/to/file.riv\n";
         return 2;
     }

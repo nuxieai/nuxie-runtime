@@ -75,6 +75,9 @@ dependencies = [
  "anyhow",
  "rive-binary",
  "rive-graph",
+ "rive-schema",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

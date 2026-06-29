@@ -1,8 +1,8 @@
 use rive_binary::{RuntimeFile, read_runtime_file};
 use rive_graph::GraphFile;
 use rive_runtime::{
-    ArtboardInstance, ComponentDirt, Mat2D, RuntimeComponent, StateMachineInputKind,
-    TransformProperty,
+    ArtboardInstance, ComponentDirt, Mat2D, RuntimeComponent, RuntimeDrawCommandKind,
+    StateMachineInputKind, TransformProperty,
 };
 use rive_schema::definition_by_name;
 use serde::Deserialize;
@@ -1464,6 +1464,14 @@ fn read_cpp_probe_bytes_with_args(
 }
 
 fn read_rust_instance_from_bytes(bytes: &[u8], label: &str) -> (RuntimeFile, ArtboardInstance) {
+    let (runtime, _graph, instance) = read_rust_graph_instance_from_bytes(bytes, label);
+    (runtime, instance)
+}
+
+fn read_rust_graph_instance_from_bytes(
+    bytes: &[u8],
+    label: &str,
+) -> (RuntimeFile, GraphFile, ArtboardInstance) {
     let runtime = read_runtime_file(bytes).unwrap_or_else(|err| {
         panic!("failed to import {label}: {err:#}");
     });
@@ -1478,7 +1486,7 @@ fn read_rust_instance_from_bytes(bytes: &[u8], label: &str) -> (RuntimeFile, Art
         panic!("failed to build Rust artboard instance for {label}: {err:#}");
     });
 
-    (runtime, instance)
+    (runtime, graph, instance)
 }
 
 #[test]
@@ -1536,6 +1544,66 @@ fn runtime_update_matches_cpp_for_transform_hierarchy() {
             .unwrap_or_else(|| panic!("missing Rust component {}", cpp_component.local_id));
         compare_component(cpp_component, rust_component, label);
     }
+}
+
+#[test]
+fn runtime_draw_command_stream_filters_hidden_and_opacity_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_draw_command_filtering.riv";
+    let bytes = synthetic_runtime_file(8201, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "Shape", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "Shape", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+            push_f32_property(bytes, "Node", "opacity", 0.0);
+        });
+        push_object_with_properties(bytes, "Shape", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+            push_uint_property(bytes, "Drawable", "drawableFlags", 1);
+        });
+    });
+
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let (_, graph, mut rust) = read_rust_graph_instance_from_bytes(&bytes, label);
+    rust.update_components();
+
+    let artboard = graph
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing Rust artboard for {label}"));
+    let rust_commands = rust
+        .draw_commands(artboard)
+        .into_iter()
+        .map(|command| (command.local_id, command.kind, command.needs_save_operation))
+        .collect::<Vec<_>>();
+    let cpp_commands = cpp.artboards[0]
+        .draw_command_stream
+        .iter()
+        .map(|command| {
+            (
+                command.local_id,
+                command.kind(),
+                command.needs_save_operation,
+            )
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        cpp_commands,
+        vec![(Some(1), RuntimeDrawCommandKind::Draw, true)],
+        "C++ draw command stream should skip hidden and opacity-zero shapes"
+    );
+    assert_eq!(
+        rust_commands, cpp_commands,
+        "Rust runtime draw command stream should match C++ willDraw filtering for simple shapes"
+    );
 }
 
 #[test]
@@ -4262,12 +4330,38 @@ struct CppArtboard {
     #[serde(rename = "objectCount")]
     object_count: usize,
     objects: Vec<Option<CppObject>>,
+    #[serde(default, rename = "drawCommandStream")]
+    draw_command_stream: Vec<CppDrawCommand>,
     #[serde(rename = "runtimeUpdate")]
     runtime_update: Option<CppRuntimeUpdate>,
     #[serde(default, rename = "runtimeAnimationAdvances")]
     runtime_animation_advances: Vec<CppRuntimeAnimationAdvance>,
     #[serde(default, rename = "runtimeStateMachineAdvances")]
     runtime_state_machine_advances: Vec<CppRuntimeStateMachineAdvance>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppDrawCommand {
+    #[serde(rename = "localId")]
+    local_id: Option<usize>,
+    #[serde(rename = "isClipStart")]
+    is_clip_start: bool,
+    #[serde(rename = "isClipEnd")]
+    is_clip_end: bool,
+    #[serde(rename = "needsSaveOperation")]
+    needs_save_operation: bool,
+}
+
+impl CppDrawCommand {
+    fn kind(&self) -> RuntimeDrawCommandKind {
+        if self.is_clip_start {
+            RuntimeDrawCommandKind::ClipStart
+        } else if self.is_clip_end {
+            RuntimeDrawCommandKind::ClipEnd
+        } else {
+            RuntimeDrawCommandKind::Draw
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]

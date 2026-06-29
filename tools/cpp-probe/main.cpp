@@ -1305,6 +1305,71 @@ void write_sorted_drawable_order(std::ostream& out,
     out << ']';
 }
 
+void write_draw_command(std::ostream& out,
+                        bool& first,
+                        const LocalIds& localIds,
+                        rive::Drawable* drawable)
+{
+    if (!first)
+    {
+        out << ',';
+    }
+    first = false;
+
+    out << "{\"localId\":";
+    write_local_id_or_null(out, localIds, drawable);
+    out << ",\"isClipStart\":"
+        << (drawable->isClipStart() ? "true" : "false");
+    out << ",\"isClipEnd\":" << (drawable->isClipEnd() ? "true" : "false");
+    out << ",\"needsSaveOperation\":"
+        << (drawable->m_needsSaveOperation ? "true" : "false");
+    out << '}';
+}
+
+void write_draw_command_stream(std::ostream& out,
+                               const LocalIds& localIds,
+                               rive::Artboard* artboard)
+{
+    out << ",\"drawCommandStream\":[";
+    bool first = true;
+    int emptyClips = 0;
+    std::vector<rive::Drawable*> pendingClipOperations;
+    for (auto drawable = artboard == nullptr ? nullptr : artboard->firstDrawable();
+         drawable != nullptr;
+         drawable = drawable->prevDrawable())
+    {
+        auto prevClips = emptyClips;
+        emptyClips += drawable->emptyClipCount();
+        if (!drawable->willDraw() || emptyClips != prevClips || emptyClips > 0)
+        {
+            continue;
+        }
+        if (drawable->isClipStart())
+        {
+            pendingClipOperations.push_back(drawable);
+            continue;
+        }
+        else if (pendingClipOperations.size() > 0)
+        {
+            if (drawable->isClipEnd())
+            {
+                pendingClipOperations.pop_back();
+                continue;
+            }
+            else
+            {
+                for (auto& pendingClip : pendingClipOperations)
+                {
+                    write_draw_command(out, first, localIds, pendingClip);
+                }
+                pendingClipOperations.clear();
+            }
+        }
+        write_draw_command(out, first, localIds, drawable);
+    }
+    out << ']';
+}
+
 bool drawable_has_clipping_shape(const rive::Drawable* drawable,
                                  const rive::ClippingShape* clippingShape)
 {
@@ -5226,6 +5291,7 @@ void write_artboard(std::ostream& out,
     out << ']';
 
     write_sorted_drawable_order(out, localIds, artboard);
+    write_draw_command_stream(out, localIds, artboard);
 
     out << ",\"clippingShapes\":[";
     first = true;

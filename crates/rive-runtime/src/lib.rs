@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use rive_binary::{RuntimeFile, RuntimeImportStatus, RuntimeObject};
-use rive_graph::{ArtboardGraph, ComponentNode};
+use rive_graph::{ArtboardGraph, ComponentNode, DrawableOrderKind, SortedDrawableNode};
 use rive_schema::{definition_by_name, object_supports_property};
 use std::collections::BTreeMap;
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
@@ -118,6 +118,62 @@ impl ArtboardInstance {
 
     pub fn linear_animations(&self) -> &[RuntimeLinearAnimation] {
         &self.linear_animations
+    }
+
+    pub fn draw_commands(&self, graph: &ArtboardGraph) -> Vec<RuntimeDrawCommand> {
+        let mut commands = Vec::new();
+        let mut pending_clip_operations = Vec::<&SortedDrawableNode>::new();
+        let mut empty_clips = 0i32;
+
+        for drawable in &graph.sorted_drawable_order {
+            let prev_clips = empty_clips;
+            empty_clips += runtime_empty_clip_count(drawable);
+            if !self.runtime_will_draw(drawable) || empty_clips != prev_clips || empty_clips > 0 {
+                continue;
+            }
+
+            if drawable.kind == DrawableOrderKind::ClipStartProxy {
+                pending_clip_operations.push(drawable);
+                continue;
+            } else if !pending_clip_operations.is_empty() {
+                if drawable.kind == DrawableOrderKind::ClipEndProxy {
+                    pending_clip_operations.pop();
+                    continue;
+                }
+
+                commands.extend(
+                    pending_clip_operations
+                        .drain(..)
+                        .map(runtime_draw_command_for_node),
+                );
+            }
+
+            commands.push(runtime_draw_command_for_node(drawable));
+        }
+
+        commands
+    }
+
+    fn runtime_will_draw(&self, drawable: &SortedDrawableNode) -> bool {
+        match drawable.kind {
+            DrawableOrderKind::ClipStartProxy | DrawableOrderKind::ClipEndProxy => true,
+            DrawableOrderKind::Drawable | DrawableOrderKind::LayoutProxy => {
+                if drawable.is_hidden {
+                    return false;
+                }
+
+                if sorted_drawable_uses_render_opacity(drawable.type_name) {
+                    let Some(local_id) = drawable.local_id else {
+                        return false;
+                    };
+                    return self
+                        .component(local_id)
+                        .is_some_and(|component| component.transform.render_opacity != 0.0);
+                }
+
+                true
+            }
+        }
     }
 
     pub fn state_machine(&self, index: usize) -> Option<&RuntimeStateMachine> {
@@ -384,6 +440,46 @@ pub struct InstanceSlot {
     pub type_name: Option<&'static str>,
     pub name: Option<String>,
     pub component_index: Option<usize>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeDrawCommandKind {
+    Draw,
+    ClipStart,
+    ClipEnd,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RuntimeDrawCommand {
+    pub kind: RuntimeDrawCommandKind,
+    pub local_id: Option<usize>,
+    pub clipping_shape_local: Option<usize>,
+    pub needs_save_operation: bool,
+}
+
+fn runtime_empty_clip_count(_drawable: &SortedDrawableNode) -> i32 {
+    0
+}
+
+fn runtime_draw_command_for_node(drawable: &SortedDrawableNode) -> RuntimeDrawCommand {
+    RuntimeDrawCommand {
+        kind: match drawable.kind {
+            DrawableOrderKind::ClipStartProxy => RuntimeDrawCommandKind::ClipStart,
+            DrawableOrderKind::ClipEndProxy => RuntimeDrawCommandKind::ClipEnd,
+            DrawableOrderKind::Drawable | DrawableOrderKind::LayoutProxy => {
+                RuntimeDrawCommandKind::Draw
+            }
+        },
+        local_id: drawable.local_id,
+        clipping_shape_local: drawable.clipping_shape_local,
+        needs_save_operation: drawable.needs_save_operation,
+    }
+}
+
+fn sorted_drawable_uses_render_opacity(type_name: &str) -> bool {
+    definition_by_name(type_name).is_some_and(|definition| {
+        definition.is_a("Shape") || matches!(definition.name, "Image" | "TextInputDrawable")
+    })
 }
 
 #[derive(Debug, Clone)]

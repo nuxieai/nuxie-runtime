@@ -6,6 +6,7 @@ use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 
 #[derive(Debug, Clone)]
 pub struct ArtboardInstance {
+    slots: Vec<InstanceSlot>,
     components: Vec<RuntimeComponent>,
     component_by_local: BTreeMap<usize, usize>,
     update_order: Vec<usize>,
@@ -16,6 +17,25 @@ pub struct ArtboardInstance {
 
 impl ArtboardInstance {
     pub fn from_graph(file: &RuntimeFile, graph: &ArtboardGraph) -> Result<Self> {
+        let mut slots = Vec::new();
+        for local_object in &graph.local_objects {
+            let object = file.object(local_object.global_id as usize);
+            if local_object.type_name.is_some() && object.is_none() {
+                anyhow::bail!(
+                    "local object {} global id {} is missing",
+                    local_object.local_id,
+                    local_object.global_id
+                );
+            }
+            slots.push(InstanceSlot {
+                local_id: local_object.local_id,
+                source_global_id: local_object.global_id,
+                type_name: local_object.type_name,
+                name: local_object.name.clone(),
+                component_index: None,
+            });
+        }
+
         let mut component_by_local = BTreeMap::new();
         let mut components = Vec::new();
 
@@ -26,6 +46,10 @@ impl ArtboardInstance {
 
             component_by_local.insert(component.local_id, components.len());
             components.push(RuntimeComponent::from_graph_component(component, object));
+            let slot = slots
+                .get_mut(component.local_id)
+                .with_context(|| format!("component local id {} is missing", component.local_id))?;
+            slot.component_index = Some(components.len() - 1);
         }
 
         let mut update_order = graph
@@ -44,6 +68,7 @@ impl ArtboardInstance {
             .collect::<Vec<_>>();
 
         Ok(Self {
+            slots,
             components,
             component_by_local,
             update_order,
@@ -59,6 +84,14 @@ impl ArtboardInstance {
             .map(|index| &self.components[*index])
     }
 
+    pub fn slot(&self, local_id: usize) -> Option<&InstanceSlot> {
+        self.slots.get(local_id)
+    }
+
+    pub fn slots(&self) -> &[InstanceSlot] {
+        &self.slots
+    }
+
     pub fn component_mut(&mut self, local_id: usize) -> Option<&mut RuntimeComponent> {
         let index = *self.component_by_local.get(&local_id)?;
         Some(&mut self.components[index])
@@ -70,6 +103,42 @@ impl ArtboardInstance {
 
     pub fn update_order(&self) -> &[usize] {
         &self.update_order
+    }
+
+    pub fn set_transform_property(
+        &mut self,
+        local_id: usize,
+        property: TransformProperty,
+        value: f32,
+    ) -> bool {
+        let Some(index) = self.component_by_local.get(&local_id).copied() else {
+            return false;
+        };
+        if !self.components[index].capabilities.transform {
+            return false;
+        }
+
+        if !self.components[index]
+            .transform
+            .set_property(property, value)
+        {
+            return false;
+        }
+
+        match property {
+            TransformProperty::Opacity => {
+                self.add_dirt(local_id, ComponentDirt::RENDER_OPACITY, true);
+            }
+            TransformProperty::X
+            | TransformProperty::Y
+            | TransformProperty::Rotation
+            | TransformProperty::ScaleX
+            | TransformProperty::ScaleY => {
+                self.add_dirt(local_id, ComponentDirt::TRANSFORM, false);
+                self.add_dirt(local_id, ComponentDirt::WORLD_TRANSFORM, true);
+            }
+        }
+        true
     }
 
     pub fn has_dirt(&self, dirt: ComponentDirt) -> bool {
@@ -214,6 +283,15 @@ impl ArtboardInstance {
 }
 
 #[derive(Debug, Clone)]
+pub struct InstanceSlot {
+    pub local_id: usize,
+    pub source_global_id: u32,
+    pub type_name: Option<&'static str>,
+    pub name: Option<String>,
+    pub component_index: Option<usize>,
+}
+
+#[derive(Debug, Clone)]
 pub struct RuntimeComponent {
     pub local_id: usize,
     pub global_id: u32,
@@ -249,6 +327,16 @@ impl RuntimeComponent {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TransformProperty {
+    X,
+    Y,
+    Rotation,
+    ScaleX,
+    ScaleY,
+    Opacity,
+}
+
 #[derive(Debug, Clone, Copy, Default)]
 pub struct RuntimeComponentCapabilities {
     pub world_transform: bool,
@@ -281,6 +369,22 @@ impl TransformRuntimeState {
             world_transform: Mat2D::IDENTITY,
             render_opacity: 0.0,
         }
+    }
+
+    fn set_property(&mut self, property: TransformProperty, value: f32) -> bool {
+        let current = match property {
+            TransformProperty::X => &mut self.x,
+            TransformProperty::Y => &mut self.y,
+            TransformProperty::Rotation => &mut self.rotation,
+            TransformProperty::ScaleX => &mut self.scale_x,
+            TransformProperty::ScaleY => &mut self.scale_y,
+            TransformProperty::Opacity => &mut self.opacity,
+        };
+        if *current == value {
+            return false;
+        }
+        *current = value;
+        true
     }
 }
 
@@ -477,6 +581,17 @@ mod tests {
             .collect::<BTreeMap<_, _>>();
 
         ArtboardInstance {
+            slots: components
+                .iter()
+                .enumerate()
+                .map(|(index, component)| InstanceSlot {
+                    local_id: component.local_id,
+                    source_global_id: component.global_id,
+                    type_name: Some(component.type_name),
+                    name: None,
+                    component_index: Some(index),
+                })
+                .collect(),
             components,
             component_by_local,
             update_order,
@@ -647,6 +762,81 @@ mod tests {
     }
 
     #[test]
+    fn transform_property_mutation_marks_instance_dirty() {
+        let mut component = synthetic_component(0, 0);
+        component.dirt = ComponentDirt::NONE;
+        let mut instance = synthetic_instance(vec![component], vec![0]);
+        instance.dirt = ComponentDirt::NONE;
+        instance.did_change = false;
+
+        assert!(instance.set_transform_property(0, TransformProperty::X, 12.0));
+        let component = instance.component(0).unwrap();
+        assert_eq!(component.transform.x, 12.0);
+        assert!(
+            component
+                .dirt
+                .contains(ComponentDirt::TRANSFORM | ComponentDirt::WORLD_TRANSFORM)
+        );
+        assert!(instance.has_dirt(ComponentDirt::COMPONENTS));
+        assert!(instance.did_change());
+
+        assert!(!instance.set_transform_property(0, TransformProperty::X, 12.0));
+    }
+
+    #[test]
+    fn transform_property_mutation_only_recurses_world_transform_to_dependents() {
+        let mut source = synthetic_component(0, 0);
+        source.dependent_locals.push(1);
+        let dependent = synthetic_component(1, 1);
+        let mut instance = synthetic_instance(vec![source, dependent], vec![0, 1]);
+        instance.clear_component_dirt(0);
+        instance.clear_component_dirt(1);
+        instance.dirt = ComponentDirt::NONE;
+
+        assert!(instance.set_transform_property(0, TransformProperty::X, 12.0));
+
+        let source = instance.component(0).unwrap();
+        assert!(source.dirt.contains(ComponentDirt::TRANSFORM));
+        assert!(source.dirt.contains(ComponentDirt::WORLD_TRANSFORM));
+        let dependent = instance.component(1).unwrap();
+        assert!(!dependent.dirt.contains(ComponentDirt::TRANSFORM));
+        assert!(dependent.dirt.contains(ComponentDirt::WORLD_TRANSFORM));
+    }
+
+    #[test]
+    fn opacity_mutation_marks_render_opacity_dirty() {
+        let mut component = synthetic_component(0, 0);
+        component.dirt = ComponentDirt::NONE;
+        let mut instance = synthetic_instance(vec![component], vec![0]);
+        instance.dirt = ComponentDirt::NONE;
+
+        assert!(instance.set_transform_property(0, TransformProperty::Opacity, 0.35));
+        let component = instance.component(0).unwrap();
+        assert_eq!(component.transform.opacity, 0.35);
+        assert!(component.dirt.contains(ComponentDirt::RENDER_OPACITY));
+        assert!(!component.dirt.contains(ComponentDirt::TRANSFORM));
+    }
+
+    #[test]
+    fn update_reads_mutated_instance_transform_state() {
+        let mut component = synthetic_component(0, 0);
+        component.dirt = ComponentDirt::NONE;
+        let mut instance = synthetic_instance(vec![component], vec![0]);
+        instance.dirt = ComponentDirt::NONE;
+
+        assert!(instance.set_transform_property(0, TransformProperty::X, 9.0));
+        assert!(instance.set_transform_property(0, TransformProperty::Y, 4.0));
+
+        let report = instance.update_components();
+
+        assert_eq!(report.updated_locals, vec![0]);
+        assert_eq!(
+            instance.component(0).unwrap().transform.local_transform,
+            Mat2D([1.0, 0.0, -0.0, 1.0, 9.0, 4.0])
+        );
+    }
+
+    #[test]
     fn builds_instance_from_graph_fixture() {
         let bytes = include_bytes!("../../../fixtures/graph/dependency_test.riv");
         let file = read_runtime_file(bytes).expect("fixture should import");
@@ -654,6 +844,19 @@ mod tests {
         let artboard = graph.artboards.first().expect("fixture has artboard");
         let instance = ArtboardInstance::from_graph(&file, artboard).expect("instance builds");
 
+        assert_eq!(instance.slots().len(), artboard.local_objects.len());
+        assert_eq!(
+            instance
+                .slots()
+                .iter()
+                .map(|slot| (slot.local_id, slot.source_global_id, slot.type_name))
+                .collect::<Vec<_>>(),
+            artboard
+                .local_objects
+                .iter()
+                .map(|object| (object.local_id, object.global_id, object.type_name))
+                .collect::<Vec<_>>()
+        );
         assert_eq!(instance.components().len(), artboard.components.len());
         let graph_ordered_components = artboard
             .components

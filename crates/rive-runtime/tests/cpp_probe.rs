@@ -1,6 +1,6 @@
 use rive_binary::{RuntimeFile, read_runtime_file};
 use rive_graph::GraphFile;
-use rive_runtime::{ArtboardInstance, ComponentDirt, Mat2D, RuntimeComponent};
+use rive_runtime::{ArtboardInstance, ComponentDirt, Mat2D, RuntimeComponent, TransformProperty};
 use rive_schema::definition_by_name;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -144,6 +144,15 @@ fn synthetic_transform_hierarchy() -> Vec<u8> {
 }
 
 fn read_cpp_probe_bytes(probe: &Path, label: &str, bytes: &[u8]) -> CppProbeFile {
+    read_cpp_probe_bytes_with_args(probe, label, bytes, &[])
+}
+
+fn read_cpp_probe_bytes_with_args(
+    probe: &Path,
+    label: &str,
+    bytes: &[u8],
+    extra_args: &[String],
+) -> CppProbeFile {
     let path = std::env::temp_dir().join(format!(
         "rive-rust-runtime-{}-{}.riv",
         std::process::id(),
@@ -154,7 +163,9 @@ fn read_cpp_probe_bytes(probe: &Path, label: &str, bytes: &[u8]) -> CppProbeFile
 
     let output = Command::new(probe)
         .arg("--no-advance")
+        .arg("--instance-artboards")
         .arg("--runtime-update")
+        .args(extra_args)
         .arg("--file")
         .arg(&path)
         .output()
@@ -213,6 +224,27 @@ fn runtime_update_matches_cpp_for_transform_hierarchy() {
         .as_ref()
         .unwrap_or_else(|| panic!("missing C++ runtimeUpdate for {label}"));
 
+    assert_eq!(cpp_artboard.object_count, rust.slots().len());
+    assert_eq!(cpp_artboard.objects.len(), rust.slots().len());
+    for (local_id, (cpp_object, rust_slot)) in
+        cpp_artboard.objects.iter().zip(rust.slots()).enumerate()
+    {
+        assert_eq!(rust_slot.local_id, local_id);
+        match (cpp_object, rust_slot.type_name) {
+            (Some(cpp_object), Some(type_name)) => {
+                assert_eq!(cpp_object.local_id, local_id);
+                assert_eq!(
+                    cpp_object.core_type,
+                    type_key_for_name(type_name),
+                    "slot core type mismatch for local {local_id} in {label}"
+                );
+                assert_eq!(cpp_object.is_component, rust_slot.component_index.is_some());
+            }
+            (None, None) => {}
+            _ => panic!("slot presence mismatch for local {local_id} in {label}"),
+        }
+    }
+
     assert_eq!(cpp_update.did_update, report.did_update);
     assert_eq!(
         cpp_update.has_components_dirt,
@@ -225,6 +257,83 @@ fn runtime_update_matches_cpp_for_transform_hierarchy() {
             .unwrap_or_else(|| panic!("missing Rust component {}", cpp_component.local_id));
         compare_component(cpp_component, rust_component, label);
     }
+}
+
+#[test]
+fn mutated_instance_transform_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_mutated_transform_hierarchy.riv";
+    let bytes = synthetic_transform_hierarchy();
+    let x_key = property_key_for_name("Node", "x");
+    let cpp = read_cpp_probe_bytes_with_args(
+        &probe,
+        label,
+        &bytes,
+        &[
+            "--runtime-set-double".to_owned(),
+            "1".to_owned(),
+            x_key.to_string(),
+            "12.0".to_owned(),
+        ],
+    );
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    assert!(rust.set_transform_property(1, TransformProperty::X, 12.0));
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    let cpp_update = cpp_artboard
+        .runtime_update
+        .as_ref()
+        .unwrap_or_else(|| panic!("missing C++ runtimeUpdate for {label}"));
+
+    assert_eq!(cpp_update.did_update, report.did_update);
+    assert_eq!(
+        cpp_update.has_components_dirt,
+        rust.has_dirt(ComponentDirt::COMPONENTS)
+    );
+
+    for cpp_component in &cpp_update.components {
+        let rust_component = rust
+            .component(cpp_component.local_id)
+            .unwrap_or_else(|| panic!("missing Rust component {}", cpp_component.local_id));
+        compare_component(cpp_component, rust_component, label);
+    }
+}
+
+#[test]
+fn mutable_instance_transform_does_not_mutate_source_object() {
+    let label = "synthetic/runtime_transform_source_separation.riv";
+    let bytes = synthetic_transform_hierarchy();
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let child_slot = rust.slot(1).expect("child slot should exist");
+    let source_child = runtime
+        .object(child_slot.source_global_id as usize)
+        .expect("source child should exist");
+
+    assert_eq!(source_child.double_property("x"), Some(2.0));
+
+    assert!(rust.set_transform_property(1, TransformProperty::X, 12.0));
+    assert_eq!(rust.component(1).unwrap().transform.x, 12.0);
+    assert_eq!(
+        source_child.double_property("x"),
+        Some(2.0),
+        "mutating instance transform state must not mutate imported source data"
+    );
+
+    rust.update_components();
+
+    assert_eq!(
+        rust.component(1).unwrap().transform.local_transform.0[4],
+        12.0
+    );
+    assert_eq!(source_child.double_property("x"), Some(2.0));
 }
 
 fn compare_component(cpp: &CppRuntimeComponent, rust: &RuntimeComponent, label: &str) {
@@ -326,8 +435,21 @@ struct CppProbeFile {
 
 #[derive(Debug, Deserialize)]
 struct CppArtboard {
+    #[serde(rename = "objectCount")]
+    object_count: usize,
+    objects: Vec<Option<CppObject>>,
     #[serde(rename = "runtimeUpdate")]
     runtime_update: Option<CppRuntimeUpdate>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppObject {
+    #[serde(rename = "localId")]
+    local_id: usize,
+    #[serde(rename = "coreType")]
+    core_type: u16,
+    #[serde(rename = "isComponent")]
+    is_component: bool,
 }
 
 #[derive(Debug, Deserialize)]

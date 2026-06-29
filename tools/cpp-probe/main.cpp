@@ -217,12 +217,21 @@ namespace
 {
 using LocalIds = std::unordered_map<const rive::Core*, size_t>;
 
+struct RuntimeDoubleMutation
+{
+    size_t localId;
+    uint32_t propertyKey;
+    float value;
+};
+
 struct ProbeOptions
 {
     bool propertyValues = false;
     bool artboardPropertyValues = false;
     bool advanceArtboards = true;
     bool runtimeUpdate = false;
+    bool instanceArtboards = false;
+    std::vector<RuntimeDoubleMutation> runtimeDoubleMutations;
     bool completeViewModelProperties = false;
     bool dataContextLookups = false;
 };
@@ -505,6 +514,30 @@ void write_runtime_update(std::ostream& out,
             out, localIds, object->as<rive::Component>());
     }
     out << "]}";
+}
+
+void apply_runtime_double_mutations(const std::vector<rive::Core*>& objects,
+                                    const ProbeOptions& options)
+{
+    for (const auto& mutation : options.runtimeDoubleMutations)
+    {
+        if (mutation.localId >= objects.size())
+        {
+            continue;
+        }
+        auto* object = objects[mutation.localId];
+        if (object == nullptr ||
+            !rive::CoreRegistry::objectSupportsProperty(
+                object, mutation.propertyKey) ||
+            rive::CoreRegistry::propertyFieldId(
+                static_cast<int>(mutation.propertyKey)) !=
+                rive::CoreDoubleType::id)
+        {
+            continue;
+        }
+        rive::CoreRegistry::setDouble(
+            object, mutation.propertyKey, mutation.value);
+    }
 }
 
 void write_file_artboard_index_or_null(std::ostream& out,
@@ -4624,6 +4657,8 @@ void write_artboard(std::ostream& out,
         }
     }
 
+    apply_runtime_double_mutations(objects, options);
+
     bool runtimeUpdateDidUpdate = false;
     if (options.runtimeUpdate)
     {
@@ -4978,7 +5013,17 @@ void write_file(std::ostream& out,
             out << ',';
         }
 
-        rive::Artboard* artboard = file->artboard(i);
+        std::unique_ptr<rive::ArtboardInstance> instanceArtboard;
+        rive::Artboard* artboard = nullptr;
+        if (options.instanceArtboards)
+        {
+            instanceArtboard = file->artboardAt(i);
+            artboard = instanceArtboard.get();
+        }
+        else
+        {
+            artboard = file->artboard(i);
+        }
         if (artboard == nullptr)
         {
             out << "null";
@@ -6115,6 +6160,30 @@ int main(int argc, const char* argv[])
             continue;
         }
 
+        if (is_arg(argv[i], "--instance-artboards"))
+        {
+            options.instanceArtboards = true;
+            continue;
+        }
+
+        if (is_arg(argv[i], "--runtime-set-double"))
+        {
+            if (i + 3 >= argc)
+            {
+                std::cerr
+                    << "--runtime-set-double requires localId propertyKey value\n";
+                return 2;
+            }
+            RuntimeDoubleMutation mutation;
+            mutation.localId =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            mutation.propertyKey =
+                static_cast<uint32_t>(std::strtoul(argv[++i], nullptr, 10));
+            mutation.value = std::strtof(argv[++i], nullptr);
+            options.runtimeDoubleMutations.push_back(mutation);
+            continue;
+        }
+
         if (is_arg(argv[i], "--complete-view-model-properties"))
         {
             options.completeViewModelProperties = true;
@@ -6145,7 +6214,7 @@ int main(int argc, const char* argv[])
 
     if (filename == nullptr)
     {
-        std::cerr << "usage: rive_cpp_probe [--converter-samples] [--number-to-list-samples] [--property-values] [--file-property-values] [--no-advance] [--runtime-update] [--complete-view-model-properties] [--data-context-lookups] --file "
+        std::cerr << "usage: rive_cpp_probe [--converter-samples] [--number-to-list-samples] [--property-values] [--file-property-values] [--no-advance] [--runtime-update] [--instance-artboards] [--runtime-set-double localId propertyKey value] [--complete-view-model-properties] [--data-context-lookups] --file "
                      "path/to/file.riv\n";
         return 2;
     }

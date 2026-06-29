@@ -223,12 +223,13 @@ Can Rust reproduce the C++ dirt scheduler and transform update semantics?
 
 ### Answer
 
-In progress. Implement dirt bitflags, dependent dirtying, dirty-depth restart semantics, max-pass guard behavior, local transform update, world transform update, and render opacity propagation. This is the first meaningful headless parity checkpoint. The scope is locked by `docs/prototypes/dirt-transform-runtime-contract.md`; animation, state machines, data binding, constraints, layout, cloning, draw commands, rendering, text, scripting, and audio remain later runtime slices.
+Resolved. Added `crates/rive-runtime` with C++ `ComponentDirt` bit parity, mutable per-component dirt state, graph-dependent recursive dirtying through `ComponentNode::dependent_locals`, C++ `graphOrder` traversal, dirt-depth restart behavior, max-pass guard reporting, collapsed-component skip behavior, and basic transform/render-opacity updates. The C++ probe now has an opt-in `--runtime-update` mode, and `make cpp-compare` runs a runtime C++ comparison for initial update state. Animation, state machines, data binding, constraints, layout, cloning, draw commands, rendering, text, scripting, and audio remain later runtime slices.
 
 ## #9: Artboard Instancing And Cloning
 
 Blocked by: #8
 Type: Prototype
+Contract: `docs/prototypes/artboard-instancing-runtime-contract.md`
 
 ### Question
 
@@ -236,7 +237,7 @@ How should source artboards and mutable artboard instances be separated?
 
 ### Answer
 
-Open. Preserve serialized object order. Keep source definitions distinct from mutable instances. Clone instance-owned runtime objects, share animation and state-machine definitions, and retarget cloned object references. Later, data binds will need special retargeting behavior.
+In progress. The next runtime seam separates imported source artboard data from mutable instance state without attempting full C++ clone parity yet. The first slice preserves artboard-local instance slots, keeps source global IDs/type names distinct from mutable component state, exposes mutable transform properties needed by animation, and compares initial plus mutated instance transform state against C++ cloned `ArtboardInstance` probe output. Full object cloning, data-bind retargeting, nested artboards, state-machine execution, layout, rendering, text, scripting, and audio remain out of scope for this slice.
 
 ## #10: Draw Graph Without Rendering
 

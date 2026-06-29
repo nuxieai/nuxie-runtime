@@ -588,6 +588,12 @@ pub struct PathGeometryNode {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ParametricPathNode {
+    Ellipse {
+        width: f32,
+        height: f32,
+        origin_x: f32,
+        origin_y: f32,
+    },
     Rectangle {
         width: f32,
         height: f32,
@@ -2416,6 +2422,12 @@ fn shape_paint_containers(
 
 fn parametric_path(path: &RuntimeObject) -> Option<ParametricPathNode> {
     match path.type_name {
+        "Ellipse" => Some(ParametricPathNode::Ellipse {
+            width: path.double_property("width").unwrap_or(0.0),
+            height: path.double_property("height").unwrap_or(0.0),
+            origin_x: path.double_property("originX").unwrap_or(0.5),
+            origin_y: path.double_property("originY").unwrap_or(0.5),
+        }),
         "Rectangle" => Some(ParametricPathNode::Rectangle {
             width: path.double_property("width").unwrap_or(0.0),
             height: path.double_property("height").unwrap_or(0.0),

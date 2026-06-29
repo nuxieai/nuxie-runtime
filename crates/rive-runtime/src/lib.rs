@@ -864,6 +864,7 @@ fn path_commands(
     transform: Mat2D,
 ) -> Vec<RuntimePathCommand> {
     match path.type_name {
+        "Ellipse" => ellipse_path_commands(path, path_kind, transform),
         "PointsPath" => points_path_commands(path, path_kind, transform),
         "Rectangle" => rectangle_path_commands(path, path_kind, transform),
         _ => Vec::new(),
@@ -1041,6 +1042,71 @@ fn rectangle_path_commands(
     };
 
     points_path_commands(&virtual_path, path_kind, transform)
+}
+
+const CIRCLE_CONSTANT: f32 = 0.552_284_8;
+
+fn ellipse_path_commands(
+    path: &PathGeometryNode,
+    path_kind: ShapePaintPathKind,
+    transform: Mat2D,
+) -> Vec<RuntimePathCommand> {
+    let Some(ParametricPathNode::Ellipse {
+        width,
+        height,
+        origin_x,
+        origin_y,
+    }) = path.parametric.as_ref()
+    else {
+        return Vec::new();
+    };
+    if path_kind == ShapePaintPathKind::LocalClockwise
+        && path_needs_clockwise_reversal(path, transform)
+    {
+        return Vec::new();
+    }
+
+    let radius_x = *width / 2.0;
+    let radius_y = *height / 2.0;
+    let ox = -*origin_x * *width + radius_x;
+    let oy = -*origin_y * *height + radius_y;
+    let top = (ox, oy - radius_y);
+    let right = (ox + radius_x, oy);
+    let bottom = (ox, oy + radius_y);
+    let left = (ox - radius_x, oy);
+
+    let mut commands = Vec::new();
+    push_move(&mut commands, transform, top);
+    push_cubic(
+        &mut commands,
+        transform,
+        (ox + radius_x * CIRCLE_CONSTANT, oy - radius_y),
+        (ox + radius_x, oy - CIRCLE_CONSTANT * radius_y),
+        right,
+    );
+    push_cubic(
+        &mut commands,
+        transform,
+        (ox + radius_x, oy + CIRCLE_CONSTANT * radius_y),
+        (ox + radius_x * CIRCLE_CONSTANT, oy + radius_y),
+        bottom,
+    );
+    push_cubic(
+        &mut commands,
+        transform,
+        (ox - radius_x * CIRCLE_CONSTANT, oy + radius_y),
+        (ox - radius_x, oy + radius_y * CIRCLE_CONSTANT),
+        left,
+    );
+    push_cubic(
+        &mut commands,
+        transform,
+        (ox - radius_x, oy - radius_y * CIRCLE_CONSTANT),
+        (ox - radius_x * CIRCLE_CONSTANT, oy - radius_y),
+        top,
+    );
+    commands.push(RuntimePathCommand::Close);
+    commands
 }
 
 fn virtual_straight_vertex(x: f32, y: f32, radius: f32) -> PathVertexNode {

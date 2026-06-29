@@ -2441,6 +2441,74 @@ fn runtime_draw_command_stream_exposes_rectangle_parametric_path_payloads_like_c
 }
 
 #[test]
+fn runtime_draw_command_stream_exposes_ellipse_parametric_path_payloads_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_ellipse_parametric_path_payloads.riv";
+    let bytes = synthetic_runtime_file(8218, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "Shape", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+            push_f32_property(bytes, "Node", "x", 100.0);
+        });
+        push_object_with_properties(bytes, "Fill", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 1);
+        });
+        push_object_with_properties(bytes, "SolidColor", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 2);
+            push_color_property(bytes, "SolidColor", "colorValue", 0xff33_66aa);
+        });
+        push_object_with_properties(bytes, "Ellipse", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 1);
+            push_f32_property(bytes, "Node", "x", 3.0);
+            push_f32_property(bytes, "Node", "y", 4.0);
+            push_f32_property(bytes, "ParametricPath", "width", 30.0);
+            push_f32_property(bytes, "ParametricPath", "height", 12.0);
+            push_f32_property(bytes, "ParametricPath", "originX", 0.25);
+            push_f32_property(bytes, "ParametricPath", "originY", 0.75);
+        });
+    });
+
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let (_, graph, mut rust) = read_rust_graph_instance_from_bytes(&bytes, label);
+    rust.update_components();
+
+    let artboard = graph
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing Rust artboard for {label}"));
+    let rust_paints = rust
+        .draw_commands(artboard)
+        .into_iter()
+        .flat_map(|command| command.shape_paints)
+        .collect::<Vec<_>>();
+    let cpp_paints = cpp.artboards[0]
+        .draw_command_stream
+        .iter()
+        .flat_map(|command| command.shape_paint_commands.iter())
+        .collect::<Vec<_>>();
+
+    assert_eq!(cpp_paints.len(), 1, "C++ should emit one ellipse paint");
+    assert_eq!(rust_paints.len(), 1, "Rust should emit one ellipse paint");
+
+    let cpp_path_commands = cpp_paints[0].path_commands();
+    assert_eq!(
+        cpp_path_commands.len(),
+        6,
+        "ellipse should produce move + four cubics + close"
+    );
+    assert_path_commands_close(
+        &rust_paints[0].path_commands,
+        &cpp_path_commands,
+        "Rust ellipse parametric path commands",
+    );
+}
+
+#[test]
 fn mutated_instance_transform_matches_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");

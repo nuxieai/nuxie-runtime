@@ -2418,6 +2418,7 @@ pub struct RuntimeStateMachine {
     bindable_strings: Vec<RuntimeBindableString>,
     bindable_enums: Vec<RuntimeBindableEnum>,
     bindable_assets: Vec<RuntimeBindableAsset>,
+    bindable_triggers: Vec<RuntimeBindableTrigger>,
     bindable_view_models: Vec<RuntimeBindableViewModel>,
     bindable_booleans: Vec<RuntimeBindableBoolean>,
     view_model_triggers: Vec<RuntimeViewModelTrigger>,
@@ -2488,6 +2489,18 @@ struct RuntimeBindableAsset {
     global_id: u32,
     data_bind_indices: Vec<usize>,
     value: u64,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeBindableTrigger {
+    global_id: u32,
+    source: RuntimeBindableTriggerSource,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeBindableTriggerSource {
+    None,
+    DefaultViewModelTrigger { trigger_global_id: u32 },
 }
 
 #[derive(Debug, Clone)]
@@ -2742,9 +2755,12 @@ impl RuntimeStateTransition {
         bindable_strings: &[StateMachineBindableStringInstance],
         bindable_enums: &[StateMachineBindableEnumInstance],
         bindable_assets: &[StateMachineBindableAssetInstance],
+        bindable_triggers: &[StateMachineBindableTriggerInstance],
         bindable_view_models: &[StateMachineBindableViewModelInstance],
         bindable_booleans: &[StateMachineBindableBooleanInstance],
+        view_model_triggers: &[StateMachineViewModelTriggerInstance],
         data_context_present: bool,
+        data_context_view_model_bound: bool,
         layer_index: usize,
         animation_from: Option<RuntimeTransitionAnimationRef<'_>>,
     ) -> TransitionAllowance {
@@ -2757,9 +2773,12 @@ impl RuntimeStateTransition {
                 bindable_strings,
                 bindable_enums,
                 bindable_assets,
+                bindable_triggers,
                 bindable_view_models,
                 bindable_booleans,
+                view_model_triggers,
                 data_context_present,
+                data_context_view_model_bound,
                 layer_index,
             )
         }) {
@@ -2861,9 +2880,15 @@ impl RuntimeStateTransition {
         self.exit_time as f32 / 1000.0
     }
 
-    fn use_inputs(&self, inputs: &mut [StateMachineInputInstance], layer_index: usize) {
+    fn use_inputs(
+        &self,
+        inputs: &mut [StateMachineInputInstance],
+        bindable_triggers: &[StateMachineBindableTriggerInstance],
+        view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
+        layer_index: usize,
+    ) {
         for condition in &self.conditions {
-            condition.use_input(inputs, layer_index);
+            condition.use_input(inputs, bindable_triggers, view_model_triggers, layer_index);
         }
     }
 }
@@ -3323,6 +3348,9 @@ enum RuntimeTransitionCondition {
         op: TransitionConditionOp,
         value: u64,
     },
+    ViewModelTrigger {
+        bindable_global_id: u32,
+    },
     ViewModelPointer {
         left_bindable_global_id: u32,
         right_bindable_global_id: u32,
@@ -3382,6 +3410,17 @@ impl RuntimeTransitionCondition {
                     });
                 }
                 if left.type_name != "TransitionPropertyViewModelComparator" {
+                    return None;
+                }
+                if right.type_name == "TransitionValueTriggerComparator"
+                    || right.type_name == "TransitionSelfComparator"
+                {
+                    let bindable = file.latest_bindable_property_for_object(left)?;
+                    if bindable.type_name == "BindablePropertyTrigger" {
+                        return Some(Self::ViewModelTrigger {
+                            bindable_global_id: bindable.id,
+                        });
+                    }
                     return None;
                 }
                 if right.type_name == "TransitionPropertyViewModelComparator" {
@@ -3505,9 +3544,12 @@ impl RuntimeTransitionCondition {
         bindable_strings: &[StateMachineBindableStringInstance],
         bindable_enums: &[StateMachineBindableEnumInstance],
         bindable_assets: &[StateMachineBindableAssetInstance],
+        bindable_triggers: &[StateMachineBindableTriggerInstance],
         bindable_view_models: &[StateMachineBindableViewModelInstance],
         bindable_booleans: &[StateMachineBindableBooleanInstance],
+        view_model_triggers: &[StateMachineViewModelTriggerInstance],
         data_context_present: bool,
+        data_context_view_model_bound: bool,
         layer_index: usize,
     ) -> bool {
         match self {
@@ -3626,6 +3668,20 @@ impl RuntimeTransitionCondition {
                     bindable_asset_value(bindable_assets, *bindable_global_id).unwrap_or(0);
                 op.compare_u64_equal_only(input_value, *value)
             }
+            Self::ViewModelTrigger { bindable_global_id } => {
+                if !data_context_present || !data_context_view_model_bound {
+                    return false;
+                }
+                let Some(trigger_global_id) =
+                    bindable_trigger_source_global_id(bindable_triggers, *bindable_global_id)
+                else {
+                    return false;
+                };
+                view_model_triggers
+                    .iter()
+                    .find(|trigger| trigger.global_id == trigger_global_id)
+                    .is_some_and(|trigger| trigger.is_fireable_for_layer(layer_index))
+            }
             Self::ViewModelPointer {
                 left_bindable_global_id,
                 right_bindable_global_id,
@@ -3654,11 +3710,33 @@ impl RuntimeTransitionCondition {
         }
     }
 
-    fn use_input(&self, inputs: &mut [StateMachineInputInstance], layer_index: usize) {
-        if let Self::Trigger { input_index } = self
-            && let Some(input) = inputs.get_mut(*input_index)
-        {
-            input.use_trigger_in_layer(layer_index);
+    fn use_input(
+        &self,
+        inputs: &mut [StateMachineInputInstance],
+        bindable_triggers: &[StateMachineBindableTriggerInstance],
+        view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
+        layer_index: usize,
+    ) {
+        match self {
+            Self::Trigger { input_index } => {
+                if let Some(input) = inputs.get_mut(*input_index) {
+                    input.use_trigger_in_layer(layer_index);
+                }
+            }
+            Self::ViewModelTrigger { bindable_global_id } => {
+                let Some(trigger_global_id) =
+                    bindable_trigger_source_global_id(bindable_triggers, *bindable_global_id)
+                else {
+                    return;
+                };
+                if let Some(trigger) = view_model_triggers
+                    .iter_mut()
+                    .find(|trigger| trigger.global_id == trigger_global_id)
+                {
+                    trigger.use_in_layer(layer_index);
+                }
+            }
+            _ => {}
         }
     }
 }
@@ -3766,6 +3844,7 @@ pub struct StateMachineInstance {
     bindable_strings: Vec<StateMachineBindableStringInstance>,
     bindable_enums: Vec<StateMachineBindableEnumInstance>,
     bindable_assets: Vec<StateMachineBindableAssetInstance>,
+    bindable_triggers: Vec<StateMachineBindableTriggerInstance>,
     bindable_view_models: Vec<StateMachineBindableViewModelInstance>,
     bindable_booleans: Vec<StateMachineBindableBooleanInstance>,
     view_model_triggers: Vec<StateMachineViewModelTriggerInstance>,
@@ -3845,6 +3924,11 @@ impl StateMachineInstance {
             .iter()
             .map(StateMachineBindableAssetInstance::new)
             .collect::<Vec<_>>();
+        let bindable_triggers = state_machine
+            .bindable_triggers
+            .iter()
+            .map(StateMachineBindableTriggerInstance::new)
+            .collect::<Vec<_>>();
         let bindable_view_models = state_machine
             .bindable_view_models
             .iter()
@@ -3876,6 +3960,7 @@ impl StateMachineInstance {
             bindable_strings,
             bindable_enums,
             bindable_assets,
+            bindable_triggers,
             bindable_view_models,
             bindable_booleans,
             view_model_triggers,
@@ -4172,6 +4257,7 @@ impl StateMachineInstance {
                 &self.bindable_strings,
                 &self.bindable_enums,
                 &self.bindable_assets,
+                &self.bindable_triggers,
                 &self.bindable_view_models,
                 &self.bindable_booleans,
                 self.data_context_present,
@@ -4566,6 +4652,36 @@ fn bindable_asset_value(
 }
 
 #[derive(Debug, Clone)]
+struct StateMachineBindableTriggerInstance {
+    global_id: u32,
+    source: RuntimeBindableTriggerSource,
+}
+
+impl StateMachineBindableTriggerInstance {
+    fn new(bindable_trigger: &RuntimeBindableTrigger) -> Self {
+        Self {
+            global_id: bindable_trigger.global_id,
+            source: bindable_trigger.source,
+        }
+    }
+}
+
+fn bindable_trigger_source_global_id(
+    bindable_triggers: &[StateMachineBindableTriggerInstance],
+    global_id: u32,
+) -> Option<u32> {
+    bindable_triggers
+        .iter()
+        .find(|bindable_trigger| bindable_trigger.global_id == global_id)
+        .and_then(|bindable_trigger| match bindable_trigger.source {
+            RuntimeBindableTriggerSource::DefaultViewModelTrigger { trigger_global_id } => {
+                Some(trigger_global_id)
+            }
+            RuntimeBindableTriggerSource::None => None,
+        })
+}
+
+#[derive(Debug, Clone)]
 struct StateMachineBindableViewModelInstance {
     global_id: u32,
     source: RuntimeBindableViewModelSource,
@@ -4652,6 +4768,8 @@ struct StateMachineViewModelTriggerInstance {
     global_id: u32,
     view_model_property_id: u32,
     value: u64,
+    changed: bool,
+    used_layers: Vec<usize>,
 }
 
 impl StateMachineViewModelTriggerInstance {
@@ -4660,15 +4778,30 @@ impl StateMachineViewModelTriggerInstance {
             global_id: trigger.global_id,
             view_model_property_id: trigger.view_model_property_id,
             value: trigger.value,
+            changed: false,
+            used_layers: Vec::new(),
         }
     }
 
     fn increment(&mut self) {
         self.value = self.value.saturating_add(1);
+        self.changed = true;
     }
 
     fn reset(&mut self) {
         self.value = 0;
+        self.changed = false;
+        self.used_layers.clear();
+    }
+
+    fn is_fireable_for_layer(&self, layer_index: usize) -> bool {
+        self.changed && !self.used_layers.contains(&layer_index)
+    }
+
+    fn use_in_layer(&mut self, layer_index: usize) {
+        if !self.used_layers.contains(&layer_index) {
+            self.used_layers.push(layer_index);
+        }
     }
 
     fn value(&self) -> u64 {
@@ -4820,6 +4953,7 @@ impl StateMachineLayerInstance {
         bindable_strings: &[StateMachineBindableStringInstance],
         bindable_enums: &[StateMachineBindableEnumInstance],
         bindable_assets: &[StateMachineBindableAssetInstance],
+        bindable_triggers: &[StateMachineBindableTriggerInstance],
         bindable_view_models: &[StateMachineBindableViewModelInstance],
         bindable_booleans: &[StateMachineBindableBooleanInstance],
         data_context_present: bool,
@@ -4857,6 +4991,7 @@ impl StateMachineLayerInstance {
                 bindable_strings,
                 bindable_enums,
                 bindable_assets,
+                bindable_triggers,
                 bindable_view_models,
                 bindable_booleans,
                 data_context_present,
@@ -4892,6 +5027,7 @@ impl StateMachineLayerInstance {
         bindable_strings: &[StateMachineBindableStringInstance],
         bindable_enums: &[StateMachineBindableEnumInstance],
         bindable_assets: &[StateMachineBindableAssetInstance],
+        bindable_triggers: &[StateMachineBindableTriggerInstance],
         bindable_view_models: &[StateMachineBindableViewModelInstance],
         bindable_booleans: &[StateMachineBindableBooleanInstance],
         data_context_present: bool,
@@ -4915,6 +5051,7 @@ impl StateMachineLayerInstance {
             bindable_strings,
             bindable_enums,
             bindable_assets,
+            bindable_triggers,
             bindable_view_models,
             bindable_booleans,
             data_context_present,
@@ -4936,6 +5073,7 @@ impl StateMachineLayerInstance {
             bindable_strings,
             bindable_enums,
             bindable_assets,
+            bindable_triggers,
             bindable_view_models,
             bindable_booleans,
             data_context_present,
@@ -4958,6 +5096,7 @@ impl StateMachineLayerInstance {
         bindable_strings: &[StateMachineBindableStringInstance],
         bindable_enums: &[StateMachineBindableEnumInstance],
         bindable_assets: &[StateMachineBindableAssetInstance],
+        bindable_triggers: &[StateMachineBindableTriggerInstance],
         bindable_view_models: &[StateMachineBindableViewModelInstance],
         bindable_booleans: &[StateMachineBindableBooleanInstance],
         data_context_present: bool,
@@ -4985,14 +5124,17 @@ impl StateMachineLayerInstance {
                 bindable_strings,
                 bindable_enums,
                 bindable_assets,
+                bindable_triggers,
                 bindable_view_models,
                 bindable_booleans,
+                view_model_triggers,
                 data_context_present,
+                data_context_view_model_bound,
             ) else {
                 return false;
             };
             let transition = &state.transitions[transition_index];
-            transition.use_inputs(inputs, layer_index);
+            transition.use_inputs(inputs, bindable_triggers, view_model_triggers, layer_index);
             self.change_state(
                 artboard,
                 layer,
@@ -5030,9 +5172,12 @@ impl StateMachineLayerInstance {
                 bindable_strings,
                 bindable_enums,
                 bindable_assets,
+                bindable_triggers,
                 bindable_view_models,
                 bindable_booleans,
+                view_model_triggers,
                 data_context_present,
+                data_context_view_model_bound,
                 layer_index,
                 animation_from,
             ) {
@@ -5045,7 +5190,7 @@ impl StateMachineLayerInstance {
                     self.waiting_for_exit = false;
                 }
             }
-            transition.use_inputs(inputs, layer_index);
+            transition.use_inputs(inputs, bindable_triggers, view_model_triggers, layer_index);
             self.change_state(
                 artboard,
                 layer,
@@ -5075,9 +5220,12 @@ impl StateMachineLayerInstance {
         bindable_strings: &[StateMachineBindableStringInstance],
         bindable_enums: &[StateMachineBindableEnumInstance],
         bindable_assets: &[StateMachineBindableAssetInstance],
+        bindable_triggers: &[StateMachineBindableTriggerInstance],
         bindable_view_models: &[StateMachineBindableViewModelInstance],
         bindable_booleans: &[StateMachineBindableBooleanInstance],
+        view_model_triggers: &[StateMachineViewModelTriggerInstance],
         data_context_present: bool,
+        data_context_view_model_bound: bool,
     ) -> Option<(usize, usize)> {
         let mut weighted_candidates = Vec::new();
         let mut total_weight = 0_u64;
@@ -5107,9 +5255,12 @@ impl StateMachineLayerInstance {
                 bindable_strings,
                 bindable_enums,
                 bindable_assets,
+                bindable_triggers,
                 bindable_view_models,
                 bindable_booleans,
+                view_model_triggers,
                 data_context_present,
+                data_context_view_model_bound,
                 layer_index,
                 animation_from,
             ) {
@@ -6107,6 +6258,7 @@ fn build_state_machines(
             let bindable_strings = runtime_bindable_strings(file, &state_machine);
             let bindable_enums = runtime_bindable_enums(file, &state_machine);
             let bindable_assets = runtime_bindable_assets(file, &state_machine);
+            let bindable_triggers = runtime_bindable_triggers(file, &state_machine);
             let bindable_view_models = runtime_bindable_view_models(file, &state_machine);
             let bindable_booleans = runtime_bindable_booleans(file, &state_machine);
             let view_model_triggers = runtime_default_view_model_triggers(file);
@@ -6127,6 +6279,7 @@ fn build_state_machines(
                 bindable_strings,
                 bindable_enums,
                 bindable_assets,
+                bindable_triggers,
                 bindable_view_models,
                 bindable_booleans,
                 view_model_triggers,
@@ -6420,6 +6573,58 @@ fn runtime_bindable_assets(
     }
 
     values.into_values().collect()
+}
+
+fn runtime_bindable_triggers(
+    file: &RuntimeFile,
+    state_machine: &rive_binary::RuntimeStateMachine<'_>,
+) -> Vec<RuntimeBindableTrigger> {
+    let mut values = BTreeMap::<u32, RuntimeBindableTrigger>::new();
+    for data_bind in &state_machine.data_binds {
+        let Some(target) = file.data_bind_target_for_object(data_bind) else {
+            continue;
+        };
+        if target.type_name != "BindablePropertyTrigger" {
+            continue;
+        }
+        let source = runtime_bindable_trigger_source(file, data_bind);
+        values
+            .entry(target.id)
+            .and_modify(|bindable_trigger| bindable_trigger.source = source)
+            .or_insert_with(|| RuntimeBindableTrigger {
+                global_id: target.id,
+                source,
+            });
+    }
+
+    values.into_values().collect()
+}
+
+fn runtime_bindable_trigger_source(
+    file: &RuntimeFile,
+    data_bind: &RuntimeObject,
+) -> RuntimeBindableTriggerSource {
+    let Some(path) = file.data_bind_context_source_path_ids_for_object(data_bind) else {
+        return RuntimeBindableTriggerSource::None;
+    };
+    let Some(default_instance) = file.view_model_default_instance(0) else {
+        return RuntimeBindableTriggerSource::None;
+    };
+    let Some(target) =
+        file.data_context_view_model_property_for_instance(default_instance.object, &path)
+    else {
+        return RuntimeBindableTriggerSource::None;
+    };
+    if file
+        .view_model_instance_trigger_count_for_object(target)
+        .is_none()
+    {
+        return RuntimeBindableTriggerSource::None;
+    }
+
+    RuntimeBindableTriggerSource::DefaultViewModelTrigger {
+        trigger_global_id: target.id,
+    }
 }
 
 fn runtime_bindable_view_models(

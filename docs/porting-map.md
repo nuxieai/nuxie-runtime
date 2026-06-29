@@ -205,6 +205,8 @@ Current #7 scope also includes artboard-owned and state-machine-owned `data_bind
 
 Current #7 scope also includes state-machine `scripted_objects`, recording C++ `StateMachineImporter::addScriptedObject`, `StateMachine::addScriptedObject`, and `ScriptedObjectImporter::addInput` registrations while leaving script asset initialization, VM registration, cloning, script input hydration, script execution, and state-machine execution to later runtime crates.
 
+Current #7 scope also includes `shape_paint_containers`, recording C++ shape-paint container membership, paint mutators, feathers, gradient stops, stroke effects, and target-effect group links while leaving paint mutation, effect execution, gradient stop sorting, path-effect application, renderer paint allocation, draw commands, and GPU work to later runtime/render crates.
+
 ## #8: Dirt Propagation And Transform Update
 
 Blocked by: #7

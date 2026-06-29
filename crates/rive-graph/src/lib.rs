@@ -55,6 +55,7 @@ pub struct ArtboardGraph {
     pub drawable_order: Vec<DrawableOrderNode>,
     pub clipping_shapes: Vec<ClippingShapeNode>,
     pub path_composers: Vec<PathComposerNode>,
+    pub shape_paint_containers: Vec<ShapePaintContainerNode>,
     pub shape_deformers: Vec<ShapeDeformerNode>,
     pub skeletal_bones: Vec<SkeletalBoneNode>,
     pub skeletal_skins: Vec<SkeletalSkinNode>,
@@ -154,6 +155,7 @@ impl ArtboardGraph {
         let clipping_shapes =
             clipping_shapes(file, &local_objects, &components, &component_by_local);
         let path_composers = path_composers(file, artboard_index, &local_objects);
+        let shape_paint_containers = shape_paint_containers(file, artboard_index, &local_objects);
         let shape_deformers = shape_deformers(file, &local_objects);
         let skeletal_bones = skeletal_bones(file, &local_objects);
         let skeletal_skins = skeletal_skins(file, &local_objects);
@@ -230,6 +232,7 @@ impl ArtboardGraph {
             drawable_order,
             clipping_shapes,
             path_composers,
+            shape_paint_containers,
             shape_deformers,
             skeletal_bones,
             skeletal_skins,
@@ -453,6 +456,46 @@ pub struct PathComposerNode {
     pub shape_global: u32,
     pub path_locals: Vec<usize>,
     pub path_globals: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ShapePaintContainerNode {
+    pub local_id: usize,
+    pub global_id: u32,
+    pub type_name: &'static str,
+    pub paints: Vec<ShapePaintNode>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ShapePaintNode {
+    pub local_id: usize,
+    pub global_id: u32,
+    pub type_name: &'static str,
+    pub mutator_local: Option<usize>,
+    pub mutator_global: Option<u32>,
+    pub mutator_type_name: Option<&'static str>,
+    pub feather_local: Option<usize>,
+    pub feather_global: Option<u32>,
+    pub feather_type_name: Option<&'static str>,
+    pub effects: Vec<StrokeEffectNode>,
+    pub gradient_stops: Vec<GradientStopNode>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct StrokeEffectNode {
+    pub local_id: usize,
+    pub global_id: u32,
+    pub type_name: &'static str,
+    pub target_group_effect_local: Option<usize>,
+    pub target_group_effect_global: Option<u32>,
+    pub target_group_effect_type_name: Option<&'static str>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct GradientStopNode {
+    pub local_id: usize,
+    pub global_id: u32,
+    pub type_name: &'static str,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1659,6 +1702,86 @@ fn path_composers(
                 shape_global,
                 path_locals,
                 path_globals,
+            })
+        })
+        .collect()
+}
+
+fn shape_paint_containers(
+    file: &RuntimeFile,
+    artboard_index: usize,
+    local_objects: &[LocalObject],
+) -> Vec<ShapePaintContainerNode> {
+    file.artboard_shape_paint_containers(artboard_index)
+        .into_iter()
+        .filter_map(|container| {
+            let global_id = local_object_global_id(local_objects, container.local_id)?;
+
+            Some(ShapePaintContainerNode {
+                local_id: container.local_id,
+                global_id,
+                type_name: container.object.type_name,
+                paints: container
+                    .paints
+                    .into_iter()
+                    .filter_map(|paint| {
+                        let global_id = local_object_global_id(local_objects, paint.local_id)?;
+
+                        Some(ShapePaintNode {
+                            local_id: paint.local_id,
+                            global_id,
+                            type_name: paint.object.type_name,
+                            mutator_local: paint.mutator_local_id,
+                            mutator_global: paint.mutator_local_id.and_then(|local_id| {
+                                local_object_global_id(local_objects, local_id)
+                            }),
+                            mutator_type_name: paint.mutator.map(|object| object.type_name),
+                            feather_local: paint.feather_local_id,
+                            feather_global: paint.feather_local_id.and_then(|local_id| {
+                                local_object_global_id(local_objects, local_id)
+                            }),
+                            feather_type_name: paint.feather.map(|object| object.type_name),
+                            effects: paint
+                                .effects
+                                .into_iter()
+                                .filter_map(|effect| {
+                                    let global_id =
+                                        local_object_global_id(local_objects, effect.local_id)?;
+
+                                    Some(StrokeEffectNode {
+                                        local_id: effect.local_id,
+                                        global_id,
+                                        type_name: effect.object.type_name,
+                                        target_group_effect_local: effect
+                                            .target_group_effect_local_id,
+                                        target_group_effect_global: effect
+                                            .target_group_effect_local_id
+                                            .and_then(|local_id| {
+                                                local_object_global_id(local_objects, local_id)
+                                            }),
+                                        target_group_effect_type_name: effect
+                                            .target_group_effect
+                                            .map(|object| object.type_name),
+                                    })
+                                })
+                                .collect(),
+                            gradient_stops: paint
+                                .gradient_stops
+                                .into_iter()
+                                .filter_map(|stop| {
+                                    let global_id =
+                                        local_object_global_id(local_objects, stop.local_id)?;
+
+                                    Some(GradientStopNode {
+                                        local_id: stop.local_id,
+                                        global_id,
+                                        type_name: stop.object.type_name,
+                                    })
+                                })
+                                .collect(),
+                        })
+                    })
+                    .collect(),
             })
         })
         .collect()

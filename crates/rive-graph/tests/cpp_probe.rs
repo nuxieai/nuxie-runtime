@@ -1655,6 +1655,214 @@ fn cpp_clipping_shape_dependency_method_is_tracked_by_graph_model() {
 }
 
 #[test]
+fn graph_projects_shape_paint_container_registrations() {
+    let parent_id_key = property_key_for_name("Component", "parentId");
+    let target_id_key = property_key_for_name("TargetEffect", "targetId");
+    let mode_value_key = property_key_for_name("TrimPath", "modeValue");
+    let bytes = synthetic_runtime_file(7119, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object(bytes, "Shape", &[(parent_id_key, 0)]);
+        push_object(bytes, "Fill", &[(parent_id_key, 1)]);
+        push_object(bytes, "LinearGradient", &[(parent_id_key, 2)]);
+        push_object(bytes, "GradientStop", &[(parent_id_key, 3)]);
+        push_object(bytes, "GradientStop", &[(parent_id_key, 3)]);
+        push_object(bytes, "Stroke", &[(parent_id_key, 1)]);
+        push_object(bytes, "SolidColor", &[(parent_id_key, 6)]);
+        push_object(bytes, "Feather", &[(parent_id_key, 6)]);
+        push_object(
+            bytes,
+            "TrimPath",
+            &[(parent_id_key, 6), (mode_value_key, 1)],
+        );
+        push_object(bytes, "GroupEffect", &[(parent_id_key, 6)]);
+        push_object(
+            bytes,
+            "TargetEffect",
+            &[(parent_id_key, 6), (target_id_key, 10)],
+        );
+        push_object(bytes, "LayoutComponent", &[(parent_id_key, 0)]);
+        push_object(bytes, "Fill", &[(parent_id_key, 12)]);
+        push_object(bytes, "SolidColor", &[(parent_id_key, 13)]);
+    });
+
+    let (_, rust) = read_graph_from_bytes(&bytes, "synthetic/shape_paint_containers.riv");
+    let artboard = &rust.artboards[0];
+
+    assert_eq!(
+        artboard
+            .shape_paint_containers
+            .iter()
+            .map(|container| (
+                container.local_id,
+                container.global_id,
+                container.type_name,
+                container
+                    .paints
+                    .iter()
+                    .map(|paint| (
+                        paint.local_id,
+                        paint.global_id,
+                        paint.type_name,
+                        paint.mutator_local,
+                        paint.mutator_global,
+                        paint.mutator_type_name,
+                        paint.feather_local,
+                        paint.feather_global,
+                        paint.feather_type_name,
+                        paint
+                            .effects
+                            .iter()
+                            .map(|effect| (
+                                effect.local_id,
+                                effect.global_id,
+                                effect.type_name,
+                                effect.target_group_effect_local,
+                                effect.target_group_effect_global,
+                                effect.target_group_effect_type_name
+                            ))
+                            .collect::<Vec<_>>(),
+                        paint
+                            .gradient_stops
+                            .iter()
+                            .map(|stop| (stop.local_id, stop.global_id, stop.type_name))
+                            .collect::<Vec<_>>()
+                    ))
+                    .collect::<Vec<_>>()
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                1,
+                2,
+                "Shape",
+                vec![
+                    (
+                        2,
+                        3,
+                        "Fill",
+                        Some(3),
+                        Some(4),
+                        Some("LinearGradient"),
+                        None,
+                        None,
+                        None,
+                        vec![],
+                        vec![(4, 5, "GradientStop"), (5, 6, "GradientStop")]
+                    ),
+                    (
+                        6,
+                        7,
+                        "Stroke",
+                        Some(7),
+                        Some(8),
+                        Some("SolidColor"),
+                        Some(8),
+                        Some(9),
+                        Some("Feather"),
+                        vec![
+                            (9, 10, "TrimPath", None, None, None),
+                            (
+                                11,
+                                12,
+                                "TargetEffect",
+                                Some(10),
+                                Some(11),
+                                Some("GroupEffect")
+                            )
+                        ],
+                        vec![]
+                    )
+                ]
+            ),
+            (
+                12,
+                13,
+                "LayoutComponent",
+                vec![(
+                    13,
+                    14,
+                    "Fill",
+                    Some(14),
+                    Some(15),
+                    Some("SolidColor"),
+                    None,
+                    None,
+                    None,
+                    vec![],
+                    vec![]
+                )]
+            )
+        ],
+        "ShapePaint::onAddedClean registration plus mutator/effect/gradient child facts are static graph data, not paint mutation or rendering"
+    );
+}
+
+#[test]
+fn cpp_shape_paint_container_registration_methods_are_tracked_by_graph_model() {
+    let runtime_dir = reference_runtime_dir();
+    assert!(
+        runtime_dir.exists(),
+        "reference runtime not found at {}; set RIVE_RUNTIME_DIR",
+        runtime_dir.display()
+    );
+
+    let shape_paint_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/shapes/paint/shape_paint.cpp"))
+            .expect("read C++ shape_paint.cpp"),
+    );
+    let on_added_clean_body =
+        cpp_function_body(&shape_paint_source, "StatusCodeShapePaint::onAddedClean");
+    assert!(
+        on_added_clean_body.contains("autocontainer=ShapePaintContainer::from(parent());"),
+        "ShapePaint::onAddedClean no longer resolves the owning ShapePaintContainer"
+    );
+    assert!(
+        on_added_clean_body.contains("container->addPaint(this);"),
+        "ShapePaint::onAddedClean no longer registers paints with their container"
+    );
+
+    let shape_paint_container_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/shapes/shape_paint_container.cpp"))
+            .expect("read C++ shape_paint_container.cpp"),
+    );
+    let add_paint_body = cpp_function_body(
+        &shape_paint_container_source,
+        "voidShapePaintContainer::addPaint",
+    );
+    assert!(
+        add_paint_body.contains("m_ShapePaints.push_back(paint);"),
+        "ShapePaintContainer::addPaint no longer preserves static paint registration order"
+    );
+
+    let shape_paint_mutator_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/shapes/paint/shape_paint_mutator.cpp"))
+            .expect("read C++ shape_paint_mutator.cpp"),
+    );
+    let init_mutator_body = cpp_function_body(
+        &shape_paint_mutator_source,
+        "StatusCodeShapePaintMutator::initPaintMutator",
+    );
+    assert!(
+        init_mutator_body.contains("parent->as<ShapePaint>()->initRenderPaint(this);"),
+        "ShapePaintMutator::initPaintMutator no longer records the ShapePaint mutator relationship"
+    );
+
+    let gradient_stop_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/shapes/paint/gradient_stop.cpp"))
+            .expect("read C++ gradient_stop.cpp"),
+    );
+    let gradient_stop_body = cpp_function_body(
+        &gradient_stop_source,
+        "StatusCodeGradientStop::onAddedDirty",
+    );
+    assert!(
+        gradient_stop_body.contains("parent()->as<LinearGradient>()->addStop(this);"),
+        "GradientStop::onAddedDirty no longer registers stops with LinearGradient"
+    );
+}
+
+#[test]
 fn graph_dependency_order_includes_follow_path_dependencies() {
     let parent_id_key = property_key_for_name("Component", "parentId");
     let target_id_key = property_key_for_name("TargetedConstraint", "targetId");
@@ -4899,6 +5107,148 @@ fn compare_artboard_import_collections(
             "artboard {artboard_index} data bind {data_bind_index} target local mismatch for {label}"
         );
     }
+
+    compare_artboard_shape_paint_containers(
+        &cpp_artboard.shape_paint_containers,
+        &rust_artboard.shape_paint_containers,
+        artboard_index,
+        label,
+    );
+}
+
+fn compare_artboard_shape_paint_containers(
+    cpp_containers: &[CppShapePaintContainer],
+    rust_containers: &[rive_graph::ShapePaintContainerNode],
+    artboard_index: usize,
+    label: &str,
+) {
+    assert_eq!(
+        cpp_containers.len(),
+        rust_containers.len(),
+        "artboard {artboard_index} shape paint container count mismatch for {label}"
+    );
+
+    for (container_index, (cpp_container, rust_container)) in
+        cpp_containers.iter().zip(rust_containers).enumerate()
+    {
+        assert_eq!(
+            cpp_container.local_id, rust_container.local_id,
+            "artboard {artboard_index} shape paint container {container_index} local id mismatch for {label}"
+        );
+        assert_eq!(
+            cpp_container.core_type,
+            type_key_for_name(rust_container.type_name),
+            "artboard {artboard_index} shape paint container {container_index} type mismatch for {label}"
+        );
+        assert_eq!(
+            cpp_container.paints.len(),
+            rust_container.paints.len(),
+            "artboard {artboard_index} shape paint container {container_index} paint count mismatch for {label}"
+        );
+
+        for (paint_index, (cpp_paint, rust_paint)) in cpp_container
+            .paints
+            .iter()
+            .zip(&rust_container.paints)
+            .enumerate()
+        {
+            assert_eq!(
+                cpp_paint.index, paint_index,
+                "artboard {artboard_index} shape paint container {container_index} paint {paint_index} index mismatch for {label}"
+            );
+            assert_eq!(
+                cpp_paint.local_id,
+                Some(rust_paint.local_id),
+                "artboard {artboard_index} shape paint container {container_index} paint {paint_index} local id mismatch for {label}"
+            );
+            assert_eq!(
+                cpp_paint.core_type,
+                type_key_for_name(rust_paint.type_name),
+                "artboard {artboard_index} shape paint container {container_index} paint {paint_index} type mismatch for {label}"
+            );
+            assert_eq!(
+                cpp_paint.mutator_local, rust_paint.mutator_local,
+                "artboard {artboard_index} shape paint container {container_index} paint {paint_index} mutator local mismatch for {label}"
+            );
+            assert_eq!(
+                cpp_paint.mutator_core_type,
+                rust_paint.mutator_type_name.map(type_key_for_name),
+                "artboard {artboard_index} shape paint container {container_index} paint {paint_index} mutator type mismatch for {label}"
+            );
+            assert_eq!(
+                cpp_paint.feather_local, rust_paint.feather_local,
+                "artboard {artboard_index} shape paint container {container_index} paint {paint_index} feather local mismatch for {label}"
+            );
+            assert_eq!(
+                cpp_paint.feather_core_type,
+                rust_paint.feather_type_name.map(type_key_for_name),
+                "artboard {artboard_index} shape paint container {container_index} paint {paint_index} feather type mismatch for {label}"
+            );
+            assert_eq!(
+                cpp_paint.effects.len(),
+                rust_paint.effects.len(),
+                "artboard {artboard_index} shape paint container {container_index} paint {paint_index} effect count mismatch for {label}"
+            );
+            for (effect_index, (cpp_effect, rust_effect)) in cpp_paint
+                .effects
+                .iter()
+                .zip(&rust_paint.effects)
+                .enumerate()
+            {
+                assert_eq!(
+                    cpp_effect.index, effect_index,
+                    "artboard {artboard_index} shape paint container {container_index} paint {paint_index} effect {effect_index} index mismatch for {label}"
+                );
+                assert_eq!(
+                    cpp_effect.local_id,
+                    Some(rust_effect.local_id),
+                    "artboard {artboard_index} shape paint container {container_index} paint {paint_index} effect {effect_index} local id mismatch for {label}"
+                );
+                assert_eq!(
+                    cpp_effect.core_type,
+                    type_key_for_name(rust_effect.type_name),
+                    "artboard {artboard_index} shape paint container {container_index} paint {paint_index} effect {effect_index} type mismatch for {label}"
+                );
+                assert_eq!(
+                    cpp_effect.target_group_effect_local, rust_effect.target_group_effect_local,
+                    "artboard {artboard_index} shape paint container {container_index} paint {paint_index} effect {effect_index} target group local mismatch for {label}"
+                );
+                assert_eq!(
+                    cpp_effect.target_group_effect_core_type,
+                    rust_effect
+                        .target_group_effect_type_name
+                        .map(type_key_for_name),
+                    "artboard {artboard_index} shape paint container {container_index} paint {paint_index} effect {effect_index} target group type mismatch for {label}"
+                );
+            }
+            assert_eq!(
+                cpp_paint.gradient_stops.len(),
+                rust_paint.gradient_stops.len(),
+                "artboard {artboard_index} shape paint container {container_index} paint {paint_index} gradient stop count mismatch for {label}"
+            );
+            for (stop_index, (cpp_stop, rust_stop)) in cpp_paint
+                .gradient_stops
+                .iter()
+                .zip(&rust_paint.gradient_stops)
+                .enumerate()
+            {
+                assert_eq!(
+                    cpp_stop.index, stop_index,
+                    "artboard {artboard_index} shape paint container {container_index} paint {paint_index} gradient stop {stop_index} index mismatch for {label}"
+                );
+                assert_eq!(
+                    cpp_stop.local_id,
+                    Some(rust_stop.local_id),
+                    "artboard {artboard_index} shape paint container {container_index} paint {paint_index} gradient stop {stop_index} local id mismatch for {label}"
+                );
+                assert_eq!(
+                    cpp_stop.core_type,
+                    type_key_for_name(rust_stop.type_name),
+                    "artboard {artboard_index} shape paint container {container_index} paint {paint_index} gradient stop {stop_index} type mismatch for {label}"
+                );
+            }
+        }
+    }
 }
 
 fn compare_artboard_draw_graph(
@@ -5189,6 +5539,8 @@ struct CppArtboard {
     state_machines: Vec<CppStateMachine>,
     #[serde(default, rename = "dataBinds")]
     data_binds: Vec<CppDataBind>,
+    #[serde(default, rename = "shapePaintContainers")]
+    shape_paint_containers: Vec<CppShapePaintContainer>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -5248,6 +5600,59 @@ struct CppClippingShape {
     shape_locals: Vec<usize>,
     #[serde(default, rename = "clippedDrawableLocals")]
     clipped_drawable_locals: Vec<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppShapePaintContainer {
+    #[serde(rename = "localId")]
+    local_id: usize,
+    #[serde(rename = "coreType")]
+    core_type: u16,
+    #[serde(default)]
+    paints: Vec<CppShapePaint>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppShapePaint {
+    index: usize,
+    #[serde(default, rename = "localId")]
+    local_id: Option<usize>,
+    #[serde(rename = "coreType")]
+    core_type: u16,
+    #[serde(default, rename = "mutatorLocal")]
+    mutator_local: Option<usize>,
+    #[serde(default, rename = "mutatorCoreType")]
+    mutator_core_type: Option<u16>,
+    #[serde(default, rename = "featherLocal")]
+    feather_local: Option<usize>,
+    #[serde(default, rename = "featherCoreType")]
+    feather_core_type: Option<u16>,
+    #[serde(default)]
+    effects: Vec<CppStrokeEffect>,
+    #[serde(default, rename = "gradientStops")]
+    gradient_stops: Vec<CppGradientStop>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppStrokeEffect {
+    index: usize,
+    #[serde(default, rename = "localId")]
+    local_id: Option<usize>,
+    #[serde(rename = "coreType")]
+    core_type: u16,
+    #[serde(default, rename = "targetGroupEffectLocal")]
+    target_group_effect_local: Option<usize>,
+    #[serde(default, rename = "targetGroupEffectCoreType")]
+    target_group_effect_core_type: Option<u16>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppGradientStop {
+    index: usize,
+    #[serde(default, rename = "localId")]
+    local_id: Option<usize>,
+    #[serde(rename = "coreType")]
+    core_type: u16,
 }
 
 #[derive(Debug, Deserialize)]

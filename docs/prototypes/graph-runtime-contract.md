@@ -172,6 +172,13 @@ The existing `rive-graph` prototype already covers:
   state-machine execution.
 - Synthetic path composer projections for each imported `Shape`, with path inputs
   sourced from `rive-binary`'s C++-equivalent shape registration facts.
+- Static shape-paint container registration projections, exposed through
+  `ArtboardGraph::shape_paint_containers`, matching
+  `ShapePaint::onAddedClean`, `ShapePaintContainer::addPaint`,
+  `ShapePaintMutator::initPaintMutator`, `GradientStop::onAddedDirty`, and
+  registered stroke-effect target links. These facts do not admit paint
+  mutation, effect execution, gradient stop sorting, path-effect application,
+  renderer paint allocation, draw commands, or GPU work.
 - Static `Shape::onAddedClean` render-path deformer projections for each
   imported `Shape`, recording the first ancestor accepted by
   `RenderPathDeformer::from`, currently exact `NSlicedNode`, without admitting

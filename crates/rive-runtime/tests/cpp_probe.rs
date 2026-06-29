@@ -2497,11 +2497,23 @@ fn runtime_draw_command_stream_exposes_feather_paint_payloads_like_cpp_probe() {
         offset_x: 3.0,
         offset_y: -4.0,
         inner: true,
+        inner_path_commands: vec![
+            RuntimePathCommand::Move { x: -12.0, y: -12.0 },
+            RuntimePathCommand::Line { x: 22.0, y: -12.0 },
+            RuntimePathCommand::Line { x: 22.0, y: 22.0 },
+            RuntimePathCommand::Line { x: -12.0, y: 22.0 },
+            RuntimePathCommand::Close,
+            RuntimePathCommand::Move { x: 3.0, y: -4.0 },
+            RuntimePathCommand::Line { x: 3.0, y: 6.0 },
+            RuntimePathCommand::Line { x: 13.0, y: -4.0 },
+            RuntimePathCommand::Line { x: 3.0, y: -4.0 },
+            RuntimePathCommand::Close,
+        ],
     };
 
     let cpp_paint = cpp_paints[0];
     let rust_paint = &rust_paints[0];
-    assert_eq!(cpp_paint.feather_state(), Some(expected_feather));
+    assert_eq!(cpp_paint.feather_state(), Some(expected_feather.clone()));
     assert_eq!(rust_paint.feather_state, Some(expected_feather));
     assert_eq!(rust_paint.feather_state, cpp_paint.feather_state());
 }
@@ -5823,6 +5835,8 @@ struct CppFeatherState {
     #[serde(rename = "offsetY")]
     offset_y: f32,
     inner: bool,
+    #[serde(default, rename = "innerPathCommands")]
+    inner_path_commands: Vec<CppPathCommand>,
 }
 
 impl CppFeatherState {
@@ -5834,6 +5848,11 @@ impl CppFeatherState {
             offset_x: self.offset_x,
             offset_y: self.offset_y,
             inner: self.inner,
+            inner_path_commands: self
+                .inner_path_commands
+                .iter()
+                .map(CppPathCommand::path_command)
+                .collect(),
         }
     }
 }

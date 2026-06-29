@@ -1419,6 +1419,10 @@ void write_shape_paint_state(std::ostream& out, rive::ShapePaint* shapePaint)
     out << "null";
 }
 
+void write_shape_paint_path_commands(std::ostream& out,
+                                     const char* fieldName,
+                                     rive::ShapePaintPath* path);
+
 void write_shape_paint_feather(std::ostream& out,
                                const LocalIds& localIds,
                                rive::ShapePaint* shapePaint)
@@ -1438,6 +1442,15 @@ void write_shape_paint_feather(std::ostream& out,
     out << ",\"offsetX\":" << feather->offsetX();
     out << ",\"offsetY\":" << feather->offsetY();
     out << ",\"inner\":" << (feather->inner() ? "true" : "false");
+    if (feather->inner())
+    {
+        write_shape_paint_path_commands(
+            out, "innerPathCommands", feather->innerPath());
+    }
+    else
+    {
+        out << ",\"innerPathCommands\":[]";
+    }
     out << '}';
 }
 
@@ -1454,9 +1467,15 @@ void write_path_point(std::ostream& out,
 }
 
 void write_shape_paint_path_commands(std::ostream& out,
+                                     const char* fieldName,
                                      rive::ShapePaintPath* path)
 {
-    out << ",\"pathCommands\":[";
+    out << ",\"" << fieldName << "\":[";
+    if (path == nullptr)
+    {
+        out << ']';
+        return;
+    }
     bool first = true;
     for (auto iter : *path->rawPath())
     {
@@ -1503,6 +1522,12 @@ void write_shape_paint_path_commands(std::ostream& out,
         }
     }
     out << ']';
+}
+
+void write_shape_paint_path_commands(std::ostream& out,
+                                     rive::ShapePaintPath* path)
+{
+    write_shape_paint_path_commands(out, "pathCommands", path);
 }
 
 void write_shape_paint_commands(std::ostream& out,

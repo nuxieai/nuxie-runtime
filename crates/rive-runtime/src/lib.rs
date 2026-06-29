@@ -279,17 +279,24 @@ impl ArtboardInstance {
             .component(shape_local)
             .map(|component| component.transform.render_opacity)
             .unwrap_or(1.0);
+        let shape_world = self
+            .component(shape_local)
+            .map(|component| component.transform.world_transform)
+            .unwrap_or(Mat2D::IDENTITY);
 
         container
             .paints
             .iter()
             .filter_map(|paint| {
+                let path_commands =
+                    self.runtime_shape_paint_path_commands(shape_local, paint, graph);
                 runtime_shape_paint_command(
                     paint,
                     container.blend_mode_value,
                     needs_save_operation,
                     render_opacity,
-                    self.runtime_shape_paint_path_commands(shape_local, paint, graph),
+                    shape_world,
+                    path_commands,
                 )
             })
             .collect()
@@ -728,7 +735,7 @@ pub struct RuntimeGradientStop {
     pub position: f32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RuntimeFeatherState {
     pub feather_local: usize,
     pub space_value: u32,
@@ -736,6 +743,7 @@ pub struct RuntimeFeatherState {
     pub offset_x: f32,
     pub offset_y: f32,
     pub inner: bool,
+    pub inner_path_commands: Vec<RuntimePathCommand>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -764,6 +772,7 @@ fn runtime_shape_paint_command(
     container_blend_mode_value: u32,
     needs_save_operation: bool,
     render_opacity: f32,
+    shape_world: Mat2D,
     path_commands: Vec<RuntimePathCommand>,
 ) -> Option<RuntimeShapePaintCommand> {
     if !paint.is_visible {
@@ -780,7 +789,7 @@ fn runtime_shape_paint_command(
             container_blend_mode_value,
         ),
         paint_state: runtime_shape_paint_state(paint.paint_state.clone(), render_opacity),
-        feather_state: runtime_feather_state(paint.feather.as_ref()),
+        feather_state: runtime_feather_state(paint.feather.as_ref(), &path_commands, shape_world),
         path_commands,
         needs_save_operation,
     })
@@ -872,8 +881,13 @@ fn runtime_gradient_stops(
         .collect()
 }
 
-fn runtime_feather_state(feather: Option<&FeatherNode>) -> Option<RuntimeFeatherState> {
+fn runtime_feather_state(
+    feather: Option<&FeatherNode>,
+    path_commands: &[RuntimePathCommand],
+    shape_world: Mat2D,
+) -> Option<RuntimeFeatherState> {
     let feather = feather?;
+    let inner_path_commands = inner_feather_path_commands(feather, path_commands, shape_world);
     Some(RuntimeFeatherState {
         feather_local: feather.local_id,
         space_value: feather.space_value,
@@ -881,7 +895,265 @@ fn runtime_feather_state(feather: Option<&FeatherNode>) -> Option<RuntimeFeather
         offset_x: feather.offset_x,
         offset_y: feather.offset_y,
         inner: feather.inner,
+        inner_path_commands,
     })
+}
+
+fn inner_feather_path_commands(
+    feather: &FeatherNode,
+    source: &[RuntimePathCommand],
+    shape_world: Mat2D,
+) -> Vec<RuntimePathCommand> {
+    if !feather.inner || source.is_empty() {
+        return Vec::new();
+    }
+    let Some(bounds) = path_command_bounds(source) else {
+        return Vec::new();
+    };
+    let pad = feather.strength * 1.5;
+    let mut commands = rect_commands(bounds.pad(pad));
+    let mut reversed_source = path_commands_backwards(source);
+    let mut offset = (feather.offset_x, feather.offset_y);
+    if feather.space_value == 0 {
+        offset = shape_world
+            .invert_or_identity()
+            .transform_direction(offset.0, offset.1);
+    }
+    translate_path_commands(&mut reversed_source, offset);
+    commands.extend(reversed_source);
+    commands
+}
+
+#[derive(Debug, Clone, Copy)]
+struct PathBounds {
+    min_x: f32,
+    min_y: f32,
+    max_x: f32,
+    max_y: f32,
+}
+
+impl PathBounds {
+    fn from_point(x: f32, y: f32) -> Self {
+        Self {
+            min_x: x,
+            min_y: y,
+            max_x: x,
+            max_y: y,
+        }
+    }
+
+    fn include(&mut self, x: f32, y: f32) {
+        self.min_x = self.min_x.min(x);
+        self.min_y = self.min_y.min(y);
+        self.max_x = self.max_x.max(x);
+        self.max_y = self.max_y.max(y);
+    }
+
+    fn pad(self, amount: f32) -> Self {
+        Self {
+            min_x: self.min_x - amount,
+            min_y: self.min_y - amount,
+            max_x: self.max_x + amount,
+            max_y: self.max_y + amount,
+        }
+    }
+}
+
+fn path_command_bounds(commands: &[RuntimePathCommand]) -> Option<PathBounds> {
+    let mut bounds: Option<PathBounds> = None;
+    for command in commands {
+        for (x, y) in command_points(command) {
+            match &mut bounds {
+                Some(bounds) => bounds.include(x, y),
+                None => bounds = Some(PathBounds::from_point(x, y)),
+            }
+        }
+    }
+    bounds
+}
+
+fn rect_commands(bounds: PathBounds) -> Vec<RuntimePathCommand> {
+    vec![
+        RuntimePathCommand::Move {
+            x: bounds.min_x,
+            y: bounds.min_y,
+        },
+        RuntimePathCommand::Line {
+            x: bounds.max_x,
+            y: bounds.min_y,
+        },
+        RuntimePathCommand::Line {
+            x: bounds.max_x,
+            y: bounds.max_y,
+        },
+        RuntimePathCommand::Line {
+            x: bounds.min_x,
+            y: bounds.max_y,
+        },
+        RuntimePathCommand::Close,
+    ]
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RawPathVerb {
+    Move,
+    Line,
+    Cubic,
+    Close,
+}
+
+fn path_commands_backwards(commands: &[RuntimePathCommand]) -> Vec<RuntimePathCommand> {
+    let (verbs, points) = raw_path_parts(commands);
+    if verbs.is_empty() {
+        return Vec::new();
+    }
+
+    let reversed_points = points.into_iter().rev().collect::<Vec<_>>();
+    let mut reversed_verbs = Vec::with_capacity(verbs.len());
+    reversed_verbs.push(RawPathVerb::Move);
+    let mut closed = false;
+    for index in (0..verbs.len()).rev() {
+        let verb = verbs[index];
+        if verb == RawPathVerb::Close {
+            closed = true;
+            continue;
+        }
+        if verb == RawPathVerb::Move && closed {
+            reversed_verbs.push(RawPathVerb::Close);
+            closed = false;
+        }
+        if index != 0 {
+            reversed_verbs.push(verb);
+        } else {
+            break;
+        }
+    }
+
+    raw_path_parts_to_commands(&reversed_verbs, &reversed_points)
+}
+
+fn raw_path_parts(commands: &[RuntimePathCommand]) -> (Vec<RawPathVerb>, Vec<(f32, f32)>) {
+    let mut verbs = Vec::with_capacity(commands.len());
+    let mut points = Vec::new();
+    for command in commands {
+        match *command {
+            RuntimePathCommand::Move { x, y } => {
+                verbs.push(RawPathVerb::Move);
+                points.push((x, y));
+            }
+            RuntimePathCommand::Line { x, y } => {
+                verbs.push(RawPathVerb::Line);
+                points.push((x, y));
+            }
+            RuntimePathCommand::Cubic {
+                x1,
+                y1,
+                x2,
+                y2,
+                x3,
+                y3,
+            } => {
+                verbs.push(RawPathVerb::Cubic);
+                points.push((x1, y1));
+                points.push((x2, y2));
+                points.push((x3, y3));
+            }
+            RuntimePathCommand::Close => verbs.push(RawPathVerb::Close),
+        }
+    }
+    (verbs, points)
+}
+
+fn raw_path_parts_to_commands(
+    verbs: &[RawPathVerb],
+    points: &[(f32, f32)],
+) -> Vec<RuntimePathCommand> {
+    let mut commands = Vec::with_capacity(verbs.len());
+    let mut point_index = 0;
+    for verb in verbs {
+        match *verb {
+            RawPathVerb::Move => {
+                let Some((x, y)) = points.get(point_index).copied() else {
+                    return Vec::new();
+                };
+                point_index += 1;
+                commands.push(RuntimePathCommand::Move { x, y });
+            }
+            RawPathVerb::Line => {
+                let Some((x, y)) = points.get(point_index).copied() else {
+                    return Vec::new();
+                };
+                point_index += 1;
+                commands.push(RuntimePathCommand::Line { x, y });
+            }
+            RawPathVerb::Cubic => {
+                let Some((x1, y1)) = points.get(point_index).copied() else {
+                    return Vec::new();
+                };
+                let Some((x2, y2)) = points.get(point_index + 1).copied() else {
+                    return Vec::new();
+                };
+                let Some((x3, y3)) = points.get(point_index + 2).copied() else {
+                    return Vec::new();
+                };
+                point_index += 3;
+                commands.push(RuntimePathCommand::Cubic {
+                    x1,
+                    y1,
+                    x2,
+                    y2,
+                    x3,
+                    y3,
+                });
+            }
+            RawPathVerb::Close => commands.push(RuntimePathCommand::Close),
+        }
+    }
+    commands
+}
+
+fn translate_path_commands(commands: &mut [RuntimePathCommand], offset: (f32, f32)) {
+    for command in commands {
+        match command {
+            RuntimePathCommand::Move { x, y } | RuntimePathCommand::Line { x, y } => {
+                *x += offset.0;
+                *y += offset.1;
+            }
+            RuntimePathCommand::Cubic {
+                x1,
+                y1,
+                x2,
+                y2,
+                x3,
+                y3,
+            } => {
+                *x1 += offset.0;
+                *y1 += offset.1;
+                *x2 += offset.0;
+                *y2 += offset.1;
+                *x3 += offset.0;
+                *y3 += offset.1;
+            }
+            RuntimePathCommand::Close => {}
+        }
+    }
+}
+
+fn command_points(command: &RuntimePathCommand) -> Vec<(f32, f32)> {
+    match *command {
+        RuntimePathCommand::Move { x, y } | RuntimePathCommand::Line { x, y } => {
+            vec![(x, y)]
+        }
+        RuntimePathCommand::Cubic {
+            x1,
+            y1,
+            x2,
+            y2,
+            x3,
+            y3,
+        } => vec![(x1, y1), (x2, y2), (x3, y3)],
+        RuntimePathCommand::Close => Vec::new(),
+    }
 }
 
 fn color_modulate_opacity(color: u32, opacity: f32) -> u32 {
@@ -4933,6 +5205,10 @@ impl Mat2D {
             self.0[0] * x + self.0[2] * y + self.0[4],
             self.0[1] * x + self.0[3] * y + self.0[5],
         )
+    }
+
+    pub fn transform_direction(self, x: f32, y: f32) -> (f32, f32) {
+        (self.0[0] * x + self.0[2] * y, self.0[1] * x + self.0[3] * y)
     }
 }
 

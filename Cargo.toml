@@ -2,6 +2,7 @@
 members = [
     "crates/rive-binary",
     "crates/rive-graph",
+    "crates/rive-runtime",
     "crates/rive-schema",
     "tools/rive-codegen",
 ]

@@ -215,6 +215,7 @@ Current #7 scope also includes `meshes` and `paths`, recording ordered `MeshVert
 
 Blocked by: #7
 Type: Prototype
+Contract: `docs/prototypes/dirt-transform-runtime-contract.md`
 
 ### Question
 
@@ -222,7 +223,7 @@ Can Rust reproduce the C++ dirt scheduler and transform update semantics?
 
 ### Answer
 
-Open. Implement dirt bitflags, dependent dirtying, dirty-depth restart semantics, max-pass guard behavior, local transform update, world transform update, and render opacity propagation. This is the first meaningful headless parity checkpoint.
+In progress. Implement dirt bitflags, dependent dirtying, dirty-depth restart semantics, max-pass guard behavior, local transform update, world transform update, and render opacity propagation. This is the first meaningful headless parity checkpoint. The scope is locked by `docs/prototypes/dirt-transform-runtime-contract.md`; animation, state machines, data binding, constraints, layout, cloning, draw commands, rendering, text, scripting, and audio remain later runtime slices.
 
 ## #9: Artboard Instancing And Cloning
 

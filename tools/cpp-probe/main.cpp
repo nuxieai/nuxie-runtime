@@ -1574,6 +1574,8 @@ void write_shape_paint_commands(std::ostream& out,
         write_shape_paint_state(out, shapePaint);
         write_shape_paint_feather(out, localIds, shapePaint);
         write_shape_paint_path_commands(out, path);
+        write_shape_paint_path_commands(
+            out, "effectPathCommands", shapePaint->lastEffectPath(shapePaint));
         out << ",\"needsSaveOperation\":"
             << (needsSaveOperation ? "true" : "false");
         out << '}';

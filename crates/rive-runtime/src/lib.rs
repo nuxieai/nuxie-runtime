@@ -4,7 +4,7 @@ use rive_graph::{
     ArtboardGraph, ClippingShapeNode, ComponentNode, DrawableOrderKind, FeatherNode,
     GradientStopNode, ParametricPathNode, PathComposerNode, PathComposerPathNode, PathGeometryNode,
     PathVertexNode, ShapePaintKind, ShapePaintNode, ShapePaintPathKind, ShapePaintStateNode,
-    SortedDrawableNode,
+    SortedDrawableNode, StrokeEffectNode,
 };
 use rive_schema::{definition_by_name, object_supports_property};
 use std::collections::BTreeMap;
@@ -713,6 +713,7 @@ pub struct RuntimeShapePaintCommand {
     pub paint_state: Option<RuntimeShapePaintState>,
     pub feather_state: Option<RuntimeFeatherState>,
     pub path_commands: Vec<RuntimePathCommand>,
+    pub effect_path_commands: Vec<RuntimePathCommand>,
     pub needs_save_operation: bool,
 }
 
@@ -792,6 +793,7 @@ fn runtime_shape_paint_command(
     if !paint.is_visible {
         return None;
     }
+    let effect_path_commands = runtime_effect_path_commands(paint, &path_commands);
     Some(RuntimeShapePaintCommand {
         paint_local: paint.local_id,
         mutator_local: paint.mutator_local,
@@ -805,6 +807,7 @@ fn runtime_shape_paint_command(
         paint_state: runtime_shape_paint_state(paint.paint_state.clone(), render_opacity),
         feather_state: runtime_feather_state(paint.feather.as_ref(), &path_commands, shape_world),
         path_commands,
+        effect_path_commands,
         needs_save_operation,
     })
 }
@@ -1168,6 +1171,192 @@ fn command_points(command: &RuntimePathCommand) -> Vec<(f32, f32)> {
         } => vec![(x1, y1), (x2, y2), (x3, y3)],
         RuntimePathCommand::Close => Vec::new(),
     }
+}
+
+fn runtime_effect_path_commands(
+    paint: &ShapePaintNode,
+    source: &[RuntimePathCommand],
+) -> Vec<RuntimePathCommand> {
+    if paint.effects.is_empty() {
+        return Vec::new();
+    }
+
+    let mut current = source.to_vec();
+    let mut has_supported_effect = false;
+    for effect in &paint.effects {
+        let Some(effect_path) = runtime_stroke_effect_path_commands(effect, paint, &current) else {
+            continue;
+        };
+        current = effect_path;
+        has_supported_effect = true;
+    }
+
+    if has_supported_effect {
+        current
+    } else {
+        Vec::new()
+    }
+}
+
+fn runtime_stroke_effect_path_commands(
+    effect: &StrokeEffectNode,
+    paint: &ShapePaintNode,
+    source: &[RuntimePathCommand],
+) -> Option<Vec<RuntimePathCommand>> {
+    match effect.type_name {
+        "TrimPath" => runtime_trim_path_line_effect_commands(effect, paint, source),
+        _ => None,
+    }
+}
+
+fn runtime_trim_path_line_effect_commands(
+    effect: &StrokeEffectNode,
+    paint: &ShapePaintNode,
+    source: &[RuntimePathCommand],
+) -> Option<Vec<RuntimePathCommand>> {
+    let mode = effect.trim_mode_value?;
+    if !matches!(mode, 1 | 2) {
+        return None;
+    }
+    let contour = LineContour::from_commands(source)?;
+    let total_length = contour.length();
+    if total_length == 0.0 {
+        return Some(Vec::new());
+    }
+
+    let render_offset = positive_unit_mod(effect.trim_offset.unwrap_or(0.0));
+    let mut start_length = total_length * (effect.trim_start.unwrap_or(0.0) + render_offset);
+    let mut end_length = total_length * (effect.trim_end.unwrap_or(0.0) + render_offset);
+    if end_length < start_length {
+        std::mem::swap(&mut start_length, &mut end_length);
+    }
+    if start_length > total_length {
+        start_length -= total_length;
+        end_length -= total_length;
+    }
+    if end_length > total_length {
+        return None;
+    }
+
+    let mut commands = contour.segment_commands(start_length, end_length)?;
+    if paint.paint_type == ShapePaintKind::Fill || (contour.is_closed && start_length == 0.0) {
+        commands.push(RuntimePathCommand::Close);
+    }
+    Some(commands)
+}
+
+fn positive_unit_mod(value: f32) -> f32 {
+    value.rem_euclid(1.0)
+}
+
+#[derive(Debug, Clone)]
+struct LineContour {
+    points: Vec<(f32, f32)>,
+    is_closed: bool,
+}
+
+impl LineContour {
+    fn from_commands(commands: &[RuntimePathCommand]) -> Option<Self> {
+        let mut points = Vec::new();
+        let mut saw_move = false;
+        let mut is_closed = false;
+        for command in commands {
+            match *command {
+                RuntimePathCommand::Move { x, y } => {
+                    if saw_move {
+                        return None;
+                    }
+                    saw_move = true;
+                    points.push((x, y));
+                }
+                RuntimePathCommand::Line { x, y } => {
+                    if !saw_move || is_closed {
+                        return None;
+                    }
+                    points.push((x, y));
+                }
+                RuntimePathCommand::Close => {
+                    if !saw_move || is_closed {
+                        return None;
+                    }
+                    is_closed = true;
+                }
+                RuntimePathCommand::Cubic { .. } => return None,
+            }
+        }
+        (points.len() >= 2).then_some(Self { points, is_closed })
+    }
+
+    fn length(&self) -> f32 {
+        self.points
+            .windows(2)
+            .map(|points| distance(points[0], points[1]))
+            .sum()
+    }
+
+    fn segment_commands(&self, start: f32, end: f32) -> Option<Vec<RuntimePathCommand>> {
+        if end <= start {
+            return Some(Vec::new());
+        }
+
+        let mut commands = Vec::new();
+        let mut walked = 0.0;
+        let mut started = false;
+        for points in self.points.windows(2) {
+            let from = points[0];
+            let to = points[1];
+            let segment_length = distance(from, to);
+            let segment_start = walked;
+            let segment_end = walked + segment_length;
+            walked = segment_end;
+
+            if segment_length == 0.0 || end <= segment_start || start >= segment_end {
+                continue;
+            }
+
+            let clipped_start = start.max(segment_start);
+            let clipped_end = end.min(segment_end);
+            let start_t = (clipped_start - segment_start) / segment_length;
+            let end_t = (clipped_end - segment_start) / segment_length;
+            let start_point = lerp_point(from, to, start_t);
+            let end_point = lerp_point(from, to, end_t);
+            if !started {
+                commands.push(RuntimePathCommand::Move {
+                    x: start_point.0,
+                    y: start_point.1,
+                });
+                started = true;
+            } else if last_command_point(&commands) != Some(start_point) {
+                commands.push(RuntimePathCommand::Line {
+                    x: start_point.0,
+                    y: start_point.1,
+                });
+            }
+            commands.push(RuntimePathCommand::Line {
+                x: end_point.0,
+                y: end_point.1,
+            });
+        }
+        Some(commands)
+    }
+}
+
+fn last_command_point(commands: &[RuntimePathCommand]) -> Option<(f32, f32)> {
+    match commands.last()? {
+        RuntimePathCommand::Move { x, y } | RuntimePathCommand::Line { x, y } => Some((*x, *y)),
+        RuntimePathCommand::Cubic { x3, y3, .. } => Some((*x3, *y3)),
+        RuntimePathCommand::Close => None,
+    }
+}
+
+fn distance(from: (f32, f32), to: (f32, f32)) -> f32 {
+    let x = to.0 - from.0;
+    let y = to.1 - from.1;
+    (x * x + y * y).sqrt()
+}
+
+fn lerp_point(from: (f32, f32), to: (f32, f32), t: f32) -> (f32, f32) {
+    (from.0 + (to.0 - from.0) * t, from.1 + (to.1 - from.1) * t)
 }
 
 fn color_modulate_opacity(color: u32, opacity: f32) -> u32 {

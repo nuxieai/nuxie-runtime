@@ -734,6 +734,10 @@ pub struct StrokeEffectNode {
     pub local_id: usize,
     pub global_id: u32,
     pub type_name: &'static str,
+    pub trim_start: Option<f32>,
+    pub trim_end: Option<f32>,
+    pub trim_offset: Option<f32>,
+    pub trim_mode_value: Option<u32>,
     pub target_group_effect_local: Option<usize>,
     pub target_group_effect_global: Option<u32>,
     pub target_group_effect_type_name: Option<&'static str>,
@@ -2447,6 +2451,14 @@ fn shape_paint_containers(
                                         local_id: effect.local_id,
                                         global_id,
                                         type_name: effect.object.type_name,
+                                        trim_start: trim_path_double(&effect.object, "start"),
+                                        trim_end: trim_path_double(&effect.object, "end"),
+                                        trim_offset: trim_path_double(&effect.object, "offset"),
+                                        trim_mode_value: if effect.object.type_name == "TrimPath" {
+                                            optional_u32_property(Some(&effect.object), "modeValue")
+                                        } else {
+                                            None
+                                        },
                                         target_group_effect_local: effect
                                             .target_group_effect_local_id,
                                         target_group_effect_global: effect
@@ -2473,6 +2485,14 @@ fn optional_u32_property(object: Option<&RuntimeObject>, property: &str) -> Opti
     object?
         .uint_property(property)
         .and_then(|value| u32::try_from(value).ok())
+}
+
+fn trim_path_double(object: &RuntimeObject, property: &str) -> Option<f32> {
+    if object.type_name == "TrimPath" {
+        Some(object.double_property(property).unwrap_or(0.0))
+    } else {
+        None
+    }
 }
 
 fn mat2d_property_array(object: &RuntimeObject) -> [f32; 6] {

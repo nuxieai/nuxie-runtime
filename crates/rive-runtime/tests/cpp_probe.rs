@@ -2377,6 +2377,97 @@ fn runtime_draw_command_stream_deforms_weighted_points_path_payloads_like_cpp_pr
 }
 
 #[test]
+fn runtime_draw_command_stream_exposes_line_trim_path_effect_payloads_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_line_trim_path_effect_payloads.riv";
+    let bytes = synthetic_runtime_file(8233, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "Shape", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "Stroke", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 1);
+        });
+        push_object_with_properties(bytes, "SolidColor", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 2);
+            push_color_property(bytes, "SolidColor", "colorValue", 0xff22_4466);
+        });
+        push_object_with_properties(bytes, "TrimPath", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 2);
+            push_f32_property(bytes, "TrimPath", "start", 0.25);
+            push_f32_property(bytes, "TrimPath", "end", 0.75);
+            push_uint_property(bytes, "TrimPath", "modeValue", 1);
+        });
+        push_object_with_properties(bytes, "PointsPath", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 1);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 5);
+            push_f32_property(bytes, "Vertex", "x", 0.0);
+            push_f32_property(bytes, "Vertex", "y", 0.0);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 5);
+            push_f32_property(bytes, "Vertex", "x", 10.0);
+            push_f32_property(bytes, "Vertex", "y", 0.0);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 5);
+            push_f32_property(bytes, "Vertex", "x", 20.0);
+            push_f32_property(bytes, "Vertex", "y", 0.0);
+        });
+    });
+
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let (_, graph, mut rust) = read_rust_graph_instance_from_bytes(&bytes, label);
+    rust.update_components();
+
+    let artboard = graph
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing Rust artboard for {label}"));
+    let rust_paints = rust
+        .draw_commands(artboard)
+        .into_iter()
+        .flat_map(|command| command.shape_paints)
+        .collect::<Vec<_>>();
+    let cpp_paints = cpp.artboards[0]
+        .draw_command_stream
+        .iter()
+        .flat_map(|command| command.shape_paint_commands.iter())
+        .collect::<Vec<_>>();
+
+    assert_eq!(cpp_paints.len(), 1, "C++ should emit one trimmed stroke");
+    assert_eq!(rust_paints.len(), 1, "Rust should emit one trimmed stroke");
+
+    let expected_source = vec![
+        RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+        RuntimePathCommand::Line { x: 10.0, y: 0.0 },
+        RuntimePathCommand::Line { x: 20.0, y: 0.0 },
+    ];
+    let expected_effect = vec![
+        RuntimePathCommand::Move { x: 5.0, y: 0.0 },
+        RuntimePathCommand::Line { x: 10.0, y: 0.0 },
+        RuntimePathCommand::Line { x: 15.0, y: 0.0 },
+    ];
+
+    let cpp_paint = cpp_paints[0];
+    let rust_paint = &rust_paints[0];
+    assert_eq!(cpp_paint.path_commands(), expected_source);
+    assert_eq!(rust_paint.path_commands, cpp_paint.path_commands());
+    assert_eq!(cpp_paint.effect_path_commands(), expected_effect);
+    assert_eq!(
+        rust_paint.effect_path_commands,
+        cpp_paint.effect_path_commands()
+    );
+}
+
+#[test]
 fn runtime_draw_command_stream_exposes_gradient_paint_payloads_like_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
@@ -5789,6 +5880,8 @@ struct CppShapePaintCommand {
     feather: Option<CppFeatherState>,
     #[serde(default, rename = "pathCommands")]
     path_commands: Vec<CppPathCommand>,
+    #[serde(default, rename = "effectPathCommands")]
+    effect_path_commands: Vec<CppPathCommand>,
     #[serde(rename = "needsSaveOperation")]
     needs_save_operation: bool,
 }
@@ -5854,6 +5947,13 @@ impl CppShapePaintCommand {
 
     fn path_commands(&self) -> Vec<RuntimePathCommand> {
         self.path_commands
+            .iter()
+            .map(CppPathCommand::path_command)
+            .collect()
+    }
+
+    fn effect_path_commands(&self) -> Vec<RuntimePathCommand> {
+        self.effect_path_commands
             .iter()
             .map(CppPathCommand::path_command)
             .collect()

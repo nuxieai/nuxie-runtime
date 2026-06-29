@@ -578,6 +578,9 @@ pub struct PathGeometryNode {
     pub local_id: usize,
     pub global_id: u32,
     pub type_name: &'static str,
+    pub is_closed: bool,
+    pub is_hole: bool,
+    pub is_clockwise: bool,
     pub vertices: Vec<PathVertexNode>,
 }
 
@@ -586,6 +589,9 @@ pub struct PathVertexNode {
     pub local_id: usize,
     pub global_id: u32,
     pub type_name: &'static str,
+    pub x: f32,
+    pub y: f32,
+    pub radius: f32,
     pub weight_local: Option<usize>,
     pub weight_global: Option<u32>,
     pub weight_type_name: Option<&'static str>,
@@ -2207,6 +2213,9 @@ fn paths(
                 local_id: path.local_id,
                 global_id,
                 type_name: path.object.type_name,
+                is_closed: path.object.bool_property("isClosed").unwrap_or(false),
+                is_hole: path.object.bool_property("isHole").unwrap_or(false),
+                is_clockwise: path.object.bool_property("isClockwise").unwrap_or(true),
                 vertices: path
                     .vertices
                     .into_iter()
@@ -2217,6 +2226,9 @@ fn paths(
                             local_id: vertex.local_id,
                             global_id,
                             type_name: vertex.object.type_name,
+                            x: vertex.object.double_property("x").unwrap_or(0.0),
+                            y: vertex.object.double_property("y").unwrap_or(0.0),
+                            radius: vertex.object.double_property("radius").unwrap_or(0.0),
                             weight_local: vertex.weight_local_id,
                             weight_global: vertex.weight_local_id.and_then(|local_id| {
                                 local_object_global_id(local_objects, local_id)

@@ -2,7 +2,7 @@ use rive_binary::{RuntimeFile, read_runtime_file};
 use rive_graph::GraphFile;
 use rive_runtime::{
     ArtboardInstance, ComponentDirt, Mat2D, RuntimeComponent, RuntimeDrawCommandKind,
-    RuntimeShapePaintKind, RuntimeShapePaintPathKind, RuntimeShapePaintState,
+    RuntimePathCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind, RuntimeShapePaintState,
     StateMachineInputKind, TransformProperty,
 };
 use rive_schema::definition_by_name;
@@ -1861,6 +1861,25 @@ fn runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe() {
         push_object_with_properties(bytes, "SolidColor", |bytes| {
             push_uint_property(bytes, "Component", "parentId", 8);
         });
+        push_object_with_properties(bytes, "PointsPath", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 1);
+            push_bool_property(bytes, "PointsCommonPath", "isClosed", true);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 10);
+            push_f32_property(bytes, "Vertex", "x", 0.0);
+            push_f32_property(bytes, "Vertex", "y", 0.0);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 10);
+            push_f32_property(bytes, "Vertex", "x", 10.0);
+            push_f32_property(bytes, "Vertex", "y", 0.0);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 10);
+            push_f32_property(bytes, "Vertex", "x", 10.0);
+            push_f32_property(bytes, "Vertex", "y", 20.0);
+        });
     });
 
     let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
@@ -1882,6 +1901,7 @@ fn runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe() {
                 paint.paint_type,
                 paint.path_kind,
                 paint.paint_state,
+                paint.path_commands,
                 paint.needs_save_operation,
             )
         })
@@ -1897,10 +1917,18 @@ fn runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe() {
                 paint.paint_type(),
                 paint.path_kind(),
                 paint.paint_state(),
+                paint.path_commands(),
                 paint.needs_save_operation,
             )
         })
         .collect::<Vec<_>>();
+    let expected_path_commands = vec![
+        RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+        RuntimePathCommand::Line { x: 10.0, y: 0.0 },
+        RuntimePathCommand::Line { x: 10.0, y: 20.0 },
+        RuntimePathCommand::Line { x: 0.0, y: 0.0 },
+        RuntimePathCommand::Close,
+    ];
 
     assert_eq!(
         cpp_payloads,
@@ -1914,6 +1942,7 @@ fn runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe() {
                     color: 0x8040_2010,
                     render_color: 0x4040_2010,
                 }),
+                expected_path_commands.clone(),
                 true
             ),
             (
@@ -1925,6 +1954,7 @@ fn runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe() {
                     color: 0xff11_2233,
                     render_color: 0x8011_2233,
                 }),
+                expected_path_commands,
                 true
             ),
         ],
@@ -4708,6 +4738,8 @@ struct CppShapePaintCommand {
     path_kind: String,
     #[serde(rename = "paintState")]
     paint_state: Option<CppShapePaintState>,
+    #[serde(default, rename = "pathCommands")]
+    path_commands: Vec<CppPathCommand>,
     #[serde(rename = "needsSaveOperation")]
     needs_save_operation: bool,
 }
@@ -4740,6 +4772,13 @@ impl CppShapePaintCommand {
             other => panic!("unexpected C++ shape paint state kind {other}"),
         }
     }
+
+    fn path_commands(&self) -> Vec<RuntimePathCommand> {
+        self.path_commands
+            .iter()
+            .map(CppPathCommand::path_command)
+            .collect()
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -4748,6 +4787,37 @@ struct CppShapePaintState {
     color: u32,
     #[serde(rename = "renderColor")]
     render_color: u32,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppPathCommand {
+    verb: String,
+    points: Vec<[f32; 2]>,
+}
+
+impl CppPathCommand {
+    fn path_command(&self) -> RuntimePathCommand {
+        match self.verb.as_str() {
+            "move" => RuntimePathCommand::Move {
+                x: self.points[0][0],
+                y: self.points[0][1],
+            },
+            "line" => RuntimePathCommand::Line {
+                x: self.points[0][0],
+                y: self.points[0][1],
+            },
+            "cubic" => RuntimePathCommand::Cubic {
+                x1: self.points[0][0],
+                y1: self.points[0][1],
+                x2: self.points[1][0],
+                y2: self.points[1][1],
+                x3: self.points[2][0],
+                y3: self.points[2][1],
+            },
+            "close" => RuntimePathCommand::Close,
+            other => panic!("unexpected C++ raw path verb {other}"),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]

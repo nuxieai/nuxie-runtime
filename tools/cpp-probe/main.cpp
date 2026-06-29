@@ -155,6 +155,8 @@
 #include "rive/foreground_layout_drawable.hpp"
 #include "rive/generated/core_registry.hpp"
 #include "rive/generated/event_base.hpp"
+#include "rive/math/path_types.hpp"
+#include "rive/math/raw_path.hpp"
 #include "rive/component.hpp"
 #include "rive/layout_component.hpp"
 #include "rive/layout/axis.hpp"
@@ -1383,6 +1385,70 @@ void write_shape_paint_state(std::ostream& out, rive::ShapePaint* shapePaint)
     out << "null";
 }
 
+void write_vec2(std::ostream& out, const rive::Vec2D& point)
+{
+    out << '[' << point.x << ',' << point.y << ']';
+}
+
+void write_path_point(std::ostream& out,
+                      const rive::Vec2D* points,
+                      size_t index)
+{
+    write_vec2(out, points[index]);
+}
+
+void write_shape_paint_path_commands(std::ostream& out,
+                                     rive::ShapePaintPath* path)
+{
+    out << ",\"pathCommands\":[";
+    bool first = true;
+    for (auto iter : *path->rawPath())
+    {
+        if (!first)
+        {
+            out << ',';
+        }
+        first = false;
+
+        auto verb = std::get<0>(iter);
+        auto points = std::get<1>(iter);
+        out << "{\"verb\":\"";
+        switch (verb)
+        {
+            case rive::PathVerb::move:
+                out << "move\",\"points\":[";
+                write_path_point(out, points, 0);
+                out << "]}";
+                break;
+            case rive::PathVerb::line:
+                out << "line\",\"points\":[";
+                write_path_point(out, points, 1);
+                out << "]}";
+                break;
+            case rive::PathVerb::quad:
+                out << "quad\",\"points\":[";
+                write_path_point(out, points, 1);
+                out << ',';
+                write_path_point(out, points, 2);
+                out << "]}";
+                break;
+            case rive::PathVerb::cubic:
+                out << "cubic\",\"points\":[";
+                write_path_point(out, points, 1);
+                out << ',';
+                write_path_point(out, points, 2);
+                out << ',';
+                write_path_point(out, points, 3);
+                out << "]}";
+                break;
+            case rive::PathVerb::close:
+                out << "close\",\"points\":[]}";
+                break;
+        }
+    }
+    out << ']';
+}
+
 void write_shape_paint_commands(std::ostream& out,
                                 const LocalIds& localIds,
                                 rive::Drawable* drawable)
@@ -1421,6 +1487,7 @@ void write_shape_paint_commands(std::ostream& out,
         out << ",\"paintType\":\"" << shape_paint_type_name(shapePaint) << "\"";
         out << ",\"pathKind\":\"" << shape_paint_path_kind(shape, path) << "\"";
         write_shape_paint_state(out, shapePaint);
+        write_shape_paint_path_commands(out, path);
         out << ",\"needsSaveOperation\":"
             << (needsSaveOperation ? "true" : "false");
         out << '}';

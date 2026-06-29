@@ -2,8 +2,8 @@ use anyhow::{Context, Result};
 use rive_binary::{RuntimeFile, RuntimeImportStatus, RuntimeObject};
 use rive_graph::{
     ArtboardGraph, ClippingShapeNode, ComponentNode, DrawableOrderKind, PathComposerNode,
-    PathComposerPathNode, ShapePaintKind, ShapePaintNode, ShapePaintPathKind, ShapePaintStateNode,
-    SortedDrawableNode,
+    PathComposerPathNode, PathGeometryNode, ShapePaintKind, ShapePaintNode, ShapePaintPathKind,
+    ShapePaintStateNode, SortedDrawableNode,
 };
 use rive_schema::{definition_by_name, object_supports_property};
 use std::collections::BTreeMap;
@@ -283,9 +283,68 @@ impl ArtboardInstance {
             .paints
             .iter()
             .filter_map(|paint| {
-                runtime_shape_paint_command(paint, needs_save_operation, render_opacity)
+                runtime_shape_paint_command(
+                    paint,
+                    needs_save_operation,
+                    render_opacity,
+                    self.runtime_shape_paint_path_commands(shape_local, paint, graph),
+                )
             })
             .collect()
+    }
+
+    fn runtime_shape_paint_path_commands(
+        &self,
+        shape_local: usize,
+        paint: &ShapePaintNode,
+        graph: &ArtboardGraph,
+    ) -> Vec<RuntimePathCommand> {
+        let Some(path_kind) = paint.path_kind else {
+            return Vec::new();
+        };
+        let Some(composer) = graph
+            .path_composers
+            .iter()
+            .find(|composer| composer.shape_local == shape_local)
+        else {
+            return Vec::new();
+        };
+
+        let shape_world = self
+            .component(shape_local)
+            .map(|component| component.transform.world_transform)
+            .unwrap_or(Mat2D::IDENTITY);
+        let inverse_shape_world = shape_world.invert_or_identity();
+        let mut commands = Vec::new();
+
+        for path_ref in &composer.paths {
+            if !self.runtime_path_counts_for_clip(path_ref) {
+                continue;
+            }
+            let Some(path) = graph
+                .paths
+                .iter()
+                .find(|path| path.local_id == path_ref.local_id)
+            else {
+                continue;
+            };
+            let Some(path_world) = self
+                .component(path.local_id)
+                .map(|component| component.transform.world_transform)
+            else {
+                continue;
+            };
+            let transform = match path_kind {
+                ShapePaintPathKind::World => path_world,
+                ShapePaintPathKind::Local | ShapePaintPathKind::LocalClockwise => {
+                    inverse_shape_world.multiply(path_world)
+                }
+            };
+
+            commands.extend(straight_points_path_commands(path, path_kind, transform));
+        }
+
+        commands
     }
 
     pub fn state_machine(&self, index: usize) -> Option<&RuntimeStateMachine> {
@@ -561,7 +620,7 @@ pub enum RuntimeDrawCommandKind {
     ClipEnd,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RuntimeDrawCommand {
     pub kind: RuntimeDrawCommandKind,
     pub local_id: Option<usize>,
@@ -584,13 +643,14 @@ pub enum RuntimeShapePaintPathKind {
     World,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RuntimeShapePaintCommand {
     pub paint_local: usize,
     pub mutator_local: Option<usize>,
     pub paint_type: RuntimeShapePaintKind,
     pub path_kind: RuntimeShapePaintPathKind,
     pub paint_state: Option<RuntimeShapePaintState>,
+    pub path_commands: Vec<RuntimePathCommand>,
     pub needs_save_operation: bool,
 }
 
@@ -599,10 +659,32 @@ pub enum RuntimeShapePaintState {
     SolidColor { color: u32, render_color: u32 },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum RuntimePathCommand {
+    Move {
+        x: f32,
+        y: f32,
+    },
+    Line {
+        x: f32,
+        y: f32,
+    },
+    Cubic {
+        x1: f32,
+        y1: f32,
+        x2: f32,
+        y2: f32,
+        x3: f32,
+        y3: f32,
+    },
+    Close,
+}
+
 fn runtime_shape_paint_command(
     paint: &ShapePaintNode,
     needs_save_operation: bool,
     render_opacity: f32,
+    path_commands: Vec<RuntimePathCommand>,
 ) -> Option<RuntimeShapePaintCommand> {
     if !paint.is_visible {
         return None;
@@ -613,6 +695,7 @@ fn runtime_shape_paint_command(
         paint_type: runtime_shape_paint_kind(paint.paint_type),
         path_kind: runtime_shape_paint_path_kind(paint.path_kind?)?,
         paint_state: runtime_shape_paint_state(paint.paint_state, render_opacity),
+        path_commands,
         needs_save_operation,
     })
 }
@@ -653,6 +736,52 @@ fn color_modulate_opacity(color: u32, opacity: f32) -> u32 {
 
 fn opacity_to_alpha(opacity: f32) -> u8 {
     (255.0 * opacity.clamp(0.0, 1.0)).round() as u8
+}
+
+fn straight_points_path_commands(
+    path: &PathGeometryNode,
+    path_kind: ShapePaintPathKind,
+    transform: Mat2D,
+) -> Vec<RuntimePathCommand> {
+    if path.type_name != "PointsPath" || path.vertices.len() < 2 {
+        return Vec::new();
+    }
+    if path.vertices.iter().any(|vertex| {
+        vertex.type_name != "StraightVertex"
+            || vertex.radius != 0.0
+            || vertex.weight_local.is_some()
+    }) {
+        return Vec::new();
+    }
+    if path_kind == ShapePaintPathKind::LocalClockwise
+        && path_needs_clockwise_reversal(path, transform)
+    {
+        return Vec::new();
+    }
+
+    let mut commands = Vec::new();
+    let first = &path.vertices[0];
+    let (x, y) = transform.transform_point(first.x, first.y);
+    commands.push(RuntimePathCommand::Move { x, y });
+
+    for vertex in path.vertices.iter().skip(1) {
+        let (x, y) = transform.transform_point(vertex.x, vertex.y);
+        commands.push(RuntimePathCommand::Line { x, y });
+    }
+
+    if path.is_closed {
+        let (x, y) = transform.transform_point(first.x, first.y);
+        commands.push(RuntimePathCommand::Line { x, y });
+        commands.push(RuntimePathCommand::Close);
+    }
+
+    commands
+}
+
+fn path_needs_clockwise_reversal(path: &PathGeometryNode, transform: Mat2D) -> bool {
+    let designed_clockwise = if path.is_clockwise { 1.0 } else { -1.0 };
+    let is_not_clockwise = transform.determinant() * designed_clockwise < 0.0;
+    is_not_clockwise != path.is_hole
 }
 
 fn sorted_drawable_uses_render_opacity(type_name: &str) -> bool {
@@ -3942,6 +4071,34 @@ impl Mat2D {
         self.0[1] *= scale_x;
         self.0[2] *= scale_y;
         self.0[3] *= scale_y;
+    }
+
+    pub fn determinant(self) -> f32 {
+        self.0[0] * self.0[3] - self.0[1] * self.0[2]
+    }
+
+    pub fn invert_or_identity(self) -> Self {
+        let determinant = self.determinant();
+        if determinant == 0.0 {
+            return Self::IDENTITY;
+        }
+
+        let [a, b, c, d, e, f] = self.0;
+        Self([
+            d / determinant,
+            -b / determinant,
+            -c / determinant,
+            a / determinant,
+            (c * f - d * e) / determinant,
+            (b * e - a * f) / determinant,
+        ])
+    }
+
+    pub fn transform_point(self, x: f32, y: f32) -> (f32, f32) {
+        (
+            self.0[0] * x + self.0[2] * y + self.0[4],
+            self.0[1] * x + self.0[3] * y + self.0[5],
+        )
     }
 }
 

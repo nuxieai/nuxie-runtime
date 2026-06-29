@@ -1444,6 +1444,88 @@ fn cpp_probe_matches_rust_sorted_drawable_order_when_available() {
 }
 
 #[test]
+fn cpp_probe_matches_rust_clipping_proxy_drawable_order_when_available() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ probe comparison; set RIVE_CPP_PROBE or run make cpp-probe");
+        return;
+    };
+
+    let parent_id_key = property_key_for_name("Component", "parentId");
+    let source_id_key = property_key_for_name("ClippingShape", "sourceId");
+
+    let bytes = synthetic_runtime_file(7196, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object(bytes, "Shape", &[(parent_id_key, 0)]);
+        push_object(bytes, "Node", &[(parent_id_key, 0)]);
+        push_object(bytes, "Shape", &[(parent_id_key, 2)]);
+        push_object(bytes, "Shape", &[(parent_id_key, 2)]);
+        push_object(
+            bytes,
+            "ClippingShape",
+            &[(parent_id_key, 2), (source_id_key, 1)],
+        );
+        push_object(bytes, "Shape", &[(parent_id_key, 0)]);
+    });
+
+    let label = "synthetic/clipping_proxy_drawable_order.riv";
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let (runtime, rust) = read_graph_from_bytes(&bytes, label);
+    compare_artboards(&cpp, &runtime, &rust, label);
+
+    let cpp_order = cpp.artboards[0]
+        .sorted_drawable_order
+        .iter()
+        .map(|node| (node.local_id, node.is_clip_start, node.is_clip_end))
+        .collect::<Vec<_>>();
+    let rust_order = rust.artboards[0]
+        .sorted_drawable_order
+        .iter()
+        .map(|node| {
+            (
+                node.local_id,
+                node.kind == DrawableOrderKind::ClipStartProxy,
+                node.kind == DrawableOrderKind::ClipEndProxy,
+            )
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        cpp_order,
+        vec![
+            (Some(6), false, false),
+            (None, true, false),
+            (Some(4), false, false),
+            (Some(3), false, false),
+            (None, false, true),
+            (Some(1), false, false),
+        ],
+        "C++ should wrap the clipped subtree with start/end proxy drawables"
+    );
+    assert_eq!(
+        rust_order, cpp_order,
+        "Rust sorted drawable order should interleave clipping proxies like C++"
+    );
+
+    let rust_clip_proxies = rust.artboards[0]
+        .sorted_drawable_order
+        .iter()
+        .filter(|node| {
+            matches!(
+                node.kind,
+                DrawableOrderKind::ClipStartProxy | DrawableOrderKind::ClipEndProxy
+            )
+        })
+        .map(|node| node.clipping_shape_local)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        rust_clip_proxies,
+        vec![Some(5), Some(5)],
+        "Rust proxy nodes retain the clipping shape they came from for later draw-command work"
+    );
+}
+
+#[test]
 fn graph_reports_draw_target_order_cycles() {
     let parent_id_key = property_key_for_name("Component", "parentId");
     let drawable_id_key = property_key_for_name("DrawTarget", "drawableId");
@@ -6819,6 +6901,10 @@ struct CppSortedDrawable {
     local_id: Option<usize>,
     #[serde(rename = "isProxy")]
     is_proxy: bool,
+    #[serde(rename = "isClipStart")]
+    is_clip_start: bool,
+    #[serde(rename = "isClipEnd")]
+    is_clip_end: bool,
 }
 
 #[derive(Debug, Deserialize)]

@@ -158,17 +158,18 @@ impl ArtboardGraph {
         let drawable_order = drawable_order(file, &local_objects);
         let draw_target_order =
             draw_target_order(file, &local_objects, &draw_targets, &drawable_order);
+        let clipping_shapes =
+            clipping_shapes(file, &local_objects, &components, &component_by_local);
         let sorted_drawable_order = sorted_drawable_order(
             &drawable_order,
             &draw_targets,
             &draw_rules,
             &draw_target_order.local_ids,
+            &clipping_shapes,
         );
         lifecycle.post_build_dependencies_draw_target_edges =
             draw_target_order.dependency_edges.len();
         lifecycle.draw_target_cycles = draw_target_order.cycles.len();
-        let clipping_shapes =
-            clipping_shapes(file, &local_objects, &components, &component_by_local);
         let path_composers = path_composers(file, artboard_index, &local_objects);
         let meshes = meshes(file, artboard_index, &local_objects);
         let paths = paths(file, artboard_index, &local_objects);
@@ -494,6 +495,8 @@ pub struct DrawTargetCycle {
 pub enum DrawableOrderKind {
     Drawable,
     LayoutProxy,
+    ClipStartProxy,
+    ClipEndProxy,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -517,6 +520,8 @@ pub struct SortedDrawableNode {
     pub layout_local: Option<usize>,
     pub layout_global: Option<u32>,
     pub draw_target_local: Option<usize>,
+    pub clipping_shape_local: Option<usize>,
+    pub clipping_shape_global: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1628,6 +1633,7 @@ fn sorted_drawable_order(
     draw_targets: &[DrawTargetNode],
     draw_rules: &[DrawRulesNode],
     draw_target_order: &[usize],
+    clipping_shapes: &[ClippingShapeNode],
 ) -> Vec<SortedDrawableNode> {
     let active_target_by_rules = draw_rules
         .iter()
@@ -1684,7 +1690,7 @@ fn sorted_drawable_order(
         main.splice(insert_at..insert_at, group);
     }
 
-    main.into_iter().rev().collect()
+    interleave_clipping_proxy_drawables(main.into_iter().rev(), clipping_shapes)
 }
 
 fn sorted_drawable_node(
@@ -1699,6 +1705,106 @@ fn sorted_drawable_node(
         layout_local: drawable.layout_local,
         layout_global: drawable.layout_global,
         draw_target_local,
+        clipping_shape_local: None,
+        clipping_shape_global: None,
+    }
+}
+
+fn interleave_clipping_proxy_drawables(
+    sorted_drawables: impl IntoIterator<Item = SortedDrawableNode>,
+    clipping_shapes: &[ClippingShapeNode],
+) -> Vec<SortedDrawableNode> {
+    let mut order = Vec::new();
+    let mut clipping_stack = Vec::<usize>::new();
+
+    for drawable in sorted_drawables {
+        let drawable_clipping_shapes = drawable_clipping_shape_locals(&drawable, clipping_shapes);
+        let removing_index = clipping_stack
+            .iter()
+            .position(|clipping_shape_local| {
+                !drawable_clipping_shapes.contains(clipping_shape_local)
+            })
+            .unwrap_or(clipping_stack.len());
+
+        if removing_index < clipping_stack.len() {
+            for clipping_shape_local in clipping_stack[removing_index..].iter().rev() {
+                order.push(clipping_proxy_node(
+                    clipping_shapes,
+                    *clipping_shape_local,
+                    DrawableOrderKind::ClipEndProxy,
+                ));
+            }
+            clipping_stack.truncate(removing_index);
+        }
+
+        for clipping_shape_local in drawable_clipping_shapes {
+            if !clipping_stack.contains(&clipping_shape_local) {
+                order.push(clipping_proxy_node(
+                    clipping_shapes,
+                    clipping_shape_local,
+                    DrawableOrderKind::ClipStartProxy,
+                ));
+                clipping_stack.push(clipping_shape_local);
+            }
+        }
+
+        order.push(drawable);
+    }
+
+    for clipping_shape_local in clipping_stack.into_iter().rev() {
+        order.push(clipping_proxy_node(
+            clipping_shapes,
+            clipping_shape_local,
+            DrawableOrderKind::ClipEndProxy,
+        ));
+    }
+
+    order
+}
+
+fn drawable_clipping_shape_locals(
+    drawable: &SortedDrawableNode,
+    clipping_shapes: &[ClippingShapeNode],
+) -> Vec<usize> {
+    let Some(drawable_local) = drawable.local_id else {
+        return Vec::new();
+    };
+
+    clipping_shapes
+        .iter()
+        .filter_map(|clipping_shape| {
+            clipping_shape
+                .clipped_drawable_locals
+                .contains(&drawable_local)
+                .then_some(clipping_shape.local_id)
+        })
+        .collect()
+}
+
+fn clipping_proxy_node(
+    clipping_shapes: &[ClippingShapeNode],
+    clipping_shape_local: usize,
+    kind: DrawableOrderKind,
+) -> SortedDrawableNode {
+    let clipping_shape_global = clipping_shapes
+        .iter()
+        .find(|clipping_shape| clipping_shape.local_id == clipping_shape_local)
+        .map(|clipping_shape| clipping_shape.global_id);
+    debug_assert!(matches!(
+        kind,
+        DrawableOrderKind::ClipStartProxy | DrawableOrderKind::ClipEndProxy
+    ));
+
+    SortedDrawableNode {
+        kind,
+        local_id: None,
+        global_id: None,
+        type_name: "ClippingShapeProxyDrawable",
+        layout_local: None,
+        layout_global: None,
+        draw_target_local: None,
+        clipping_shape_local: Some(clipping_shape_local),
+        clipping_shape_global,
     }
 }
 

@@ -243,7 +243,7 @@ In progress. The next runtime seam separates imported source artboard data from 
 
 Blocked by: #9
 Type: Prototype
-Contract: `docs/prototypes/draw-target-placement-order-runtime-contract.md`
+Contracts: `docs/prototypes/draw-target-placement-order-runtime-contract.md`, `docs/prototypes/clipping-proxy-draw-order-runtime-contract.md`
 
 ### Question
 
@@ -251,7 +251,7 @@ Can Rust produce the same derived draw order without implementing a renderer?
 
 ### Answer
 
-Partially open. `crates/rive-graph` now exposes draw target/rule/clipping relationships; `drawable_order` mirrors C++ `m_Drawables` initialization through foreground reordering, layout proxy insertion, and flattened draw-rule assignment; `draw_target_order` mirrors C++ `m_DrawTargets` initialization through parent-ordered rule groups, synthetic root target dependencies, and flattened-rule target dependencies; and `sorted_drawable_order` mirrors the first `Artboard::sortDrawOrder()` phase by grouping active-target drawables and splicing them before/after their resolved target drawable. Remaining work: clipping-stack proxy operations, `clearRedundantOperations()`/save-operation elision, hidden/will-draw filtering, and a renderer-independent draw command stream. This should remain headless and comparable in tests before any GPU work begins.
+Partially open. `crates/rive-graph` now exposes draw target/rule/clipping relationships; `drawable_order` mirrors C++ `m_Drawables` initialization through foreground reordering, layout proxy insertion, and flattened draw-rule assignment; `draw_target_order` mirrors C++ `m_DrawTargets` initialization through parent-ordered rule groups, synthetic root target dependencies, and flattened-rule target dependencies; and `sorted_drawable_order` mirrors `Artboard::sortDrawOrder()` through active-target grouping, before/after target placement splicing, and clipping proxy start/end interleaving. Remaining work: `clearRedundantOperations()`/save-operation elision, hidden/will-draw filtering, and a renderer-independent draw command stream. This should remain headless and comparable in tests before any GPU work begins.
 
 ## #11: Animation And State Machine Integration
 

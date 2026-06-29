@@ -314,6 +314,7 @@ struct SyntheticTransitionOptions {
     any_state_transition: bool,
     source_second_frame: u64,
     source_second_value: f32,
+    cubic_transition_interpolator: bool,
 }
 
 impl Default for SyntheticTransitionOptions {
@@ -325,6 +326,7 @@ impl Default for SyntheticTransitionOptions {
             any_state_transition: false,
             source_second_frame: 10,
             source_second_value: 12.0,
+            cubic_transition_interpolator: false,
         }
     }
 }
@@ -363,13 +365,24 @@ fn synthetic_state_machine_input_transition_with_options(
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "Backboard", |_| {});
         push_object_with_properties(bytes, "Artboard", |_| {});
+        let animated_local_id = if transition.cubic_transition_interpolator {
+            push_object_with_properties(bytes, "CubicEaseInterpolator", |bytes| {
+                push_f32_property(bytes, "CubicEaseInterpolator", "x1", 0.2);
+                push_f32_property(bytes, "CubicEaseInterpolator", "y1", 0.0);
+                push_f32_property(bytes, "CubicEaseInterpolator", "x2", 0.8);
+                push_f32_property(bytes, "CubicEaseInterpolator", "y2", 0.0);
+            });
+            2
+        } else {
+            1
+        };
         push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
         push_object_with_properties(bytes, "LinearAnimation", |bytes| {
             push_uint_property(bytes, "LinearAnimation", "fps", 10);
             push_uint_property(bytes, "LinearAnimation", "duration", 20);
         });
         push_object_with_properties(bytes, "KeyedObject", |bytes| {
-            push_uint_property(bytes, "KeyedObject", "objectId", 1);
+            push_uint_property(bytes, "KeyedObject", "objectId", animated_local_id);
         });
         push_object_with_properties(bytes, "KeyedProperty", |bytes| {
             push_uint_property(
@@ -391,7 +404,7 @@ fn synthetic_state_machine_input_transition_with_options(
             push_uint_property(bytes, "LinearAnimation", "duration", 20);
         });
         push_object_with_properties(bytes, "KeyedObject", |bytes| {
-            push_uint_property(bytes, "KeyedObject", "objectId", 1);
+            push_uint_property(bytes, "KeyedObject", "objectId", animated_local_id);
         });
         push_object_with_properties(bytes, "KeyedProperty", |bytes| {
             push_uint_property(
@@ -458,6 +471,9 @@ fn push_synthetic_transition_options(bytes: &mut Vec<u8>, transition: SyntheticT
     }
     if let Some(exit_time) = transition.exit_time {
         push_uint_property(bytes, "StateTransition", "exitTime", exit_time);
+    }
+    if transition.cubic_transition_interpolator {
+        push_uint_property(bytes, "StateTransition", "interpolatorId", 1);
     }
 }
 
@@ -1636,6 +1652,74 @@ fn state_machine_percentage_timing_matches_cpp_probe() {
         }
         compare_cpp_runtime_update(&cpp, &rust, &report, label);
     }
+}
+
+#[test]
+fn state_machine_cubic_transition_interpolator_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_cubic_transition_interpolator_cpp.riv";
+    let bytes = synthetic_state_machine_input_transition_with_options(
+        8247,
+        SyntheticInputTransitionKind::Bool,
+        SyntheticTransitionOptions {
+            duration: 1000,
+            cubic_transition_interpolator: true,
+            ..Default::default()
+        },
+    );
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-state-machine-bool".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "true".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.5".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    let mut rust_reports = Vec::new();
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    rust_reports.push((advanced, state_machine.clone()));
+    assert!(state_machine.set_bool(0, true));
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    rust_reports.push((advanced, state_machine.clone()));
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.5);
+    rust_reports.push((advanced, state_machine.clone()));
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+    {
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
 }
 
 #[test]

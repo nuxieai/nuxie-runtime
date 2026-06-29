@@ -748,7 +748,8 @@ struct RuntimeStateTransition {
     flags: u64,
     condition_count: usize,
     conditions: Vec<RuntimeTransitionCondition>,
-    has_interpolator: bool,
+    interpolator: Option<RuntimeTransitionInterpolator>,
+    has_unsupported_interpolator: bool,
 }
 
 impl RuntimeStateTransition {
@@ -762,7 +763,7 @@ impl RuntimeStateTransition {
     fn is_simple_supported(&self) -> bool {
         self.state_to_index.is_some()
             && self.condition_count == self.conditions.len()
-            && !self.has_interpolator
+            && !self.has_unsupported_interpolator
             && self.flags & (Self::DISABLED | Self::ENABLE_EARLY_EXIT) == 0
     }
 
@@ -842,6 +843,99 @@ impl RuntimeStateTransition {
     fn use_inputs(&self, inputs: &mut [StateMachineInputInstance], layer_index: usize) {
         for condition in &self.conditions {
             condition.use_input(inputs, layer_index);
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum RuntimeTransitionInterpolator {
+    CubicEase { x1: f32, y1: f32, x2: f32, y2: f32 },
+}
+
+impl RuntimeTransitionInterpolator {
+    fn from_object(object: &RuntimeObject) -> Option<Self> {
+        match object.type_name {
+            "CubicEaseInterpolator" => Some(Self::CubicEase {
+                x1: object.double_property("x1").unwrap_or(0.42),
+                y1: object.double_property("y1").unwrap_or(0.0),
+                x2: object.double_property("x2").unwrap_or(0.58),
+                y2: object.double_property("y2").unwrap_or(1.0),
+            }),
+            _ => None,
+        }
+    }
+
+    fn transform(self, factor: f32) -> f32 {
+        match self {
+            Self::CubicEase { x1, y1, x2, y2 } => {
+                let t = cubic_interpolator_get_t(factor, x1, x2);
+                cubic_interpolator_calc_bezier(t, y1, y2)
+            }
+        }
+    }
+}
+
+fn cubic_interpolator_calc_bezier(t: f32, a1: f32, a2: f32) -> f32 {
+    (((1.0 - 3.0 * a2 + 3.0 * a1) * t + (3.0 * a2 - 6.0 * a1)) * t + (3.0 * a1)) * t
+}
+
+fn cubic_interpolator_slope(t: f32, a1: f32, a2: f32) -> f32 {
+    3.0 * (1.0 - 3.0 * a2 + 3.0 * a1) * t * t + 2.0 * (3.0 * a2 - 6.0 * a1) * t + (3.0 * a1)
+}
+
+fn cubic_interpolator_get_t(x: f32, x1: f32, x2: f32) -> f32 {
+    const SPLINE_TABLE_SIZE: usize = 11;
+    const SAMPLE_STEP_SIZE: f32 = 1.0 / (SPLINE_TABLE_SIZE as f32 - 1.0);
+    const NEWTON_ITERATIONS: usize = 4;
+    const NEWTON_MIN_SLOPE: f32 = 0.001;
+    const SUBDIVISION_PRECISION: f32 = 0.0000001;
+    const SUBDIVISION_MAX_ITERATIONS: usize = 10;
+
+    let mut values = [0.0; SPLINE_TABLE_SIZE];
+    for (i, value) in values.iter_mut().enumerate() {
+        *value = cubic_interpolator_calc_bezier(i as f32 * SAMPLE_STEP_SIZE, x1, x2);
+    }
+
+    let mut interval_start = 0.0;
+    let mut current_sample = 1;
+    let last_sample = SPLINE_TABLE_SIZE - 1;
+    while current_sample != last_sample && values[current_sample] <= x {
+        interval_start += SAMPLE_STEP_SIZE;
+        current_sample += 1;
+    }
+    current_sample -= 1;
+
+    let dist = (x - values[current_sample]) / (values[current_sample + 1] - values[current_sample]);
+    let mut guess_for_t = interval_start + dist * SAMPLE_STEP_SIZE;
+    let initial_slope = cubic_interpolator_slope(guess_for_t, x1, x2);
+    if initial_slope >= NEWTON_MIN_SLOPE {
+        for _ in 0..NEWTON_ITERATIONS {
+            let current_slope = cubic_interpolator_slope(guess_for_t, x1, x2);
+            if current_slope == 0.0 {
+                return guess_for_t;
+            }
+            let current_x = cubic_interpolator_calc_bezier(guess_for_t, x1, x2) - x;
+            guess_for_t -= current_x / current_slope;
+        }
+        guess_for_t
+    } else if initial_slope == 0.0 {
+        guess_for_t
+    } else {
+        let mut upper_bound = interval_start + SAMPLE_STEP_SIZE;
+        let mut iterations = 0;
+        loop {
+            let current_t = interval_start + (upper_bound - interval_start) / 2.0;
+            let current_x = cubic_interpolator_calc_bezier(current_t, x1, x2) - x;
+            if current_x > 0.0 {
+                upper_bound = current_t;
+            } else {
+                interval_start = current_t;
+            }
+            iterations += 1;
+            if current_x.abs() <= SUBDIVISION_PRECISION || iterations >= SUBDIVISION_MAX_ITERATIONS
+            {
+                return current_t;
+            }
         }
     }
 }
@@ -1245,6 +1339,7 @@ struct StateMachineLayerInstance {
     transition_mix: f32,
     transition_mix_from: f32,
     transition_source_paused: bool,
+    transition_interpolator: Option<RuntimeTransitionInterpolator>,
     waiting_for_exit: bool,
 }
 
@@ -1266,6 +1361,7 @@ impl StateMachineLayerInstance {
             transition_mix: 1.0,
             transition_mix_from: 1.0,
             transition_source_paused: false,
+            transition_interpolator: None,
             waiting_for_exit: false,
         };
         instance.refresh_current_animation(artboard, layer);
@@ -1431,6 +1527,7 @@ impl StateMachineLayerInstance {
             self.transition_mix_from = previous_mix;
             self.transition_mix = 0.0;
             self.transition_source_paused = transition.pause_on_exit();
+            self.transition_interpolator = transition.interpolator;
             self.update_transition_mix(0.0);
         } else {
             self.clear_transition_source();
@@ -1444,6 +1541,7 @@ impl StateMachineLayerInstance {
         self.transition_mix = 1.0;
         self.transition_mix_from = 1.0;
         self.transition_source_paused = false;
+        self.transition_interpolator = None;
     }
 
     fn is_transitioning(&self) -> bool {
@@ -1549,14 +1647,19 @@ impl StateMachineLayerInstance {
         if self.is_transitioning()
             && let Some(source_animation) = self.transition_source_animation.as_ref()
         {
-            changed |= artboard
-                .apply_linear_animation_instance(source_animation, self.transition_mix_from);
+            let mix_from = self
+                .transition_interpolator
+                .map(|interpolator| interpolator.transform(self.transition_mix_from))
+                .unwrap_or(self.transition_mix_from);
+            changed |= artboard.apply_linear_animation_instance(source_animation, mix_from);
         }
         let Some(animation_instance) = self.current_animation.as_ref() else {
             return changed;
         };
         let mix = if self.transition_source_animation.is_some() {
-            self.transition_mix
+            self.transition_interpolator
+                .map(|interpolator| interpolator.transform(self.transition_mix))
+                .unwrap_or(self.transition_mix)
         } else {
             1.0
         };
@@ -1875,29 +1978,40 @@ fn build_state_machines(
                                 transitions: state
                                     .transitions
                                     .into_iter()
-                                    .map(|transition| RuntimeStateTransition {
-                                        state_to_index: transition.state_to_index,
-                                        duration: transition
-                                            .object
-                                            .uint_property("duration")
-                                            .unwrap_or(0),
-                                        exit_time: transition
-                                            .object
-                                            .uint_property("exitTime")
-                                            .unwrap_or(0),
-                                        flags: transition
-                                            .object
-                                            .uint_property("flags")
-                                            .unwrap_or(0),
-                                        condition_count: transition.conditions.len(),
-                                        conditions: transition
-                                            .conditions
-                                            .iter()
-                                            .filter_map(|condition| {
-                                                RuntimeTransitionCondition::from_object(condition)
-                                            })
-                                            .collect(),
-                                        has_interpolator: transition.interpolator.is_some(),
+                                    .map(|transition| {
+                                        let interpolator = transition
+                                            .interpolator
+                                            .and_then(RuntimeTransitionInterpolator::from_object);
+                                        RuntimeStateTransition {
+                                            state_to_index: transition.state_to_index,
+                                            duration: transition
+                                                .object
+                                                .uint_property("duration")
+                                                .unwrap_or(0),
+                                            exit_time: transition
+                                                .object
+                                                .uint_property("exitTime")
+                                                .unwrap_or(0),
+                                            flags: transition
+                                                .object
+                                                .uint_property("flags")
+                                                .unwrap_or(0),
+                                            condition_count: transition.conditions.len(),
+                                            conditions: transition
+                                                .conditions
+                                                .iter()
+                                                .filter_map(|condition| {
+                                                    RuntimeTransitionCondition::from_object(
+                                                        condition,
+                                                    )
+                                                })
+                                                .collect(),
+                                            interpolator,
+                                            has_unsupported_interpolator: transition
+                                                .interpolator
+                                                .is_some()
+                                                && interpolator.is_none(),
+                                        }
                                     })
                                     .collect(),
                             }

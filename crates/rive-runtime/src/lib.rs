@@ -1,9 +1,9 @@
 use anyhow::{Context, Result};
 use rive_binary::{RuntimeFile, RuntimeImportStatus, RuntimeObject};
 use rive_graph::{
-    ArtboardGraph, ClippingShapeNode, ComponentNode, DrawableOrderKind, GradientStopNode,
-    PathComposerNode, PathComposerPathNode, PathGeometryNode, PathVertexNode, ShapePaintKind,
-    ShapePaintNode, ShapePaintPathKind, ShapePaintStateNode, SortedDrawableNode,
+    ArtboardGraph, ClippingShapeNode, ComponentNode, DrawableOrderKind, FeatherNode,
+    GradientStopNode, PathComposerNode, PathComposerPathNode, PathGeometryNode, PathVertexNode,
+    ShapePaintKind, ShapePaintNode, ShapePaintPathKind, ShapePaintStateNode, SortedDrawableNode,
 };
 use rive_schema::{definition_by_name, object_supports_property};
 use std::collections::BTreeMap;
@@ -653,6 +653,7 @@ pub struct RuntimeShapePaintCommand {
     pub blend_mode_value: u32,
     pub render_blend_mode_value: u32,
     pub paint_state: Option<RuntimeShapePaintState>,
+    pub feather_state: Option<RuntimeFeatherState>,
     pub path_commands: Vec<RuntimePathCommand>,
     pub needs_save_operation: bool,
 }
@@ -688,6 +689,16 @@ pub struct RuntimeGradientStop {
     pub color: u32,
     pub render_color: u32,
     pub position: f32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RuntimeFeatherState {
+    pub feather_local: usize,
+    pub space_value: u32,
+    pub strength: f32,
+    pub offset_x: f32,
+    pub offset_y: f32,
+    pub inner: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -732,6 +743,7 @@ fn runtime_shape_paint_command(
             container_blend_mode_value,
         ),
         paint_state: runtime_shape_paint_state(paint.paint_state.clone(), render_opacity),
+        feather_state: runtime_feather_state(paint.feather.as_ref()),
         path_commands,
         needs_save_operation,
     })
@@ -821,6 +833,18 @@ fn runtime_gradient_stops(
             position: stop.position.clamp(0.0, 1.0),
         })
         .collect()
+}
+
+fn runtime_feather_state(feather: Option<&FeatherNode>) -> Option<RuntimeFeatherState> {
+    let feather = feather?;
+    Some(RuntimeFeatherState {
+        feather_local: feather.local_id,
+        space_value: feather.space_value,
+        strength: feather.strength,
+        offset_x: feather.offset_x,
+        offset_y: feather.offset_y,
+        inner: feather.inner,
+    })
 }
 
 fn color_modulate_opacity(color: u32, opacity: f32) -> u32 {

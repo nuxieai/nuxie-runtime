@@ -122,6 +122,18 @@ fn push_uint_property(bytes: &mut Vec<u8>, type_name: &str, property_name: &str,
     push_var_uint(bytes, value);
 }
 
+fn push_f32_property(bytes: &mut Vec<u8>, type_name: &str, property_name: &str, value: f32) {
+    let key = property_key_for_name(type_name, property_name);
+    push_var_uint(bytes, u64::from(key));
+    bytes.extend_from_slice(&value.to_le_bytes());
+}
+
+fn push_bool_property(bytes: &mut Vec<u8>, type_name: &str, property_name: &str, value: bool) {
+    let key = property_key_for_name(type_name, property_name);
+    push_var_uint(bytes, u64::from(key));
+    bytes.push(u8::from(value));
+}
+
 fn draw_target_edge(
     source_local: Option<usize>,
     dependent_local: usize,
@@ -2520,7 +2532,14 @@ fn graph_projects_shape_paint_container_registrations() {
             &[(parent_id_key, 1), (shape_paint_blend_mode_value_key, 14)],
         );
         push_object(bytes, "SolidColor", &[(parent_id_key, 6)]);
-        push_object(bytes, "Feather", &[(parent_id_key, 6)]);
+        push_object_with_properties(bytes, "Feather", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 6);
+            push_uint_property(bytes, "Feather", "spaceValue", 1);
+            push_f32_property(bytes, "Feather", "strength", 8.0);
+            push_f32_property(bytes, "Feather", "offsetX", 3.0);
+            push_f32_property(bytes, "Feather", "offsetY", -4.0);
+            push_bool_property(bytes, "Feather", "inner", true);
+        });
         push_object(
             bytes,
             "TrimPath",
@@ -2653,6 +2672,36 @@ fn graph_projects_shape_paint_container_registrations() {
             )
         ],
         "ShapePaint::onAddedClean registration plus mutator/effect/gradient child facts are static graph data, not paint mutation or rendering"
+    );
+
+    assert_eq!(
+        artboard.shape_paint_containers[0].paints[1]
+            .feather
+            .as_ref()
+            .map(|feather| (
+                feather.local_id,
+                feather.global_id,
+                feather.type_name,
+                feather.space_value,
+                feather.strength,
+                feather.offset_x,
+                feather.offset_y,
+                feather.inner
+            )),
+        Some((8, 9, "Feather", 1, 8.0, 3.0, -4.0, true)),
+        "ShapePaint Feather scalar facts should be projected without running feather rendering"
+    );
+    assert!(
+        artboard.shape_paint_containers[0].paints[0]
+            .feather
+            .is_none(),
+        "paints without an attached Feather should not receive synthetic feather state"
+    );
+    assert!(
+        artboard.shape_paint_containers[1].paints[0]
+            .feather
+            .is_none(),
+        "unfeathered non-Shape containers should not receive synthetic feather state"
     );
 }
 
@@ -6617,6 +6666,40 @@ fn compare_artboard_shape_paint_containers(
                 "artboard {artboard_index} shape paint container {container_index} paint {paint_index} feather type mismatch for {label}"
             );
             assert_eq!(
+                cpp_paint.feather.is_some(),
+                rust_paint.feather.is_some(),
+                "artboard {artboard_index} shape paint container {container_index} paint {paint_index} feather payload presence mismatch for {label}"
+            );
+            if let (Some(cpp_feather), Some(rust_feather)) =
+                (&cpp_paint.feather, &rust_paint.feather)
+            {
+                assert_eq!(
+                    cpp_feather.local,
+                    Some(rust_feather.local_id),
+                    "artboard {artboard_index} shape paint container {container_index} paint {paint_index} feather payload local mismatch for {label}"
+                );
+                assert_eq!(
+                    cpp_feather.space_value, rust_feather.space_value,
+                    "artboard {artboard_index} shape paint container {container_index} paint {paint_index} feather spaceValue mismatch for {label}"
+                );
+                assert_eq!(
+                    cpp_feather.strength, rust_feather.strength,
+                    "artboard {artboard_index} shape paint container {container_index} paint {paint_index} feather strength mismatch for {label}"
+                );
+                assert_eq!(
+                    cpp_feather.offset_x, rust_feather.offset_x,
+                    "artboard {artboard_index} shape paint container {container_index} paint {paint_index} feather offsetX mismatch for {label}"
+                );
+                assert_eq!(
+                    cpp_feather.offset_y, rust_feather.offset_y,
+                    "artboard {artboard_index} shape paint container {container_index} paint {paint_index} feather offsetY mismatch for {label}"
+                );
+                assert_eq!(
+                    cpp_feather.inner, rust_feather.inner,
+                    "artboard {artboard_index} shape paint container {container_index} paint {paint_index} feather inner mismatch for {label}"
+                );
+            }
+            assert_eq!(
                 cpp_paint.effects.len(),
                 rust_paint.effects.len(),
                 "artboard {artboard_index} shape paint container {container_index} paint {paint_index} effect count mismatch for {label}"
@@ -7180,9 +7263,25 @@ struct CppShapePaint {
     #[serde(default, rename = "featherCoreType")]
     feather_core_type: Option<u16>,
     #[serde(default)]
+    feather: Option<CppFeather>,
+    #[serde(default)]
     effects: Vec<CppStrokeEffect>,
     #[serde(default, rename = "gradientStops")]
     gradient_stops: Vec<CppGradientStop>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppFeather {
+    #[serde(default)]
+    local: Option<usize>,
+    #[serde(rename = "spaceValue")]
+    space_value: u32,
+    strength: f32,
+    #[serde(rename = "offsetX")]
+    offset_x: f32,
+    #[serde(rename = "offsetY")]
+    offset_y: f32,
+    inner: bool,
 }
 
 #[derive(Debug, Deserialize)]

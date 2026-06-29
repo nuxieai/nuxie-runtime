@@ -625,6 +625,7 @@ pub struct ShapePaintNode {
     pub mutator_local: Option<usize>,
     pub mutator_global: Option<u32>,
     pub mutator_type_name: Option<&'static str>,
+    pub feather: Option<FeatherNode>,
     pub feather_local: Option<usize>,
     pub feather_global: Option<u32>,
     pub feather_type_name: Option<&'static str>,
@@ -689,6 +690,18 @@ pub struct GradientStopNode {
     pub type_name: &'static str,
     pub color: u32,
     pub position: f32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct FeatherNode {
+    pub local_id: usize,
+    pub global_id: u32,
+    pub type_name: &'static str,
+    pub space_value: u32,
+    pub strength: f32,
+    pub offset_x: f32,
+    pub offset_y: f32,
+    pub inner: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -2340,6 +2353,11 @@ fn shape_paint_containers(
                                 local_object_global_id(local_objects, local_id)
                             }),
                             mutator_type_name: paint.mutator.map(|object| object.type_name),
+                            feather: shape_paint_feather(
+                                paint.feather,
+                                paint.feather_local_id,
+                                local_objects,
+                            ),
                             feather_local: paint.feather_local_id,
                             feather_global: paint.feather_local_id.and_then(|local_id| {
                                 local_object_global_id(local_objects, local_id)
@@ -2449,6 +2467,25 @@ fn shape_paint_state(
         }),
         _ => None,
     }
+}
+
+fn shape_paint_feather(
+    feather: Option<&RuntimeObject>,
+    feather_local_id: Option<usize>,
+    local_objects: &[LocalObject],
+) -> Option<FeatherNode> {
+    let feather = feather?;
+    Some(FeatherNode {
+        local_id: feather_local_id?,
+        global_id: feather_local_id
+            .and_then(|local_id| local_object_global_id(local_objects, local_id))?,
+        type_name: feather.type_name,
+        space_value: feather.uint_property("spaceValue").unwrap_or(0) as u32,
+        strength: feather.double_property("strength").unwrap_or(12.0),
+        offset_x: feather.double_property("offsetX").unwrap_or(0.0),
+        offset_y: feather.double_property("offsetY").unwrap_or(0.0),
+        inner: feather.bool_property("inner").unwrap_or(false),
+    })
 }
 
 fn shape_paint_container_blend_mode_value(container: &RuntimeObject) -> u32 {

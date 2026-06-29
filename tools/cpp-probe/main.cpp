@@ -1419,6 +1419,28 @@ void write_shape_paint_state(std::ostream& out, rive::ShapePaint* shapePaint)
     out << "null";
 }
 
+void write_shape_paint_feather(std::ostream& out,
+                               const LocalIds& localIds,
+                               rive::ShapePaint* shapePaint)
+{
+    out << ",\"feather\":";
+    auto feather = shapePaint->feather();
+    if (feather == nullptr)
+    {
+        out << "null";
+        return;
+    }
+
+    out << "{\"local\":";
+    write_local_id_or_null(out, localIds, feather);
+    out << ",\"spaceValue\":" << feather->spaceValue();
+    out << ",\"strength\":" << feather->strength();
+    out << ",\"offsetX\":" << feather->offsetX();
+    out << ",\"offsetY\":" << feather->offsetY();
+    out << ",\"inner\":" << (feather->inner() ? "true" : "false");
+    out << '}';
+}
+
 void write_vec2(std::ostream& out, const rive::Vec2D& point)
 {
     out << '[' << point.x << ',' << point.y << ']';
@@ -1525,6 +1547,7 @@ void write_shape_paint_commands(std::ostream& out,
         out << ",\"renderBlendModeValue\":"
             << (blendModeValue == 127 ? shape->blendModeValue() : blendModeValue);
         write_shape_paint_state(out, shapePaint);
+        write_shape_paint_feather(out, localIds, shapePaint);
         write_shape_paint_path_commands(out, path);
         out << ",\"needsSaveOperation\":"
             << (needsSaveOperation ? "true" : "false");
@@ -2040,6 +2063,7 @@ void write_shape_paint(std::ostream& out,
     {
         out << feather->coreType();
     }
+    write_shape_paint_feather(out, localIds, paint);
 
     out << ",\"effects\":[";
     bool first = true;

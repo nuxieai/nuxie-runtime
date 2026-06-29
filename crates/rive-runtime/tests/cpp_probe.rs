@@ -2,8 +2,8 @@ use rive_binary::{RuntimeFile, read_runtime_file};
 use rive_graph::GraphFile;
 use rive_runtime::{
     ArtboardInstance, ComponentDirt, Mat2D, RuntimeComponent, RuntimeDrawCommandKind,
-    RuntimeGradientStop, RuntimePathCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind,
-    RuntimeShapePaintState, StateMachineInputKind, TransformProperty,
+    RuntimeFeatherState, RuntimeGradientStop, RuntimePathCommand, RuntimeShapePaintKind,
+    RuntimeShapePaintPathKind, RuntimeShapePaintState, StateMachineInputKind, TransformProperty,
 };
 use rive_schema::definition_by_name;
 use serde::Deserialize;
@@ -1909,6 +1909,7 @@ fn runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe() {
                 paint.blend_mode_value,
                 paint.render_blend_mode_value,
                 paint.paint_state,
+                paint.feather_state,
                 paint.path_commands,
                 paint.needs_save_operation,
             )
@@ -1927,6 +1928,7 @@ fn runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe() {
                 paint.blend_mode_value,
                 paint.render_blend_mode_value,
                 paint.paint_state(),
+                paint.feather_state(),
                 paint.path_commands(),
                 paint.needs_save_operation,
             )
@@ -1989,6 +1991,7 @@ fn runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe() {
                     color: 0x8040_2010,
                     render_color: 0x4040_2010,
                 }),
+                None,
                 expected_local_path_commands,
                 true
             ),
@@ -2003,6 +2006,7 @@ fn runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe() {
                     color: 0xff11_2233,
                     render_color: 0x8011_2233,
                 }),
+                None,
                 expected_world_path_commands,
                 true
             ),
@@ -2108,6 +2112,7 @@ fn runtime_draw_command_stream_exposes_rounded_point_path_payloads_like_cpp_prob
         rust_paint.render_blend_mode_value
     );
     assert_eq!(cpp_paint.paint_state(), rust_paint.paint_state);
+    assert_eq!(cpp_paint.feather_state(), rust_paint.feather_state);
     assert_eq!(
         cpp_paint.needs_save_operation,
         rust_paint.needs_save_operation
@@ -2273,6 +2278,96 @@ fn runtime_draw_command_stream_exposes_gradient_paint_payloads_like_cpp_probe() 
     assert_eq!(cpp_paint.paint_state(), Some(expected_state.clone()));
     assert_eq!(rust_paint.paint_state, Some(expected_state));
     assert_eq!(rust_paint.paint_state, cpp_paint.paint_state());
+    assert_eq!(cpp_paint.feather_state(), None);
+    assert_eq!(rust_paint.feather_state, None);
+}
+
+#[test]
+fn runtime_draw_command_stream_exposes_feather_paint_payloads_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_feather_paint_payloads.riv";
+    let bytes = synthetic_runtime_file(8216, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "Shape", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "Fill", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 1);
+        });
+        push_object_with_properties(bytes, "SolidColor", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 2);
+            push_color_property(bytes, "SolidColor", "colorValue", 0xffaa_5500);
+        });
+        push_object_with_properties(bytes, "Feather", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 2);
+            push_uint_property(bytes, "Feather", "spaceValue", 1);
+            push_f32_property(bytes, "Feather", "strength", 8.0);
+            push_f32_property(bytes, "Feather", "offsetX", 3.0);
+            push_f32_property(bytes, "Feather", "offsetY", -4.0);
+            push_bool_property(bytes, "Feather", "inner", true);
+        });
+        push_object_with_properties(bytes, "PointsPath", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 1);
+            push_bool_property(bytes, "PointsCommonPath", "isClosed", true);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 5);
+            push_f32_property(bytes, "Vertex", "x", 0.0);
+            push_f32_property(bytes, "Vertex", "y", 0.0);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 5);
+            push_f32_property(bytes, "Vertex", "x", 10.0);
+            push_f32_property(bytes, "Vertex", "y", 0.0);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 5);
+            push_f32_property(bytes, "Vertex", "x", 0.0);
+            push_f32_property(bytes, "Vertex", "y", 10.0);
+        });
+    });
+
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let (_, graph, mut rust) = read_rust_graph_instance_from_bytes(&bytes, label);
+    rust.update_components();
+
+    let artboard = graph
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing Rust artboard for {label}"));
+    let rust_paints = rust
+        .draw_commands(artboard)
+        .into_iter()
+        .flat_map(|command| command.shape_paints)
+        .collect::<Vec<_>>();
+    let cpp_paints = cpp.artboards[0]
+        .draw_command_stream
+        .iter()
+        .flat_map(|command| command.shape_paint_commands.iter())
+        .collect::<Vec<_>>();
+
+    assert_eq!(cpp_paints.len(), 1, "C++ should emit one feather paint");
+    assert_eq!(rust_paints.len(), 1, "Rust should emit one feather paint");
+
+    let expected_feather = RuntimeFeatherState {
+        feather_local: 4,
+        space_value: 1,
+        strength: 8.0,
+        offset_x: 3.0,
+        offset_y: -4.0,
+        inner: true,
+    };
+
+    let cpp_paint = cpp_paints[0];
+    let rust_paint = &rust_paints[0];
+    assert_eq!(cpp_paint.feather_state(), Some(expected_feather));
+    assert_eq!(rust_paint.feather_state, Some(expected_feather));
+    assert_eq!(rust_paint.feather_state, cpp_paint.feather_state());
 }
 
 #[test]
@@ -5118,6 +5213,8 @@ struct CppShapePaintCommand {
     render_blend_mode_value: u32,
     #[serde(rename = "paintState")]
     paint_state: Option<CppShapePaintState>,
+    #[serde(default)]
+    feather: Option<CppFeatherState>,
     #[serde(default, rename = "pathCommands")]
     path_commands: Vec<CppPathCommand>,
     #[serde(rename = "needsSaveOperation")]
@@ -5179,6 +5276,10 @@ impl CppShapePaintCommand {
         }
     }
 
+    fn feather_state(&self) -> Option<RuntimeFeatherState> {
+        self.feather.as_ref().map(CppFeatherState::feather_state)
+    }
+
     fn path_commands(&self) -> Vec<RuntimePathCommand> {
         self.path_commands
             .iter()
@@ -5224,6 +5325,32 @@ impl CppGradientStopState {
             color: self.color,
             render_color: self.render_color,
             position: self.position,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct CppFeatherState {
+    local: usize,
+    #[serde(rename = "spaceValue")]
+    space_value: u32,
+    strength: f32,
+    #[serde(rename = "offsetX")]
+    offset_x: f32,
+    #[serde(rename = "offsetY")]
+    offset_y: f32,
+    inner: bool,
+}
+
+impl CppFeatherState {
+    fn feather_state(&self) -> RuntimeFeatherState {
+        RuntimeFeatherState {
+            feather_local: self.local,
+            space_value: self.space_value,
+            strength: self.strength,
+            offset_x: self.offset_x,
+            offset_y: self.offset_y,
+            inner: self.inner,
         }
     }
 }

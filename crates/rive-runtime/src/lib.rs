@@ -695,6 +695,7 @@ pub struct RuntimeStateMachine {
     pub name: Option<String>,
     pub inputs: Vec<RuntimeStateMachineInput>,
     pub layers: Vec<RuntimeStateMachineLayer>,
+    bindable_numbers: Vec<RuntimeBindableNumber>,
 }
 
 #[derive(Debug, Clone)]
@@ -720,6 +721,12 @@ enum StateMachineInputValue {
         fired: bool,
         used_layers: Vec<usize>,
     },
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeBindableNumber {
+    global_id: u32,
+    value: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -777,23 +784,29 @@ impl RuntimeLayerState {
 
 #[derive(Debug, Clone)]
 struct RuntimeBlendState1D {
-    input_index: Option<usize>,
+    source: RuntimeBlendState1DSource,
     animations: Vec<RuntimeBlendAnimation1D>,
 }
 
 impl RuntimeBlendState1D {
     fn from_imported(
+        file: &RuntimeFile,
         state: &rive_binary::RuntimeLayerState<'_>,
         animation_index_by_global: &BTreeMap<u32, usize>,
     ) -> Option<Self> {
         let object = state.object?;
-        if object.type_name != "BlendState1DInput" {
-            return None;
-        }
-        let input_index = object
-            .uint_property("inputId")
-            .filter(|input_id| *input_id != u64::from(u32::MAX))
-            .and_then(|input_id| usize::try_from(input_id).ok());
+        let source = match object.type_name {
+            "BlendState1DInput" => RuntimeBlendState1DSource::Input {
+                input_index: object
+                    .uint_property("inputId")
+                    .filter(|input_id| *input_id != u64::from(u32::MAX))
+                    .and_then(|input_id| usize::try_from(input_id).ok()),
+            },
+            "BlendState1DViewModel" => RuntimeBlendState1DSource::BindableProperty {
+                global_id: file.latest_bindable_property_for_object(object)?.id as u32,
+            },
+            _ => return None,
+        };
         let animations = state
             .blend_animations
             .iter()
@@ -807,11 +820,14 @@ impl RuntimeBlendState1D {
                 })
             })
             .collect::<Vec<_>>();
-        (!animations.is_empty()).then_some(Self {
-            input_index,
-            animations,
-        })
+        (!animations.is_empty()).then_some(Self { source, animations })
     }
+}
+
+#[derive(Debug, Clone)]
+enum RuntimeBlendState1DSource {
+    Input { input_index: Option<usize> },
+    BindableProperty { global_id: u32 },
 }
 
 #[derive(Debug, Clone)]
@@ -827,6 +843,7 @@ struct RuntimeBlendStateDirect {
 
 impl RuntimeBlendStateDirect {
     fn from_imported(
+        file: &RuntimeFile,
         state: &rive_binary::RuntimeLayerState<'_>,
         animation_index_by_global: &BTreeMap<u32, usize>,
     ) -> Option<Self> {
@@ -846,7 +863,7 @@ impl RuntimeBlendStateDirect {
                     .and_then(|animation| animation_index_by_global.get(&animation.id).copied())?;
                 Some(RuntimeBlendAnimationDirect {
                     animation_index,
-                    source: RuntimeDirectBlendSource::from_object(animation.object)?,
+                    source: RuntimeDirectBlendSource::from_object(file, animation.object)?,
                 })
             })
             .collect::<Vec<_>>();
@@ -864,16 +881,20 @@ struct RuntimeBlendAnimationDirect {
 enum RuntimeDirectBlendSource {
     Input { input_index: usize },
     MixValue { value: f32 },
+    BindableProperty { global_id: u32 },
 }
 
 impl RuntimeDirectBlendSource {
-    fn from_object(object: &RuntimeObject) -> Option<Self> {
+    fn from_object(file: &RuntimeFile, object: &RuntimeObject) -> Option<Self> {
         match object.uint_property("blendSource").unwrap_or(0) {
             0 => Some(Self::Input {
                 input_index: usize::try_from(object.uint_property("inputId")?).ok()?,
             }),
             1 => Some(Self::MixValue {
                 value: object.double_property("mixValue").unwrap_or(100.0),
+            }),
+            2 => Some(Self::BindableProperty {
+                global_id: file.latest_bindable_property_for_object(object)?.id as u32,
             }),
             _ => None,
         }
@@ -1493,6 +1514,7 @@ impl TransitionConditionOp {
 pub struct StateMachineInstance {
     state_machine_index: usize,
     inputs: Vec<StateMachineInputInstance>,
+    bindable_numbers: Vec<StateMachineBindableNumberInstance>,
     layers: Vec<StateMachineLayerInstance>,
     reported_events: Vec<StateMachineReportedEvent>,
     changed_state_count: usize,
@@ -1537,14 +1559,22 @@ impl StateMachineInstance {
             .enumerate()
             .map(|(index, input)| StateMachineInputInstance::new(index, input))
             .collect::<Vec<_>>();
+        let bindable_numbers = state_machine
+            .bindable_numbers
+            .iter()
+            .map(StateMachineBindableNumberInstance::new)
+            .collect::<Vec<_>>();
         let layers = state_machine
             .layers
             .iter()
-            .map(|layer| StateMachineLayerInstance::new(layer, artboard, &inputs))
+            .map(|layer| {
+                StateMachineLayerInstance::new(layer, artboard, &inputs, &bindable_numbers)
+            })
             .collect();
         Self {
             state_machine_index,
             inputs,
+            bindable_numbers,
             layers,
             reported_events: Vec::new(),
             changed_state_count: 0,
@@ -1661,6 +1691,7 @@ impl StateMachineInstance {
                 elapsed_seconds,
                 layer_index,
                 &mut self.inputs,
+                &self.bindable_numbers,
                 &mut self.reported_events,
             );
             if layer_result.changed_state {
@@ -1816,6 +1847,31 @@ impl StateMachineInputInstance {
 }
 
 #[derive(Debug, Clone)]
+struct StateMachineBindableNumberInstance {
+    global_id: u32,
+    value: f32,
+}
+
+impl StateMachineBindableNumberInstance {
+    fn new(bindable_number: &RuntimeBindableNumber) -> Self {
+        Self {
+            global_id: bindable_number.global_id,
+            value: bindable_number.value,
+        }
+    }
+}
+
+fn bindable_number_value(
+    bindable_numbers: &[StateMachineBindableNumberInstance],
+    global_id: u32,
+) -> Option<f32> {
+    bindable_numbers
+        .iter()
+        .find(|bindable_number| bindable_number.global_id == global_id)
+        .map(|bindable_number| bindable_number.value)
+}
+
+#[derive(Debug, Clone)]
 struct StateMachineLayerInstance {
     current_state_index: Option<usize>,
     current_animation: Option<LinearAnimationInstance>,
@@ -1914,6 +1970,7 @@ impl StateMachineLayerInstance {
         layer: &RuntimeStateMachineLayer,
         artboard: &ArtboardInstance,
         inputs: &[StateMachineInputInstance],
+        bindable_numbers: &[StateMachineBindableNumberInstance],
     ) -> Self {
         let mut instance = Self {
             current_state_index: layer.entry_state_index,
@@ -1937,7 +1994,7 @@ impl StateMachineLayerInstance {
             transition_animation_reset: None,
             waiting_for_exit: false,
         };
-        instance.refresh_current_animation(artboard, layer, inputs);
+        instance.refresh_current_animation(artboard, layer, inputs, bindable_numbers);
         instance
     }
 
@@ -1948,16 +2005,30 @@ impl StateMachineLayerInstance {
         elapsed_seconds: f32,
         layer_index: usize,
         inputs: &mut [StateMachineInputInstance],
+        bindable_numbers: &[StateMachineBindableNumberInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
     ) -> StateMachineLayerAdvance {
-        self.advance_current_animation(artboard, layer, elapsed_seconds, inputs);
+        self.advance_current_animation(artboard, layer, elapsed_seconds, inputs, bindable_numbers);
         let input_changed = self.update_transition_mix(elapsed_seconds, inputs, reported_events);
-        self.advance_transition_source_animation(artboard, layer, elapsed_seconds, inputs);
+        self.advance_transition_source_animation(
+            artboard,
+            layer,
+            elapsed_seconds,
+            inputs,
+            bindable_numbers,
+        );
         self.apply_animations(artboard);
 
         let mut changed_state = false;
         for _ in 0..100 {
-            if !self.update_state(artboard, layer, layer_index, inputs, reported_events) {
+            if !self.update_state(
+                artboard,
+                layer,
+                layer_index,
+                inputs,
+                bindable_numbers,
+                reported_events,
+            ) {
                 break;
             }
             changed_state = true;
@@ -1980,6 +2051,7 @@ impl StateMachineLayerInstance {
         layer: &RuntimeStateMachineLayer,
         layer_index: usize,
         inputs: &mut [StateMachineInputInstance],
+        bindable_numbers: &[StateMachineBindableNumberInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
     ) -> bool {
         if self.is_transitioning() && !self.transition_enable_early_exit {
@@ -1992,6 +2064,7 @@ impl StateMachineLayerInstance {
             layer.any_state_index,
             layer_index,
             inputs,
+            bindable_numbers,
             reported_events,
         ) {
             return true;
@@ -2002,6 +2075,7 @@ impl StateMachineLayerInstance {
             self.current_state_index,
             layer_index,
             inputs,
+            bindable_numbers,
             reported_events,
         )
     }
@@ -2013,6 +2087,7 @@ impl StateMachineLayerInstance {
         state_index: Option<usize>,
         layer_index: usize,
         inputs: &mut [StateMachineInputInstance],
+        bindable_numbers: &[StateMachineBindableNumberInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
     ) -> bool {
         let Some(state_index) = state_index else {
@@ -2036,6 +2111,7 @@ impl StateMachineLayerInstance {
                 transition,
                 state_to_index,
                 inputs,
+                bindable_numbers,
                 reported_events,
             );
             return true;
@@ -2073,6 +2149,7 @@ impl StateMachineLayerInstance {
                 transition,
                 state_to_index,
                 inputs,
+                bindable_numbers,
                 reported_events,
             );
             return true;
@@ -2189,6 +2266,7 @@ impl StateMachineLayerInstance {
         transition: &RuntimeStateTransition,
         state_to_index: usize,
         inputs: &mut [StateMachineInputInstance],
+        bindable_numbers: &[StateMachineBindableNumberInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
     ) {
         let previous_state_index = self.current_state_index;
@@ -2229,7 +2307,7 @@ impl StateMachineLayerInstance {
             transition.transition_duration_seconds(previous_runtime_animation);
 
         self.current_state_index = Some(state_to_index);
-        self.refresh_current_animation(artboard, layer, inputs);
+        self.refresh_current_animation(artboard, layer, inputs, bindable_numbers);
         if let Some(current_state) = layer.states.get(state_to_index) {
             current_state.fire_events(StateMachineFireOccurrence::AtStart, reported_events);
             current_state.perform_listener_actions(
@@ -2245,7 +2323,13 @@ impl StateMachineLayerInstance {
             reported_events,
         );
         if previous_spilled_time != 0.0 {
-            self.advance_current_animation(artboard, layer, previous_spilled_time, inputs);
+            self.advance_current_animation(
+                artboard,
+                layer,
+                previous_spilled_time,
+                inputs,
+                bindable_numbers,
+            );
         }
 
         if transition_duration_seconds == 0.0 {
@@ -2361,6 +2445,7 @@ impl StateMachineLayerInstance {
         artboard: &ArtboardInstance,
         layer: &RuntimeStateMachineLayer,
         inputs: &[StateMachineInputInstance],
+        bindable_numbers: &[StateMachineBindableNumberInstance],
     ) {
         let Some(state) = self
             .current_state_index
@@ -2375,7 +2460,7 @@ impl StateMachineLayerInstance {
         if let Some(blend_state) = state.blend_state_1d.as_ref() {
             self.current_animation = None;
             let mut blend_instance = BlendState1DInstance::new(blend_state, artboard);
-            blend_instance.advance(artboard, inputs, 0.0);
+            blend_instance.advance(artboard, inputs, bindable_numbers, 0.0);
             self.current_blend_state_1d = Some(blend_instance);
             self.current_blend_state_direct = None;
             self.current_animation_keep_going = true;
@@ -2385,7 +2470,7 @@ impl StateMachineLayerInstance {
             self.current_animation = None;
             self.current_blend_state_1d = None;
             let mut blend_instance = BlendStateDirectInstance::new(blend_state, artboard);
-            blend_instance.advance(artboard, inputs, 0.0);
+            blend_instance.advance(artboard, inputs, bindable_numbers, 0.0);
             self.current_blend_state_direct = Some(blend_instance);
             self.current_animation_keep_going = true;
             return;
@@ -2414,15 +2499,16 @@ impl StateMachineLayerInstance {
         layer: &RuntimeStateMachineLayer,
         elapsed_seconds: f32,
         inputs: &[StateMachineInputInstance],
+        bindable_numbers: &[StateMachineBindableNumberInstance],
     ) -> bool {
         if let Some(blend_state) = self.current_blend_state_1d.as_mut() {
             self.current_animation_keep_going =
-                blend_state.advance(artboard, inputs, elapsed_seconds);
+                blend_state.advance(artboard, inputs, bindable_numbers, elapsed_seconds);
             return self.current_animation_keep_going;
         }
         if let Some(blend_state) = self.current_blend_state_direct.as_mut() {
             self.current_animation_keep_going =
-                blend_state.advance(artboard, inputs, elapsed_seconds);
+                blend_state.advance(artboard, inputs, bindable_numbers, elapsed_seconds);
             return self.current_animation_keep_going;
         }
         let Some(animation_instance) = self.current_animation.as_mut() else {
@@ -2451,6 +2537,7 @@ impl StateMachineLayerInstance {
         layer: &RuntimeStateMachineLayer,
         elapsed_seconds: f32,
         inputs: &[StateMachineInputInstance],
+        bindable_numbers: &[StateMachineBindableNumberInstance],
     ) -> bool {
         if !self.is_transitioning() {
             return false;
@@ -2459,10 +2546,10 @@ impl StateMachineLayerInstance {
             return false;
         }
         if let Some(blend_state) = self.transition_source_blend_state_1d.as_mut() {
-            return blend_state.advance(artboard, inputs, elapsed_seconds);
+            return blend_state.advance(artboard, inputs, bindable_numbers, elapsed_seconds);
         }
         if let Some(blend_state) = self.transition_source_blend_state_direct.as_mut() {
-            return blend_state.advance(artboard, inputs, elapsed_seconds);
+            return blend_state.advance(artboard, inputs, bindable_numbers, elapsed_seconds);
         }
         let Some(animation_instance) = self.transition_source_animation.as_mut() else {
             return false;
@@ -2535,7 +2622,7 @@ impl StateMachineLayerInstance {
 
 #[derive(Debug, Clone)]
 struct BlendState1DInstance {
-    input_index: Option<usize>,
+    source: RuntimeBlendState1DSource,
     animations: Vec<BlendAnimation1DInstance>,
 }
 
@@ -2559,7 +2646,7 @@ impl BlendState1DInstance {
             .collect();
 
         Self {
-            input_index: blend_state.input_index,
+            source: blend_state.source.clone(),
             animations,
         }
     }
@@ -2568,6 +2655,7 @@ impl BlendState1DInstance {
         &mut self,
         artboard: &ArtboardInstance,
         inputs: &[StateMachineInputInstance],
+        bindable_numbers: &[StateMachineBindableNumberInstance],
         elapsed_seconds: f32,
     ) -> bool {
         for animation in &mut self.animations {
@@ -2577,20 +2665,28 @@ impl BlendState1DInstance {
             }
         }
 
-        self.update_mix_values(inputs);
+        self.update_mix_values(inputs, bindable_numbers);
         true
     }
 
-    fn update_mix_values(&mut self, inputs: &[StateMachineInputInstance]) {
+    fn update_mix_values(
+        &mut self,
+        inputs: &[StateMachineInputInstance],
+        bindable_numbers: &[StateMachineBindableNumberInstance],
+    ) {
         if self.animations.is_empty() {
             return;
         }
 
-        let value = self
-            .input_index
-            .and_then(|input_index| inputs.get(input_index))
-            .and_then(StateMachineInputInstance::number_value)
-            .unwrap_or(0.0);
+        let value = match self.source {
+            RuntimeBlendState1DSource::Input { input_index } => input_index
+                .and_then(|input_index| inputs.get(input_index))
+                .and_then(StateMachineInputInstance::number_value)
+                .unwrap_or(0.0),
+            RuntimeBlendState1DSource::BindableProperty { global_id } => {
+                bindable_number_value(bindable_numbers, global_id).unwrap_or(0.0)
+            }
+        };
 
         let animation_count = self.animations.len();
         let to_index = self.animation_index(value);
@@ -2704,6 +2800,7 @@ impl BlendStateDirectInstance {
         &mut self,
         artboard: &ArtboardInstance,
         inputs: &[StateMachineInputInstance],
+        bindable_numbers: &[StateMachineBindableNumberInstance],
         elapsed_seconds: f32,
     ) -> bool {
         for animation in &mut self.animations {
@@ -2713,11 +2810,15 @@ impl BlendStateDirectInstance {
             }
         }
 
-        self.update_mix_values(inputs);
+        self.update_mix_values(inputs, bindable_numbers);
         true
     }
 
-    fn update_mix_values(&mut self, inputs: &[StateMachineInputInstance]) {
+    fn update_mix_values(
+        &mut self,
+        inputs: &[StateMachineInputInstance],
+        bindable_numbers: &[StateMachineBindableNumberInstance],
+    ) {
         for animation in &mut self.animations {
             let value = match animation.source {
                 RuntimeDirectBlendSource::Input { input_index } => inputs
@@ -2725,6 +2826,9 @@ impl BlendStateDirectInstance {
                     .and_then(StateMachineInputInstance::number_value)
                     .unwrap_or(0.0),
                 RuntimeDirectBlendSource::MixValue { value } => value,
+                RuntimeDirectBlendSource::BindableProperty { global_id } => {
+                    bindable_number_value(bindable_numbers, global_id).unwrap_or(0.0)
+                }
             };
             animation.mix = (value / 100.0).clamp(0.0, 1.0);
         }
@@ -3035,138 +3139,167 @@ fn build_state_machines(
 
     file.artboard_state_machine_graphs(artboard_index)
         .into_iter()
-        .map(|state_machine| RuntimeStateMachine {
-            global_id: state_machine.object.id,
-            name: state_machine
-                .object
-                .string_property("name")
-                .map(ToOwned::to_owned),
-            inputs: state_machine
-                .inputs
-                .into_iter()
-                .filter_map(runtime_state_machine_input)
-                .collect(),
-            layers: state_machine
-                .layers
-                .into_iter()
-                .map(|layer| {
-                    let states = layer
-                        .states
-                        .into_iter()
-                        .map(|state| {
-                            let animation_index = state.animation.and_then(|animation| {
-                                animation_index_by_global.get(&animation.id).copied()
-                            });
-                            let blend_state_1d = RuntimeBlendState1D::from_imported(
-                                &state,
-                                &animation_index_by_global,
-                            );
-                            let blend_state_direct = RuntimeBlendStateDirect::from_imported(
-                                &state,
-                                &animation_index_by_global,
-                            );
-                            RuntimeLayerState {
-                                global_id: state.object.map(|object| object.id),
-                                type_name: state.object.map(|object| object.type_name),
-                                animation_index,
-                                blend_state_1d,
-                                blend_state_direct,
-                                speed: state
-                                    .object
-                                    .and_then(|object| object.double_property("speed"))
-                                    .unwrap_or(1.0),
-                                flags: state
-                                    .object
-                                    .and_then(|object| object.uint_property("flags"))
-                                    .unwrap_or(0),
-                                fire_actions: state
-                                    .fire_actions
-                                    .iter()
-                                    .filter_map(RuntimeStateMachineFireEvent::from_imported)
-                                    .collect(),
-                                listener_actions: state
-                                    .listener_actions
-                                    .iter()
-                                    .filter_map(RuntimeScheduledListenerAction::from_imported)
-                                    .collect(),
-                                transitions: state
-                                    .transitions
-                                    .into_iter()
-                                    .map(|transition| {
-                                        let interpolator = transition
-                                            .interpolator
-                                            .and_then(RuntimeTransitionInterpolator::from_object);
-                                        RuntimeStateTransition {
-                                            state_to_index: transition.state_to_index,
-                                            exit_blend_animation_index: transition
-                                                .exit_blend_animation_index,
-                                            duration: transition
-                                                .object
-                                                .uint_property("duration")
-                                                .unwrap_or(0),
-                                            exit_time: transition
-                                                .object
-                                                .uint_property("exitTime")
-                                                .unwrap_or(0),
-                                            flags: transition
-                                                .object
-                                                .uint_property("flags")
-                                                .unwrap_or(0),
-                                            random_weight: transition
-                                                .object
-                                                .uint_property("randomWeight")
-                                                .unwrap_or(1),
-                                            condition_count: transition.conditions.len(),
-                                            conditions: transition
-                                                .conditions
-                                                .iter()
-                                                .filter_map(|condition| {
-                                                    RuntimeTransitionCondition::from_object(
-                                                        condition,
+        .map(|state_machine| {
+            let bindable_numbers = runtime_bindable_numbers(file, &state_machine);
+            RuntimeStateMachine {
+                global_id: state_machine.object.id,
+                name: state_machine
+                    .object
+                    .string_property("name")
+                    .map(ToOwned::to_owned),
+                inputs: state_machine
+                    .inputs
+                    .into_iter()
+                    .filter_map(runtime_state_machine_input)
+                    .collect(),
+                bindable_numbers,
+                layers: state_machine
+                    .layers
+                    .into_iter()
+                    .map(|layer| {
+                        let states = layer
+                            .states
+                            .into_iter()
+                            .map(|state| {
+                                let animation_index = state.animation.and_then(|animation| {
+                                    animation_index_by_global.get(&animation.id).copied()
+                                });
+                                let blend_state_1d = RuntimeBlendState1D::from_imported(
+                                    file,
+                                    &state,
+                                    &animation_index_by_global,
+                                );
+                                let blend_state_direct = RuntimeBlendStateDirect::from_imported(
+                                    file,
+                                    &state,
+                                    &animation_index_by_global,
+                                );
+                                RuntimeLayerState {
+                                    global_id: state.object.map(|object| object.id),
+                                    type_name: state.object.map(|object| object.type_name),
+                                    animation_index,
+                                    blend_state_1d,
+                                    blend_state_direct,
+                                    speed: state
+                                        .object
+                                        .and_then(|object| object.double_property("speed"))
+                                        .unwrap_or(1.0),
+                                    flags: state
+                                        .object
+                                        .and_then(|object| object.uint_property("flags"))
+                                        .unwrap_or(0),
+                                    fire_actions: state
+                                        .fire_actions
+                                        .iter()
+                                        .filter_map(RuntimeStateMachineFireEvent::from_imported)
+                                        .collect(),
+                                    listener_actions: state
+                                        .listener_actions
+                                        .iter()
+                                        .filter_map(RuntimeScheduledListenerAction::from_imported)
+                                        .collect(),
+                                    transitions: state
+                                        .transitions
+                                        .into_iter()
+                                        .map(|transition| {
+                                            let interpolator = transition.interpolator.and_then(
+                                                RuntimeTransitionInterpolator::from_object,
+                                            );
+                                            RuntimeStateTransition {
+                                                state_to_index: transition.state_to_index,
+                                                exit_blend_animation_index: transition
+                                                    .exit_blend_animation_index,
+                                                duration: transition
+                                                    .object
+                                                    .uint_property("duration")
+                                                    .unwrap_or(0),
+                                                exit_time: transition
+                                                    .object
+                                                    .uint_property("exitTime")
+                                                    .unwrap_or(0),
+                                                flags: transition
+                                                    .object
+                                                    .uint_property("flags")
+                                                    .unwrap_or(0),
+                                                random_weight: transition
+                                                    .object
+                                                    .uint_property("randomWeight")
+                                                    .unwrap_or(1),
+                                                condition_count: transition.conditions.len(),
+                                                conditions: transition
+                                                    .conditions
+                                                    .iter()
+                                                    .filter_map(|condition| {
+                                                        RuntimeTransitionCondition::from_object(
+                                                            condition,
+                                                        )
+                                                    })
+                                                    .collect(),
+                                                fire_actions: transition
+                                                    .fire_actions
+                                                    .iter()
+                                                    .filter_map(
+                                                        RuntimeStateMachineFireEvent::from_imported,
                                                     )
-                                                })
-                                                .collect(),
-                                            fire_actions: transition
-                                                .fire_actions
-                                                .iter()
-                                                .filter_map(
-                                                    RuntimeStateMachineFireEvent::from_imported,
-                                                )
-                                                .collect(),
-                                            listener_actions: transition
-                                                .listener_actions
-                                                .iter()
-                                                .filter_map(
-                                                    RuntimeScheduledListenerAction::from_imported,
-                                                )
-                                                .collect(),
-                                            interpolator,
-                                            has_unsupported_interpolator: transition
-                                                .interpolator
-                                                .is_some()
-                                                && interpolator.is_none(),
-                                        }
-                                    })
-                                    .collect(),
-                            }
-                        })
-                        .collect::<Vec<_>>();
-                    let entry_state_index = states
-                        .iter()
-                        .position(|state| state.type_name == Some("EntryState"));
-                    let any_state_index = states
-                        .iter()
-                        .position(|state| state.type_name == Some("AnyState"));
-                    RuntimeStateMachineLayer {
-                        global_id: layer.object.id,
-                        name: layer.object.string_property("name").map(ToOwned::to_owned),
-                        states,
-                        entry_state_index,
-                        any_state_index,
-                    }
-                })
-                .collect(),
+                                                    .collect(),
+                                                listener_actions: transition
+                                                    .listener_actions
+                                                    .iter()
+                                                    .filter_map(
+                                                        RuntimeScheduledListenerAction::from_imported,
+                                                    )
+                                                    .collect(),
+                                                interpolator,
+                                                has_unsupported_interpolator: transition
+                                                    .interpolator
+                                                    .is_some()
+                                                    && interpolator.is_none(),
+                                            }
+                                        })
+                                        .collect(),
+                                }
+                            })
+                            .collect::<Vec<_>>();
+                        let entry_state_index = states
+                            .iter()
+                            .position(|state| state.type_name == Some("EntryState"));
+                        let any_state_index = states
+                            .iter()
+                            .position(|state| state.type_name == Some("AnyState"));
+                        RuntimeStateMachineLayer {
+                            global_id: layer.object.id,
+                            name: layer.object.string_property("name").map(ToOwned::to_owned),
+                            states,
+                            entry_state_index,
+                            any_state_index,
+                        }
+                    })
+                    .collect(),
+            }
         })
+        .collect()
+}
+
+fn runtime_bindable_numbers(
+    file: &RuntimeFile,
+    state_machine: &rive_binary::RuntimeStateMachine<'_>,
+) -> Vec<RuntimeBindableNumber> {
+    let mut values = BTreeMap::<u32, f32>::new();
+    for data_bind in &state_machine.data_binds {
+        let Some(target) = file.data_bind_target_for_object(data_bind) else {
+            continue;
+        };
+        if target.type_name != "BindablePropertyNumber" {
+            continue;
+        }
+        values
+            .entry(target.id)
+            .or_insert_with(|| target.double_property("propertyValue").unwrap_or(0.0));
+    }
+
+    values
+        .into_iter()
+        .map(|(global_id, value)| RuntimeBindableNumber { global_id, value })
         .collect()
 }
 

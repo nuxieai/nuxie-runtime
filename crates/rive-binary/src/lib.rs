@@ -789,6 +789,21 @@ impl RuntimeFile {
             .nth(data_bind_index)
     }
 
+    pub fn data_bind_target_for_object<'a>(
+        &'a self,
+        data_bind: &RuntimeObject,
+    ) -> Option<&'a RuntimeObject> {
+        self.validate_data_bind(data_bind)?;
+        self.cpp_data_bind_target_for_object(data_bind)
+    }
+
+    pub fn latest_bindable_property_for_object<'a>(
+        &'a self,
+        object: &RuntimeObject,
+    ) -> Option<&'a RuntimeObject> {
+        self.cpp_latest_bindable_property_for_object(object)
+    }
+
     pub fn artboard_skins(&self, artboard_index: usize) -> Vec<RuntimeSkin<'_>> {
         self.cpp_artboard_skins(artboard_index)
     }
@@ -5282,6 +5297,28 @@ impl RuntimeFile {
         self.cpp_data_bind_targets()
             .get(object_id)
             .and_then(|target| target.map(|target| target.object))
+    }
+
+    fn cpp_latest_bindable_property_for_object<'a>(
+        &'a self,
+        object: &RuntimeObject,
+    ) -> Option<&'a RuntimeObject> {
+        let object_id = usize::try_from(object.id).ok()?;
+        let mut latest_bindable_property = None;
+        for candidate in self.objects.iter().take(object_id).flatten() {
+            if self.import_status(usize::try_from(candidate.id).ok()?)
+                != Some(RuntimeImportStatus::Imported)
+            {
+                continue;
+            }
+            let Some(definition) = definition_by_type_key(candidate.type_key) else {
+                continue;
+            };
+            if definition.is_a("BindableProperty") {
+                latest_bindable_property = Some(candidate);
+            }
+        }
+        latest_bindable_property
     }
 
     fn cpp_data_converter_output_type(

@@ -1831,6 +1831,7 @@ fn runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe() {
             push_uint_property(bytes, "Node", "parentId", 0);
             push_f32_property(bytes, "Node", "x", 100.0);
             push_f32_property(bytes, "Node", "opacity", 0.5);
+            push_uint_property(bytes, "Drawable", "blendModeValue", 24);
         });
         push_object_with_properties(bytes, "Fill", |bytes| {
             push_uint_property(bytes, "Component", "parentId", 1);
@@ -1849,6 +1850,7 @@ fn runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe() {
         });
         push_object_with_properties(bytes, "Stroke", |bytes| {
             push_uint_property(bytes, "Component", "parentId", 1);
+            push_uint_property(bytes, "ShapePaint", "blendModeValue", 14);
             push_bool_property(bytes, "Stroke", "transformAffectsStroke", false);
         });
         push_object_with_properties(bytes, "SolidColor", |bytes| {
@@ -1904,6 +1906,8 @@ fn runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe() {
                 paint.mutator_local,
                 paint.paint_type,
                 paint.path_kind,
+                paint.blend_mode_value,
+                paint.render_blend_mode_value,
                 paint.paint_state,
                 paint.path_commands,
                 paint.needs_save_operation,
@@ -1920,6 +1924,8 @@ fn runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe() {
                 paint.mutator_local,
                 paint.paint_type(),
                 paint.path_kind(),
+                paint.blend_mode_value,
+                paint.render_blend_mode_value,
                 paint.paint_state(),
                 paint.path_commands(),
                 paint.needs_save_operation,
@@ -1977,6 +1983,8 @@ fn runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe() {
                 Some(3),
                 RuntimeShapePaintKind::Fill,
                 RuntimeShapePaintPathKind::LocalClockwise,
+                127,
+                24,
                 Some(RuntimeShapePaintState::SolidColor {
                     color: 0x8040_2010,
                     render_color: 0x4040_2010,
@@ -1989,6 +1997,8 @@ fn runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe() {
                 Some(7),
                 RuntimeShapePaintKind::Stroke,
                 RuntimeShapePaintPathKind::World,
+                14,
+                14,
                 Some(RuntimeShapePaintState::SolidColor {
                     color: 0xff11_2233,
                     render_color: 0x8011_2233,
@@ -2092,6 +2102,11 @@ fn runtime_draw_command_stream_exposes_rounded_point_path_payloads_like_cpp_prob
     assert_eq!(cpp_paint.mutator_local, rust_paint.mutator_local);
     assert_eq!(cpp_paint.paint_type(), rust_paint.paint_type);
     assert_eq!(cpp_paint.path_kind(), rust_paint.path_kind);
+    assert_eq!(cpp_paint.blend_mode_value, rust_paint.blend_mode_value);
+    assert_eq!(
+        cpp_paint.render_blend_mode_value,
+        rust_paint.render_blend_mode_value
+    );
     assert_eq!(cpp_paint.paint_state(), rust_paint.paint_state);
     assert_eq!(
         cpp_paint.needs_save_operation,
@@ -4980,6 +4995,10 @@ struct CppShapePaintCommand {
     paint_type: String,
     #[serde(rename = "pathKind")]
     path_kind: String,
+    #[serde(rename = "blendModeValue")]
+    blend_mode_value: u32,
+    #[serde(rename = "renderBlendModeValue")]
+    render_blend_mode_value: u32,
     #[serde(rename = "paintState")]
     paint_state: Option<CppShapePaintState>,
     #[serde(default, rename = "pathCommands")]

@@ -608,6 +608,7 @@ pub struct ShapePaintContainerNode {
     pub local_id: usize,
     pub global_id: u32,
     pub type_name: &'static str,
+    pub blend_mode_value: u32,
     pub paints: Vec<ShapePaintNode>,
 }
 
@@ -618,6 +619,7 @@ pub struct ShapePaintNode {
     pub type_name: &'static str,
     pub paint_type: ShapePaintKind,
     pub is_visible: bool,
+    pub blend_mode_value: u32,
     pub path_kind: Option<ShapePaintPathKind>,
     pub paint_state: Option<ShapePaintStateNode>,
     pub mutator_local: Option<usize>,
@@ -2274,6 +2276,7 @@ fn shape_paint_containers(
                 local_id: container.local_id,
                 global_id,
                 type_name: container.object.type_name,
+                blend_mode_value: shape_paint_container_blend_mode_value(&container.object),
                 paints: container
                     .paints
                     .into_iter()
@@ -2287,6 +2290,7 @@ fn shape_paint_containers(
                             type_name: paint.object.type_name,
                             paint_type,
                             is_visible: shape_paint_is_visible(&paint.object, paint_type),
+                            blend_mode_value: shape_paint_blend_mode_value(&paint.object),
                             path_kind: shape_paint_path_kind(&paint.object, paint_type),
                             paint_state: shape_paint_state(paint.mutator),
                             mutator_local: paint.mutator_local_id,
@@ -2397,6 +2401,14 @@ fn shape_paint_state(mutator: Option<&RuntimeObject>) -> Option<ShapePaintStateN
         }),
         _ => None,
     }
+}
+
+fn shape_paint_container_blend_mode_value(container: &RuntimeObject) -> u32 {
+    container.uint_property("blendModeValue").unwrap_or(3) as u32
+}
+
+fn shape_paint_blend_mode_value(paint: &RuntimeObject) -> u32 {
+    paint.uint_property("blendModeValue").unwrap_or(127) as u32
 }
 
 fn n_slicer_details(

@@ -2498,17 +2498,27 @@ fn cpp_clipping_shape_dependency_method_is_tracked_by_graph_model() {
 #[test]
 fn graph_projects_shape_paint_container_registrations() {
     let parent_id_key = property_key_for_name("Component", "parentId");
+    let drawable_blend_mode_value_key = property_key_for_name("Drawable", "blendModeValue");
+    let shape_paint_blend_mode_value_key = property_key_for_name("ShapePaint", "blendModeValue");
     let target_id_key = property_key_for_name("TargetEffect", "targetId");
     let mode_value_key = property_key_for_name("TrimPath", "modeValue");
     let bytes = synthetic_runtime_file(7119, |bytes| {
         push_object(bytes, "Backboard", &[]);
         push_object(bytes, "Artboard", &[]);
-        push_object(bytes, "Shape", &[(parent_id_key, 0)]);
+        push_object(
+            bytes,
+            "Shape",
+            &[(parent_id_key, 0), (drawable_blend_mode_value_key, 24)],
+        );
         push_object(bytes, "Fill", &[(parent_id_key, 1)]);
         push_object(bytes, "LinearGradient", &[(parent_id_key, 2)]);
         push_object(bytes, "GradientStop", &[(parent_id_key, 3)]);
         push_object(bytes, "GradientStop", &[(parent_id_key, 3)]);
-        push_object(bytes, "Stroke", &[(parent_id_key, 1)]);
+        push_object(
+            bytes,
+            "Stroke",
+            &[(parent_id_key, 1), (shape_paint_blend_mode_value_key, 14)],
+        );
         push_object(bytes, "SolidColor", &[(parent_id_key, 6)]);
         push_object(bytes, "Feather", &[(parent_id_key, 6)]);
         push_object(
@@ -2538,6 +2548,7 @@ fn graph_projects_shape_paint_container_registrations() {
                 container.local_id,
                 container.global_id,
                 container.type_name,
+                container.blend_mode_value,
                 container
                     .paints
                     .iter()
@@ -2545,6 +2556,7 @@ fn graph_projects_shape_paint_container_registrations() {
                         paint.local_id,
                         paint.global_id,
                         paint.type_name,
+                        paint.blend_mode_value,
                         paint.mutator_local,
                         paint.mutator_global,
                         paint.mutator_type_name,
@@ -2577,11 +2589,13 @@ fn graph_projects_shape_paint_container_registrations() {
                 1,
                 2,
                 "Shape",
+                24,
                 vec![
                     (
                         2,
                         3,
                         "Fill",
+                        127,
                         Some(3),
                         Some(4),
                         Some("LinearGradient"),
@@ -2595,6 +2609,7 @@ fn graph_projects_shape_paint_container_registrations() {
                         6,
                         7,
                         "Stroke",
+                        14,
                         Some(7),
                         Some(8),
                         Some("SolidColor"),
@@ -2620,10 +2635,12 @@ fn graph_projects_shape_paint_container_registrations() {
                 12,
                 13,
                 "LayoutComponent",
+                3,
                 vec![(
                     13,
                     14,
                     "Fill",
+                    127,
                     Some(14),
                     Some(15),
                     Some("SolidColor"),

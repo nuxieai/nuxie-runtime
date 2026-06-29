@@ -1486,6 +1486,10 @@ void write_shape_paint_commands(std::ostream& out,
         write_local_id_or_null(out, localIds, shapePaint->paint());
         out << ",\"paintType\":\"" << shape_paint_type_name(shapePaint) << "\"";
         out << ",\"pathKind\":\"" << shape_paint_path_kind(shape, path) << "\"";
+        auto blendModeValue = shapePaint->blendModeValue();
+        out << ",\"blendModeValue\":" << blendModeValue;
+        out << ",\"renderBlendModeValue\":"
+            << (blendModeValue == 127 ? shape->blendModeValue() : blendModeValue);
         write_shape_paint_state(out, shapePaint);
         write_shape_paint_path_commands(out, path);
         out << ",\"needsSaveOperation\":"

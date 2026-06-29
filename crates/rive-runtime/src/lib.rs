@@ -285,6 +285,7 @@ impl ArtboardInstance {
             .filter_map(|paint| {
                 runtime_shape_paint_command(
                     paint,
+                    container.blend_mode_value,
                     needs_save_operation,
                     render_opacity,
                     self.runtime_shape_paint_path_commands(shape_local, paint, graph),
@@ -649,6 +650,8 @@ pub struct RuntimeShapePaintCommand {
     pub mutator_local: Option<usize>,
     pub paint_type: RuntimeShapePaintKind,
     pub path_kind: RuntimeShapePaintPathKind,
+    pub blend_mode_value: u32,
+    pub render_blend_mode_value: u32,
     pub paint_state: Option<RuntimeShapePaintState>,
     pub path_commands: Vec<RuntimePathCommand>,
     pub needs_save_operation: bool,
@@ -682,6 +685,7 @@ pub enum RuntimePathCommand {
 
 fn runtime_shape_paint_command(
     paint: &ShapePaintNode,
+    container_blend_mode_value: u32,
     needs_save_operation: bool,
     render_opacity: f32,
     path_commands: Vec<RuntimePathCommand>,
@@ -694,10 +698,26 @@ fn runtime_shape_paint_command(
         mutator_local: paint.mutator_local,
         paint_type: runtime_shape_paint_kind(paint.paint_type),
         path_kind: runtime_shape_paint_path_kind(paint.path_kind?)?,
+        blend_mode_value: paint.blend_mode_value,
+        render_blend_mode_value: runtime_shape_paint_blend_mode_value(
+            paint.blend_mode_value,
+            container_blend_mode_value,
+        ),
         paint_state: runtime_shape_paint_state(paint.paint_state, render_opacity),
         path_commands,
         needs_save_operation,
     })
+}
+
+fn runtime_shape_paint_blend_mode_value(
+    paint_blend_mode_value: u32,
+    container_blend_mode_value: u32,
+) -> u32 {
+    if paint_blend_mode_value == 127 {
+        container_blend_mode_value
+    } else {
+        paint_blend_mode_value
+    }
 }
 
 fn runtime_shape_paint_kind(kind: ShapePaintKind) -> RuntimeShapePaintKind {

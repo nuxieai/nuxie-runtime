@@ -1829,6 +1829,7 @@ fn runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe() {
         push_object_with_properties(bytes, "Artboard", |_| {});
         push_object_with_properties(bytes, "Shape", |bytes| {
             push_uint_property(bytes, "Node", "parentId", 0);
+            push_f32_property(bytes, "Node", "x", 100.0);
             push_f32_property(bytes, "Node", "opacity", 0.5);
         });
         push_object_with_properties(bytes, "Fill", |bytes| {
@@ -1863,6 +1864,7 @@ fn runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe() {
         });
         push_object_with_properties(bytes, "PointsPath", |bytes| {
             push_uint_property(bytes, "Node", "parentId", 1);
+            push_f32_property(bytes, "Node", "x", 10.0);
             push_bool_property(bytes, "PointsCommonPath", "isClosed", true);
         });
         push_object_with_properties(bytes, "StraightVertex", |bytes| {
@@ -1924,25 +1926,46 @@ fn runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe() {
             )
         })
         .collect::<Vec<_>>();
-    let expected_path_commands = vec![
-        RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+    let expected_local_path_commands = vec![
+        RuntimePathCommand::Move { x: 10.0, y: 0.0 },
         RuntimePathCommand::Cubic {
-            x1: 0.0,
+            x1: 10.0,
             y1: 0.0,
-            x2: 5.0,
+            x2: 15.0,
             y2: 0.0,
-            x3: 10.0,
+            x3: 20.0,
             y3: 0.0,
         },
         RuntimePathCommand::Cubic {
-            x1: 15.0,
+            x1: 25.0,
             y1: 0.0,
-            x2: 10.0,
+            x2: 20.0,
             y2: 20.0,
-            x3: 10.0,
+            x3: 20.0,
             y3: 20.0,
         },
-        RuntimePathCommand::Line { x: 0.0, y: 0.0 },
+        RuntimePathCommand::Line { x: 10.0, y: 0.0 },
+        RuntimePathCommand::Close,
+    ];
+    let expected_world_path_commands = vec![
+        RuntimePathCommand::Move { x: 110.0, y: 0.0 },
+        RuntimePathCommand::Cubic {
+            x1: 110.0,
+            y1: 0.0,
+            x2: 115.0,
+            y2: 0.0,
+            x3: 120.0,
+            y3: 0.0,
+        },
+        RuntimePathCommand::Cubic {
+            x1: 125.0,
+            y1: 0.0,
+            x2: 120.0,
+            y2: 20.0,
+            x3: 120.0,
+            y3: 20.0,
+        },
+        RuntimePathCommand::Line { x: 110.0, y: 0.0 },
         RuntimePathCommand::Close,
     ];
 
@@ -1958,7 +1981,7 @@ fn runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe() {
                     color: 0x8040_2010,
                     render_color: 0x4040_2010,
                 }),
-                expected_path_commands.clone(),
+                expected_local_path_commands,
                 true
             ),
             (
@@ -1970,7 +1993,7 @@ fn runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe() {
                     color: 0xff11_2233,
                     render_color: 0x8011_2233,
                 }),
-                expected_path_commands,
+                expected_world_path_commands,
                 true
             ),
         ],

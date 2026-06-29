@@ -2413,6 +2413,7 @@ pub struct RuntimeStateMachine {
     pub inputs: Vec<RuntimeStateMachineInput>,
     pub layers: Vec<RuntimeStateMachineLayer>,
     bindable_numbers: Vec<RuntimeBindableNumber>,
+    bindable_integers: Vec<RuntimeBindableInteger>,
     bindable_booleans: Vec<RuntimeBindableBoolean>,
     view_model_triggers: Vec<RuntimeViewModelTrigger>,
 }
@@ -2447,6 +2448,13 @@ struct RuntimeBindableNumber {
     global_id: u32,
     data_bind_indices: Vec<usize>,
     value: f32,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeBindableInteger {
+    global_id: u32,
+    data_bind_indices: Vec<usize>,
+    value: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -2684,6 +2692,7 @@ impl RuntimeStateTransition {
         &self,
         inputs: &[StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
+        bindable_integers: &[StateMachineBindableIntegerInstance],
         bindable_booleans: &[StateMachineBindableBooleanInstance],
         data_context_present: bool,
         layer_index: usize,
@@ -2693,6 +2702,7 @@ impl RuntimeStateTransition {
             condition.evaluate(
                 inputs,
                 bindable_numbers,
+                bindable_integers,
                 bindable_booleans,
                 data_context_present,
                 layer_index,
@@ -3228,6 +3238,11 @@ enum RuntimeTransitionCondition {
         op: TransitionConditionOp,
         value: f32,
     },
+    ViewModelIntegerNumber {
+        bindable_global_id: u32,
+        op: TransitionConditionOp,
+        value: f32,
+    },
     ViewModelBoolean {
         bindable_global_id: u32,
         op: TransitionConditionOp,
@@ -3304,6 +3319,17 @@ impl RuntimeTransitionCondition {
                         value: right.double_property("value").unwrap_or(0.0),
                     });
                 }
+                if bindable.type_name == "BindablePropertyInteger"
+                    && right.type_name == "TransitionValueNumberComparator"
+                {
+                    return Some(Self::ViewModelIntegerNumber {
+                        bindable_global_id: bindable.id,
+                        op: TransitionConditionOp::from_value(
+                            object.uint_property("opValue").unwrap_or(0),
+                        ),
+                        value: right.double_property("value").unwrap_or(0.0),
+                    });
+                }
                 if bindable.type_name == "BindablePropertyBoolean"
                     && right.type_name == "TransitionValueBooleanComparator"
                 {
@@ -3325,6 +3351,7 @@ impl RuntimeTransitionCondition {
         &self,
         inputs: &[StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
+        bindable_integers: &[StateMachineBindableIntegerInstance],
         bindable_booleans: &[StateMachineBindableBooleanInstance],
         data_context_present: bool,
         layer_index: usize,
@@ -3371,6 +3398,18 @@ impl RuntimeTransitionCondition {
                 }
                 let input_value =
                     bindable_number_value(bindable_numbers, *bindable_global_id).unwrap_or(0.0);
+                op.compare(input_value, *value)
+            }
+            Self::ViewModelIntegerNumber {
+                bindable_global_id,
+                op,
+                value,
+            } => {
+                if !data_context_present {
+                    return false;
+                }
+                let input_value = bindable_integer_value(bindable_integers, *bindable_global_id)
+                    .unwrap_or(0) as f32;
                 op.compare(input_value, *value)
             }
             Self::ViewModelBoolean {
@@ -3476,6 +3515,7 @@ pub struct StateMachineInstance {
     state_machine_index: usize,
     inputs: Vec<StateMachineInputInstance>,
     bindable_numbers: Vec<StateMachineBindableNumberInstance>,
+    bindable_integers: Vec<StateMachineBindableIntegerInstance>,
     bindable_booleans: Vec<StateMachineBindableBooleanInstance>,
     view_model_triggers: Vec<StateMachineViewModelTriggerInstance>,
     layers: Vec<StateMachineLayerInstance>,
@@ -3529,6 +3569,11 @@ impl StateMachineInstance {
             .iter()
             .map(StateMachineBindableNumberInstance::new)
             .collect::<Vec<_>>();
+        let bindable_integers = state_machine
+            .bindable_integers
+            .iter()
+            .map(StateMachineBindableIntegerInstance::new)
+            .collect::<Vec<_>>();
         let bindable_booleans = state_machine
             .bindable_booleans
             .iter()
@@ -3550,6 +3595,7 @@ impl StateMachineInstance {
             state_machine_index,
             inputs,
             bindable_numbers,
+            bindable_integers,
             bindable_booleans,
             view_model_triggers,
             layers,
@@ -3664,6 +3710,25 @@ impl StateMachineInstance {
         true
     }
 
+    pub fn set_bindable_integer_for_data_bind(
+        &mut self,
+        data_bind_index: usize,
+        value: u64,
+    ) -> bool {
+        let Some(bindable_integer) = self
+            .bindable_integers
+            .iter_mut()
+            .find(|bindable_integer| bindable_integer.has_data_bind_index(data_bind_index))
+        else {
+            return false;
+        };
+        if !bindable_integer.set_value(value) {
+            return false;
+        }
+        self.needs_advance = true;
+        true
+    }
+
     pub fn bind_empty_data_context(&mut self) -> bool {
         if self.data_context_present {
             return false;
@@ -3757,6 +3822,7 @@ impl StateMachineInstance {
                 layer_index,
                 &mut self.inputs,
                 &self.bindable_numbers,
+                &self.bindable_integers,
                 &self.bindable_booleans,
                 self.data_context_present,
                 self.data_context_view_model_bound,
@@ -3952,6 +4018,45 @@ fn bindable_number_value(
         .iter()
         .find(|bindable_number| bindable_number.global_id == global_id)
         .map(|bindable_number| bindable_number.value)
+}
+
+#[derive(Debug, Clone)]
+struct StateMachineBindableIntegerInstance {
+    global_id: u32,
+    data_bind_indices: Vec<usize>,
+    value: u64,
+}
+
+impl StateMachineBindableIntegerInstance {
+    fn new(bindable_integer: &RuntimeBindableInteger) -> Self {
+        Self {
+            global_id: bindable_integer.global_id,
+            data_bind_indices: bindable_integer.data_bind_indices.clone(),
+            value: bindable_integer.value,
+        }
+    }
+
+    fn has_data_bind_index(&self, data_bind_index: usize) -> bool {
+        self.data_bind_indices.contains(&data_bind_index)
+    }
+
+    fn set_value(&mut self, value: u64) -> bool {
+        if self.value == value {
+            return false;
+        }
+        self.value = value;
+        true
+    }
+}
+
+fn bindable_integer_value(
+    bindable_integers: &[StateMachineBindableIntegerInstance],
+    global_id: u32,
+) -> Option<u64> {
+    bindable_integers
+        .iter()
+        .find(|bindable_integer| bindable_integer.global_id == global_id)
+        .map(|bindable_integer| bindable_integer.value)
 }
 
 #[derive(Debug, Clone)]
@@ -4161,6 +4266,7 @@ impl StateMachineLayerInstance {
         layer_index: usize,
         inputs: &mut [StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
+        bindable_integers: &[StateMachineBindableIntegerInstance],
         bindable_booleans: &[StateMachineBindableBooleanInstance],
         data_context_present: bool,
         data_context_view_model_bound: bool,
@@ -4192,6 +4298,7 @@ impl StateMachineLayerInstance {
                 layer_index,
                 inputs,
                 bindable_numbers,
+                bindable_integers,
                 bindable_booleans,
                 data_context_present,
                 data_context_view_model_bound,
@@ -4221,6 +4328,7 @@ impl StateMachineLayerInstance {
         layer_index: usize,
         inputs: &mut [StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
+        bindable_integers: &[StateMachineBindableIntegerInstance],
         bindable_booleans: &[StateMachineBindableBooleanInstance],
         data_context_present: bool,
         data_context_view_model_bound: bool,
@@ -4238,6 +4346,7 @@ impl StateMachineLayerInstance {
             layer_index,
             inputs,
             bindable_numbers,
+            bindable_integers,
             bindable_booleans,
             data_context_present,
             data_context_view_model_bound,
@@ -4253,6 +4362,7 @@ impl StateMachineLayerInstance {
             layer_index,
             inputs,
             bindable_numbers,
+            bindable_integers,
             bindable_booleans,
             data_context_present,
             data_context_view_model_bound,
@@ -4269,6 +4379,7 @@ impl StateMachineLayerInstance {
         layer_index: usize,
         inputs: &mut [StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
+        bindable_integers: &[StateMachineBindableIntegerInstance],
         bindable_booleans: &[StateMachineBindableBooleanInstance],
         data_context_present: bool,
         data_context_view_model_bound: bool,
@@ -4290,6 +4401,7 @@ impl StateMachineLayerInstance {
                 layer_index,
                 inputs,
                 bindable_numbers,
+                bindable_integers,
                 bindable_booleans,
                 data_context_present,
             ) else {
@@ -4329,6 +4441,7 @@ impl StateMachineLayerInstance {
             match transition.allow(
                 inputs,
                 bindable_numbers,
+                bindable_integers,
                 bindable_booleans,
                 data_context_present,
                 layer_index,
@@ -4368,6 +4481,7 @@ impl StateMachineLayerInstance {
         layer_index: usize,
         inputs: &[StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
+        bindable_integers: &[StateMachineBindableIntegerInstance],
         bindable_booleans: &[StateMachineBindableBooleanInstance],
         data_context_present: bool,
     ) -> Option<(usize, usize)> {
@@ -4394,6 +4508,7 @@ impl StateMachineLayerInstance {
             match transition.allow(
                 inputs,
                 bindable_numbers,
+                bindable_integers,
                 bindable_booleans,
                 data_context_present,
                 layer_index,
@@ -5388,6 +5503,7 @@ fn build_state_machines(
         .into_iter()
         .map(|state_machine| {
             let bindable_numbers = runtime_bindable_numbers(file, &state_machine);
+            let bindable_integers = runtime_bindable_integers(file, &state_machine);
             let bindable_booleans = runtime_bindable_booleans(file, &state_machine);
             let view_model_triggers = runtime_default_view_model_triggers(file);
             RuntimeStateMachine {
@@ -5402,6 +5518,7 @@ fn build_state_machines(
                     .filter_map(runtime_state_machine_input)
                     .collect(),
                 bindable_numbers,
+                bindable_integers,
                 bindable_booleans,
                 view_model_triggers,
                 layers: state_machine
@@ -5558,6 +5675,31 @@ fn runtime_bindable_numbers(
                 global_id: target.id,
                 data_bind_indices: vec![data_bind_index],
                 value: target.double_property("propertyValue").unwrap_or(0.0),
+            });
+    }
+
+    values.into_values().collect()
+}
+
+fn runtime_bindable_integers(
+    file: &RuntimeFile,
+    state_machine: &rive_binary::RuntimeStateMachine<'_>,
+) -> Vec<RuntimeBindableInteger> {
+    let mut values = BTreeMap::<u32, RuntimeBindableInteger>::new();
+    for (data_bind_index, data_bind) in state_machine.data_binds.iter().enumerate() {
+        let Some(target) = file.data_bind_target_for_object(data_bind) else {
+            continue;
+        };
+        if target.type_name != "BindablePropertyInteger" {
+            continue;
+        }
+        values
+            .entry(target.id)
+            .and_modify(|bindable_integer| bindable_integer.data_bind_indices.push(data_bind_index))
+            .or_insert_with(|| RuntimeBindableInteger {
+                global_id: target.id,
+                data_bind_indices: vec![data_bind_index],
+                value: target.uint_property("propertyValue").unwrap_or(0),
             });
     }
 

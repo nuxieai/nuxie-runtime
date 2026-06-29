@@ -53,6 +53,7 @@ pub struct ArtboardGraph {
     pub draw_target_order: Vec<usize>,
     pub draw_target_cycles: Vec<DrawTargetCycle>,
     pub drawable_order: Vec<DrawableOrderNode>,
+    pub sorted_drawable_order: Vec<SortedDrawableNode>,
     pub clipping_shapes: Vec<ClippingShapeNode>,
     pub path_composers: Vec<PathComposerNode>,
     pub meshes: Vec<MeshGeometryNode>,
@@ -157,6 +158,12 @@ impl ArtboardGraph {
         let drawable_order = drawable_order(file, &local_objects);
         let draw_target_order =
             draw_target_order(file, &local_objects, &draw_targets, &drawable_order);
+        let sorted_drawable_order = sorted_drawable_order(
+            &drawable_order,
+            &draw_targets,
+            &draw_rules,
+            &draw_target_order.local_ids,
+        );
         lifecycle.post_build_dependencies_draw_target_edges =
             draw_target_order.dependency_edges.len();
         lifecycle.draw_target_cycles = draw_target_order.cycles.len();
@@ -256,6 +263,7 @@ impl ArtboardGraph {
             draw_target_order: draw_target_order.local_ids,
             draw_target_cycles: draw_target_order.cycles,
             drawable_order,
+            sorted_drawable_order,
             clipping_shapes,
             path_composers,
             meshes,
@@ -498,6 +506,17 @@ pub struct DrawableOrderNode {
     pub layout_global: Option<u32>,
     pub flattened_draw_rules_local: Option<usize>,
     pub flattened_draw_rules_global: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SortedDrawableNode {
+    pub kind: DrawableOrderKind,
+    pub local_id: Option<usize>,
+    pub global_id: Option<u32>,
+    pub type_name: &'static str,
+    pub layout_local: Option<usize>,
+    pub layout_global: Option<u32>,
+    pub draw_target_local: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1602,6 +1621,85 @@ fn drawable_order(file: &RuntimeFile, local_objects: &[LocalObject]) -> Vec<Draw
 
     inject_layout_proxy_drawables(file, local_objects, &mut order);
     order
+}
+
+fn sorted_drawable_order(
+    drawable_order: &[DrawableOrderNode],
+    draw_targets: &[DrawTargetNode],
+    draw_rules: &[DrawRulesNode],
+    draw_target_order: &[usize],
+) -> Vec<SortedDrawableNode> {
+    let active_target_by_rules = draw_rules
+        .iter()
+        .filter_map(|rules| {
+            rules
+                .active_target_local
+                .map(|target_local| (rules.local_id, target_local))
+        })
+        .collect::<BTreeMap<_, _>>();
+    let draw_targets_by_local = draw_targets
+        .iter()
+        .map(|target| (target.local_id, target))
+        .collect::<BTreeMap<_, _>>();
+
+    let mut main = Vec::new();
+    let mut grouped = BTreeMap::<usize, Vec<SortedDrawableNode>>::new();
+    for drawable in drawable_order {
+        let draw_target_local = drawable
+            .flattened_draw_rules_local
+            .and_then(|rules_local| active_target_by_rules.get(&rules_local).copied());
+        let node = sorted_drawable_node(drawable, draw_target_local);
+        if let Some(draw_target_local) = draw_target_local {
+            grouped.entry(draw_target_local).or_default().push(node);
+        } else {
+            main.push(node);
+        }
+    }
+
+    for draw_target_local in draw_target_order {
+        let Some(group) = grouped.remove(draw_target_local) else {
+            continue;
+        };
+        if group.is_empty() {
+            continue;
+        }
+        let Some(target) = draw_targets_by_local.get(draw_target_local) else {
+            continue;
+        };
+        let Some(target_drawable_local) = target.drawable_local else {
+            continue;
+        };
+        let Some(target_position) = main
+            .iter()
+            .position(|drawable| drawable.local_id == Some(target_drawable_local))
+        else {
+            continue;
+        };
+
+        let insert_at = match target.placement_value {
+            0 => target_position,
+            1 => target_position + 1,
+            _ => continue,
+        };
+        main.splice(insert_at..insert_at, group);
+    }
+
+    main.into_iter().rev().collect()
+}
+
+fn sorted_drawable_node(
+    drawable: &DrawableOrderNode,
+    draw_target_local: Option<usize>,
+) -> SortedDrawableNode {
+    SortedDrawableNode {
+        kind: drawable.kind,
+        local_id: drawable.local_id,
+        global_id: drawable.global_id,
+        type_name: drawable.type_name,
+        layout_local: drawable.layout_local,
+        layout_global: drawable.layout_global,
+        draw_target_local,
+    }
 }
 
 fn component_draw_rules_by_parent(

@@ -1269,6 +1269,36 @@ void write_draw_rules(std::ostream& out,
     out << '}';
 }
 
+void write_sorted_drawable_order(std::ostream& out,
+                                 const LocalIds& localIds,
+                                 rive::Artboard* artboard)
+{
+    out << ",\"sortedDrawableOrder\":[";
+    bool first = true;
+    size_t index = 0;
+    for (auto drawable = artboard == nullptr ? nullptr : artboard->firstDrawable();
+         drawable != nullptr;
+         drawable = drawable->prevDrawable())
+    {
+        if (!first)
+        {
+            out << ',';
+        }
+        first = false;
+
+        out << "{\"index\":" << index++;
+        out << ",\"localId\":";
+        write_local_id_or_null(out, localIds, drawable);
+        out << ",\"coreType\":" << drawable->coreType();
+        out << ",\"isProxy\":" << (drawable->isProxy() ? "true" : "false");
+        out << ",\"isClipStart\":"
+            << (drawable->isClipStart() ? "true" : "false");
+        out << ",\"isClipEnd\":" << (drawable->isClipEnd() ? "true" : "false");
+        out << '}';
+    }
+    out << ']';
+}
+
 bool drawable_has_clipping_shape(const rive::Drawable* drawable,
                                  const rive::ClippingShape* clippingShape)
 {
@@ -5188,6 +5218,8 @@ void write_artboard(std::ostream& out,
         write_draw_rules(out, localIds, i, object->as<rive::DrawRules>());
     }
     out << ']';
+
+    write_sorted_drawable_order(out, localIds, artboard);
 
     out << ",\"clippingShapes\":[";
     first = true;

@@ -1363,6 +1363,87 @@ fn graph_projects_draw_target_order_from_flattened_rules() {
 }
 
 #[test]
+fn cpp_probe_matches_rust_sorted_drawable_order_when_available() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ probe comparison; set RIVE_CPP_PROBE or run make cpp-probe");
+        return;
+    };
+
+    let parent_id_key = property_key_for_name("Component", "parentId");
+    let drawable_id_key = property_key_for_name("DrawTarget", "drawableId");
+    let placement_value_key = property_key_for_name("DrawTarget", "placementValue");
+    let draw_target_id_key = property_key_for_name("DrawRules", "drawTargetId");
+
+    let bytes = synthetic_runtime_file(7195, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object(bytes, "Shape", &[(parent_id_key, 0)]);
+        push_object(bytes, "Shape", &[(parent_id_key, 0)]);
+        push_object(bytes, "Shape", &[(parent_id_key, 0)]);
+        push_object(
+            bytes,
+            "DrawRules",
+            &[(parent_id_key, 2), (draw_target_id_key, 5)],
+        );
+        push_object(
+            bytes,
+            "DrawTarget",
+            &[
+                (parent_id_key, 4),
+                (drawable_id_key, 1),
+                (placement_value_key, 0),
+            ],
+        );
+        push_object(
+            bytes,
+            "DrawRules",
+            &[(parent_id_key, 3), (draw_target_id_key, 7)],
+        );
+        push_object(
+            bytes,
+            "DrawTarget",
+            &[
+                (parent_id_key, 6),
+                (drawable_id_key, 1),
+                (placement_value_key, 1),
+            ],
+        );
+    });
+
+    let label = "synthetic/sorted_drawable_order.riv";
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let (runtime, rust) = read_graph_from_bytes(&bytes, label);
+    compare_artboards(&cpp, &runtime, &rust, label);
+
+    let cpp_order = cpp.artboards[0]
+        .sorted_drawable_order
+        .iter()
+        .map(|node| node.local_id)
+        .collect::<Vec<_>>();
+    let rust_order = rust.artboards[0]
+        .sorted_drawable_order
+        .iter()
+        .map(|node| node.local_id)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        cpp_order,
+        vec![Some(3), Some(1), Some(2)],
+        "C++ sorted draw order should render the after-target group, target drawable, then before-target group"
+    );
+    assert_eq!(
+        rust_order, cpp_order,
+        "Rust sorted draw order should match C++ draw-target placement splicing"
+    );
+    assert!(
+        cpp.artboards[0]
+            .sorted_drawable_order
+            .iter()
+            .all(|node| !node.is_proxy),
+        "this first sorted draw-order slice does not include clipping or layout proxies"
+    );
+}
+
+#[test]
 fn graph_reports_draw_target_order_cycles() {
     let parent_id_key = property_key_for_name("Component", "parentId");
     let drawable_id_key = property_key_for_name("DrawTarget", "drawableId");
@@ -6643,6 +6724,8 @@ struct CppArtboard {
     draw_targets: Vec<CppDrawTarget>,
     #[serde(default, rename = "drawRules")]
     draw_rules: Vec<CppDrawRules>,
+    #[serde(default, rename = "sortedDrawableOrder")]
+    sorted_drawable_order: Vec<CppSortedDrawable>,
     #[serde(default, rename = "clippingShapes")]
     clipping_shapes: Vec<CppClippingShape>,
     #[serde(default)]
@@ -6728,6 +6811,14 @@ struct CppDrawRules {
     draw_target_id: u64,
     #[serde(rename = "activeTargetLocal")]
     active_target_local: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppSortedDrawable {
+    #[serde(rename = "localId")]
+    local_id: Option<usize>,
+    #[serde(rename = "isProxy")]
+    is_proxy: bool,
 }
 
 #[derive(Debug, Deserialize)]

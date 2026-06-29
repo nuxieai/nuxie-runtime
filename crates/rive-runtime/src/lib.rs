@@ -3362,31 +3362,54 @@ enum RuntimeTransitionCondition {
         op: TransitionConditionOp,
     },
     ComponentNumber {
-        local_id: usize,
-        transform_property: Option<TransformProperty>,
-        source_value: f32,
+        component: RuntimeComponentNumberValue,
         op: TransitionConditionOp,
         value: f32,
+    },
+    ComponentNumberPair {
+        left: RuntimeComponentNumberValue,
+        right: RuntimeComponentNumberValue,
+        op: TransitionConditionOp,
     },
     ComponentBoolean {
         source_value: bool,
         op: TransitionConditionOp,
         value: bool,
     },
+    ComponentBooleanPair {
+        left: bool,
+        right: bool,
+        op: TransitionConditionOp,
+    },
     ComponentString {
         source_value: Vec<u8>,
         op: TransitionConditionOp,
         value: Vec<u8>,
+    },
+    ComponentStringPair {
+        left: Vec<u8>,
+        right: Vec<u8>,
+        op: TransitionConditionOp,
     },
     ComponentColor {
         source_value: u32,
         op: TransitionConditionOp,
         value: u32,
     },
+    ComponentColorPair {
+        left: u32,
+        right: u32,
+        op: TransitionConditionOp,
+    },
     ComponentUint {
         source_value: u64,
         op: TransitionConditionOp,
         value: u64,
+    },
+    ComponentUintPair {
+        left: u64,
+        right: u64,
+        op: TransitionConditionOp,
     },
     ArtboardNumber {
         value: f32,
@@ -3441,6 +3464,11 @@ impl RuntimeTransitionCondition {
                         ),
                         threshold: right.double_property("value").unwrap_or(0.0),
                     });
+                }
+                if left.type_name == "TransitionPropertyComponentComparator"
+                    && right.type_name == "TransitionPropertyComponentComparator"
+                {
+                    return Self::from_component_pair(file, graph, object, left, right);
                 }
                 if left.type_name == "TransitionPropertyComponentComparator" {
                     return Self::from_component_literal(file, graph, object, left, right);
@@ -3593,31 +3621,26 @@ impl RuntimeTransitionCondition {
         match (kind, right.type_name) {
             (RuntimeComponentComparandKind::NumberDouble, "TransitionValueNumberComparator") => {
                 Some(Self::ComponentNumber {
-                    local_id,
-                    transform_property: supports_property
-                        .then(|| transform_property_for_key(property_key))
-                        .flatten(),
-                    source_value: source_object
-                        .filter(|_| supports_property)
-                        .and_then(|object| {
-                            runtime_object_double_property_by_key(object, property_key)
-                        })
-                        .unwrap_or(0.0),
+                    component: RuntimeComponentNumberValue::from_parts(
+                        local_id,
+                        property_key,
+                        kind,
+                        source_object,
+                        supports_property,
+                    )?,
                     op,
                     value: right.double_property("value").unwrap_or(0.0),
                 })
             }
             (RuntimeComponentComparandKind::NumberFromUint, "TransitionValueNumberComparator") => {
                 Some(Self::ComponentNumber {
-                    local_id,
-                    transform_property: None,
-                    source_value: source_object
-                        .filter(|_| supports_property)
-                        .and_then(|object| {
-                            runtime_object_uint_property_by_key(object, property_key)
-                        })
-                        .map(|value| value as f32)
-                        .unwrap_or(0.0),
+                    component: RuntimeComponentNumberValue::from_parts(
+                        local_id,
+                        property_key,
+                        kind,
+                        source_object,
+                        supports_property,
+                    )?,
                     op,
                     value: right.double_property("value").unwrap_or(0.0),
                 })
@@ -3696,6 +3719,141 @@ impl RuntimeTransitionCondition {
                         .unwrap_or(0),
                     op,
                     value: right.uint_property("value").unwrap_or(u64::from(u32::MAX)),
+                })
+            }
+            _ => None,
+        }
+    }
+
+    fn from_component_pair(
+        file: &RuntimeFile,
+        graph: &ArtboardGraph,
+        condition: &RuntimeObject,
+        left: &RuntimeObject,
+        right: &RuntimeObject,
+    ) -> Option<Self> {
+        let left_local_id = usize::try_from(left.uint_property("objectId")?).ok()?;
+        let right_local_id = usize::try_from(right.uint_property("objectId")?).ok()?;
+        let left_property_key = u16::try_from(left.uint_property("propertyKey")?).ok()?;
+        let right_property_key = u16::try_from(right.uint_property("propertyKey")?).ok()?;
+        let left_kind = RuntimeComponentComparandKind::from_property_key(left_property_key)?;
+        let right_kind = RuntimeComponentComparandKind::from_property_key(right_property_key)?;
+        if !left_kind.is_compatible_with(right_kind) {
+            return None;
+        }
+
+        let op = TransitionConditionOp::from_value(condition.uint_property("opValue").unwrap_or(0));
+        let left_source = component_source_object(file, graph, left_local_id);
+        let right_source = component_source_object(file, graph, right_local_id);
+        let left_supports = component_supports_property(left_source, left_property_key);
+        let right_supports = component_supports_property(right_source, right_property_key);
+
+        match (left_kind, right_kind) {
+            (
+                RuntimeComponentComparandKind::NumberDouble
+                | RuntimeComponentComparandKind::NumberFromUint,
+                RuntimeComponentComparandKind::NumberDouble
+                | RuntimeComponentComparandKind::NumberFromUint,
+            ) if left_kind == RuntimeComponentComparandKind::NumberFromUint
+                && right_kind == RuntimeComponentComparandKind::NumberFromUint =>
+            {
+                Some(Self::ComponentUintPair {
+                    left: runtime_component_uint_value(
+                        left_source,
+                        left_property_key,
+                        left_supports,
+                    ),
+                    right: runtime_component_uint_value(
+                        right_source,
+                        right_property_key,
+                        right_supports,
+                    ),
+                    op,
+                })
+            }
+            (
+                RuntimeComponentComparandKind::NumberDouble
+                | RuntimeComponentComparandKind::NumberFromUint,
+                RuntimeComponentComparandKind::NumberDouble
+                | RuntimeComponentComparandKind::NumberFromUint,
+            ) => Some(Self::ComponentNumberPair {
+                left: RuntimeComponentNumberValue::from_parts(
+                    left_local_id,
+                    left_property_key,
+                    left_kind,
+                    left_source,
+                    left_supports,
+                )?,
+                right: RuntimeComponentNumberValue::from_parts(
+                    right_local_id,
+                    right_property_key,
+                    right_kind,
+                    right_source,
+                    right_supports,
+                )?,
+                op,
+            }),
+            (RuntimeComponentComparandKind::Boolean, RuntimeComponentComparandKind::Boolean) => {
+                Some(Self::ComponentBooleanPair {
+                    left: runtime_component_bool_value(
+                        left_source,
+                        left_property_key,
+                        left_supports,
+                    ),
+                    right: runtime_component_bool_value(
+                        right_source,
+                        right_property_key,
+                        right_supports,
+                    ),
+                    op,
+                })
+            }
+            (RuntimeComponentComparandKind::String, RuntimeComponentComparandKind::String) => {
+                Some(Self::ComponentStringPair {
+                    left: runtime_component_string_value(
+                        left_source,
+                        left_property_key,
+                        left_supports,
+                    ),
+                    right: runtime_component_string_value(
+                        right_source,
+                        right_property_key,
+                        right_supports,
+                    ),
+                    op,
+                })
+            }
+            (RuntimeComponentComparandKind::Color, RuntimeComponentComparandKind::Color) => {
+                Some(Self::ComponentColorPair {
+                    left: runtime_component_color_value(
+                        left_source,
+                        left_property_key,
+                        left_supports,
+                    ),
+                    right: runtime_component_color_value(
+                        right_source,
+                        right_property_key,
+                        right_supports,
+                    ),
+                    op,
+                })
+            }
+            (RuntimeComponentComparandKind::Enum, RuntimeComponentComparandKind::Enum)
+            | (RuntimeComponentComparandKind::Trigger, RuntimeComponentComparandKind::Trigger)
+            | (RuntimeComponentComparandKind::Asset, RuntimeComponentComparandKind::Asset)
+            | (RuntimeComponentComparandKind::Artboard, RuntimeComponentComparandKind::Artboard) => {
+                Some(Self::ComponentUintPair {
+                    left: runtime_component_uint_value(
+                        left_source,
+                        left_property_key,
+                        left_supports,
+                    ),
+                    right: runtime_component_uint_value(
+                        right_source,
+                        right_property_key,
+                        right_supports,
+                    ),
+                    op,
                 })
             }
             _ => None,
@@ -3871,37 +4029,41 @@ impl RuntimeTransitionCondition {
                 op.compare_bool(left == right, true)
             }
             Self::ComponentNumber {
-                local_id,
-                transform_property,
-                source_value,
+                component,
                 op,
                 value,
-            } => {
-                let input_value = transform_property
-                    .and_then(|property| artboard.transform_property(*local_id, property))
-                    .unwrap_or(*source_value);
-                op.compare(input_value, *value)
+            } => op.compare(component.value(artboard), *value),
+            Self::ComponentNumberPair { left, right, op } => {
+                op.compare(left.value(artboard), right.value(artboard))
             }
             Self::ComponentBoolean {
                 source_value,
                 op,
                 value,
             } => op.compare_bool(*source_value, *value),
+            Self::ComponentBooleanPair { left, right, op } => op.compare_bool(*left, *right),
             Self::ComponentString {
                 source_value,
                 op,
                 value,
             } => op.compare_bytes_equal_only(source_value, value),
+            Self::ComponentStringPair { left, right, op } => {
+                op.compare_bytes_equal_only(left, right)
+            }
             Self::ComponentColor {
                 source_value,
                 op,
                 value,
             } => op.compare_u32_equal_only(*source_value, *value),
+            Self::ComponentColorPair { left, right, op } => {
+                op.compare_u32_equal_only(*left, *right)
+            }
             Self::ComponentUint {
                 source_value,
                 op,
                 value,
             } => op.compare_u64_equal_only(*source_value, *value),
+            Self::ComponentUintPair { left, right, op } => op.compare_u64_equal_only(*left, *right),
             Self::ArtboardNumber {
                 value,
                 op,
@@ -4000,6 +4162,76 @@ impl RuntimeComponentComparandKind {
             }
         }
     }
+
+    fn is_number(self) -> bool {
+        matches!(self, Self::NumberDouble | Self::NumberFromUint)
+    }
+
+    fn is_compatible_with(self, other: Self) -> bool {
+        (self.is_number() && other.is_number()) || self == other
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RuntimeComponentNumberValue {
+    local_id: usize,
+    transform_property: Option<TransformProperty>,
+    source_value: f32,
+}
+
+impl RuntimeComponentNumberValue {
+    fn from_parts(
+        local_id: usize,
+        property_key: u16,
+        kind: RuntimeComponentComparandKind,
+        source_object: Option<&RuntimeObject>,
+        supports_property: bool,
+    ) -> Option<Self> {
+        match kind {
+            RuntimeComponentComparandKind::NumberDouble => Some(Self {
+                local_id,
+                transform_property: supports_property
+                    .then(|| transform_property_for_key(property_key))
+                    .flatten(),
+                source_value: source_object
+                    .filter(|_| supports_property)
+                    .and_then(|object| runtime_object_double_property_by_key(object, property_key))
+                    .unwrap_or(0.0),
+            }),
+            RuntimeComponentComparandKind::NumberFromUint => Some(Self {
+                local_id,
+                transform_property: None,
+                source_value: runtime_component_uint_value(
+                    source_object,
+                    property_key,
+                    supports_property,
+                ) as f32,
+            }),
+            _ => None,
+        }
+    }
+
+    fn value(self, artboard: &ArtboardInstance) -> f32 {
+        self.transform_property
+            .and_then(|property| artboard.transform_property(self.local_id, property))
+            .unwrap_or(self.source_value)
+    }
+}
+
+fn component_source_object<'a>(
+    file: &'a RuntimeFile,
+    graph: &ArtboardGraph,
+    local_id: usize,
+) -> Option<&'a RuntimeObject> {
+    graph
+        .local_objects
+        .iter()
+        .find(|local| local.local_id == local_id)
+        .and_then(|local| file.object(local.global_id as usize))
+}
+
+fn component_supports_property(source_object: Option<&RuntimeObject>, property_key: u16) -> bool {
+    source_object.is_some_and(|object| object_supports_property(object.type_key, property_key))
 }
 
 fn component_property_key_matches(property_key: u16, properties: &[(&str, &str)]) -> bool {
@@ -4045,6 +4277,50 @@ fn runtime_object_string_property_by_key(
             .map(|value| value.to_vec()),
         _ => None,
     }
+}
+
+fn runtime_component_uint_value(
+    source_object: Option<&RuntimeObject>,
+    property_key: u16,
+    supports_property: bool,
+) -> u64 {
+    source_object
+        .filter(|_| supports_property)
+        .and_then(|object| runtime_object_uint_property_by_key(object, property_key))
+        .unwrap_or(0)
+}
+
+fn runtime_component_bool_value(
+    source_object: Option<&RuntimeObject>,
+    property_key: u16,
+    supports_property: bool,
+) -> bool {
+    source_object
+        .filter(|_| supports_property)
+        .and_then(|object| runtime_object_bool_property_by_key(object, property_key))
+        .unwrap_or(false)
+}
+
+fn runtime_component_string_value(
+    source_object: Option<&RuntimeObject>,
+    property_key: u16,
+    supports_property: bool,
+) -> Vec<u8> {
+    source_object
+        .filter(|_| supports_property)
+        .and_then(|object| runtime_object_string_property_by_key(object, property_key))
+        .unwrap_or_default()
+}
+
+fn runtime_component_color_value(
+    source_object: Option<&RuntimeObject>,
+    property_key: u16,
+    supports_property: bool,
+) -> u32 {
+    source_object
+        .filter(|_| supports_property)
+        .and_then(|object| runtime_object_color_property_by_key(object, property_key))
+        .unwrap_or(0)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

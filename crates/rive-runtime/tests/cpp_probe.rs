@@ -1778,6 +1778,81 @@ fn synthetic_state_machine_component_number_condition(
     })
 }
 
+fn push_synthetic_component_pair_condition(
+    bytes: &mut Vec<u8>,
+    left_object_id: u64,
+    left_property_key: u16,
+    right_object_id: u64,
+    right_property_key: u16,
+    op_value: u64,
+) {
+    push_object_with_properties(bytes, "TransitionViewModelCondition", |bytes| {
+        push_uint_property(bytes, "TransitionViewModelCondition", "opValue", op_value);
+    });
+    for (object_id, property_key) in [
+        (left_object_id, left_property_key),
+        (right_object_id, right_property_key),
+    ] {
+        push_object_with_properties(bytes, "TransitionPropertyComponentComparator", |bytes| {
+            push_uint_property(
+                bytes,
+                "TransitionPropertyComponentComparator",
+                "objectId",
+                object_id,
+            );
+            push_uint_property(
+                bytes,
+                "TransitionPropertyComponentComparator",
+                "propertyKey",
+                u64::from(property_key),
+            );
+        });
+    }
+}
+
+fn synthetic_state_machine_component_pair_condition(
+    file_id: u64,
+    left_object_id: u64,
+    left_property_key: u16,
+    right_object_id: u64,
+    right_property_key: u16,
+    op_value: u64,
+) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_transform_node(bytes, 0, 7.0, 11.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 2, 7.0, 17.0);
+        push_animation_for_single_node(bytes, 2, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+        });
+        push_synthetic_component_pair_condition(
+            bytes,
+            left_object_id,
+            left_property_key,
+            right_object_id,
+            right_property_key,
+            op_value,
+        );
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
 fn synthetic_state_machine_direct_blend_state_transition(file_id: u64) -> Vec<u8> {
     const ENABLE_EXIT_TIME: u64 = 1 << 2;
 
@@ -6777,6 +6852,140 @@ fn state_machine_component_literal_conditions_match_cpp_probe() {
         (
             "synthetic/runtime_state_machine_component_number_unsupported_default_cpp.riv",
             synthetic_state_machine_component_number_condition(8320, 1, artboard_width_key, 0, 0.0),
+            None,
+        ),
+    ] {
+        let mut args = Vec::new();
+        if let Some(value) = mutated_x {
+            args.extend([
+                "--runtime-set-double".to_owned(),
+                "1".to_owned(),
+                node_x_key.to_string(),
+                value.to_string(),
+            ]);
+        }
+        args.extend([
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+        ]);
+
+        let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+        let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+        if let Some(value) = mutated_x {
+            assert!(
+                rust.set_transform_property(1, TransformProperty::X, value),
+                "{label} failed to mutate component x"
+            );
+        }
+        let mut state_machine = rust
+            .state_machine_instance(0)
+            .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+        let mut rust_reports = Vec::new();
+        rust_reports.push((
+            rust.advance_state_machine_instance(&mut state_machine, 0.0),
+            state_machine.clone(),
+        ));
+        rust_reports.push((
+            rust.advance_state_machine_instance(&mut state_machine, 0.0),
+            state_machine.clone(),
+        ));
+        let report = rust.update_components();
+
+        let cpp_artboard = cpp
+            .artboards
+            .first()
+            .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+        assert_eq!(
+            cpp_artboard.runtime_state_machine_advances.len(),
+            rust_reports.len(),
+            "{label} state-machine report count mismatch"
+        );
+        for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+            .runtime_state_machine_advances
+            .iter()
+            .zip(&rust_reports)
+        {
+            compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+        }
+        compare_cpp_runtime_update(&cpp, &rust, &report, label);
+    }
+}
+
+#[test]
+fn state_machine_component_pair_conditions_match_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let node_x_key = property_key_for_name("Node", "x");
+    let node_y_key = property_key_for_name("Node", "y");
+    let node_parent_id_key = property_key_for_name("Node", "parentId");
+    let node_name_key = property_key_for_name("Node", "name");
+    let artboard_width_key = property_key_for_name("Artboard", "width");
+
+    for (label, bytes, mutated_x) in [
+        (
+            "synthetic/runtime_state_machine_component_pair_number_static_true_cpp.riv",
+            synthetic_state_machine_component_pair_condition(8321, 1, node_x_key, 2, node_y_key, 4),
+            None,
+        ),
+        (
+            "synthetic/runtime_state_machine_component_pair_number_static_false_cpp.riv",
+            synthetic_state_machine_component_pair_condition(8322, 1, node_x_key, 2, node_y_key, 5),
+            None,
+        ),
+        (
+            "synthetic/runtime_state_machine_component_pair_number_mutated_true_cpp.riv",
+            synthetic_state_machine_component_pair_condition(8323, 1, node_x_key, 2, node_y_key, 5),
+            Some(12.0),
+        ),
+        (
+            "synthetic/runtime_state_machine_component_pair_uint_equal_cpp.riv",
+            synthetic_state_machine_component_pair_condition(
+                8324,
+                1,
+                node_parent_id_key,
+                2,
+                node_parent_id_key,
+                0,
+            ),
+            None,
+        ),
+        (
+            "synthetic/runtime_state_machine_component_pair_missing_default_cpp.riv",
+            synthetic_state_machine_component_pair_condition(
+                8325, 99, node_x_key, 1, node_x_key, 4,
+            ),
+            None,
+        ),
+        (
+            "synthetic/runtime_state_machine_component_pair_unsupported_default_cpp.riv",
+            synthetic_state_machine_component_pair_condition(
+                8326,
+                1,
+                artboard_width_key,
+                1,
+                node_parent_id_key,
+                0,
+            ),
+            None,
+        ),
+        (
+            "synthetic/runtime_state_machine_component_pair_incompatible_cpp.riv",
+            synthetic_state_machine_component_pair_condition(
+                8327,
+                1,
+                node_x_key,
+                1,
+                node_name_key,
+                0,
+            ),
             None,
         ),
     ] {

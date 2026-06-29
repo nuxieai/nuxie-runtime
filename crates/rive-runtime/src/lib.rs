@@ -869,6 +869,7 @@ fn path_commands(
         "Polygon" => polygon_path_commands(path, path_kind, transform),
         "Rectangle" => rectangle_path_commands(path, path_kind, transform),
         "Star" => star_path_commands(path, path_kind, transform),
+        "Triangle" => triangle_path_commands(path, path_kind, transform),
         _ => Vec::new(),
     }
 }
@@ -1227,6 +1228,32 @@ fn closed_straight_vertices_path_commands(
     };
 
     points_path_commands(&virtual_path, path_kind, transform)
+}
+
+fn triangle_path_commands(
+    path: &PathGeometryNode,
+    path_kind: ShapePaintPathKind,
+    transform: Mat2D,
+) -> Vec<RuntimePathCommand> {
+    let Some(ParametricPathNode::Triangle {
+        width,
+        height,
+        origin_x,
+        origin_y,
+    }) = path.parametric.as_ref()
+    else {
+        return Vec::new();
+    };
+
+    let ox = -*origin_x * *width;
+    let oy = -*origin_y * *height;
+    let vertices = vec![
+        virtual_straight_vertex(ox + *width / 2.0, oy, 0.0),
+        virtual_straight_vertex(ox + *width, oy + *height, 0.0),
+        virtual_straight_vertex(ox, oy + *height, 0.0),
+    ];
+
+    closed_straight_vertices_path_commands(path, path_kind, transform, vertices)
 }
 
 fn virtual_straight_vertex(x: f32, y: f32, radius: f32) -> PathVertexNode {

@@ -602,6 +602,15 @@ pub enum ParametricPathNode {
         points: u32,
         corner_radius: f32,
     },
+    Star {
+        width: f32,
+        height: f32,
+        origin_x: f32,
+        origin_y: f32,
+        points: u32,
+        corner_radius: f32,
+        inner_radius: f32,
+    },
     Rectangle {
         width: f32,
         height: f32,
@@ -2443,6 +2452,15 @@ fn parametric_path(path: &RuntimeObject) -> Option<ParametricPathNode> {
             origin_y: path.double_property("originY").unwrap_or(0.5),
             points: path.uint_property("points").unwrap_or(5) as u32,
             corner_radius: path.double_property("cornerRadius").unwrap_or(0.0),
+        }),
+        "Star" => Some(ParametricPathNode::Star {
+            width: path.double_property("width").unwrap_or(0.0),
+            height: path.double_property("height").unwrap_or(0.0),
+            origin_x: path.double_property("originX").unwrap_or(0.5),
+            origin_y: path.double_property("originY").unwrap_or(0.5),
+            points: path.uint_property("points").unwrap_or(5) as u32,
+            corner_radius: path.double_property("cornerRadius").unwrap_or(0.0),
+            inner_radius: path.double_property("innerRadius").unwrap_or(0.5),
         }),
         "Rectangle" => Some(ParametricPathNode::Rectangle {
             width: path.double_property("width").unwrap_or(0.0),

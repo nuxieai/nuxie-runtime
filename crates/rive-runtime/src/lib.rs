@@ -868,6 +868,7 @@ fn path_commands(
         "PointsPath" => points_path_commands(path, path_kind, transform),
         "Polygon" => polygon_path_commands(path, path_kind, transform),
         "Rectangle" => rectangle_path_commands(path, path_kind, transform),
+        "Star" => star_path_commands(path, path_kind, transform),
         _ => Vec::new(),
     }
 }
@@ -1150,6 +1151,70 @@ fn polygon_path_commands(
         angle += inc;
     }
 
+    closed_straight_vertices_path_commands(path, path_kind, transform, vertices)
+}
+
+fn star_path_commands(
+    path: &PathGeometryNode,
+    path_kind: ShapePaintPathKind,
+    transform: Mat2D,
+) -> Vec<RuntimePathCommand> {
+    let Some(ParametricPathNode::Star {
+        width,
+        height,
+        origin_x,
+        origin_y,
+        points,
+        corner_radius,
+        inner_radius,
+    }) = path.parametric.as_ref()
+    else {
+        return Vec::new();
+    };
+
+    let Ok(point_count) = usize::try_from(*points) else {
+        return Vec::new();
+    };
+    let Some(count) = point_count.checked_mul(2) else {
+        return Vec::new();
+    };
+    if count < 2 {
+        return Vec::new();
+    }
+
+    let half_width = *width / 2.0;
+    let half_height = *height / 2.0;
+    let inner_half_width = *width * *inner_radius / 2.0;
+    let inner_half_height = *height * *inner_radius / 2.0;
+    let ox = -*origin_x * *width + half_width;
+    let oy = -*origin_y * *height + half_height;
+    let mut angle = -std::f32::consts::FRAC_PI_2;
+    let inc = 2.0 * std::f32::consts::PI / count as f32;
+    let mut vertices = Vec::with_capacity(count);
+    for _ in 0..point_count {
+        vertices.push(virtual_straight_vertex(
+            ox + angle.cos() * half_width,
+            oy + angle.sin() * half_height,
+            *corner_radius,
+        ));
+        angle += inc;
+        vertices.push(virtual_straight_vertex(
+            ox + angle.cos() * inner_half_width,
+            oy + angle.sin() * inner_half_height,
+            *corner_radius,
+        ));
+        angle += inc;
+    }
+
+    closed_straight_vertices_path_commands(path, path_kind, transform, vertices)
+}
+
+fn closed_straight_vertices_path_commands(
+    path: &PathGeometryNode,
+    path_kind: ShapePaintPathKind,
+    transform: Mat2D,
+    vertices: Vec<PathVertexNode>,
+) -> Vec<RuntimePathCommand> {
     let virtual_path = PathGeometryNode {
         local_id: path.local_id,
         global_id: path.global_id,

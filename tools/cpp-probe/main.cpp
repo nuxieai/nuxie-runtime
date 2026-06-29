@@ -67,6 +67,7 @@
 #include "rive/animation/state_machine_layer_component.hpp"
 #include "rive/animation/state_machine_component.hpp"
 #include "rive/animation/state_machine_input.hpp"
+#include "rive/animation/state_machine_input_instance.hpp"
 #include "rive/animation/state_machine_layer.hpp"
 #include "rive/animation/state_machine_listener.hpp"
 #include "rive/animation/state_machine_listener_single.hpp"
@@ -257,10 +258,22 @@ struct RuntimeAnimationAdvanceReport
     int loopValue;
 };
 
-struct RuntimeStateMachineAdvance
+enum class RuntimeStateMachineActionKind
 {
+    Advance,
+    SetBool,
+    SetNumber,
+    FireTrigger,
+};
+
+struct RuntimeStateMachineAction
+{
+    RuntimeStateMachineActionKind kind;
     size_t stateMachineIndex;
+    size_t inputIndex;
     float seconds;
+    bool boolValue;
+    float numberValue;
 };
 
 struct RuntimeStateMachineCurrentAnimationReport
@@ -289,7 +302,7 @@ struct ProbeOptions
     std::vector<RuntimeDoubleMutation> runtimeDoubleMutations;
     std::vector<RuntimeAnimationApplication> runtimeAnimationApplications;
     std::vector<RuntimeAnimationAdvance> runtimeAnimationAdvances;
-    std::vector<RuntimeStateMachineAdvance> runtimeStateMachineAdvances;
+    std::vector<RuntimeStateMachineAction> runtimeStateMachineActions;
     bool completeViewModelProperties = false;
     bool dataContextLookups = false;
 };
@@ -695,33 +708,61 @@ apply_runtime_state_machine_advances(rive::ArtboardInstance* instance,
                                      const ProbeOptions& options)
 {
     std::vector<RuntimeStateMachineAdvanceReport> reports;
-    if (options.runtimeStateMachineAdvances.empty() || instance == nullptr)
+    if (options.runtimeStateMachineActions.empty() || instance == nullptr)
     {
         return reports;
     }
 
     std::vector<std::unique_ptr<rive::StateMachineInstance>> instances(
         instance->stateMachineCount());
-    for (const auto& advance : options.runtimeStateMachineAdvances)
+    for (const auto& action : options.runtimeStateMachineActions)
     {
-        if (advance.stateMachineIndex >= instances.size())
+        if (action.stateMachineIndex >= instances.size())
         {
             continue;
         }
-        auto& stateMachine = instances[advance.stateMachineIndex];
+        auto& stateMachine = instances[action.stateMachineIndex];
         if (stateMachine == nullptr)
         {
-            stateMachine = instance->stateMachineAt(advance.stateMachineIndex);
+            stateMachine = instance->stateMachineAt(action.stateMachineIndex);
         }
         if (stateMachine == nullptr)
         {
             continue;
         }
 
-        bool advanced = stateMachine->advance(advance.seconds);
+        if (action.kind == RuntimeStateMachineActionKind::SetBool)
+        {
+            auto input = stateMachine->input(action.inputIndex);
+            if (input != nullptr)
+            {
+                static_cast<rive::SMIBool*>(input)->value(action.boolValue);
+            }
+            continue;
+        }
+        if (action.kind == RuntimeStateMachineActionKind::SetNumber)
+        {
+            auto input = stateMachine->input(action.inputIndex);
+            if (input != nullptr)
+            {
+                static_cast<rive::SMINumber*>(input)->value(action.numberValue);
+            }
+            continue;
+        }
+        if (action.kind == RuntimeStateMachineActionKind::FireTrigger)
+        {
+            auto input = stateMachine->input(action.inputIndex);
+            if (input != nullptr)
+            {
+                static_cast<rive::SMITrigger*>(input)->fire();
+            }
+            continue;
+        }
+
+        bool advanced = stateMachine->advance(action.seconds);
         RuntimeStateMachineAdvanceReport report;
-        report.stateMachineIndex = advance.stateMachineIndex;
-        report.seconds = advance.seconds;
+        report.stateMachineIndex = action.stateMachineIndex;
+        report.seconds = action.seconds;
         report.advanced = advanced;
         report.currentAnimationCount = stateMachine->currentAnimationCount();
         report.changedStateCount = stateMachine->stateChangedCount();
@@ -4946,7 +4987,7 @@ void write_artboard(std::ostream& out,
         write_runtime_animation_advance_reports(
             out, runtimeAnimationAdvanceReports);
     }
-    if (!options.runtimeStateMachineAdvances.empty())
+    if (!options.runtimeStateMachineActions.empty())
     {
         out << ",\"runtimeStateMachineAdvances\":";
         write_runtime_state_machine_advance_reports(
@@ -6359,6 +6400,12 @@ bool is_arg(const char* arg, const char* target, const char* alt = nullptr)
            (std::strcmp(arg, target) == 0 ||
             (alt != nullptr && std::strcmp(arg, alt) == 0));
 }
+
+bool parse_bool_arg(const char* arg)
+{
+    return arg != nullptr &&
+           (std::strcmp(arg, "true") == 0 || std::strcmp(arg, "1") == 0);
+}
 } // namespace
 
 int main(int argc, const char* argv[])
@@ -6481,11 +6528,75 @@ int main(int argc, const char* argv[])
                 std::cerr << "--runtime-advance-state-machine requires stateMachineIndex seconds\n";
                 return 2;
             }
-            RuntimeStateMachineAdvance advance;
-            advance.stateMachineIndex =
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::Advance;
+            action.stateMachineIndex =
                 static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
-            advance.seconds = std::strtof(argv[++i], nullptr);
-            options.runtimeStateMachineAdvances.push_back(advance);
+            action.inputIndex = 0;
+            action.seconds = std::strtof(argv[++i], nullptr);
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
+        if (is_arg(argv[i], "--runtime-set-state-machine-bool"))
+        {
+            if (i + 3 >= argc)
+            {
+                std::cerr << "--runtime-set-state-machine-bool requires stateMachineIndex inputIndex value\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::SetBool;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.seconds = 0.0f;
+            action.boolValue = parse_bool_arg(argv[++i]);
+            action.numberValue = 0.0f;
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
+        if (is_arg(argv[i], "--runtime-set-state-machine-number"))
+        {
+            if (i + 3 >= argc)
+            {
+                std::cerr << "--runtime-set-state-machine-number requires stateMachineIndex inputIndex value\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::SetNumber;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = std::strtof(argv[++i], nullptr);
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
+        if (is_arg(argv[i], "--runtime-fire-state-machine-trigger"))
+        {
+            if (i + 2 >= argc)
+            {
+                std::cerr << "--runtime-fire-state-machine-trigger requires stateMachineIndex inputIndex\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::FireTrigger;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            options.runtimeStateMachineActions.push_back(action);
             continue;
         }
 
@@ -6519,7 +6630,7 @@ int main(int argc, const char* argv[])
 
     if (filename == nullptr)
     {
-        std::cerr << "usage: rive_cpp_probe [--converter-samples] [--number-to-list-samples] [--property-values] [--file-property-values] [--no-advance] [--runtime-update] [--instance-artboards] [--runtime-set-double localId propertyKey value] [--runtime-apply-animation animationIndex seconds mix] [--runtime-advance-animation animationIndex seconds mix] [--runtime-advance-state-machine stateMachineIndex seconds] [--complete-view-model-properties] [--data-context-lookups] --file "
+        std::cerr << "usage: rive_cpp_probe [--converter-samples] [--number-to-list-samples] [--property-values] [--file-property-values] [--no-advance] [--runtime-update] [--instance-artboards] [--runtime-set-double localId propertyKey value] [--runtime-apply-animation animationIndex seconds mix] [--runtime-advance-animation animationIndex seconds mix] [--runtime-advance-state-machine stateMachineIndex seconds] [--runtime-set-state-machine-bool stateMachineIndex inputIndex value] [--runtime-set-state-machine-number stateMachineIndex inputIndex value] [--runtime-fire-state-machine-trigger stateMachineIndex inputIndex] [--complete-view-model-properties] [--data-context-lookups] --file "
                      "path/to/file.riv\n";
         return 2;
     }

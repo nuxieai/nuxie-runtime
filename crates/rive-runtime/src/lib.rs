@@ -678,7 +678,33 @@ impl LinearAnimationInstance {
 pub struct RuntimeStateMachine {
     pub global_id: u32,
     pub name: Option<String>,
+    pub inputs: Vec<RuntimeStateMachineInput>,
     pub layers: Vec<RuntimeStateMachineLayer>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RuntimeStateMachineInput {
+    pub global_id: u32,
+    pub name: Option<String>,
+    pub kind: StateMachineInputKind,
+    value: StateMachineInputValue,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StateMachineInputKind {
+    Bool,
+    Number,
+    Trigger,
+}
+
+#[derive(Debug, Clone)]
+enum StateMachineInputValue {
+    Bool(bool),
+    Number(f32),
+    Trigger {
+        fired: bool,
+        used_layers: Vec<usize>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -705,6 +731,7 @@ struct RuntimeStateTransition {
     duration: u64,
     flags: u64,
     condition_count: usize,
+    conditions: Vec<RuntimeTransitionCondition>,
 }
 
 impl RuntimeStateTransition {
@@ -714,16 +741,143 @@ impl RuntimeStateTransition {
 
         self.state_to_index.is_some()
             && self.duration == 0
-            && self.condition_count == 0
+            && self.condition_count == self.conditions.len()
             && self.flags & (DISABLED | ENABLE_EXIT_TIME) == 0
+    }
+
+    fn is_allowed(&self, inputs: &[StateMachineInputInstance], layer_index: usize) -> bool {
+        self.conditions
+            .iter()
+            .all(|condition| condition.evaluate(inputs, layer_index))
+    }
+
+    fn use_inputs(&self, inputs: &mut [StateMachineInputInstance], layer_index: usize) {
+        for condition in &self.conditions {
+            condition.use_input(inputs, layer_index);
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+enum RuntimeTransitionCondition {
+    Bool {
+        input_index: usize,
+        op: TransitionConditionOp,
+    },
+    Number {
+        input_index: usize,
+        op: TransitionConditionOp,
+        value: f32,
+    },
+    Trigger {
+        input_index: usize,
+    },
+}
+
+impl RuntimeTransitionCondition {
+    fn from_object(object: &RuntimeObject) -> Option<Self> {
+        let input_index = usize::try_from(object.uint_property("inputId")?).ok()?;
+        match object.type_name {
+            "TransitionBoolCondition" => Some(Self::Bool {
+                input_index,
+                op: TransitionConditionOp::from_value(object.uint_property("opValue").unwrap_or(0)),
+            }),
+            "TransitionNumberCondition" => Some(Self::Number {
+                input_index,
+                op: TransitionConditionOp::from_value(object.uint_property("opValue").unwrap_or(0)),
+                value: object.double_property("value").unwrap_or(0.0),
+            }),
+            "TransitionTriggerCondition" => Some(Self::Trigger { input_index }),
+            _ => None,
+        }
+    }
+
+    fn evaluate(&self, inputs: &[StateMachineInputInstance], layer_index: usize) -> bool {
+        match self {
+            Self::Bool { input_index, op } => {
+                let Some(value) = inputs
+                    .get(*input_index)
+                    .and_then(StateMachineInputInstance::bool_value)
+                else {
+                    return true;
+                };
+                (value && *op == TransitionConditionOp::Equal)
+                    || (!value && *op == TransitionConditionOp::NotEqual)
+            }
+            Self::Number {
+                input_index,
+                op,
+                value,
+            } => {
+                let Some(input_value) = inputs
+                    .get(*input_index)
+                    .and_then(StateMachineInputInstance::number_value)
+                else {
+                    return true;
+                };
+                op.compare(input_value, *value)
+            }
+            Self::Trigger { input_index } => {
+                let Some(input) = inputs.get(*input_index) else {
+                    return true;
+                };
+                input
+                    .trigger_is_fireable_for_layer(layer_index)
+                    .unwrap_or(true)
+            }
+        }
+    }
+
+    fn use_input(&self, inputs: &mut [StateMachineInputInstance], layer_index: usize) {
+        if let Self::Trigger { input_index } = self
+            && let Some(input) = inputs.get_mut(*input_index)
+        {
+            input.use_trigger_in_layer(layer_index);
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TransitionConditionOp {
+    Equal,
+    NotEqual,
+    LessThanOrEqual,
+    GreaterThanOrEqual,
+    LessThan,
+    GreaterThan,
+}
+
+impl TransitionConditionOp {
+    fn from_value(value: u64) -> Self {
+        match value {
+            1 => Self::NotEqual,
+            2 => Self::LessThanOrEqual,
+            3 => Self::GreaterThanOrEqual,
+            4 => Self::LessThan,
+            5 => Self::GreaterThan,
+            _ => Self::Equal,
+        }
+    }
+
+    fn compare(self, input_value: f32, value: f32) -> bool {
+        match self {
+            Self::Equal => input_value == value,
+            Self::NotEqual => input_value != value,
+            Self::LessThanOrEqual => input_value <= value,
+            Self::GreaterThanOrEqual => input_value >= value,
+            Self::LessThan => input_value < value,
+            Self::GreaterThan => input_value > value,
+        }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct StateMachineInstance {
     state_machine_index: usize,
+    inputs: Vec<StateMachineInputInstance>,
     layers: Vec<StateMachineLayerInstance>,
     changed_state_count: usize,
+    needs_advance: bool,
 }
 
 impl StateMachineInstance {
@@ -734,12 +888,19 @@ impl StateMachineInstance {
     ) -> Self {
         Self {
             state_machine_index,
+            inputs: state_machine
+                .inputs
+                .iter()
+                .enumerate()
+                .map(|(index, input)| StateMachineInputInstance::new(index, input))
+                .collect(),
             layers: state_machine
                 .layers
                 .iter()
                 .map(|layer| StateMachineLayerInstance::new(layer, artboard))
                 .collect(),
             changed_state_count: 0,
+            needs_advance: false,
         }
     }
 
@@ -749,6 +910,63 @@ impl StateMachineInstance {
 
     pub fn changed_state_count(&self) -> usize {
         self.changed_state_count
+    }
+
+    pub fn needs_advance(&self) -> bool {
+        self.needs_advance
+    }
+
+    pub fn input_count(&self) -> usize {
+        self.inputs.len()
+    }
+
+    pub fn input(&self, index: usize) -> Option<&StateMachineInputInstance> {
+        self.inputs.get(index)
+    }
+
+    pub fn input_named(&self, name: &str) -> Option<&StateMachineInputInstance> {
+        self.inputs
+            .iter()
+            .find(|input| input.name.as_deref() == Some(name))
+    }
+
+    pub fn input_index_named(&self, name: &str) -> Option<usize> {
+        self.inputs
+            .iter()
+            .position(|input| input.name.as_deref() == Some(name))
+    }
+
+    pub fn set_bool(&mut self, index: usize, value: bool) -> bool {
+        let Some(input) = self.inputs.get_mut(index) else {
+            return false;
+        };
+        if !input.set_bool(value) {
+            return false;
+        }
+        self.needs_advance = true;
+        true
+    }
+
+    pub fn set_number(&mut self, index: usize, value: f32) -> bool {
+        let Some(input) = self.inputs.get_mut(index) else {
+            return false;
+        };
+        if !input.set_number(value) {
+            return false;
+        }
+        self.needs_advance = true;
+        true
+    }
+
+    pub fn fire_trigger(&mut self, index: usize) -> bool {
+        let Some(input) = self.inputs.get_mut(index) else {
+            return false;
+        };
+        if !input.fire_trigger() {
+            return false;
+        }
+        self.needs_advance = true;
+        true
     }
 
     pub fn current_animation_count(&self) -> usize {
@@ -772,15 +990,152 @@ impl StateMachineInstance {
         elapsed_seconds: f32,
     ) -> bool {
         self.changed_state_count = 0;
+        self.needs_advance = false;
         let mut keep_going = false;
-        for (layer_instance, layer) in self.layers.iter_mut().zip(&state_machine.layers) {
-            let layer_result = layer_instance.advance(artboard, layer, elapsed_seconds);
+        for (layer_index, (layer_instance, layer)) in self
+            .layers
+            .iter_mut()
+            .zip(&state_machine.layers)
+            .enumerate()
+        {
+            let layer_result = layer_instance.advance(
+                artboard,
+                layer,
+                elapsed_seconds,
+                layer_index,
+                &mut self.inputs,
+            );
             if layer_result.changed_state {
                 self.changed_state_count += 1;
             }
             keep_going |= layer_result.keep_going;
         }
-        keep_going
+        for input in &mut self.inputs {
+            input.advanced();
+        }
+        self.needs_advance = keep_going;
+        self.needs_advance
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct StateMachineInputInstance {
+    index: usize,
+    global_id: u32,
+    name: Option<String>,
+    kind: StateMachineInputKind,
+    value: StateMachineInputValue,
+}
+
+impl StateMachineInputInstance {
+    fn new(index: usize, input: &RuntimeStateMachineInput) -> Self {
+        Self {
+            index,
+            global_id: input.global_id,
+            name: input.name.clone(),
+            kind: input.kind,
+            value: input.value.clone(),
+        }
+    }
+
+    pub fn index(&self) -> usize {
+        self.index
+    }
+
+    pub fn global_id(&self) -> u32 {
+        self.global_id
+    }
+
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+
+    pub fn kind(&self) -> StateMachineInputKind {
+        self.kind
+    }
+
+    pub fn bool_value(&self) -> Option<bool> {
+        match self.value {
+            StateMachineInputValue::Bool(value) => Some(value),
+            _ => None,
+        }
+    }
+
+    pub fn number_value(&self) -> Option<f32> {
+        match self.value {
+            StateMachineInputValue::Number(value) => Some(value),
+            _ => None,
+        }
+    }
+
+    pub fn trigger_fired(&self) -> Option<bool> {
+        match self.value {
+            StateMachineInputValue::Trigger { fired, .. } => Some(fired),
+            _ => None,
+        }
+    }
+
+    fn set_bool(&mut self, value: bool) -> bool {
+        match &mut self.value {
+            StateMachineInputValue::Bool(current) => {
+                if *current == value {
+                    return false;
+                }
+                *current = value;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn set_number(&mut self, value: f32) -> bool {
+        match &mut self.value {
+            StateMachineInputValue::Number(current) => {
+                if *current == value {
+                    return false;
+                }
+                *current = value;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn fire_trigger(&mut self) -> bool {
+        match &mut self.value {
+            StateMachineInputValue::Trigger { fired, .. } => {
+                if *fired {
+                    return false;
+                }
+                *fired = true;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn trigger_is_fireable_for_layer(&self, layer_index: usize) -> Option<bool> {
+        match &self.value {
+            StateMachineInputValue::Trigger { fired, used_layers } => {
+                Some(*fired && !used_layers.contains(&layer_index))
+            }
+            _ => None,
+        }
+    }
+
+    fn use_trigger_in_layer(&mut self, layer_index: usize) {
+        if let StateMachineInputValue::Trigger { used_layers, .. } = &mut self.value
+            && !used_layers.contains(&layer_index)
+        {
+            used_layers.push(layer_index);
+        }
+    }
+
+    fn advanced(&mut self) {
+        if let StateMachineInputValue::Trigger { fired, used_layers } = &mut self.value {
+            *fired = false;
+            used_layers.clear();
+        }
     }
 }
 
@@ -813,13 +1168,15 @@ impl StateMachineLayerInstance {
         artboard: &mut ArtboardInstance,
         layer: &RuntimeStateMachineLayer,
         elapsed_seconds: f32,
+        layer_index: usize,
+        inputs: &mut [StateMachineInputInstance],
     ) -> StateMachineLayerAdvance {
         self.advance_current_animation(artboard, layer, elapsed_seconds);
         self.apply_current_animation(artboard);
 
         let mut changed_state = false;
         for _ in 0..100 {
-            if !self.update_state(artboard, layer) {
+            if !self.update_state(artboard, layer, layer_index, inputs) {
                 break;
             }
             changed_state = true;
@@ -836,11 +1193,19 @@ impl StateMachineLayerInstance {
         &mut self,
         artboard: &ArtboardInstance,
         layer: &RuntimeStateMachineLayer,
+        layer_index: usize,
+        inputs: &mut [StateMachineInputInstance],
     ) -> bool {
-        if self.try_change_state(artboard, layer, layer.any_state_index) {
+        if self.try_change_state(artboard, layer, layer.any_state_index, layer_index, inputs) {
             return true;
         }
-        self.try_change_state(artboard, layer, self.current_state_index)
+        self.try_change_state(
+            artboard,
+            layer,
+            self.current_state_index,
+            layer_index,
+            inputs,
+        )
     }
 
     fn try_change_state(
@@ -848,6 +1213,8 @@ impl StateMachineLayerInstance {
         artboard: &ArtboardInstance,
         layer: &RuntimeStateMachineLayer,
         state_index: Option<usize>,
+        layer_index: usize,
+        inputs: &mut [StateMachineInputInstance],
     ) -> bool {
         let Some(state_index) = state_index else {
             return false;
@@ -860,12 +1227,16 @@ impl StateMachineLayerInstance {
             if !transition.is_simple_immediate() {
                 continue;
             }
+            if !transition.is_allowed(inputs, layer_index) {
+                continue;
+            }
             let Some(state_to_index) = transition.state_to_index else {
                 continue;
             };
             if self.current_state_index == Some(state_to_index) {
                 continue;
             }
+            transition.use_inputs(inputs, layer_index);
             self.current_state_index = Some(state_to_index);
             self.refresh_current_animation(artboard, layer);
             return true;
@@ -1220,6 +1591,11 @@ fn build_state_machines(
                 .object
                 .string_property("name")
                 .map(ToOwned::to_owned),
+            inputs: state_machine
+                .inputs
+                .into_iter()
+                .filter_map(runtime_state_machine_input)
+                .collect(),
             layers: state_machine
                 .layers
                 .into_iter()
@@ -1253,6 +1629,13 @@ fn build_state_machines(
                                             .uint_property("flags")
                                             .unwrap_or(0),
                                         condition_count: transition.conditions.len(),
+                                        conditions: transition
+                                            .conditions
+                                            .iter()
+                                            .filter_map(|condition| {
+                                                RuntimeTransitionCondition::from_object(condition)
+                                            })
+                                            .collect(),
                                     })
                                     .collect(),
                             }
@@ -1275,6 +1658,34 @@ fn build_state_machines(
                 .collect(),
         })
         .collect()
+}
+
+fn runtime_state_machine_input(object: &RuntimeObject) -> Option<RuntimeStateMachineInput> {
+    let (kind, value) = match object.type_name {
+        "StateMachineBool" => (
+            StateMachineInputKind::Bool,
+            StateMachineInputValue::Bool(object.bool_property("value").unwrap_or(false)),
+        ),
+        "StateMachineNumber" => (
+            StateMachineInputKind::Number,
+            StateMachineInputValue::Number(object.double_property("value").unwrap_or(0.0)),
+        ),
+        "StateMachineTrigger" => (
+            StateMachineInputKind::Trigger,
+            StateMachineInputValue::Trigger {
+                fired: false,
+                used_layers: Vec::new(),
+            },
+        ),
+        _ => return None,
+    };
+
+    Some(RuntimeStateMachineInput {
+        global_id: object.id,
+        name: object.string_property("name").map(ToOwned::to_owned),
+        kind,
+        value,
+    })
 }
 
 fn artboard_index_for_graph(file: &RuntimeFile, graph: &ArtboardGraph) -> Option<usize> {

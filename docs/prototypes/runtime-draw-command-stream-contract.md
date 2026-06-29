@@ -33,8 +33,10 @@ items, scripted drawable checks, empty-clip counting, clip render-path
 availability, renderer callbacks, renderer state mutation, path tessellation,
 GPU work, or live draw-order mutation.
 
-The next draw-command slices should add one omitted `willDraw()`/empty-clip
-family at a time, each with a C++ probe fixture.
+The first follow-up empty-clip slice is captured in
+`runtime-empty-clip-command-stream-contract.md`. Further draw-command slices
+should add one omitted `willDraw()`/empty-clip family at a time, each with a C++
+probe fixture.
 
 ## Admission Rule
 

@@ -1,6 +1,9 @@
 use anyhow::{Context, Result};
 use rive_binary::{RuntimeFile, RuntimeImportStatus, RuntimeObject};
-use rive_graph::{ArtboardGraph, ComponentNode, DrawableOrderKind, SortedDrawableNode};
+use rive_graph::{
+    ArtboardGraph, ClippingShapeNode, ComponentNode, DrawableOrderKind, PathComposerNode,
+    SortedDrawableNode,
+};
 use rive_schema::{definition_by_name, object_supports_property};
 use std::collections::BTreeMap;
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
@@ -127,7 +130,7 @@ impl ArtboardInstance {
 
         for drawable in &graph.sorted_drawable_order {
             let prev_clips = empty_clips;
-            empty_clips += runtime_empty_clip_count(drawable);
+            empty_clips += runtime_empty_clip_count(drawable, graph);
             if !self.runtime_will_draw(drawable) || empty_clips != prev_clips || empty_clips > 0 {
                 continue;
             }
@@ -457,8 +460,41 @@ pub struct RuntimeDrawCommand {
     pub needs_save_operation: bool,
 }
 
-fn runtime_empty_clip_count(_drawable: &SortedDrawableNode) -> i32 {
-    0
+fn runtime_empty_clip_count(drawable: &SortedDrawableNode, graph: &ArtboardGraph) -> i32 {
+    let empty_delta = match drawable.kind {
+        DrawableOrderKind::ClipStartProxy => 1,
+        DrawableOrderKind::ClipEndProxy => -1,
+        DrawableOrderKind::Drawable | DrawableOrderKind::LayoutProxy => return 0,
+    };
+    let Some(clipping_shape_local) = drawable.clipping_shape_local else {
+        return 0;
+    };
+    let Some(clipping_shape) = graph
+        .clipping_shapes
+        .iter()
+        .find(|clipping_shape| clipping_shape.local_id == clipping_shape_local)
+    else {
+        return 0;
+    };
+
+    if clipping_shape.is_visible
+        && !clipping_shape_has_modeled_clip_path(clipping_shape, &graph.path_composers)
+    {
+        empty_delta
+    } else {
+        0
+    }
+}
+
+fn clipping_shape_has_modeled_clip_path(
+    clipping_shape: &ClippingShapeNode,
+    path_composers: &[PathComposerNode],
+) -> bool {
+    clipping_shape.shape_locals.iter().any(|shape_local| {
+        path_composers.iter().any(|composer| {
+            composer.shape_local == *shape_local && !composer.path_locals.is_empty()
+        })
+    })
 }
 
 fn runtime_draw_command_for_node(drawable: &SortedDrawableNode) -> RuntimeDrawCommand {

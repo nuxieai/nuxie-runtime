@@ -155,6 +155,7 @@
 #include "rive/foreground_layout_drawable.hpp"
 #include "rive/generated/core_registry.hpp"
 #include "rive/generated/event_base.hpp"
+#include "rive/component.hpp"
 #include "rive/layout_component.hpp"
 #include "rive/layout/axis.hpp"
 #include "rive/layout/n_sliced_node.hpp"
@@ -229,6 +230,12 @@ struct RuntimeDoubleMutation
     size_t localId;
     uint32_t propertyKey;
     float value;
+};
+
+struct RuntimeCollapseMutation
+{
+    size_t localId;
+    bool collapsed;
 };
 
 struct RuntimeAnimationApplication
@@ -318,6 +325,7 @@ struct ProbeOptions
     bool runtimeUpdate = false;
     bool instanceArtboards = false;
     std::vector<RuntimeDoubleMutation> runtimeDoubleMutations;
+    std::vector<RuntimeCollapseMutation> runtimeCollapseMutations;
     std::vector<RuntimeAnimationApplication> runtimeAnimationApplications;
     std::vector<RuntimeAnimationAdvance> runtimeAnimationAdvances;
     std::vector<RuntimeStateMachineAction> runtimeStateMachineActions;
@@ -626,6 +634,24 @@ void apply_runtime_double_mutations(const std::vector<rive::Core*>& objects,
         }
         rive::CoreRegistry::setDouble(
             object, mutation.propertyKey, mutation.value);
+    }
+}
+
+void apply_runtime_collapse_mutations(const std::vector<rive::Core*>& objects,
+                                      const ProbeOptions& options)
+{
+    for (const auto& mutation : options.runtimeCollapseMutations)
+    {
+        if (mutation.localId >= objects.size())
+        {
+            continue;
+        }
+        auto* object = objects[mutation.localId];
+        if (object == nullptr || !object->is<rive::Component>())
+        {
+            continue;
+        }
+        object->as<rive::Component>()->collapse(mutation.collapsed);
     }
 }
 
@@ -5147,6 +5173,7 @@ void write_artboard(std::ostream& out,
     }
 
     apply_runtime_double_mutations(objects, options);
+    apply_runtime_collapse_mutations(objects, options);
     apply_runtime_animation_applications(instanceArtboard, options);
     auto runtimeAnimationAdvanceReports =
         apply_runtime_animation_advances(instanceArtboard, options);
@@ -6700,6 +6727,22 @@ int main(int argc, const char* argv[])
             continue;
         }
 
+        if (is_arg(argv[i], "--runtime-collapse-component"))
+        {
+            if (i + 2 >= argc)
+            {
+                std::cerr
+                    << "--runtime-collapse-component requires localId value\n";
+                return 2;
+            }
+            RuntimeCollapseMutation mutation;
+            mutation.localId =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            mutation.collapsed = parse_bool_arg(argv[++i]);
+            options.runtimeCollapseMutations.push_back(mutation);
+            continue;
+        }
+
         if (is_arg(argv[i], "--runtime-apply-animation"))
         {
             if (i + 3 >= argc)
@@ -6886,7 +6929,7 @@ int main(int argc, const char* argv[])
 
     if (filename == nullptr)
     {
-        std::cerr << "usage: rive_cpp_probe [--converter-samples] [--number-to-list-samples] [--property-values] [--file-property-values] [--no-advance] [--runtime-update] [--instance-artboards] [--runtime-set-double localId propertyKey value] [--runtime-apply-animation animationIndex seconds mix] [--runtime-advance-animation animationIndex seconds mix] [--runtime-advance-state-machine stateMachineIndex seconds] [--runtime-set-state-machine-bool stateMachineIndex inputIndex value] [--runtime-set-state-machine-number stateMachineIndex inputIndex value] [--runtime-set-state-machine-bindable-number stateMachineIndex dataBindIndex value] [--runtime-bind-empty-state-machine-context stateMachineIndex] [--runtime-fire-state-machine-trigger stateMachineIndex inputIndex] [--complete-view-model-properties] [--data-context-lookups] --file "
+        std::cerr << "usage: rive_cpp_probe [--converter-samples] [--number-to-list-samples] [--property-values] [--file-property-values] [--no-advance] [--runtime-update] [--instance-artboards] [--runtime-set-double localId propertyKey value] [--runtime-collapse-component localId value] [--runtime-apply-animation animationIndex seconds mix] [--runtime-advance-animation animationIndex seconds mix] [--runtime-advance-state-machine stateMachineIndex seconds] [--runtime-set-state-machine-bool stateMachineIndex inputIndex value] [--runtime-set-state-machine-number stateMachineIndex inputIndex value] [--runtime-set-state-machine-bindable-number stateMachineIndex dataBindIndex value] [--runtime-bind-empty-state-machine-context stateMachineIndex] [--runtime-fire-state-machine-trigger stateMachineIndex inputIndex] [--complete-view-model-properties] [--data-context-lookups] --file "
                      "path/to/file.riv\n";
         return 2;
     }

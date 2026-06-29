@@ -37,9 +37,10 @@ paint picking, path geometry, path effects, deformers, clipping stack renderer
 operations, or GPU work.
 
 In this slice, a clipping shape is considered to have a modeled clip path when
-any collected source shape has at least one imported registered path. That is
-enough to prove the pathless-source empty-clip case and intentionally avoids
-guessing about future geometry/runtime path state.
+any collected source shape has at least one imported registered path. The
+follow-up path hidden/collapse slice is captured in
+`runtime-path-empty-clip-command-stream-contract.md`; geometry-backed
+`PathComposer::worldPath()` behavior remains later work.
 
 ## Admission Rule
 

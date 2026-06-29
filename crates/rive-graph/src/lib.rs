@@ -545,6 +545,14 @@ pub struct PathComposerNode {
     pub shape_global: u32,
     pub path_locals: Vec<usize>,
     pub path_globals: Vec<u32>,
+    pub paths: Vec<PathComposerPathNode>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PathComposerPathNode {
+    pub local_id: usize,
+    pub global_id: u32,
+    pub is_hidden: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -2095,13 +2103,20 @@ fn path_composers(
             let shape_global = local_object_global_id(local_objects, shape.local_id)?;
             let mut path_locals = Vec::new();
             let mut path_globals = Vec::new();
+            let mut paths = Vec::new();
 
             for path in shape.paths {
                 let Some(path_global) = local_object_global_id(local_objects, path.local_id) else {
                     continue;
                 };
+                let is_hidden = path.object.uint_property("pathFlags").unwrap_or(0) & 1 != 0;
                 path_locals.push(path.local_id);
                 path_globals.push(path_global);
+                paths.push(PathComposerPathNode {
+                    local_id: path.local_id,
+                    global_id: path_global,
+                    is_hidden,
+                });
             }
 
             Some(PathComposerNode {
@@ -2109,6 +2124,7 @@ fn path_composers(
                 shape_global,
                 path_locals,
                 path_globals,
+                paths,
             })
         })
         .collect()

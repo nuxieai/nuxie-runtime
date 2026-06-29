@@ -1669,6 +1669,147 @@ fn runtime_draw_command_stream_suppresses_empty_clips_like_cpp_probe() {
 }
 
 #[test]
+fn runtime_draw_command_stream_treats_hidden_clip_paths_as_empty_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_hidden_clip_path_filtering.riv";
+    let bytes = synthetic_runtime_file(8203, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "Shape", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "PointsPath", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 1);
+            push_uint_property(bytes, "Path", "pathFlags", 1);
+        });
+        push_object_with_properties(bytes, "Node", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "Shape", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 3);
+        });
+        push_object_with_properties(bytes, "ClippingShape", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 3);
+            push_uint_property(bytes, "ClippingShape", "sourceId", 1);
+        });
+    });
+
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let (_, graph, mut rust) = read_rust_graph_instance_from_bytes(&bytes, label);
+    rust.update_components();
+
+    let artboard = graph
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing Rust artboard for {label}"));
+    let rust_commands = rust
+        .draw_commands(artboard)
+        .into_iter()
+        .map(|command| (command.local_id, command.kind, command.needs_save_operation))
+        .collect::<Vec<_>>();
+    let cpp_commands = cpp.artboards[0]
+        .draw_command_stream
+        .iter()
+        .map(|command| {
+            (
+                command.local_id,
+                command.kind(),
+                command.needs_save_operation,
+            )
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        cpp_commands,
+        vec![(Some(1), RuntimeDrawCommandKind::Draw, true)],
+        "C++ draw command stream should suppress drawables clipped by a source shape with only hidden paths"
+    );
+    assert_eq!(
+        rust_commands, cpp_commands,
+        "Rust runtime draw command stream should match C++ empty-clip suppression for hidden source paths"
+    );
+}
+
+#[test]
+fn runtime_draw_command_stream_treats_collapsed_clip_paths_as_empty_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_collapsed_clip_path_filtering.riv";
+    let bytes = synthetic_runtime_file(8204, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "Shape", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "PointsPath", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 1);
+        });
+        push_object_with_properties(bytes, "Node", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "Shape", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 3);
+        });
+        push_object_with_properties(bytes, "ClippingShape", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 3);
+            push_uint_property(bytes, "ClippingShape", "sourceId", 1);
+        });
+    });
+
+    let cpp = read_cpp_probe_bytes_with_args(
+        &probe,
+        label,
+        &bytes,
+        &[
+            "--runtime-collapse-component".to_owned(),
+            "2".to_owned(),
+            "true".to_owned(),
+        ],
+    );
+    let (_, graph, mut rust) = read_rust_graph_instance_from_bytes(&bytes, label);
+    assert!(rust.collapse_component(2, true));
+    rust.update_components();
+
+    let artboard = graph
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing Rust artboard for {label}"));
+    let rust_commands = rust
+        .draw_commands(artboard)
+        .into_iter()
+        .map(|command| (command.local_id, command.kind, command.needs_save_operation))
+        .collect::<Vec<_>>();
+    let cpp_commands = cpp.artboards[0]
+        .draw_command_stream
+        .iter()
+        .map(|command| {
+            (
+                command.local_id,
+                command.kind(),
+                command.needs_save_operation,
+            )
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        cpp_commands,
+        vec![(Some(1), RuntimeDrawCommandKind::Draw, true)],
+        "C++ draw command stream should suppress drawables clipped by a source shape with only collapsed paths"
+    );
+    assert_eq!(
+        rust_commands, cpp_commands,
+        "Rust runtime draw command stream should match C++ empty-clip suppression for collapsed source paths"
+    );
+}
+
+#[test]
 fn mutated_instance_transform_matches_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");

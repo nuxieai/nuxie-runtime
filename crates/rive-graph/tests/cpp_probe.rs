@@ -2102,13 +2102,14 @@ fn cpp_parent_dependency_hooks_are_tracked_by_graph_model() {
 #[test]
 fn graph_projects_shape_path_composers_from_imported_shape_paths() {
     let parent_id_key = property_key_for_name("Component", "parentId");
+    let path_flags_key = property_key_for_name("Path", "pathFlags");
 
     let bytes = synthetic_runtime_file(7110, |bytes| {
         push_object(bytes, "Backboard", &[]);
         push_object(bytes, "Artboard", &[]);
         push_object(bytes, "Shape", &[(parent_id_key, 0)]);
         push_object(bytes, "PointsPath", &[(parent_id_key, 1)]);
-        push_object(bytes, "Ellipse", &[(parent_id_key, 1)]);
+        push_object(bytes, "Ellipse", &[(parent_id_key, 1), (path_flags_key, 1)]);
         push_object(bytes, "Shape", &[(parent_id_key, 0)]);
         push_object(bytes, "Node", &[(parent_id_key, 4)]);
     });
@@ -2125,11 +2126,22 @@ fn graph_projects_shape_path_composers_from_imported_shape_paths() {
                 composer.shape_global,
                 composer.path_locals.clone(),
                 composer.path_globals.clone(),
+                composer
+                    .paths
+                    .iter()
+                    .map(|path| (path.local_id, path.global_id, path.is_hidden))
+                    .collect::<Vec<_>>(),
             ))
             .collect::<Vec<_>>(),
         vec![
-            (1, 2, vec![2, 3], vec![3, 4]),
-            (4, 5, Vec::new(), Vec::new())
+            (
+                1,
+                2,
+                vec![2, 3],
+                vec![3, 4],
+                vec![(2, 3, false), (3, 4, true)]
+            ),
+            (4, 5, Vec::new(), Vec::new(), Vec::new())
         ],
         "every imported Shape owns one synthetic PathComposer projection, with paths coming from the C++-equivalent shape registration list"
     );

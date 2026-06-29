@@ -2418,6 +2418,7 @@ pub struct RuntimeStateMachine {
     bindable_strings: Vec<RuntimeBindableString>,
     bindable_enums: Vec<RuntimeBindableEnum>,
     bindable_assets: Vec<RuntimeBindableAsset>,
+    bindable_view_models: Vec<RuntimeBindableViewModel>,
     bindable_booleans: Vec<RuntimeBindableBoolean>,
     view_model_triggers: Vec<RuntimeViewModelTrigger>,
 }
@@ -2487,6 +2488,18 @@ struct RuntimeBindableAsset {
     global_id: u32,
     data_bind_indices: Vec<usize>,
     value: u64,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeBindableViewModel {
+    global_id: u32,
+    source: RuntimeBindableViewModelSource,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeBindableViewModelSource {
+    Null,
+    RootDataContext,
 }
 
 #[derive(Debug, Clone)]
@@ -2729,6 +2742,7 @@ impl RuntimeStateTransition {
         bindable_strings: &[StateMachineBindableStringInstance],
         bindable_enums: &[StateMachineBindableEnumInstance],
         bindable_assets: &[StateMachineBindableAssetInstance],
+        bindable_view_models: &[StateMachineBindableViewModelInstance],
         bindable_booleans: &[StateMachineBindableBooleanInstance],
         data_context_present: bool,
         layer_index: usize,
@@ -2743,6 +2757,7 @@ impl RuntimeStateTransition {
                 bindable_strings,
                 bindable_enums,
                 bindable_assets,
+                bindable_view_models,
                 bindable_booleans,
                 data_context_present,
                 layer_index,
@@ -3308,6 +3323,11 @@ enum RuntimeTransitionCondition {
         op: TransitionConditionOp,
         value: u64,
     },
+    ViewModelPointer {
+        left_bindable_global_id: u32,
+        right_bindable_global_id: u32,
+        op: TransitionConditionOp,
+    },
     ArtboardNumber {
         value: f32,
         op: TransitionConditionOp,
@@ -3361,13 +3381,31 @@ impl RuntimeTransitionCondition {
                         threshold: right.double_property("value").unwrap_or(0.0),
                     });
                 }
-                if left.type_name != "TransitionPropertyViewModelComparator"
-                    || (right.type_name != "TransitionValueNumberComparator"
-                        && right.type_name != "TransitionValueBooleanComparator"
-                        && right.type_name != "TransitionValueColorComparator"
-                        && right.type_name != "TransitionValueStringComparator"
-                        && right.type_name != "TransitionValueEnumComparator"
-                        && right.type_name != "TransitionValueAssetComparator")
+                if left.type_name != "TransitionPropertyViewModelComparator" {
+                    return None;
+                }
+                if right.type_name == "TransitionPropertyViewModelComparator" {
+                    let left_bindable = file.latest_bindable_property_for_object(left)?;
+                    let right_bindable = file.latest_bindable_property_for_object(right)?;
+                    if left_bindable.type_name == "BindablePropertyViewModel"
+                        && right_bindable.type_name == "BindablePropertyViewModel"
+                    {
+                        return Some(Self::ViewModelPointer {
+                            left_bindable_global_id: left_bindable.id,
+                            right_bindable_global_id: right_bindable.id,
+                            op: TransitionConditionOp::from_value(
+                                object.uint_property("opValue").unwrap_or(0),
+                            ),
+                        });
+                    }
+                    return None;
+                }
+                if right.type_name != "TransitionValueNumberComparator"
+                    && right.type_name != "TransitionValueBooleanComparator"
+                    && right.type_name != "TransitionValueColorComparator"
+                    && right.type_name != "TransitionValueStringComparator"
+                    && right.type_name != "TransitionValueEnumComparator"
+                    && right.type_name != "TransitionValueAssetComparator"
                 {
                     return None;
                 }
@@ -3467,6 +3505,7 @@ impl RuntimeTransitionCondition {
         bindable_strings: &[StateMachineBindableStringInstance],
         bindable_enums: &[StateMachineBindableEnumInstance],
         bindable_assets: &[StateMachineBindableAssetInstance],
+        bindable_view_models: &[StateMachineBindableViewModelInstance],
         bindable_booleans: &[StateMachineBindableBooleanInstance],
         data_context_present: bool,
         layer_index: usize,
@@ -3586,6 +3625,26 @@ impl RuntimeTransitionCondition {
                 let input_value =
                     bindable_asset_value(bindable_assets, *bindable_global_id).unwrap_or(0);
                 op.compare_u64_equal_only(input_value, *value)
+            }
+            Self::ViewModelPointer {
+                left_bindable_global_id,
+                right_bindable_global_id,
+                op,
+            } => {
+                if !data_context_present {
+                    return false;
+                }
+                let left = bindable_view_model_value(
+                    bindable_view_models,
+                    *left_bindable_global_id,
+                    data_context_present,
+                );
+                let right = bindable_view_model_value(
+                    bindable_view_models,
+                    *right_bindable_global_id,
+                    data_context_present,
+                );
+                op.compare_bool(left == right, true)
             }
             Self::ArtboardNumber {
                 value,
@@ -3707,6 +3766,7 @@ pub struct StateMachineInstance {
     bindable_strings: Vec<StateMachineBindableStringInstance>,
     bindable_enums: Vec<StateMachineBindableEnumInstance>,
     bindable_assets: Vec<StateMachineBindableAssetInstance>,
+    bindable_view_models: Vec<StateMachineBindableViewModelInstance>,
     bindable_booleans: Vec<StateMachineBindableBooleanInstance>,
     view_model_triggers: Vec<StateMachineViewModelTriggerInstance>,
     layers: Vec<StateMachineLayerInstance>,
@@ -3785,6 +3845,11 @@ impl StateMachineInstance {
             .iter()
             .map(StateMachineBindableAssetInstance::new)
             .collect::<Vec<_>>();
+        let bindable_view_models = state_machine
+            .bindable_view_models
+            .iter()
+            .map(StateMachineBindableViewModelInstance::new)
+            .collect::<Vec<_>>();
         let bindable_booleans = state_machine
             .bindable_booleans
             .iter()
@@ -3811,6 +3876,7 @@ impl StateMachineInstance {
             bindable_strings,
             bindable_enums,
             bindable_assets,
+            bindable_view_models,
             bindable_booleans,
             view_model_triggers,
             layers,
@@ -4106,6 +4172,7 @@ impl StateMachineInstance {
                 &self.bindable_strings,
                 &self.bindable_enums,
                 &self.bindable_assets,
+                &self.bindable_view_models,
                 &self.bindable_booleans,
                 self.data_context_present,
                 self.data_context_view_model_bound,
@@ -4499,6 +4566,49 @@ fn bindable_asset_value(
 }
 
 #[derive(Debug, Clone)]
+struct StateMachineBindableViewModelInstance {
+    global_id: u32,
+    source: RuntimeBindableViewModelSource,
+}
+
+impl StateMachineBindableViewModelInstance {
+    fn new(bindable_view_model: &RuntimeBindableViewModel) -> Self {
+        Self {
+            global_id: bindable_view_model.global_id,
+            source: bindable_view_model.source,
+        }
+    }
+
+    fn pointer(&self, data_context_present: bool) -> RuntimeViewModelPointer {
+        match self.source {
+            RuntimeBindableViewModelSource::RootDataContext if data_context_present => {
+                RuntimeViewModelPointer::DataContextRoot
+            }
+            RuntimeBindableViewModelSource::RootDataContext
+            | RuntimeBindableViewModelSource::Null => RuntimeViewModelPointer::Null,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeViewModelPointer {
+    Null,
+    DataContextRoot,
+}
+
+fn bindable_view_model_value(
+    bindable_view_models: &[StateMachineBindableViewModelInstance],
+    global_id: u32,
+    data_context_present: bool,
+) -> RuntimeViewModelPointer {
+    bindable_view_models
+        .iter()
+        .find(|bindable_view_model| bindable_view_model.global_id == global_id)
+        .map(|bindable_view_model| bindable_view_model.pointer(data_context_present))
+        .unwrap_or(RuntimeViewModelPointer::Null)
+}
+
+#[derive(Debug, Clone)]
 struct StateMachineBindableBooleanInstance {
     global_id: u32,
     data_bind_indices: Vec<usize>,
@@ -4710,6 +4820,7 @@ impl StateMachineLayerInstance {
         bindable_strings: &[StateMachineBindableStringInstance],
         bindable_enums: &[StateMachineBindableEnumInstance],
         bindable_assets: &[StateMachineBindableAssetInstance],
+        bindable_view_models: &[StateMachineBindableViewModelInstance],
         bindable_booleans: &[StateMachineBindableBooleanInstance],
         data_context_present: bool,
         data_context_view_model_bound: bool,
@@ -4746,6 +4857,7 @@ impl StateMachineLayerInstance {
                 bindable_strings,
                 bindable_enums,
                 bindable_assets,
+                bindable_view_models,
                 bindable_booleans,
                 data_context_present,
                 data_context_view_model_bound,
@@ -4780,6 +4892,7 @@ impl StateMachineLayerInstance {
         bindable_strings: &[StateMachineBindableStringInstance],
         bindable_enums: &[StateMachineBindableEnumInstance],
         bindable_assets: &[StateMachineBindableAssetInstance],
+        bindable_view_models: &[StateMachineBindableViewModelInstance],
         bindable_booleans: &[StateMachineBindableBooleanInstance],
         data_context_present: bool,
         data_context_view_model_bound: bool,
@@ -4802,6 +4915,7 @@ impl StateMachineLayerInstance {
             bindable_strings,
             bindable_enums,
             bindable_assets,
+            bindable_view_models,
             bindable_booleans,
             data_context_present,
             data_context_view_model_bound,
@@ -4822,6 +4936,7 @@ impl StateMachineLayerInstance {
             bindable_strings,
             bindable_enums,
             bindable_assets,
+            bindable_view_models,
             bindable_booleans,
             data_context_present,
             data_context_view_model_bound,
@@ -4843,6 +4958,7 @@ impl StateMachineLayerInstance {
         bindable_strings: &[StateMachineBindableStringInstance],
         bindable_enums: &[StateMachineBindableEnumInstance],
         bindable_assets: &[StateMachineBindableAssetInstance],
+        bindable_view_models: &[StateMachineBindableViewModelInstance],
         bindable_booleans: &[StateMachineBindableBooleanInstance],
         data_context_present: bool,
         data_context_view_model_bound: bool,
@@ -4869,6 +4985,7 @@ impl StateMachineLayerInstance {
                 bindable_strings,
                 bindable_enums,
                 bindable_assets,
+                bindable_view_models,
                 bindable_booleans,
                 data_context_present,
             ) else {
@@ -4913,6 +5030,7 @@ impl StateMachineLayerInstance {
                 bindable_strings,
                 bindable_enums,
                 bindable_assets,
+                bindable_view_models,
                 bindable_booleans,
                 data_context_present,
                 layer_index,
@@ -4957,6 +5075,7 @@ impl StateMachineLayerInstance {
         bindable_strings: &[StateMachineBindableStringInstance],
         bindable_enums: &[StateMachineBindableEnumInstance],
         bindable_assets: &[StateMachineBindableAssetInstance],
+        bindable_view_models: &[StateMachineBindableViewModelInstance],
         bindable_booleans: &[StateMachineBindableBooleanInstance],
         data_context_present: bool,
     ) -> Option<(usize, usize)> {
@@ -4988,6 +5107,7 @@ impl StateMachineLayerInstance {
                 bindable_strings,
                 bindable_enums,
                 bindable_assets,
+                bindable_view_models,
                 bindable_booleans,
                 data_context_present,
                 layer_index,
@@ -5987,6 +6107,7 @@ fn build_state_machines(
             let bindable_strings = runtime_bindable_strings(file, &state_machine);
             let bindable_enums = runtime_bindable_enums(file, &state_machine);
             let bindable_assets = runtime_bindable_assets(file, &state_machine);
+            let bindable_view_models = runtime_bindable_view_models(file, &state_machine);
             let bindable_booleans = runtime_bindable_booleans(file, &state_machine);
             let view_model_triggers = runtime_default_view_model_triggers(file);
             RuntimeStateMachine {
@@ -6006,6 +6127,7 @@ fn build_state_machines(
                 bindable_strings,
                 bindable_enums,
                 bindable_assets,
+                bindable_view_models,
                 bindable_booleans,
                 view_model_triggers,
                 layers: state_machine
@@ -6298,6 +6420,46 @@ fn runtime_bindable_assets(
     }
 
     values.into_values().collect()
+}
+
+fn runtime_bindable_view_models(
+    file: &RuntimeFile,
+    state_machine: &rive_binary::RuntimeStateMachine<'_>,
+) -> Vec<RuntimeBindableViewModel> {
+    let mut values = BTreeMap::<u32, RuntimeBindableViewModel>::new();
+    for data_bind in &state_machine.data_binds {
+        let Some(target) = file.data_bind_target_for_object(data_bind) else {
+            continue;
+        };
+        if target.type_name != "BindablePropertyViewModel" {
+            continue;
+        }
+        let source = runtime_bindable_view_model_source(file, data_bind);
+        values
+            .entry(target.id)
+            .and_modify(|bindable_view_model| bindable_view_model.source = source)
+            .or_insert_with(|| RuntimeBindableViewModel {
+                global_id: target.id,
+                source,
+            });
+    }
+
+    values.into_values().collect()
+}
+
+fn runtime_bindable_view_model_source(
+    file: &RuntimeFile,
+    data_bind: &RuntimeObject,
+) -> RuntimeBindableViewModelSource {
+    if data_bind.type_name == "DataBindContext"
+        && file
+            .data_bind_context_source_path_ids_for_object(data_bind)
+            .is_some_and(|source_path_ids| source_path_ids.len() == 1)
+    {
+        RuntimeBindableViewModelSource::RootDataContext
+    } else {
+        RuntimeBindableViewModelSource::Null
+    }
 }
 
 fn runtime_bindable_booleans(

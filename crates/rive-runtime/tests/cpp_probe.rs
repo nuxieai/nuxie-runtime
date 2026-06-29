@@ -1168,6 +1168,19 @@ fn push_bindable_asset_data_bind(bytes: &mut Vec<u8>, value: u64) {
     push_object_with_properties(bytes, "DataBind", |_| {});
 }
 
+fn push_bindable_view_model_data_bind(bytes: &mut Vec<u8>, root_context: bool) {
+    push_object_with_properties(bytes, "BindablePropertyViewModel", |_| {});
+    if root_context {
+        let mut source_path_ids = Vec::new();
+        push_var_uint(&mut source_path_ids, 0);
+        push_object_with_properties(bytes, "DataBindContext", |bytes| {
+            push_bytes_property(bytes, "DataBindContext", "sourcePathIds", &source_path_ids);
+        });
+    } else {
+        push_object_with_properties(bytes, "DataBind", |_| {});
+    }
+}
+
 fn push_bindable_boolean_data_bind(bytes: &mut Vec<u8>, value: bool) {
     push_object_with_properties(bytes, "BindablePropertyBoolean", |bytes| {
         push_bool_property(bytes, "BindablePropertyBoolean", "propertyValue", value);
@@ -1470,6 +1483,45 @@ fn synthetic_state_machine_viewmodel_asset_condition(
                 comparator_value,
             );
         });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn synthetic_state_machine_viewmodel_pointer_condition(
+    file_id: u64,
+    left_root_context: bool,
+    right_root_context: bool,
+    op_value: u64,
+) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+        });
+        push_bindable_view_model_data_bind(bytes, left_root_context);
+        push_object_with_properties(bytes, "TransitionViewModelCondition", |bytes| {
+            push_uint_property(bytes, "TransitionViewModelCondition", "opValue", op_value);
+        });
+        push_object_with_properties(bytes, "TransitionPropertyViewModelComparator", |_| {});
+        push_bindable_view_model_data_bind(bytes, right_root_context);
+        push_object_with_properties(bytes, "TransitionPropertyViewModelComparator", |_| {});
         push_object_with_properties(bytes, "AnimationState", |bytes| {
             push_uint_property(bytes, "AnimationState", "animationId", 1);
         });
@@ -6123,6 +6175,107 @@ fn state_machine_viewmodel_asset_conditions_match_cpp_probe() {
             assert!(
                 state_machine.set_bindable_asset_for_data_bind(0, value),
                 "{label} failed to mutate bindable asset"
+            );
+        }
+        rust_reports.push((
+            rust.advance_state_machine_instance(&mut state_machine, 0.0),
+            state_machine.clone(),
+        ));
+        rust_reports.push((
+            rust.advance_state_machine_instance(&mut state_machine, 1.0),
+            state_machine.clone(),
+        ));
+        let report = rust.update_components();
+
+        let cpp_artboard = cpp
+            .artboards
+            .first()
+            .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+        assert_eq!(
+            cpp_artboard.runtime_state_machine_advances.len(),
+            rust_reports.len(),
+            "{label} state-machine report count mismatch"
+        );
+        for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+            .runtime_state_machine_advances
+            .iter()
+            .zip(&rust_reports)
+        {
+            compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+        }
+        compare_cpp_runtime_update(&cpp, &rust, &report, label);
+    }
+}
+
+#[test]
+fn state_machine_viewmodel_pointer_conditions_match_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    for (label, bytes, bind_context) in [
+        (
+            "synthetic/runtime_state_machine_viewmodel_pointer_condition_no_context_cpp.riv",
+            synthetic_state_machine_viewmodel_pointer_condition(8308, true, true, 0),
+            false,
+        ),
+        (
+            "synthetic/runtime_state_machine_viewmodel_pointer_condition_root_equal_cpp.riv",
+            synthetic_state_machine_viewmodel_pointer_condition(8309, true, true, 0),
+            true,
+        ),
+        (
+            "synthetic/runtime_state_machine_viewmodel_pointer_condition_root_not_null_cpp.riv",
+            synthetic_state_machine_viewmodel_pointer_condition(8310, true, false, 1),
+            true,
+        ),
+        (
+            "synthetic/runtime_state_machine_viewmodel_pointer_condition_null_equal_cpp.riv",
+            synthetic_state_machine_viewmodel_pointer_condition(8311, false, false, 0),
+            true,
+        ),
+        (
+            "synthetic/runtime_state_machine_viewmodel_pointer_condition_ordered_false_cpp.riv",
+            synthetic_state_machine_viewmodel_pointer_condition(8312, true, true, 4),
+            true,
+        ),
+    ] {
+        let mut args = vec![
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+        ];
+        if bind_context {
+            args.extend([
+                "--runtime-bind-empty-state-machine-context".to_owned(),
+                "0".to_owned(),
+            ]);
+        }
+        args.extend([
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "1".to_owned(),
+        ]);
+
+        let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+        let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+        let mut state_machine = rust
+            .state_machine_instance(0)
+            .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+        let mut rust_reports = Vec::new();
+        rust_reports.push((
+            rust.advance_state_machine_instance(&mut state_machine, 0.0),
+            state_machine.clone(),
+        ));
+        if bind_context {
+            assert!(
+                state_machine.bind_empty_data_context(),
+                "{label} failed to bind empty data context"
             );
         }
         rust_reports.push((

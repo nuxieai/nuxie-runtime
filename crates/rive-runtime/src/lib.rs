@@ -1835,6 +1835,7 @@ struct StateMachineLayerInstance {
     transition_fire_actions: Vec<RuntimeStateMachineFireEvent>,
     transition_listener_actions: Vec<RuntimeScheduledListenerAction>,
     transition_completed: bool,
+    transition_animation_reset: Option<TransitionAnimationReset>,
     waiting_for_exit: bool,
 }
 
@@ -1842,6 +1843,70 @@ struct StateMachineLayerInstance {
 struct StateMachineLayerAdvance {
     changed_state: bool,
     keep_going: bool,
+}
+
+#[derive(Debug, Clone)]
+struct TransitionAnimationReset {
+    entries: Vec<TransitionAnimationResetEntry>,
+}
+
+#[derive(Debug, Clone)]
+struct TransitionAnimationResetEntry {
+    local_id: usize,
+    property: TransformProperty,
+    value: f32,
+}
+
+impl TransitionAnimationReset {
+    fn from_animation_indices(
+        artboard: &ArtboardInstance,
+        animation_indices: &[usize],
+    ) -> Option<Self> {
+        let mut entries = Vec::new();
+        let mut seen = Vec::new();
+
+        for animation_index in animation_indices {
+            let Some(animation) = artboard.linear_animation(*animation_index) else {
+                continue;
+            };
+            for keyed_object in &animation.keyed_objects {
+                for keyed_property in &keyed_object.keyed_properties {
+                    let Some(property) = keyed_property.transform_property else {
+                        continue;
+                    };
+                    let key = (keyed_object.target_local_id, property);
+                    if seen.contains(&key) {
+                        continue;
+                    }
+                    let Some(value) =
+                        artboard.transform_property(keyed_object.target_local_id, property)
+                    else {
+                        continue;
+                    };
+                    seen.push(key);
+                    entries.push(TransitionAnimationResetEntry {
+                        local_id: keyed_object.target_local_id,
+                        property,
+                        value,
+                    });
+                }
+            }
+        }
+
+        if entries.is_empty() {
+            None
+        } else {
+            Some(Self { entries })
+        }
+    }
+
+    fn apply(&self, artboard: &mut ArtboardInstance) -> bool {
+        let mut changed = false;
+        for entry in &self.entries {
+            changed |= artboard.set_transform_property(entry.local_id, entry.property, entry.value);
+        }
+        changed
+    }
 }
 
 impl StateMachineLayerInstance {
@@ -1869,6 +1934,7 @@ impl StateMachineLayerInstance {
             transition_fire_actions: Vec::new(),
             transition_listener_actions: Vec::new(),
             transition_completed: false,
+            transition_animation_reset: None,
             waiting_for_exit: false,
         };
         instance.refresh_current_animation(artboard, layer, inputs);
@@ -2196,6 +2262,15 @@ impl StateMachineLayerInstance {
         let has_transition_source = previous_animation.is_some()
             || previous_blend_state_1d.is_some()
             || previous_blend_state_direct.is_some();
+        let mut reset_animation_indices = Vec::new();
+        if let Some(animation) = previous_animation.as_ref() {
+            reset_animation_indices.push(animation.animation_index);
+        }
+        if let Some(animation) = self.current_animation.as_ref() {
+            reset_animation_indices.push(animation.animation_index);
+        }
+        let transition_animation_reset =
+            TransitionAnimationReset::from_animation_indices(artboard, &reset_animation_indices);
 
         if let Some(source_state_index) = previous_state_index
             && has_transition_source
@@ -2213,6 +2288,7 @@ impl StateMachineLayerInstance {
             self.transition_fire_actions = transition.fire_actions.clone();
             self.transition_listener_actions = transition.listener_actions.clone();
             self.transition_completed = false;
+            self.transition_animation_reset = transition_animation_reset;
             self.update_transition_mix(0.0, inputs, reported_events);
         } else {
             self.clear_transition_source();
@@ -2233,6 +2309,7 @@ impl StateMachineLayerInstance {
         self.transition_fire_actions.clear();
         self.transition_listener_actions.clear();
         self.transition_completed = false;
+        self.transition_animation_reset = None;
     }
 
     fn is_transitioning(&self) -> bool {
@@ -2262,6 +2339,7 @@ impl StateMachineLayerInstance {
             .clamp(0.0, 1.0);
         if self.transition_mix == 1.0 && !self.transition_completed {
             self.transition_completed = true;
+            self.transition_animation_reset = None;
             fire_state_machine_events(
                 &self.transition_fire_actions,
                 StateMachineFireOccurrence::AtEnd,
@@ -2404,6 +2482,9 @@ impl StateMachineLayerInstance {
     fn apply_animations(&self, artboard: &mut ArtboardInstance) -> bool {
         let mut changed = false;
         if self.is_transitioning() {
+            if let Some(reset) = self.transition_animation_reset.as_ref() {
+                changed |= reset.apply(artboard);
+            }
             let mix_from = self
                 .transition_interpolator
                 .map(|interpolator| interpolator.transform(self.transition_mix_from))

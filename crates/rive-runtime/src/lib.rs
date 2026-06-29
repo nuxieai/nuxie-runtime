@@ -736,6 +736,7 @@ pub struct RuntimeLayerState {
     pub global_id: Option<u32>,
     pub type_name: Option<&'static str>,
     animation_index: Option<usize>,
+    blend_state_1d: Option<RuntimeBlendState1D>,
     speed: f32,
     flags: u64,
     fire_actions: Vec<RuntimeStateMachineFireEvent>,
@@ -771,6 +772,51 @@ impl RuntimeLayerState {
             reported_events,
         )
     }
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeBlendState1D {
+    input_index: Option<usize>,
+    animations: Vec<RuntimeBlendAnimation1D>,
+}
+
+impl RuntimeBlendState1D {
+    fn from_imported(
+        state: &rive_binary::RuntimeLayerState<'_>,
+        animation_index_by_global: &BTreeMap<u32, usize>,
+    ) -> Option<Self> {
+        let object = state.object?;
+        if object.type_name != "BlendState1DInput" {
+            return None;
+        }
+        let input_index = object
+            .uint_property("inputId")
+            .filter(|input_id| *input_id != u64::from(u32::MAX))
+            .and_then(|input_id| usize::try_from(input_id).ok());
+        let animations = state
+            .blend_animations
+            .iter()
+            .filter_map(|animation| {
+                let animation_index = animation
+                    .animation
+                    .and_then(|animation| animation_index_by_global.get(&animation.id).copied())?;
+                Some(RuntimeBlendAnimation1D {
+                    animation_index,
+                    value: animation.object.double_property("value").unwrap_or(0.0),
+                })
+            })
+            .collect::<Vec<_>>();
+        (!animations.is_empty()).then_some(Self {
+            input_index,
+            animations,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeBlendAnimation1D {
+    animation_index: usize,
+    value: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -1415,19 +1461,21 @@ impl StateMachineInstance {
         state_machine: &RuntimeStateMachine,
         artboard: &ArtboardInstance,
     ) -> Self {
+        let inputs = state_machine
+            .inputs
+            .iter()
+            .enumerate()
+            .map(|(index, input)| StateMachineInputInstance::new(index, input))
+            .collect::<Vec<_>>();
+        let layers = state_machine
+            .layers
+            .iter()
+            .map(|layer| StateMachineLayerInstance::new(layer, artboard, &inputs))
+            .collect();
         Self {
             state_machine_index,
-            inputs: state_machine
-                .inputs
-                .iter()
-                .enumerate()
-                .map(|(index, input)| StateMachineInputInstance::new(index, input))
-                .collect(),
-            layers: state_machine
-                .layers
-                .iter()
-                .map(|layer| StateMachineLayerInstance::new(layer, artboard))
-                .collect(),
+            inputs,
+            layers,
             reported_events: Vec::new(),
             changed_state_count: 0,
             needs_advance: false,
@@ -1701,6 +1749,7 @@ impl StateMachineInputInstance {
 struct StateMachineLayerInstance {
     current_state_index: Option<usize>,
     current_animation: Option<LinearAnimationInstance>,
+    current_blend_state_1d: Option<BlendState1DInstance>,
     current_animation_keep_going: bool,
     transition_source_state_index: Option<usize>,
     transition_source_animation: Option<LinearAnimationInstance>,
@@ -1723,10 +1772,15 @@ struct StateMachineLayerAdvance {
 }
 
 impl StateMachineLayerInstance {
-    fn new(layer: &RuntimeStateMachineLayer, artboard: &ArtboardInstance) -> Self {
+    fn new(
+        layer: &RuntimeStateMachineLayer,
+        artboard: &ArtboardInstance,
+        inputs: &[StateMachineInputInstance],
+    ) -> Self {
         let mut instance = Self {
             current_state_index: layer.entry_state_index,
             current_animation: None,
+            current_blend_state_1d: None,
             current_animation_keep_going: false,
             transition_source_state_index: None,
             transition_source_animation: None,
@@ -1741,7 +1795,7 @@ impl StateMachineLayerInstance {
             transition_completed: false,
             waiting_for_exit: false,
         };
-        instance.refresh_current_animation(artboard, layer);
+        instance.refresh_current_animation(artboard, layer, inputs);
         instance
     }
 
@@ -1754,7 +1808,7 @@ impl StateMachineLayerInstance {
         inputs: &mut [StateMachineInputInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
     ) -> StateMachineLayerAdvance {
-        self.advance_current_animation(artboard, layer, elapsed_seconds);
+        self.advance_current_animation(artboard, layer, elapsed_seconds, inputs);
         let input_changed = self.update_transition_mix(elapsed_seconds, inputs, reported_events);
         self.advance_transition_source_animation(artboard, layer, elapsed_seconds);
         self.apply_animations(artboard);
@@ -2008,7 +2062,7 @@ impl StateMachineLayerInstance {
             transition.transition_duration_seconds(previous_runtime_animation);
 
         self.current_state_index = Some(state_to_index);
-        self.refresh_current_animation(artboard, layer);
+        self.refresh_current_animation(artboard, layer, inputs);
         if let Some(current_state) = layer.states.get(state_to_index) {
             current_state.fire_events(StateMachineFireOccurrence::AtStart, reported_events);
             current_state.perform_listener_actions(
@@ -2024,7 +2078,7 @@ impl StateMachineLayerInstance {
             reported_events,
         );
         if previous_spilled_time != 0.0 {
-            self.advance_current_animation(artboard, layer, previous_spilled_time);
+            self.advance_current_animation(artboard, layer, previous_spilled_time, inputs);
         }
 
         if transition_duration_seconds == 0.0 {
@@ -2113,15 +2167,26 @@ impl StateMachineLayerInstance {
         &mut self,
         artboard: &ArtboardInstance,
         layer: &RuntimeStateMachineLayer,
+        inputs: &[StateMachineInputInstance],
     ) {
         let Some(state) = self
             .current_state_index
             .and_then(|index| layer.states.get(index))
         else {
             self.current_animation = None;
+            self.current_blend_state_1d = None;
             self.current_animation_keep_going = false;
             return;
         };
+        if let Some(blend_state) = state.blend_state_1d.as_ref() {
+            self.current_animation = None;
+            let mut blend_instance = BlendState1DInstance::new(blend_state, artboard);
+            blend_instance.advance(artboard, inputs, 0.0);
+            self.current_blend_state_1d = Some(blend_instance);
+            self.current_animation_keep_going = true;
+            return;
+        }
+        self.current_blend_state_1d = None;
         let Some(animation_index) = state.animation_index else {
             self.current_animation = None;
             self.current_animation_keep_going = false;
@@ -2143,7 +2208,13 @@ impl StateMachineLayerInstance {
         artboard: &ArtboardInstance,
         layer: &RuntimeStateMachineLayer,
         elapsed_seconds: f32,
+        inputs: &[StateMachineInputInstance],
     ) -> bool {
+        if let Some(blend_state) = self.current_blend_state_1d.as_mut() {
+            self.current_animation_keep_going =
+                blend_state.advance(artboard, inputs, elapsed_seconds);
+            return self.current_animation_keep_going;
+        }
         let Some(animation_instance) = self.current_animation.as_mut() else {
             self.current_animation_keep_going = false;
             return false;
@@ -2203,6 +2274,16 @@ impl StateMachineLayerInstance {
             changed |= artboard.apply_linear_animation_instance(source_animation, mix_from);
         }
         let Some(animation_instance) = self.current_animation.as_ref() else {
+            if let Some(blend_state) = self.current_blend_state_1d.as_ref() {
+                let mix = if self.transition_source_animation.is_some() {
+                    self.transition_interpolator
+                        .map(|interpolator| interpolator.transform(self.transition_mix))
+                        .unwrap_or(self.transition_mix)
+                } else {
+                    1.0
+                };
+                return changed | blend_state.apply(artboard, mix);
+            }
             return changed;
         };
         let mix = if self.transition_source_animation.is_some() {
@@ -2214,6 +2295,140 @@ impl StateMachineLayerInstance {
         };
         changed | artboard.apply_linear_animation_instance(animation_instance, mix)
     }
+}
+
+#[derive(Debug, Clone)]
+struct BlendState1DInstance {
+    input_index: Option<usize>,
+    animations: Vec<BlendAnimation1DInstance>,
+}
+
+impl BlendState1DInstance {
+    fn new(blend_state: &RuntimeBlendState1D, artboard: &ArtboardInstance) -> Self {
+        let animations = blend_state
+            .animations
+            .iter()
+            .filter_map(|animation| {
+                let linear_animation = artboard.linear_animation(animation.animation_index)?;
+                Some(BlendAnimation1DInstance {
+                    value: animation.value,
+                    animation: LinearAnimationInstance::new(
+                        animation.animation_index,
+                        linear_animation,
+                        1.0,
+                    ),
+                    mix: 0.0,
+                })
+            })
+            .collect();
+
+        Self {
+            input_index: blend_state.input_index,
+            animations,
+        }
+    }
+
+    fn advance(
+        &mut self,
+        artboard: &ArtboardInstance,
+        inputs: &[StateMachineInputInstance],
+        elapsed_seconds: f32,
+    ) -> bool {
+        for animation in &mut self.animations {
+            if artboard.linear_animation_instance_keep_going(&animation.animation) {
+                artboard
+                    .advance_linear_animation_instance(&mut animation.animation, elapsed_seconds);
+            }
+        }
+
+        self.update_mix_values(inputs);
+        true
+    }
+
+    fn update_mix_values(&mut self, inputs: &[StateMachineInputInstance]) {
+        if self.animations.is_empty() {
+            return;
+        }
+
+        let value = self
+            .input_index
+            .and_then(|input_index| inputs.get(input_index))
+            .and_then(StateMachineInputInstance::number_value)
+            .unwrap_or(0.0);
+
+        let animation_count = self.animations.len();
+        let to_index = self.animation_index(value);
+        let from_index = to_index.checked_sub(1);
+        let to_value = self
+            .animations
+            .get(to_index)
+            .map(|animation| animation.value)
+            .unwrap_or(0.0);
+        let from_value = from_index
+            .and_then(|index| self.animations.get(index))
+            .map(|animation| animation.value)
+            .unwrap_or(0.0);
+        let (mix, mix_from) =
+            if to_index >= animation_count || from_index.is_none() || to_value == from_value {
+                (1.0, 1.0)
+            } else {
+                let mix = (value - from_value) / (to_value - from_value);
+                (mix, 1.0 - mix)
+            };
+
+        for animation in &mut self.animations {
+            if to_index < animation_count && animation.value == to_value {
+                animation.mix = mix;
+            } else if from_index.is_some() && animation.value == from_value {
+                animation.mix = mix_from;
+            } else {
+                animation.mix = 0.0;
+            }
+        }
+    }
+
+    fn animation_index(&self, value: f32) -> usize {
+        let mut index = 0_usize;
+        let mut start = 0_isize;
+        let mut end = self.animations.len() as isize - 1;
+
+        while start <= end {
+            let mid = (start + end) >> 1;
+            let closest_value = self.animations[mid as usize].value;
+            if closest_value < value {
+                start = mid + 1;
+            } else if closest_value > value {
+                end = mid - 1;
+            } else {
+                index = mid as usize;
+                break;
+            }
+
+            index = start as usize;
+        }
+
+        index
+    }
+
+    fn apply(&self, artboard: &mut ArtboardInstance, mix: f32) -> bool {
+        let mut changed = false;
+        for animation in &self.animations {
+            let animation_mix = mix * animation.mix;
+            if animation_mix == 0.0 {
+                continue;
+            }
+            changed |=
+                artboard.apply_linear_animation_instance(&animation.animation, animation_mix);
+        }
+        changed
+    }
+}
+
+#[derive(Debug, Clone)]
+struct BlendAnimation1DInstance {
+    value: f32,
+    animation: LinearAnimationInstance,
+    mix: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -2516,10 +2731,15 @@ fn build_state_machines(
                             let animation_index = state.animation.and_then(|animation| {
                                 animation_index_by_global.get(&animation.id).copied()
                             });
+                            let blend_state_1d = RuntimeBlendState1D::from_imported(
+                                &state,
+                                &animation_index_by_global,
+                            );
                             RuntimeLayerState {
                                 global_id: state.object.map(|object| object.id),
                                 type_name: state.object.map(|object| object.type_name),
                                 animation_index,
+                                blend_state_1d,
                                 speed: state
                                     .object
                                     .and_then(|object| object.double_property("speed"))

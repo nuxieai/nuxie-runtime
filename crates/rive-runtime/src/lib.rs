@@ -761,15 +761,39 @@ fn points_path_commands(
 
     let mut commands = Vec::new();
     let first = &path.vertices[0];
-    let start = vertex_translation(first);
-    let (start_in, mut out, start_is_cubic) = match cubic_vertex_points(first) {
-        Some((in_point, out_point)) => (in_point, out_point, true),
-        None => (start, start, false),
-    };
-    let mut prev_is_cubic = start_is_cubic;
-    push_move(&mut commands, transform, start);
 
-    for vertex in path.vertices.iter().skip(1) {
+    let (start, start_in, mut out, start_is_cubic, mut prev_is_cubic) =
+        if let Some((in_point, out_point)) = cubic_vertex_points(first) {
+            let start = vertex_translation(first);
+            push_move(&mut commands, transform, start);
+            (start, in_point, out_point, true, true)
+        } else if first.radius != 0.0 {
+            let prev = path
+                .vertices
+                .last()
+                .expect("path has at least two vertices");
+            let next = &path.vertices[1];
+            let (start, mut out_point, mut in_point, out_after) =
+                rounded_straight_vertex_points(first, prev, next);
+            if first.radius < 0.0 {
+                rotate_rounded_points(
+                    out_after,
+                    start,
+                    vertex_translation(first),
+                    &mut out_point,
+                    &mut in_point,
+                );
+            }
+            push_move(&mut commands, transform, start);
+            push_cubic(&mut commands, transform, out_point, in_point, out_after);
+            (start, start, out_after, false, false)
+        } else {
+            let start = vertex_translation(first);
+            push_move(&mut commands, transform, start);
+            (start, start, start, false, false)
+        };
+
+    for (index, vertex) in path.vertices.iter().enumerate().skip(1) {
         if let Some((in_point, out_point)) = cubic_vertex_points(vertex) {
             let translation = vertex_translation(vertex);
             push_cubic(&mut commands, transform, out, in_point, translation);
@@ -777,13 +801,36 @@ fn points_path_commands(
             out = out_point;
         } else {
             let position = vertex_translation(vertex);
-            if prev_is_cubic {
+            if vertex.radius != 0.0 {
+                let prev = &path.vertices[index - 1];
+                let next = &path.vertices[(index + 1) % path.vertices.len()];
+                let (translation, mut out_point, mut in_point, out_after) =
+                    rounded_straight_vertex_points(vertex, prev, next);
+                if prev_is_cubic {
+                    push_cubic(&mut commands, transform, out, translation, translation);
+                } else {
+                    push_line(&mut commands, transform, translation);
+                }
+                if vertex.radius < 0.0 {
+                    rotate_rounded_points(
+                        out_after,
+                        translation,
+                        position,
+                        &mut out_point,
+                        &mut in_point,
+                    );
+                }
+                push_cubic(&mut commands, transform, out_point, in_point, out_after);
+                prev_is_cubic = false;
+                out = out_after;
+            } else if prev_is_cubic {
                 push_cubic(&mut commands, transform, out, position, position);
                 prev_is_cubic = false;
+                out = position;
             } else {
                 push_line(&mut commands, transform, position);
+                out = position;
             }
-            out = position;
         }
     }
 
@@ -804,7 +851,7 @@ fn is_supported_point_path_vertex(vertex: &PathVertexNode) -> bool {
         return false;
     }
     match vertex.type_name {
-        "StraightVertex" => vertex.radius == 0.0,
+        "StraightVertex" => true,
         "CubicDetachedVertex" | "CubicAsymmetricVertex" | "CubicMirroredVertex" => true,
         _ => false,
     }
@@ -846,6 +893,104 @@ fn add_point(point: (f32, f32), vector: (f32, f32)) -> (f32, f32) {
 
 fn subtract_point(point: (f32, f32), vector: (f32, f32)) -> (f32, f32) {
     (point.0 - vector.0, point.1 - vector.1)
+}
+
+fn rounded_straight_vertex_points(
+    vertex: &PathVertexNode,
+    prev: &PathVertexNode,
+    next: &PathVertexNode,
+) -> ((f32, f32), (f32, f32), (f32, f32), (f32, f32)) {
+    let position = vertex_translation(vertex);
+    let (to_prev, to_prev_length) =
+        normalize_vector(subtract_point(vertex_render_out_point(prev), position));
+    let (to_next, to_next_length) =
+        normalize_vector(subtract_point(vertex_render_in_point(next), position));
+    let render_radius = (to_prev_length / 2.0)
+        .min(to_next_length / 2.0)
+        .min(vertex.radius.abs());
+    let ideal_distance = compute_ideal_control_point_distance(to_prev, to_next, render_radius);
+    let translation = scale_and_add_point(position, to_prev, render_radius);
+    let out_point = scale_and_add_point(position, to_prev, render_radius - ideal_distance);
+    let in_point = scale_and_add_point(position, to_next, render_radius - ideal_distance);
+    let out_after = scale_and_add_point(position, to_next, render_radius);
+
+    (translation, out_point, in_point, out_after)
+}
+
+fn vertex_render_in_point(vertex: &PathVertexNode) -> (f32, f32) {
+    cubic_vertex_points(vertex)
+        .map(|(in_point, _)| in_point)
+        .unwrap_or_else(|| vertex_translation(vertex))
+}
+
+fn vertex_render_out_point(vertex: &PathVertexNode) -> (f32, f32) {
+    cubic_vertex_points(vertex)
+        .map(|(_, out_point)| out_point)
+        .unwrap_or_else(|| vertex_translation(vertex))
+}
+
+fn normalize_vector(vector: (f32, f32)) -> ((f32, f32), f32) {
+    let length = (vector.0 * vector.0 + vector.1 * vector.1).sqrt();
+    if length > 0.0 {
+        ((vector.0 / length, vector.1 / length), length)
+    } else {
+        (vector, length)
+    }
+}
+
+fn scale_and_add_point(point: (f32, f32), vector: (f32, f32), scale: f32) -> (f32, f32) {
+    (point.0 + vector.0 * scale, point.1 + vector.1 * scale)
+}
+
+fn compute_ideal_control_point_distance(
+    to_prev: (f32, f32),
+    to_next: (f32, f32),
+    radius: f32,
+) -> f32 {
+    let angle = cross_point(to_prev, to_next)
+        .atan2(dot_point(to_prev, to_next))
+        .abs();
+    let natural_rounding = (4.0 / 3.0)
+        * (std::f32::consts::PI / (2.0 * ((2.0 * std::f32::consts::PI) / angle))).tan()
+        * radius
+        * if angle < std::f32::consts::FRAC_PI_2 {
+            1.0 + angle.cos()
+        } else {
+            2.0 - angle.sin()
+        };
+
+    radius.min(natural_rounding)
+}
+
+fn rotate_rounded_points(
+    next_point: (f32, f32),
+    prev_point: (f32, f32),
+    point: (f32, f32),
+    out_point: &mut (f32, f32),
+    in_point: &mut (f32, f32),
+) {
+    let v1 = subtract_point(prev_point, next_point);
+    let v2 = subtract_point(point, next_point);
+    let angle = cross_point(v1, v2).atan2(dot_point(v1, v2));
+    *out_point = rotate_point_around(*out_point, prev_point, angle * 2.0);
+    *in_point = rotate_point_around(*in_point, next_point, -angle * 2.0);
+}
+
+fn rotate_point_around(point: (f32, f32), origin: (f32, f32), angle: f32) -> (f32, f32) {
+    let sin = angle.sin();
+    let cos = angle.cos();
+    let x = point.0 - origin.0;
+    let y = point.1 - origin.1;
+
+    (x * cos - y * sin + origin.0, x * sin + y * cos + origin.1)
+}
+
+fn dot_point(left: (f32, f32), right: (f32, f32)) -> f32 {
+    left.0 * right.0 + left.1 * right.1
+}
+
+fn cross_point(left: (f32, f32), right: (f32, f32)) -> f32 {
+    left.0 * right.1 - left.1 * right.0
 }
 
 fn push_move(commands: &mut Vec<RuntimePathCommand>, transform: Mat2D, point: (f32, f32)) {

@@ -2006,6 +2006,144 @@ fn runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe() {
 }
 
 #[test]
+fn runtime_draw_command_stream_exposes_rounded_point_path_payloads_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_rounded_point_path_payloads.riv";
+    let bytes = synthetic_runtime_file(8214, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "Shape", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "Fill", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 1);
+            push_uint_property(bytes, "Fill", "fillRule", 2);
+        });
+        push_object_with_properties(bytes, "SolidColor", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 2);
+            push_color_property(bytes, "SolidColor", "colorValue", 0xffa0_3020);
+        });
+        push_object_with_properties(bytes, "PointsPath", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 1);
+            push_bool_property(bytes, "PointsCommonPath", "isClosed", true);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 4);
+            push_f32_property(bytes, "Vertex", "x", 0.0);
+            push_f32_property(bytes, "Vertex", "y", 0.0);
+            push_f32_property(bytes, "StraightVertex", "radius", 2.0);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 4);
+            push_f32_property(bytes, "Vertex", "x", 10.0);
+            push_f32_property(bytes, "Vertex", "y", 0.0);
+            push_f32_property(bytes, "StraightVertex", "radius", -2.0);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 4);
+            push_f32_property(bytes, "Vertex", "x", 10.0);
+            push_f32_property(bytes, "Vertex", "y", 10.0);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 4);
+            push_f32_property(bytes, "Vertex", "x", 0.0);
+            push_f32_property(bytes, "Vertex", "y", 10.0);
+            push_f32_property(bytes, "StraightVertex", "radius", 2.0);
+        });
+    });
+
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let (_, graph, mut rust) = read_rust_graph_instance_from_bytes(&bytes, label);
+    rust.update_components();
+
+    let artboard = graph
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing Rust artboard for {label}"));
+    let rust_paints = rust
+        .draw_commands(artboard)
+        .into_iter()
+        .flat_map(|command| command.shape_paints)
+        .collect::<Vec<_>>();
+    let cpp_paints = cpp.artboards[0]
+        .draw_command_stream
+        .iter()
+        .flat_map(|command| command.shape_paint_commands.iter())
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        cpp_paints.len(),
+        1,
+        "C++ should emit one visible shape paint"
+    );
+    assert_eq!(
+        rust_paints.len(),
+        1,
+        "Rust should emit one visible shape paint"
+    );
+
+    let cpp_paint = cpp_paints[0];
+    let rust_paint = &rust_paints[0];
+    assert_eq!(cpp_paint.paint_local, Some(rust_paint.paint_local));
+    assert_eq!(cpp_paint.mutator_local, rust_paint.mutator_local);
+    assert_eq!(cpp_paint.paint_type(), rust_paint.paint_type);
+    assert_eq!(cpp_paint.path_kind(), rust_paint.path_kind);
+    assert_eq!(cpp_paint.paint_state(), rust_paint.paint_state);
+    assert_eq!(
+        cpp_paint.needs_save_operation,
+        rust_paint.needs_save_operation
+    );
+
+    let expected_path_commands = vec![
+        RuntimePathCommand::Move { x: 0.0, y: 2.0 },
+        RuntimePathCommand::Cubic {
+            x1: 0.0,
+            y1: 0.895_430_3,
+            x2: 0.895_430_3,
+            y2: 0.0,
+            x3: 2.0,
+            y3: 0.0,
+        },
+        RuntimePathCommand::Line { x: 8.0, y: 0.0 },
+        RuntimePathCommand::Cubic {
+            x1: 8.0,
+            y1: 1.104_569_4,
+            x2: 8.895_431,
+            y2: 2.0,
+            x3: 10.0,
+            y3: 2.0,
+        },
+        RuntimePathCommand::Line { x: 10.0, y: 10.0 },
+        RuntimePathCommand::Line { x: 2.0, y: 10.0 },
+        RuntimePathCommand::Cubic {
+            x1: 0.895_430_3,
+            y1: 10.0,
+            x2: 0.0,
+            y2: 9.104_569,
+            x3: 0.0,
+            y3: 8.0,
+        },
+        RuntimePathCommand::Line { x: 0.0, y: 2.0 },
+        RuntimePathCommand::Close,
+    ];
+    let cpp_path_commands = cpp_paint.path_commands();
+    assert_path_commands_close(
+        &cpp_path_commands,
+        &expected_path_commands,
+        "C++ rounded point path commands",
+    );
+    assert_path_commands_close(
+        &rust_paint.path_commands,
+        &cpp_path_commands,
+        "Rust rounded point path commands",
+    );
+}
+
+#[test]
 fn mutated_instance_transform_matches_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
@@ -4479,6 +4617,73 @@ fn assert_close(actual: f32, expected: f32, label: &str) {
         (actual - expected).abs() <= 0.0001,
         "{label} mismatch: expected {expected}, got {actual}"
     );
+}
+
+fn assert_path_commands_close(
+    actual: &[RuntimePathCommand],
+    expected: &[RuntimePathCommand],
+    label: &str,
+) {
+    assert_eq!(
+        actual.len(),
+        expected.len(),
+        "{label} command count mismatch: expected {expected:?}, got {actual:?}"
+    );
+    for (index, (actual, expected)) in actual.iter().zip(expected).enumerate() {
+        let point_label = |field: &str| format!("{label}[{index}].{field}");
+        match (actual, expected) {
+            (
+                RuntimePathCommand::Move {
+                    x: actual_x,
+                    y: actual_y,
+                },
+                RuntimePathCommand::Move {
+                    x: expected_x,
+                    y: expected_y,
+                },
+            )
+            | (
+                RuntimePathCommand::Line {
+                    x: actual_x,
+                    y: actual_y,
+                },
+                RuntimePathCommand::Line {
+                    x: expected_x,
+                    y: expected_y,
+                },
+            ) => {
+                assert_close(*actual_x, *expected_x, &point_label("x"));
+                assert_close(*actual_y, *expected_y, &point_label("y"));
+            }
+            (
+                RuntimePathCommand::Cubic {
+                    x1: actual_x1,
+                    y1: actual_y1,
+                    x2: actual_x2,
+                    y2: actual_y2,
+                    x3: actual_x3,
+                    y3: actual_y3,
+                },
+                RuntimePathCommand::Cubic {
+                    x1: expected_x1,
+                    y1: expected_y1,
+                    x2: expected_x2,
+                    y2: expected_y2,
+                    x3: expected_x3,
+                    y3: expected_y3,
+                },
+            ) => {
+                assert_close(*actual_x1, *expected_x1, &point_label("x1"));
+                assert_close(*actual_y1, *expected_y1, &point_label("y1"));
+                assert_close(*actual_x2, *expected_x2, &point_label("x2"));
+                assert_close(*actual_y2, *expected_y2, &point_label("y2"));
+                assert_close(*actual_x3, *expected_x3, &point_label("x3"));
+                assert_close(*actual_y3, *expected_y3, &point_label("y3"));
+            }
+            (RuntimePathCommand::Close, RuntimePathCommand::Close) => {}
+            _ => panic!("{label}[{index}] command mismatch: expected {expected:?}, got {actual:?}"),
+        }
+    }
 }
 
 fn compare_animation_advance(

@@ -39,6 +39,7 @@
 #include "rive/artboard_component_list.hpp"
 #undef private
 #include "rive/artboard.hpp"
+#include "rive/container_component.hpp"
 #include "rive/animation/blend_animation.hpp"
 #include "rive/animation/blend_state.hpp"
 #include "rive/animation/blend_state_transition.hpp"
@@ -346,6 +347,26 @@ void write_component_fields(std::ostream& out,
     out << ",\"parentLocal\":";
     write_local_id_or_null(out, localIds, component->parent());
     out << ",\"graphOrder\":" << component->graphOrder();
+    out << ",\"childrenLocal\":[";
+    if (component->is<rive::ContainerComponent>())
+    {
+        bool first = true;
+        for (auto* child : component->as<rive::ContainerComponent>()->children())
+        {
+            auto itr = localIds.find(child);
+            if (itr == localIds.end())
+            {
+                continue;
+            }
+            if (!first)
+            {
+                out << ',';
+            }
+            first = false;
+            out << itr->second;
+        }
+    }
+    out << ']';
 
     out << ",\"worldTransform\":";
     if (component->is<rive::WorldTransformComponent>())

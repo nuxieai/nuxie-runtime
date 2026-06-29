@@ -1171,6 +1171,83 @@ fn graph_projects_initialized_drawable_order() {
 }
 
 #[test]
+fn graph_child_index_matches_cpp_on_added_dirty_layout_style_adoption() {
+    let parent_id_key = property_key_for_name("Component", "parentId");
+    let style_id_key = property_key_for_name("LayoutComponent", "styleId");
+
+    let bytes = synthetic_runtime_file(7156, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object(
+            bytes,
+            "LayoutComponent",
+            &[(parent_id_key, 0), (style_id_key, 3)],
+        );
+        push_object(bytes, "Node", &[(parent_id_key, 1)]);
+        push_object(bytes, "LayoutComponentStyle", &[(parent_id_key, 0)]);
+        push_object(bytes, "Node", &[(parent_id_key, 1)]);
+    });
+
+    let (_, rust) = read_graph_from_bytes(&bytes, "synthetic/layout_style_children.riv");
+    let artboard = &rust.artboards[0];
+    let children_by_local = artboard
+        .components
+        .iter()
+        .map(|component| (component.local_id, component.children.clone()))
+        .collect::<BTreeMap<_, _>>();
+
+    assert_eq!(
+        children_by_local.get(&0).cloned().unwrap_or_default(),
+        vec![1, 3],
+        "ordinary Component::onAddedDirty children stay in C++ object-processing order"
+    );
+    assert_eq!(
+        children_by_local.get(&1).cloned().unwrap_or_default(),
+        vec![3, 2, 4],
+        "LayoutComponent::onAddedDirty adopts its resolved style child immediately, before later serialized children"
+    );
+    assert_eq!(
+        artboard
+            .components
+            .iter()
+            .find(|component| component.local_id == 3)
+            .and_then(|component| component.parent_local),
+        Some(0),
+        "the adopted style child keeps its serialized parent pointer; only the C++ children list gains the layout-style edge"
+    );
+}
+
+#[test]
+fn cpp_layout_component_style_child_adoption_is_tracked_by_graph_model() {
+    let runtime_dir = reference_runtime_dir();
+    let layout_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/layout_component.cpp"))
+            .expect("read C++ layout_component.cpp"),
+    );
+    let on_added_dirty_body = cpp_function_body(
+        &layout_source,
+        "StatusCodeLayoutComponent::onAddedDirty(CoreContext*context)",
+    );
+
+    assert!(
+        on_added_dirty_body.contains("autocode=Super::onAddedDirty(context);"),
+        "LayoutComponent::onAddedDirty stopped preserving ordinary Component child adoption"
+    );
+    assert!(
+        on_added_dirty_body.contains("autocoreStyle=context->resolve(styleId());"),
+        "LayoutComponent::onAddedDirty no longer resolves styleId through the artboard context"
+    );
+    assert!(
+        on_added_dirty_body.contains("!coreStyle->is<LayoutComponentStyle>()"),
+        "LayoutComponent::onAddedDirty changed the accepted style type; audit layout-style child projection"
+    );
+    assert!(
+        on_added_dirty_body.contains("addChild(m_style);"),
+        "LayoutComponent::onAddedDirty no longer adopts its LayoutComponentStyle as a child"
+    );
+}
+
+#[test]
 fn graph_projects_draw_target_order_from_flattened_rules() {
     let parent_id_key = property_key_for_name("Component", "parentId");
     let drawable_id_key = property_key_for_name("DrawTarget", "drawableId");
@@ -5294,6 +5371,11 @@ fn compare_artboards(cpp: &CppProbeFile, runtime: &RuntimeFile, rust: &GraphFile
                 "component {} graph order mismatch in artboard {index} for {label}",
                 cpp_component.local_id
             );
+            assert_eq!(
+                cpp_component.children_local, rust_component.children,
+                "component {} child list mismatch in artboard {index} for {label}",
+                cpp_component.local_id
+            );
         }
 
         compare_artboard_import_collections(cpp_artboard, rust_artboard, index, label);
@@ -6284,6 +6366,8 @@ struct CppComponent {
     parent_local: Option<usize>,
     #[serde(rename = "graphOrder")]
     graph_order: usize,
+    #[serde(default, rename = "childrenLocal")]
+    children_local: Vec<usize>,
 }
 
 #[derive(Debug, Deserialize)]

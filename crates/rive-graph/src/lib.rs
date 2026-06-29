@@ -146,7 +146,8 @@ impl ArtboardGraph {
         let mut lifecycle = LifecycleSummary::default();
         lifecycle.imported_slots = local_objects.len();
         lifecycle.on_added_dirty_resolved = resolve_parents(&mut components);
-        lifecycle.on_added_clean_indexed = index_children(&mut components, &component_by_local);
+        lifecycle.on_added_clean_indexed =
+            index_children(file, &local_objects, &mut components, &component_by_local);
         let draw_targets = draw_targets(file, &local_objects);
         let draw_rules = draw_rules(file, &local_objects);
         let drawable_order = drawable_order(file, &local_objects);
@@ -3948,6 +3949,8 @@ fn resolve_parents(components: &mut [ComponentNode]) -> usize {
 }
 
 fn index_children(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
     components: &mut [ComponentNode],
     component_by_local: &BTreeMap<usize, usize>,
 ) -> usize {
@@ -3960,26 +3963,48 @@ fn index_children(
         }
     }
 
-    let mut edges = Vec::new();
-    for component in components.iter() {
-        let Some(parent_local) = component.parent_local else {
+    let mut edge_count = 0;
+    let component_locals = components
+        .iter()
+        .map(|component| component.local_id)
+        .collect::<Vec<_>>();
+
+    for local_id in component_locals {
+        let Some(component_index) = component_by_local.get(&local_id).copied() else {
             continue;
         };
-        let Some(parent_index) = component_by_local.get(&parent_local) else {
+        let parent_local = components[component_index].parent_local;
+        if let Some(parent_local) = parent_local {
+            if let Some(parent_index) = component_by_local.get(&parent_local).copied() {
+                components[parent_index].children.push(local_id);
+                edge_count += 1;
+            }
+        }
+
+        let Some(object) = runtime_object_for_local(file, local_objects, local_id) else {
             continue;
         };
-        edges.push((*parent_index, component.local_id));
+        if !definition_by_type_key(object.type_key)
+            .is_some_and(|definition| definition.is_a("LayoutComponent"))
+        {
+            continue;
+        }
+        let Some((style_local, style)) = local_object_reference_with_local_id(
+            file,
+            local_objects,
+            object.uint_property("styleId"),
+        ) else {
+            continue;
+        };
+        if style.type_name == "LayoutComponentStyle"
+            && component_by_local.contains_key(&style_local)
+        {
+            components[component_index].children.push(style_local);
+            edge_count += 1;
+        }
     }
 
-    for (parent_index, child_local) in &edges {
-        components[*parent_index].children.push(*child_local);
-    }
-
-    for component in components.iter_mut() {
-        component.children.sort_unstable();
-    }
-
-    edges.len()
+    edge_count
 }
 
 fn component_dependency_node_by_local(

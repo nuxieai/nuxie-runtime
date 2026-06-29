@@ -125,7 +125,9 @@ The existing `rive-graph` prototype already covers:
 - `GraphFile::from_runtime_file`.
 - C++-style artboard-local object slots.
 - File-level asset, view-model, data-enum, animation, and state-machine projection.
-- Component parent resolution and child indexing.
+- Component parent resolution and C++ `children()` list projection, including
+  import-time child adoption that is not a simple inversion of serialized
+  `parentId` values.
 - Capability flags for artboard/container/world-transform/transform/drawable.
 - Draw target, draw rules, and clipping source relationships.
 - Static drawable-order initialization projection matching C++ `m_Drawables`:

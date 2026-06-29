@@ -2,7 +2,8 @@ use anyhow::{Context, Result};
 use rive_binary::{RuntimeFile, RuntimeImportStatus, RuntimeObject};
 use rive_graph::{
     ArtboardGraph, ClippingShapeNode, ComponentNode, DrawableOrderKind, PathComposerNode,
-    PathComposerPathNode, ShapePaintKind, ShapePaintNode, ShapePaintPathKind, SortedDrawableNode,
+    PathComposerPathNode, ShapePaintKind, ShapePaintNode, ShapePaintPathKind, ShapePaintStateNode,
+    SortedDrawableNode,
 };
 use rive_schema::{definition_by_name, object_supports_property};
 use std::collections::BTreeMap;
@@ -145,13 +146,13 @@ impl ArtboardInstance {
                 }
 
                 commands.extend(
-                    pending_clip_operations
-                        .drain(..)
-                        .map(|pending_clip| runtime_draw_command_for_node(pending_clip, graph)),
+                    pending_clip_operations.drain(..).map(|pending_clip| {
+                        self.runtime_draw_command_for_node(pending_clip, graph)
+                    }),
                 );
             }
 
-            commands.push(runtime_draw_command_for_node(drawable, graph));
+            commands.push(self.runtime_draw_command_for_node(drawable, graph));
         }
 
         commands
@@ -232,6 +233,59 @@ impl ArtboardInstance {
             && !self
                 .component(path.local_id)
                 .is_some_and(|component| component.is_collapsed())
+    }
+
+    fn runtime_draw_command_for_node(
+        &self,
+        drawable: &SortedDrawableNode,
+        graph: &ArtboardGraph,
+    ) -> RuntimeDrawCommand {
+        RuntimeDrawCommand {
+            kind: match drawable.kind {
+                DrawableOrderKind::ClipStartProxy => RuntimeDrawCommandKind::ClipStart,
+                DrawableOrderKind::ClipEndProxy => RuntimeDrawCommandKind::ClipEnd,
+                DrawableOrderKind::Drawable | DrawableOrderKind::LayoutProxy => {
+                    RuntimeDrawCommandKind::Draw
+                }
+            },
+            local_id: drawable.local_id,
+            clipping_shape_local: drawable.clipping_shape_local,
+            needs_save_operation: drawable.needs_save_operation,
+            shape_paints: self.runtime_shape_paint_commands(drawable, graph),
+        }
+    }
+
+    fn runtime_shape_paint_commands(
+        &self,
+        drawable: &SortedDrawableNode,
+        graph: &ArtboardGraph,
+    ) -> Vec<RuntimeShapePaintCommand> {
+        if drawable.kind != DrawableOrderKind::Drawable || drawable.type_name != "Shape" {
+            return Vec::new();
+        }
+        let Some(shape_local) = drawable.local_id else {
+            return Vec::new();
+        };
+        let Some(container) = graph
+            .shape_paint_containers
+            .iter()
+            .find(|container| container.local_id == shape_local)
+        else {
+            return Vec::new();
+        };
+        let needs_save_operation = drawable.needs_save_operation || container.paints.len() > 1;
+        let render_opacity = self
+            .component(shape_local)
+            .map(|component| component.transform.render_opacity)
+            .unwrap_or(1.0);
+
+        container
+            .paints
+            .iter()
+            .filter_map(|paint| {
+                runtime_shape_paint_command(paint, needs_save_operation, render_opacity)
+            })
+            .collect()
     }
 
     pub fn state_machine(&self, index: usize) -> Option<&RuntimeStateMachine> {
@@ -536,57 +590,19 @@ pub struct RuntimeShapePaintCommand {
     pub mutator_local: Option<usize>,
     pub paint_type: RuntimeShapePaintKind,
     pub path_kind: RuntimeShapePaintPathKind,
+    pub paint_state: Option<RuntimeShapePaintState>,
     pub needs_save_operation: bool,
 }
 
-fn runtime_draw_command_for_node(
-    drawable: &SortedDrawableNode,
-    graph: &ArtboardGraph,
-) -> RuntimeDrawCommand {
-    RuntimeDrawCommand {
-        kind: match drawable.kind {
-            DrawableOrderKind::ClipStartProxy => RuntimeDrawCommandKind::ClipStart,
-            DrawableOrderKind::ClipEndProxy => RuntimeDrawCommandKind::ClipEnd,
-            DrawableOrderKind::Drawable | DrawableOrderKind::LayoutProxy => {
-                RuntimeDrawCommandKind::Draw
-            }
-        },
-        local_id: drawable.local_id,
-        clipping_shape_local: drawable.clipping_shape_local,
-        needs_save_operation: drawable.needs_save_operation,
-        shape_paints: runtime_shape_paint_commands(drawable, graph),
-    }
-}
-
-fn runtime_shape_paint_commands(
-    drawable: &SortedDrawableNode,
-    graph: &ArtboardGraph,
-) -> Vec<RuntimeShapePaintCommand> {
-    if drawable.kind != DrawableOrderKind::Drawable || drawable.type_name != "Shape" {
-        return Vec::new();
-    }
-    let Some(shape_local) = drawable.local_id else {
-        return Vec::new();
-    };
-    let Some(container) = graph
-        .shape_paint_containers
-        .iter()
-        .find(|container| container.local_id == shape_local)
-    else {
-        return Vec::new();
-    };
-    let needs_save_operation = drawable.needs_save_operation || container.paints.len() > 1;
-
-    container
-        .paints
-        .iter()
-        .filter_map(|paint| runtime_shape_paint_command(paint, needs_save_operation))
-        .collect()
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeShapePaintState {
+    SolidColor { color: u32, render_color: u32 },
 }
 
 fn runtime_shape_paint_command(
     paint: &ShapePaintNode,
     needs_save_operation: bool,
+    render_opacity: f32,
 ) -> Option<RuntimeShapePaintCommand> {
     if !paint.is_visible {
         return None;
@@ -596,6 +612,7 @@ fn runtime_shape_paint_command(
         mutator_local: paint.mutator_local,
         paint_type: runtime_shape_paint_kind(paint.paint_type),
         path_kind: runtime_shape_paint_path_kind(paint.path_kind?)?,
+        paint_state: runtime_shape_paint_state(paint.paint_state, render_opacity),
         needs_save_operation,
     })
 }
@@ -614,6 +631,28 @@ fn runtime_shape_paint_path_kind(kind: ShapePaintPathKind) -> Option<RuntimeShap
         ShapePaintPathKind::LocalClockwise => Some(RuntimeShapePaintPathKind::LocalClockwise),
         ShapePaintPathKind::World => Some(RuntimeShapePaintPathKind::World),
     }
+}
+
+fn runtime_shape_paint_state(
+    state: Option<ShapePaintStateNode>,
+    render_opacity: f32,
+) -> Option<RuntimeShapePaintState> {
+    match state? {
+        ShapePaintStateNode::SolidColor { color } => Some(RuntimeShapePaintState::SolidColor {
+            color,
+            render_color: color_modulate_opacity(color, render_opacity),
+        }),
+    }
+}
+
+fn color_modulate_opacity(color: u32, opacity: f32) -> u32 {
+    let alpha = ((color >> 24) & 0xff) as f32 / 255.0;
+    let alpha = opacity_to_alpha(alpha * opacity);
+    (color & 0x00ff_ffff) | (u32::from(alpha) << 24)
+}
+
+fn opacity_to_alpha(opacity: f32) -> u8 {
+    (255.0 * opacity.clamp(0.0, 1.0)).round() as u8
 }
 
 fn sorted_drawable_uses_render_opacity(type_name: &str) -> bool {

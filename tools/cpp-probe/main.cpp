@@ -173,6 +173,7 @@
 #include "rive/shapes/mesh_vertex.hpp"
 #include "rive/shapes/path.hpp"
 #include "rive/shapes/path_vertex.hpp"
+#include "rive/shapes/paint/color.hpp"
 #include "rive/shapes/paint/dash_path.hpp"
 #include "rive/shapes/paint/feather.hpp"
 #include "rive/shapes/paint/fill.hpp"
@@ -1364,6 +1365,24 @@ const char* shape_paint_path_kind(rive::Shape* shape,
     return "unknown";
 }
 
+void write_shape_paint_state(std::ostream& out, rive::ShapePaint* shapePaint)
+{
+    out << ",\"paintState\":";
+    auto paint = shapePaint->paint();
+    if (paint != nullptr && paint->is<rive::SolidColor>())
+    {
+        auto solid = paint->as<rive::SolidColor>();
+        auto color = static_cast<uint32_t>(solid->colorValue());
+        auto renderColor = rive::colorModulateOpacity(color, solid->renderOpacity());
+        out << "{\"kind\":\"solidColor\"";
+        out << ",\"color\":" << color;
+        out << ",\"renderColor\":" << renderColor;
+        out << '}';
+        return;
+    }
+    out << "null";
+}
+
 void write_shape_paint_commands(std::ostream& out,
                                 const LocalIds& localIds,
                                 rive::Drawable* drawable)
@@ -1401,6 +1420,7 @@ void write_shape_paint_commands(std::ostream& out,
         write_local_id_or_null(out, localIds, shapePaint->paint());
         out << ",\"paintType\":\"" << shape_paint_type_name(shapePaint) << "\"";
         out << ",\"pathKind\":\"" << shape_paint_path_kind(shape, path) << "\"";
+        write_shape_paint_state(out, shapePaint);
         out << ",\"needsSaveOperation\":"
             << (needsSaveOperation ? "true" : "false");
         out << '}';

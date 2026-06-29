@@ -2,7 +2,8 @@ use rive_binary::{RuntimeFile, read_runtime_file};
 use rive_graph::GraphFile;
 use rive_runtime::{
     ArtboardInstance, ComponentDirt, Mat2D, RuntimeComponent, RuntimeDrawCommandKind,
-    RuntimeShapePaintKind, RuntimeShapePaintPathKind, StateMachineInputKind, TransformProperty,
+    RuntimeShapePaintKind, RuntimeShapePaintPathKind, RuntimeShapePaintState,
+    StateMachineInputKind, TransformProperty,
 };
 use rive_schema::definition_by_name;
 use serde::Deserialize;
@@ -118,6 +119,12 @@ fn push_bool_property(bytes: &mut Vec<u8>, type_name: &str, property_name: &str,
     let key = property_key_for_name(type_name, property_name);
     push_var_uint(bytes, u64::from(key));
     bytes.push(u8::from(value));
+}
+
+fn push_color_property(bytes: &mut Vec<u8>, type_name: &str, property_name: &str, value: u32) {
+    let key = property_key_for_name(type_name, property_name);
+    push_var_uint(bytes, u64::from(key));
+    bytes.extend_from_slice(&value.to_le_bytes());
 }
 
 fn synthetic_runtime_file(file_id: u64, object_stream: impl FnOnce(&mut Vec<u8>)) -> Vec<u8> {
@@ -1822,6 +1829,7 @@ fn runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe() {
         push_object_with_properties(bytes, "Artboard", |_| {});
         push_object_with_properties(bytes, "Shape", |bytes| {
             push_uint_property(bytes, "Node", "parentId", 0);
+            push_f32_property(bytes, "Node", "opacity", 0.5);
         });
         push_object_with_properties(bytes, "Fill", |bytes| {
             push_uint_property(bytes, "Component", "parentId", 1);
@@ -1829,6 +1837,7 @@ fn runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe() {
         });
         push_object_with_properties(bytes, "SolidColor", |bytes| {
             push_uint_property(bytes, "Component", "parentId", 2);
+            push_color_property(bytes, "SolidColor", "colorValue", 0x8040_2010);
         });
         push_object_with_properties(bytes, "Fill", |bytes| {
             push_uint_property(bytes, "Component", "parentId", 1);
@@ -1843,6 +1852,7 @@ fn runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe() {
         });
         push_object_with_properties(bytes, "SolidColor", |bytes| {
             push_uint_property(bytes, "Component", "parentId", 6);
+            push_color_property(bytes, "SolidColor", "colorValue", 0xff11_2233);
         });
         push_object_with_properties(bytes, "Stroke", |bytes| {
             push_uint_property(bytes, "Component", "parentId", 1);
@@ -1871,6 +1881,7 @@ fn runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe() {
                 paint.mutator_local,
                 paint.paint_type,
                 paint.path_kind,
+                paint.paint_state,
                 paint.needs_save_operation,
             )
         })
@@ -1885,6 +1896,7 @@ fn runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe() {
                 paint.mutator_local,
                 paint.paint_type(),
                 paint.path_kind(),
+                paint.paint_state(),
                 paint.needs_save_operation,
             )
         })
@@ -1898,6 +1910,10 @@ fn runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe() {
                 Some(3),
                 RuntimeShapePaintKind::Fill,
                 RuntimeShapePaintPathKind::LocalClockwise,
+                Some(RuntimeShapePaintState::SolidColor {
+                    color: 0x8040_2010,
+                    render_color: 0x4040_2010,
+                }),
                 true
             ),
             (
@@ -1905,6 +1921,10 @@ fn runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe() {
                 Some(7),
                 RuntimeShapePaintKind::Stroke,
                 RuntimeShapePaintPathKind::World,
+                Some(RuntimeShapePaintState::SolidColor {
+                    color: 0xff11_2233,
+                    render_color: 0x8011_2233,
+                }),
                 true
             ),
         ],
@@ -4686,6 +4706,8 @@ struct CppShapePaintCommand {
     paint_type: String,
     #[serde(rename = "pathKind")]
     path_kind: String,
+    #[serde(rename = "paintState")]
+    paint_state: Option<CppShapePaintState>,
     #[serde(rename = "needsSaveOperation")]
     needs_save_operation: bool,
 }
@@ -4707,6 +4729,25 @@ impl CppShapePaintCommand {
             other => panic!("unexpected C++ shape paint path kind {other}"),
         }
     }
+
+    fn paint_state(&self) -> Option<RuntimeShapePaintState> {
+        let state = self.paint_state.as_ref()?;
+        match state.kind.as_str() {
+            "solidColor" => Some(RuntimeShapePaintState::SolidColor {
+                color: state.color,
+                render_color: state.render_color,
+            }),
+            other => panic!("unexpected C++ shape paint state kind {other}"),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct CppShapePaintState {
+    kind: String,
+    color: u32,
+    #[serde(rename = "renderColor")]
+    render_color: u32,
 }
 
 #[derive(Debug, Deserialize)]

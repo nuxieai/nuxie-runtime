@@ -607,6 +607,7 @@ pub struct ShapePaintNode {
     pub paint_type: ShapePaintKind,
     pub is_visible: bool,
     pub path_kind: Option<ShapePaintPathKind>,
+    pub paint_state: Option<ShapePaintStateNode>,
     pub mutator_local: Option<usize>,
     pub mutator_global: Option<u32>,
     pub mutator_type_name: Option<&'static str>,
@@ -631,6 +632,12 @@ pub enum ShapePaintPathKind {
     Local,
     LocalClockwise,
     World,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ShapePaintStateNode {
+    SolidColor { color: u32 },
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -2251,6 +2258,7 @@ fn shape_paint_containers(
                             paint_type,
                             is_visible: shape_paint_is_visible(&paint.object, paint_type),
                             path_kind: shape_paint_path_kind(&paint.object, paint_type),
+                            paint_state: shape_paint_state(paint.mutator),
                             mutator_local: paint.mutator_local_id,
                             mutator_global: paint.mutator_local_id.and_then(|local_id| {
                                 local_object_global_id(local_objects, local_id)
@@ -2348,6 +2356,16 @@ fn shape_paint_path_kind(
             }
         }
         ShapePaintKind::Unknown => None,
+    }
+}
+
+fn shape_paint_state(mutator: Option<&RuntimeObject>) -> Option<ShapePaintStateNode> {
+    let mutator = mutator?;
+    match mutator.type_name {
+        "SolidColor" => Some(ShapePaintStateNode::SolidColor {
+            color: mutator.color_property("colorValue").unwrap_or(0xFF747474),
+        }),
+        _ => None,
     }
 }
 

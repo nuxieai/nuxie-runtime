@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
-use rive_binary::{RuntimeFile, RuntimeObject};
+use rive_binary::{RuntimeFile, RuntimeImportStatus, RuntimeObject};
 use rive_graph::{ArtboardGraph, ComponentNode};
+use rive_schema::{definition_by_name, object_supports_property};
 use std::collections::BTreeMap;
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 
@@ -10,6 +11,7 @@ pub struct ArtboardInstance {
     components: Vec<RuntimeComponent>,
     component_by_local: BTreeMap<usize, usize>,
     update_order: Vec<usize>,
+    linear_animations: Vec<RuntimeLinearAnimation>,
     dirt: ComponentDirt,
     dirt_depth: usize,
     did_change: bool,
@@ -66,12 +68,14 @@ impl ArtboardInstance {
             .into_iter()
             .map(|(_, local_id)| local_id)
             .collect::<Vec<_>>();
+        let linear_animations = build_linear_animations(file, graph, &slots);
 
         Ok(Self {
             slots,
             components,
             component_by_local,
             update_order,
+            linear_animations,
             dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,
             did_change: true,
@@ -103,6 +107,21 @@ impl ArtboardInstance {
 
     pub fn update_order(&self) -> &[usize] {
         &self.update_order
+    }
+
+    pub fn linear_animation(&self, index: usize) -> Option<&RuntimeLinearAnimation> {
+        self.linear_animations.get(index)
+    }
+
+    pub fn linear_animations(&self) -> &[RuntimeLinearAnimation] {
+        &self.linear_animations
+    }
+
+    pub fn apply_linear_animation(&mut self, index: usize, seconds: f32, mix: f32) -> bool {
+        let Some(animation) = self.linear_animations.get(index).cloned() else {
+            return false;
+        };
+        animation.apply(self, seconds, mix)
     }
 
     pub fn set_transform_property(
@@ -139,6 +158,12 @@ impl ArtboardInstance {
             }
         }
         true
+    }
+
+    fn transform_property(&self, local_id: usize, property: TransformProperty) -> Option<f32> {
+        self.component(local_id)
+            .filter(|component| component.capabilities.transform)
+            .map(|component| component.transform.property(property))
     }
 
     pub fn has_dirt(&self, dirt: ComponentDirt) -> bool {
@@ -292,6 +317,147 @@ pub struct InstanceSlot {
 }
 
 #[derive(Debug, Clone)]
+pub struct RuntimeLinearAnimation {
+    pub global_id: u32,
+    pub name: Option<String>,
+    pub fps: u64,
+    pub duration: u64,
+    pub speed: f32,
+    pub loop_value: u64,
+    pub work_start: u64,
+    pub work_end: u64,
+    pub enable_work_area: bool,
+    pub quantize: bool,
+    pub keyed_objects: Vec<RuntimeKeyedObject>,
+}
+
+impl RuntimeLinearAnimation {
+    fn apply(&self, instance: &mut ArtboardInstance, seconds: f32, mix: f32) -> bool {
+        let seconds = if self.quantize && self.fps != 0 {
+            let fps = self.fps as f32;
+            (seconds * fps).floor() / fps
+        } else {
+            seconds
+        };
+
+        let mut changed = false;
+        for keyed_object in &self.keyed_objects {
+            for keyed_property in &keyed_object.keyed_properties {
+                let Some(property) = keyed_property.transform_property else {
+                    continue;
+                };
+                let Some(current) =
+                    instance.transform_property(keyed_object.target_local_id, property)
+                else {
+                    continue;
+                };
+                let Some(value) = keyed_property.value_at(seconds, self.fps, current, mix) else {
+                    continue;
+                };
+                changed |=
+                    instance.set_transform_property(keyed_object.target_local_id, property, value);
+            }
+        }
+        changed
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RuntimeKeyedObject {
+    pub global_id: u32,
+    pub object_id: usize,
+    pub target_local_id: usize,
+    pub keyed_properties: Vec<RuntimeKeyedProperty>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RuntimeKeyedProperty {
+    pub global_id: u32,
+    pub property_key: u16,
+    pub transform_property: Option<TransformProperty>,
+    pub key_frames: Vec<RuntimeKeyFrameDouble>,
+}
+
+impl RuntimeKeyedProperty {
+    fn value_at(&self, seconds: f32, fps: u64, current: f32, mix: f32) -> Option<f32> {
+        if self.key_frames.is_empty() {
+            return None;
+        }
+
+        let idx = self.closest_frame_index(seconds, fps);
+        let value = if idx == 0 {
+            self.key_frames[0].value
+        } else if idx < self.key_frames.len() {
+            let from = &self.key_frames[idx - 1];
+            let to = &self.key_frames[idx];
+            if seconds == to.seconds(fps) {
+                to.value
+            } else if from.interpolation_type == 0 {
+                from.value
+            } else if from.interpolator_id.is_some() {
+                return None;
+            } else {
+                let from_seconds = from.seconds(fps);
+                let to_seconds = to.seconds(fps);
+                let frame_mix = if to_seconds == from_seconds {
+                    1.0
+                } else {
+                    (seconds - from_seconds) / (to_seconds - from_seconds)
+                };
+                from.value + (to.value - from.value) * frame_mix
+            }
+        } else {
+            self.key_frames.last()?.value
+        };
+
+        Some(mix_value(current, value, mix))
+    }
+
+    fn closest_frame_index(&self, seconds: f32, fps: u64) -> usize {
+        let last = self.key_frames.len() - 1;
+        if seconds > self.key_frames[last].seconds(fps) {
+            return self.key_frames.len();
+        }
+
+        let mut start = 0;
+        let mut end = last;
+        while start <= end {
+            let mid = (start + end) >> 1;
+            let closest = self.key_frames[mid].seconds(fps);
+            if closest < seconds {
+                start = mid + 1;
+            } else if closest > seconds {
+                if mid == 0 {
+                    break;
+                }
+                end = mid - 1;
+            } else {
+                return mid;
+            }
+        }
+        start
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RuntimeKeyFrameDouble {
+    pub global_id: u32,
+    pub frame: u64,
+    pub interpolation_type: u64,
+    pub interpolator_id: Option<u64>,
+    pub value: f32,
+}
+
+impl RuntimeKeyFrameDouble {
+    fn seconds(&self, fps: u64) -> f32 {
+        if fps == 0 {
+            return 0.0;
+        }
+        self.frame as f32 / fps as f32
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct RuntimeComponent {
     pub local_id: usize,
     pub global_id: u32,
@@ -325,6 +491,215 @@ impl RuntimeComponent {
     pub fn is_collapsed(&self) -> bool {
         self.dirt.contains(ComponentDirt::COLLAPSED)
     }
+}
+
+fn build_linear_animations(
+    file: &RuntimeFile,
+    graph: &ArtboardGraph,
+    slots: &[InstanceSlot],
+) -> Vec<RuntimeLinearAnimation> {
+    let Some((start, end)) = artboard_object_range(file, graph.global_id as usize) else {
+        return Vec::new();
+    };
+
+    let mut animations = Vec::<RuntimeLinearAnimation>::new();
+    let mut current_animation = None;
+    let mut current_keyed_object = None;
+    let mut current_keyed_property = None;
+
+    for global_id in start..end {
+        let Some(object) = file.object(global_id) else {
+            continue;
+        };
+        if file.import_status(global_id) != Some(RuntimeImportStatus::Imported) {
+            continue;
+        }
+
+        if object.type_name == "LinearAnimation" {
+            animations.push(RuntimeLinearAnimation {
+                global_id: global_id as u32,
+                name: object.string_property("name").map(ToOwned::to_owned),
+                fps: object.uint_property("fps").unwrap_or(60),
+                duration: object.uint_property("duration").unwrap_or(60),
+                speed: object.double_property("speed").unwrap_or(1.0),
+                loop_value: object.uint_property("loopValue").unwrap_or(0),
+                work_start: object.uint_property("workStart").unwrap_or(0),
+                work_end: object.uint_property("workEnd").unwrap_or(0),
+                enable_work_area: object.bool_property("enableWorkArea").unwrap_or(false),
+                quantize: object.bool_property("quantize").unwrap_or(false),
+                keyed_objects: Vec::new(),
+            });
+            current_animation = Some(animations.len() - 1);
+            current_keyed_object = None;
+            current_keyed_property = None;
+            continue;
+        }
+
+        let Some(animation_index) = current_animation else {
+            continue;
+        };
+
+        if object.type_name == "KeyedObject" {
+            let Some((object_id, target_local_id, _target)) =
+                keyed_object_target(file, slots, object)
+            else {
+                current_keyed_object = None;
+                current_keyed_property = None;
+                continue;
+            };
+
+            animations[animation_index]
+                .keyed_objects
+                .push(RuntimeKeyedObject {
+                    global_id: global_id as u32,
+                    object_id,
+                    target_local_id,
+                    keyed_properties: Vec::new(),
+                });
+            current_keyed_object = Some(animations[animation_index].keyed_objects.len() - 1);
+            current_keyed_property = None;
+            continue;
+        }
+
+        if object.type_name == "KeyedProperty" {
+            let Some(keyed_object_index) = current_keyed_object else {
+                continue;
+            };
+            let Some(property_key) = object
+                .uint_property("propertyKey")
+                .and_then(|key| u16::try_from(key).ok())
+            else {
+                current_keyed_property = None;
+                continue;
+            };
+            let target_local_id =
+                animations[animation_index].keyed_objects[keyed_object_index].target_local_id;
+            let Some(target) = slots
+                .get(target_local_id)
+                .and_then(|slot| file.object(slot.source_global_id as usize))
+            else {
+                current_keyed_property = None;
+                continue;
+            };
+            if !object_supports_property(target.type_key, property_key) {
+                current_keyed_property = None;
+                continue;
+            }
+
+            animations[animation_index].keyed_objects[keyed_object_index]
+                .keyed_properties
+                .push(RuntimeKeyedProperty {
+                    global_id: global_id as u32,
+                    property_key,
+                    transform_property: transform_property_for_key(property_key),
+                    key_frames: Vec::new(),
+                });
+            current_keyed_property = Some((
+                keyed_object_index,
+                animations[animation_index].keyed_objects[keyed_object_index]
+                    .keyed_properties
+                    .len()
+                    - 1,
+            ));
+            continue;
+        }
+
+        if object.type_name == "KeyFrameDouble" {
+            let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
+                continue;
+            };
+            animations[animation_index].keyed_objects[keyed_object_index].keyed_properties
+                [keyed_property_index]
+                .key_frames
+                .push(RuntimeKeyFrameDouble {
+                    global_id: global_id as u32,
+                    frame: object.uint_property("frame").unwrap_or(0),
+                    interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
+                    interpolator_id: normalized_interpolator_id(object),
+                    value: object.double_property("value").unwrap_or(0.0),
+                });
+        }
+    }
+
+    animations
+}
+
+fn artboard_object_range(file: &RuntimeFile, start: usize) -> Option<(usize, usize)> {
+    let artboard = file.object(start)?;
+    if artboard.type_name != "Artboard" {
+        return None;
+    }
+    let end = ((start + 1)..file.objects.len())
+        .find(|index| {
+            file.object(*index)
+                .is_some_and(|object| object.type_name == "Artboard")
+        })
+        .unwrap_or(file.objects.len());
+    Some((start, end))
+}
+
+fn keyed_object_target<'a>(
+    file: &'a RuntimeFile,
+    slots: &[InstanceSlot],
+    keyed_object: &RuntimeObject,
+) -> Option<(usize, usize, &'a RuntimeObject)> {
+    let object_id = usize::try_from(keyed_object.uint_property("objectId")?).ok()?;
+    let slot = slots.get(object_id)?;
+    let target = file.object(slot.source_global_id as usize)?;
+    Some((object_id, slot.local_id, target))
+}
+
+fn transform_property_for_key(property_key: u16) -> Option<TransformProperty> {
+    [
+        ("Node", "x", TransformProperty::X),
+        ("Node", "y", TransformProperty::Y),
+        ("Node", "rotation", TransformProperty::Rotation),
+        ("Node", "scaleX", TransformProperty::ScaleX),
+        ("Node", "scaleY", TransformProperty::ScaleY),
+        ("Node", "opacity", TransformProperty::Opacity),
+    ]
+    .into_iter()
+    .find_map(|(type_name, property_name, property)| {
+        (property_key_for_name(type_name, property_name) == Some(property_key)).then_some(property)
+    })
+}
+
+fn property_key_for_name(type_name: &str, property_name: &str) -> Option<u16> {
+    let definition = definition_by_name(type_name)?;
+    if let Some(property) = definition
+        .properties
+        .iter()
+        .find(|property| property.name == property_name)
+    {
+        return Some(property.key.int);
+    }
+
+    for ancestor in definition.ancestors {
+        let ancestor = definition_by_name(ancestor)?;
+        if let Some(property) = ancestor
+            .properties
+            .iter()
+            .find(|property| property.name == property_name)
+        {
+            return Some(property.key.int);
+        }
+    }
+
+    None
+}
+
+fn mix_value(current: f32, value: f32, mix: f32) -> f32 {
+    if mix == 1.0 {
+        value
+    } else {
+        current * (1.0 - mix) + value * mix
+    }
+}
+
+fn normalized_interpolator_id(object: &RuntimeObject) -> Option<u64> {
+    object
+        .uint_property("interpolatorId")
+        .filter(|id| *id != u64::from(u32::MAX) && *id != u64::MAX)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -368,6 +743,17 @@ impl TransformRuntimeState {
             local_transform: Mat2D::IDENTITY,
             world_transform: Mat2D::IDENTITY,
             render_opacity: 0.0,
+        }
+    }
+
+    fn property(&self, property: TransformProperty) -> f32 {
+        match property {
+            TransformProperty::X => self.x,
+            TransformProperty::Y => self.y,
+            TransformProperty::Rotation => self.rotation,
+            TransformProperty::ScaleX => self.scale_x,
+            TransformProperty::ScaleY => self.scale_y,
+            TransformProperty::Opacity => self.opacity,
         }
     }
 
@@ -595,6 +981,7 @@ mod tests {
             components,
             component_by_local,
             update_order,
+            linear_animations: Vec::new(),
             dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,
             did_change: true,

@@ -104,6 +104,12 @@ fn push_f32_property(bytes: &mut Vec<u8>, type_name: &str, property_name: &str, 
     bytes.extend_from_slice(&value.to_le_bytes());
 }
 
+fn push_bool_property(bytes: &mut Vec<u8>, type_name: &str, property_name: &str, value: bool) {
+    let key = property_key_for_name(type_name, property_name);
+    push_var_uint(bytes, u64::from(key));
+    bytes.push(u8::from(value));
+}
+
 fn synthetic_runtime_file(file_id: u64, object_stream: impl FnOnce(&mut Vec<u8>)) -> Vec<u8> {
     let mut bytes = Vec::new();
     bytes.extend_from_slice(b"RIVE");
@@ -140,6 +146,55 @@ fn synthetic_transform_hierarchy() -> Vec<u8> {
         push_object_with_properties(bytes, "Artboard", |_| {});
         push_transform_node(bytes, 0, 2.0, 3.0, 4.0, 5.0, 0.5);
         push_transform_node(bytes, 1, 7.0, 11.0, 2.0, 3.0, 0.25);
+    })
+}
+
+fn push_keyframe_double(bytes: &mut Vec<u8>, frame: u64, value: f32, interpolation_type: u64) {
+    push_object_with_properties(bytes, "KeyFrameDouble", |bytes| {
+        push_uint_property(bytes, "KeyFrameDouble", "frame", frame);
+        push_uint_property(
+            bytes,
+            "KeyFrameDouble",
+            "interpolationType",
+            interpolation_type,
+        );
+        push_f32_property(bytes, "KeyFrameDouble", "value", value);
+    });
+}
+
+fn synthetic_linear_animation(
+    file_id: u64,
+    first_frame: u64,
+    first_value: f32,
+    second_frame: u64,
+    second_value: f32,
+    first_interpolation_type: u64,
+    quantize: bool,
+) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "fps", 10);
+            push_uint_property(bytes, "LinearAnimation", "duration", 20);
+            if quantize {
+                push_bool_property(bytes, "LinearAnimation", "quantize", true);
+            }
+        });
+        push_object_with_properties(bytes, "KeyedObject", |bytes| {
+            push_uint_property(bytes, "KeyedObject", "objectId", 1);
+        });
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("Node", "x")),
+            );
+        });
+        push_keyframe_double(bytes, first_frame, first_value, first_interpolation_type);
+        push_keyframe_double(bytes, second_frame, second_value, 0);
     })
 }
 
@@ -334,6 +389,214 @@ fn mutable_instance_transform_does_not_mutate_source_object() {
         12.0
     );
     assert_eq!(source_child.double_property("x"), Some(2.0));
+}
+
+#[test]
+fn linear_animation_apply_interpolates_keyframe_double_transform() {
+    let label = "synthetic/runtime_linear_animation_interpolation.riv";
+    let bytes = synthetic_linear_animation(8201, 0, 2.0, 10, 12.0, 1, false);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+
+    assert_eq!(rust.linear_animations().len(), 1);
+    assert_eq!(
+        rust.linear_animation(0).unwrap().keyed_objects[0].keyed_properties[0]
+            .key_frames
+            .len(),
+        2
+    );
+
+    assert!(rust.apply_linear_animation(0, 0.5, 1.0));
+    assert_close(
+        rust.component(1).unwrap().transform.x,
+        7.0,
+        "interpolated x",
+    );
+    assert!(
+        rust.component(1)
+            .unwrap()
+            .dirt
+            .contains(ComponentDirt::TRANSFORM | ComponentDirt::WORLD_TRANSFORM)
+    );
+}
+
+#[test]
+fn linear_animation_apply_holds_when_interpolation_type_is_zero() {
+    let label = "synthetic/runtime_linear_animation_hold.riv";
+    let bytes = synthetic_linear_animation(8202, 0, 4.0, 10, 12.0, 0, false);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+
+    assert!(rust.apply_linear_animation(0, 0.5, 1.0));
+    assert_close(rust.component(1).unwrap().transform.x, 4.0, "held x");
+}
+
+#[test]
+fn linear_animation_apply_uses_first_and_last_keyframes_outside_range() {
+    let before_label = "synthetic/runtime_linear_animation_before_first.riv";
+    let before_bytes = synthetic_linear_animation(8203, 10, 4.0, 20, 12.0, 1, false);
+    let (_, mut before) = read_rust_instance_from_bytes(&before_bytes, before_label);
+
+    assert!(before.apply_linear_animation(0, 0.0, 1.0));
+    assert_close(
+        before.component(1).unwrap().transform.x,
+        4.0,
+        "before first x",
+    );
+
+    let after_label = "synthetic/runtime_linear_animation_after_last.riv";
+    let after_bytes = synthetic_linear_animation(8204, 0, 4.0, 10, 12.0, 1, false);
+    let (_, mut after) = read_rust_instance_from_bytes(&after_bytes, after_label);
+
+    assert!(after.apply_linear_animation(0, 2.0, 1.0));
+    assert_close(
+        after.component(1).unwrap().transform.x,
+        12.0,
+        "after last x",
+    );
+}
+
+#[test]
+fn linear_animation_apply_quantizes_seconds_before_sampling() {
+    let label = "synthetic/runtime_linear_animation_quantized.riv";
+    let bytes = synthetic_linear_animation(8205, 0, 2.0, 10, 12.0, 1, true);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+
+    assert!(rust.apply_linear_animation(0, 0.99, 1.0));
+    assert_close(rust.component(1).unwrap().transform.x, 11.0, "quantized x");
+}
+
+#[test]
+fn linear_animation_apply_mixes_with_current_transform_value() {
+    let label = "synthetic/runtime_linear_animation_mixed.riv";
+    let bytes = synthetic_linear_animation(8206, 0, 2.0, 10, 12.0, 1, false);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+
+    assert!(rust.apply_linear_animation(0, 1.0, 0.25));
+    assert_close(rust.component(1).unwrap().transform.x, 4.5, "mixed x");
+}
+
+#[test]
+fn linear_animation_apply_does_not_mutate_source_object() {
+    let label = "synthetic/runtime_linear_animation_source_separation.riv";
+    let bytes = synthetic_linear_animation(8207, 0, 2.0, 10, 12.0, 1, false);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let child_slot = rust.slot(1).expect("child slot should exist");
+    let source_child = runtime
+        .object(child_slot.source_global_id as usize)
+        .expect("source child should exist");
+
+    assert_eq!(source_child.double_property("x"), Some(2.0));
+
+    assert!(rust.apply_linear_animation(0, 1.0, 1.0));
+    assert_close(rust.component(1).unwrap().transform.x, 12.0, "applied x");
+    assert_eq!(source_child.double_property("x"), Some(2.0));
+}
+
+#[test]
+fn linear_animation_apply_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let cases = [
+        (
+            "synthetic/runtime_linear_animation_cpp_exact.riv",
+            synthetic_linear_animation(8211, 0, 2.0, 10, 12.0, 1, false),
+            1.0,
+            1.0,
+        ),
+        (
+            "synthetic/runtime_linear_animation_cpp_before_first.riv",
+            synthetic_linear_animation(8212, 10, 4.0, 20, 12.0, 1, false),
+            0.0,
+            1.0,
+        ),
+        (
+            "synthetic/runtime_linear_animation_cpp_interpolated.riv",
+            synthetic_linear_animation(8213, 0, 2.0, 10, 12.0, 1, false),
+            0.5,
+            1.0,
+        ),
+        (
+            "synthetic/runtime_linear_animation_cpp_held.riv",
+            synthetic_linear_animation(8214, 0, 4.0, 10, 12.0, 0, false),
+            0.5,
+            1.0,
+        ),
+        (
+            "synthetic/runtime_linear_animation_cpp_after_last.riv",
+            synthetic_linear_animation(8215, 0, 4.0, 10, 12.0, 1, false),
+            2.0,
+            1.0,
+        ),
+        (
+            "synthetic/runtime_linear_animation_cpp_quantized.riv",
+            synthetic_linear_animation(8216, 0, 2.0, 10, 12.0, 1, true),
+            0.99,
+            1.0,
+        ),
+        (
+            "synthetic/runtime_linear_animation_cpp_mixed.riv",
+            synthetic_linear_animation(8217, 0, 2.0, 10, 12.0, 1, false),
+            1.0,
+            0.25,
+        ),
+    ];
+
+    for (label, bytes, seconds, mix) in cases {
+        let cpp = read_cpp_probe_bytes_with_args(
+            &probe,
+            label,
+            &bytes,
+            &[
+                "--runtime-apply-animation".to_owned(),
+                "0".to_owned(),
+                seconds.to_string(),
+                mix.to_string(),
+            ],
+        );
+        let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+        rust.apply_linear_animation(0, seconds, mix);
+        let report = rust.update_components();
+
+        compare_cpp_runtime_update(&cpp, &rust, &report, label);
+    }
+}
+
+fn assert_close(actual: f32, expected: f32, label: &str) {
+    assert!(
+        (actual - expected).abs() <= 0.0001,
+        "{label} mismatch: expected {expected}, got {actual}"
+    );
+}
+
+fn compare_cpp_runtime_update(
+    cpp: &CppProbeFile,
+    rust: &ArtboardInstance,
+    report: &rive_runtime::UpdateComponentsReport,
+    label: &str,
+) {
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    let cpp_update = cpp_artboard
+        .runtime_update
+        .as_ref()
+        .unwrap_or_else(|| panic!("missing C++ runtimeUpdate for {label}"));
+
+    assert_eq!(cpp_update.did_update, report.did_update);
+    assert_eq!(
+        cpp_update.has_components_dirt,
+        rust.has_dirt(ComponentDirt::COMPONENTS)
+    );
+
+    for cpp_component in &cpp_update.components {
+        let rust_component = rust
+            .component(cpp_component.local_id)
+            .unwrap_or_else(|| panic!("missing Rust component {}", cpp_component.local_id));
+        compare_component(cpp_component, rust_component, label);
+    }
 }
 
 fn compare_component(cpp: &CppRuntimeComponent, rust: &RuntimeComponent, label: &str) {

@@ -256,6 +256,7 @@ Partially open. `crates/rive-graph` now exposes draw target/rule/clipping relati
 
 Blocked by: #8, #9
 Type: Prototype
+Contract: `docs/prototypes/linear-animation-runtime-contract.md`
 
 ### Question
 
@@ -263,7 +264,7 @@ How should animations and state machines drive the graph scheduler?
 
 ### Answer
 
-Open. Implement linear animation application first, then state machine inputs, layer stepping, transition evaluation, event collection, and integration with `ArtboardInstance::advance(dt)`.
+In progress. Start with direct `LinearAnimation::apply` parity, not full playback or state-machine execution: build runtime-owned linear animation definitions on `ArtboardInstance`, apply `KeyFrameDouble` values for the transform properties admitted by the instancing slice at an explicit seconds/mix pair, and compare the resulting mutable instance state against a C++ cloned-artboard probe. Full `LinearAnimationInstance::advance`, looping/work-area playback, state machine inputs, layer stepping, transition evaluation, event collection, nested animation remapping, data binding, draw/render behavior, and non-double keyframe coverage remain later slices.
 
 ## #12: Data Binding Graph
 

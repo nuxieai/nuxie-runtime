@@ -54,6 +54,7 @@
 #include "rive/animation/animation_state.hpp"
 #include "rive/animation/layer_state.hpp"
 #include "rive/animation/linear_animation.hpp"
+#include "rive/animation/linear_animation_instance.hpp"
 #include "rive/animation/listener_action.hpp"
 #include "rive/animation/listener_fire_event.hpp"
 #include "rive/animation/listener_types/listener_input_type.hpp"
@@ -224,6 +225,13 @@ struct RuntimeDoubleMutation
     float value;
 };
 
+struct RuntimeAnimationApplication
+{
+    size_t animationIndex;
+    float seconds;
+    float mix;
+};
+
 struct ProbeOptions
 {
     bool propertyValues = false;
@@ -232,6 +240,7 @@ struct ProbeOptions
     bool runtimeUpdate = false;
     bool instanceArtboards = false;
     std::vector<RuntimeDoubleMutation> runtimeDoubleMutations;
+    std::vector<RuntimeAnimationApplication> runtimeAnimationApplications;
     bool completeViewModelProperties = false;
     bool dataContextLookups = false;
 };
@@ -537,6 +546,30 @@ void apply_runtime_double_mutations(const std::vector<rive::Core*>& objects,
         }
         rive::CoreRegistry::setDouble(
             object, mutation.propertyKey, mutation.value);
+    }
+}
+
+void apply_runtime_animation_applications(rive::ArtboardInstance* instance,
+                                          const ProbeOptions& options)
+{
+    if (options.runtimeAnimationApplications.empty())
+    {
+        return;
+    }
+    if (instance == nullptr)
+    {
+        return;
+    }
+
+    for (const auto& application : options.runtimeAnimationApplications)
+    {
+        auto animation = instance->animationAt(application.animationIndex);
+        if (animation == nullptr)
+        {
+            continue;
+        }
+        animation->time(application.seconds);
+        animation->apply(application.mix);
     }
 }
 
@@ -4640,6 +4673,7 @@ void write_artboard(std::ostream& out,
                     rive::File* file,
                     size_t index,
                     rive::Artboard* artboard,
+                    rive::ArtboardInstance* instanceArtboard,
                     const ProbeOptions& options)
 {
     if (options.advanceArtboards)
@@ -4658,6 +4692,7 @@ void write_artboard(std::ostream& out,
     }
 
     apply_runtime_double_mutations(objects, options);
+    apply_runtime_animation_applications(instanceArtboard, options);
 
     bool runtimeUpdateDidUpdate = false;
     if (options.runtimeUpdate)
@@ -5030,7 +5065,8 @@ void write_file(std::ostream& out,
         }
         else
         {
-            write_artboard(out, file, i, artboard, options);
+            write_artboard(
+                out, file, i, artboard, instanceArtboard.get(), options);
         }
     }
 
@@ -6184,6 +6220,22 @@ int main(int argc, const char* argv[])
             continue;
         }
 
+        if (is_arg(argv[i], "--runtime-apply-animation"))
+        {
+            if (i + 3 >= argc)
+            {
+                std::cerr << "--runtime-apply-animation requires animationIndex seconds mix\n";
+                return 2;
+            }
+            RuntimeAnimationApplication application;
+            application.animationIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            application.seconds = std::strtof(argv[++i], nullptr);
+            application.mix = std::strtof(argv[++i], nullptr);
+            options.runtimeAnimationApplications.push_back(application);
+            continue;
+        }
+
         if (is_arg(argv[i], "--complete-view-model-properties"))
         {
             options.completeViewModelProperties = true;
@@ -6214,7 +6266,7 @@ int main(int argc, const char* argv[])
 
     if (filename == nullptr)
     {
-        std::cerr << "usage: rive_cpp_probe [--converter-samples] [--number-to-list-samples] [--property-values] [--file-property-values] [--no-advance] [--runtime-update] [--instance-artboards] [--runtime-set-double localId propertyKey value] [--complete-view-model-properties] [--data-context-lookups] --file "
+        std::cerr << "usage: rive_cpp_probe [--converter-samples] [--number-to-list-samples] [--property-values] [--file-property-values] [--no-advance] [--runtime-update] [--instance-artboards] [--runtime-set-double localId propertyKey value] [--runtime-apply-animation animationIndex seconds mix] [--complete-view-model-properties] [--data-context-lookups] --file "
                      "path/to/file.riv\n";
         return 2;
     }

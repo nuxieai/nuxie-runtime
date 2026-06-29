@@ -209,6 +209,8 @@ Current #7 scope also includes `shape_paint_containers`, recording C++ shape-pai
 
 Current #7 scope also includes `n_slicer_details`, recording exact C++ `NSlicerDetails` owner recognition plus ordered X/Y axes and patch-indexed tile-mode registrations while leaving NSlicer deformation math, patch solving, layout updates, path deformation, and render-path mutation to later deformer/runtime crates.
 
+Current #7 scope also includes `meshes` and `paths`, recording ordered `MeshVertex`/`PathVertex` registration plus resolved `Weight`/`CubicWeight` attachment facts from C++ `onAddedDirty`. Vertex deformation, skinning math, `Path::buildPath`, contour/path tessellation, weight blending, and dirty propagation remain later runtime/deformer work.
+
 ## #8: Dirt Propagation And Transform Update
 
 Blocked by: #7

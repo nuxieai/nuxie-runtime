@@ -172,6 +172,13 @@ The existing `rive-graph` prototype already covers:
   state-machine execution.
 - Synthetic path composer projections for each imported `Shape`, with path inputs
   sourced from `rive-binary`'s C++-equivalent shape registration facts.
+- Static mesh/path geometry registration projections, exposed through
+  `ArtboardGraph::meshes` and `ArtboardGraph::paths`, matching
+  `MeshVertex::onAddedDirty`, `PathVertex::onAddedDirty`, ordered
+  `Mesh::addVertex`/`Path::addVertex`, and `Weight::onAddedDirty` attachment to
+  vertices. These facts do not admit vertex deformation, skinning math,
+  `Path::buildPath`, contour/path tessellation, weight blending, or dirty
+  propagation.
 - Static shape-paint container registration projections, exposed through
   `ArtboardGraph::shape_paint_containers`, matching
   `ShapePaint::onAddedClean`, `ShapePaintContainer::addPaint`,

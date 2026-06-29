@@ -55,6 +55,8 @@ pub struct ArtboardGraph {
     pub drawable_order: Vec<DrawableOrderNode>,
     pub clipping_shapes: Vec<ClippingShapeNode>,
     pub path_composers: Vec<PathComposerNode>,
+    pub meshes: Vec<MeshGeometryNode>,
+    pub paths: Vec<PathGeometryNode>,
     pub shape_paint_containers: Vec<ShapePaintContainerNode>,
     pub n_slicer_details: Vec<NSlicerDetailsNode>,
     pub shape_deformers: Vec<ShapeDeformerNode>,
@@ -156,6 +158,8 @@ impl ArtboardGraph {
         let clipping_shapes =
             clipping_shapes(file, &local_objects, &components, &component_by_local);
         let path_composers = path_composers(file, artboard_index, &local_objects);
+        let meshes = meshes(file, artboard_index, &local_objects);
+        let paths = paths(file, artboard_index, &local_objects);
         let shape_paint_containers = shape_paint_containers(file, artboard_index, &local_objects);
         let n_slicer_details = n_slicer_details(file, artboard_index, &local_objects);
         let shape_deformers = shape_deformers(file, &local_objects);
@@ -234,6 +238,8 @@ impl ArtboardGraph {
             drawable_order,
             clipping_shapes,
             path_composers,
+            meshes,
+            paths,
             shape_paint_containers,
             n_slicer_details,
             shape_deformers,
@@ -459,6 +465,42 @@ pub struct PathComposerNode {
     pub shape_global: u32,
     pub path_locals: Vec<usize>,
     pub path_globals: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MeshGeometryNode {
+    pub local_id: usize,
+    pub global_id: u32,
+    pub type_name: &'static str,
+    pub vertices: Vec<MeshVertexNode>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MeshVertexNode {
+    pub local_id: usize,
+    pub global_id: u32,
+    pub type_name: &'static str,
+    pub weight_local: Option<usize>,
+    pub weight_global: Option<u32>,
+    pub weight_type_name: Option<&'static str>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PathGeometryNode {
+    pub local_id: usize,
+    pub global_id: u32,
+    pub type_name: &'static str,
+    pub vertices: Vec<PathVertexNode>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PathVertexNode {
+    pub local_id: usize,
+    pub global_id: u32,
+    pub type_name: &'static str,
+    pub weight_local: Option<usize>,
+    pub weight_global: Option<u32>,
+    pub weight_type_name: Option<&'static str>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1731,6 +1773,80 @@ fn path_composers(
                 shape_global,
                 path_locals,
                 path_globals,
+            })
+        })
+        .collect()
+}
+
+fn meshes(
+    file: &RuntimeFile,
+    artboard_index: usize,
+    local_objects: &[LocalObject],
+) -> Vec<MeshGeometryNode> {
+    file.artboard_meshes(artboard_index)
+        .into_iter()
+        .filter_map(|mesh| {
+            let global_id = local_object_global_id(local_objects, mesh.local_id)?;
+
+            Some(MeshGeometryNode {
+                local_id: mesh.local_id,
+                global_id,
+                type_name: mesh.object.type_name,
+                vertices: mesh
+                    .vertices
+                    .into_iter()
+                    .filter_map(|vertex| {
+                        let global_id = local_object_global_id(local_objects, vertex.local_id)?;
+
+                        Some(MeshVertexNode {
+                            local_id: vertex.local_id,
+                            global_id,
+                            type_name: vertex.object.type_name,
+                            weight_local: vertex.weight_local_id,
+                            weight_global: vertex.weight_local_id.and_then(|local_id| {
+                                local_object_global_id(local_objects, local_id)
+                            }),
+                            weight_type_name: vertex.weight.map(|weight| weight.type_name),
+                        })
+                    })
+                    .collect(),
+            })
+        })
+        .collect()
+}
+
+fn paths(
+    file: &RuntimeFile,
+    artboard_index: usize,
+    local_objects: &[LocalObject],
+) -> Vec<PathGeometryNode> {
+    file.artboard_paths(artboard_index)
+        .into_iter()
+        .filter_map(|path| {
+            let global_id = local_object_global_id(local_objects, path.local_id)?;
+
+            Some(PathGeometryNode {
+                local_id: path.local_id,
+                global_id,
+                type_name: path.object.type_name,
+                vertices: path
+                    .vertices
+                    .into_iter()
+                    .filter_map(|vertex| {
+                        let global_id = local_object_global_id(local_objects, vertex.local_id)?;
+
+                        Some(PathVertexNode {
+                            local_id: vertex.local_id,
+                            global_id,
+                            type_name: vertex.object.type_name,
+                            weight_local: vertex.weight_local_id,
+                            weight_global: vertex.weight_local_id.and_then(|local_id| {
+                                local_object_global_id(local_objects, local_id)
+                            }),
+                            weight_type_name: vertex.weight.map(|weight| weight.type_name),
+                        })
+                    })
+                    .collect(),
             })
         })
         .collect()

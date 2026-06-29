@@ -1721,6 +1721,209 @@ fn graph_projects_shape_path_composers_from_imported_shape_paths() {
 }
 
 #[test]
+fn graph_projects_mesh_and_path_vertex_weight_registrations() {
+    let parent_id_key = property_key_for_name("Component", "parentId");
+
+    let bytes = synthetic_runtime_file(7147, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object_with_properties(bytes, "Mesh", |bytes| {
+            push_uint_property(bytes, "Mesh", "parentId", 0);
+            push_bytes_property(bytes, "Mesh", "triangleIndexBytes", &[0]);
+        });
+        push_object(bytes, "MeshVertex", &[(parent_id_key, 1)]);
+        push_object(bytes, "Weight", &[(parent_id_key, 2)]);
+        push_object(bytes, "MeshVertex", &[(parent_id_key, 1)]);
+        push_object(bytes, "Weight", &[(parent_id_key, 4)]);
+        push_object(bytes, "Shape", &[(parent_id_key, 0)]);
+        push_object(bytes, "PointsPath", &[(parent_id_key, 6)]);
+        push_object(bytes, "StraightVertex", &[(parent_id_key, 7)]);
+        push_object(bytes, "Weight", &[(parent_id_key, 8)]);
+        push_object(bytes, "CubicMirroredVertex", &[(parent_id_key, 7)]);
+        push_object(bytes, "CubicWeight", &[(parent_id_key, 10)]);
+    });
+
+    let (_, rust) = read_graph_from_bytes(&bytes, "synthetic/geometry_vertex_weights.riv");
+    let artboard = &rust.artboards[0];
+
+    assert_eq!(
+        artboard
+            .meshes
+            .iter()
+            .map(|mesh| (
+                mesh.local_id,
+                mesh.global_id,
+                mesh.type_name,
+                mesh.vertices
+                    .iter()
+                    .map(|vertex| (
+                        vertex.local_id,
+                        vertex.global_id,
+                        vertex.type_name,
+                        vertex.weight_local,
+                        vertex.weight_global,
+                        vertex.weight_type_name
+                    ))
+                    .collect::<Vec<_>>()
+            ))
+            .collect::<Vec<_>>(),
+        vec![(
+            1,
+            2,
+            "Mesh",
+            vec![
+                (2, 3, "MeshVertex", Some(3), Some(4), Some("Weight")),
+                (4, 5, "MeshVertex", Some(5), Some(6), Some("Weight"))
+            ]
+        )],
+        "MeshVertex::onAddedDirty registration and Weight::onAddedDirty attachment are static geometry graph facts"
+    );
+
+    assert_eq!(
+        artboard
+            .paths
+            .iter()
+            .map(|path| (
+                path.local_id,
+                path.global_id,
+                path.type_name,
+                path.vertices
+                    .iter()
+                    .map(|vertex| (
+                        vertex.local_id,
+                        vertex.global_id,
+                        vertex.type_name,
+                        vertex.weight_local,
+                        vertex.weight_global,
+                        vertex.weight_type_name
+                    ))
+                    .collect::<Vec<_>>()
+            ))
+            .collect::<Vec<_>>(),
+        vec![(
+            7,
+            8,
+            "PointsPath",
+            vec![
+                (8, 9, "StraightVertex", Some(9), Some(10), Some("Weight")),
+                (
+                    10,
+                    11,
+                    "CubicMirroredVertex",
+                    Some(11),
+                    Some(12),
+                    Some("CubicWeight")
+                )
+            ]
+        )],
+        "PathVertex::onAddedDirty registration and Weight::onAddedDirty attachment are static geometry graph facts"
+    );
+}
+
+#[test]
+fn cpp_probe_matches_rust_geometry_registrations_when_available() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ probe comparison; set RIVE_CPP_PROBE or run make cpp-probe");
+        return;
+    };
+
+    let parent_id_key = property_key_for_name("Component", "parentId");
+    let bytes = synthetic_runtime_file(7148, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object_with_properties(bytes, "Mesh", |bytes| {
+            push_uint_property(bytes, "Mesh", "parentId", 0);
+            push_bytes_property(bytes, "Mesh", "triangleIndexBytes", &[0]);
+        });
+        push_object(bytes, "MeshVertex", &[(parent_id_key, 1)]);
+        push_object(bytes, "Weight", &[(parent_id_key, 2)]);
+        push_object(bytes, "Shape", &[(parent_id_key, 0)]);
+        push_object(bytes, "PointsPath", &[(parent_id_key, 4)]);
+        push_object(bytes, "CubicMirroredVertex", &[(parent_id_key, 5)]);
+        push_object(bytes, "CubicWeight", &[(parent_id_key, 6)]);
+    });
+
+    let label = "synthetic/geometry_registrations.riv";
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let (runtime, rust) = read_graph_from_bytes(&bytes, label);
+    compare_artboards(&cpp, &runtime, &rust, label);
+}
+
+#[test]
+fn cpp_geometry_vertex_registration_methods_are_tracked_by_graph_model() {
+    let runtime_dir = reference_runtime_dir();
+    assert!(
+        runtime_dir.exists(),
+        "reference runtime not found at {}; set RIVE_RUNTIME_DIR",
+        runtime_dir.display()
+    );
+
+    let mesh_vertex_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/shapes/mesh_vertex.cpp"))
+            .expect("read C++ mesh_vertex.cpp"),
+    );
+    let mesh_vertex_body =
+        cpp_function_body(&mesh_vertex_source, "StatusCodeMeshVertex::onAddedDirty");
+    assert!(
+        mesh_vertex_body.contains("!parent()->is<Mesh>()"),
+        "MeshVertex::onAddedDirty no longer validates Mesh parents"
+    );
+    assert!(
+        mesh_vertex_body.contains("parent()->as<Mesh>()->addVertex(this);"),
+        "MeshVertex::onAddedDirty no longer registers with Mesh"
+    );
+
+    let mesh_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/shapes/mesh.cpp"))
+            .expect("read C++ mesh.cpp"),
+    );
+    let add_mesh_vertex_body = cpp_function_body(&mesh_source, "voidMesh::addVertex");
+    assert!(
+        add_mesh_vertex_body.contains("m_Vertices.push_back(vertex);"),
+        "Mesh::addVertex no longer preserves static vertex registration order"
+    );
+
+    let path_vertex_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/shapes/path_vertex.cpp"))
+            .expect("read C++ path_vertex.cpp"),
+    );
+    let path_vertex_body =
+        cpp_function_body(&path_vertex_source, "StatusCodePathVertex::onAddedDirty");
+    assert!(
+        path_vertex_body.contains("!parent()->is<Path>()"),
+        "PathVertex::onAddedDirty no longer validates Path parents"
+    );
+    assert!(
+        path_vertex_body.contains("parent()->as<Path>()->addVertex(this);"),
+        "PathVertex::onAddedDirty no longer registers with Path"
+    );
+
+    let path_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/shapes/path.cpp"))
+            .expect("read C++ path.cpp"),
+    );
+    let add_path_vertex_body = cpp_function_body(&path_source, "voidPath::addVertex");
+    assert!(
+        add_path_vertex_body.contains("m_Vertices.push_back(vertex);"),
+        "Path::addVertex no longer preserves static vertex registration order"
+    );
+
+    let weight_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/bones/weight.cpp"))
+            .expect("read C++ weight.cpp"),
+    );
+    let weight_body = cpp_function_body(&weight_source, "StatusCodeWeight::onAddedDirty");
+    assert!(
+        weight_body.contains("!parent()->is<Vertex>()"),
+        "Weight::onAddedDirty no longer validates Vertex parents"
+    );
+    assert!(
+        weight_body.contains("parent()->as<Vertex>()->weight(this);"),
+        "Weight::onAddedDirty no longer attaches weights to vertices"
+    );
+}
+
+#[test]
 fn cpp_path_composer_dependency_methods_are_tracked_by_graph_model() {
     let runtime_dir = reference_runtime_dir();
     assert!(
@@ -5286,6 +5489,154 @@ fn compare_artboard_import_collections(
         artboard_index,
         label,
     );
+
+    compare_artboard_meshes(
+        &cpp_artboard.meshes,
+        &rust_artboard.meshes,
+        artboard_index,
+        label,
+    );
+
+    compare_artboard_paths(
+        &cpp_artboard.paths,
+        &rust_artboard.paths,
+        artboard_index,
+        label,
+    );
+}
+
+fn compare_artboard_meshes(
+    cpp_meshes: &[CppMesh],
+    rust_meshes: &[rive_graph::MeshGeometryNode],
+    artboard_index: usize,
+    label: &str,
+) {
+    assert_eq!(
+        cpp_meshes.len(),
+        rust_meshes.len(),
+        "artboard {artboard_index} mesh count mismatch for {label}"
+    );
+
+    for (mesh_index, (cpp_mesh, rust_mesh)) in cpp_meshes.iter().zip(rust_meshes).enumerate() {
+        assert_eq!(
+            cpp_mesh.local_id, rust_mesh.local_id,
+            "artboard {artboard_index} mesh {mesh_index} local id mismatch for {label}"
+        );
+        assert_eq!(
+            cpp_mesh.core_type,
+            type_key_for_name(rust_mesh.type_name),
+            "artboard {artboard_index} mesh {mesh_index} type mismatch for {label}"
+        );
+        assert_eq!(
+            cpp_mesh.vertices.len(),
+            rust_mesh.vertices.len(),
+            "artboard {artboard_index} mesh {mesh_index} vertex count mismatch for {label}"
+        );
+
+        for (vertex_index, (cpp_vertex, rust_vertex)) in cpp_mesh
+            .vertices
+            .iter()
+            .zip(&rust_mesh.vertices)
+            .enumerate()
+        {
+            compare_geometry_vertex(
+                cpp_vertex,
+                rust_vertex.local_id,
+                rust_vertex.type_name,
+                rust_vertex.weight_local,
+                rust_vertex.weight_type_name,
+                artboard_index,
+                label,
+                &format!("mesh {mesh_index} vertex {vertex_index}"),
+                vertex_index,
+            );
+        }
+    }
+}
+
+fn compare_artboard_paths(
+    cpp_paths: &[CppPath],
+    rust_paths: &[rive_graph::PathGeometryNode],
+    artboard_index: usize,
+    label: &str,
+) {
+    assert_eq!(
+        cpp_paths.len(),
+        rust_paths.len(),
+        "artboard {artboard_index} path count mismatch for {label}"
+    );
+
+    for (path_index, (cpp_path, rust_path)) in cpp_paths.iter().zip(rust_paths).enumerate() {
+        assert_eq!(
+            cpp_path.local_id, rust_path.local_id,
+            "artboard {artboard_index} path {path_index} local id mismatch for {label}"
+        );
+        assert_eq!(
+            cpp_path.core_type,
+            type_key_for_name(rust_path.type_name),
+            "artboard {artboard_index} path {path_index} type mismatch for {label}"
+        );
+        assert_eq!(
+            cpp_path.vertices.len(),
+            rust_path.vertices.len(),
+            "artboard {artboard_index} path {path_index} vertex count mismatch for {label}"
+        );
+
+        for (vertex_index, (cpp_vertex, rust_vertex)) in cpp_path
+            .vertices
+            .iter()
+            .zip(&rust_path.vertices)
+            .enumerate()
+        {
+            compare_geometry_vertex(
+                cpp_vertex,
+                rust_vertex.local_id,
+                rust_vertex.type_name,
+                rust_vertex.weight_local,
+                rust_vertex.weight_type_name,
+                artboard_index,
+                label,
+                &format!("path {path_index} vertex {vertex_index}"),
+                vertex_index,
+            );
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn compare_geometry_vertex(
+    cpp_vertex: &CppGeometryVertex,
+    rust_local_id: usize,
+    rust_type_name: &'static str,
+    rust_weight_local: Option<usize>,
+    rust_weight_type_name: Option<&'static str>,
+    artboard_index: usize,
+    label: &str,
+    vertex_label: &str,
+    vertex_index: usize,
+) {
+    assert_eq!(
+        cpp_vertex.index, vertex_index,
+        "artboard {artboard_index} {vertex_label} C++ index mismatch for {label}"
+    );
+    assert_eq!(
+        cpp_vertex.local_id, rust_local_id,
+        "artboard {artboard_index} {vertex_label} local id mismatch for {label}"
+    );
+    assert_eq!(
+        cpp_vertex.core_type,
+        type_key_for_name(rust_type_name),
+        "artboard {artboard_index} {vertex_label} type mismatch for {label}"
+    );
+    assert_eq!(
+        cpp_vertex.weight_local, rust_weight_local,
+        "artboard {artboard_index} {vertex_label} weight local mismatch for {label}"
+    );
+    assert_eq!(
+        cpp_vertex.weight_core_type,
+        rust_weight_type_name.map(type_key_for_name),
+        "artboard {artboard_index} {vertex_label} weight type mismatch for {label}"
+    );
 }
 
 fn compare_artboard_n_slicer_details(
@@ -5832,6 +6183,10 @@ struct CppArtboard {
     state_machines: Vec<CppStateMachine>,
     #[serde(default, rename = "dataBinds")]
     data_binds: Vec<CppDataBind>,
+    #[serde(default)]
+    meshes: Vec<CppMesh>,
+    #[serde(default)]
+    paths: Vec<CppPath>,
     #[serde(default, rename = "nSlicerDetails")]
     n_slicer_details: Vec<CppNSlicerDetails>,
     #[serde(default, rename = "shapePaintContainers")]
@@ -5895,6 +6250,39 @@ struct CppClippingShape {
     shape_locals: Vec<usize>,
     #[serde(default, rename = "clippedDrawableLocals")]
     clipped_drawable_locals: Vec<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppMesh {
+    #[serde(rename = "localId")]
+    local_id: usize,
+    #[serde(rename = "coreType")]
+    core_type: u16,
+    #[serde(default)]
+    vertices: Vec<CppGeometryVertex>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppPath {
+    #[serde(rename = "localId")]
+    local_id: usize,
+    #[serde(rename = "coreType")]
+    core_type: u16,
+    #[serde(default)]
+    vertices: Vec<CppGeometryVertex>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppGeometryVertex {
+    index: usize,
+    #[serde(rename = "localId")]
+    local_id: usize,
+    #[serde(rename = "coreType")]
+    core_type: u16,
+    #[serde(default, rename = "weightLocal")]
+    weight_local: Option<usize>,
+    #[serde(default, rename = "weightCoreType")]
+    weight_core_type: Option<u16>,
 }
 
 #[derive(Debug, Deserialize)]

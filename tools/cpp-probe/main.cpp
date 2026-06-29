@@ -71,6 +71,7 @@
 #include "rive/animation/state_machine_listener.hpp"
 #include "rive/animation/state_machine_listener_single.hpp"
 #include "rive/animation/state_machine.hpp"
+#include "rive/animation/state_machine_instance.hpp"
 #include "rive/animation/state_transition.hpp"
 #include "rive/animation/transition_condition.hpp"
 #include "rive/assets/file_asset.hpp"
@@ -256,6 +257,28 @@ struct RuntimeAnimationAdvanceReport
     int loopValue;
 };
 
+struct RuntimeStateMachineAdvance
+{
+    size_t stateMachineIndex;
+    float seconds;
+};
+
+struct RuntimeStateMachineCurrentAnimationReport
+{
+    float time;
+    bool didLoop;
+};
+
+struct RuntimeStateMachineAdvanceReport
+{
+    size_t stateMachineIndex;
+    float seconds;
+    bool advanced;
+    size_t currentAnimationCount;
+    size_t changedStateCount;
+    std::vector<RuntimeStateMachineCurrentAnimationReport> currentAnimations;
+};
+
 struct ProbeOptions
 {
     bool propertyValues = false;
@@ -266,6 +289,7 @@ struct ProbeOptions
     std::vector<RuntimeDoubleMutation> runtimeDoubleMutations;
     std::vector<RuntimeAnimationApplication> runtimeAnimationApplications;
     std::vector<RuntimeAnimationAdvance> runtimeAnimationAdvances;
+    std::vector<RuntimeStateMachineAdvance> runtimeStateMachineAdvances;
     bool completeViewModelProperties = false;
     bool dataContextLookups = false;
 };
@@ -662,6 +686,95 @@ void write_runtime_animation_advance_reports(
         out << ",\"didLoop\":" << (report.didLoop ? "true" : "false");
         out << ",\"loopValue\":" << report.loopValue;
         out << '}';
+    }
+    out << ']';
+}
+
+std::vector<RuntimeStateMachineAdvanceReport>
+apply_runtime_state_machine_advances(rive::ArtboardInstance* instance,
+                                     const ProbeOptions& options)
+{
+    std::vector<RuntimeStateMachineAdvanceReport> reports;
+    if (options.runtimeStateMachineAdvances.empty() || instance == nullptr)
+    {
+        return reports;
+    }
+
+    std::vector<std::unique_ptr<rive::StateMachineInstance>> instances(
+        instance->stateMachineCount());
+    for (const auto& advance : options.runtimeStateMachineAdvances)
+    {
+        if (advance.stateMachineIndex >= instances.size())
+        {
+            continue;
+        }
+        auto& stateMachine = instances[advance.stateMachineIndex];
+        if (stateMachine == nullptr)
+        {
+            stateMachine = instance->stateMachineAt(advance.stateMachineIndex);
+        }
+        if (stateMachine == nullptr)
+        {
+            continue;
+        }
+
+        bool advanced = stateMachine->advance(advance.seconds);
+        RuntimeStateMachineAdvanceReport report;
+        report.stateMachineIndex = advance.stateMachineIndex;
+        report.seconds = advance.seconds;
+        report.advanced = advanced;
+        report.currentAnimationCount = stateMachine->currentAnimationCount();
+        report.changedStateCount = stateMachine->stateChangedCount();
+        for (size_t i = 0; i < report.currentAnimationCount; ++i)
+        {
+            auto animation = stateMachine->currentAnimationByIndex(i);
+            if (animation == nullptr)
+            {
+                continue;
+            }
+            report.currentAnimations.push_back(
+                RuntimeStateMachineCurrentAnimationReport{
+                    animation->time(),
+                    animation->didLoop(),
+                });
+        }
+        reports.push_back(report);
+    }
+    return reports;
+}
+
+void write_runtime_state_machine_advance_reports(
+    std::ostream& out,
+    const std::vector<RuntimeStateMachineAdvanceReport>& reports)
+{
+    out << '[';
+    for (size_t i = 0; i < reports.size(); ++i)
+    {
+        if (i != 0)
+        {
+            out << ',';
+        }
+        const auto& report = reports[i];
+        out << "{\"stateMachineIndex\":" << report.stateMachineIndex;
+        out << ",\"seconds\":" << report.seconds;
+        out << ",\"advanced\":" << (report.advanced ? "true" : "false");
+        out << ",\"currentAnimationCount\":"
+            << report.currentAnimationCount;
+        out << ",\"changedStateCount\":" << report.changedStateCount;
+        out << ",\"currentAnimations\":[";
+        for (size_t j = 0; j < report.currentAnimations.size(); ++j)
+        {
+            if (j != 0)
+            {
+                out << ',';
+            }
+            const auto& animation = report.currentAnimations[j];
+            out << "{\"time\":" << animation.time;
+            out << ",\"didLoop\":"
+                << (animation.didLoop ? "true" : "false");
+            out << '}';
+        }
+        out << "]}";
     }
     out << ']';
 }
@@ -4788,6 +4901,8 @@ void write_artboard(std::ostream& out,
     apply_runtime_animation_applications(instanceArtboard, options);
     auto runtimeAnimationAdvanceReports =
         apply_runtime_animation_advances(instanceArtboard, options);
+    auto runtimeStateMachineAdvanceReports =
+        apply_runtime_state_machine_advances(instanceArtboard, options);
 
     bool runtimeUpdateDidUpdate = false;
     if (options.runtimeUpdate)
@@ -4830,6 +4945,12 @@ void write_artboard(std::ostream& out,
         out << ",\"runtimeAnimationAdvances\":";
         write_runtime_animation_advance_reports(
             out, runtimeAnimationAdvanceReports);
+    }
+    if (!options.runtimeStateMachineAdvances.empty())
+    {
+        out << ",\"runtimeStateMachineAdvances\":";
+        write_runtime_state_machine_advance_reports(
+            out, runtimeStateMachineAdvanceReports);
     }
 
     out << ",\"objects\":[";
@@ -6353,6 +6474,21 @@ int main(int argc, const char* argv[])
             continue;
         }
 
+        if (is_arg(argv[i], "--runtime-advance-state-machine"))
+        {
+            if (i + 2 >= argc)
+            {
+                std::cerr << "--runtime-advance-state-machine requires stateMachineIndex seconds\n";
+                return 2;
+            }
+            RuntimeStateMachineAdvance advance;
+            advance.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            advance.seconds = std::strtof(argv[++i], nullptr);
+            options.runtimeStateMachineAdvances.push_back(advance);
+            continue;
+        }
+
         if (is_arg(argv[i], "--complete-view-model-properties"))
         {
             options.completeViewModelProperties = true;
@@ -6383,7 +6519,7 @@ int main(int argc, const char* argv[])
 
     if (filename == nullptr)
     {
-        std::cerr << "usage: rive_cpp_probe [--converter-samples] [--number-to-list-samples] [--property-values] [--file-property-values] [--no-advance] [--runtime-update] [--instance-artboards] [--runtime-set-double localId propertyKey value] [--runtime-apply-animation animationIndex seconds mix] [--runtime-advance-animation animationIndex seconds mix] [--complete-view-model-properties] [--data-context-lookups] --file "
+        std::cerr << "usage: rive_cpp_probe [--converter-samples] [--number-to-list-samples] [--property-values] [--file-property-values] [--no-advance] [--runtime-update] [--instance-artboards] [--runtime-set-double localId propertyKey value] [--runtime-apply-animation animationIndex seconds mix] [--runtime-advance-animation animationIndex seconds mix] [--runtime-advance-state-machine stateMachineIndex seconds] [--complete-view-model-properties] [--data-context-lookups] --file "
                      "path/to/file.riv\n";
         return 2;
     }

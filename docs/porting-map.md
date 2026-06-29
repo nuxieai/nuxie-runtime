@@ -256,7 +256,7 @@ Partially open. `crates/rive-graph` now exposes draw target/rule/clipping relati
 
 Blocked by: #8, #9
 Type: Prototype
-Contracts: `docs/prototypes/linear-animation-runtime-contract.md`, `docs/prototypes/linear-animation-instance-runtime-contract.md`
+Contracts: `docs/prototypes/linear-animation-runtime-contract.md`, `docs/prototypes/linear-animation-instance-runtime-contract.md`, `docs/prototypes/state-machine-animation-state-runtime-contract.md`
 
 ### Question
 
@@ -264,7 +264,7 @@ How should animations and state machines drive the graph scheduler?
 
 ### Answer
 
-In progress. Direct `LinearAnimation::apply` parity is in place for transform `KeyFrameDouble` properties. The next slice adds a narrow `LinearAnimationInstance` playback seam with C++ time, speed, loop, work-area, spill, and keep-going parity while still routing application through the existing direct apply path. State machine inputs, layer stepping, transition evaluation, event collection, nested animation remapping, data binding, draw/render behavior, custom interpolators, and non-double keyframe coverage remain later slices.
+In progress. Direct `LinearAnimation::apply` parity is in place for transform `KeyFrameDouble` properties, and the narrow `LinearAnimationInstance` playback seam now has C++ time, speed, loop, work-area, spill, and keep-going parity while still routing application through the existing direct apply path. The next slice adds the first `StateMachineInstance` runtime seam: a state-machine layer can enter an `AnimationState` backed by an existing linear animation and advance/apply it through the existing animation-instance path. State machine inputs, condition evaluation, transition mixing, event collection, listener actions, blend states, nested animation remapping, data binding, draw/render behavior, custom interpolators, and non-double keyframe coverage remain later slices.
 
 ## #12: Data Binding Graph
 

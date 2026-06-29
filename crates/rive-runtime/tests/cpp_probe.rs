@@ -253,6 +253,42 @@ fn synthetic_linear_animation_with_options(
     })
 }
 
+fn synthetic_state_machine_animation_state(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "fps", 10);
+            push_uint_property(bytes, "LinearAnimation", "duration", 20);
+        });
+        push_object_with_properties(bytes, "KeyedObject", |bytes| {
+            push_uint_property(bytes, "KeyedObject", "objectId", 1);
+        });
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("Node", "x")),
+            );
+        });
+        push_keyframe_double(bytes, 0, 2.0, 1);
+        push_keyframe_double(bytes, 10, 12.0, 0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
 fn read_cpp_probe_bytes(probe: &Path, label: &str, bytes: &[u8]) -> CppProbeFile {
     read_cpp_probe_bytes_with_args(probe, label, bytes, &[])
 }
@@ -780,6 +816,105 @@ fn linear_animation_instance_advance_matches_cpp_probe() {
     }
 }
 
+#[test]
+fn state_machine_animation_state_advances_through_public_runtime_seam() {
+    let label = "synthetic/runtime_state_machine_animation_state_public.riv";
+    let bytes = synthetic_state_machine_animation_state(8230);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+
+    assert_eq!(rust.state_machines().len(), 1);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    assert!(rust.advance_state_machine_instance(&mut state_machine, 0.0));
+    assert_eq!(state_machine.current_animation_count(), 1);
+    assert_close(
+        state_machine.current_animation(0).unwrap().time(),
+        0.0,
+        "entered animation state time",
+    );
+    assert_close(
+        rust.component(1).unwrap().transform.x,
+        2.0,
+        "entered animation state x",
+    );
+
+    assert!(rust.advance_state_machine_instance(&mut state_machine, 0.5));
+    assert_close(
+        state_machine.current_animation(0).unwrap().time(),
+        0.5,
+        "advanced animation state time",
+    );
+    assert_close(
+        rust.component(1).unwrap().transform.x,
+        7.0,
+        "advanced animation state x",
+    );
+
+    assert!(
+        !rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        "zero-second state-machine advance after entering an animation state matches C++ cached keep-going behavior"
+    );
+}
+
+#[test]
+fn state_machine_animation_state_advance_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_animation_state.riv";
+    let bytes = synthetic_state_machine_animation_state(8231);
+    let advances = [0.0_f32, 0.5, 0.0];
+    let cpp = read_cpp_probe_bytes_with_args(
+        &probe,
+        label,
+        &bytes,
+        &[
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            advances[0].to_string(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            advances[1].to_string(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            advances[2].to_string(),
+        ],
+    );
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    let mut rust_reports = Vec::new();
+    for seconds in advances {
+        let advanced = rust.advance_state_machine_instance(&mut state_machine, seconds);
+        rust_reports.push((advanced, state_machine.clone()));
+    }
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+    {
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
 fn assert_close(actual: f32, expected: f32, label: &str) {
     assert!(
         (actual - expected).abs() <= 0.0001,
@@ -833,6 +968,45 @@ fn compare_animation_advance(
         rust.loop_value().unwrap_or(runtime_animation.loop_value),
         "{label} loopValue override mismatch"
     );
+}
+
+fn compare_state_machine_advance(
+    cpp: &CppRuntimeStateMachineAdvance,
+    rust: &rive_runtime::StateMachineInstance,
+    advanced: bool,
+    label: &str,
+) {
+    assert_eq!(
+        cpp.state_machine_index,
+        rust.state_machine_index(),
+        "{label} stateMachineIndex mismatch"
+    );
+    assert_eq!(cpp.advanced, advanced, "{label} advance return mismatch");
+    assert_eq!(
+        cpp.current_animation_count,
+        rust.current_animation_count(),
+        "{label} currentAnimationCount mismatch"
+    );
+    assert_eq!(
+        cpp.changed_state_count,
+        rust.changed_state_count(),
+        "{label} changedStateCount mismatch"
+    );
+    for (animation_index, cpp_animation) in cpp.current_animations.iter().enumerate() {
+        let rust_animation = rust.current_animation(animation_index).unwrap_or_else(|| {
+            panic!("missing Rust current animation {animation_index} for {label}")
+        });
+        assert_close(
+            cpp_animation.time,
+            rust_animation.time(),
+            &format!("{label} current animation {animation_index} time"),
+        );
+        assert_eq!(
+            cpp_animation.did_loop,
+            rust_animation.did_loop(),
+            "{label} current animation {animation_index} didLoop mismatch"
+        );
+    }
 }
 
 fn compare_cpp_runtime_update(
@@ -970,6 +1144,8 @@ struct CppArtboard {
     runtime_update: Option<CppRuntimeUpdate>,
     #[serde(default, rename = "runtimeAnimationAdvances")]
     runtime_animation_advances: Vec<CppRuntimeAnimationAdvance>,
+    #[serde(default, rename = "runtimeStateMachineAdvances")]
+    runtime_state_machine_advances: Vec<CppRuntimeStateMachineAdvance>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1012,6 +1188,26 @@ struct CppRuntimeAnimationAdvance {
     did_loop: bool,
     #[serde(rename = "loopValue")]
     loop_value: i64,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppRuntimeStateMachineAdvance {
+    #[serde(rename = "stateMachineIndex")]
+    state_machine_index: usize,
+    advanced: bool,
+    #[serde(rename = "currentAnimationCount")]
+    current_animation_count: usize,
+    #[serde(rename = "changedStateCount")]
+    changed_state_count: usize,
+    #[serde(rename = "currentAnimations")]
+    current_animations: Vec<CppRuntimeStateMachineCurrentAnimation>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppRuntimeStateMachineCurrentAnimation {
+    time: f32,
+    #[serde(rename = "didLoop")]
+    did_loop: bool,
 }
 
 #[derive(Debug, Deserialize)]

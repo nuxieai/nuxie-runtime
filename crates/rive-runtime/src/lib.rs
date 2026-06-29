@@ -12,6 +12,7 @@ pub struct ArtboardInstance {
     component_by_local: BTreeMap<usize, usize>,
     update_order: Vec<usize>,
     linear_animations: Vec<RuntimeLinearAnimation>,
+    state_machines: Vec<RuntimeStateMachine>,
     dirt: ComponentDirt,
     dirt_depth: usize,
     did_change: bool,
@@ -69,6 +70,7 @@ impl ArtboardInstance {
             .map(|(_, local_id)| local_id)
             .collect::<Vec<_>>();
         let linear_animations = build_linear_animations(file, graph, &slots);
+        let state_machines = build_state_machines(file, graph, &linear_animations);
 
         Ok(Self {
             slots,
@@ -76,6 +78,7 @@ impl ArtboardInstance {
             component_by_local,
             update_order,
             linear_animations,
+            state_machines,
             dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,
             did_change: true,
@@ -115,6 +118,14 @@ impl ArtboardInstance {
 
     pub fn linear_animations(&self) -> &[RuntimeLinearAnimation] {
         &self.linear_animations
+    }
+
+    pub fn state_machine(&self, index: usize) -> Option<&RuntimeStateMachine> {
+        self.state_machines.get(index)
+    }
+
+    pub fn state_machines(&self) -> &[RuntimeStateMachine] {
+        &self.state_machines
     }
 
     pub fn apply_linear_animation(&mut self, index: usize, seconds: f32, mix: f32) -> bool {
@@ -165,6 +176,22 @@ impl ArtboardInstance {
             return false;
         };
         instance.keep_going(animation)
+    }
+
+    pub fn state_machine_instance(&self, index: usize) -> Option<StateMachineInstance> {
+        let state_machine = self.state_machine(index)?;
+        Some(StateMachineInstance::new(index, state_machine, self))
+    }
+
+    pub fn advance_state_machine_instance(
+        &mut self,
+        instance: &mut StateMachineInstance,
+        elapsed_seconds: f32,
+    ) -> bool {
+        let Some(state_machine) = self.state_machine(instance.state_machine_index).cloned() else {
+            return false;
+        };
+        instance.advance(self, &state_machine, elapsed_seconds)
     }
 
     pub fn set_transform_property(
@@ -648,6 +675,268 @@ impl LinearAnimationInstance {
 }
 
 #[derive(Debug, Clone)]
+pub struct RuntimeStateMachine {
+    pub global_id: u32,
+    pub name: Option<String>,
+    pub layers: Vec<RuntimeStateMachineLayer>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RuntimeStateMachineLayer {
+    pub global_id: u32,
+    pub name: Option<String>,
+    pub states: Vec<RuntimeLayerState>,
+    entry_state_index: Option<usize>,
+    any_state_index: Option<usize>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RuntimeLayerState {
+    pub global_id: Option<u32>,
+    pub type_name: Option<&'static str>,
+    animation_index: Option<usize>,
+    speed: f32,
+    transitions: Vec<RuntimeStateTransition>,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeStateTransition {
+    state_to_index: Option<usize>,
+    duration: u64,
+    flags: u64,
+    condition_count: usize,
+}
+
+impl RuntimeStateTransition {
+    fn is_simple_immediate(&self) -> bool {
+        const DISABLED: u64 = 1 << 0;
+        const ENABLE_EXIT_TIME: u64 = 1 << 2;
+
+        self.state_to_index.is_some()
+            && self.duration == 0
+            && self.condition_count == 0
+            && self.flags & (DISABLED | ENABLE_EXIT_TIME) == 0
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct StateMachineInstance {
+    state_machine_index: usize,
+    layers: Vec<StateMachineLayerInstance>,
+    changed_state_count: usize,
+}
+
+impl StateMachineInstance {
+    fn new(
+        state_machine_index: usize,
+        state_machine: &RuntimeStateMachine,
+        artboard: &ArtboardInstance,
+    ) -> Self {
+        Self {
+            state_machine_index,
+            layers: state_machine
+                .layers
+                .iter()
+                .map(|layer| StateMachineLayerInstance::new(layer, artboard))
+                .collect(),
+            changed_state_count: 0,
+        }
+    }
+
+    pub fn state_machine_index(&self) -> usize {
+        self.state_machine_index
+    }
+
+    pub fn changed_state_count(&self) -> usize {
+        self.changed_state_count
+    }
+
+    pub fn current_animation_count(&self) -> usize {
+        self.layers
+            .iter()
+            .filter(|layer| layer.current_animation.is_some())
+            .count()
+    }
+
+    pub fn current_animation(&self, index: usize) -> Option<&LinearAnimationInstance> {
+        self.layers
+            .iter()
+            .filter_map(|layer| layer.current_animation.as_ref())
+            .nth(index)
+    }
+
+    fn advance(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        state_machine: &RuntimeStateMachine,
+        elapsed_seconds: f32,
+    ) -> bool {
+        self.changed_state_count = 0;
+        let mut keep_going = false;
+        for (layer_instance, layer) in self.layers.iter_mut().zip(&state_machine.layers) {
+            let layer_result = layer_instance.advance(artboard, layer, elapsed_seconds);
+            if layer_result.changed_state {
+                self.changed_state_count += 1;
+            }
+            keep_going |= layer_result.keep_going;
+        }
+        keep_going
+    }
+}
+
+#[derive(Debug, Clone)]
+struct StateMachineLayerInstance {
+    current_state_index: Option<usize>,
+    current_animation: Option<LinearAnimationInstance>,
+    current_animation_keep_going: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct StateMachineLayerAdvance {
+    changed_state: bool,
+    keep_going: bool,
+}
+
+impl StateMachineLayerInstance {
+    fn new(layer: &RuntimeStateMachineLayer, artboard: &ArtboardInstance) -> Self {
+        let mut instance = Self {
+            current_state_index: layer.entry_state_index,
+            current_animation: None,
+            current_animation_keep_going: false,
+        };
+        instance.refresh_current_animation(artboard, layer);
+        instance
+    }
+
+    fn advance(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        layer: &RuntimeStateMachineLayer,
+        elapsed_seconds: f32,
+    ) -> StateMachineLayerAdvance {
+        self.advance_current_animation(artboard, layer, elapsed_seconds);
+        self.apply_current_animation(artboard);
+
+        let mut changed_state = false;
+        for _ in 0..100 {
+            if !self.update_state(artboard, layer) {
+                break;
+            }
+            changed_state = true;
+            self.apply_current_animation(artboard);
+        }
+
+        StateMachineLayerAdvance {
+            changed_state,
+            keep_going: changed_state || self.current_animation_keep_going,
+        }
+    }
+
+    fn update_state(
+        &mut self,
+        artboard: &ArtboardInstance,
+        layer: &RuntimeStateMachineLayer,
+    ) -> bool {
+        if self.try_change_state(artboard, layer, layer.any_state_index) {
+            return true;
+        }
+        self.try_change_state(artboard, layer, self.current_state_index)
+    }
+
+    fn try_change_state(
+        &mut self,
+        artboard: &ArtboardInstance,
+        layer: &RuntimeStateMachineLayer,
+        state_index: Option<usize>,
+    ) -> bool {
+        let Some(state_index) = state_index else {
+            return false;
+        };
+        let Some(state) = layer.states.get(state_index) else {
+            return false;
+        };
+
+        for transition in &state.transitions {
+            if !transition.is_simple_immediate() {
+                continue;
+            }
+            let Some(state_to_index) = transition.state_to_index else {
+                continue;
+            };
+            if self.current_state_index == Some(state_to_index) {
+                continue;
+            }
+            self.current_state_index = Some(state_to_index);
+            self.refresh_current_animation(artboard, layer);
+            return true;
+        }
+        false
+    }
+
+    fn refresh_current_animation(
+        &mut self,
+        artboard: &ArtboardInstance,
+        layer: &RuntimeStateMachineLayer,
+    ) {
+        let Some(state) = self
+            .current_state_index
+            .and_then(|index| layer.states.get(index))
+        else {
+            self.current_animation = None;
+            self.current_animation_keep_going = false;
+            return;
+        };
+        let Some(animation_index) = state.animation_index else {
+            self.current_animation = None;
+            self.current_animation_keep_going = false;
+            return;
+        };
+        let Some(animation) = artboard.linear_animation(animation_index) else {
+            self.current_animation = None;
+            self.current_animation_keep_going = false;
+            return;
+        };
+        let mut animation_instance =
+            LinearAnimationInstance::new(animation_index, animation, state.speed);
+        self.current_animation_keep_going = animation_instance.advance(animation, 0.0);
+        self.current_animation = Some(animation_instance);
+    }
+
+    fn advance_current_animation(
+        &mut self,
+        artboard: &ArtboardInstance,
+        layer: &RuntimeStateMachineLayer,
+        elapsed_seconds: f32,
+    ) -> bool {
+        let Some(animation_instance) = self.current_animation.as_mut() else {
+            self.current_animation_keep_going = false;
+            return false;
+        };
+        let Some(state) = self
+            .current_state_index
+            .and_then(|index| layer.states.get(index))
+        else {
+            self.current_animation_keep_going = false;
+            return false;
+        };
+        let Some(animation) = artboard.linear_animation(animation_instance.animation_index) else {
+            self.current_animation_keep_going = false;
+            return false;
+        };
+        self.current_animation_keep_going =
+            animation_instance.advance(animation, elapsed_seconds * state.speed);
+        self.current_animation_keep_going
+    }
+
+    fn apply_current_animation(&self, artboard: &mut ArtboardInstance) -> bool {
+        let Some(animation_instance) = self.current_animation.as_ref() else {
+            return false;
+        };
+        artboard.apply_linear_animation_instance(animation_instance, 1.0)
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct RuntimeKeyedObject {
     pub global_id: u32,
     pub object_id: usize,
@@ -907,6 +1196,91 @@ fn build_linear_animations(
     }
 
     animations
+}
+
+fn build_state_machines(
+    file: &RuntimeFile,
+    graph: &ArtboardGraph,
+    linear_animations: &[RuntimeLinearAnimation],
+) -> Vec<RuntimeStateMachine> {
+    let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
+        return Vec::new();
+    };
+    let animation_index_by_global = linear_animations
+        .iter()
+        .enumerate()
+        .map(|(index, animation)| (animation.global_id, index))
+        .collect::<BTreeMap<_, _>>();
+
+    file.artboard_state_machine_graphs(artboard_index)
+        .into_iter()
+        .map(|state_machine| RuntimeStateMachine {
+            global_id: state_machine.object.id,
+            name: state_machine
+                .object
+                .string_property("name")
+                .map(ToOwned::to_owned),
+            layers: state_machine
+                .layers
+                .into_iter()
+                .map(|layer| {
+                    let states = layer
+                        .states
+                        .into_iter()
+                        .map(|state| {
+                            let animation_index = state.animation.and_then(|animation| {
+                                animation_index_by_global.get(&animation.id).copied()
+                            });
+                            RuntimeLayerState {
+                                global_id: state.object.map(|object| object.id),
+                                type_name: state.object.map(|object| object.type_name),
+                                animation_index,
+                                speed: state
+                                    .object
+                                    .and_then(|object| object.double_property("speed"))
+                                    .unwrap_or(1.0),
+                                transitions: state
+                                    .transitions
+                                    .into_iter()
+                                    .map(|transition| RuntimeStateTransition {
+                                        state_to_index: transition.state_to_index,
+                                        duration: transition
+                                            .object
+                                            .uint_property("duration")
+                                            .unwrap_or(0),
+                                        flags: transition
+                                            .object
+                                            .uint_property("flags")
+                                            .unwrap_or(0),
+                                        condition_count: transition.conditions.len(),
+                                    })
+                                    .collect(),
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                    let entry_state_index = states
+                        .iter()
+                        .position(|state| state.type_name == Some("EntryState"));
+                    let any_state_index = states
+                        .iter()
+                        .position(|state| state.type_name == Some("AnyState"));
+                    RuntimeStateMachineLayer {
+                        global_id: layer.object.id,
+                        name: layer.object.string_property("name").map(ToOwned::to_owned),
+                        states,
+                        entry_state_index,
+                        any_state_index,
+                    }
+                })
+                .collect(),
+        })
+        .collect()
+}
+
+fn artboard_index_for_graph(file: &RuntimeFile, graph: &ArtboardGraph) -> Option<usize> {
+    file.artboards()
+        .into_iter()
+        .position(|artboard| artboard.id == graph.global_id)
 }
 
 fn artboard_object_range(file: &RuntimeFile, start: usize) -> Option<(usize, usize)> {
@@ -1267,6 +1641,7 @@ mod tests {
             component_by_local,
             update_order,
             linear_animations: Vec::new(),
+            state_machines: Vec::new(),
             dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,
             did_change: true,

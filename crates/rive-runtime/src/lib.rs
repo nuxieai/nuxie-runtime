@@ -3603,6 +3603,18 @@ impl StateMachineInstance {
         true
     }
 
+    pub fn advance_data_context(&mut self) -> bool {
+        if !self.data_context_present {
+            return false;
+        }
+        if self.data_context_view_model_bound {
+            for trigger in &mut self.view_model_triggers {
+                trigger.reset();
+            }
+        }
+        true
+    }
+
     pub fn current_animation_count(&self) -> usize {
         self.layers
             .iter()
@@ -3878,6 +3890,10 @@ impl StateMachineViewModelTriggerInstance {
 
     fn increment(&mut self) {
         self.value = self.value.saturating_add(1);
+    }
+
+    fn reset(&mut self) {
+        self.value = 0;
     }
 
     fn value(&self) -> u64 {

@@ -163,6 +163,13 @@ The existing `rive-graph` prototype already covers:
   These facts do not admit data-context binding, dirty queues, property
   observers, converter execution, source/target mutation, state-machine
   execution, or data-bind advancement.
+- Static state-machine scripted-object registrations, exposed through
+  `StateMachineGraph::scripted_objects`, matching
+  `StateMachineImporter::addScriptedObject`, `StateMachine::addScriptedObject`,
+  and `ScriptedObjectImporter::addInput` for exact C++ state-machine
+  scripted-object owners. These facts do not admit script asset initialization,
+  VM registration, cloning, script input hydration, script execution, or
+  state-machine execution.
 - Synthetic path composer projections for each imported `Shape`, with path inputs
   sourced from `rive-binary`'s C++-equivalent shape registration facts.
 - Static `Shape::onAddedClean` render-path deformer projections for each

@@ -706,6 +706,7 @@ pub struct StateMachineGraph {
     pub inputs: Vec<StateMachineInputNode>,
     pub listeners: Vec<StateMachineListenerGraph>,
     pub data_binds: Vec<DataBindNode>,
+    pub scripted_objects: Vec<StateMachineScriptedObjectNode>,
 }
 
 impl StateMachineGraph {
@@ -717,6 +718,7 @@ impl StateMachineGraph {
             inputs: Vec::new(),
             listeners: Vec::new(),
             data_binds: Vec::new(),
+            scripted_objects: Vec::new(),
         }
     }
 }
@@ -743,6 +745,20 @@ pub struct StateMachineListenerGraph {
     pub target_id: u64,
     pub action_count: usize,
     pub listener_input_type_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct StateMachineScriptedObjectNode {
+    pub global_id: u32,
+    pub type_name: &'static str,
+    pub inputs: Vec<StateMachineScriptInputNode>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct StateMachineScriptInputNode {
+    pub global_id: u32,
+    pub type_name: &'static str,
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1045,6 +1061,23 @@ fn state_machines(file: &RuntimeFile, artboard_index: usize) -> Vec<StateMachine
                 .data_binds
                 .into_iter()
                 .map(|data_bind| data_bind_node(file, data_bind, None, None))
+                .collect(),
+            scripted_objects: state_machine
+                .scripted_objects
+                .into_iter()
+                .map(|scripted_object| StateMachineScriptedObjectNode {
+                    global_id: scripted_object.object.id,
+                    type_name: scripted_object.object.type_name,
+                    inputs: scripted_object
+                        .inputs
+                        .into_iter()
+                        .map(|input| StateMachineScriptInputNode {
+                            global_id: input.id,
+                            type_name: input.type_name,
+                            name: object_name(input),
+                        })
+                        .collect(),
+                })
                 .collect(),
         })
         .collect()

@@ -203,6 +203,8 @@ Current #7 scope also includes `layout_constraint_registrations`, which records 
 
 Current #7 scope also includes artboard-owned and state-machine-owned `data_binds`: artboard-owned binds record C++ `DataBindContainer` membership and initialized `sortDataBinds()` ordering, while state-machine-owned binds now consume the verified `RuntimeFile::artboard_state_machine_graphs` ownership so bindable-property targets stay out of artboard registrations and component-target binds stay out of state-machine registrations. Data-context binding, dirty queues, property observers, converter execution, source/target mutation, state-machine execution, and data-bind advancement remain out of `rive-graph`.
 
+Current #7 scope also includes state-machine `scripted_objects`, recording C++ `StateMachineImporter::addScriptedObject`, `StateMachine::addScriptedObject`, and `ScriptedObjectImporter::addInput` registrations while leaving script asset initialization, VM registration, cloning, script input hydration, script execution, and state-machine execution to later runtime crates.
+
 ## #8: Dirt Propagation And Transform Update
 
 Blocked by: #7

@@ -140,6 +140,10 @@ fn push_bytes_property(bytes: &mut Vec<u8>, type_name: &str, property_name: &str
     bytes.extend_from_slice(value);
 }
 
+fn push_string_property(bytes: &mut Vec<u8>, type_name: &str, property_name: &str, value: &str) {
+    push_bytes_property(bytes, type_name, property_name, value.as_bytes());
+}
+
 fn synthetic_runtime_file(file_id: u64, object_stream: impl FnOnce(&mut Vec<u8>)) -> Vec<u8> {
     let mut bytes = Vec::new();
     bytes.extend_from_slice(b"RIVE");
@@ -388,6 +392,73 @@ fn graph_projects_state_machine_data_bind_registrations() {
 }
 
 #[test]
+fn graph_projects_state_machine_scripted_object_registrations() {
+    let parent_id_key = property_key_for_name("Component", "parentId");
+    let state_to_id_key = property_key_for_name("StateTransition", "stateToId");
+    let animation_id_key = property_key_for_name("AnimationState", "animationId");
+    let bytes = synthetic_runtime_file(7108, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object(bytes, "Shape", &[(parent_id_key, 0)]);
+        push_object(bytes, "LinearAnimation", &[]);
+        push_object(bytes, "StateMachine", &[]);
+        push_object(bytes, "StateMachineListenerSingle", &[]);
+        push_object(bytes, "ScriptedListenerAction", &[]);
+        push_object_with_properties(bytes, "ScriptInputNumber", |bytes| {
+            push_string_property(bytes, "ScriptInputNumber", "name", "listener-input");
+        });
+        push_object(bytes, "StateMachineLayer", &[]);
+        push_object(bytes, "AnyState", &[]);
+        push_object(bytes, "StateTransition", &[(state_to_id_key, 2)]);
+        push_object(bytes, "ScriptedTransitionCondition", &[]);
+        push_object_with_properties(bytes, "ScriptInputBoolean", |bytes| {
+            push_string_property(bytes, "ScriptInputBoolean", "name", "condition-input");
+        });
+        push_object(bytes, "EntryState", &[]);
+        push_object(bytes, "AnimationState", &[(animation_id_key, 0)]);
+        push_object(bytes, "ExitState", &[]);
+    });
+
+    let (_runtime, graph) =
+        read_graph_from_bytes(&bytes, "synthetic/state_machine_scripted_object.riv");
+    let artboard = &graph.artboards[0];
+
+    assert_eq!(
+        artboard.state_machines.len(),
+        1,
+        "synthetic fixture should expose the authored state machine"
+    );
+    assert_eq!(
+        artboard.state_machines[0]
+            .scripted_objects
+            .iter()
+            .map(|scripted_object| (
+                scripted_object.global_id,
+                scripted_object.type_name,
+                scripted_object
+                    .inputs
+                    .iter()
+                    .map(|input| (input.global_id, input.type_name, input.name.as_deref()))
+                    .collect::<Vec<_>>()
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                6,
+                "ScriptedListenerAction",
+                vec![(7, "ScriptInputNumber", Some("listener-input"))]
+            ),
+            (
+                11,
+                "ScriptedTransitionCondition",
+                vec![(12, "ScriptInputBoolean", Some("condition-input"))]
+            )
+        ],
+        "StateMachine::addScriptedObject plus ScriptedObjectImporter::addInput are static graph facts, not script execution"
+    );
+}
+
+#[test]
 fn cpp_data_bind_registration_methods_are_tracked_by_graph_model() {
     let runtime_dir = reference_runtime_dir();
     assert!(
@@ -463,6 +534,81 @@ fn cpp_data_bind_registration_methods_are_tracked_by_graph_model() {
     assert!(
         internal_data_context_body.contains("sortDataBinds();"),
         "Artboard initialization no longer sorts artboard-owned data binds"
+    );
+}
+
+#[test]
+fn cpp_state_machine_scripted_object_registration_methods_are_tracked_by_graph_model() {
+    let runtime_dir = reference_runtime_dir();
+    assert!(
+        runtime_dir.exists(),
+        "reference runtime not found at {}; set RIVE_RUNTIME_DIR",
+        runtime_dir.display()
+    );
+
+    let listener_action_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/animation/scripted_listener_action.cpp"))
+            .expect("read C++ scripted_listener_action.cpp"),
+    );
+    let listener_action_import_body = cpp_function_body(
+        &listener_action_source,
+        "StatusCodeScriptedListenerAction::import",
+    );
+    assert!(
+        listener_action_import_body.contains("stateMachineImporter->addScriptedObject(this);"),
+        "ScriptedListenerAction::import no longer registers with the latest StateMachineImporter"
+    );
+
+    let transition_condition_source = compact_cpp_source(
+        &std::fs::read_to_string(
+            runtime_dir.join("src/animation/scripted_transition_condition.cpp"),
+        )
+        .expect("read C++ scripted_transition_condition.cpp"),
+    );
+    let transition_condition_import_body = cpp_function_body(
+        &transition_condition_source,
+        "StatusCodeScriptedTransitionCondition::import",
+    );
+    assert!(
+        transition_condition_import_body.contains("stateMachineImporter->addScriptedObject(this);"),
+        "ScriptedTransitionCondition::import no longer registers with the latest StateMachineImporter"
+    );
+
+    let state_machine_importer_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/importers/state_machine_importer.cpp"))
+            .expect("read C++ state_machine_importer.cpp"),
+    );
+    let importer_add_body = cpp_function_body(
+        &state_machine_importer_source,
+        "voidStateMachineImporter::addScriptedObject",
+    );
+    assert!(
+        importer_add_body.contains("m_StateMachine->addScriptedObject(object);"),
+        "StateMachineImporter::addScriptedObject no longer forwards to StateMachine"
+    );
+
+    let state_machine_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/animation/state_machine.cpp"))
+            .expect("read C++ state_machine.cpp"),
+    );
+    let state_machine_add_body =
+        cpp_function_body(&state_machine_source, "voidStateMachine::addScriptedObject");
+    assert!(
+        state_machine_add_body.contains("m_scriptedObjects.push_back(object);"),
+        "StateMachine::addScriptedObject no longer stores static scripted-object registration order"
+    );
+
+    let scripted_object_importer_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/importers/scripted_object_importer.cpp"))
+            .expect("read C++ scripted_object_importer.cpp"),
+    );
+    let add_input_body = cpp_function_body(
+        &scripted_object_importer_source,
+        "voidScriptedObjectImporter::addInput",
+    );
+    assert!(
+        add_input_body.contains("m_scriptedObject->addProperty(value);"),
+        "ScriptedObjectImporter::addInput no longer stores accepted ScriptInput properties"
     );
 }
 
@@ -4651,6 +4797,63 @@ fn compare_artboard_import_collections(
                 "artboard {artboard_index} state machine {machine_index} data bind {data_bind_index} converter type mismatch for {label}"
             );
         }
+        assert_eq!(
+            cpp_machine.scripted_object_count,
+            rust_machine.scripted_objects.len(),
+            "artboard {artboard_index} state machine {machine_index} scripted object count mismatch for {label}"
+        );
+        assert_eq!(
+            cpp_machine.scripted_objects.len(),
+            rust_machine.scripted_objects.len(),
+            "artboard {artboard_index} state machine {machine_index} scripted object list mismatch for {label}"
+        );
+        for (scripted_object_index, (cpp_scripted_object, rust_scripted_object)) in cpp_machine
+            .scripted_objects
+            .iter()
+            .zip(&rust_machine.scripted_objects)
+            .enumerate()
+        {
+            assert_eq!(
+                cpp_scripted_object.index, scripted_object_index,
+                "artboard {artboard_index} state machine {machine_index} scripted object {scripted_object_index} index mismatch for {label}"
+            );
+            assert_eq!(
+                cpp_scripted_object.core_type,
+                type_key_for_name(rust_scripted_object.type_name),
+                "artboard {artboard_index} state machine {machine_index} scripted object {scripted_object_index} type mismatch for {label}"
+            );
+            assert_eq!(
+                cpp_scripted_object.input_count,
+                rust_scripted_object.inputs.len(),
+                "artboard {artboard_index} state machine {machine_index} scripted object {scripted_object_index} input count mismatch for {label}"
+            );
+            assert_eq!(
+                cpp_scripted_object.inputs.len(),
+                rust_scripted_object.inputs.len(),
+                "artboard {artboard_index} state machine {machine_index} scripted object {scripted_object_index} input list mismatch for {label}"
+            );
+            for (input_index, (cpp_input, rust_input)) in cpp_scripted_object
+                .inputs
+                .iter()
+                .zip(&rust_scripted_object.inputs)
+                .enumerate()
+            {
+                assert_eq!(
+                    cpp_input.index, input_index,
+                    "artboard {artboard_index} state machine {machine_index} scripted object {scripted_object_index} input {input_index} index mismatch for {label}"
+                );
+                assert_eq!(
+                    cpp_input.core_type,
+                    type_key_for_name(rust_input.type_name),
+                    "artboard {artboard_index} state machine {machine_index} scripted object {scripted_object_index} input {input_index} type mismatch for {label}"
+                );
+                assert_eq!(
+                    cpp_input.name,
+                    rust_input.name.clone().unwrap_or_default(),
+                    "artboard {artboard_index} state machine {machine_index} scripted object {scripted_object_index} input {input_index} name mismatch for {label}"
+                );
+            }
+        }
     }
 
     assert_eq!(
@@ -5087,6 +5290,29 @@ struct CppStateMachine {
     data_bind_count: usize,
     #[serde(default, rename = "dataBinds")]
     data_binds: Vec<CppDataBind>,
+    #[serde(rename = "scriptedObjectCount")]
+    scripted_object_count: usize,
+    #[serde(default, rename = "scriptedObjects")]
+    scripted_objects: Vec<CppScriptedObject>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppScriptedObject {
+    index: usize,
+    #[serde(rename = "coreType")]
+    core_type: u16,
+    #[serde(rename = "inputCount")]
+    input_count: usize,
+    #[serde(default)]
+    inputs: Vec<CppScriptInput>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppScriptInput {
+    index: usize,
+    #[serde(rename = "coreType")]
+    core_type: u16,
+    name: String,
 }
 
 #[derive(Debug, Deserialize)]

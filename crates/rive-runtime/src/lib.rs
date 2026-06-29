@@ -2413,6 +2413,7 @@ pub struct RuntimeStateMachine {
     pub inputs: Vec<RuntimeStateMachineInput>,
     pub layers: Vec<RuntimeStateMachineLayer>,
     bindable_numbers: Vec<RuntimeBindableNumber>,
+    view_model_triggers: Vec<RuntimeViewModelTrigger>,
 }
 
 #[derive(Debug, Clone)]
@@ -2448,6 +2449,13 @@ struct RuntimeBindableNumber {
 }
 
 #[derive(Debug, Clone)]
+struct RuntimeViewModelTrigger {
+    global_id: u32,
+    view_model_property_id: u32,
+    value: u64,
+}
+
+#[derive(Debug, Clone)]
 pub struct RuntimeStateMachineLayer {
     pub global_id: u32,
     pub name: Option<String>,
@@ -2465,7 +2473,7 @@ pub struct RuntimeLayerState {
     blend_state_direct: Option<RuntimeBlendStateDirect>,
     speed: f32,
     flags: u64,
-    fire_actions: Vec<RuntimeStateMachineFireEvent>,
+    fire_actions: Vec<RuntimeStateMachineFireAction>,
     listener_actions: Vec<RuntimeScheduledListenerAction>,
     transitions: Vec<RuntimeStateTransition>,
 }
@@ -2477,12 +2485,20 @@ impl RuntimeLayerState {
         self.flags & Self::RANDOM == Self::RANDOM
     }
 
-    fn fire_events(
+    fn perform_fire_actions(
         &self,
         occurrence: StateMachineFireOccurrence,
+        data_context_view_model_bound: bool,
+        view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
     ) {
-        fire_state_machine_events(&self.fire_actions, occurrence, reported_events);
+        perform_state_machine_fire_actions(
+            &self.fire_actions,
+            occurrence,
+            data_context_view_model_bound,
+            view_model_triggers,
+            reported_events,
+        );
     }
 
     fn perform_listener_actions(
@@ -2629,7 +2645,7 @@ struct RuntimeStateTransition {
     random_weight: u64,
     condition_count: usize,
     conditions: Vec<RuntimeTransitionCondition>,
-    fire_actions: Vec<RuntimeStateMachineFireEvent>,
+    fire_actions: Vec<RuntimeStateMachineFireAction>,
     listener_actions: Vec<RuntimeScheduledListenerAction>,
     interpolator: Option<RuntimeTransitionInterpolator>,
     has_unsupported_interpolator: bool,
@@ -2703,12 +2719,20 @@ impl RuntimeStateTransition {
         self.flags & Self::ENABLE_EARLY_EXIT == Self::ENABLE_EARLY_EXIT
     }
 
-    fn fire_events(
+    fn perform_fire_actions(
         &self,
         occurrence: StateMachineFireOccurrence,
+        data_context_view_model_bound: bool,
+        view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
     ) {
-        fire_state_machine_events(&self.fire_actions, occurrence, reported_events);
+        perform_state_machine_fire_actions(
+            &self.fire_actions,
+            occurrence,
+            data_context_view_model_bound,
+            view_model_triggers,
+            reported_events,
+        );
     }
 
     fn perform_listener_actions(
@@ -2765,9 +2789,15 @@ impl RuntimeStateTransition {
 }
 
 #[derive(Debug, Clone)]
-struct RuntimeStateMachineFireEvent {
-    occurs_value: u64,
-    event: StateMachineReportedEvent,
+enum RuntimeStateMachineFireAction {
+    Event {
+        occurs_value: u64,
+        event: StateMachineReportedEvent,
+    },
+    Trigger {
+        occurs_value: u64,
+        target_global_id: Option<u32>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -2838,18 +2868,31 @@ fn listener_action_input_index(action: &rive_binary::RuntimeListenerAction<'_>) 
     usize::try_from(action.object.uint_property("inputId")?).ok()
 }
 
-impl RuntimeStateMachineFireEvent {
-    fn from_imported(action: &rive_binary::RuntimeStateMachineFireAction<'_>) -> Option<Self> {
-        let event = action.event?;
-        Some(Self {
-            occurs_value: action.object.uint_property("occursValue").unwrap_or(0),
-            event: StateMachineReportedEvent {
-                event_local_index: action.event_local_index?,
-                event_core_type: u32::from(event.type_key),
-                name: event.string_property("name").map(ToOwned::to_owned),
-                seconds_delay: 0.0,
-            },
-        })
+impl RuntimeStateMachineFireAction {
+    fn from_imported(
+        file: &RuntimeFile,
+        action: &rive_binary::RuntimeStateMachineFireAction<'_>,
+    ) -> Option<Self> {
+        let occurs_value = action.object.uint_property("occursValue").unwrap_or(0);
+        match action.object.type_name {
+            "StateMachineFireEvent" => {
+                let event = action.event?;
+                Some(Self::Event {
+                    occurs_value,
+                    event: StateMachineReportedEvent {
+                        event_local_index: action.event_local_index?,
+                        event_core_type: u32::from(event.type_key),
+                        name: event.string_property("name").map(ToOwned::to_owned),
+                        seconds_delay: 0.0,
+                    },
+                })
+            }
+            "StateMachineFireTrigger" => Some(Self::Trigger {
+                occurs_value,
+                target_global_id: runtime_fire_trigger_target_global(file, action.object),
+            }),
+            _ => None,
+        }
     }
 }
 
@@ -2868,16 +2911,52 @@ impl StateMachineFireOccurrence {
     }
 }
 
-fn fire_state_machine_events(
-    fire_actions: &[RuntimeStateMachineFireEvent],
+fn perform_state_machine_fire_actions(
+    fire_actions: &[RuntimeStateMachineFireAction],
     occurrence: StateMachineFireOccurrence,
+    data_context_view_model_bound: bool,
+    view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
     reported_events: &mut Vec<StateMachineReportedEvent>,
 ) {
     for action in fire_actions {
-        if action.occurs_value == occurrence.value() {
-            reported_events.push(action.event.clone());
+        match action {
+            RuntimeStateMachineFireAction::Event {
+                occurs_value,
+                event,
+            } if *occurs_value == occurrence.value() => {
+                reported_events.push(event.clone());
+            }
+            RuntimeStateMachineFireAction::Trigger {
+                occurs_value,
+                target_global_id,
+            } if *occurs_value == occurrence.value() && data_context_view_model_bound => {
+                if let Some(target_global_id) = target_global_id {
+                    if let Some(trigger) = view_model_triggers
+                        .iter_mut()
+                        .find(|trigger| trigger.global_id == *target_global_id)
+                    {
+                        trigger.increment();
+                    }
+                }
+            }
+            _ => {}
         }
     }
+}
+
+fn runtime_fire_trigger_target_global(file: &RuntimeFile, object: &RuntimeObject) -> Option<u32> {
+    if object
+        .bool_property("isDataBindPathRelative")
+        .unwrap_or(false)
+    {
+        return None;
+    }
+    let path = object.id_list_property("viewModelPathIds")?;
+    let default_instance = file.view_model_default_instance(0)?;
+    let target =
+        file.data_context_view_model_property_for_instance(default_instance.object, &path)?;
+    file.view_model_instance_trigger_count_for_object(target)?;
+    Some(target.id)
 }
 
 fn perform_scheduled_listener_actions(
@@ -3289,11 +3368,13 @@ pub struct StateMachineInstance {
     state_machine_index: usize,
     inputs: Vec<StateMachineInputInstance>,
     bindable_numbers: Vec<StateMachineBindableNumberInstance>,
+    view_model_triggers: Vec<StateMachineViewModelTriggerInstance>,
     layers: Vec<StateMachineLayerInstance>,
     reported_events: Vec<StateMachineReportedEvent>,
     changed_state_count: usize,
     needs_advance: bool,
     data_context_present: bool,
+    data_context_view_model_bound: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -3339,6 +3420,11 @@ impl StateMachineInstance {
             .iter()
             .map(StateMachineBindableNumberInstance::new)
             .collect::<Vec<_>>();
+        let view_model_triggers = state_machine
+            .view_model_triggers
+            .iter()
+            .map(StateMachineViewModelTriggerInstance::new)
+            .collect::<Vec<_>>();
         let layers = state_machine
             .layers
             .iter()
@@ -3350,11 +3436,13 @@ impl StateMachineInstance {
             state_machine_index,
             inputs,
             bindable_numbers,
+            view_model_triggers,
             layers,
             reported_events: Vec::new(),
             changed_state_count: 0,
             needs_advance: false,
             data_context_present: false,
+            data_context_view_model_bound: false,
         }
     }
 
@@ -3447,6 +3535,17 @@ impl StateMachineInstance {
             return false;
         }
         self.data_context_present = true;
+        self.data_context_view_model_bound = false;
+        self.needs_advance = true;
+        true
+    }
+
+    pub fn bind_default_view_model_context(&mut self) -> bool {
+        if self.data_context_present && self.data_context_view_model_bound {
+            return false;
+        }
+        self.data_context_present = true;
+        self.data_context_view_model_bound = true;
         self.needs_advance = true;
         true
     }
@@ -3473,6 +3572,22 @@ impl StateMachineInstance {
         self.reported_events.get(index)
     }
 
+    pub fn view_model_trigger_count(&self, index: usize) -> Option<u64> {
+        self.view_model_triggers
+            .get(index)
+            .map(StateMachineViewModelTriggerInstance::value)
+    }
+
+    pub fn view_model_trigger_value_count(&self) -> usize {
+        self.view_model_triggers.len()
+    }
+
+    pub fn view_model_trigger_property_id(&self, index: usize) -> Option<u32> {
+        self.view_model_triggers
+            .get(index)
+            .map(StateMachineViewModelTriggerInstance::view_model_property_id)
+    }
+
     fn advance(
         &mut self,
         artboard: &mut ArtboardInstance,
@@ -3497,6 +3612,8 @@ impl StateMachineInstance {
                 &mut self.inputs,
                 &self.bindable_numbers,
                 self.data_context_present,
+                self.data_context_view_model_bound,
+                &mut self.view_model_triggers,
                 &mut self.reported_events,
             );
             if layer_result.changed_state {
@@ -3691,6 +3808,35 @@ fn bindable_number_value(
 }
 
 #[derive(Debug, Clone)]
+struct StateMachineViewModelTriggerInstance {
+    global_id: u32,
+    view_model_property_id: u32,
+    value: u64,
+}
+
+impl StateMachineViewModelTriggerInstance {
+    fn new(trigger: &RuntimeViewModelTrigger) -> Self {
+        Self {
+            global_id: trigger.global_id,
+            view_model_property_id: trigger.view_model_property_id,
+            value: trigger.value,
+        }
+    }
+
+    fn increment(&mut self) {
+        self.value = self.value.saturating_add(1);
+    }
+
+    fn value(&self) -> u64 {
+        self.value
+    }
+
+    fn view_model_property_id(&self) -> u32 {
+        self.view_model_property_id
+    }
+}
+
+#[derive(Debug, Clone)]
 struct StateMachineLayerInstance {
     current_state_index: Option<usize>,
     current_animation: Option<LinearAnimationInstance>,
@@ -3707,7 +3853,7 @@ struct StateMachineLayerInstance {
     transition_source_paused: bool,
     transition_interpolator: Option<RuntimeTransitionInterpolator>,
     transition_enable_early_exit: bool,
-    transition_fire_actions: Vec<RuntimeStateMachineFireEvent>,
+    transition_fire_actions: Vec<RuntimeStateMachineFireAction>,
     transition_listener_actions: Vec<RuntimeScheduledListenerAction>,
     transition_completed: bool,
     transition_animation_reset: Option<TransitionAnimationReset>,
@@ -3826,10 +3972,18 @@ impl StateMachineLayerInstance {
         inputs: &mut [StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
         data_context_present: bool,
+        data_context_view_model_bound: bool,
+        view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
     ) -> StateMachineLayerAdvance {
         self.advance_current_animation(artboard, layer, elapsed_seconds, inputs, bindable_numbers);
-        let input_changed = self.update_transition_mix(elapsed_seconds, inputs, reported_events);
+        let input_changed = self.update_transition_mix(
+            elapsed_seconds,
+            inputs,
+            data_context_view_model_bound,
+            view_model_triggers,
+            reported_events,
+        );
         self.advance_transition_source_animation(
             artboard,
             layer,
@@ -3848,6 +4002,8 @@ impl StateMachineLayerInstance {
                 inputs,
                 bindable_numbers,
                 data_context_present,
+                data_context_view_model_bound,
+                view_model_triggers,
                 reported_events,
             ) {
                 break;
@@ -3874,6 +4030,8 @@ impl StateMachineLayerInstance {
         inputs: &mut [StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
         data_context_present: bool,
+        data_context_view_model_bound: bool,
+        view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
     ) -> bool {
         if self.is_transitioning() && !self.transition_enable_early_exit {
@@ -3888,6 +4046,8 @@ impl StateMachineLayerInstance {
             inputs,
             bindable_numbers,
             data_context_present,
+            data_context_view_model_bound,
+            view_model_triggers,
             reported_events,
         ) {
             return true;
@@ -3900,6 +4060,8 @@ impl StateMachineLayerInstance {
             inputs,
             bindable_numbers,
             data_context_present,
+            data_context_view_model_bound,
+            view_model_triggers,
             reported_events,
         )
     }
@@ -3913,6 +4075,8 @@ impl StateMachineLayerInstance {
         inputs: &mut [StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
         data_context_present: bool,
+        data_context_view_model_bound: bool,
+        view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
     ) -> bool {
         let Some(state_index) = state_index else {
@@ -3943,6 +4107,8 @@ impl StateMachineLayerInstance {
                 state_to_index,
                 inputs,
                 bindable_numbers,
+                data_context_view_model_bound,
+                view_model_triggers,
                 reported_events,
             );
             return true;
@@ -3987,6 +4153,8 @@ impl StateMachineLayerInstance {
                 state_to_index,
                 inputs,
                 bindable_numbers,
+                data_context_view_model_bound,
+                view_model_triggers,
                 reported_events,
             );
             return true;
@@ -4112,6 +4280,8 @@ impl StateMachineLayerInstance {
         state_to_index: usize,
         inputs: &mut [StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
+        data_context_view_model_bound: bool,
+        view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
     ) {
         let previous_state_index = self.current_state_index;
@@ -4126,7 +4296,12 @@ impl StateMachineLayerInstance {
         if let Some(previous_state) =
             previous_state_index.and_then(|state_index| layer.states.get(state_index))
         {
-            previous_state.fire_events(StateMachineFireOccurrence::AtEnd, reported_events);
+            previous_state.perform_fire_actions(
+                StateMachineFireOccurrence::AtEnd,
+                data_context_view_model_bound,
+                view_model_triggers,
+                reported_events,
+            );
             previous_state.perform_listener_actions(
                 StateMachineFireOccurrence::AtEnd,
                 inputs,
@@ -4154,14 +4329,24 @@ impl StateMachineLayerInstance {
         self.current_state_index = Some(state_to_index);
         self.refresh_current_animation(artboard, layer, inputs, bindable_numbers);
         if let Some(current_state) = layer.states.get(state_to_index) {
-            current_state.fire_events(StateMachineFireOccurrence::AtStart, reported_events);
+            current_state.perform_fire_actions(
+                StateMachineFireOccurrence::AtStart,
+                data_context_view_model_bound,
+                view_model_triggers,
+                reported_events,
+            );
             current_state.perform_listener_actions(
                 StateMachineFireOccurrence::AtStart,
                 inputs,
                 reported_events,
             );
         }
-        transition.fire_events(StateMachineFireOccurrence::AtStart, reported_events);
+        transition.perform_fire_actions(
+            StateMachineFireOccurrence::AtStart,
+            data_context_view_model_bound,
+            view_model_triggers,
+            reported_events,
+        );
         transition.perform_listener_actions(
             StateMachineFireOccurrence::AtStart,
             inputs,
@@ -4178,7 +4363,12 @@ impl StateMachineLayerInstance {
         }
 
         if transition_duration_seconds == 0.0 {
-            transition.fire_events(StateMachineFireOccurrence::AtEnd, reported_events);
+            transition.perform_fire_actions(
+                StateMachineFireOccurrence::AtEnd,
+                data_context_view_model_bound,
+                view_model_triggers,
+                reported_events,
+            );
             transition.perform_listener_actions(
                 StateMachineFireOccurrence::AtEnd,
                 inputs,
@@ -4218,7 +4408,13 @@ impl StateMachineLayerInstance {
             self.transition_listener_actions = transition.listener_actions.clone();
             self.transition_completed = false;
             self.transition_animation_reset = transition_animation_reset;
-            self.update_transition_mix(0.0, inputs, reported_events);
+            self.update_transition_mix(
+                0.0,
+                inputs,
+                data_context_view_model_bound,
+                view_model_triggers,
+                reported_events,
+            );
         } else {
             self.clear_transition_source();
         }
@@ -4257,6 +4453,8 @@ impl StateMachineLayerInstance {
         &mut self,
         elapsed_seconds: f32,
         inputs: &mut [StateMachineInputInstance],
+        data_context_view_model_bound: bool,
+        view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
     ) -> bool {
         if !self.has_transition_source() || self.transition_duration_seconds == 0.0 {
@@ -4269,9 +4467,11 @@ impl StateMachineLayerInstance {
         if self.transition_mix == 1.0 && !self.transition_completed {
             self.transition_completed = true;
             self.transition_animation_reset = None;
-            fire_state_machine_events(
+            perform_state_machine_fire_actions(
                 &self.transition_fire_actions,
                 StateMachineFireOccurrence::AtEnd,
+                data_context_view_model_bound,
+                view_model_triggers,
                 reported_events,
             );
             perform_scheduled_listener_actions(
@@ -4986,6 +5186,7 @@ fn build_state_machines(
         .into_iter()
         .map(|state_machine| {
             let bindable_numbers = runtime_bindable_numbers(file, &state_machine);
+            let view_model_triggers = runtime_default_view_model_triggers(file);
             RuntimeStateMachine {
                 global_id: state_machine.object.id,
                 name: state_machine
@@ -4998,6 +5199,7 @@ fn build_state_machines(
                     .filter_map(runtime_state_machine_input)
                     .collect(),
                 bindable_numbers,
+                view_model_triggers,
                 layers: state_machine
                     .layers
                     .into_iter()
@@ -5036,7 +5238,11 @@ fn build_state_machines(
                                     fire_actions: state
                                         .fire_actions
                                         .iter()
-                                        .filter_map(RuntimeStateMachineFireEvent::from_imported)
+                                        .filter_map(|action| {
+                                            RuntimeStateMachineFireAction::from_imported(
+                                                file, action,
+                                            )
+                                        })
                                         .collect(),
                                     listener_actions: state
                                         .listener_actions
@@ -5084,9 +5290,11 @@ fn build_state_machines(
                                                 fire_actions: transition
                                                     .fire_actions
                                                     .iter()
-                                                    .filter_map(
-                                                        RuntimeStateMachineFireEvent::from_imported,
-                                                    )
+                                                    .filter_map(|action| {
+                                                        RuntimeStateMachineFireAction::from_imported(
+                                                            file, action,
+                                                        )
+                                                    })
                                                     .collect(),
                                                 listener_actions: transition
                                                     .listener_actions
@@ -5149,6 +5357,32 @@ fn runtime_bindable_numbers(
     }
 
     values.into_values().collect()
+}
+
+fn runtime_default_view_model_triggers(file: &RuntimeFile) -> Vec<RuntimeViewModelTrigger> {
+    let Some(view_model) = file.view_model(0) else {
+        return Vec::new();
+    };
+    let Some(instance) = view_model.instances.into_iter().next() else {
+        return Vec::new();
+    };
+
+    instance
+        .values
+        .into_iter()
+        .filter_map(|value| {
+            let value_count = file.view_model_instance_trigger_count_for_object(value.object)?;
+            let view_model_property_id = value
+                .object
+                .uint_property("viewModelPropertyId")
+                .and_then(|id| u32::try_from(id).ok())?;
+            Some(RuntimeViewModelTrigger {
+                global_id: value.object.id,
+                view_model_property_id,
+                value: value_count,
+            })
+        })
+        .collect()
 }
 
 fn runtime_state_machine_input(object: &RuntimeObject) -> Option<RuntimeStateMachineInput> {

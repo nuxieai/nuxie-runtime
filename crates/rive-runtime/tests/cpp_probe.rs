@@ -109,6 +109,13 @@ fn push_string_property(bytes: &mut Vec<u8>, type_name: &str, property_name: &st
     bytes.extend_from_slice(value.as_bytes());
 }
 
+fn push_bytes_property(bytes: &mut Vec<u8>, type_name: &str, property_name: &str, value: &[u8]) {
+    let key = property_key_for_name(type_name, property_name);
+    push_var_uint(bytes, u64::from(key));
+    push_var_uint(bytes, value.len() as u64);
+    bytes.extend_from_slice(value);
+}
+
 fn push_f32_property(bytes: &mut Vec<u8>, type_name: &str, property_name: &str, value: f32) {
     let key = property_key_for_name(type_name, property_name);
     push_var_uint(bytes, u64::from(key));
@@ -842,6 +849,79 @@ fn push_state_machine_fire_event(bytes: &mut Vec<u8>, event_local_id: u64, occur
         push_uint_property(bytes, "StateMachineFireEvent", "eventId", event_local_id);
         if occurs_value != 0 {
             push_uint_property(bytes, "StateMachineFireEvent", "occursValue", occurs_value);
+        }
+    });
+}
+
+fn synthetic_state_machine_fire_trigger_actions(file_id: u64) -> Vec<u8> {
+    const AT_START: u64 = 0;
+    const AT_END: u64 = 1;
+
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyTrigger", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyTrigger", "name", "fire");
+        });
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceTrigger", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceTrigger", "viewModelPropertyId", 0);
+            push_uint_property(bytes, "ViewModelInstanceTrigger", "propertyValue", 3);
+        });
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineBool", |bytes| {
+            push_string_property(bytes, "StateMachineBool", "name", "go");
+        });
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_state_machine_fire_trigger(bytes, &[0, 0], AT_START);
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+        });
+        push_synthetic_bool_transition_condition(bytes, 0);
+        push_state_machine_fire_trigger(bytes, &[0, 0], AT_END);
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn push_state_machine_fire_trigger(bytes: &mut Vec<u8>, path: &[u32], occurs_value: u64) {
+    let mut encoded_path = Vec::new();
+    for path_id in path {
+        push_var_uint(&mut encoded_path, u64::from(*path_id));
+    }
+    push_object_with_properties(bytes, "StateMachineFireTrigger", |bytes| {
+        push_bytes_property(
+            bytes,
+            "StateMachineFireTrigger",
+            "viewModelPathIds",
+            &encoded_path,
+        );
+        if occurs_value != 0 {
+            push_uint_property(
+                bytes,
+                "StateMachineFireTrigger",
+                "occursValue",
+                occurs_value,
+            );
         }
     });
 }
@@ -4534,6 +4614,67 @@ fn state_machine_fire_events_match_cpp_probe() {
 }
 
 #[test]
+fn state_machine_fire_trigger_actions_match_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_fire_trigger_actions_cpp.riv";
+    let bytes = synthetic_state_machine_fire_trigger_actions(8270);
+    let args = [
+        "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-state-machine-bool".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "true".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    assert!(
+        state_machine.bind_default_view_model_context(),
+        "{label} failed to bind default view-model context"
+    );
+    let mut rust_reports = Vec::new();
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    rust_reports.push((advanced, state_machine.clone()));
+    assert!(state_machine.set_bool(0, true));
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    rust_reports.push((advanced, state_machine.clone()));
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+    {
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
 fn state_machine_scheduled_listener_fire_events_match_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
@@ -5691,6 +5832,27 @@ fn compare_state_machine_advance(
             &format!("{label} reported event {event_index} secondsDelay"),
         );
     }
+    assert_eq!(
+        cpp.view_model_triggers.len(),
+        rust.view_model_trigger_value_count(),
+        "{label} viewModelTriggers count mismatch"
+    );
+    for (trigger_index, cpp_trigger) in cpp.view_model_triggers.iter().enumerate() {
+        assert_eq!(
+            cpp_trigger.index, trigger_index,
+            "{label} view-model trigger {trigger_index} index mismatch"
+        );
+        assert_eq!(
+            Some(cpp_trigger.view_model_property_id),
+            rust.view_model_trigger_property_id(trigger_index),
+            "{label} view-model trigger {trigger_index} property ID mismatch"
+        );
+        assert_eq!(
+            Some(cpp_trigger.value),
+            rust.view_model_trigger_count(trigger_index),
+            "{label} view-model trigger {trigger_index} value mismatch"
+        );
+    }
 }
 
 fn compare_cpp_runtime_update(
@@ -6122,6 +6284,8 @@ struct CppRuntimeStateMachineAdvance {
     current_animations: Vec<CppRuntimeStateMachineCurrentAnimation>,
     #[serde(default, rename = "reportedEvents")]
     reported_events: Vec<CppRuntimeStateMachineReportedEvent>,
+    #[serde(default, rename = "viewModelTriggers")]
+    view_model_triggers: Vec<CppRuntimeStateMachineViewModelTrigger>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -6141,6 +6305,14 @@ struct CppRuntimeStateMachineReportedEvent {
     event_name: Option<String>,
     #[serde(rename = "secondsDelay")]
     seconds_delay: f32,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppRuntimeStateMachineViewModelTrigger {
+    index: usize,
+    #[serde(rename = "viewModelPropertyId")]
+    view_model_property_id: u32,
+    value: u64,
 }
 
 #[derive(Debug, Deserialize)]

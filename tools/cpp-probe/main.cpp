@@ -281,6 +281,7 @@ enum class RuntimeStateMachineActionKind
     SetNumber,
     SetBindableNumber,
     BindEmptyContext,
+    BindDefaultViewModelContext,
     FireTrigger,
 };
 
@@ -311,6 +312,13 @@ struct RuntimeStateMachineReportedEventReport
     float secondsDelay;
 };
 
+struct RuntimeStateMachineViewModelTriggerReport
+{
+    size_t index;
+    uint32_t viewModelPropertyId;
+    uint32_t value;
+};
+
 struct RuntimeStateMachineAdvanceReport
 {
     size_t stateMachineIndex;
@@ -320,6 +328,7 @@ struct RuntimeStateMachineAdvanceReport
     size_t changedStateCount;
     std::vector<RuntimeStateMachineCurrentAnimationReport> currentAnimations;
     std::vector<RuntimeStateMachineReportedEventReport> reportedEvents;
+    std::vector<RuntimeStateMachineViewModelTriggerReport> viewModelTriggers;
 };
 
 struct ProbeOptions
@@ -752,8 +761,46 @@ void write_runtime_animation_advance_reports(
     out << ']';
 }
 
+std::vector<RuntimeStateMachineViewModelTriggerReport>
+collect_default_view_model_trigger_reports(rive::File* file)
+{
+    std::vector<RuntimeStateMachineViewModelTriggerReport> reports;
+    if (file == nullptr || file->viewModelCount() == 0)
+    {
+        return reports;
+    }
+
+    auto viewModel = file->viewModel(0);
+    if (viewModel == nullptr || viewModel->instanceCount() == 0)
+    {
+        return reports;
+    }
+
+    auto viewModelInstance = viewModel->instance(0);
+    if (viewModelInstance == nullptr)
+    {
+        return reports;
+    }
+
+    auto values = viewModelInstance->propertyValues();
+    for (auto value : values)
+    {
+        if (value == nullptr || !value->is<rive::ViewModelInstanceTrigger>())
+        {
+            continue;
+        }
+        reports.push_back(RuntimeStateMachineViewModelTriggerReport{
+            reports.size(),
+            value->viewModelPropertyId(),
+            value->as<rive::ViewModelInstanceTrigger>()->propertyValue(),
+        });
+    }
+    return reports;
+}
+
 std::vector<RuntimeStateMachineAdvanceReport>
-apply_runtime_state_machine_advances(rive::ArtboardInstance* instance,
+apply_runtime_state_machine_advances(rive::File* file,
+                                     rive::ArtboardInstance* instance,
                                      const ProbeOptions& options,
                                      const LocalIds& localIds)
 {
@@ -828,6 +875,25 @@ apply_runtime_state_machine_advances(rive::ArtboardInstance* instance,
             stateMachine->bindDataContext(dataContext);
             continue;
         }
+        if (action.kind ==
+            RuntimeStateMachineActionKind::BindDefaultViewModelContext)
+        {
+            auto viewModel =
+                file != nullptr && file->viewModelCount() > 0
+                    ? file->viewModel(0)
+                    : nullptr;
+            auto viewModelInstance =
+                viewModel != nullptr && viewModel->instanceCount() > 0
+                    ? viewModel->instance(0)
+                    : nullptr;
+            if (viewModelInstance != nullptr)
+            {
+                auto dataContext = rive::make_rcp<rive::DataContext>(
+                    rive::ref_rcp(viewModelInstance));
+                stateMachine->bindDataContext(dataContext);
+            }
+            continue;
+        }
         if (action.kind == RuntimeStateMachineActionKind::FireTrigger)
         {
             auto input = stateMachine->input(action.inputIndex);
@@ -880,6 +946,8 @@ apply_runtime_state_machine_advances(rive::ArtboardInstance* instance,
             }
             report.reportedEvents.push_back(reportedEvent);
         }
+        report.viewModelTriggers =
+            collect_default_view_model_trigger_reports(file);
         reports.push_back(report);
     }
     return reports;
@@ -954,6 +1022,20 @@ void write_runtime_state_machine_advance_reports(
                 out << "null";
             }
             out << ",\"secondsDelay\":" << event.secondsDelay;
+            out << '}';
+        }
+        out << "],\"viewModelTriggers\":[";
+        for (size_t j = 0; j < report.viewModelTriggers.size(); ++j)
+        {
+            if (j != 0)
+            {
+                out << ',';
+            }
+            const auto& trigger = report.viewModelTriggers[j];
+            out << "{\"index\":" << trigger.index;
+            out << ",\"viewModelPropertyId\":"
+                << trigger.viewModelPropertyId;
+            out << ",\"value\":" << trigger.value;
             out << '}';
         }
         out << "]}";
@@ -5432,7 +5514,8 @@ void write_artboard(std::ostream& out,
     auto runtimeAnimationAdvanceReports =
         apply_runtime_animation_advances(instanceArtboard, options);
     auto runtimeStateMachineAdvanceReports =
-        apply_runtime_state_machine_advances(instanceArtboard, options, localIds);
+        apply_runtime_state_machine_advances(
+            file, instanceArtboard, options, localIds);
 
     bool runtimeUpdateDidUpdate = false;
     if (options.runtimeUpdate)
@@ -7132,6 +7215,28 @@ int main(int argc, const char* argv[])
             continue;
         }
 
+        if (is_arg(argv[i],
+                   "--runtime-bind-default-view-model-state-machine-context"))
+        {
+            if (i + 1 >= argc)
+            {
+                std::cerr << "--runtime-bind-default-view-model-state-machine-context requires stateMachineIndex\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind =
+                RuntimeStateMachineActionKind::BindDefaultViewModelContext;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
         if (is_arg(argv[i], "--runtime-fire-state-machine-trigger"))
         {
             if (i + 2 >= argc)
@@ -7183,7 +7288,7 @@ int main(int argc, const char* argv[])
 
     if (filename == nullptr)
     {
-        std::cerr << "usage: rive_cpp_probe [--converter-samples] [--number-to-list-samples] [--property-values] [--file-property-values] [--no-advance] [--runtime-update] [--instance-artboards] [--runtime-set-double localId propertyKey value] [--runtime-collapse-component localId value] [--runtime-apply-animation animationIndex seconds mix] [--runtime-advance-animation animationIndex seconds mix] [--runtime-advance-state-machine stateMachineIndex seconds] [--runtime-set-state-machine-bool stateMachineIndex inputIndex value] [--runtime-set-state-machine-number stateMachineIndex inputIndex value] [--runtime-set-state-machine-bindable-number stateMachineIndex dataBindIndex value] [--runtime-bind-empty-state-machine-context stateMachineIndex] [--runtime-fire-state-machine-trigger stateMachineIndex inputIndex] [--complete-view-model-properties] [--data-context-lookups] --file "
+        std::cerr << "usage: rive_cpp_probe [--converter-samples] [--number-to-list-samples] [--property-values] [--file-property-values] [--no-advance] [--runtime-update] [--instance-artboards] [--runtime-set-double localId propertyKey value] [--runtime-collapse-component localId value] [--runtime-apply-animation animationIndex seconds mix] [--runtime-advance-animation animationIndex seconds mix] [--runtime-advance-state-machine stateMachineIndex seconds] [--runtime-set-state-machine-bool stateMachineIndex inputIndex value] [--runtime-set-state-machine-number stateMachineIndex inputIndex value] [--runtime-set-state-machine-bindable-number stateMachineIndex dataBindIndex value] [--runtime-bind-empty-state-machine-context stateMachineIndex] [--runtime-bind-default-view-model-state-machine-context stateMachineIndex] [--runtime-fire-state-machine-trigger stateMachineIndex inputIndex] [--complete-view-model-properties] [--data-context-lookups] --file "
                      "path/to/file.riv\n";
         return 2;
     }

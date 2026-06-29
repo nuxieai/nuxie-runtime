@@ -439,6 +439,10 @@ impl RuntimeLinearAnimation {
         self.frame_to_seconds(self.end_frame())
     }
 
+    fn duration_seconds(&self) -> f32 {
+        self.frame_to_seconds(self.duration as f32)
+    }
+
     fn start_time_with_speed(&self, speed_multiplier: f32) -> f32 {
         if self.speed * speed_multiplier >= 0.0 {
             self.start_seconds()
@@ -729,6 +733,7 @@ pub struct RuntimeLayerState {
 struct RuntimeStateTransition {
     state_to_index: Option<usize>,
     duration: u64,
+    exit_time: u64,
     flags: u64,
     condition_count: usize,
     conditions: Vec<RuntimeTransitionCondition>,
@@ -736,31 +741,57 @@ struct RuntimeStateTransition {
 }
 
 impl RuntimeStateTransition {
-    fn is_simple_supported(&self) -> bool {
-        const DISABLED: u64 = 1 << 0;
-        const DURATION_IS_PERCENTAGE: u64 = 1 << 1;
-        const ENABLE_EXIT_TIME: u64 = 1 << 2;
-        const EXIT_TIME_IS_PERCENTAGE: u64 = 1 << 3;
-        const PAUSE_ON_EXIT: u64 = 1 << 4;
-        const ENABLE_EARLY_EXIT: u64 = 1 << 5;
+    const DISABLED: u64 = 1 << 0;
+    const DURATION_IS_PERCENTAGE: u64 = 1 << 1;
+    const ENABLE_EXIT_TIME: u64 = 1 << 2;
+    const EXIT_TIME_IS_PERCENTAGE: u64 = 1 << 3;
+    const PAUSE_ON_EXIT: u64 = 1 << 4;
+    const ENABLE_EARLY_EXIT: u64 = 1 << 5;
 
+    fn is_simple_supported(&self) -> bool {
         self.state_to_index.is_some()
             && self.condition_count == self.conditions.len()
             && !self.has_interpolator
             && self.flags
-                & (DISABLED
-                    | DURATION_IS_PERCENTAGE
-                    | ENABLE_EXIT_TIME
-                    | EXIT_TIME_IS_PERCENTAGE
-                    | PAUSE_ON_EXIT
-                    | ENABLE_EARLY_EXIT)
+                & (Self::DISABLED
+                    | Self::DURATION_IS_PERCENTAGE
+                    | Self::EXIT_TIME_IS_PERCENTAGE
+                    | Self::PAUSE_ON_EXIT
+                    | Self::ENABLE_EARLY_EXIT)
                 == 0
     }
 
-    fn is_allowed(&self, inputs: &[StateMachineInputInstance], layer_index: usize) -> bool {
-        self.conditions
+    fn allow(
+        &self,
+        inputs: &[StateMachineInputInstance],
+        layer_index: usize,
+        animation_from: Option<(&LinearAnimationInstance, &RuntimeLinearAnimation)>,
+    ) -> TransitionAllowance {
+        if !self
+            .conditions
             .iter()
             .all(|condition| condition.evaluate(inputs, layer_index))
+        {
+            return TransitionAllowance::No;
+        }
+
+        if self.flags & Self::ENABLE_EXIT_TIME == Self::ENABLE_EXIT_TIME
+            && let Some((animation_instance, animation)) = animation_from
+        {
+            let mut exit_time = self.exit_time as f32 / 1000.0;
+            let duration = animation.duration_seconds();
+            if exit_time <= duration
+                && AnimationLoop::from_loop_value(animation.loop_value) != AnimationLoop::OneShot
+                && duration != 0.0
+            {
+                exit_time += (animation_instance.last_total_time / duration).floor() * duration;
+            }
+            if animation_instance.total_time < exit_time {
+                return TransitionAllowance::WaitingForExit;
+            }
+        }
+
+        TransitionAllowance::Yes
     }
 
     fn use_inputs(&self, inputs: &mut [StateMachineInputInstance], layer_index: usize) {
@@ -768,6 +799,13 @@ impl RuntimeStateTransition {
             condition.use_input(inputs, layer_index);
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TransitionAllowance {
+    No,
+    WaitingForExit,
+    Yes,
 }
 
 #[derive(Debug, Clone)]
@@ -1161,6 +1199,7 @@ struct StateMachineLayerInstance {
     transition_duration_seconds: f32,
     transition_mix: f32,
     transition_mix_from: f32,
+    waiting_for_exit: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1180,6 +1219,7 @@ impl StateMachineLayerInstance {
             transition_duration_seconds: 0.0,
             transition_mix: 1.0,
             transition_mix_from: 1.0,
+            waiting_for_exit: false,
         };
         instance.refresh_current_animation(artboard, layer);
         instance
@@ -1211,6 +1251,7 @@ impl StateMachineLayerInstance {
             changed_state,
             keep_going: changed_state
                 || self.is_transitioning()
+                || self.waiting_for_exit
                 || self.current_animation_keep_going,
         }
     }
@@ -1225,6 +1266,7 @@ impl StateMachineLayerInstance {
         if self.is_transitioning() {
             return false;
         }
+        self.waiting_for_exit = false;
         if self.try_change_state(artboard, layer, layer.any_state_index, layer_index, inputs) {
             return true;
         }
@@ -1256,14 +1298,32 @@ impl StateMachineLayerInstance {
             if !transition.is_simple_supported() {
                 continue;
             }
-            if !transition.is_allowed(inputs, layer_index) {
-                continue;
-            }
             let Some(state_to_index) = transition.state_to_index else {
                 continue;
             };
             if self.current_state_index == Some(state_to_index) {
                 continue;
+            }
+            let animation_from = (self.current_state_index == Some(state_index))
+                .then(|| {
+                    self.current_animation
+                        .as_ref()
+                        .and_then(|animation_instance| {
+                            artboard
+                                .linear_animation(animation_instance.animation_index)
+                                .map(|animation| (animation_instance, animation))
+                        })
+                })
+                .flatten();
+            match transition.allow(inputs, layer_index, animation_from) {
+                TransitionAllowance::No => continue,
+                TransitionAllowance::WaitingForExit => {
+                    self.waiting_for_exit = true;
+                    continue;
+                }
+                TransitionAllowance::Yes => {
+                    self.waiting_for_exit = false;
+                }
             }
             transition.use_inputs(inputs, layer_index);
             self.change_state(artboard, layer, transition, state_to_index);
@@ -1744,6 +1804,10 @@ fn build_state_machines(
                                         duration: transition
                                             .object
                                             .uint_property("duration")
+                                            .unwrap_or(0),
+                                        exit_time: transition
+                                            .object
+                                            .uint_property("exitTime")
                                             .unwrap_or(0),
                                         flags: transition
                                             .object

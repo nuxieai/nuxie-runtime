@@ -256,7 +256,7 @@ Partially open. `crates/rive-graph` now exposes draw target/rule/clipping relati
 
 Blocked by: #8, #9
 Type: Prototype
-Contracts: `docs/prototypes/linear-animation-runtime-contract.md`, `docs/prototypes/linear-animation-instance-runtime-contract.md`, `docs/prototypes/state-machine-animation-state-runtime-contract.md`, `docs/prototypes/state-machine-input-runtime-contract.md`, `docs/prototypes/state-machine-timed-transition-runtime-contract.md`
+Contracts: `docs/prototypes/linear-animation-runtime-contract.md`, `docs/prototypes/linear-animation-instance-runtime-contract.md`, `docs/prototypes/state-machine-animation-state-runtime-contract.md`, `docs/prototypes/state-machine-input-runtime-contract.md`, `docs/prototypes/state-machine-timed-transition-runtime-contract.md`, `docs/prototypes/state-machine-exit-time-runtime-contract.md`
 
 ### Question
 
@@ -264,7 +264,7 @@ How should animations and state machines drive the graph scheduler?
 
 ### Answer
 
-In progress. Direct `LinearAnimation::apply` parity is in place for transform `KeyFrameDouble` properties, the narrow `LinearAnimationInstance` playback seam now has C++ time, speed, loop, work-area, spill, and keep-going parity while still routing application through the existing direct apply path, the first `StateMachineInstance` runtime seam can enter an `AnimationState` backed by an existing linear animation and advance/apply it through the animation-instance path, and state machines are now controllable with runtime bool/number/trigger inputs plus simple input-condition transitions. The next slice adds timed `AnimationState -> AnimationState` transition mixing for millisecond durations. Exit time, early exit, duration-as-percentage, transition interpolators, random transitions, event collection, listener actions, blend states, nested animation remapping, data binding, draw/render behavior, custom interpolators, and non-double keyframe coverage remain later slices.
+In progress. Direct `LinearAnimation::apply` parity is in place for transform `KeyFrameDouble` properties, the narrow `LinearAnimationInstance` playback seam now has C++ time, speed, loop, work-area, spill, and keep-going parity while still routing application through the existing direct apply path, the first `StateMachineInstance` runtime seam can enter an `AnimationState` backed by an existing linear animation and advance/apply it through the animation-instance path, state machines are now controllable with runtime bool/number/trigger inputs plus simple input-condition transitions, timed `AnimationState -> AnimationState` transition mixing for millisecond durations is in place, and absolute millisecond exit-time gating for simple animation-state transitions is in place. The next slice should add the remaining exit-transition handoff behavior: pause-on-exit/source hold and spilled-time handoff into the target state. Early exit, exit-time-as-percentage, duration-as-percentage, transition interpolators, random transitions, event collection, listener actions, blend states, nested animation remapping, data binding, draw/render behavior, custom interpolators, and non-double keyframe coverage remain later slices.
 
 ## #12: Data Binding Graph
 

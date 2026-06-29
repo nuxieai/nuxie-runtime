@@ -306,17 +306,44 @@ enum SyntheticInputTransitionKind {
     Trigger,
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+struct SyntheticTransitionOptions {
+    duration: u64,
+    flags: u64,
+    exit_time: Option<u64>,
+    any_state_transition: bool,
+}
+
 fn synthetic_state_machine_input_transition(
     file_id: u64,
     kind: SyntheticInputTransitionKind,
 ) -> Vec<u8> {
-    synthetic_state_machine_input_transition_with_duration(file_id, kind, 0)
+    synthetic_state_machine_input_transition_with_options(
+        file_id,
+        kind,
+        SyntheticTransitionOptions::default(),
+    )
 }
 
 fn synthetic_state_machine_input_transition_with_duration(
     file_id: u64,
     kind: SyntheticInputTransitionKind,
     transition_duration: u64,
+) -> Vec<u8> {
+    synthetic_state_machine_input_transition_with_options(
+        file_id,
+        kind,
+        SyntheticTransitionOptions {
+            duration: transition_duration,
+            ..Default::default()
+        },
+    )
+}
+
+fn synthetic_state_machine_input_transition_with_options(
+    file_id: u64,
+    kind: SyntheticInputTransitionKind,
+    transition: SyntheticTransitionOptions,
 ) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "Backboard", |_| {});
@@ -376,6 +403,13 @@ fn synthetic_state_machine_input_transition_with_duration(
         }
         push_object_with_properties(bytes, "StateMachineLayer", |_| {});
         push_object_with_properties(bytes, "AnyState", |_| {});
+        if transition.any_state_transition {
+            push_object_with_properties(bytes, "StateTransition", |bytes| {
+                push_uint_property(bytes, "StateTransition", "stateToId", 3);
+                push_synthetic_transition_options(bytes, transition);
+            });
+            push_synthetic_transition_condition(bytes, kind);
+        }
         push_object_with_properties(bytes, "EntryState", |_| {});
         push_object_with_properties(bytes, "StateTransition", |bytes| {
             push_uint_property(bytes, "StateTransition", "stateToId", 2);
@@ -385,35 +419,49 @@ fn synthetic_state_machine_input_transition_with_duration(
         });
         push_object_with_properties(bytes, "StateTransition", |bytes| {
             push_uint_property(bytes, "StateTransition", "stateToId", 3);
-            if transition_duration != 0 {
-                push_uint_property(bytes, "StateTransition", "duration", transition_duration);
-            }
+            push_synthetic_transition_options(bytes, transition);
         });
-        match kind {
-            SyntheticInputTransitionKind::Bool => {
-                push_object_with_properties(bytes, "TransitionBoolCondition", |bytes| {
-                    push_uint_property(bytes, "TransitionBoolCondition", "inputId", 0);
-                    push_uint_property(bytes, "TransitionBoolCondition", "opValue", 0);
-                });
-            }
-            SyntheticInputTransitionKind::Number => {
-                push_object_with_properties(bytes, "TransitionNumberCondition", |bytes| {
-                    push_uint_property(bytes, "TransitionNumberCondition", "inputId", 0);
-                    push_uint_property(bytes, "TransitionNumberCondition", "opValue", 5);
-                    push_f32_property(bytes, "TransitionNumberCondition", "value", 3.0);
-                });
-            }
-            SyntheticInputTransitionKind::Trigger => {
-                push_object_with_properties(bytes, "TransitionTriggerCondition", |bytes| {
-                    push_uint_property(bytes, "TransitionTriggerCondition", "inputId", 0);
-                });
-            }
-        }
+        push_synthetic_transition_condition(bytes, kind);
         push_object_with_properties(bytes, "AnimationState", |bytes| {
             push_uint_property(bytes, "AnimationState", "animationId", 1);
         });
         push_object_with_properties(bytes, "ExitState", |_| {});
     })
+}
+
+fn push_synthetic_transition_options(bytes: &mut Vec<u8>, transition: SyntheticTransitionOptions) {
+    if transition.duration != 0 {
+        push_uint_property(bytes, "StateTransition", "duration", transition.duration);
+    }
+    if transition.flags != 0 {
+        push_uint_property(bytes, "StateTransition", "flags", transition.flags);
+    }
+    if let Some(exit_time) = transition.exit_time {
+        push_uint_property(bytes, "StateTransition", "exitTime", exit_time);
+    }
+}
+
+fn push_synthetic_transition_condition(bytes: &mut Vec<u8>, kind: SyntheticInputTransitionKind) {
+    match kind {
+        SyntheticInputTransitionKind::Bool => {
+            push_object_with_properties(bytes, "TransitionBoolCondition", |bytes| {
+                push_uint_property(bytes, "TransitionBoolCondition", "inputId", 0);
+                push_uint_property(bytes, "TransitionBoolCondition", "opValue", 0);
+            });
+        }
+        SyntheticInputTransitionKind::Number => {
+            push_object_with_properties(bytes, "TransitionNumberCondition", |bytes| {
+                push_uint_property(bytes, "TransitionNumberCondition", "inputId", 0);
+                push_uint_property(bytes, "TransitionNumberCondition", "opValue", 5);
+                push_f32_property(bytes, "TransitionNumberCondition", "value", 3.0);
+            });
+        }
+        SyntheticInputTransitionKind::Trigger => {
+            push_object_with_properties(bytes, "TransitionTriggerCondition", |bytes| {
+                push_uint_property(bytes, "TransitionTriggerCondition", "inputId", 0);
+            });
+        }
+    }
 }
 
 fn synthetic_state_machine_bool_transition(file_id: u64) -> Vec<u8> {
@@ -1272,6 +1320,97 @@ fn state_machine_timed_transition_mixing_matches_cpp_probe() {
         let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
         rust_reports.push((advanced, state_machine.clone()));
         for seconds in post_transition_advances {
+            let advanced = rust.advance_state_machine_instance(&mut state_machine, seconds);
+            rust_reports.push((advanced, state_machine.clone()));
+        }
+        let report = rust.update_components();
+
+        let cpp_artboard = cpp
+            .artboards
+            .first()
+            .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+        assert_eq!(
+            cpp_artboard.runtime_state_machine_advances.len(),
+            rust_reports.len(),
+            "{label} state-machine report count mismatch"
+        );
+        for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+            .runtime_state_machine_advances
+            .iter()
+            .zip(&rust_reports)
+        {
+            compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+        }
+        compare_cpp_runtime_update(&cpp, &rust, &report, label);
+    }
+}
+
+#[test]
+fn state_machine_exit_time_transition_matches_cpp_probe() {
+    const ENABLE_EXIT_TIME: u64 = 1 << 2;
+
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    for (label, bytes, post_set_advances) in [
+        (
+            "synthetic/runtime_state_machine_exit_time_transition_cpp.riv",
+            synthetic_state_machine_input_transition_with_options(
+                8241,
+                SyntheticInputTransitionKind::Bool,
+                SyntheticTransitionOptions {
+                    flags: ENABLE_EXIT_TIME,
+                    exit_time: Some(1000),
+                    ..Default::default()
+                },
+            ),
+            vec![0.5, 0.5],
+        ),
+        (
+            "synthetic/runtime_state_machine_any_exit_time_transition_cpp.riv",
+            synthetic_state_machine_input_transition_with_options(
+                8242,
+                SyntheticInputTransitionKind::Bool,
+                SyntheticTransitionOptions {
+                    flags: ENABLE_EXIT_TIME,
+                    exit_time: Some(1000),
+                    any_state_transition: true,
+                    ..Default::default()
+                },
+            ),
+            vec![0.0],
+        ),
+    ] {
+        let mut args = vec![
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "--runtime-set-state-machine-bool".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "true".to_owned(),
+        ];
+        for seconds in &post_set_advances {
+            args.extend([
+                "--runtime-advance-state-machine".to_owned(),
+                "0".to_owned(),
+                seconds.to_string(),
+            ]);
+        }
+
+        let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+        let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+        let mut state_machine = rust
+            .state_machine_instance(0)
+            .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+        let mut rust_reports = Vec::new();
+        let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+        rust_reports.push((advanced, state_machine.clone()));
+        assert!(state_machine.set_bool(0, true));
+        for seconds in post_set_advances {
             let advanced = rust.advance_state_machine_instance(&mut state_machine, seconds);
             rust_reports.push((advanced, state_machine.clone()));
         }

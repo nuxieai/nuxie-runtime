@@ -2306,6 +2306,52 @@ fn graph_projects_mesh_and_path_vertex_weight_registrations() {
 }
 
 #[test]
+fn graph_projects_rectangle_parametric_path_facts() {
+    let bytes = synthetic_runtime_file(7120, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object_with_properties(bytes, "Shape", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "Rectangle", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 1);
+            push_f32_property(bytes, "ParametricPath", "width", 20.0);
+            push_f32_property(bytes, "ParametricPath", "height", 10.0);
+            push_f32_property(bytes, "ParametricPath", "originX", 0.25);
+            push_f32_property(bytes, "ParametricPath", "originY", 0.5);
+            push_bool_property(bytes, "Rectangle", "linkCornerRadius", false);
+            push_f32_property(bytes, "Rectangle", "cornerRadiusTL", 1.0);
+            push_f32_property(bytes, "Rectangle", "cornerRadiusTR", 2.0);
+            push_f32_property(bytes, "Rectangle", "cornerRadiusBL", 3.0);
+            push_f32_property(bytes, "Rectangle", "cornerRadiusBR", 4.0);
+        });
+    });
+
+    let (_, rust) = read_graph_from_bytes(&bytes, "synthetic/rectangle_parametric_path_facts.riv");
+    let artboard = &rust.artboards[0];
+    assert_eq!(
+        artboard.paths.len(),
+        1,
+        "rectangle path should be projected"
+    );
+    assert_eq!(
+        artboard.paths[0].parametric,
+        Some(rive_graph::ParametricPathNode::Rectangle {
+            width: 20.0,
+            height: 10.0,
+            origin_x: 0.25,
+            origin_y: 0.5,
+            link_corner_radius: false,
+            corner_radius_tl: 1.0,
+            corner_radius_tr: 2.0,
+            corner_radius_bl: 3.0,
+            corner_radius_br: 4.0,
+        }),
+        "Rectangle parametric fields should be available without running path updates"
+    );
+}
+
+#[test]
 fn cpp_probe_matches_rust_geometry_registrations_when_available() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ probe comparison; set RIVE_CPP_PROBE or run make cpp-probe");

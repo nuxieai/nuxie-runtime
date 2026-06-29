@@ -2,8 +2,9 @@ use anyhow::{Context, Result};
 use rive_binary::{RuntimeFile, RuntimeImportStatus, RuntimeObject};
 use rive_graph::{
     ArtboardGraph, ClippingShapeNode, ComponentNode, DrawableOrderKind, FeatherNode,
-    GradientStopNode, PathComposerNode, PathComposerPathNode, PathGeometryNode, PathVertexNode,
-    ShapePaintKind, ShapePaintNode, ShapePaintPathKind, ShapePaintStateNode, SortedDrawableNode,
+    GradientStopNode, ParametricPathNode, PathComposerNode, PathComposerPathNode, PathGeometryNode,
+    PathVertexNode, ShapePaintKind, ShapePaintNode, ShapePaintPathKind, ShapePaintStateNode,
+    SortedDrawableNode,
 };
 use rive_schema::{definition_by_name, object_supports_property};
 use std::collections::BTreeMap;
@@ -342,7 +343,7 @@ impl ArtboardInstance {
                 }
             };
 
-            commands.extend(points_path_commands(path, path_kind, transform));
+            commands.extend(path_commands(path, path_kind, transform));
         }
 
         commands
@@ -857,6 +858,18 @@ fn opacity_to_alpha(opacity: f32) -> u8 {
     (255.0 * opacity.clamp(0.0, 1.0)).round() as u8
 }
 
+fn path_commands(
+    path: &PathGeometryNode,
+    path_kind: ShapePaintPathKind,
+    transform: Mat2D,
+) -> Vec<RuntimePathCommand> {
+    match path.type_name {
+        "PointsPath" => points_path_commands(path, path_kind, transform),
+        "Rectangle" => rectangle_path_commands(path, path_kind, transform),
+        _ => Vec::new(),
+    }
+}
+
 fn points_path_commands(
     path: &PathGeometryNode,
     path_kind: ShapePaintPathKind,
@@ -963,6 +976,91 @@ fn points_path_commands(
     }
 
     commands
+}
+
+fn rectangle_path_commands(
+    path: &PathGeometryNode,
+    path_kind: ShapePaintPathKind,
+    transform: Mat2D,
+) -> Vec<RuntimePathCommand> {
+    let Some(ParametricPathNode::Rectangle {
+        width,
+        height,
+        origin_x,
+        origin_y,
+        link_corner_radius,
+        corner_radius_tl,
+        corner_radius_tr,
+        corner_radius_bl,
+        corner_radius_br,
+    }) = path.parametric.as_ref()
+    else {
+        return Vec::new();
+    };
+
+    let width = *width;
+    let height = *height;
+    let origin_x = *origin_x;
+    let origin_y = *origin_y;
+    let link_corner_radius = *link_corner_radius;
+    let left = -origin_x * width;
+    let top = -origin_y * height;
+    let right = left + width;
+    let bottom = top + height;
+    let top_left_radius = *corner_radius_tl;
+    let top_right_radius = if link_corner_radius {
+        top_left_radius
+    } else {
+        *corner_radius_tr
+    };
+    let bottom_right_radius = if link_corner_radius {
+        top_left_radius
+    } else {
+        *corner_radius_br
+    };
+    let bottom_left_radius = if link_corner_radius {
+        top_left_radius
+    } else {
+        *corner_radius_bl
+    };
+
+    let virtual_path = PathGeometryNode {
+        local_id: path.local_id,
+        global_id: path.global_id,
+        type_name: "PointsPath",
+        is_closed: true,
+        is_hole: path.is_hole,
+        is_clockwise: true,
+        parametric: None,
+        vertices: vec![
+            virtual_straight_vertex(left, top, top_left_radius),
+            virtual_straight_vertex(right, top, top_right_radius),
+            virtual_straight_vertex(right, bottom, bottom_right_radius),
+            virtual_straight_vertex(left, bottom, bottom_left_radius),
+        ],
+    };
+
+    points_path_commands(&virtual_path, path_kind, transform)
+}
+
+fn virtual_straight_vertex(x: f32, y: f32, radius: f32) -> PathVertexNode {
+    PathVertexNode {
+        local_id: 0,
+        global_id: 0,
+        type_name: "StraightVertex",
+        x,
+        y,
+        radius,
+        rotation: 0.0,
+        distance: 0.0,
+        in_rotation: 0.0,
+        in_distance: 0.0,
+        out_rotation: 0.0,
+        out_distance: 0.0,
+        weight_local: None,
+        weight_global: None,
+        weight_type_name: None,
+    }
 }
 
 fn is_supported_point_path_vertex(vertex: &PathVertexNode) -> bool {

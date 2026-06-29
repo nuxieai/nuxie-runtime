@@ -581,7 +581,24 @@ pub struct PathGeometryNode {
     pub is_closed: bool,
     pub is_hole: bool,
     pub is_clockwise: bool,
+    pub parametric: Option<ParametricPathNode>,
     pub vertices: Vec<PathVertexNode>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ParametricPathNode {
+    Rectangle {
+        width: f32,
+        height: f32,
+        origin_x: f32,
+        origin_y: f32,
+        link_corner_radius: bool,
+        corner_radius_tl: f32,
+        corner_radius_tr: f32,
+        corner_radius_bl: f32,
+        corner_radius_br: f32,
+    },
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -2257,6 +2274,7 @@ fn paths(
                 is_closed: path.object.bool_property("isClosed").unwrap_or(false),
                 is_hole: path.object.bool_property("isHole").unwrap_or(false),
                 is_clockwise: path.object.bool_property("isClockwise").unwrap_or(true),
+                parametric: parametric_path(&path.object),
                 vertices: path
                     .vertices
                     .into_iter()
@@ -2394,6 +2412,23 @@ fn shape_paint_containers(
             })
         })
         .collect()
+}
+
+fn parametric_path(path: &RuntimeObject) -> Option<ParametricPathNode> {
+    match path.type_name {
+        "Rectangle" => Some(ParametricPathNode::Rectangle {
+            width: path.double_property("width").unwrap_or(0.0),
+            height: path.double_property("height").unwrap_or(0.0),
+            origin_x: path.double_property("originX").unwrap_or(0.5),
+            origin_y: path.double_property("originY").unwrap_or(0.5),
+            link_corner_radius: path.bool_property("linkCornerRadius").unwrap_or(true),
+            corner_radius_tl: path.double_property("cornerRadiusTL").unwrap_or(0.0),
+            corner_radius_tr: path.double_property("cornerRadiusTR").unwrap_or(0.0),
+            corner_radius_bl: path.double_property("cornerRadiusBL").unwrap_or(0.0),
+            corner_radius_br: path.double_property("cornerRadiusBR").unwrap_or(0.0),
+        }),
+        _ => None,
+    }
 }
 
 fn shape_paint_kind(type_name: &str) -> ShapePaintKind {

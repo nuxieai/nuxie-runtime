@@ -942,14 +942,14 @@ impl RuntimeStateTransition {
     fn allow(
         &self,
         inputs: &[StateMachineInputInstance],
+        bindable_numbers: &[StateMachineBindableNumberInstance],
+        data_context_present: bool,
         layer_index: usize,
         animation_from: Option<RuntimeTransitionAnimationRef<'_>>,
     ) -> TransitionAllowance {
-        if !self
-            .conditions
-            .iter()
-            .all(|condition| condition.evaluate(inputs, layer_index))
-        {
+        if !self.conditions.iter().all(|condition| {
+            condition.evaluate(inputs, bindable_numbers, data_context_present, layer_index)
+        }) {
             return TransitionAllowance::No;
         }
 
@@ -1412,27 +1412,71 @@ enum RuntimeTransitionCondition {
     Trigger {
         input_index: usize,
     },
+    ViewModelNumber {
+        bindable_global_id: u32,
+        op: TransitionConditionOp,
+        value: f32,
+    },
 }
 
 impl RuntimeTransitionCondition {
-    fn from_object(object: &RuntimeObject) -> Option<Self> {
-        let input_index = usize::try_from(object.uint_property("inputId")?).ok()?;
+    fn from_object(file: &RuntimeFile, object: &RuntimeObject) -> Option<Self> {
         match object.type_name {
-            "TransitionBoolCondition" => Some(Self::Bool {
-                input_index,
-                op: TransitionConditionOp::from_value(object.uint_property("opValue").unwrap_or(0)),
-            }),
-            "TransitionNumberCondition" => Some(Self::Number {
-                input_index,
-                op: TransitionConditionOp::from_value(object.uint_property("opValue").unwrap_or(0)),
-                value: object.double_property("value").unwrap_or(0.0),
-            }),
-            "TransitionTriggerCondition" => Some(Self::Trigger { input_index }),
+            "TransitionBoolCondition" => {
+                let input_index = usize::try_from(object.uint_property("inputId")?).ok()?;
+                Some(Self::Bool {
+                    input_index,
+                    op: TransitionConditionOp::from_value(
+                        object.uint_property("opValue").unwrap_or(0),
+                    ),
+                })
+            }
+            "TransitionNumberCondition" => {
+                let input_index = usize::try_from(object.uint_property("inputId")?).ok()?;
+                Some(Self::Number {
+                    input_index,
+                    op: TransitionConditionOp::from_value(
+                        object.uint_property("opValue").unwrap_or(0),
+                    ),
+                    value: object.double_property("value").unwrap_or(0.0),
+                })
+            }
+            "TransitionTriggerCondition" => {
+                let input_index = usize::try_from(object.uint_property("inputId")?).ok()?;
+                Some(Self::Trigger { input_index })
+            }
+            "TransitionViewModelCondition" => {
+                let comparators = file.transition_view_model_condition_comparators(object)?;
+                let left = comparators.left?;
+                let right = comparators.right?;
+                if left.type_name != "TransitionPropertyViewModelComparator"
+                    || right.type_name != "TransitionValueNumberComparator"
+                {
+                    return None;
+                }
+                let bindable = file.latest_bindable_property_for_object(left)?;
+                if bindable.type_name != "BindablePropertyNumber" {
+                    return None;
+                }
+                Some(Self::ViewModelNumber {
+                    bindable_global_id: bindable.id,
+                    op: TransitionConditionOp::from_value(
+                        object.uint_property("opValue").unwrap_or(0),
+                    ),
+                    value: right.double_property("value").unwrap_or(0.0),
+                })
+            }
             _ => None,
         }
     }
 
-    fn evaluate(&self, inputs: &[StateMachineInputInstance], layer_index: usize) -> bool {
+    fn evaluate(
+        &self,
+        inputs: &[StateMachineInputInstance],
+        bindable_numbers: &[StateMachineBindableNumberInstance],
+        data_context_present: bool,
+        layer_index: usize,
+    ) -> bool {
         match self {
             Self::Bool { input_index, op } => {
                 let Some(value) = inputs
@@ -1464,6 +1508,18 @@ impl RuntimeTransitionCondition {
                 input
                     .trigger_is_fireable_for_layer(layer_index)
                     .unwrap_or(true)
+            }
+            Self::ViewModelNumber {
+                bindable_global_id,
+                op,
+                value,
+            } => {
+                if !data_context_present {
+                    return false;
+                }
+                let input_value =
+                    bindable_number_value(bindable_numbers, *bindable_global_id).unwrap_or(0.0);
+                op.compare(input_value, *value)
             }
         }
     }
@@ -1520,6 +1576,7 @@ pub struct StateMachineInstance {
     reported_events: Vec<StateMachineReportedEvent>,
     changed_state_count: usize,
     needs_advance: bool,
+    data_context_present: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -1580,6 +1637,7 @@ impl StateMachineInstance {
             reported_events: Vec::new(),
             changed_state_count: 0,
             needs_advance: false,
+            data_context_present: false,
         }
     }
 
@@ -1667,6 +1725,15 @@ impl StateMachineInstance {
         true
     }
 
+    pub fn bind_empty_data_context(&mut self) -> bool {
+        if self.data_context_present {
+            return false;
+        }
+        self.data_context_present = true;
+        self.needs_advance = true;
+        true
+    }
+
     pub fn current_animation_count(&self) -> usize {
         self.layers
             .iter()
@@ -1712,6 +1779,7 @@ impl StateMachineInstance {
                 layer_index,
                 &mut self.inputs,
                 &self.bindable_numbers,
+                self.data_context_present,
                 &mut self.reported_events,
             );
             if layer_result.changed_state {
@@ -2040,6 +2108,7 @@ impl StateMachineLayerInstance {
         layer_index: usize,
         inputs: &mut [StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
+        data_context_present: bool,
         reported_events: &mut Vec<StateMachineReportedEvent>,
     ) -> StateMachineLayerAdvance {
         self.advance_current_animation(artboard, layer, elapsed_seconds, inputs, bindable_numbers);
@@ -2061,6 +2130,7 @@ impl StateMachineLayerInstance {
                 layer_index,
                 inputs,
                 bindable_numbers,
+                data_context_present,
                 reported_events,
             ) {
                 break;
@@ -2086,6 +2156,7 @@ impl StateMachineLayerInstance {
         layer_index: usize,
         inputs: &mut [StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
+        data_context_present: bool,
         reported_events: &mut Vec<StateMachineReportedEvent>,
     ) -> bool {
         if self.is_transitioning() && !self.transition_enable_early_exit {
@@ -2099,6 +2170,7 @@ impl StateMachineLayerInstance {
             layer_index,
             inputs,
             bindable_numbers,
+            data_context_present,
             reported_events,
         ) {
             return true;
@@ -2110,6 +2182,7 @@ impl StateMachineLayerInstance {
             layer_index,
             inputs,
             bindable_numbers,
+            data_context_present,
             reported_events,
         )
     }
@@ -2122,6 +2195,7 @@ impl StateMachineLayerInstance {
         layer_index: usize,
         inputs: &mut [StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
+        data_context_present: bool,
         reported_events: &mut Vec<StateMachineReportedEvent>,
     ) -> bool {
         let Some(state_index) = state_index else {
@@ -2132,9 +2206,15 @@ impl StateMachineLayerInstance {
         };
 
         if state.uses_random_transition_selection() {
-            let Some((transition_index, state_to_index)) =
-                self.find_random_transition(artboard, state, state_index, layer_index, inputs)
-            else {
+            let Some((transition_index, state_to_index)) = self.find_random_transition(
+                artboard,
+                state,
+                state_index,
+                layer_index,
+                inputs,
+                bindable_numbers,
+                data_context_present,
+            ) else {
                 return false;
             };
             let transition = &state.transitions[transition_index];
@@ -2166,7 +2246,13 @@ impl StateMachineLayerInstance {
                 transition,
                 self.current_state_index == Some(state_index),
             );
-            match transition.allow(inputs, layer_index, animation_from) {
+            match transition.allow(
+                inputs,
+                bindable_numbers,
+                data_context_present,
+                layer_index,
+                animation_from,
+            ) {
                 TransitionAllowance::No => continue,
                 TransitionAllowance::WaitingForExit => {
                     self.waiting_for_exit = true;
@@ -2198,6 +2284,8 @@ impl StateMachineLayerInstance {
         state_index: usize,
         layer_index: usize,
         inputs: &[StateMachineInputInstance],
+        bindable_numbers: &[StateMachineBindableNumberInstance],
+        data_context_present: bool,
     ) -> Option<(usize, usize)> {
         let mut weighted_candidates = Vec::new();
         let mut total_weight = 0_u64;
@@ -2219,7 +2307,13 @@ impl StateMachineLayerInstance {
                 transition,
                 self.current_state_index == Some(state_index),
             );
-            match transition.allow(inputs, layer_index, animation_from) {
+            match transition.allow(
+                inputs,
+                bindable_numbers,
+                data_context_present,
+                layer_index,
+                animation_from,
+            ) {
                 TransitionAllowance::No => {}
                 TransitionAllowance::WaitingForExit => {
                     waiting_for_exit = true;
@@ -3265,6 +3359,7 @@ fn build_state_machines(
                                                     .iter()
                                                     .filter_map(|condition| {
                                                         RuntimeTransitionCondition::from_object(
+                                                            file,
                                                             condition,
                                                         )
                                                     })

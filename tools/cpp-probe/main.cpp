@@ -265,6 +265,7 @@ enum class RuntimeStateMachineActionKind
     SetBool,
     SetNumber,
     SetBindableNumber,
+    BindEmptyContext,
     FireTrigger,
 };
 
@@ -784,6 +785,13 @@ apply_runtime_state_machine_advances(rive::ArtboardInstance* instance,
                         ->propertyValue(action.numberValue);
                 }
             }
+            continue;
+        }
+        if (action.kind == RuntimeStateMachineActionKind::BindEmptyContext)
+        {
+            auto viewModelInstance = rive::make_rcp<rive::ViewModelInstance>();
+            auto dataContext = rive::make_rcp<rive::DataContext>(viewModelInstance);
+            stateMachine->bindDataContext(dataContext);
             continue;
         }
         if (action.kind == RuntimeStateMachineActionKind::FireTrigger)
@@ -6703,6 +6711,26 @@ int main(int argc, const char* argv[])
             continue;
         }
 
+        if (is_arg(argv[i], "--runtime-bind-empty-state-machine-context"))
+        {
+            if (i + 1 >= argc)
+            {
+                std::cerr << "--runtime-bind-empty-state-machine-context requires stateMachineIndex\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::BindEmptyContext;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
         if (is_arg(argv[i], "--runtime-fire-state-machine-trigger"))
         {
             if (i + 2 >= argc)
@@ -6754,7 +6782,7 @@ int main(int argc, const char* argv[])
 
     if (filename == nullptr)
     {
-        std::cerr << "usage: rive_cpp_probe [--converter-samples] [--number-to-list-samples] [--property-values] [--file-property-values] [--no-advance] [--runtime-update] [--instance-artboards] [--runtime-set-double localId propertyKey value] [--runtime-apply-animation animationIndex seconds mix] [--runtime-advance-animation animationIndex seconds mix] [--runtime-advance-state-machine stateMachineIndex seconds] [--runtime-set-state-machine-bool stateMachineIndex inputIndex value] [--runtime-set-state-machine-number stateMachineIndex inputIndex value] [--runtime-set-state-machine-bindable-number stateMachineIndex dataBindIndex value] [--runtime-fire-state-machine-trigger stateMachineIndex inputIndex] [--complete-view-model-properties] [--data-context-lookups] --file "
+        std::cerr << "usage: rive_cpp_probe [--converter-samples] [--number-to-list-samples] [--property-values] [--file-property-values] [--no-advance] [--runtime-update] [--instance-artboards] [--runtime-set-double localId propertyKey value] [--runtime-apply-animation animationIndex seconds mix] [--runtime-advance-animation animationIndex seconds mix] [--runtime-advance-state-machine stateMachineIndex seconds] [--runtime-set-state-machine-bool stateMachineIndex inputIndex value] [--runtime-set-state-machine-number stateMachineIndex inputIndex value] [--runtime-set-state-machine-bindable-number stateMachineIndex dataBindIndex value] [--runtime-bind-empty-state-machine-context stateMachineIndex] [--runtime-fire-state-machine-trigger stateMachineIndex inputIndex] [--complete-view-model-properties] [--data-context-lookups] --file "
                      "path/to/file.riv\n";
         return 2;
     }

@@ -804,6 +804,14 @@ impl RuntimeFile {
         self.cpp_latest_bindable_property_for_object(object)
     }
 
+    pub fn transition_view_model_condition_comparators<'a>(
+        &'a self,
+        condition: &RuntimeObject,
+    ) -> Option<RuntimeTransitionViewModelConditionComparators<'a>> {
+        self.validate_transition_view_model_condition(condition)?;
+        Some(self.cpp_transition_view_model_condition_comparators(condition))
+    }
+
     pub fn artboard_skins(&self, artboard_index: usize) -> Vec<RuntimeSkin<'_>> {
         self.cpp_artboard_skins(artboard_index)
     }
@@ -5289,6 +5297,20 @@ impl RuntimeFile {
         definition.is_a("DataBind").then_some(data_bind)
     }
 
+    fn validate_transition_view_model_condition<'a>(
+        &'a self,
+        condition: &'a RuntimeObject,
+    ) -> Option<&'a RuntimeObject> {
+        let object_id = usize::try_from(condition.id).ok()?;
+        if self.import_status(object_id) != Some(RuntimeImportStatus::Imported) {
+            return None;
+        }
+        let definition = definition_by_type_key(condition.type_key)?;
+        definition
+            .is_a("TransitionViewModelCondition")
+            .then_some(condition)
+    }
+
     fn cpp_data_bind_target_for_object<'a>(
         &'a self,
         data_bind: &RuntimeObject,
@@ -5319,6 +5341,39 @@ impl RuntimeFile {
             }
         }
         latest_bindable_property
+    }
+
+    fn cpp_transition_view_model_condition_comparators<'a>(
+        &'a self,
+        condition: &RuntimeObject,
+    ) -> RuntimeTransitionViewModelConditionComparators<'a> {
+        let Some(object_id) = usize::try_from(condition.id).ok() else {
+            return RuntimeTransitionViewModelConditionComparators::default();
+        };
+        let mut comparators = RuntimeTransitionViewModelConditionComparators::default();
+        for candidate in self.objects.iter().skip(object_id + 1).flatten() {
+            let Some(candidate_id) = usize::try_from(candidate.id).ok() else {
+                continue;
+            };
+            if self.import_status(candidate_id) != Some(RuntimeImportStatus::Imported) {
+                continue;
+            }
+            let Some(definition) = definition_by_type_key(candidate.type_key) else {
+                continue;
+            };
+            if definition.is_a("TransitionViewModelCondition") {
+                break;
+            }
+            if !definition.is_a("TransitionComparator") {
+                continue;
+            }
+            if comparators.left.is_none() {
+                comparators.left = Some(candidate);
+            } else {
+                comparators.right = Some(candidate);
+            }
+        }
+        comparators
     }
 
     fn cpp_data_converter_output_type(
@@ -7536,6 +7591,12 @@ pub struct RuntimeStateTransition<'a> {
     pub fire_actions: Vec<RuntimeStateMachineFireAction<'a>>,
     pub listener_actions: Vec<RuntimeListenerAction<'a>>,
     pub conditions: Vec<&'a RuntimeObject>,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct RuntimeTransitionViewModelConditionComparators<'a> {
+    pub left: Option<&'a RuntimeObject>,
+    pub right: Option<&'a RuntimeObject>,
 }
 
 #[derive(Debug, Clone)]

@@ -1614,6 +1614,83 @@ fn runtime_draw_command_stream_filters_hidden_and_opacity_like_cpp_probe() {
 }
 
 #[test]
+fn runtime_draw_command_stream_filters_image_and_nested_artboard_will_draw_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_drawable_will_draw_prereqs.riv";
+    let bytes = synthetic_runtime_file(8232, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "ImageAsset", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "Shape", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "Image", |bytes| {
+            push_uint_property(bytes, "Image", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "Image", |bytes| {
+            push_uint_property(bytes, "Image", "parentId", 0);
+            push_uint_property(bytes, "Image", "assetId", 0);
+        });
+        push_object_with_properties(bytes, "Image", |bytes| {
+            push_uint_property(bytes, "Image", "parentId", 0);
+            push_uint_property(bytes, "Image", "assetId", 1);
+        });
+        push_object_with_properties(bytes, "NestedArtboard", |bytes| {
+            push_uint_property(bytes, "NestedArtboard", "parentId", 0);
+            push_uint_property(bytes, "NestedArtboard", "artboardId", 1);
+        });
+        push_object_with_properties(bytes, "NestedArtboard", |bytes| {
+            push_uint_property(bytes, "NestedArtboard", "parentId", 0);
+            push_uint_property(bytes, "NestedArtboard", "artboardId", 99);
+        });
+        push_object_with_properties(bytes, "Artboard", |_| {});
+    });
+
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let (_, graph, mut rust) = read_rust_graph_instance_from_bytes(&bytes, label);
+    rust.update_components();
+
+    let artboard = graph
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing Rust artboard for {label}"));
+    let rust_commands = rust
+        .draw_commands(artboard)
+        .into_iter()
+        .map(|command| (command.local_id, command.kind, command.needs_save_operation))
+        .collect::<Vec<_>>();
+    let cpp_commands = cpp.artboards[0]
+        .draw_command_stream
+        .iter()
+        .map(|command| {
+            (
+                command.local_id,
+                command.kind(),
+                command.needs_save_operation,
+            )
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        cpp_commands,
+        vec![
+            (Some(5), RuntimeDrawCommandKind::Draw, true),
+            (Some(3), RuntimeDrawCommandKind::Draw, true),
+            (Some(1), RuntimeDrawCommandKind::Draw, true),
+        ],
+        "C++ should only draw the plain shape, image with ImageAsset, and nested artboard with a resolved artboard"
+    );
+    assert_eq!(
+        rust_commands, cpp_commands,
+        "Rust runtime draw command stream should match C++ type-specific willDraw prerequisites"
+    );
+}
+
+#[test]
 fn runtime_draw_command_stream_suppresses_empty_clips_like_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");

@@ -167,18 +167,32 @@ impl ArtboardInstance {
                     return false;
                 }
 
+                if drawable.type_name == "Image" {
+                    return drawable.resolved_image_asset_global.is_some()
+                        && self
+                            .runtime_drawable_render_opacity(drawable)
+                            .is_some_and(|opacity| opacity != 0.0);
+                }
+
+                if sorted_drawable_is_nested_artboard(drawable.type_name) {
+                    return drawable.referenced_artboard_global.is_some();
+                }
+
                 if sorted_drawable_uses_render_opacity(drawable.type_name) {
-                    let Some(local_id) = drawable.local_id else {
-                        return false;
-                    };
                     return self
-                        .component(local_id)
-                        .is_some_and(|component| component.transform.render_opacity != 0.0);
+                        .runtime_drawable_render_opacity(drawable)
+                        .is_some_and(|opacity| opacity != 0.0);
                 }
 
                 true
             }
         }
+    }
+
+    fn runtime_drawable_render_opacity(&self, drawable: &SortedDrawableNode) -> Option<f32> {
+        let local_id = drawable.local_id?;
+        self.component(local_id)
+            .map(|component| component.transform.render_opacity)
     }
 
     fn runtime_empty_clip_count(
@@ -1892,8 +1906,12 @@ fn path_needs_clockwise_reversal(path: &PathGeometryNode, transform: Mat2D) -> b
 
 fn sorted_drawable_uses_render_opacity(type_name: &str) -> bool {
     definition_by_name(type_name).is_some_and(|definition| {
-        definition.is_a("Shape") || matches!(definition.name, "Image" | "TextInputDrawable")
+        definition.is_a("Shape") || matches!(definition.name, "TextInputDrawable")
     })
+}
+
+fn sorted_drawable_is_nested_artboard(type_name: &str) -> bool {
+    definition_by_name(type_name).is_some_and(|definition| definition.is_a("NestedArtboard"))
 }
 
 #[derive(Debug, Clone)]

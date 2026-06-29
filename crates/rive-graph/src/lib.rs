@@ -506,6 +506,8 @@ pub struct DrawableOrderNode {
     pub global_id: Option<u32>,
     pub type_name: &'static str,
     pub is_hidden: bool,
+    pub resolved_image_asset_global: Option<u32>,
+    pub referenced_artboard_global: Option<u32>,
     pub layout_local: Option<usize>,
     pub layout_global: Option<u32>,
     pub flattened_draw_rules_local: Option<usize>,
@@ -519,6 +521,8 @@ pub struct SortedDrawableNode {
     pub global_id: Option<u32>,
     pub type_name: &'static str,
     pub is_hidden: bool,
+    pub resolved_image_asset_global: Option<u32>,
+    pub referenced_artboard_global: Option<u32>,
     pub layout_local: Option<usize>,
     pub layout_global: Option<u32>,
     pub draw_target_local: Option<usize>,
@@ -1843,6 +1847,8 @@ fn sorted_drawable_node(
         global_id: drawable.global_id,
         type_name: drawable.type_name,
         is_hidden: drawable.is_hidden,
+        resolved_image_asset_global: drawable.resolved_image_asset_global,
+        referenced_artboard_global: drawable.referenced_artboard_global,
         layout_local: drawable.layout_local,
         layout_global: drawable.layout_global,
         draw_target_local,
@@ -1943,6 +1949,8 @@ fn clipping_proxy_node(
         global_id: None,
         type_name: "ClippingShapeProxyDrawable",
         is_hidden: false,
+        resolved_image_asset_global: None,
+        referenced_artboard_global: None,
         layout_local: None,
         layout_global: None,
         draw_target_local: None,
@@ -2040,6 +2048,8 @@ fn drawable_order_node(
         global_id: local_object_global_id(local_objects, local_id),
         type_name: object.type_name,
         is_hidden: drawable_is_hidden(object),
+        resolved_image_asset_global: resolved_image_asset_global(file, object),
+        referenced_artboard_global: referenced_artboard_global(file, object),
         layout_local: None,
         layout_global: None,
         flattened_draw_rules_local,
@@ -2154,6 +2164,8 @@ fn layout_proxy_node(
         global_id: None,
         type_name: "DrawableProxy",
         is_hidden,
+        resolved_image_asset_global: None,
+        referenced_artboard_global: None,
         layout_local: Some(layout_local),
         layout_global: local_object_global_id(local_objects, layout_local),
         flattened_draw_rules_local: None,
@@ -5403,6 +5415,22 @@ fn is_drawable(object: &RuntimeObject) -> bool {
 
 fn drawable_is_hidden(object: &RuntimeObject) -> bool {
     object.uint_property("drawableFlags").unwrap_or(0) & 1 != 0
+}
+
+fn resolved_image_asset_global(file: &RuntimeFile, object: &RuntimeObject) -> Option<u32> {
+    if object.type_name != "Image" {
+        return None;
+    }
+    file.resolved_file_asset_for_referencer(object)
+        .map(|asset| asset.id)
+}
+
+fn referenced_artboard_global(file: &RuntimeFile, object: &RuntimeObject) -> Option<u32> {
+    if !is_exact_nested_artboard_host(object) {
+        return None;
+    }
+    file.resolved_artboard_for_referencer_object(object)
+        .map(|artboard| artboard.id)
 }
 
 fn is_node(object: &RuntimeObject) -> bool {

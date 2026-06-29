@@ -232,6 +232,30 @@ struct RuntimeAnimationApplication
     float mix;
 };
 
+struct RuntimeAnimationAdvance
+{
+    size_t animationIndex;
+    float seconds;
+    float mix;
+};
+
+struct RuntimeAnimationAdvanceReport
+{
+    size_t animationIndex;
+    float seconds;
+    float mix;
+    bool advanced;
+    bool keepGoing;
+    float time;
+    float direction;
+    float directedSpeed;
+    float totalTime;
+    float lastTotalTime;
+    float spilledTime;
+    bool didLoop;
+    int loopValue;
+};
+
 struct ProbeOptions
 {
     bool propertyValues = false;
@@ -241,6 +265,7 @@ struct ProbeOptions
     bool instanceArtboards = false;
     std::vector<RuntimeDoubleMutation> runtimeDoubleMutations;
     std::vector<RuntimeAnimationApplication> runtimeAnimationApplications;
+    std::vector<RuntimeAnimationAdvance> runtimeAnimationAdvances;
     bool completeViewModelProperties = false;
     bool dataContextLookups = false;
 };
@@ -571,6 +596,74 @@ void apply_runtime_animation_applications(rive::ArtboardInstance* instance,
         animation->time(application.seconds);
         animation->apply(application.mix);
     }
+}
+
+std::vector<RuntimeAnimationAdvanceReport> apply_runtime_animation_advances(
+    rive::ArtboardInstance* instance,
+    const ProbeOptions& options)
+{
+    std::vector<RuntimeAnimationAdvanceReport> reports;
+    if (options.runtimeAnimationAdvances.empty() || instance == nullptr)
+    {
+        return reports;
+    }
+
+    for (const auto& advance : options.runtimeAnimationAdvances)
+    {
+        auto animation = instance->animationAt(advance.animationIndex);
+        if (animation == nullptr)
+        {
+            continue;
+        }
+        bool advanced = animation->advance(advance.seconds);
+        animation->apply(advance.mix);
+        reports.push_back(RuntimeAnimationAdvanceReport{
+            advance.animationIndex,
+            advance.seconds,
+            advance.mix,
+            advanced,
+            animation->keepGoing(),
+            animation->time(),
+            animation->direction(),
+            animation->directedSpeed(),
+            animation->totalTime(),
+            animation->lastTotalTime(),
+            animation->spilledTime(),
+            animation->didLoop(),
+            animation->loopValue(),
+        });
+    }
+    return reports;
+}
+
+void write_runtime_animation_advance_reports(
+    std::ostream& out,
+    const std::vector<RuntimeAnimationAdvanceReport>& reports)
+{
+    out << '[';
+    for (size_t i = 0; i < reports.size(); ++i)
+    {
+        if (i != 0)
+        {
+            out << ',';
+        }
+        const auto& report = reports[i];
+        out << "{\"animationIndex\":" << report.animationIndex;
+        out << ",\"seconds\":" << report.seconds;
+        out << ",\"mix\":" << report.mix;
+        out << ",\"advanced\":" << (report.advanced ? "true" : "false");
+        out << ",\"keepGoing\":" << (report.keepGoing ? "true" : "false");
+        out << ",\"time\":" << report.time;
+        out << ",\"direction\":" << report.direction;
+        out << ",\"directedSpeed\":" << report.directedSpeed;
+        out << ",\"totalTime\":" << report.totalTime;
+        out << ",\"lastTotalTime\":" << report.lastTotalTime;
+        out << ",\"spilledTime\":" << report.spilledTime;
+        out << ",\"didLoop\":" << (report.didLoop ? "true" : "false");
+        out << ",\"loopValue\":" << report.loopValue;
+        out << '}';
+    }
+    out << ']';
 }
 
 void write_file_artboard_index_or_null(std::ostream& out,
@@ -4693,6 +4786,8 @@ void write_artboard(std::ostream& out,
 
     apply_runtime_double_mutations(objects, options);
     apply_runtime_animation_applications(instanceArtboard, options);
+    auto runtimeAnimationAdvanceReports =
+        apply_runtime_animation_advances(instanceArtboard, options);
 
     bool runtimeUpdateDidUpdate = false;
     if (options.runtimeUpdate)
@@ -4729,6 +4824,12 @@ void write_artboard(std::ostream& out,
         out << ",\"runtimeUpdate\":";
         write_runtime_update(
             out, localIds, objects, runtimeUpdateDidUpdate, artboard);
+    }
+    if (!options.runtimeAnimationAdvances.empty())
+    {
+        out << ",\"runtimeAnimationAdvances\":";
+        write_runtime_animation_advance_reports(
+            out, runtimeAnimationAdvanceReports);
     }
 
     out << ",\"objects\":[";
@@ -6236,6 +6337,22 @@ int main(int argc, const char* argv[])
             continue;
         }
 
+        if (is_arg(argv[i], "--runtime-advance-animation"))
+        {
+            if (i + 3 >= argc)
+            {
+                std::cerr << "--runtime-advance-animation requires animationIndex seconds mix\n";
+                return 2;
+            }
+            RuntimeAnimationAdvance advance;
+            advance.animationIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            advance.seconds = std::strtof(argv[++i], nullptr);
+            advance.mix = std::strtof(argv[++i], nullptr);
+            options.runtimeAnimationAdvances.push_back(advance);
+            continue;
+        }
+
         if (is_arg(argv[i], "--complete-view-model-properties"))
         {
             options.completeViewModelProperties = true;
@@ -6266,7 +6383,7 @@ int main(int argc, const char* argv[])
 
     if (filename == nullptr)
     {
-        std::cerr << "usage: rive_cpp_probe [--converter-samples] [--number-to-list-samples] [--property-values] [--file-property-values] [--no-advance] [--runtime-update] [--instance-artboards] [--runtime-set-double localId propertyKey value] [--runtime-apply-animation animationIndex seconds mix] [--complete-view-model-properties] [--data-context-lookups] --file "
+        std::cerr << "usage: rive_cpp_probe [--converter-samples] [--number-to-list-samples] [--property-values] [--file-property-values] [--no-advance] [--runtime-update] [--instance-artboards] [--runtime-set-double localId propertyKey value] [--runtime-apply-animation animationIndex seconds mix] [--runtime-advance-animation animationIndex seconds mix] [--complete-view-model-properties] [--data-context-lookups] --file "
                      "path/to/file.riv\n";
         return 2;
     }

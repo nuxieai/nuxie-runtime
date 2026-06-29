@@ -124,6 +124,49 @@ impl ArtboardInstance {
         animation.apply(self, seconds, mix)
     }
 
+    pub fn linear_animation_instance(&self, index: usize) -> Option<LinearAnimationInstance> {
+        self.linear_animation_instance_with_speed(index, 1.0)
+    }
+
+    pub fn linear_animation_instance_with_speed(
+        &self,
+        index: usize,
+        speed_multiplier: f32,
+    ) -> Option<LinearAnimationInstance> {
+        let animation = self.linear_animation(index)?;
+        Some(LinearAnimationInstance::new(
+            index,
+            animation,
+            speed_multiplier,
+        ))
+    }
+
+    pub fn advance_linear_animation_instance(
+        &self,
+        instance: &mut LinearAnimationInstance,
+        elapsed_seconds: f32,
+    ) -> bool {
+        let Some(animation) = self.linear_animation(instance.animation_index) else {
+            return false;
+        };
+        instance.advance(animation, elapsed_seconds)
+    }
+
+    pub fn apply_linear_animation_instance(
+        &mut self,
+        instance: &LinearAnimationInstance,
+        mix: f32,
+    ) -> bool {
+        self.apply_linear_animation(instance.animation_index, instance.time, mix)
+    }
+
+    pub fn linear_animation_instance_keep_going(&self, instance: &LinearAnimationInstance) -> bool {
+        let Some(animation) = self.linear_animation(instance.animation_index) else {
+            return false;
+        };
+        instance.keep_going(animation)
+    }
+
     pub fn set_transform_property(
         &mut self,
         local_id: usize,
@@ -359,6 +402,248 @@ impl RuntimeLinearAnimation {
             }
         }
         changed
+    }
+
+    fn start_seconds(&self) -> f32 {
+        self.frame_to_seconds(self.start_frame())
+    }
+
+    fn end_seconds(&self) -> f32 {
+        self.frame_to_seconds(self.end_frame())
+    }
+
+    fn start_time_with_speed(&self, speed_multiplier: f32) -> f32 {
+        if self.speed * speed_multiplier >= 0.0 {
+            self.start_seconds()
+        } else {
+            self.end_seconds()
+        }
+    }
+
+    fn fps_as_f32(&self) -> f32 {
+        self.fps as f32
+    }
+
+    fn start_frame(&self) -> f32 {
+        if self.enable_work_area {
+            self.work_start as f32
+        } else {
+            0.0
+        }
+    }
+
+    fn end_frame(&self) -> f32 {
+        if self.enable_work_area {
+            self.work_end as f32
+        } else {
+            self.duration as f32
+        }
+    }
+
+    fn frame_to_seconds(&self, frame: f32) -> f32 {
+        if self.fps == 0 {
+            return 0.0;
+        }
+        frame / self.fps_as_f32()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AnimationLoop {
+    OneShot,
+    Loop,
+    PingPong,
+}
+
+impl AnimationLoop {
+    fn from_loop_value(value: u64) -> Self {
+        match value {
+            1 => Self::Loop,
+            2 => Self::PingPong,
+            _ => Self::OneShot,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct LinearAnimationInstance {
+    animation_index: usize,
+    time: f32,
+    speed_direction: f32,
+    total_time: f32,
+    last_total_time: f32,
+    spilled_time: f32,
+    direction: f32,
+    did_loop: bool,
+    loop_value: Option<u64>,
+}
+
+impl LinearAnimationInstance {
+    fn new(
+        animation_index: usize,
+        animation: &RuntimeLinearAnimation,
+        speed_multiplier: f32,
+    ) -> Self {
+        Self {
+            animation_index,
+            time: animation.start_time_with_speed(speed_multiplier),
+            speed_direction: if speed_multiplier >= 0.0 { 1.0 } else { -1.0 },
+            total_time: 0.0,
+            last_total_time: 0.0,
+            spilled_time: 0.0,
+            direction: 1.0,
+            did_loop: false,
+            loop_value: None,
+        }
+    }
+
+    pub fn animation_index(&self) -> usize {
+        self.animation_index
+    }
+
+    pub fn time(&self) -> f32 {
+        self.time
+    }
+
+    pub fn speed_direction(&self) -> f32 {
+        self.speed_direction
+    }
+
+    pub fn total_time(&self) -> f32 {
+        self.total_time
+    }
+
+    pub fn last_total_time(&self) -> f32 {
+        self.last_total_time
+    }
+
+    pub fn spilled_time(&self) -> f32 {
+        self.spilled_time
+    }
+
+    pub fn direction(&self) -> f32 {
+        self.direction
+    }
+
+    pub fn did_loop(&self) -> bool {
+        self.did_loop
+    }
+
+    pub fn loop_value(&self) -> Option<u64> {
+        self.loop_value
+    }
+
+    pub fn directed_speed(&self, animation: &RuntimeLinearAnimation) -> f32 {
+        self.direction * animation.speed
+    }
+
+    fn resolved_loop_kind(&self, animation: &RuntimeLinearAnimation) -> AnimationLoop {
+        AnimationLoop::from_loop_value(self.loop_value.unwrap_or(animation.loop_value))
+    }
+
+    fn keep_going(&self, animation: &RuntimeLinearAnimation) -> bool {
+        self.resolved_loop_kind(animation) != AnimationLoop::OneShot
+            || (self.directed_speed(animation) > 0.0 && self.time < animation.end_seconds())
+            || (self.directed_speed(animation) < 0.0 && self.time > animation.start_seconds())
+    }
+
+    fn keep_going_with_speed_multiplier(
+        &self,
+        animation: &RuntimeLinearAnimation,
+        speed_multiplier: f32,
+    ) -> bool {
+        self.resolved_loop_kind(animation) != AnimationLoop::OneShot
+            || (self.directed_speed(animation) * speed_multiplier > 0.0
+                && self.time < animation.end_seconds())
+            || (self.directed_speed(animation) * speed_multiplier < 0.0
+                && self.time > animation.start_seconds())
+    }
+
+    fn advance(&mut self, animation: &RuntimeLinearAnimation, elapsed_seconds: f32) -> bool {
+        let delta_seconds = elapsed_seconds * animation.speed * self.direction;
+        self.spilled_time = 0.0;
+        if delta_seconds == 0.0 {
+            self.did_loop = false;
+            return false;
+        }
+
+        self.last_total_time = self.total_time;
+        self.total_time += delta_seconds.abs();
+        let kill_spilled_time = !self.keep_going_with_speed_multiplier(animation, elapsed_seconds);
+
+        self.time += delta_seconds;
+        let fps = animation.fps_as_f32();
+        if fps == 0.0 {
+            self.did_loop = false;
+            return self.keep_going_with_speed_multiplier(animation, elapsed_seconds);
+        }
+
+        let mut frames = self.time * fps;
+        let start = animation.start_frame();
+        let end = animation.end_frame();
+        let range = end - start;
+        let mut did_loop = false;
+        let mut direction = if delta_seconds < 0.0 { -1 } else { 1 };
+
+        match self.resolved_loop_kind(animation) {
+            AnimationLoop::OneShot => {
+                if direction == 1 && frames > end {
+                    let delta_frames = delta_seconds * fps;
+                    let spilled_frames_ratio = (frames - end) / delta_frames;
+                    self.spilled_time = spilled_frames_ratio * elapsed_seconds;
+                    frames = end;
+                    self.time = frames / fps;
+                    did_loop = true;
+                } else if direction == -1 && frames < start {
+                    let delta_frames = (delta_seconds * fps).abs();
+                    let spilled_frames_ratio = (start - frames) / delta_frames;
+                    self.spilled_time = spilled_frames_ratio * elapsed_seconds;
+                    frames = start;
+                    self.time = frames / fps;
+                    did_loop = true;
+                }
+            }
+            AnimationLoop::Loop => {
+                if range != 0.0 && direction == 1 && frames >= end {
+                    let delta_frames = delta_seconds * fps;
+                    let remainder = (frames - start) % range;
+                    let spilled_frames_ratio = remainder / delta_frames;
+                    self.spilled_time = spilled_frames_ratio * elapsed_seconds;
+                    frames = start + remainder;
+                    self.time = frames / fps;
+                    did_loop = true;
+                } else if range != 0.0 && direction == -1 && frames <= start {
+                    let delta_frames = delta_seconds * fps;
+                    let remainder = ((start - frames) % range).abs();
+                    let spilled_frames_ratio = (remainder / delta_frames).abs();
+                    self.spilled_time = spilled_frames_ratio * elapsed_seconds;
+                    frames = end - remainder;
+                    self.time = frames / fps;
+                    did_loop = true;
+                }
+            }
+            AnimationLoop::PingPong => loop {
+                if direction == 1 && frames >= end {
+                    self.spilled_time = (frames - end) / fps;
+                    frames = end + (end - frames);
+                } else if direction == -1 && frames < start {
+                    self.spilled_time = (start - frames) / fps;
+                    frames = start + (start - frames);
+                } else {
+                    break;
+                }
+                self.time = frames / fps;
+                self.direction *= -1.0;
+                direction *= -1;
+                did_loop = true;
+            },
+        }
+
+        if kill_spilled_time {
+            self.spilled_time = 0.0;
+        }
+        self.did_loop = did_loop;
+        self.keep_going_with_speed_multiplier(animation, elapsed_seconds)
     }
 }
 

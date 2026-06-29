@@ -162,6 +162,31 @@ fn push_keyframe_double(bytes: &mut Vec<u8>, frame: u64, value: f32, interpolati
     });
 }
 
+#[derive(Debug, Clone, Copy)]
+struct LinearAnimationFixtureOptions {
+    duration: u64,
+    loop_value: u64,
+    speed: f32,
+    enable_work_area: bool,
+    work_start: u64,
+    work_end: u64,
+    quantize: bool,
+}
+
+impl Default for LinearAnimationFixtureOptions {
+    fn default() -> Self {
+        Self {
+            duration: 20,
+            loop_value: 0,
+            speed: 1.0,
+            enable_work_area: false,
+            work_start: 0,
+            work_end: 0,
+            quantize: false,
+        }
+    }
+}
+
 fn synthetic_linear_animation(
     file_id: u64,
     first_frame: u64,
@@ -171,14 +196,44 @@ fn synthetic_linear_animation(
     first_interpolation_type: u64,
     quantize: bool,
 ) -> Vec<u8> {
+    synthetic_linear_animation_with_options(
+        file_id,
+        first_frame,
+        first_value,
+        second_frame,
+        second_value,
+        first_interpolation_type,
+        LinearAnimationFixtureOptions {
+            quantize,
+            ..Default::default()
+        },
+    )
+}
+
+fn synthetic_linear_animation_with_options(
+    file_id: u64,
+    first_frame: u64,
+    first_value: f32,
+    second_frame: u64,
+    second_value: f32,
+    first_interpolation_type: u64,
+    options: LinearAnimationFixtureOptions,
+) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "Backboard", |_| {});
         push_object_with_properties(bytes, "Artboard", |_| {});
         push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
         push_object_with_properties(bytes, "LinearAnimation", |bytes| {
             push_uint_property(bytes, "LinearAnimation", "fps", 10);
-            push_uint_property(bytes, "LinearAnimation", "duration", 20);
-            if quantize {
+            push_uint_property(bytes, "LinearAnimation", "duration", options.duration);
+            push_f32_property(bytes, "LinearAnimation", "speed", options.speed);
+            push_uint_property(bytes, "LinearAnimation", "loopValue", options.loop_value);
+            push_uint_property(bytes, "LinearAnimation", "workStart", options.work_start);
+            push_uint_property(bytes, "LinearAnimation", "workEnd", options.work_end);
+            if options.enable_work_area {
+                push_bool_property(bytes, "LinearAnimation", "enableWorkArea", true);
+            }
+            if options.quantize {
                 push_bool_property(bytes, "LinearAnimation", "quantize", true);
             }
         });
@@ -563,10 +618,220 @@ fn linear_animation_apply_matches_cpp_probe() {
     }
 }
 
+#[test]
+fn linear_animation_instance_advance_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let cases = [
+        (
+            "synthetic/runtime_linear_animation_instance_one_shot.riv",
+            synthetic_linear_animation_with_options(
+                8221,
+                0,
+                2.0,
+                10,
+                12.0,
+                1,
+                LinearAnimationFixtureOptions {
+                    duration: 10,
+                    ..Default::default()
+                },
+            ),
+            1.5,
+            1.0,
+        ),
+        (
+            "synthetic/runtime_linear_animation_instance_loop.riv",
+            synthetic_linear_animation_with_options(
+                8222,
+                0,
+                2.0,
+                10,
+                12.0,
+                1,
+                LinearAnimationFixtureOptions {
+                    duration: 10,
+                    loop_value: 1,
+                    ..Default::default()
+                },
+            ),
+            1.25,
+            1.0,
+        ),
+        (
+            "synthetic/runtime_linear_animation_instance_ping_pong.riv",
+            synthetic_linear_animation_with_options(
+                8223,
+                0,
+                2.0,
+                10,
+                12.0,
+                1,
+                LinearAnimationFixtureOptions {
+                    duration: 10,
+                    loop_value: 2,
+                    ..Default::default()
+                },
+            ),
+            1.25,
+            1.0,
+        ),
+        (
+            "synthetic/runtime_linear_animation_instance_work_area.riv",
+            synthetic_linear_animation_with_options(
+                8224,
+                0,
+                2.0,
+                10,
+                12.0,
+                1,
+                LinearAnimationFixtureOptions {
+                    duration: 20,
+                    enable_work_area: true,
+                    work_start: 2,
+                    work_end: 8,
+                    ..Default::default()
+                },
+            ),
+            0.3,
+            1.0,
+        ),
+        (
+            "synthetic/runtime_linear_animation_instance_negative_speed.riv",
+            synthetic_linear_animation_with_options(
+                8225,
+                0,
+                2.0,
+                10,
+                12.0,
+                1,
+                LinearAnimationFixtureOptions {
+                    duration: 10,
+                    speed: -1.0,
+                    ..Default::default()
+                },
+            ),
+            0.25,
+            1.0,
+        ),
+        (
+            "synthetic/runtime_linear_animation_instance_mixed.riv",
+            synthetic_linear_animation_with_options(
+                8226,
+                0,
+                2.0,
+                10,
+                12.0,
+                1,
+                LinearAnimationFixtureOptions {
+                    duration: 10,
+                    ..Default::default()
+                },
+            ),
+            0.5,
+            0.25,
+        ),
+    ];
+
+    for (label, bytes, seconds, mix) in cases {
+        let cpp = read_cpp_probe_bytes_with_args(
+            &probe,
+            label,
+            &bytes,
+            &[
+                "--runtime-advance-animation".to_owned(),
+                "0".to_owned(),
+                seconds.to_string(),
+                mix.to_string(),
+            ],
+        );
+        let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+        let mut animation = rust
+            .linear_animation_instance(0)
+            .unwrap_or_else(|| panic!("missing Rust animation instance for {label}"));
+        let keep_going = rust.advance_linear_animation_instance(&mut animation, seconds);
+        rust.apply_linear_animation_instance(&animation, mix);
+        let report = rust.update_components();
+
+        let cpp_artboard = cpp
+            .artboards
+            .first()
+            .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+        let cpp_animation = cpp_artboard
+            .runtime_animation_advances
+            .first()
+            .unwrap_or_else(|| panic!("missing C++ animation advance report for {label}"));
+        let runtime_animation = rust
+            .linear_animation(0)
+            .unwrap_or_else(|| panic!("missing Rust runtime animation for {label}"));
+        let keep_going_after = rust.linear_animation_instance_keep_going(&animation);
+        compare_animation_advance(
+            cpp_animation,
+            runtime_animation,
+            &animation,
+            keep_going,
+            keep_going_after,
+            label,
+        );
+        compare_cpp_runtime_update(&cpp, &rust, &report, label);
+    }
+}
+
 fn assert_close(actual: f32, expected: f32, label: &str) {
     assert!(
         (actual - expected).abs() <= 0.0001,
         "{label} mismatch: expected {expected}, got {actual}"
+    );
+}
+
+fn compare_animation_advance(
+    cpp: &CppRuntimeAnimationAdvance,
+    runtime_animation: &rive_runtime::RuntimeLinearAnimation,
+    rust: &rive_runtime::LinearAnimationInstance,
+    keep_going: bool,
+    keep_going_after: bool,
+    label: &str,
+) {
+    assert_eq!(cpp.animation_index, rust.animation_index(), "{label}");
+    assert_eq!(cpp.advanced, keep_going, "{label} advance return mismatch");
+    assert_eq!(
+        cpp.keep_going, keep_going_after,
+        "{label} keepGoing mismatch"
+    );
+    assert_close(cpp.time, rust.time(), &format!("{label} time"));
+    assert_close(
+        cpp.direction,
+        rust.direction(),
+        &format!("{label} direction"),
+    );
+    assert_close(
+        cpp.directed_speed,
+        rust.directed_speed(runtime_animation),
+        &format!("{label} directedSpeed"),
+    );
+    assert_close(
+        cpp.total_time,
+        rust.total_time(),
+        &format!("{label} totalTime"),
+    );
+    assert_close(
+        cpp.last_total_time,
+        rust.last_total_time(),
+        &format!("{label} lastTotalTime"),
+    );
+    assert_close(
+        cpp.spilled_time,
+        rust.spilled_time(),
+        &format!("{label} spilledTime"),
+    );
+    assert_eq!(cpp.did_loop, rust.did_loop(), "{label} didLoop mismatch");
+    assert_eq!(
+        cpp.loop_value as u64,
+        rust.loop_value().unwrap_or(runtime_animation.loop_value),
+        "{label} loopValue override mismatch"
     );
 }
 
@@ -703,6 +968,8 @@ struct CppArtboard {
     objects: Vec<Option<CppObject>>,
     #[serde(rename = "runtimeUpdate")]
     runtime_update: Option<CppRuntimeUpdate>,
+    #[serde(default, rename = "runtimeAnimationAdvances")]
+    runtime_animation_advances: Vec<CppRuntimeAnimationAdvance>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -722,6 +989,29 @@ struct CppRuntimeUpdate {
     #[serde(rename = "hasComponentsDirt")]
     has_components_dirt: bool,
     components: Vec<CppRuntimeComponent>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppRuntimeAnimationAdvance {
+    #[serde(rename = "animationIndex")]
+    animation_index: usize,
+    advanced: bool,
+    #[serde(rename = "keepGoing")]
+    keep_going: bool,
+    time: f32,
+    direction: f32,
+    #[serde(rename = "directedSpeed")]
+    directed_speed: f32,
+    #[serde(rename = "totalTime")]
+    total_time: f32,
+    #[serde(rename = "lastTotalTime")]
+    last_total_time: f32,
+    #[serde(rename = "spilledTime")]
+    spilled_time: f32,
+    #[serde(rename = "didLoop")]
+    did_loop: bool,
+    #[serde(rename = "loopValue")]
+    loop_value: i64,
 }
 
 #[derive(Debug, Deserialize)]

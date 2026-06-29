@@ -1,7 +1,8 @@
 use rive_binary::{RuntimeFile, read_runtime_file};
 use rive_graph::{
     AdvancingComponentKind, ArtboardHostKind, DependencyKind, DrawTargetDependencyEdge,
-    DrawTargetDependencyKind, DrawableOrderKind, GraphFile, ResettingComponentKind,
+    DrawTargetDependencyKind, DrawableOrderKind, GraphDiagnostic, GraphFile,
+    ResettingComponentKind,
 };
 use rive_schema::definition_by_name;
 use serde::Deserialize;
@@ -758,6 +759,33 @@ fn cpp_probe_matches_rust_draw_graph_resolution_when_available() {
     assert_eq!(artboard.clipping_shapes.len(), 2);
     assert_eq!(artboard.clipping_shapes[0].source_local, Some(1));
     assert_eq!(artboard.clipping_shapes[1].source_local, None);
+    assert!(
+        artboard
+            .diagnostics
+            .contains(&GraphDiagnostic::UnresolvedDrawTargetDrawable {
+                draw_target_local: 3,
+                drawable_id: 99,
+            }),
+        "unresolved DrawTarget drawable references are surfaced as graph diagnostics"
+    );
+    assert!(
+        artboard
+            .diagnostics
+            .contains(&GraphDiagnostic::UnresolvedDrawRulesTarget {
+                draw_rules_local: 5,
+                draw_target_id: 99,
+            }),
+        "unresolved DrawRules target references are surfaced as graph diagnostics"
+    );
+    assert!(
+        artboard
+            .diagnostics
+            .contains(&GraphDiagnostic::UnresolvedClippingSource {
+                clipping_shape_local: 7,
+                source_id: 99,
+            }),
+        "unresolved ClippingShape source references are surfaced as graph diagnostics"
+    );
     assert_eq!(
         artboard.lifecycle.build_dependencies_edges,
         artboard.dependency_edges.len()
@@ -1384,6 +1412,14 @@ fn graph_reports_draw_target_order_cycles() {
     assert_eq!(artboard.draw_target_cycles.len(), 1);
     assert_eq!(artboard.draw_target_cycles[0].local_ids, vec![6, 8, 6]);
     assert_eq!(artboard.lifecycle.draw_target_cycles, 1);
+    assert!(
+        artboard
+            .diagnostics
+            .contains(&GraphDiagnostic::DrawTargetCycle {
+                local_ids: vec![6, 8, 6],
+            }),
+        "draw-target cycles are surfaced as graph diagnostics without admitting draw-target mutation"
+    );
 }
 
 #[test]
@@ -4281,6 +4317,14 @@ fn graph_dependency_order_reports_targeted_constraint_cycles() {
     assert_eq!(artboard.dependency_cycles.len(), 1);
     assert_eq!(artboard.lifecycle.dependency_cycles, 1);
     assert_eq!(artboard.dependency_cycles[0].local_ids, vec![1, 2, 1]);
+    assert!(
+        artboard
+            .diagnostics
+            .contains(&GraphDiagnostic::DependencyCycle {
+                local_ids: vec![1, 2, 1],
+            }),
+        "dependency cycles are surfaced as graph diagnostics for later scheduler validation"
+    );
 }
 
 #[test]

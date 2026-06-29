@@ -138,6 +138,10 @@ The existing `rive-graph` prototype already covers:
   `PathComposer`/`TextVariationHelper` dependents and temporary draw-target
   roots remain represented through dependency nodes or draw-target projections,
   not as serialized local components.
+- Aggregated structural diagnostics on `ArtboardGraph`, covering missing
+  component parents, unresolved nonzero draw/clipping references, dependency
+  cycles, dependency-node cycles, and draw-target cycles without mutating or
+  rejecting the imported graph.
 - Capability flags for artboard/container/world-transform/transform/drawable.
 - Draw target, draw rules, and clipping source relationships.
 - Static drawable-order initialization projection matching C++ `m_Drawables`:

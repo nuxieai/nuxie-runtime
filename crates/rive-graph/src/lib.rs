@@ -77,6 +77,7 @@ pub struct ArtboardGraph {
     pub state_machines: Vec<StateMachineGraph>,
     pub dependency_order: Vec<usize>,
     pub dependency_node_order: Vec<usize>,
+    pub diagnostics: Vec<GraphDiagnostic>,
     pub lifecycle: LifecycleSummary,
 }
 
@@ -214,6 +215,15 @@ impl ArtboardGraph {
         );
         lifecycle.dependency_cycles = dependency_order.cycles.len();
         lifecycle.dependency_node_cycles = dependency_order.node_cycles.len();
+        let diagnostics = graph_diagnostics(
+            &components,
+            &draw_targets,
+            &draw_rules,
+            &clipping_shapes,
+            &dependency_order.cycles,
+            &dependency_order.node_cycles,
+            &draw_target_order.cycles,
+        );
 
         let artboard = file.objects[range.start]
             .as_ref()
@@ -270,6 +280,7 @@ impl ArtboardGraph {
             state_machines,
             dependency_order: dependency_order.component_order,
             dependency_node_order: dependency_order.node_order,
+            diagnostics,
             lifecycle,
         })
     }
@@ -318,6 +329,36 @@ pub struct ComponentCapabilities {
 pub struct DependencyNode {
     pub node_id: usize,
     pub kind: DependencyNodeKind,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum GraphDiagnostic {
+    MissingParent {
+        component_local: usize,
+        parent_local: usize,
+    },
+    UnresolvedDrawTargetDrawable {
+        draw_target_local: usize,
+        drawable_id: u64,
+    },
+    UnresolvedDrawRulesTarget {
+        draw_rules_local: usize,
+        draw_target_id: u64,
+    },
+    UnresolvedClippingSource {
+        clipping_shape_local: usize,
+        source_id: u64,
+    },
+    DependencyCycle {
+        local_ids: Vec<usize>,
+    },
+    DependencyNodeCycle {
+        node_ids: Vec<usize>,
+    },
+    DrawTargetCycle {
+        local_ids: Vec<usize>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -4167,6 +4208,76 @@ fn dependency_kind_is_component_dependent(kind: DependencyKind) -> bool {
             | DependencyKind::TextVariationHelperArtboard
             | DependencyKind::TextVariationHelperText
     )
+}
+
+fn graph_diagnostics(
+    components: &[ComponentNode],
+    draw_targets: &[DrawTargetNode],
+    draw_rules: &[DrawRulesNode],
+    clipping_shapes: &[ClippingShapeNode],
+    dependency_cycles: &[DependencyCycle],
+    dependency_node_cycles: &[DependencyNodeCycle],
+    draw_target_cycles: &[DrawTargetCycle],
+) -> Vec<GraphDiagnostic> {
+    let mut diagnostics = Vec::new();
+
+    for component in components {
+        if let (true, Some(parent_local)) = (component.missing_parent, component.parent_local) {
+            diagnostics.push(GraphDiagnostic::MissingParent {
+                component_local: component.local_id,
+                parent_local,
+            });
+        }
+    }
+
+    for target in draw_targets {
+        if target.drawable_id != 0 && target.drawable_local.is_none() {
+            diagnostics.push(GraphDiagnostic::UnresolvedDrawTargetDrawable {
+                draw_target_local: target.local_id,
+                drawable_id: target.drawable_id,
+            });
+        }
+    }
+
+    for rules in draw_rules {
+        if rules.draw_target_id != 0 && rules.active_target_local.is_none() {
+            diagnostics.push(GraphDiagnostic::UnresolvedDrawRulesTarget {
+                draw_rules_local: rules.local_id,
+                draw_target_id: rules.draw_target_id,
+            });
+        }
+    }
+
+    for clipping_shape in clipping_shapes {
+        if clipping_shape.source_id != 0 && clipping_shape.source_local.is_none() {
+            diagnostics.push(GraphDiagnostic::UnresolvedClippingSource {
+                clipping_shape_local: clipping_shape.local_id,
+                source_id: clipping_shape.source_id,
+            });
+        }
+    }
+
+    diagnostics.extend(
+        dependency_cycles
+            .iter()
+            .map(|cycle| GraphDiagnostic::DependencyCycle {
+                local_ids: cycle.local_ids.clone(),
+            }),
+    );
+    diagnostics.extend(dependency_node_cycles.iter().map(|cycle| {
+        GraphDiagnostic::DependencyNodeCycle {
+            node_ids: cycle.node_ids.clone(),
+        }
+    }));
+    diagnostics.extend(
+        draw_target_cycles
+            .iter()
+            .map(|cycle| GraphDiagnostic::DrawTargetCycle {
+                local_ids: cycle.local_ids.clone(),
+            }),
+    );
+
+    diagnostics
 }
 
 fn component_dependency_node_by_local(

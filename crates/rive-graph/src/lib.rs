@@ -647,6 +647,12 @@ pub struct PathVertexNode {
     pub weight_local: Option<usize>,
     pub weight_global: Option<u32>,
     pub weight_type_name: Option<&'static str>,
+    pub weight_values: Option<u32>,
+    pub weight_indices: Option<u32>,
+    pub weight_in_values: Option<u32>,
+    pub weight_in_indices: Option<u32>,
+    pub weight_out_values: Option<u32>,
+    pub weight_out_indices: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -2334,6 +2340,12 @@ fn paths(
                                 local_object_global_id(local_objects, local_id)
                             }),
                             weight_type_name: vertex.weight.map(|weight| weight.type_name),
+                            weight_values: optional_u32_property(vertex.weight, "values"),
+                            weight_indices: optional_u32_property(vertex.weight, "indices"),
+                            weight_in_values: optional_u32_property(vertex.weight, "inValues"),
+                            weight_in_indices: optional_u32_property(vertex.weight, "inIndices"),
+                            weight_out_values: optional_u32_property(vertex.weight, "outValues"),
+                            weight_out_indices: optional_u32_property(vertex.weight, "outIndices"),
                         })
                     })
                     .collect(),
@@ -2441,6 +2453,12 @@ fn shape_paint_containers(
             })
         })
         .collect()
+}
+
+fn optional_u32_property(object: Option<&RuntimeObject>, property: &str) -> Option<u32> {
+    object?
+        .uint_property(property)
+        .and_then(|value| u32::try_from(value).ok())
 }
 
 fn parametric_path(path: &RuntimeObject) -> Option<ParametricPathNode> {

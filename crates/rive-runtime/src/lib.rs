@@ -1273,6 +1273,12 @@ fn virtual_straight_vertex(x: f32, y: f32, radius: f32) -> PathVertexNode {
         weight_local: None,
         weight_global: None,
         weight_type_name: None,
+        weight_values: None,
+        weight_indices: None,
+        weight_in_values: None,
+        weight_in_indices: None,
+        weight_out_values: None,
+        weight_out_indices: None,
     }
 }
 

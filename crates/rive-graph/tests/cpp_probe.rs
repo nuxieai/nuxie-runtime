@@ -2223,9 +2223,21 @@ fn graph_projects_mesh_and_path_vertex_weight_registrations() {
         push_object(bytes, "Shape", &[(parent_id_key, 0)]);
         push_object(bytes, "PointsPath", &[(parent_id_key, 6)]);
         push_object(bytes, "StraightVertex", &[(parent_id_key, 7)]);
-        push_object(bytes, "Weight", &[(parent_id_key, 8)]);
+        push_object_with_properties(bytes, "Weight", |bytes| {
+            push_uint_property(bytes, "Weight", "parentId", 8);
+            push_uint_property(bytes, "Weight", "values", 0x0d0c_0b0a);
+            push_uint_property(bytes, "Weight", "indices", 0x1110_0f0e);
+        });
         push_object(bytes, "CubicMirroredVertex", &[(parent_id_key, 7)]);
-        push_object(bytes, "CubicWeight", &[(parent_id_key, 10)]);
+        push_object_with_properties(bytes, "CubicWeight", |bytes| {
+            push_uint_property(bytes, "CubicWeight", "parentId", 10);
+            push_uint_property(bytes, "CubicWeight", "values", 0x1514_1312);
+            push_uint_property(bytes, "CubicWeight", "indices", 0x1918_1716);
+            push_uint_property(bytes, "CubicWeight", "inValues", 0x2120_1f1e);
+            push_uint_property(bytes, "CubicWeight", "inIndices", 0x2524_2322);
+            push_uint_property(bytes, "CubicWeight", "outValues", 0x2928_2726);
+            push_uint_property(bytes, "CubicWeight", "outIndices", 0x2d2c_2b2a);
+        });
     });
 
     let (_, rust) = read_graph_from_bytes(&bytes, "synthetic/geometry_vertex_weights.riv");
@@ -2247,7 +2259,7 @@ fn graph_projects_mesh_and_path_vertex_weight_registrations() {
                         vertex.type_name,
                         vertex.weight_local,
                         vertex.weight_global,
-                        vertex.weight_type_name
+                        vertex.weight_type_name,
                     ))
                     .collect::<Vec<_>>()
             ))
@@ -2280,7 +2292,13 @@ fn graph_projects_mesh_and_path_vertex_weight_registrations() {
                         vertex.type_name,
                         vertex.weight_local,
                         vertex.weight_global,
-                        vertex.weight_type_name
+                        vertex.weight_type_name,
+                        vertex.weight_values,
+                        vertex.weight_indices,
+                        vertex.weight_in_values,
+                        vertex.weight_in_indices,
+                        vertex.weight_out_values,
+                        vertex.weight_out_indices,
                     ))
                     .collect::<Vec<_>>()
             ))
@@ -2290,14 +2308,33 @@ fn graph_projects_mesh_and_path_vertex_weight_registrations() {
             8,
             "PointsPath",
             vec![
-                (8, 9, "StraightVertex", Some(9), Some(10), Some("Weight")),
+                (
+                    8,
+                    9,
+                    "StraightVertex",
+                    Some(9),
+                    Some(10),
+                    Some("Weight"),
+                    Some(0x0d0c_0b0a),
+                    Some(0x1110_0f0e),
+                    None,
+                    None,
+                    None,
+                    None
+                ),
                 (
                     10,
                     11,
                     "CubicMirroredVertex",
                     Some(11),
                     Some(12),
-                    Some("CubicWeight")
+                    Some("CubicWeight"),
+                    Some(0x1514_1312),
+                    Some(0x1918_1716),
+                    Some(0x2120_1f1e),
+                    Some(0x2524_2322),
+                    Some(0x2928_2726),
+                    Some(0x2d2c_2b2a)
                 )
             ]
         )],

@@ -3213,10 +3213,19 @@ enum RuntimeTransitionCondition {
         op: TransitionConditionOp,
         value: f32,
     },
+    ArtboardNumber {
+        value: f32,
+        op: TransitionConditionOp,
+        threshold: f32,
+    },
 }
 
 impl RuntimeTransitionCondition {
-    fn from_object(file: &RuntimeFile, object: &RuntimeObject) -> Option<Self> {
+    fn from_object(
+        file: &RuntimeFile,
+        object: &RuntimeObject,
+        artboard_dimensions: RuntimeArtboardDimensions,
+    ) -> Option<Self> {
         match object.type_name {
             "TransitionBoolCondition" => {
                 let input_index = usize::try_from(object.uint_property("inputId")?).ok()?;
@@ -3245,6 +3254,18 @@ impl RuntimeTransitionCondition {
                 let comparators = file.transition_view_model_condition_comparators(object)?;
                 let left = comparators.left?;
                 let right = comparators.right?;
+                if left.type_name == "TransitionPropertyArtboardComparator"
+                    && right.type_name == "TransitionValueNumberComparator"
+                {
+                    return Some(Self::ArtboardNumber {
+                        value: artboard_dimensions
+                            .property_value(left.uint_property("propertyType").unwrap_or(0)),
+                        op: TransitionConditionOp::from_value(
+                            object.uint_property("opValue").unwrap_or(0),
+                        ),
+                        threshold: right.double_property("value").unwrap_or(0.0),
+                    });
+                }
                 if left.type_name != "TransitionPropertyViewModelComparator"
                     || right.type_name != "TransitionValueNumberComparator"
                 {
@@ -3317,6 +3338,11 @@ impl RuntimeTransitionCondition {
                     bindable_number_value(bindable_numbers, *bindable_global_id).unwrap_or(0.0);
                 op.compare(input_value, *value)
             }
+            Self::ArtboardNumber {
+                value,
+                op,
+                threshold,
+            } => op.compare(*value, *threshold),
         }
     }
 
@@ -3359,6 +3385,33 @@ impl TransitionConditionOp {
             Self::GreaterThanOrEqual => input_value >= value,
             Self::LessThan => input_value < value,
             Self::GreaterThan => input_value > value,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RuntimeArtboardDimensions {
+    width: f32,
+    height: f32,
+}
+
+impl RuntimeArtboardDimensions {
+    fn from_object(object: Option<&RuntimeObject>) -> Self {
+        let width = object
+            .and_then(|object| object.double_property("width"))
+            .unwrap_or(0.0);
+        let height = object
+            .and_then(|object| object.double_property("height"))
+            .unwrap_or(0.0);
+        Self { width, height }
+    }
+
+    fn property_value(self, property_type: u64) -> f32 {
+        match property_type {
+            0 => self.width,
+            1 => self.height,
+            2 => self.width / self.height,
+            _ => 0.0,
         }
     }
 }
@@ -5176,6 +5229,8 @@ fn build_state_machines(
     let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
         return Vec::new();
     };
+    let artboard_dimensions =
+        RuntimeArtboardDimensions::from_object(file.object(graph.global_id as usize));
     let animation_index_by_global = linear_animations
         .iter()
         .enumerate()
@@ -5284,6 +5339,7 @@ fn build_state_machines(
                                                         RuntimeTransitionCondition::from_object(
                                                             file,
                                                             condition,
+                                                            artboard_dimensions,
                                                         )
                                                     })
                                                     .collect(),

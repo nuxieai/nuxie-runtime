@@ -2384,6 +2384,42 @@ fn graph_projects_ellipse_parametric_path_facts() {
 }
 
 #[test]
+fn graph_projects_polygon_parametric_path_facts() {
+    let bytes = synthetic_runtime_file(7122, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object_with_properties(bytes, "Shape", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "Polygon", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 1);
+            push_f32_property(bytes, "ParametricPath", "width", 30.0);
+            push_f32_property(bytes, "ParametricPath", "height", 12.0);
+            push_f32_property(bytes, "ParametricPath", "originX", 0.25);
+            push_f32_property(bytes, "ParametricPath", "originY", 0.75);
+            push_uint_property(bytes, "Polygon", "points", 6);
+            push_f32_property(bytes, "Polygon", "cornerRadius", 1.5);
+        });
+    });
+
+    let (_, rust) = read_graph_from_bytes(&bytes, "synthetic/polygon_parametric_path_facts.riv");
+    let artboard = &rust.artboards[0];
+    assert_eq!(artboard.paths.len(), 1, "polygon path should be projected");
+    assert_eq!(
+        artboard.paths[0].parametric,
+        Some(rive_graph::ParametricPathNode::Polygon {
+            width: 30.0,
+            height: 12.0,
+            origin_x: 0.25,
+            origin_y: 0.75,
+            points: 6,
+            corner_radius: 1.5,
+        }),
+        "Polygon parametric fields should be available without running path updates"
+    );
+}
+
+#[test]
 fn cpp_probe_matches_rust_geometry_registrations_when_available() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ probe comparison; set RIVE_CPP_PROBE or run make cpp-probe");

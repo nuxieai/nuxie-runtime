@@ -866,6 +866,7 @@ fn path_commands(
     match path.type_name {
         "Ellipse" => ellipse_path_commands(path, path_kind, transform),
         "PointsPath" => points_path_commands(path, path_kind, transform),
+        "Polygon" => polygon_path_commands(path, path_kind, transform),
         "Rectangle" => rectangle_path_commands(path, path_kind, transform),
         _ => Vec::new(),
     }
@@ -1107,6 +1108,60 @@ fn ellipse_path_commands(
     );
     commands.push(RuntimePathCommand::Close);
     commands
+}
+
+fn polygon_path_commands(
+    path: &PathGeometryNode,
+    path_kind: ShapePaintPathKind,
+    transform: Mat2D,
+) -> Vec<RuntimePathCommand> {
+    let Some(ParametricPathNode::Polygon {
+        width,
+        height,
+        origin_x,
+        origin_y,
+        points,
+        corner_radius,
+    }) = path.parametric.as_ref()
+    else {
+        return Vec::new();
+    };
+
+    let Ok(count) = usize::try_from(*points) else {
+        return Vec::new();
+    };
+    if count < 2 {
+        return Vec::new();
+    }
+
+    let half_width = *width / 2.0;
+    let half_height = *height / 2.0;
+    let ox = -*origin_x * *width + half_width;
+    let oy = -*origin_y * *height + half_height;
+    let mut angle = -std::f32::consts::FRAC_PI_2;
+    let inc = 2.0 * std::f32::consts::PI / *points as f32;
+    let mut vertices = Vec::with_capacity(count);
+    for _ in 0..count {
+        vertices.push(virtual_straight_vertex(
+            ox + angle.cos() * half_width,
+            oy + angle.sin() * half_height,
+            *corner_radius,
+        ));
+        angle += inc;
+    }
+
+    let virtual_path = PathGeometryNode {
+        local_id: path.local_id,
+        global_id: path.global_id,
+        type_name: "PointsPath",
+        is_closed: true,
+        is_hole: path.is_hole,
+        is_clockwise: true,
+        parametric: None,
+        vertices,
+    };
+
+    points_path_commands(&virtual_path, path_kind, transform)
 }
 
 fn virtual_straight_vertex(x: f32, y: f32, radius: f32) -> PathVertexNode {

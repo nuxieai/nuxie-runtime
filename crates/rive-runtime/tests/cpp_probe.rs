@@ -632,6 +632,70 @@ fn synthetic_state_machine_random_transition(file_id: u64) -> Vec<u8> {
     })
 }
 
+fn synthetic_state_machine_fire_events(file_id: u64) -> Vec<u8> {
+    const AT_START: u64 = 0;
+    const AT_END: u64 = 1;
+    const SOURCE_START_EVENT: u64 = 2;
+    const SOURCE_END_EVENT: u64 = 3;
+    const TARGET_START_EVENT: u64 = 4;
+    const TRANSITION_START_EVENT: u64 = 5;
+    const TRANSITION_END_EVENT: u64 = 6;
+
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        for name in [
+            "source-start",
+            "source-end",
+            "target-start",
+            "transition-start",
+            "transition-end",
+        ] {
+            push_object_with_properties(bytes, "Event", |bytes| {
+                push_string_property(bytes, "Event", "name", name);
+            });
+        }
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineBool", |bytes| {
+            push_string_property(bytes, "StateMachineBool", "name", "go");
+        });
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_state_machine_fire_event(bytes, SOURCE_START_EVENT, AT_START);
+        push_state_machine_fire_event(bytes, SOURCE_END_EVENT, AT_END);
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+        });
+        push_synthetic_bool_transition_condition(bytes, 0);
+        push_state_machine_fire_event(bytes, TRANSITION_START_EVENT, AT_START);
+        push_state_machine_fire_event(bytes, TRANSITION_END_EVENT, AT_END);
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_state_machine_fire_event(bytes, TARGET_START_EVENT, AT_START);
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn push_state_machine_fire_event(bytes: &mut Vec<u8>, event_local_id: u64, occurs_value: u64) {
+    push_object_with_properties(bytes, "StateMachineFireEvent", |bytes| {
+        push_uint_property(bytes, "StateMachineFireEvent", "eventId", event_local_id);
+        if occurs_value != 0 {
+            push_uint_property(bytes, "StateMachineFireEvent", "occursValue", occurs_value);
+        }
+    });
+}
+
 fn read_cpp_probe_bytes(probe: &Path, label: &str, bytes: &[u8]) -> CppProbeFile {
     read_cpp_probe_bytes_with_args(probe, label, bytes, &[])
 }
@@ -2039,6 +2103,61 @@ fn state_machine_random_transition_matches_cpp_probe() {
 }
 
 #[test]
+fn state_machine_fire_events_match_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_fire_events_cpp.riv";
+    let bytes = synthetic_state_machine_fire_events(8251);
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-state-machine-bool".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "true".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    let mut rust_reports = Vec::new();
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    rust_reports.push((advanced, state_machine.clone()));
+    assert!(state_machine.set_bool(0, true));
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    rust_reports.push((advanced, state_machine.clone()));
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+    {
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
 fn state_machine_animation_state_advance_matches_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
@@ -2172,6 +2291,11 @@ fn compare_state_machine_advance(
         rust.changed_state_count(),
         "{label} changedStateCount mismatch"
     );
+    assert_eq!(
+        cpp.reported_event_count,
+        rust.reported_event_count(),
+        "{label} reportedEventCount mismatch"
+    );
     for (animation_index, cpp_animation) in cpp.current_animations.iter().enumerate() {
         let rust_animation = rust.current_animation(animation_index).unwrap_or_else(|| {
             panic!("missing Rust current animation {animation_index} for {label}")
@@ -2185,6 +2309,31 @@ fn compare_state_machine_advance(
             cpp_animation.did_loop,
             rust_animation.did_loop(),
             "{label} current animation {animation_index} didLoop mismatch"
+        );
+    }
+    for (event_index, cpp_event) in cpp.reported_events.iter().enumerate() {
+        let rust_event = rust
+            .reported_event(event_index)
+            .unwrap_or_else(|| panic!("missing Rust reported event {event_index} for {label}"));
+        assert_eq!(
+            cpp_event.event_local,
+            Some(rust_event.event_local_index()),
+            "{label} reported event {event_index} local ID mismatch"
+        );
+        assert_eq!(
+            cpp_event.event_core_type,
+            Some(rust_event.event_core_type()),
+            "{label} reported event {event_index} core type mismatch"
+        );
+        assert_eq!(
+            cpp_event.event_name.as_deref(),
+            rust_event.name(),
+            "{label} reported event {event_index} name mismatch"
+        );
+        assert_close(
+            cpp_event.seconds_delay,
+            rust_event.seconds_delay(),
+            &format!("{label} reported event {event_index} secondsDelay"),
         );
     }
 }
@@ -2379,8 +2528,12 @@ struct CppRuntimeStateMachineAdvance {
     current_animation_count: usize,
     #[serde(rename = "changedStateCount")]
     changed_state_count: usize,
+    #[serde(default, rename = "reportedEventCount")]
+    reported_event_count: usize,
     #[serde(rename = "currentAnimations")]
     current_animations: Vec<CppRuntimeStateMachineCurrentAnimation>,
+    #[serde(default, rename = "reportedEvents")]
+    reported_events: Vec<CppRuntimeStateMachineReportedEvent>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -2388,6 +2541,18 @@ struct CppRuntimeStateMachineCurrentAnimation {
     time: f32,
     #[serde(rename = "didLoop")]
     did_loop: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppRuntimeStateMachineReportedEvent {
+    #[serde(rename = "eventLocal")]
+    event_local: Option<usize>,
+    #[serde(rename = "eventCoreType")]
+    event_core_type: Option<u32>,
+    #[serde(rename = "eventName")]
+    event_name: Option<String>,
+    #[serde(rename = "secondsDelay")]
+    seconds_delay: f32,
 }
 
 #[derive(Debug, Deserialize)]

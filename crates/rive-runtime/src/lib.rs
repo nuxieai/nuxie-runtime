@@ -738,6 +738,7 @@ pub struct RuntimeLayerState {
     animation_index: Option<usize>,
     speed: f32,
     flags: u64,
+    fire_actions: Vec<RuntimeStateMachineFireEvent>,
     transitions: Vec<RuntimeStateTransition>,
 }
 
@@ -746,6 +747,14 @@ impl RuntimeLayerState {
 
     fn uses_random_transition_selection(&self) -> bool {
         self.flags & Self::RANDOM == Self::RANDOM
+    }
+
+    fn fire_events(
+        &self,
+        occurrence: StateMachineFireOccurrence,
+        reported_events: &mut Vec<StateMachineReportedEvent>,
+    ) {
+        fire_state_machine_events(&self.fire_actions, occurrence, reported_events);
     }
 }
 
@@ -758,6 +767,7 @@ struct RuntimeStateTransition {
     random_weight: u64,
     condition_count: usize,
     conditions: Vec<RuntimeTransitionCondition>,
+    fire_actions: Vec<RuntimeStateMachineFireEvent>,
     interpolator: Option<RuntimeTransitionInterpolator>,
     has_unsupported_interpolator: bool,
 }
@@ -822,6 +832,14 @@ impl RuntimeStateTransition {
         self.flags & Self::ENABLE_EARLY_EXIT == Self::ENABLE_EARLY_EXIT
     }
 
+    fn fire_events(
+        &self,
+        occurrence: StateMachineFireOccurrence,
+        reported_events: &mut Vec<StateMachineReportedEvent>,
+    ) {
+        fire_state_machine_events(&self.fire_actions, occurrence, reported_events);
+    }
+
     fn transition_duration_seconds(&self, animation_from: Option<&RuntimeLinearAnimation>) -> f32 {
         if self.duration == 0 {
             return 0.0;
@@ -857,6 +875,54 @@ impl RuntimeStateTransition {
     fn use_inputs(&self, inputs: &mut [StateMachineInputInstance], layer_index: usize) {
         for condition in &self.conditions {
             condition.use_input(inputs, layer_index);
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeStateMachineFireEvent {
+    occurs_value: u64,
+    event: StateMachineReportedEvent,
+}
+
+impl RuntimeStateMachineFireEvent {
+    fn from_imported(action: &rive_binary::RuntimeStateMachineFireAction<'_>) -> Option<Self> {
+        let event = action.event?;
+        Some(Self {
+            occurs_value: action.object.uint_property("occursValue").unwrap_or(0),
+            event: StateMachineReportedEvent {
+                event_local_index: action.event_local_index?,
+                event_core_type: u32::from(event.type_key),
+                name: event.string_property("name").map(ToOwned::to_owned),
+                seconds_delay: 0.0,
+            },
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StateMachineFireOccurrence {
+    AtStart,
+    AtEnd,
+}
+
+impl StateMachineFireOccurrence {
+    fn value(self) -> u64 {
+        match self {
+            Self::AtStart => 0,
+            Self::AtEnd => 1,
+        }
+    }
+}
+
+fn fire_state_machine_events(
+    fire_actions: &[RuntimeStateMachineFireEvent],
+    occurrence: StateMachineFireOccurrence,
+    reported_events: &mut Vec<StateMachineReportedEvent>,
+) {
+    for action in fire_actions {
+        if action.occurs_value == occurrence.value() {
+            reported_events.push(action.event.clone());
         }
     }
 }
@@ -1169,8 +1235,35 @@ pub struct StateMachineInstance {
     state_machine_index: usize,
     inputs: Vec<StateMachineInputInstance>,
     layers: Vec<StateMachineLayerInstance>,
+    reported_events: Vec<StateMachineReportedEvent>,
     changed_state_count: usize,
     needs_advance: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct StateMachineReportedEvent {
+    event_local_index: usize,
+    event_core_type: u32,
+    name: Option<String>,
+    seconds_delay: f32,
+}
+
+impl StateMachineReportedEvent {
+    pub fn event_local_index(&self) -> usize {
+        self.event_local_index
+    }
+
+    pub fn event_core_type(&self) -> u32 {
+        self.event_core_type
+    }
+
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+
+    pub fn seconds_delay(&self) -> f32 {
+        self.seconds_delay
+    }
 }
 
 impl StateMachineInstance {
@@ -1192,6 +1285,7 @@ impl StateMachineInstance {
                 .iter()
                 .map(|layer| StateMachineLayerInstance::new(layer, artboard))
                 .collect(),
+            reported_events: Vec::new(),
             changed_state_count: 0,
             needs_advance: false,
         }
@@ -1276,12 +1370,21 @@ impl StateMachineInstance {
             .nth(index)
     }
 
+    pub fn reported_event_count(&self) -> usize {
+        self.reported_events.len()
+    }
+
+    pub fn reported_event(&self, index: usize) -> Option<&StateMachineReportedEvent> {
+        self.reported_events.get(index)
+    }
+
     fn advance(
         &mut self,
         artboard: &mut ArtboardInstance,
         state_machine: &RuntimeStateMachine,
         elapsed_seconds: f32,
     ) -> bool {
+        self.reported_events.clear();
         self.changed_state_count = 0;
         self.needs_advance = false;
         let mut keep_going = false;
@@ -1297,6 +1400,7 @@ impl StateMachineInstance {
                 elapsed_seconds,
                 layer_index,
                 &mut self.inputs,
+                &mut self.reported_events,
             );
             if layer_result.changed_state {
                 self.changed_state_count += 1;
@@ -1306,7 +1410,7 @@ impl StateMachineInstance {
         for input in &mut self.inputs {
             input.advanced();
         }
-        self.needs_advance = keep_going;
+        self.needs_advance = keep_going || !self.reported_events.is_empty();
         self.needs_advance
     }
 }
@@ -1445,6 +1549,8 @@ struct StateMachineLayerInstance {
     transition_source_paused: bool,
     transition_interpolator: Option<RuntimeTransitionInterpolator>,
     transition_enable_early_exit: bool,
+    transition_fire_actions: Vec<RuntimeStateMachineFireEvent>,
+    transition_completed: bool,
     waiting_for_exit: bool,
 }
 
@@ -1468,6 +1574,8 @@ impl StateMachineLayerInstance {
             transition_source_paused: false,
             transition_interpolator: None,
             transition_enable_early_exit: false,
+            transition_fire_actions: Vec::new(),
+            transition_completed: false,
             waiting_for_exit: false,
         };
         instance.refresh_current_animation(artboard, layer);
@@ -1481,15 +1589,16 @@ impl StateMachineLayerInstance {
         elapsed_seconds: f32,
         layer_index: usize,
         inputs: &mut [StateMachineInputInstance],
+        reported_events: &mut Vec<StateMachineReportedEvent>,
     ) -> StateMachineLayerAdvance {
         self.advance_current_animation(artboard, layer, elapsed_seconds);
-        self.update_transition_mix(elapsed_seconds);
+        self.update_transition_mix(elapsed_seconds, reported_events);
         self.advance_transition_source_animation(artboard, layer, elapsed_seconds);
         self.apply_animations(artboard);
 
         let mut changed_state = false;
         for _ in 0..100 {
-            if !self.update_state(artboard, layer, layer_index, inputs) {
+            if !self.update_state(artboard, layer, layer_index, inputs, reported_events) {
                 break;
             }
             changed_state = true;
@@ -1511,12 +1620,20 @@ impl StateMachineLayerInstance {
         layer: &RuntimeStateMachineLayer,
         layer_index: usize,
         inputs: &mut [StateMachineInputInstance],
+        reported_events: &mut Vec<StateMachineReportedEvent>,
     ) -> bool {
         if self.is_transitioning() && !self.transition_enable_early_exit {
             return false;
         }
         self.waiting_for_exit = false;
-        if self.try_change_state(artboard, layer, layer.any_state_index, layer_index, inputs) {
+        if self.try_change_state(
+            artboard,
+            layer,
+            layer.any_state_index,
+            layer_index,
+            inputs,
+            reported_events,
+        ) {
             return true;
         }
         self.try_change_state(
@@ -1525,6 +1642,7 @@ impl StateMachineLayerInstance {
             self.current_state_index,
             layer_index,
             inputs,
+            reported_events,
         )
     }
 
@@ -1535,6 +1653,7 @@ impl StateMachineLayerInstance {
         state_index: Option<usize>,
         layer_index: usize,
         inputs: &mut [StateMachineInputInstance],
+        reported_events: &mut Vec<StateMachineReportedEvent>,
     ) -> bool {
         let Some(state_index) = state_index else {
             return false;
@@ -1551,7 +1670,7 @@ impl StateMachineLayerInstance {
             };
             let transition = &state.transitions[transition_index];
             transition.use_inputs(inputs, layer_index);
-            self.change_state(artboard, layer, transition, state_to_index);
+            self.change_state(artboard, layer, transition, state_to_index, reported_events);
             return true;
         }
 
@@ -1587,7 +1706,7 @@ impl StateMachineLayerInstance {
                 }
             }
             transition.use_inputs(inputs, layer_index);
-            self.change_state(artboard, layer, transition, state_to_index);
+            self.change_state(artboard, layer, transition, state_to_index, reported_events);
             return true;
         }
         false
@@ -1672,6 +1791,7 @@ impl StateMachineLayerInstance {
         layer: &RuntimeStateMachineLayer,
         transition: &RuntimeStateTransition,
         state_to_index: usize,
+        reported_events: &mut Vec<StateMachineReportedEvent>,
     ) {
         let previous_state_index = self.current_state_index;
         let mut previous_animation = self.current_animation.clone();
@@ -1680,6 +1800,11 @@ impl StateMachineLayerInstance {
             .map(LinearAnimationInstance::spilled_time)
             .unwrap_or(0.0);
         let previous_mix = self.transition_mix;
+        if let Some(previous_state) =
+            previous_state_index.and_then(|state_index| layer.states.get(state_index))
+        {
+            previous_state.fire_events(StateMachineFireOccurrence::AtEnd, reported_events);
+        }
 
         if transition.pause_on_exit()
             && transition.has_exit_time()
@@ -1700,11 +1825,16 @@ impl StateMachineLayerInstance {
 
         self.current_state_index = Some(state_to_index);
         self.refresh_current_animation(artboard, layer);
+        if let Some(current_state) = layer.states.get(state_to_index) {
+            current_state.fire_events(StateMachineFireOccurrence::AtStart, reported_events);
+        }
+        transition.fire_events(StateMachineFireOccurrence::AtStart, reported_events);
         if previous_spilled_time != 0.0 {
             self.advance_current_animation(artboard, layer, previous_spilled_time);
         }
 
         if transition_duration_seconds == 0.0 {
+            transition.fire_events(StateMachineFireOccurrence::AtEnd, reported_events);
             self.clear_transition_source();
             return;
         }
@@ -1720,7 +1850,9 @@ impl StateMachineLayerInstance {
             self.transition_source_paused = transition.pause_on_exit();
             self.transition_interpolator = transition.interpolator;
             self.transition_enable_early_exit = transition.enable_early_exit();
-            self.update_transition_mix(0.0);
+            self.transition_fire_actions = transition.fire_actions.clone();
+            self.transition_completed = false;
+            self.update_transition_mix(0.0, reported_events);
         } else {
             self.clear_transition_source();
         }
@@ -1735,6 +1867,8 @@ impl StateMachineLayerInstance {
         self.transition_source_paused = false;
         self.transition_interpolator = None;
         self.transition_enable_early_exit = false;
+        self.transition_fire_actions.clear();
+        self.transition_completed = false;
     }
 
     fn is_transitioning(&self) -> bool {
@@ -1743,7 +1877,11 @@ impl StateMachineLayerInstance {
             && self.transition_mix < 1.0
     }
 
-    fn update_transition_mix(&mut self, elapsed_seconds: f32) {
+    fn update_transition_mix(
+        &mut self,
+        elapsed_seconds: f32,
+        reported_events: &mut Vec<StateMachineReportedEvent>,
+    ) {
         if self.transition_source_animation.is_none() || self.transition_duration_seconds == 0.0 {
             self.transition_mix = 1.0;
             return;
@@ -1751,6 +1889,14 @@ impl StateMachineLayerInstance {
         self.transition_mix = (self.transition_mix
             + elapsed_seconds / self.transition_duration_seconds)
             .clamp(0.0, 1.0);
+        if self.transition_mix == 1.0 && !self.transition_completed {
+            self.transition_completed = true;
+            fire_state_machine_events(
+                &self.transition_fire_actions,
+                StateMachineFireOccurrence::AtEnd,
+                reported_events,
+            );
+        }
     }
 
     fn refresh_current_animation(
@@ -2172,6 +2318,11 @@ fn build_state_machines(
                                     .object
                                     .and_then(|object| object.uint_property("flags"))
                                     .unwrap_or(0),
+                                fire_actions: state
+                                    .fire_actions
+                                    .iter()
+                                    .filter_map(RuntimeStateMachineFireEvent::from_imported)
+                                    .collect(),
                                 transitions: state
                                     .transitions
                                     .into_iter()
@@ -2206,6 +2357,13 @@ fn build_state_machines(
                                                         condition,
                                                     )
                                                 })
+                                                .collect(),
+                                            fire_actions: transition
+                                                .fire_actions
+                                                .iter()
+                                                .filter_map(
+                                                    RuntimeStateMachineFireEvent::from_imported,
+                                                )
                                                 .collect(),
                                             interpolator,
                                             has_unsupported_interpolator: transition

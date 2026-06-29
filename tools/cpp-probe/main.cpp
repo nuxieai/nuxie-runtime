@@ -282,6 +282,16 @@ struct RuntimeStateMachineCurrentAnimationReport
     bool didLoop;
 };
 
+struct RuntimeStateMachineReportedEventReport
+{
+    bool hasEvent;
+    bool hasEventLocal;
+    size_t eventLocal;
+    int coreType;
+    std::string name;
+    float secondsDelay;
+};
+
 struct RuntimeStateMachineAdvanceReport
 {
     size_t stateMachineIndex;
@@ -290,6 +300,7 @@ struct RuntimeStateMachineAdvanceReport
     size_t currentAnimationCount;
     size_t changedStateCount;
     std::vector<RuntimeStateMachineCurrentAnimationReport> currentAnimations;
+    std::vector<RuntimeStateMachineReportedEventReport> reportedEvents;
 };
 
 struct ProbeOptions
@@ -705,7 +716,8 @@ void write_runtime_animation_advance_reports(
 
 std::vector<RuntimeStateMachineAdvanceReport>
 apply_runtime_state_machine_advances(rive::ArtboardInstance* instance,
-                                     const ProbeOptions& options)
+                                     const ProbeOptions& options,
+                                     const LocalIds& localIds)
 {
     std::vector<RuntimeStateMachineAdvanceReport> reports;
     if (options.runtimeStateMachineActions.empty() || instance == nullptr)
@@ -779,6 +791,28 @@ apply_runtime_state_machine_advances(rive::ArtboardInstance* instance,
                     animation->didLoop(),
                 });
         }
+        for (size_t i = 0; i < stateMachine->reportedEventCount(); ++i)
+        {
+            auto eventReport = stateMachine->reportedEventAt(i);
+            auto event = eventReport.event();
+            RuntimeStateMachineReportedEventReport reportedEvent;
+            reportedEvent.hasEvent = event != nullptr;
+            reportedEvent.hasEventLocal = false;
+            reportedEvent.eventLocal = 0;
+            reportedEvent.coreType = event == nullptr ? 0 : event->coreType();
+            reportedEvent.name = event == nullptr ? "" : event->name();
+            reportedEvent.secondsDelay = eventReport.secondsDelay();
+            if (event != nullptr)
+            {
+                auto localId = localIds.find(event);
+                if (localId != localIds.end())
+                {
+                    reportedEvent.hasEventLocal = true;
+                    reportedEvent.eventLocal = localId->second;
+                }
+            }
+            report.reportedEvents.push_back(reportedEvent);
+        }
         reports.push_back(report);
     }
     return reports;
@@ -802,6 +836,7 @@ void write_runtime_state_machine_advance_reports(
         out << ",\"currentAnimationCount\":"
             << report.currentAnimationCount;
         out << ",\"changedStateCount\":" << report.changedStateCount;
+        out << ",\"reportedEventCount\":" << report.reportedEvents.size();
         out << ",\"currentAnimations\":[";
         for (size_t j = 0; j < report.currentAnimations.size(); ++j)
         {
@@ -813,6 +848,45 @@ void write_runtime_state_machine_advance_reports(
             out << "{\"time\":" << animation.time;
             out << ",\"didLoop\":"
                 << (animation.didLoop ? "true" : "false");
+            out << '}';
+        }
+        out << "],\"reportedEvents\":[";
+        for (size_t j = 0; j < report.reportedEvents.size(); ++j)
+        {
+            if (j != 0)
+            {
+                out << ',';
+            }
+            const auto& event = report.reportedEvents[j];
+            out << "{\"index\":" << j;
+            out << ",\"eventLocal\":";
+            if (event.hasEventLocal)
+            {
+                out << event.eventLocal;
+            }
+            else
+            {
+                out << "null";
+            }
+            out << ",\"eventCoreType\":";
+            if (event.hasEvent)
+            {
+                out << event.coreType;
+            }
+            else
+            {
+                out << "null";
+            }
+            out << ",\"eventName\":";
+            if (event.hasEvent)
+            {
+                write_json_string(out, event.name);
+            }
+            else
+            {
+                out << "null";
+            }
+            out << ",\"secondsDelay\":" << event.secondsDelay;
             out << '}';
         }
         out << "]}";
@@ -4943,7 +5017,7 @@ void write_artboard(std::ostream& out,
     auto runtimeAnimationAdvanceReports =
         apply_runtime_animation_advances(instanceArtboard, options);
     auto runtimeStateMachineAdvanceReports =
-        apply_runtime_state_machine_advances(instanceArtboard, options);
+        apply_runtime_state_machine_advances(instanceArtboard, options, localIds);
 
     bool runtimeUpdateDidUpdate = false;
     if (options.runtimeUpdate)

@@ -592,6 +592,12 @@ pub struct PathVertexNode {
     pub x: f32,
     pub y: f32,
     pub radius: f32,
+    pub rotation: f32,
+    pub distance: f32,
+    pub in_rotation: f32,
+    pub in_distance: f32,
+    pub out_rotation: f32,
+    pub out_distance: f32,
     pub weight_local: Option<usize>,
     pub weight_global: Option<u32>,
     pub weight_type_name: Option<&'static str>,
@@ -2229,6 +2235,18 @@ fn paths(
                             x: vertex.object.double_property("x").unwrap_or(0.0),
                             y: vertex.object.double_property("y").unwrap_or(0.0),
                             radius: vertex.object.double_property("radius").unwrap_or(0.0),
+                            rotation: vertex.object.double_property("rotation").unwrap_or(0.0),
+                            distance: vertex.object.double_property("distance").unwrap_or(0.0),
+                            in_rotation: vertex.object.double_property("inRotation").unwrap_or(0.0),
+                            in_distance: vertex.object.double_property("inDistance").unwrap_or(0.0),
+                            out_rotation: vertex
+                                .object
+                                .double_property("outRotation")
+                                .unwrap_or(0.0),
+                            out_distance: vertex
+                                .object
+                                .double_property("outDistance")
+                                .unwrap_or(0.0),
                             weight_local: vertex.weight_local_id,
                             weight_global: vertex.weight_local_id.and_then(|local_id| {
                                 local_object_global_id(local_objects, local_id)

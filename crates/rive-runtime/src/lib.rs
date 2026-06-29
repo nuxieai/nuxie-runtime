@@ -2,8 +2,8 @@ use anyhow::{Context, Result};
 use rive_binary::{RuntimeFile, RuntimeImportStatus, RuntimeObject};
 use rive_graph::{
     ArtboardGraph, ClippingShapeNode, ComponentNode, DrawableOrderKind, PathComposerNode,
-    PathComposerPathNode, PathGeometryNode, ShapePaintKind, ShapePaintNode, ShapePaintPathKind,
-    ShapePaintStateNode, SortedDrawableNode,
+    PathComposerPathNode, PathGeometryNode, PathVertexNode, ShapePaintKind, ShapePaintNode,
+    ShapePaintPathKind, ShapePaintStateNode, SortedDrawableNode,
 };
 use rive_schema::{definition_by_name, object_supports_property};
 use std::collections::BTreeMap;
@@ -341,7 +341,7 @@ impl ArtboardInstance {
                 }
             };
 
-            commands.extend(straight_points_path_commands(path, path_kind, transform));
+            commands.extend(points_path_commands(path, path_kind, transform));
         }
 
         commands
@@ -738,7 +738,7 @@ fn opacity_to_alpha(opacity: f32) -> u8 {
     (255.0 * opacity.clamp(0.0, 1.0)).round() as u8
 }
 
-fn straight_points_path_commands(
+fn points_path_commands(
     path: &PathGeometryNode,
     path_kind: ShapePaintPathKind,
     transform: Mat2D,
@@ -746,11 +746,11 @@ fn straight_points_path_commands(
     if path.type_name != "PointsPath" || path.vertices.len() < 2 {
         return Vec::new();
     }
-    if path.vertices.iter().any(|vertex| {
-        vertex.type_name != "StraightVertex"
-            || vertex.radius != 0.0
-            || vertex.weight_local.is_some()
-    }) {
+    if path
+        .vertices
+        .iter()
+        .any(|vertex| !is_supported_point_path_vertex(vertex))
+    {
         return Vec::new();
     }
     if path_kind == ShapePaintPathKind::LocalClockwise
@@ -761,21 +761,121 @@ fn straight_points_path_commands(
 
     let mut commands = Vec::new();
     let first = &path.vertices[0];
-    let (x, y) = transform.transform_point(first.x, first.y);
-    commands.push(RuntimePathCommand::Move { x, y });
+    let start = vertex_translation(first);
+    let (start_in, mut out, start_is_cubic) = match cubic_vertex_points(first) {
+        Some((in_point, out_point)) => (in_point, out_point, true),
+        None => (start, start, false),
+    };
+    let mut prev_is_cubic = start_is_cubic;
+    push_move(&mut commands, transform, start);
 
     for vertex in path.vertices.iter().skip(1) {
-        let (x, y) = transform.transform_point(vertex.x, vertex.y);
-        commands.push(RuntimePathCommand::Line { x, y });
+        if let Some((in_point, out_point)) = cubic_vertex_points(vertex) {
+            let translation = vertex_translation(vertex);
+            push_cubic(&mut commands, transform, out, in_point, translation);
+            prev_is_cubic = true;
+            out = out_point;
+        } else {
+            let position = vertex_translation(vertex);
+            if prev_is_cubic {
+                push_cubic(&mut commands, transform, out, position, position);
+                prev_is_cubic = false;
+            } else {
+                push_line(&mut commands, transform, position);
+            }
+            out = position;
+        }
     }
 
     if path.is_closed {
-        let (x, y) = transform.transform_point(first.x, first.y);
-        commands.push(RuntimePathCommand::Line { x, y });
+        if prev_is_cubic || start_is_cubic {
+            push_cubic(&mut commands, transform, out, start_in, start);
+        } else {
+            push_line(&mut commands, transform, start);
+        }
         commands.push(RuntimePathCommand::Close);
     }
 
     commands
+}
+
+fn is_supported_point_path_vertex(vertex: &PathVertexNode) -> bool {
+    if vertex.weight_local.is_some() {
+        return false;
+    }
+    match vertex.type_name {
+        "StraightVertex" => vertex.radius == 0.0,
+        "CubicDetachedVertex" | "CubicAsymmetricVertex" | "CubicMirroredVertex" => true,
+        _ => false,
+    }
+}
+
+fn vertex_translation(vertex: &PathVertexNode) -> (f32, f32) {
+    (vertex.x, vertex.y)
+}
+
+fn cubic_vertex_points(vertex: &PathVertexNode) -> Option<((f32, f32), (f32, f32))> {
+    let point = vertex_translation(vertex);
+    match vertex.type_name {
+        "CubicDetachedVertex" => Some((
+            add_point(point, angle_vector(vertex.in_rotation, vertex.in_distance)),
+            add_point(
+                point,
+                angle_vector(vertex.out_rotation, vertex.out_distance),
+            ),
+        )),
+        "CubicAsymmetricVertex" => Some((
+            subtract_point(point, angle_vector(vertex.rotation, vertex.in_distance)),
+            add_point(point, angle_vector(vertex.rotation, vertex.out_distance)),
+        )),
+        "CubicMirroredVertex" => Some((
+            subtract_point(point, angle_vector(vertex.rotation, vertex.distance)),
+            add_point(point, angle_vector(vertex.rotation, vertex.distance)),
+        )),
+        _ => None,
+    }
+}
+
+fn angle_vector(rotation: f32, distance: f32) -> (f32, f32) {
+    (rotation.cos() * distance, rotation.sin() * distance)
+}
+
+fn add_point(point: (f32, f32), vector: (f32, f32)) -> (f32, f32) {
+    (point.0 + vector.0, point.1 + vector.1)
+}
+
+fn subtract_point(point: (f32, f32), vector: (f32, f32)) -> (f32, f32) {
+    (point.0 - vector.0, point.1 - vector.1)
+}
+
+fn push_move(commands: &mut Vec<RuntimePathCommand>, transform: Mat2D, point: (f32, f32)) {
+    let (x, y) = transform.transform_point(point.0, point.1);
+    commands.push(RuntimePathCommand::Move { x, y });
+}
+
+fn push_line(commands: &mut Vec<RuntimePathCommand>, transform: Mat2D, point: (f32, f32)) {
+    let (x, y) = transform.transform_point(point.0, point.1);
+    commands.push(RuntimePathCommand::Line { x, y });
+}
+
+fn push_cubic(
+    commands: &mut Vec<RuntimePathCommand>,
+    transform: Mat2D,
+    point1: (f32, f32),
+    point2: (f32, f32),
+    point3: (f32, f32),
+) {
+    let (x1, y1) = transform.transform_point(point1.0, point1.1);
+    let (x2, y2) = transform.transform_point(point2.0, point2.1);
+    let (x3, y3) = transform.transform_point(point3.0, point3.1);
+    commands.push(RuntimePathCommand::Cubic {
+        x1,
+        y1,
+        x2,
+        y2,
+        x3,
+        y3,
+    });
 }
 
 fn path_needs_clockwise_reversal(path: &PathGeometryNode, transform: Mat2D) -> bool {

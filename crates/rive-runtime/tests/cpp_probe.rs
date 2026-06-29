@@ -1870,10 +1870,12 @@ fn runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe() {
             push_f32_property(bytes, "Vertex", "x", 0.0);
             push_f32_property(bytes, "Vertex", "y", 0.0);
         });
-        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+        push_object_with_properties(bytes, "CubicAsymmetricVertex", |bytes| {
             push_uint_property(bytes, "Component", "parentId", 10);
             push_f32_property(bytes, "Vertex", "x", 10.0);
             push_f32_property(bytes, "Vertex", "y", 0.0);
+            push_f32_property(bytes, "CubicAsymmetricVertex", "inDistance", 5.0);
+            push_f32_property(bytes, "CubicAsymmetricVertex", "outDistance", 5.0);
         });
         push_object_with_properties(bytes, "StraightVertex", |bytes| {
             push_uint_property(bytes, "Component", "parentId", 10);
@@ -1924,8 +1926,22 @@ fn runtime_draw_command_stream_exposes_shape_paint_payloads_like_cpp_probe() {
         .collect::<Vec<_>>();
     let expected_path_commands = vec![
         RuntimePathCommand::Move { x: 0.0, y: 0.0 },
-        RuntimePathCommand::Line { x: 10.0, y: 0.0 },
-        RuntimePathCommand::Line { x: 10.0, y: 20.0 },
+        RuntimePathCommand::Cubic {
+            x1: 0.0,
+            y1: 0.0,
+            x2: 5.0,
+            y2: 0.0,
+            x3: 10.0,
+            y3: 0.0,
+        },
+        RuntimePathCommand::Cubic {
+            x1: 15.0,
+            y1: 0.0,
+            x2: 10.0,
+            y2: 20.0,
+            x3: 10.0,
+            y3: 20.0,
+        },
         RuntimePathCommand::Line { x: 0.0, y: 0.0 },
         RuntimePathCommand::Close,
     ];

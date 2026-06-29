@@ -139,6 +139,7 @@ impl ArtboardGraph {
                 parent_global: None,
                 children: Vec::new(),
                 constraint_locals: Vec::new(),
+                dependent_locals: Vec::new(),
                 graph_order: None,
                 missing_parent: false,
             });
@@ -199,6 +200,12 @@ impl ArtboardGraph {
             &text_variation_helpers,
         );
         lifecycle.build_dependencies_node_edges = dependency_node_edges.len();
+        index_component_dependents(
+            &mut components,
+            &dependency_nodes,
+            &dependency_node_edges,
+            &draw_target_order.dependency_edges,
+        );
         let dependency_order = build_dependency_order(
             &mut components,
             &component_by_local,
@@ -293,6 +300,7 @@ pub struct ComponentNode {
     pub parent_global: Option<u32>,
     pub children: Vec<usize>,
     pub constraint_locals: Vec<usize>,
+    pub dependent_locals: Vec<usize>,
     pub graph_order: Option<usize>,
     pub missing_parent: bool,
 }
@@ -4086,6 +4094,79 @@ fn index_transform_constraints(
     }
 
     registration_count
+}
+
+fn index_component_dependents(
+    components: &mut [ComponentNode],
+    dependency_nodes: &[DependencyNode],
+    dependency_node_edges: &[DependencyNodeEdge],
+    draw_target_dependency_edges: &[DrawTargetDependencyEdge],
+) {
+    for component in components.iter_mut() {
+        component.dependent_locals.clear();
+    }
+
+    let component_by_local = components
+        .iter()
+        .enumerate()
+        .map(|(index, component)| (component.local_id, index))
+        .collect::<BTreeMap<_, _>>();
+    let component_local_by_node = component_local_by_dependency_node(dependency_nodes);
+
+    for edge in dependency_node_edges {
+        if !dependency_kind_is_component_dependent(edge.kind) {
+            continue;
+        }
+        let Some(source_local) = component_local_by_node.get(&edge.source_node).copied() else {
+            continue;
+        };
+        let Some(dependent_local) = component_local_by_node.get(&edge.dependent_node).copied()
+        else {
+            continue;
+        };
+        let Some(source_index) = component_by_local.get(&source_local).copied() else {
+            continue;
+        };
+        if !component_by_local.contains_key(&dependent_local) {
+            continue;
+        }
+        push_unique(
+            &mut components[source_index].dependent_locals,
+            dependent_local,
+        );
+    }
+
+    for edge in draw_target_dependency_edges {
+        let Some(source_local) = edge.source_local else {
+            continue;
+        };
+        let Some(source_index) = component_by_local.get(&source_local).copied() else {
+            continue;
+        };
+        if !component_by_local.contains_key(&edge.dependent_local) {
+            continue;
+        }
+        push_unique(
+            &mut components[source_index].dependent_locals,
+            edge.dependent_local,
+        );
+    }
+}
+
+fn dependency_kind_is_component_dependent(kind: DependencyKind) -> bool {
+    !matches!(
+        kind,
+        DependencyKind::DrawTargetDrawable
+            | DependencyKind::DrawRulesTarget
+            | DependencyKind::ClippingSource
+            | DependencyKind::PathComposerShape
+            | DependencyKind::PathComposerPath
+            | DependencyKind::ClippingShapePathComposer
+            | DependencyKind::FollowPathConstraintTargetPathComposer
+            | DependencyKind::TextFollowPathModifierTargetPathComposer
+            | DependencyKind::TextVariationHelperArtboard
+            | DependencyKind::TextVariationHelperText
+    )
 }
 
 fn component_dependency_node_by_local(

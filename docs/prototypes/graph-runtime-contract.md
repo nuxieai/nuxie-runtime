@@ -128,6 +128,16 @@ The existing `rive-graph` prototype already covers:
 - Component parent resolution and C++ `children()` list projection, including
   import-time child adoption that is not a simple inversion of serialized
   `parentId` values.
+- Static transform constraint registration lists on `ComponentNode`, matching
+  C++ `TransformComponent::constraints()` append order from
+  `Constraint::onAddedDirty`, without admitting constraint solving, dirt
+  propagation, or transform mutation.
+- Static component dependent adjacency on `ComponentNode`, matching the
+  artboard-local portion of C++ `Component::dependents()` after
+  `buildDependencies` and draw-target initialization. Synthetic
+  `PathComposer`/`TextVariationHelper` dependents and temporary draw-target
+  roots remain represented through dependency nodes or draw-target projections,
+  not as serialized local components.
 - Capability flags for artboard/container/world-transform/transform/drawable.
 - Draw target, draw rules, and clipping source relationships.
 - Static drawable-order initialization projection matching C++ `m_Drawables`:

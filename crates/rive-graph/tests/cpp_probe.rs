@@ -1690,6 +1690,21 @@ fn cpp_parent_dependency_hooks_are_tracked_by_graph_model() {
         "Component::buildDependencies is no longer empty; audit generic parent dependency projection"
     );
 
+    let dependency_helper_header = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("include/rive/dependency_helper.hpp"))
+            .expect("read C++ dependency_helper.hpp"),
+    );
+    assert!(
+        dependency_helper_header
+            .contains("voidaddDependent(U*component){m_Dependents.pushUnique(component);}"),
+        "DependencyHelper::addDependent no longer uses pushUnique; audit dependent-list projection order and duplicates"
+    );
+    assert!(
+        dependency_helper_header
+            .contains("conststd::vector<U*>&dependents()const{returnm_Dependents.view();}"),
+        "DependencyHelper::dependents no longer exposes the stored dependent vector view"
+    );
+
     let transform_source = compact_cpp_source(
         &std::fs::read_to_string(runtime_dir.join("src/transform_component.cpp"))
             .expect("read C++ transform_component.cpp"),
@@ -2575,6 +2590,16 @@ fn graph_projects_transform_constraint_registrations() {
         components[&0].constraint_locals,
         Vec::<usize>::new(),
         "transform components without registered constraints retain an empty registration list"
+    );
+    assert_eq!(
+        components[&1].dependent_locals,
+        vec![2],
+        "Component::dependents stores unique constrained components in first-registration order"
+    );
+    assert_eq!(
+        components[&2].dependent_locals,
+        vec![1],
+        "repeated targeted constraints with the same target/parent pair do not duplicate C++ dependents"
     );
 }
 
@@ -5566,6 +5591,11 @@ fn compare_artboards(cpp: &CppProbeFile, runtime: &RuntimeFile, rust: &GraphFile
                 "component {} transform constraint registrations mismatch in artboard {index} for {label}",
                 cpp_component.local_id
             );
+            assert_eq!(
+                cpp_component.dependents_local, rust_component.dependent_locals,
+                "component {} dependent list mismatch in artboard {index} for {label}",
+                cpp_component.local_id
+            );
         }
 
         compare_artboard_import_collections(cpp_artboard, rust_artboard, index, label);
@@ -6612,6 +6642,8 @@ struct CppComponent {
     children_local: Vec<usize>,
     #[serde(default, rename = "constraintsLocal")]
     constraints_local: Vec<usize>,
+    #[serde(default, rename = "dependentsLocal")]
+    dependents_local: Vec<usize>,
 }
 
 #[derive(Debug, Deserialize)]

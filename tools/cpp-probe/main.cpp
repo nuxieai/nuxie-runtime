@@ -369,6 +369,26 @@ void write_component_fields(std::ostream& out,
     }
     out << ']';
 
+    out << ",\"dependentsLocal\":[";
+    {
+        bool first = true;
+        for (auto* dependent : component->dependents())
+        {
+            auto itr = localIds.find(dependent);
+            if (itr == localIds.end())
+            {
+                continue;
+            }
+            if (!first)
+            {
+                out << ',';
+            }
+            first = false;
+            out << itr->second;
+        }
+    }
+    out << ']';
+
     out << ",\"constraintsLocal\":[";
     if (component->is<rive::TransformComponent>())
     {

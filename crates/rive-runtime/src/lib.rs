@@ -2416,6 +2416,7 @@ pub struct RuntimeStateMachine {
     bindable_integers: Vec<RuntimeBindableInteger>,
     bindable_colors: Vec<RuntimeBindableColor>,
     bindable_strings: Vec<RuntimeBindableString>,
+    bindable_enums: Vec<RuntimeBindableEnum>,
     bindable_booleans: Vec<RuntimeBindableBoolean>,
     view_model_triggers: Vec<RuntimeViewModelTrigger>,
 }
@@ -2471,6 +2472,13 @@ struct RuntimeBindableString {
     global_id: u32,
     data_bind_indices: Vec<usize>,
     value: Vec<u8>,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeBindableEnum {
+    global_id: u32,
+    data_bind_indices: Vec<usize>,
+    value: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -2711,6 +2719,7 @@ impl RuntimeStateTransition {
         bindable_integers: &[StateMachineBindableIntegerInstance],
         bindable_colors: &[StateMachineBindableColorInstance],
         bindable_strings: &[StateMachineBindableStringInstance],
+        bindable_enums: &[StateMachineBindableEnumInstance],
         bindable_booleans: &[StateMachineBindableBooleanInstance],
         data_context_present: bool,
         layer_index: usize,
@@ -2723,6 +2732,7 @@ impl RuntimeStateTransition {
                 bindable_integers,
                 bindable_colors,
                 bindable_strings,
+                bindable_enums,
                 bindable_booleans,
                 data_context_present,
                 layer_index,
@@ -3278,6 +3288,11 @@ enum RuntimeTransitionCondition {
         op: TransitionConditionOp,
         value: Vec<u8>,
     },
+    ViewModelEnum {
+        bindable_global_id: u32,
+        op: TransitionConditionOp,
+        value: u64,
+    },
     ArtboardNumber {
         value: f32,
         op: TransitionConditionOp,
@@ -3335,7 +3350,8 @@ impl RuntimeTransitionCondition {
                     || (right.type_name != "TransitionValueNumberComparator"
                         && right.type_name != "TransitionValueBooleanComparator"
                         && right.type_name != "TransitionValueColorComparator"
-                        && right.type_name != "TransitionValueStringComparator")
+                        && right.type_name != "TransitionValueStringComparator"
+                        && right.type_name != "TransitionValueEnumComparator")
                 {
                     return None;
                 }
@@ -3398,6 +3414,17 @@ impl RuntimeTransitionCondition {
                             .to_vec(),
                     });
                 }
+                if bindable.type_name == "BindablePropertyEnum"
+                    && right.type_name == "TransitionValueEnumComparator"
+                {
+                    return Some(Self::ViewModelEnum {
+                        bindable_global_id: bindable.id,
+                        op: TransitionConditionOp::from_value(
+                            object.uint_property("opValue").unwrap_or(0),
+                        ),
+                        value: right.uint_property("value").unwrap_or(u64::from(u32::MAX)),
+                    });
+                }
                 None
             }
             _ => None,
@@ -3411,6 +3438,7 @@ impl RuntimeTransitionCondition {
         bindable_integers: &[StateMachineBindableIntegerInstance],
         bindable_colors: &[StateMachineBindableColorInstance],
         bindable_strings: &[StateMachineBindableStringInstance],
+        bindable_enums: &[StateMachineBindableEnumInstance],
         bindable_booleans: &[StateMachineBindableBooleanInstance],
         data_context_present: bool,
         layer_index: usize,
@@ -3507,6 +3535,18 @@ impl RuntimeTransitionCondition {
                     bindable_string_value(bindable_strings, *bindable_global_id).unwrap_or(&[]);
                 op.compare_bytes_equal_only(input_value, value)
             }
+            Self::ViewModelEnum {
+                bindable_global_id,
+                op,
+                value,
+            } => {
+                if !data_context_present {
+                    return false;
+                }
+                let input_value =
+                    bindable_enum_value(bindable_enums, *bindable_global_id).unwrap_or(0);
+                op.compare_u64_equal_only(input_value, *value)
+            }
             Self::ArtboardNumber {
                 value,
                 op,
@@ -3580,6 +3620,14 @@ impl TransitionConditionOp {
             _ => false,
         }
     }
+
+    fn compare_u64_equal_only(self, input_value: u64, value: u64) -> bool {
+        match self {
+            Self::Equal => input_value == value,
+            Self::NotEqual => input_value != value,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -3617,6 +3665,7 @@ pub struct StateMachineInstance {
     bindable_integers: Vec<StateMachineBindableIntegerInstance>,
     bindable_colors: Vec<StateMachineBindableColorInstance>,
     bindable_strings: Vec<StateMachineBindableStringInstance>,
+    bindable_enums: Vec<StateMachineBindableEnumInstance>,
     bindable_booleans: Vec<StateMachineBindableBooleanInstance>,
     view_model_triggers: Vec<StateMachineViewModelTriggerInstance>,
     layers: Vec<StateMachineLayerInstance>,
@@ -3685,6 +3734,11 @@ impl StateMachineInstance {
             .iter()
             .map(StateMachineBindableStringInstance::new)
             .collect::<Vec<_>>();
+        let bindable_enums = state_machine
+            .bindable_enums
+            .iter()
+            .map(StateMachineBindableEnumInstance::new)
+            .collect::<Vec<_>>();
         let bindable_booleans = state_machine
             .bindable_booleans
             .iter()
@@ -3709,6 +3763,7 @@ impl StateMachineInstance {
             bindable_integers,
             bindable_colors,
             bindable_strings,
+            bindable_enums,
             bindable_booleans,
             view_model_triggers,
             layers,
@@ -3876,6 +3931,21 @@ impl StateMachineInstance {
         true
     }
 
+    pub fn set_bindable_enum_for_data_bind(&mut self, data_bind_index: usize, value: u64) -> bool {
+        let Some(bindable_enum) = self
+            .bindable_enums
+            .iter_mut()
+            .find(|bindable_enum| bindable_enum.has_data_bind_index(data_bind_index))
+        else {
+            return false;
+        };
+        if !bindable_enum.set_value(value) {
+            return false;
+        }
+        self.needs_advance = true;
+        true
+    }
+
     pub fn bind_empty_data_context(&mut self) -> bool {
         if self.data_context_present {
             return false;
@@ -3972,6 +4042,7 @@ impl StateMachineInstance {
                 &self.bindable_integers,
                 &self.bindable_colors,
                 &self.bindable_strings,
+                &self.bindable_enums,
                 &self.bindable_booleans,
                 self.data_context_present,
                 self.data_context_view_model_bound,
@@ -4287,6 +4358,45 @@ fn bindable_string_value(
 }
 
 #[derive(Debug, Clone)]
+struct StateMachineBindableEnumInstance {
+    global_id: u32,
+    data_bind_indices: Vec<usize>,
+    value: u64,
+}
+
+impl StateMachineBindableEnumInstance {
+    fn new(bindable_enum: &RuntimeBindableEnum) -> Self {
+        Self {
+            global_id: bindable_enum.global_id,
+            data_bind_indices: bindable_enum.data_bind_indices.clone(),
+            value: bindable_enum.value,
+        }
+    }
+
+    fn has_data_bind_index(&self, data_bind_index: usize) -> bool {
+        self.data_bind_indices.contains(&data_bind_index)
+    }
+
+    fn set_value(&mut self, value: u64) -> bool {
+        if self.value == value {
+            return false;
+        }
+        self.value = value;
+        true
+    }
+}
+
+fn bindable_enum_value(
+    bindable_enums: &[StateMachineBindableEnumInstance],
+    global_id: u32,
+) -> Option<u64> {
+    bindable_enums
+        .iter()
+        .find(|bindable_enum| bindable_enum.global_id == global_id)
+        .map(|bindable_enum| bindable_enum.value)
+}
+
+#[derive(Debug, Clone)]
 struct StateMachineBindableBooleanInstance {
     global_id: u32,
     data_bind_indices: Vec<usize>,
@@ -4496,6 +4606,7 @@ impl StateMachineLayerInstance {
         bindable_integers: &[StateMachineBindableIntegerInstance],
         bindable_colors: &[StateMachineBindableColorInstance],
         bindable_strings: &[StateMachineBindableStringInstance],
+        bindable_enums: &[StateMachineBindableEnumInstance],
         bindable_booleans: &[StateMachineBindableBooleanInstance],
         data_context_present: bool,
         data_context_view_model_bound: bool,
@@ -4530,6 +4641,7 @@ impl StateMachineLayerInstance {
                 bindable_integers,
                 bindable_colors,
                 bindable_strings,
+                bindable_enums,
                 bindable_booleans,
                 data_context_present,
                 data_context_view_model_bound,
@@ -4562,6 +4674,7 @@ impl StateMachineLayerInstance {
         bindable_integers: &[StateMachineBindableIntegerInstance],
         bindable_colors: &[StateMachineBindableColorInstance],
         bindable_strings: &[StateMachineBindableStringInstance],
+        bindable_enums: &[StateMachineBindableEnumInstance],
         bindable_booleans: &[StateMachineBindableBooleanInstance],
         data_context_present: bool,
         data_context_view_model_bound: bool,
@@ -4582,6 +4695,7 @@ impl StateMachineLayerInstance {
             bindable_integers,
             bindable_colors,
             bindable_strings,
+            bindable_enums,
             bindable_booleans,
             data_context_present,
             data_context_view_model_bound,
@@ -4600,6 +4714,7 @@ impl StateMachineLayerInstance {
             bindable_integers,
             bindable_colors,
             bindable_strings,
+            bindable_enums,
             bindable_booleans,
             data_context_present,
             data_context_view_model_bound,
@@ -4619,6 +4734,7 @@ impl StateMachineLayerInstance {
         bindable_integers: &[StateMachineBindableIntegerInstance],
         bindable_colors: &[StateMachineBindableColorInstance],
         bindable_strings: &[StateMachineBindableStringInstance],
+        bindable_enums: &[StateMachineBindableEnumInstance],
         bindable_booleans: &[StateMachineBindableBooleanInstance],
         data_context_present: bool,
         data_context_view_model_bound: bool,
@@ -4643,6 +4759,7 @@ impl StateMachineLayerInstance {
                 bindable_integers,
                 bindable_colors,
                 bindable_strings,
+                bindable_enums,
                 bindable_booleans,
                 data_context_present,
             ) else {
@@ -4685,6 +4802,7 @@ impl StateMachineLayerInstance {
                 bindable_integers,
                 bindable_colors,
                 bindable_strings,
+                bindable_enums,
                 bindable_booleans,
                 data_context_present,
                 layer_index,
@@ -4727,6 +4845,7 @@ impl StateMachineLayerInstance {
         bindable_integers: &[StateMachineBindableIntegerInstance],
         bindable_colors: &[StateMachineBindableColorInstance],
         bindable_strings: &[StateMachineBindableStringInstance],
+        bindable_enums: &[StateMachineBindableEnumInstance],
         bindable_booleans: &[StateMachineBindableBooleanInstance],
         data_context_present: bool,
     ) -> Option<(usize, usize)> {
@@ -4756,6 +4875,7 @@ impl StateMachineLayerInstance {
                 bindable_integers,
                 bindable_colors,
                 bindable_strings,
+                bindable_enums,
                 bindable_booleans,
                 data_context_present,
                 layer_index,
@@ -5753,6 +5873,7 @@ fn build_state_machines(
             let bindable_integers = runtime_bindable_integers(file, &state_machine);
             let bindable_colors = runtime_bindable_colors(file, &state_machine);
             let bindable_strings = runtime_bindable_strings(file, &state_machine);
+            let bindable_enums = runtime_bindable_enums(file, &state_machine);
             let bindable_booleans = runtime_bindable_booleans(file, &state_machine);
             let view_model_triggers = runtime_default_view_model_triggers(file);
             RuntimeStateMachine {
@@ -5770,6 +5891,7 @@ fn build_state_machines(
                 bindable_integers,
                 bindable_colors,
                 bindable_strings,
+                bindable_enums,
                 bindable_booleans,
                 view_model_triggers,
                 layers: state_machine
@@ -6004,6 +6126,33 @@ fn runtime_bindable_strings(
                     .string_property_bytes("propertyValue")
                     .unwrap_or_default()
                     .to_vec(),
+            });
+    }
+
+    values.into_values().collect()
+}
+
+fn runtime_bindable_enums(
+    file: &RuntimeFile,
+    state_machine: &rive_binary::RuntimeStateMachine<'_>,
+) -> Vec<RuntimeBindableEnum> {
+    let mut values = BTreeMap::<u32, RuntimeBindableEnum>::new();
+    for (data_bind_index, data_bind) in state_machine.data_binds.iter().enumerate() {
+        let Some(target) = file.data_bind_target_for_object(data_bind) else {
+            continue;
+        };
+        if target.type_name != "BindablePropertyEnum" {
+            continue;
+        }
+        values
+            .entry(target.id)
+            .and_modify(|bindable_enum| bindable_enum.data_bind_indices.push(data_bind_index))
+            .or_insert_with(|| RuntimeBindableEnum {
+                global_id: target.id,
+                data_bind_indices: vec![data_bind_index],
+                value: target
+                    .uint_property("propertyValue")
+                    .unwrap_or(u64::from(u32::MAX)),
             });
     }
 

@@ -564,6 +564,17 @@ impl LinearAnimationInstance {
         self.loop_value
     }
 
+    fn set_time(&mut self, animation: &RuntimeLinearAnimation, value: f32) {
+        if self.time == value {
+            return;
+        }
+        self.time = value;
+        let diff = self.total_time - self.last_total_time;
+        self.total_time = value - animation.start_seconds();
+        self.last_total_time = self.total_time - diff;
+        self.direction = 1.0;
+    }
+
     pub fn directed_speed(&self, animation: &RuntimeLinearAnimation) -> f32 {
         self.direction * animation.speed
     }
@@ -756,7 +767,6 @@ impl RuntimeStateTransition {
                 & (Self::DISABLED
                     | Self::DURATION_IS_PERCENTAGE
                     | Self::EXIT_TIME_IS_PERCENTAGE
-                    | Self::PAUSE_ON_EXIT
                     | Self::ENABLE_EARLY_EXIT)
                 == 0
     }
@@ -778,7 +788,7 @@ impl RuntimeStateTransition {
         if self.flags & Self::ENABLE_EXIT_TIME == Self::ENABLE_EXIT_TIME
             && let Some((animation_instance, animation)) = animation_from
         {
-            let mut exit_time = self.exit_time as f32 / 1000.0;
+            let mut exit_time = self.exit_time_seconds();
             let duration = animation.duration_seconds();
             if exit_time <= duration
                 && AnimationLoop::from_loop_value(animation.loop_value) != AnimationLoop::OneShot
@@ -792,6 +802,18 @@ impl RuntimeStateTransition {
         }
 
         TransitionAllowance::Yes
+    }
+
+    fn has_exit_time(&self) -> bool {
+        self.flags & Self::ENABLE_EXIT_TIME == Self::ENABLE_EXIT_TIME
+    }
+
+    fn pause_on_exit(&self) -> bool {
+        self.flags & Self::PAUSE_ON_EXIT == Self::PAUSE_ON_EXIT
+    }
+
+    fn exit_time_seconds(&self) -> f32 {
+        self.exit_time as f32 / 1000.0
     }
 
     fn use_inputs(&self, inputs: &mut [StateMachineInputInstance], layer_index: usize) {
@@ -1199,6 +1221,7 @@ struct StateMachineLayerInstance {
     transition_duration_seconds: f32,
     transition_mix: f32,
     transition_mix_from: f32,
+    transition_source_paused: bool,
     waiting_for_exit: bool,
 }
 
@@ -1219,6 +1242,7 @@ impl StateMachineLayerInstance {
             transition_duration_seconds: 0.0,
             transition_mix: 1.0,
             transition_mix_from: 1.0,
+            transition_source_paused: false,
             waiting_for_exit: false,
         };
         instance.refresh_current_animation(artboard, layer);
@@ -1340,11 +1364,26 @@ impl StateMachineLayerInstance {
         state_to_index: usize,
     ) {
         let previous_state_index = self.current_state_index;
-        let previous_animation = self.current_animation.clone();
+        let mut previous_animation = self.current_animation.clone();
+        let previous_spilled_time = previous_animation
+            .as_ref()
+            .map(LinearAnimationInstance::spilled_time)
+            .unwrap_or(0.0);
         let previous_mix = self.transition_mix;
+
+        if transition.pause_on_exit()
+            && transition.has_exit_time()
+            && let Some(animation_instance) = previous_animation.as_mut()
+            && let Some(animation) = artboard.linear_animation(animation_instance.animation_index)
+        {
+            animation_instance.set_time(animation, transition.exit_time_seconds());
+        }
 
         self.current_state_index = Some(state_to_index);
         self.refresh_current_animation(artboard, layer);
+        if previous_spilled_time != 0.0 {
+            self.advance_current_animation(artboard, layer, previous_spilled_time);
+        }
 
         if transition.duration == 0 {
             self.clear_transition_source();
@@ -1359,6 +1398,7 @@ impl StateMachineLayerInstance {
             self.transition_duration_seconds = transition.duration as f32 / 1000.0;
             self.transition_mix_from = previous_mix;
             self.transition_mix = 0.0;
+            self.transition_source_paused = transition.pause_on_exit();
             self.update_transition_mix(0.0);
         } else {
             self.clear_transition_source();
@@ -1371,6 +1411,7 @@ impl StateMachineLayerInstance {
         self.transition_duration_seconds = 0.0;
         self.transition_mix = 1.0;
         self.transition_mix_from = 1.0;
+        self.transition_source_paused = false;
     }
 
     fn is_transitioning(&self) -> bool {
@@ -1451,6 +1492,9 @@ impl StateMachineLayerInstance {
         elapsed_seconds: f32,
     ) -> bool {
         if !self.is_transitioning() {
+            return false;
+        }
+        if self.transition_source_paused {
             return false;
         }
         let Some(animation_instance) = self.transition_source_animation.as_mut() else {

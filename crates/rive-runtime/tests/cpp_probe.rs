@@ -306,12 +306,27 @@ enum SyntheticInputTransitionKind {
     Trigger,
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy)]
 struct SyntheticTransitionOptions {
     duration: u64,
     flags: u64,
     exit_time: Option<u64>,
     any_state_transition: bool,
+    source_second_frame: u64,
+    source_second_value: f32,
+}
+
+impl Default for SyntheticTransitionOptions {
+    fn default() -> Self {
+        Self {
+            duration: 0,
+            flags: 0,
+            exit_time: None,
+            any_state_transition: false,
+            source_second_frame: 10,
+            source_second_value: 12.0,
+        }
+    }
 }
 
 fn synthetic_state_machine_input_transition(
@@ -365,7 +380,12 @@ fn synthetic_state_machine_input_transition_with_options(
             );
         });
         push_keyframe_double(bytes, 0, 2.0, 1);
-        push_keyframe_double(bytes, 10, 12.0, 0);
+        push_keyframe_double(
+            bytes,
+            transition.source_second_frame,
+            transition.source_second_value,
+            0,
+        );
         push_object_with_properties(bytes, "LinearAnimation", |bytes| {
             push_uint_property(bytes, "LinearAnimation", "fps", 10);
             push_uint_property(bytes, "LinearAnimation", "duration", 20);
@@ -1381,6 +1401,96 @@ fn state_machine_exit_time_transition_matches_cpp_probe() {
                 },
             ),
             vec![0.0],
+        ),
+    ] {
+        let mut args = vec![
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "--runtime-set-state-machine-bool".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "true".to_owned(),
+        ];
+        for seconds in &post_set_advances {
+            args.extend([
+                "--runtime-advance-state-machine".to_owned(),
+                "0".to_owned(),
+                seconds.to_string(),
+            ]);
+        }
+
+        let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+        let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+        let mut state_machine = rust
+            .state_machine_instance(0)
+            .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+        let mut rust_reports = Vec::new();
+        let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+        rust_reports.push((advanced, state_machine.clone()));
+        assert!(state_machine.set_bool(0, true));
+        for seconds in post_set_advances {
+            let advanced = rust.advance_state_machine_instance(&mut state_machine, seconds);
+            rust_reports.push((advanced, state_machine.clone()));
+        }
+        let report = rust.update_components();
+
+        let cpp_artboard = cpp
+            .artboards
+            .first()
+            .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+        assert_eq!(
+            cpp_artboard.runtime_state_machine_advances.len(),
+            rust_reports.len(),
+            "{label} state-machine report count mismatch"
+        );
+        for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+            .runtime_state_machine_advances
+            .iter()
+            .zip(&rust_reports)
+        {
+            compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+        }
+        compare_cpp_runtime_update(&cpp, &rust, &report, label);
+    }
+}
+
+#[test]
+fn state_machine_transition_handoff_matches_cpp_probe() {
+    const ENABLE_EXIT_TIME: u64 = 1 << 2;
+    const PAUSE_ON_EXIT: u64 = 1 << 4;
+
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    for (label, bytes, post_set_advances) in [
+        (
+            "synthetic/runtime_state_machine_spilled_time_handoff_cpp.riv",
+            synthetic_state_machine_input_transition_with_options(
+                8243,
+                SyntheticInputTransitionKind::Bool,
+                SyntheticTransitionOptions::default(),
+            ),
+            vec![2.5],
+        ),
+        (
+            "synthetic/runtime_state_machine_pause_on_exit_cpp.riv",
+            synthetic_state_machine_input_transition_with_options(
+                8244,
+                SyntheticInputTransitionKind::Bool,
+                SyntheticTransitionOptions {
+                    duration: 1000,
+                    flags: ENABLE_EXIT_TIME | PAUSE_ON_EXIT,
+                    exit_time: Some(1000),
+                    source_second_frame: 20,
+                    source_second_value: 22.0,
+                    ..Default::default()
+                },
+            ),
+            vec![1.5, 0.5],
         ),
     ] {
         let mut args = vec![

@@ -1010,7 +1010,7 @@ fn synthetic_state_machine_blend_state_1d_input(file_id: u64) -> Vec<u8> {
     })
 }
 
-fn synthetic_state_machine_blend_state_1d_view_model(file_id: u64) -> Vec<u8> {
+fn synthetic_state_machine_blend_state_1d_view_model(file_id: u64, value: f32) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "Backboard", |_| {});
         push_object_with_properties(bytes, "Artboard", |_| {});
@@ -1024,7 +1024,7 @@ fn synthetic_state_machine_blend_state_1d_view_model(file_id: u64) -> Vec<u8> {
         push_object_with_properties(bytes, "StateTransition", |bytes| {
             push_uint_property(bytes, "StateTransition", "stateToId", 2);
         });
-        push_bindable_number_data_bind(bytes, 0.5);
+        push_bindable_number_data_bind(bytes, value);
         push_object_with_properties(bytes, "BlendState1DViewModel", |_| {});
         push_blend_animation_1d(bytes, 0, 0.0);
         push_blend_animation_1d(bytes, 1, 1.0);
@@ -1070,7 +1070,7 @@ fn synthetic_state_machine_blend_state_direct(file_id: u64) -> Vec<u8> {
     })
 }
 
-fn synthetic_state_machine_direct_bindable_blend_state(file_id: u64) -> Vec<u8> {
+fn synthetic_state_machine_direct_bindable_blend_state(file_id: u64, value: f32) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "Backboard", |_| {});
         push_object_with_properties(bytes, "Artboard", |_| {});
@@ -1083,7 +1083,7 @@ fn synthetic_state_machine_direct_bindable_blend_state(file_id: u64) -> Vec<u8> 
         push_object_with_properties(bytes, "StateTransition", |bytes| {
             push_uint_property(bytes, "StateTransition", "stateToId", 2);
         });
-        push_bindable_number_data_bind(bytes, 50.0);
+        push_bindable_number_data_bind(bytes, value);
         push_object_with_properties(bytes, "BlendStateDirect", |_| {});
         push_blend_animation_direct_bindable(bytes, 0);
         push_object_with_properties(bytes, "ExitState", |_| {});
@@ -3245,11 +3245,11 @@ fn state_machine_bindable_blend_sources_match_cpp_probe() {
     for (label, bytes) in [
         (
             "synthetic/runtime_state_machine_blend_state_1d_view_model_cpp.riv",
-            synthetic_state_machine_blend_state_1d_view_model(8267),
+            synthetic_state_machine_blend_state_1d_view_model(8267, 0.5),
         ),
         (
             "synthetic/runtime_state_machine_direct_bindable_blend_state_cpp.riv",
-            synthetic_state_machine_direct_bindable_blend_state(8268),
+            synthetic_state_machine_direct_bindable_blend_state(8268, 50.0),
         ),
     ] {
         let args = [
@@ -3276,6 +3276,82 @@ fn state_machine_bindable_blend_sources_match_cpp_probe() {
                 rust.advance_state_machine_instance(&mut state_machine, 1.0),
                 state_machine.clone(),
             ),
+        ];
+        let report = rust.update_components();
+
+        let cpp_artboard = cpp
+            .artboards
+            .first()
+            .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+        assert_eq!(
+            cpp_artboard.runtime_state_machine_advances.len(),
+            rust_reports.len(),
+            "{label} state-machine report count mismatch"
+        );
+        for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+            .runtime_state_machine_advances
+            .iter()
+            .zip(&rust_reports)
+        {
+            compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+        }
+        compare_cpp_runtime_update(&cpp, &rust, &report, label);
+    }
+}
+
+#[test]
+fn state_machine_mutable_bindable_blend_sources_match_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    for (label, bytes, value) in [
+        (
+            "synthetic/runtime_state_machine_mutable_blend_state_1d_view_model_cpp.riv",
+            synthetic_state_machine_blend_state_1d_view_model(8269, 0.0),
+            1.0,
+        ),
+        (
+            "synthetic/runtime_state_machine_mutable_direct_bindable_blend_state_cpp.riv",
+            synthetic_state_machine_direct_bindable_blend_state(8270, 0.0),
+            100.0,
+        ),
+    ] {
+        let args = [
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "--runtime-set-state-machine-bindable-number".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            value.to_string(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "1".to_owned(),
+        ];
+
+        let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+        let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+        let mut state_machine = rust
+            .state_machine_instance(0)
+            .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+        let rust_reports = [
+            (
+                rust.advance_state_machine_instance(&mut state_machine, 0.0),
+                state_machine.clone(),
+            ),
+            {
+                assert!(
+                    state_machine.set_bindable_number_for_data_bind(0, value),
+                    "{label} failed to mutate bindable number"
+                );
+                (
+                    rust.advance_state_machine_instance(&mut state_machine, 1.0),
+                    state_machine.clone(),
+                )
+            },
         ];
         let report = rust.update_components();
 

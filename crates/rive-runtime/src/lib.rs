@@ -726,6 +726,7 @@ enum StateMachineInputValue {
 #[derive(Debug, Clone)]
 struct RuntimeBindableNumber {
     global_id: u32,
+    data_bind_indices: Vec<usize>,
     value: f32,
 }
 
@@ -1647,6 +1648,25 @@ impl StateMachineInstance {
         true
     }
 
+    pub fn set_bindable_number_for_data_bind(
+        &mut self,
+        data_bind_index: usize,
+        value: f32,
+    ) -> bool {
+        let Some(bindable_number) = self
+            .bindable_numbers
+            .iter_mut()
+            .find(|bindable_number| bindable_number.has_data_bind_index(data_bind_index))
+        else {
+            return false;
+        };
+        if !bindable_number.set_value(value) {
+            return false;
+        }
+        self.needs_advance = true;
+        true
+    }
+
     pub fn current_animation_count(&self) -> usize {
         self.layers
             .iter()
@@ -1849,6 +1869,7 @@ impl StateMachineInputInstance {
 #[derive(Debug, Clone)]
 struct StateMachineBindableNumberInstance {
     global_id: u32,
+    data_bind_indices: Vec<usize>,
     value: f32,
 }
 
@@ -1856,8 +1877,21 @@ impl StateMachineBindableNumberInstance {
     fn new(bindable_number: &RuntimeBindableNumber) -> Self {
         Self {
             global_id: bindable_number.global_id,
+            data_bind_indices: bindable_number.data_bind_indices.clone(),
             value: bindable_number.value,
         }
+    }
+
+    fn has_data_bind_index(&self, data_bind_index: usize) -> bool {
+        self.data_bind_indices.contains(&data_bind_index)
+    }
+
+    fn set_value(&mut self, value: f32) -> bool {
+        if self.value == value {
+            return false;
+        }
+        self.value = value;
+        true
     }
 }
 
@@ -3284,8 +3318,8 @@ fn runtime_bindable_numbers(
     file: &RuntimeFile,
     state_machine: &rive_binary::RuntimeStateMachine<'_>,
 ) -> Vec<RuntimeBindableNumber> {
-    let mut values = BTreeMap::<u32, f32>::new();
-    for data_bind in &state_machine.data_binds {
+    let mut values = BTreeMap::<u32, RuntimeBindableNumber>::new();
+    for (data_bind_index, data_bind) in state_machine.data_binds.iter().enumerate() {
         let Some(target) = file.data_bind_target_for_object(data_bind) else {
             continue;
         };
@@ -3294,13 +3328,15 @@ fn runtime_bindable_numbers(
         }
         values
             .entry(target.id)
-            .or_insert_with(|| target.double_property("propertyValue").unwrap_or(0.0));
+            .and_modify(|bindable_number| bindable_number.data_bind_indices.push(data_bind_index))
+            .or_insert_with(|| RuntimeBindableNumber {
+                global_id: target.id,
+                data_bind_indices: vec![data_bind_index],
+                value: target.double_property("propertyValue").unwrap_or(0.0),
+            });
     }
 
-    values
-        .into_iter()
-        .map(|(global_id, value)| RuntimeBindableNumber { global_id, value })
-        .collect()
+    values.into_values().collect()
 }
 
 fn runtime_state_machine_input(object: &RuntimeObject) -> Option<RuntimeStateMachineInput> {

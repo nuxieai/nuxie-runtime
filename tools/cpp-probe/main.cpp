@@ -129,6 +129,7 @@
 #include "rive/data_bind/converters/data_converter_to_string.hpp"
 #include "rive/data_bind/converters/data_converter_trigger.hpp"
 #include "rive/data_bind/data_bind.hpp"
+#include "rive/data_bind/bindable_property_number.hpp"
 #define private public
 #define protected public
 #include "rive/data_bind/data_bind_context.hpp"
@@ -263,6 +264,7 @@ enum class RuntimeStateMachineActionKind
     Advance,
     SetBool,
     SetNumber,
+    SetBindableNumber,
     FireTrigger,
 };
 
@@ -271,6 +273,7 @@ struct RuntimeStateMachineAction
     RuntimeStateMachineActionKind kind;
     size_t stateMachineIndex;
     size_t inputIndex;
+    size_t dataBindIndex;
     float seconds;
     bool boolValue;
     float numberValue;
@@ -758,6 +761,28 @@ apply_runtime_state_machine_advances(rive::ArtboardInstance* instance,
             if (input != nullptr)
             {
                 static_cast<rive::SMINumber*>(input)->value(action.numberValue);
+            }
+            continue;
+        }
+        if (action.kind == RuntimeStateMachineActionKind::SetBindableNumber)
+        {
+            auto sourceStateMachine = stateMachine->stateMachine();
+            auto dataBind =
+                sourceStateMachine == nullptr
+                    ? nullptr
+                    : sourceStateMachine->dataBind(action.dataBindIndex);
+            auto target = dataBind == nullptr ? nullptr : dataBind->target();
+            if (target != nullptr &&
+                target->is<rive::BindablePropertyNumber>())
+            {
+                auto bindableProperty = stateMachine->bindablePropertyInstance(
+                    target->as<rive::BindablePropertyNumber>());
+                if (bindableProperty != nullptr &&
+                    bindableProperty->is<rive::BindablePropertyNumber>())
+                {
+                    bindableProperty->as<rive::BindablePropertyNumber>()
+                        ->propertyValue(action.numberValue);
+                }
             }
             continue;
         }
@@ -6607,6 +6632,7 @@ int main(int argc, const char* argv[])
             action.stateMachineIndex =
                 static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
             action.inputIndex = 0;
+            action.dataBindIndex = 0;
             action.seconds = std::strtof(argv[++i], nullptr);
             action.boolValue = false;
             action.numberValue = 0.0f;
@@ -6627,6 +6653,7 @@ int main(int argc, const char* argv[])
                 static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
             action.inputIndex =
                 static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.dataBindIndex = 0;
             action.seconds = 0.0f;
             action.boolValue = parse_bool_arg(argv[++i]);
             action.numberValue = 0.0f;
@@ -6646,6 +6673,28 @@ int main(int argc, const char* argv[])
             action.stateMachineIndex =
                 static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
             action.inputIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.dataBindIndex = 0;
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = std::strtof(argv[++i], nullptr);
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
+        if (is_arg(argv[i], "--runtime-set-state-machine-bindable-number"))
+        {
+            if (i + 3 >= argc)
+            {
+                std::cerr << "--runtime-set-state-machine-bindable-number requires stateMachineIndex dataBindIndex value\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::SetBindableNumber;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex =
                 static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
             action.seconds = 0.0f;
             action.boolValue = false;
@@ -6667,6 +6716,7 @@ int main(int argc, const char* argv[])
                 static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
             action.inputIndex =
                 static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.dataBindIndex = 0;
             action.seconds = 0.0f;
             action.boolValue = false;
             action.numberValue = 0.0f;
@@ -6704,7 +6754,7 @@ int main(int argc, const char* argv[])
 
     if (filename == nullptr)
     {
-        std::cerr << "usage: rive_cpp_probe [--converter-samples] [--number-to-list-samples] [--property-values] [--file-property-values] [--no-advance] [--runtime-update] [--instance-artboards] [--runtime-set-double localId propertyKey value] [--runtime-apply-animation animationIndex seconds mix] [--runtime-advance-animation animationIndex seconds mix] [--runtime-advance-state-machine stateMachineIndex seconds] [--runtime-set-state-machine-bool stateMachineIndex inputIndex value] [--runtime-set-state-machine-number stateMachineIndex inputIndex value] [--runtime-fire-state-machine-trigger stateMachineIndex inputIndex] [--complete-view-model-properties] [--data-context-lookups] --file "
+        std::cerr << "usage: rive_cpp_probe [--converter-samples] [--number-to-list-samples] [--property-values] [--file-property-values] [--no-advance] [--runtime-update] [--instance-artboards] [--runtime-set-double localId propertyKey value] [--runtime-apply-animation animationIndex seconds mix] [--runtime-advance-animation animationIndex seconds mix] [--runtime-advance-state-machine stateMachineIndex seconds] [--runtime-set-state-machine-bool stateMachineIndex inputIndex value] [--runtime-set-state-machine-number stateMachineIndex inputIndex value] [--runtime-set-state-machine-bindable-number stateMachineIndex dataBindIndex value] [--runtime-fire-state-machine-trigger stateMachineIndex inputIndex] [--complete-view-model-properties] [--data-context-lookups] --file "
                      "path/to/file.riv\n";
         return 2;
     }

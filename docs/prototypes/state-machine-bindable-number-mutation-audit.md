@@ -68,10 +68,11 @@ Missing:
 - Any `DataBindContainer` queue, data-context resolution, view-model instance
   source lookup, converter execution, or target-to-source propagation.
 
-## Next Implementation Slice
+## Selected Implementation Slice
 
-The next slice should implement explicit mutable bindable-number overrides, not
-full data binding.
+The selected next slice was explicit mutable bindable-number overrides, not
+full data binding. The implemented runtime contract is
+`state-machine-bindable-number-mutation-runtime-contract.md`.
 
 Completion target:
 

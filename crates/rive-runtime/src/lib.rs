@@ -763,12 +763,7 @@ impl RuntimeStateTransition {
         self.state_to_index.is_some()
             && self.condition_count == self.conditions.len()
             && !self.has_interpolator
-            && self.flags
-                & (Self::DISABLED
-                    | Self::DURATION_IS_PERCENTAGE
-                    | Self::EXIT_TIME_IS_PERCENTAGE
-                    | Self::ENABLE_EARLY_EXIT)
-                == 0
+            && self.flags & (Self::DISABLED | Self::ENABLE_EARLY_EXIT) == 0
     }
 
     fn allow(
@@ -788,7 +783,7 @@ impl RuntimeStateTransition {
         if self.flags & Self::ENABLE_EXIT_TIME == Self::ENABLE_EXIT_TIME
             && let Some((animation_instance, animation)) = animation_from
         {
-            let mut exit_time = self.exit_time_seconds();
+            let mut exit_time = self.exit_time_seconds(Some(animation), false);
             let duration = animation.duration_seconds();
             if exit_time <= duration
                 && AnimationLoop::from_loop_value(animation.loop_value) != AnimationLoop::OneShot
@@ -812,7 +807,35 @@ impl RuntimeStateTransition {
         self.flags & Self::PAUSE_ON_EXIT == Self::PAUSE_ON_EXIT
     }
 
-    fn exit_time_seconds(&self) -> f32 {
+    fn transition_duration_seconds(&self, animation_from: Option<&RuntimeLinearAnimation>) -> f32 {
+        if self.duration == 0 {
+            return 0.0;
+        }
+        if self.flags & Self::DURATION_IS_PERCENTAGE == Self::DURATION_IS_PERCENTAGE {
+            return animation_from
+                .map(|animation| self.duration as f32 / 100.0 * animation.duration_seconds())
+                .unwrap_or(0.0);
+        }
+        self.duration as f32 / 1000.0
+    }
+
+    fn exit_time_seconds(
+        &self,
+        animation_from: Option<&RuntimeLinearAnimation>,
+        absolute: bool,
+    ) -> f32 {
+        if self.flags & Self::EXIT_TIME_IS_PERCENTAGE == Self::EXIT_TIME_IS_PERCENTAGE {
+            return animation_from
+                .map(|animation| {
+                    let start = if absolute {
+                        animation.start_seconds()
+                    } else {
+                        0.0
+                    };
+                    start + self.exit_time as f32 / 100.0 * animation.duration_seconds()
+                })
+                .unwrap_or(0.0);
+        }
         self.exit_time as f32 / 1000.0
     }
 
@@ -1376,8 +1399,17 @@ impl StateMachineLayerInstance {
             && let Some(animation_instance) = previous_animation.as_mut()
             && let Some(animation) = artboard.linear_animation(animation_instance.animation_index)
         {
-            animation_instance.set_time(animation, transition.exit_time_seconds());
+            animation_instance.set_time(
+                animation,
+                transition.exit_time_seconds(Some(animation), true),
+            );
         }
+        let previous_runtime_animation =
+            previous_animation.as_ref().and_then(|animation_instance| {
+                artboard.linear_animation(animation_instance.animation_index)
+            });
+        let transition_duration_seconds =
+            transition.transition_duration_seconds(previous_runtime_animation);
 
         self.current_state_index = Some(state_to_index);
         self.refresh_current_animation(artboard, layer);
@@ -1385,7 +1417,7 @@ impl StateMachineLayerInstance {
             self.advance_current_animation(artboard, layer, previous_spilled_time);
         }
 
-        if transition.duration == 0 {
+        if transition_duration_seconds == 0.0 {
             self.clear_transition_source();
             return;
         }
@@ -1395,7 +1427,7 @@ impl StateMachineLayerInstance {
         {
             self.transition_source_state_index = Some(source_state_index);
             self.transition_source_animation = Some(source_animation);
-            self.transition_duration_seconds = transition.duration as f32 / 1000.0;
+            self.transition_duration_seconds = transition_duration_seconds;
             self.transition_mix_from = previous_mix;
             self.transition_mix = 0.0;
             self.transition_source_paused = transition.pause_on_exit();

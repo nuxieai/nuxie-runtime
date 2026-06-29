@@ -1547,6 +1547,98 @@ fn state_machine_transition_handoff_matches_cpp_probe() {
 }
 
 #[test]
+fn state_machine_percentage_timing_matches_cpp_probe() {
+    const DURATION_IS_PERCENTAGE: u64 = 1 << 1;
+    const ENABLE_EXIT_TIME: u64 = 1 << 2;
+    const EXIT_TIME_IS_PERCENTAGE: u64 = 1 << 3;
+
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    for (label, bytes, post_set_advances) in [
+        (
+            "synthetic/runtime_state_machine_percentage_duration_cpp.riv",
+            synthetic_state_machine_input_transition_with_options(
+                8245,
+                SyntheticInputTransitionKind::Bool,
+                SyntheticTransitionOptions {
+                    duration: 50,
+                    flags: DURATION_IS_PERCENTAGE,
+                    ..Default::default()
+                },
+            ),
+            vec![0.0, 0.5, 0.5],
+        ),
+        (
+            "synthetic/runtime_state_machine_percentage_exit_time_cpp.riv",
+            synthetic_state_machine_input_transition_with_options(
+                8246,
+                SyntheticInputTransitionKind::Bool,
+                SyntheticTransitionOptions {
+                    flags: ENABLE_EXIT_TIME | EXIT_TIME_IS_PERCENTAGE,
+                    exit_time: Some(50),
+                    ..Default::default()
+                },
+            ),
+            vec![0.5, 0.5],
+        ),
+    ] {
+        let mut args = vec![
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "--runtime-set-state-machine-bool".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "true".to_owned(),
+        ];
+        for seconds in &post_set_advances {
+            args.extend([
+                "--runtime-advance-state-machine".to_owned(),
+                "0".to_owned(),
+                seconds.to_string(),
+            ]);
+        }
+
+        let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+        let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+        let mut state_machine = rust
+            .state_machine_instance(0)
+            .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+        let mut rust_reports = Vec::new();
+        let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+        rust_reports.push((advanced, state_machine.clone()));
+        assert!(state_machine.set_bool(0, true));
+        for seconds in post_set_advances {
+            let advanced = rust.advance_state_machine_instance(&mut state_machine, seconds);
+            rust_reports.push((advanced, state_machine.clone()));
+        }
+        let report = rust.update_components();
+
+        let cpp_artboard = cpp
+            .artboards
+            .first()
+            .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+        assert_eq!(
+            cpp_artboard.runtime_state_machine_advances.len(),
+            rust_reports.len(),
+            "{label} state-machine report count mismatch"
+        );
+        for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+            .runtime_state_machine_advances
+            .iter()
+            .zip(&rust_reports)
+        {
+            compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+        }
+        compare_cpp_runtime_update(&cpp, &rust, &report, label);
+    }
+}
+
+#[test]
 fn state_machine_animation_state_advance_matches_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");

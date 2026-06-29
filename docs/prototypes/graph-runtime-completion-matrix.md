@@ -101,7 +101,7 @@ The remaining C++ `addDependent()` calls should be handled as follows:
 | `DataBind`, `DataConverter*`, `ArtboardComponentList` value dependencies | Deferred runtime work | These need live source/target values, dirty queues, collapse state, or data-context mutation. |
 | `ViewModelInstance*`, `StateMachineInstance`, Lua/script runtime dependents | Deferred runtime work | These are instance/runtime execution relationships, not static artboard graph facts. |
 | `ListPath` y-value dependency | Deferred runtime work | This depends on live view-model/list data evaluation. |
-| Active draw target linked lists and draw-command emission | Partially graph-owned | Active target grouping, before/after placement, and clipping proxy interleaving are now represented by `sorted_drawable_order`; save-operation elision and renderer command emission remain deferred draw runtime work. |
+| Active draw target linked lists and draw-command emission | Partially graph-owned | Active target grouping, before/after placement, clipping proxy interleaving, and save-operation elision are now represented by `sorted_drawable_order`; hidden/will-draw filtering and renderer command emission remain deferred draw runtime work. |
 
 ## Deferred Runtime Work
 
@@ -115,8 +115,8 @@ These are not blockers for completing the current `rive-graph` milestone:
   observers, converter execution, and view-model dependent updates.
 - State-machine execution and listener/input processing.
 - Lua/script VM initialization and execution.
-- `clearRedundantOperations()` save-operation elision, renderer paint allocation,
-  draw commands, and GPU work.
+- Hidden/will-draw filtering, renderer paint allocation, draw commands, and GPU
+  work.
 - Text shaping/layout and variable-font mutation.
 - Audio playback.
 

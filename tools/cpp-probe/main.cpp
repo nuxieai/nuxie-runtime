@@ -24,6 +24,9 @@
 #define protected public
 #include "rive/component.hpp"
 #undef protected
+#define protected public
+#include "rive/drawable.hpp"
+#undef protected
 #define private public
 #include "rive/assets/manifest_asset.hpp"
 #undef private
@@ -1294,6 +1297,8 @@ void write_sorted_drawable_order(std::ostream& out,
         out << ",\"isClipStart\":"
             << (drawable->isClipStart() ? "true" : "false");
         out << ",\"isClipEnd\":" << (drawable->isClipEnd() ? "true" : "false");
+        out << ",\"needsSaveOperation\":"
+            << (drawable->m_needsSaveOperation ? "true" : "false");
         out << '}';
     }
     out << ']';

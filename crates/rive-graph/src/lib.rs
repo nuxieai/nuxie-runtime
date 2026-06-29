@@ -522,6 +522,7 @@ pub struct SortedDrawableNode {
     pub draw_target_local: Option<usize>,
     pub clipping_shape_local: Option<usize>,
     pub clipping_shape_global: Option<u32>,
+    pub needs_save_operation: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1690,7 +1691,9 @@ fn sorted_drawable_order(
         main.splice(insert_at..insert_at, group);
     }
 
-    interleave_clipping_proxy_drawables(main.into_iter().rev(), clipping_shapes)
+    let mut sorted = interleave_clipping_proxy_drawables(main.into_iter().rev(), clipping_shapes);
+    apply_save_operation_elision(&mut sorted, clipping_shapes);
+    sorted
 }
 
 fn sorted_drawable_node(
@@ -1707,6 +1710,7 @@ fn sorted_drawable_node(
         draw_target_local,
         clipping_shape_local: None,
         clipping_shape_global: None,
+        needs_save_operation: true,
     }
 }
 
@@ -1805,7 +1809,60 @@ fn clipping_proxy_node(
         draw_target_local: None,
         clipping_shape_local: Some(clipping_shape_local),
         clipping_shape_global,
+        needs_save_operation: true,
     }
+}
+
+fn apply_save_operation_elision(
+    sorted_drawables: &mut [SortedDrawableNode],
+    clipping_shapes: &[ClippingShapeNode],
+) {
+    let clipping_visibility = clipping_shapes
+        .iter()
+        .map(|clipping_shape| (clipping_shape.local_id, clipping_shape.is_visible))
+        .collect::<BTreeMap<_, _>>();
+    let mut prev_applied_save = false;
+    let mut applied_clipping_save_operations = Vec::<bool>::new();
+
+    for index in 0..sorted_drawables.len() {
+        sorted_drawables[index].needs_save_operation = true;
+        if prev_applied_save {
+            if sorted_drawables[index].kind == DrawableOrderKind::ClipStartProxy {
+                applied_clipping_save_operations.push(false);
+                sorted_drawables[index].needs_save_operation = false;
+            } else if sorted_drawables[index].kind == DrawableOrderKind::ClipEndProxy {
+                let operation_applied = applied_clipping_save_operations.pop().unwrap_or(true);
+                sorted_drawables[index].needs_save_operation = operation_applied;
+            } else if sorted_drawables
+                .get(index + 1)
+                .is_some_and(|next| next.kind == DrawableOrderKind::ClipEndProxy)
+            {
+                sorted_drawables[index].needs_save_operation = false;
+            }
+        } else if sorted_drawables[index].kind == DrawableOrderKind::ClipStartProxy {
+            applied_clipping_save_operations.push(true);
+        } else if sorted_drawables[index].kind == DrawableOrderKind::ClipEndProxy {
+            let operation_applied = applied_clipping_save_operations.pop().unwrap_or(true);
+            sorted_drawables[index].needs_save_operation = operation_applied;
+        }
+
+        prev_applied_save = sorted_drawables[index].kind == DrawableOrderKind::ClipStartProxy
+            && (sorted_drawable_will_clip(&sorted_drawables[index], &clipping_visibility)
+                || prev_applied_save);
+    }
+
+    debug_assert!(applied_clipping_save_operations.is_empty());
+}
+
+fn sorted_drawable_will_clip(
+    drawable: &SortedDrawableNode,
+    clipping_visibility: &BTreeMap<usize, bool>,
+) -> bool {
+    drawable
+        .clipping_shape_local
+        .and_then(|local_id| clipping_visibility.get(&local_id))
+        .copied()
+        .unwrap_or(false)
 }
 
 fn component_draw_rules_by_parent(

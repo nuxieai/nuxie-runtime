@@ -1526,6 +1526,85 @@ fn cpp_probe_matches_rust_clipping_proxy_drawable_order_when_available() {
 }
 
 #[test]
+fn cpp_probe_matches_rust_save_operation_elision_when_available() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ probe comparison; set RIVE_CPP_PROBE or run make cpp-probe");
+        return;
+    };
+
+    let parent_id_key = property_key_for_name("Component", "parentId");
+    let source_id_key = property_key_for_name("ClippingShape", "sourceId");
+
+    let bytes = synthetic_runtime_file(7197, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object(bytes, "Shape", &[(parent_id_key, 0)]);
+        push_object(bytes, "Shape", &[(parent_id_key, 0)]);
+        push_object(bytes, "Node", &[(parent_id_key, 0)]);
+        push_object(bytes, "Node", &[(parent_id_key, 3)]);
+        push_object(bytes, "Shape", &[(parent_id_key, 4)]);
+        push_object(
+            bytes,
+            "ClippingShape",
+            &[(parent_id_key, 3), (source_id_key, 1)],
+        );
+        push_object(
+            bytes,
+            "ClippingShape",
+            &[(parent_id_key, 4), (source_id_key, 2)],
+        );
+    });
+
+    let label = "synthetic/save_operation_elision.riv";
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let (runtime, rust) = read_graph_from_bytes(&bytes, label);
+    compare_artboards(&cpp, &runtime, &rust, label);
+
+    let cpp_order = cpp.artboards[0]
+        .sorted_drawable_order
+        .iter()
+        .map(|node| {
+            (
+                node.local_id,
+                node.is_clip_start,
+                node.is_clip_end,
+                node.needs_save_operation,
+            )
+        })
+        .collect::<Vec<_>>();
+    let rust_order = rust.artboards[0]
+        .sorted_drawable_order
+        .iter()
+        .map(|node| {
+            (
+                node.local_id,
+                node.kind == DrawableOrderKind::ClipStartProxy,
+                node.kind == DrawableOrderKind::ClipEndProxy,
+                node.needs_save_operation,
+            )
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        cpp_order,
+        vec![
+            (None, true, false, true),
+            (None, true, false, false),
+            (Some(5), false, false, false),
+            (None, false, true, false),
+            (None, false, true, true),
+            (Some(2), false, false, true),
+            (Some(1), false, false, true),
+        ],
+        "C++ clearRedundantOperations should elide consecutive clipping saves and tightly wrapped drawable saves"
+    );
+    assert_eq!(
+        rust_order, cpp_order,
+        "Rust sorted drawable order should preserve C++ save-operation elision flags"
+    );
+}
+
+#[test]
 fn graph_reports_draw_target_order_cycles() {
     let parent_id_key = property_key_for_name("Component", "parentId");
     let drawable_id_key = property_key_for_name("DrawTarget", "drawableId");
@@ -6905,6 +6984,8 @@ struct CppSortedDrawable {
     is_clip_start: bool,
     #[serde(rename = "isClipEnd")]
     is_clip_end: bool,
+    #[serde(rename = "needsSaveOperation")]
+    needs_save_operation: bool,
 }
 
 #[derive(Debug, Deserialize)]

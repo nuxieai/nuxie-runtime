@@ -737,7 +737,16 @@ pub struct RuntimeLayerState {
     pub type_name: Option<&'static str>,
     animation_index: Option<usize>,
     speed: f32,
+    flags: u64,
     transitions: Vec<RuntimeStateTransition>,
+}
+
+impl RuntimeLayerState {
+    const RANDOM: u64 = 1 << 0;
+
+    fn uses_random_transition_selection(&self) -> bool {
+        self.flags & Self::RANDOM == Self::RANDOM
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -746,6 +755,7 @@ struct RuntimeStateTransition {
     duration: u64,
     exit_time: u64,
     flags: u64,
+    random_weight: u64,
     condition_count: usize,
     conditions: Vec<RuntimeTransitionCondition>,
     interpolator: Option<RuntimeTransitionInterpolator>,
@@ -1533,6 +1543,18 @@ impl StateMachineLayerInstance {
             return false;
         };
 
+        if state.uses_random_transition_selection() {
+            let Some((transition_index, state_to_index)) =
+                self.find_random_transition(artboard, state, state_index, layer_index, inputs)
+            else {
+                return false;
+            };
+            let transition = &state.transitions[transition_index];
+            transition.use_inputs(inputs, layer_index);
+            self.change_state(artboard, layer, transition, state_to_index);
+            return true;
+        }
+
         for transition in &state.transitions {
             if !transition.is_simple_supported() {
                 continue;
@@ -1569,6 +1591,79 @@ impl StateMachineLayerInstance {
             return true;
         }
         false
+    }
+
+    fn find_random_transition(
+        &mut self,
+        artboard: &ArtboardInstance,
+        state: &RuntimeLayerState,
+        state_index: usize,
+        layer_index: usize,
+        inputs: &[StateMachineInputInstance],
+    ) -> Option<(usize, usize)> {
+        let animation_from = (self.current_state_index == Some(state_index))
+            .then(|| {
+                self.current_animation
+                    .as_ref()
+                    .and_then(|animation_instance| {
+                        artboard
+                            .linear_animation(animation_instance.animation_index)
+                            .map(|animation| (animation_instance, animation))
+                    })
+            })
+            .flatten();
+        let mut weighted_candidates = Vec::new();
+        let mut total_weight = 0_u64;
+        let mut waiting_for_exit = false;
+
+        for (transition_index, transition) in state.transitions.iter().enumerate() {
+            if !transition.is_simple_supported() {
+                continue;
+            }
+            let Some(state_to_index) = transition.state_to_index else {
+                continue;
+            };
+            if self.current_state_index == Some(state_to_index) {
+                continue;
+            }
+
+            match transition.allow(inputs, layer_index, animation_from) {
+                TransitionAllowance::No => {}
+                TransitionAllowance::WaitingForExit => {
+                    waiting_for_exit = true;
+                }
+                TransitionAllowance::Yes => {
+                    total_weight = total_weight.saturating_add(transition.random_weight);
+                    weighted_candidates.push((
+                        transition_index,
+                        state_to_index,
+                        transition.random_weight,
+                    ));
+                }
+            }
+        }
+
+        if total_weight == 0 {
+            self.waiting_for_exit = waiting_for_exit;
+            return None;
+        }
+
+        let random_weight = Self::random_transition_value() * total_weight as f64;
+        let mut current_weight = 0.0_f64;
+        for (transition_index, state_to_index, transition_weight) in weighted_candidates {
+            current_weight += transition_weight as f64;
+            if current_weight > random_weight {
+                self.waiting_for_exit = false;
+                return Some((transition_index, state_to_index));
+            }
+        }
+
+        self.waiting_for_exit = waiting_for_exit;
+        None
+    }
+
+    fn random_transition_value() -> f64 {
+        0.0
     }
 
     fn change_state(
@@ -2073,6 +2168,10 @@ fn build_state_machines(
                                     .object
                                     .and_then(|object| object.double_property("speed"))
                                     .unwrap_or(1.0),
+                                flags: state
+                                    .object
+                                    .and_then(|object| object.uint_property("flags"))
+                                    .unwrap_or(0),
                                 transitions: state
                                     .transitions
                                     .into_iter()
@@ -2094,6 +2193,10 @@ fn build_state_machines(
                                                 .object
                                                 .uint_property("flags")
                                                 .unwrap_or(0),
+                                            random_weight: transition
+                                                .object
+                                                .uint_property("randomWeight")
+                                                .unwrap_or(1),
                                             condition_count: transition.conditions.len(),
                                             conditions: transition
                                                 .conditions

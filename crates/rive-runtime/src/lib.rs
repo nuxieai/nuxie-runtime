@@ -849,7 +849,17 @@ impl RuntimeStateTransition {
 
 #[derive(Debug, Clone, Copy)]
 enum RuntimeTransitionInterpolator {
-    CubicEase { x1: f32, y1: f32, x2: f32, y2: f32 },
+    CubicEase {
+        x1: f32,
+        y1: f32,
+        x2: f32,
+        y2: f32,
+    },
+    Elastic {
+        amplitude: f32,
+        period: f32,
+        easing_value: u64,
+    },
 }
 
 impl RuntimeTransitionInterpolator {
@@ -861,6 +871,11 @@ impl RuntimeTransitionInterpolator {
                 x2: object.double_property("x2").unwrap_or(0.58),
                 y2: object.double_property("y2").unwrap_or(1.0),
             }),
+            "ElasticInterpolator" => Some(Self::Elastic {
+                amplitude: object.double_property("amplitude").unwrap_or(1.0),
+                period: object.double_property("period").unwrap_or(1.0),
+                easing_value: object.uint_property("easingValue").unwrap_or(1),
+            }),
             _ => None,
         }
     }
@@ -871,6 +886,11 @@ impl RuntimeTransitionInterpolator {
                 let t = cubic_interpolator_get_t(factor, x1, x2);
                 cubic_interpolator_calc_bezier(t, y1, y2)
             }
+            Self::Elastic {
+                amplitude,
+                period,
+                easing_value,
+            } => elastic_interpolator_transform(factor, amplitude, period, easing_value),
         }
     }
 }
@@ -937,6 +957,76 @@ fn cubic_interpolator_get_t(x: f32, x1: f32, x2: f32) -> f32 {
                 return current_t;
             }
         }
+    }
+}
+
+fn elastic_interpolator_transform(
+    factor: f32,
+    amplitude: f32,
+    serialized_period: f32,
+    easing_value: u64,
+) -> f32 {
+    let period = if serialized_period == 0.0 {
+        0.5
+    } else {
+        serialized_period
+    };
+    let shift = if amplitude < 1.0 {
+        period / 4.0
+    } else {
+        period / (2.0 * std::f32::consts::PI) * (1.0 / amplitude).asin()
+    };
+
+    match easing_value {
+        0 => elastic_ease_in(factor, amplitude, period, shift),
+        1 => elastic_ease_out(factor, amplitude, period, shift),
+        2 => elastic_ease_in_out(factor, amplitude, period, shift),
+        _ => factor,
+    }
+}
+
+fn elastic_actual_amplitude(time: f32, amplitude: f32, shift: f32) -> f32 {
+    if amplitude < 1.0 {
+        let shift_abs = shift.abs();
+        let time_abs = time.abs();
+        if time_abs < shift_abs {
+            let l = time_abs / shift_abs;
+            return (amplitude * l) + (1.0 - l);
+        }
+    }
+
+    amplitude
+}
+
+fn elastic_ease_out(factor: f32, amplitude: f32, period: f32, shift: f32) -> f32 {
+    let time = factor;
+    let actual_amplitude = elastic_actual_amplitude(time, amplitude, shift);
+    actual_amplitude
+        * 2.0_f32.powf(10.0 * -time)
+        * ((time - shift) * (2.0 * std::f32::consts::PI) / period).sin()
+        + 1.0
+}
+
+fn elastic_ease_in(factor: f32, amplitude: f32, period: f32, shift: f32) -> f32 {
+    let time = factor - 1.0;
+    let actual_amplitude = elastic_actual_amplitude(time, amplitude, shift);
+    -(actual_amplitude
+        * 2.0_f32.powf(10.0 * time)
+        * ((-time - shift) * (2.0 * std::f32::consts::PI) / period).sin())
+}
+
+fn elastic_ease_in_out(factor: f32, amplitude: f32, period: f32, shift: f32) -> f32 {
+    let time = factor * 2.0 - 1.0;
+    let actual_amplitude = elastic_actual_amplitude(time, amplitude, shift);
+    if time < 0.0 {
+        -0.5 * actual_amplitude
+            * 2.0_f32.powf(10.0 * time)
+            * ((-time - shift) * (2.0 * std::f32::consts::PI) / period).sin()
+    } else {
+        0.5 * (actual_amplitude
+            * 2.0_f32.powf(10.0 * -time)
+            * ((time - shift) * (2.0 * std::f32::consts::PI) / period).sin())
+            + 1.0
     }
 }
 

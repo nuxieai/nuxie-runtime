@@ -315,6 +315,7 @@ struct SyntheticTransitionOptions {
     source_second_frame: u64,
     source_second_value: f32,
     cubic_transition_interpolator: bool,
+    elastic_transition_interpolator: bool,
 }
 
 impl Default for SyntheticTransitionOptions {
@@ -327,6 +328,7 @@ impl Default for SyntheticTransitionOptions {
             source_second_frame: 10,
             source_second_value: 12.0,
             cubic_transition_interpolator: false,
+            elastic_transition_interpolator: false,
         }
     }
 }
@@ -371,6 +373,13 @@ fn synthetic_state_machine_input_transition_with_options(
                 push_f32_property(bytes, "CubicEaseInterpolator", "y1", 0.0);
                 push_f32_property(bytes, "CubicEaseInterpolator", "x2", 0.8);
                 push_f32_property(bytes, "CubicEaseInterpolator", "y2", 0.0);
+            });
+            2
+        } else if transition.elastic_transition_interpolator {
+            push_object_with_properties(bytes, "ElasticInterpolator", |bytes| {
+                push_uint_property(bytes, "ElasticInterpolator", "easingValue", 1);
+                push_f32_property(bytes, "ElasticInterpolator", "amplitude", 1.2);
+                push_f32_property(bytes, "ElasticInterpolator", "period", 0.4);
             });
             2
         } else {
@@ -472,7 +481,7 @@ fn push_synthetic_transition_options(bytes: &mut Vec<u8>, transition: SyntheticT
     if let Some(exit_time) = transition.exit_time {
         push_uint_property(bytes, "StateTransition", "exitTime", exit_time);
     }
-    if transition.cubic_transition_interpolator {
+    if transition.cubic_transition_interpolator || transition.elastic_transition_interpolator {
         push_uint_property(bytes, "StateTransition", "interpolatorId", 1);
     }
 }
@@ -1668,6 +1677,74 @@ fn state_machine_cubic_transition_interpolator_matches_cpp_probe() {
         SyntheticTransitionOptions {
             duration: 1000,
             cubic_transition_interpolator: true,
+            ..Default::default()
+        },
+    );
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-state-machine-bool".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "true".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.5".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    let mut rust_reports = Vec::new();
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    rust_reports.push((advanced, state_machine.clone()));
+    assert!(state_machine.set_bool(0, true));
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    rust_reports.push((advanced, state_machine.clone()));
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.5);
+    rust_reports.push((advanced, state_machine.clone()));
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+    {
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn state_machine_elastic_transition_interpolator_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_elastic_transition_interpolator_cpp.riv";
+    let bytes = synthetic_state_machine_input_transition_with_options(
+        8248,
+        SyntheticInputTransitionKind::Bool,
+        SyntheticTransitionOptions {
+            duration: 1000,
+            elastic_transition_interpolator: true,
             ..Default::default()
         },
     );

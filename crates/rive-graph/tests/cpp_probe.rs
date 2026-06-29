@@ -1605,6 +1605,55 @@ fn cpp_probe_matches_rust_save_operation_elision_when_available() {
 }
 
 #[test]
+fn cpp_probe_matches_rust_sorted_drawable_hidden_flags_when_available() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ probe comparison; set RIVE_CPP_PROBE or run make cpp-probe");
+        return;
+    };
+
+    let parent_id_key = property_key_for_name("Component", "parentId");
+    let drawable_flags_key = property_key_for_name("Drawable", "drawableFlags");
+
+    let bytes = synthetic_runtime_file(7198, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object(bytes, "Shape", &[(parent_id_key, 0)]);
+        push_object(
+            bytes,
+            "Shape",
+            &[(parent_id_key, 0), (drawable_flags_key, 1)],
+        );
+        push_object(bytes, "Shape", &[(parent_id_key, 0)]);
+    });
+
+    let label = "synthetic/sorted_drawable_hidden_flags.riv";
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let (runtime, rust) = read_graph_from_bytes(&bytes, label);
+    compare_artboards(&cpp, &runtime, &rust, label);
+
+    let cpp_hidden = cpp.artboards[0]
+        .sorted_drawable_order
+        .iter()
+        .map(|node| (node.local_id, node.is_hidden))
+        .collect::<Vec<_>>();
+    let rust_hidden = rust.artboards[0]
+        .sorted_drawable_order
+        .iter()
+        .map(|node| (node.local_id, node.is_hidden))
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        cpp_hidden,
+        vec![(Some(3), false), (Some(2), true), (Some(1), false)],
+        "C++ sorted drawable order should expose the imported hidden drawable flag"
+    );
+    assert_eq!(
+        rust_hidden, cpp_hidden,
+        "Rust sorted drawable hidden flags should match C++ Drawable::isHidden for imported flags"
+    );
+}
+
+#[test]
 fn graph_reports_draw_target_order_cycles() {
     let parent_id_key = property_key_for_name("Component", "parentId");
     let drawable_id_key = property_key_for_name("DrawTarget", "drawableId");
@@ -6980,6 +7029,8 @@ struct CppSortedDrawable {
     local_id: Option<usize>,
     #[serde(rename = "isProxy")]
     is_proxy: bool,
+    #[serde(rename = "isHidden")]
+    is_hidden: bool,
     #[serde(rename = "isClipStart")]
     is_clip_start: bool,
     #[serde(rename = "isClipEnd")]

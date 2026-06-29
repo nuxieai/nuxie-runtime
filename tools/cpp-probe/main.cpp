@@ -1294,6 +1294,7 @@ void write_sorted_drawable_order(std::ostream& out,
         write_local_id_or_null(out, localIds, drawable);
         out << ",\"coreType\":" << drawable->coreType();
         out << ",\"isProxy\":" << (drawable->isProxy() ? "true" : "false");
+        out << ",\"isHidden\":" << (drawable->isHidden() ? "true" : "false");
         out << ",\"isClipStart\":"
             << (drawable->isClipStart() ? "true" : "false");
         out << ",\"isClipEnd\":" << (drawable->isClipEnd() ? "true" : "false");

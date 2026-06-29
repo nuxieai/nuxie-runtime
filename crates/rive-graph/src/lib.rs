@@ -505,6 +505,7 @@ pub struct DrawableOrderNode {
     pub local_id: Option<usize>,
     pub global_id: Option<u32>,
     pub type_name: &'static str,
+    pub is_hidden: bool,
     pub layout_local: Option<usize>,
     pub layout_global: Option<u32>,
     pub flattened_draw_rules_local: Option<usize>,
@@ -517,6 +518,7 @@ pub struct SortedDrawableNode {
     pub local_id: Option<usize>,
     pub global_id: Option<u32>,
     pub type_name: &'static str,
+    pub is_hidden: bool,
     pub layout_local: Option<usize>,
     pub layout_global: Option<u32>,
     pub draw_target_local: Option<usize>,
@@ -1705,6 +1707,7 @@ fn sorted_drawable_node(
         local_id: drawable.local_id,
         global_id: drawable.global_id,
         type_name: drawable.type_name,
+        is_hidden: drawable.is_hidden,
         layout_local: drawable.layout_local,
         layout_global: drawable.layout_global,
         draw_target_local,
@@ -1804,6 +1807,7 @@ fn clipping_proxy_node(
         local_id: None,
         global_id: None,
         type_name: "ClippingShapeProxyDrawable",
+        is_hidden: false,
         layout_local: None,
         layout_global: None,
         draw_target_local: None,
@@ -1900,6 +1904,7 @@ fn drawable_order_node(
         local_id: Some(local_id),
         global_id: local_object_global_id(local_objects, local_id),
         type_name: object.type_name,
+        is_hidden: drawable_is_hidden(object),
         layout_local: None,
         layout_global: None,
         flattened_draw_rules_local,
@@ -1965,7 +1970,10 @@ fn inject_layout_proxy_drawables(
         if let Some(mut current_layout) = layouts.last().copied() {
             if !drawable_is_child_of_layout(file, local_objects, drawable_local, current_layout) {
                 loop {
-                    order.insert(index, layout_proxy_node(local_objects, current_layout));
+                    order.insert(
+                        index,
+                        layout_proxy_node(file, local_objects, current_layout),
+                    );
                     index += 1;
                     layouts.pop();
                     let Some(next_layout) = layouts.last().copied() else {
@@ -1994,16 +2002,23 @@ fn inject_layout_proxy_drawables(
     }
 
     while let Some(layout_local) = layouts.pop() {
-        order.push(layout_proxy_node(local_objects, layout_local));
+        order.push(layout_proxy_node(file, local_objects, layout_local));
     }
 }
 
-fn layout_proxy_node(local_objects: &[LocalObject], layout_local: usize) -> DrawableOrderNode {
+fn layout_proxy_node(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+    layout_local: usize,
+) -> DrawableOrderNode {
+    let is_hidden =
+        runtime_object_for_local(file, local_objects, layout_local).is_some_and(drawable_is_hidden);
     DrawableOrderNode {
         kind: DrawableOrderKind::LayoutProxy,
         local_id: None,
         global_id: None,
         type_name: "DrawableProxy",
+        is_hidden,
         layout_local: Some(layout_local),
         layout_global: local_object_global_id(local_objects, layout_local),
         flattened_draw_rules_local: None,
@@ -5013,6 +5028,10 @@ fn is_linear_gradient(object: &RuntimeObject) -> bool {
 
 fn is_drawable(object: &RuntimeObject) -> bool {
     definition_by_type_key(object.type_key).is_some_and(|definition| definition.is_a("Drawable"))
+}
+
+fn drawable_is_hidden(object: &RuntimeObject) -> bool {
+    object.uint_property("drawableFlags").unwrap_or(0) & 1 != 0
 }
 
 fn is_node(object: &RuntimeObject) -> bool {

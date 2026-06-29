@@ -206,6 +206,7 @@
 #include "rive/viewmodel/viewmodel_property_enum.hpp"
 #include "rive/viewmodel/viewmodel_property.hpp"
 #include "rive/script_input_viewmodel_property.hpp"
+#include "rive/transform_component.hpp"
 #include "rive/world_transform_component.hpp"
 #include "utils/no_op_factory.hpp"
 
@@ -354,6 +355,27 @@ void write_component_fields(std::ostream& out,
         for (auto* child : component->as<rive::ContainerComponent>()->children())
         {
             auto itr = localIds.find(child);
+            if (itr == localIds.end())
+            {
+                continue;
+            }
+            if (!first)
+            {
+                out << ',';
+            }
+            first = false;
+            out << itr->second;
+        }
+    }
+    out << ']';
+
+    out << ",\"constraintsLocal\":[";
+    if (component->is<rive::TransformComponent>())
+    {
+        bool first = true;
+        for (auto* constraint : component->as<rive::TransformComponent>()->constraints())
+        {
+            auto itr = localIds.find(constraint);
             if (itr == localIds.end())
             {
                 continue;

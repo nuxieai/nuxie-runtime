@@ -138,6 +138,7 @@ impl ArtboardGraph {
                 parent_local,
                 parent_global: None,
                 children: Vec::new(),
+                constraint_locals: Vec::new(),
                 graph_order: None,
                 missing_parent: false,
             });
@@ -148,6 +149,7 @@ impl ArtboardGraph {
         lifecycle.on_added_dirty_resolved = resolve_parents(&mut components);
         lifecycle.on_added_clean_indexed =
             index_children(file, &local_objects, &mut components, &component_by_local);
+        index_transform_constraints(file, &local_objects, &mut components, &component_by_local);
         let draw_targets = draw_targets(file, &local_objects);
         let draw_rules = draw_rules(file, &local_objects);
         let drawable_order = drawable_order(file, &local_objects);
@@ -290,6 +292,7 @@ pub struct ComponentNode {
     pub parent_local: Option<usize>,
     pub parent_global: Option<u32>,
     pub children: Vec<usize>,
+    pub constraint_locals: Vec<usize>,
     pub graph_order: Option<usize>,
     pub missing_parent: bool,
 }
@@ -4034,6 +4037,55 @@ fn index_children(
     }
 
     edge_count
+}
+
+fn index_transform_constraints(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+    components: &mut [ComponentNode],
+    component_by_local: &BTreeMap<usize, usize>,
+) -> usize {
+    for component in components.iter_mut() {
+        component.constraint_locals.clear();
+    }
+
+    let component_locals = components
+        .iter()
+        .map(|component| component.local_id)
+        .collect::<Vec<_>>();
+    let mut registration_count = 0;
+
+    for local_id in component_locals {
+        let Some(object) = runtime_object_for_local(file, local_objects, local_id) else {
+            continue;
+        };
+        let Some(definition) = definition_by_type_key(object.type_key) else {
+            continue;
+        };
+        if !definition.is_a("Constraint") {
+            continue;
+        }
+
+        let Some(parent_local) =
+            object_parent_id(object).and_then(|parent| usize::try_from(parent).ok())
+        else {
+            continue;
+        };
+        let Some(parent_index) = component_by_local.get(&parent_local).copied() else {
+            continue;
+        };
+        let Some(parent) = runtime_object_for_local(file, local_objects, parent_local) else {
+            continue;
+        };
+        if !is_transform_component(parent) {
+            continue;
+        }
+
+        components[parent_index].constraint_locals.push(local_id);
+        registration_count += 1;
+    }
+
+    registration_count
 }
 
 fn component_dependency_node_by_local(

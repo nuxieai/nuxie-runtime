@@ -2526,6 +2526,59 @@ fn graph_projects_list_constraint_registrations() {
 }
 
 #[test]
+fn graph_projects_transform_constraint_registrations() {
+    let parent_id_key = property_key_for_name("Component", "parentId");
+    let target_id_key = property_key_for_name("TargetedConstraint", "targetId");
+
+    let bytes = synthetic_runtime_file(7140, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object(bytes, "Node", &[(parent_id_key, 0)]);
+        push_object(bytes, "Node", &[(parent_id_key, 0)]);
+        push_object(
+            bytes,
+            "TranslationConstraint",
+            &[(parent_id_key, 1), (target_id_key, 2)],
+        );
+        push_object(
+            bytes,
+            "TranslationConstraint",
+            &[(parent_id_key, 1), (target_id_key, 2)],
+        );
+        push_object(
+            bytes,
+            "TranslationConstraint",
+            &[(parent_id_key, 2), (target_id_key, 1)],
+        );
+    });
+
+    let (_, rust) =
+        read_graph_from_bytes(&bytes, "synthetic/transform_constraint_registration.riv");
+    let artboard = &rust.artboards[0];
+    let components = artboard
+        .components
+        .iter()
+        .map(|component| (component.local_id, component))
+        .collect::<BTreeMap<_, _>>();
+
+    assert_eq!(
+        components[&1].constraint_locals,
+        vec![3, 4],
+        "TransformComponent::addConstraint appends constraints to the constrained component in import order"
+    );
+    assert_eq!(
+        components[&2].constraint_locals,
+        vec![5],
+        "constraint registrations are projected on the parent transform, not on the dependency target"
+    );
+    assert_eq!(
+        components[&0].constraint_locals,
+        Vec::<usize>::new(),
+        "transform components without registered constraints retain an empty registration list"
+    );
+}
+
+#[test]
 fn graph_projects_artboard_hosts_and_component_lists() {
     let parent_id_key = property_key_for_name("Component", "parentId");
 
@@ -4248,6 +4301,50 @@ fn cpp_targeted_constraint_dependency_method_is_tracked_by_graph_model() {
 }
 
 #[test]
+fn cpp_transform_constraint_registration_is_tracked_by_graph_model() {
+    let runtime_dir = reference_runtime_dir();
+    assert!(
+        runtime_dir.exists(),
+        "reference runtime not found at {}; set RIVE_RUNTIME_DIR",
+        runtime_dir.display()
+    );
+
+    let constraint_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/constraints/constraint.cpp"))
+            .expect("read C++ constraint.cpp"),
+    );
+    let on_added_dirty_body = cpp_function_body(
+        &constraint_source,
+        "StatusCodeConstraint::onAddedDirty(CoreContext*context)",
+    );
+    assert!(
+        on_added_dirty_body.contains("Super::onAddedDirty(context);"),
+        "Constraint::onAddedDirty stopped resolving the generic component parent first"
+    );
+    assert!(
+        on_added_dirty_body.contains("!parent()->is<TransformComponent>()"),
+        "Constraint::onAddedDirty no longer rejects non-transform parents; audit registration projection"
+    );
+    assert!(
+        on_added_dirty_body.contains("parent()->as<TransformComponent>()->addConstraint(this);"),
+        "Constraint::onAddedDirty no longer registers constraints with their transform parent"
+    );
+
+    let transform_component_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/transform_component.cpp"))
+            .expect("read C++ transform_component.cpp"),
+    );
+    let add_constraint_body = cpp_function_body(
+        &transform_component_source,
+        "voidTransformComponent::addConstraint(Constraint*constraint)",
+    );
+    assert!(
+        add_constraint_body.contains("m_Constraints.push_back(constraint);"),
+        "TransformComponent::addConstraint no longer preserves append-order constraint registration"
+    );
+}
+
+#[test]
 fn graph_dependency_order_includes_skinning_dependencies() {
     let bytes = synthetic_runtime_file(7106, |bytes| {
         push_object(bytes, "Backboard", &[]);
@@ -5464,6 +5561,11 @@ fn compare_artboards(cpp: &CppProbeFile, runtime: &RuntimeFile, rust: &GraphFile
                 "component {} child list mismatch in artboard {index} for {label}",
                 cpp_component.local_id
             );
+            assert_eq!(
+                cpp_component.constraints_local, rust_component.constraint_locals,
+                "component {} transform constraint registrations mismatch in artboard {index} for {label}",
+                cpp_component.local_id
+            );
         }
 
         compare_artboard_import_collections(cpp_artboard, rust_artboard, index, label);
@@ -6508,6 +6610,8 @@ struct CppComponent {
     graph_order: usize,
     #[serde(default, rename = "childrenLocal")]
     children_local: Vec<usize>,
+    #[serde(default, rename = "constraintsLocal")]
+    constraints_local: Vec<usize>,
 }
 
 #[derive(Debug, Deserialize)]

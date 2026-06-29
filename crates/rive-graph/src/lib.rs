@@ -56,6 +56,7 @@ pub struct ArtboardGraph {
     pub clipping_shapes: Vec<ClippingShapeNode>,
     pub path_composers: Vec<PathComposerNode>,
     pub shape_paint_containers: Vec<ShapePaintContainerNode>,
+    pub n_slicer_details: Vec<NSlicerDetailsNode>,
     pub shape_deformers: Vec<ShapeDeformerNode>,
     pub skeletal_bones: Vec<SkeletalBoneNode>,
     pub skeletal_skins: Vec<SkeletalSkinNode>,
@@ -156,6 +157,7 @@ impl ArtboardGraph {
             clipping_shapes(file, &local_objects, &components, &component_by_local);
         let path_composers = path_composers(file, artboard_index, &local_objects);
         let shape_paint_containers = shape_paint_containers(file, artboard_index, &local_objects);
+        let n_slicer_details = n_slicer_details(file, artboard_index, &local_objects);
         let shape_deformers = shape_deformers(file, &local_objects);
         let skeletal_bones = skeletal_bones(file, &local_objects);
         let skeletal_skins = skeletal_skins(file, &local_objects);
@@ -233,6 +235,7 @@ impl ArtboardGraph {
             clipping_shapes,
             path_composers,
             shape_paint_containers,
+            n_slicer_details,
             shape_deformers,
             skeletal_bones,
             skeletal_skins,
@@ -496,6 +499,32 @@ pub struct GradientStopNode {
     pub local_id: usize,
     pub global_id: u32,
     pub type_name: &'static str,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct NSlicerDetailsNode {
+    pub local_id: usize,
+    pub global_id: u32,
+    pub type_name: &'static str,
+    pub x_axes: Vec<NSlicerAxisNode>,
+    pub y_axes: Vec<NSlicerAxisNode>,
+    pub tile_modes: Vec<NSlicerTileModeNode>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct NSlicerAxisNode {
+    pub local_id: usize,
+    pub global_id: u32,
+    pub type_name: &'static str,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct NSlicerTileModeNode {
+    pub local_id: usize,
+    pub global_id: u32,
+    pub type_name: &'static str,
+    pub patch_index: u64,
+    pub style: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1779,6 +1808,60 @@ fn shape_paint_containers(
                                     })
                                 })
                                 .collect(),
+                        })
+                    })
+                    .collect(),
+            })
+        })
+        .collect()
+}
+
+fn n_slicer_details(
+    file: &RuntimeFile,
+    artboard_index: usize,
+    local_objects: &[LocalObject],
+) -> Vec<NSlicerDetailsNode> {
+    file.artboard_n_slicer_details(artboard_index)
+        .into_iter()
+        .filter_map(|details| {
+            let global_id = local_object_global_id(local_objects, details.local_id)?;
+
+            Some(NSlicerDetailsNode {
+                local_id: details.local_id,
+                global_id,
+                type_name: details.object.type_name,
+                x_axes: details
+                    .x_axes
+                    .into_iter()
+                    .filter_map(|axis| {
+                        Some(NSlicerAxisNode {
+                            local_id: axis.local_id,
+                            global_id: local_object_global_id(local_objects, axis.local_id)?,
+                            type_name: axis.object.type_name,
+                        })
+                    })
+                    .collect(),
+                y_axes: details
+                    .y_axes
+                    .into_iter()
+                    .filter_map(|axis| {
+                        Some(NSlicerAxisNode {
+                            local_id: axis.local_id,
+                            global_id: local_object_global_id(local_objects, axis.local_id)?,
+                            type_name: axis.object.type_name,
+                        })
+                    })
+                    .collect(),
+                tile_modes: details
+                    .tile_modes
+                    .into_iter()
+                    .filter_map(|tile_mode| {
+                        Some(NSlicerTileModeNode {
+                            local_id: tile_mode.local_id,
+                            global_id: local_object_global_id(local_objects, tile_mode.local_id)?,
+                            type_name: tile_mode.object.type_name,
+                            patch_index: tile_mode.patch_index,
+                            style: tile_mode.style,
                         })
                     })
                     .collect(),

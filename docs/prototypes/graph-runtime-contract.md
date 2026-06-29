@@ -179,6 +179,12 @@ The existing `rive-graph` prototype already covers:
   registered stroke-effect target links. These facts do not admit paint
   mutation, effect execution, gradient stop sorting, path-effect application,
   renderer paint allocation, draw commands, or GPU work.
+- Static `NSlicerDetails` registration projections, exposed through
+  `ArtboardGraph::n_slicer_details`, matching `NSlicerDetails::from`, ordered
+  `addAxisX`/`addAxisY`, and patch-indexed `addTileMode` registrations for
+  exact `NSlicer` and `NSlicedNode` details owners. These facts do not admit
+  NSlicer deformation math, patch solving, layout updates, path deformation, or
+  render-path mutation.
 - Static `Shape::onAddedClean` render-path deformer projections for each
   imported `Shape`, recording the first ancestor accepted by
   `RenderPathDeformer::from`, currently exact `NSlicedNode`, without admitting

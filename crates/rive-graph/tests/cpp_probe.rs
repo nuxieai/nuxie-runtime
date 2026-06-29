@@ -881,6 +881,171 @@ fn graph_projects_shape_render_path_deformers() {
 }
 
 #[test]
+fn graph_projects_n_slicer_details_registrations() {
+    let parent_id_key = property_key_for_name("Component", "parentId");
+    let patch_index_key = property_key_for_name("NSlicerTileMode", "patchIndex");
+    let style_key = property_key_for_name("NSlicerTileMode", "style");
+
+    let bytes = synthetic_runtime_file(7146, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object(bytes, "Image", &[(parent_id_key, 0)]);
+        push_object(bytes, "NSlicer", &[(parent_id_key, 1)]);
+        push_object(bytes, "AxisX", &[(parent_id_key, 2)]);
+        push_object(bytes, "AxisY", &[(parent_id_key, 2)]);
+        push_object(
+            bytes,
+            "NSlicerTileMode",
+            &[(parent_id_key, 2), (patch_index_key, 3), (style_key, 1)],
+        );
+        push_object(
+            bytes,
+            "NSlicerTileMode",
+            &[(parent_id_key, 2), (patch_index_key, 3), (style_key, 2)],
+        );
+        push_object(bytes, "NSlicedNode", &[(parent_id_key, 0)]);
+        push_object(bytes, "AxisX", &[(parent_id_key, 7)]);
+        push_object(bytes, "AxisY", &[(parent_id_key, 7)]);
+        push_object(
+            bytes,
+            "NSlicerTileMode",
+            &[(parent_id_key, 7), (patch_index_key, 1), (style_key, 1)],
+        );
+    });
+
+    let (_, rust) = read_graph_from_bytes(&bytes, "synthetic/n_slicer_details.riv");
+    let artboard = &rust.artboards[0];
+
+    assert_eq!(
+        artboard
+            .n_slicer_details
+            .iter()
+            .map(|details| (
+                details.local_id,
+                details.global_id,
+                details.type_name,
+                details
+                    .x_axes
+                    .iter()
+                    .map(|axis| (axis.local_id, axis.global_id, axis.type_name))
+                    .collect::<Vec<_>>(),
+                details
+                    .y_axes
+                    .iter()
+                    .map(|axis| (axis.local_id, axis.global_id, axis.type_name))
+                    .collect::<Vec<_>>(),
+                details
+                    .tile_modes
+                    .iter()
+                    .map(|mode| (
+                        mode.local_id,
+                        mode.global_id,
+                        mode.type_name,
+                        mode.patch_index,
+                        mode.style
+                    ))
+                    .collect::<Vec<_>>()
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                2,
+                3,
+                "NSlicer",
+                vec![(3, 4, "AxisX")],
+                vec![(4, 5, "AxisY")],
+                vec![(6, 7, "NSlicerTileMode", 3, 2)]
+            ),
+            (
+                7,
+                8,
+                "NSlicedNode",
+                vec![(8, 9, "AxisX")],
+                vec![(9, 10, "AxisY")],
+                vec![(10, 11, "NSlicerTileMode", 1, 1)]
+            )
+        ],
+        "NSlicerDetails axis order and patch-indexed tile modes are static graph facts, not NSlicer deformation"
+    );
+}
+
+#[test]
+fn cpp_n_slicer_details_registration_methods_are_tracked_by_graph_model() {
+    let runtime_dir = reference_runtime_dir();
+    assert!(
+        runtime_dir.exists(),
+        "reference runtime not found at {}; set RIVE_RUNTIME_DIR",
+        runtime_dir.display()
+    );
+
+    let details_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/layout/n_slicer_details.cpp"))
+            .expect("read C++ n_slicer_details.cpp"),
+    );
+    let from_body = cpp_function_body(
+        &details_source,
+        "NSlicerDetails*NSlicerDetails::from(Component*component)",
+    );
+    assert!(
+        from_body.contains("caseNSlicer::typeKey:")
+            && from_body.contains("caseNSlicedNode::typeKey:"),
+        "NSlicerDetails::from no longer recognizes exact NSlicer and NSlicedNode details owners"
+    );
+    let add_axis_x_body =
+        cpp_function_body(&details_source, "voidNSlicerDetails::addAxisX(Axis*axis)");
+    assert!(
+        add_axis_x_body.contains("m_xs.push_back(axis);"),
+        "NSlicerDetails::addAxisX no longer preserves X-axis registration order"
+    );
+    let add_axis_y_body =
+        cpp_function_body(&details_source, "voidNSlicerDetails::addAxisY(Axis*axis)");
+    assert!(
+        add_axis_y_body.contains("m_ys.push_back(axis);"),
+        "NSlicerDetails::addAxisY no longer preserves Y-axis registration order"
+    );
+    let add_tile_mode_body = cpp_function_body(
+        &details_source,
+        "voidNSlicerDetails::addTileMode(intpatchIndex,NSlicerTileModeTypestyle)",
+    );
+    assert!(
+        add_tile_mode_body.contains("m_tileModes[patchIndex]=style;"),
+        "NSlicerDetails::addTileMode no longer records patch-indexed last-wins tile modes"
+    );
+
+    let axis_x_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/layout/axis_x.cpp"))
+            .expect("read C++ axis_x.cpp"),
+    );
+    let axis_x_body = cpp_function_body(&axis_x_source, "StatusCodeAxisX::onAddedDirty");
+    assert!(
+        axis_x_body.contains("NSlicerDetails::from(parent())->addAxisX(this);"),
+        "AxisX::onAddedDirty no longer registers X axes with NSlicerDetails"
+    );
+
+    let axis_y_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/layout/axis_y.cpp"))
+            .expect("read C++ axis_y.cpp"),
+    );
+    let axis_y_body = cpp_function_body(&axis_y_source, "StatusCodeAxisY::onAddedDirty");
+    assert!(
+        axis_y_body.contains("NSlicerDetails::from(parent())->addAxisY(this);"),
+        "AxisY::onAddedDirty no longer registers Y axes with NSlicerDetails"
+    );
+
+    let tile_mode_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/layout/n_slicer_tile_mode.cpp"))
+            .expect("read C++ n_slicer_tile_mode.cpp"),
+    );
+    let tile_mode_body =
+        cpp_function_body(&tile_mode_source, "StatusCodeNSlicerTileMode::onAddedDirty");
+    assert!(
+        tile_mode_body
+            .contains("container->addTileMode(patchIndex(),NSlicerTileModeType(style()));"),
+        "NSlicerTileMode::onAddedDirty no longer registers patch tile modes with NSlicerDetails"
+    );
+}
+
+#[test]
 fn cpp_shape_deformer_resolution_is_tracked_by_graph_model() {
     let runtime_dir = reference_runtime_dir();
     assert!(
@@ -5114,6 +5279,134 @@ fn compare_artboard_import_collections(
         artboard_index,
         label,
     );
+
+    compare_artboard_n_slicer_details(
+        &cpp_artboard.n_slicer_details,
+        &rust_artboard.n_slicer_details,
+        artboard_index,
+        label,
+    );
+}
+
+fn compare_artboard_n_slicer_details(
+    cpp_details: &[CppNSlicerDetails],
+    rust_details: &[rive_graph::NSlicerDetailsNode],
+    artboard_index: usize,
+    label: &str,
+) {
+    assert_eq!(
+        cpp_details.len(),
+        rust_details.len(),
+        "artboard {artboard_index} NSlicerDetails count mismatch for {label}"
+    );
+
+    for (details_index, (cpp_detail, rust_detail)) in
+        cpp_details.iter().zip(rust_details).enumerate()
+    {
+        assert_eq!(
+            cpp_detail.local_id, rust_detail.local_id,
+            "artboard {artboard_index} NSlicerDetails {details_index} local id mismatch for {label}"
+        );
+        assert_eq!(
+            cpp_detail.core_type,
+            type_key_for_name(rust_detail.type_name),
+            "artboard {artboard_index} NSlicerDetails {details_index} type mismatch for {label}"
+        );
+        compare_n_slicer_axes(
+            &cpp_detail.x_axes,
+            &rust_detail.x_axes,
+            artboard_index,
+            label,
+            details_index,
+            "x",
+        );
+        compare_n_slicer_axes(
+            &cpp_detail.y_axes,
+            &rust_detail.y_axes,
+            artboard_index,
+            label,
+            details_index,
+            "y",
+        );
+        compare_n_slicer_tile_modes(
+            &cpp_detail.tile_modes,
+            &rust_detail.tile_modes,
+            artboard_index,
+            label,
+            details_index,
+        );
+    }
+}
+
+fn compare_n_slicer_axes(
+    cpp_axes: &[CppNSlicerAxis],
+    rust_axes: &[rive_graph::NSlicerAxisNode],
+    artboard_index: usize,
+    label: &str,
+    details_index: usize,
+    axis_label: &str,
+) {
+    assert_eq!(
+        cpp_axes.len(),
+        rust_axes.len(),
+        "artboard {artboard_index} NSlicerDetails {details_index} {axis_label}-axis count mismatch for {label}"
+    );
+    for (axis_index, (cpp_axis, rust_axis)) in cpp_axes.iter().zip(rust_axes).enumerate() {
+        assert_eq!(
+            cpp_axis.index, axis_index,
+            "artboard {artboard_index} NSlicerDetails {details_index} {axis_label}-axis {axis_index} index mismatch for {label}"
+        );
+        assert_eq!(
+            cpp_axis.local_id,
+            Some(rust_axis.local_id),
+            "artboard {artboard_index} NSlicerDetails {details_index} {axis_label}-axis {axis_index} local id mismatch for {label}"
+        );
+        assert_eq!(
+            cpp_axis.core_type,
+            type_key_for_name(rust_axis.type_name),
+            "artboard {artboard_index} NSlicerDetails {details_index} {axis_label}-axis {axis_index} type mismatch for {label}"
+        );
+    }
+}
+
+fn compare_n_slicer_tile_modes(
+    cpp_tile_modes: &[CppNSlicerTileMode],
+    rust_tile_modes: &[rive_graph::NSlicerTileModeNode],
+    artboard_index: usize,
+    label: &str,
+    details_index: usize,
+) {
+    assert_eq!(
+        cpp_tile_modes.len(),
+        rust_tile_modes.len(),
+        "artboard {artboard_index} NSlicerDetails {details_index} tile mode count mismatch for {label}"
+    );
+    for (mode_index, (cpp_mode, rust_mode)) in
+        cpp_tile_modes.iter().zip(rust_tile_modes).enumerate()
+    {
+        assert_eq!(
+            cpp_mode.index, mode_index,
+            "artboard {artboard_index} NSlicerDetails {details_index} tile mode {mode_index} index mismatch for {label}"
+        );
+        assert_eq!(
+            cpp_mode.local_id,
+            Some(rust_mode.local_id),
+            "artboard {artboard_index} NSlicerDetails {details_index} tile mode {mode_index} local id mismatch for {label}"
+        );
+        assert_eq!(
+            cpp_mode.core_type,
+            Some(type_key_for_name(rust_mode.type_name)),
+            "artboard {artboard_index} NSlicerDetails {details_index} tile mode {mode_index} type mismatch for {label}"
+        );
+        assert_eq!(
+            cpp_mode.patch_index, rust_mode.patch_index,
+            "artboard {artboard_index} NSlicerDetails {details_index} tile mode {mode_index} patch index mismatch for {label}"
+        );
+        assert_eq!(
+            cpp_mode.style, rust_mode.style,
+            "artboard {artboard_index} NSlicerDetails {details_index} tile mode {mode_index} style mismatch for {label}"
+        );
+    }
 }
 
 fn compare_artboard_shape_paint_containers(
@@ -5539,6 +5832,8 @@ struct CppArtboard {
     state_machines: Vec<CppStateMachine>,
     #[serde(default, rename = "dataBinds")]
     data_binds: Vec<CppDataBind>,
+    #[serde(default, rename = "nSlicerDetails")]
+    n_slicer_details: Vec<CppNSlicerDetails>,
     #[serde(default, rename = "shapePaintContainers")]
     shape_paint_containers: Vec<CppShapePaintContainer>,
 }
@@ -5600,6 +5895,41 @@ struct CppClippingShape {
     shape_locals: Vec<usize>,
     #[serde(default, rename = "clippedDrawableLocals")]
     clipped_drawable_locals: Vec<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppNSlicerDetails {
+    #[serde(rename = "localId")]
+    local_id: usize,
+    #[serde(rename = "coreType")]
+    core_type: u16,
+    #[serde(default, rename = "xAxes")]
+    x_axes: Vec<CppNSlicerAxis>,
+    #[serde(default, rename = "yAxes")]
+    y_axes: Vec<CppNSlicerAxis>,
+    #[serde(default, rename = "tileModes")]
+    tile_modes: Vec<CppNSlicerTileMode>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppNSlicerAxis {
+    index: usize,
+    #[serde(default, rename = "localId")]
+    local_id: Option<usize>,
+    #[serde(rename = "coreType")]
+    core_type: u16,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppNSlicerTileMode {
+    index: usize,
+    #[serde(default, rename = "localId")]
+    local_id: Option<usize>,
+    #[serde(default, rename = "coreType")]
+    core_type: Option<u16>,
+    #[serde(rename = "patchIndex")]
+    patch_index: u64,
+    style: u64,
 }
 
 #[derive(Debug, Deserialize)]

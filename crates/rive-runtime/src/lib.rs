@@ -6,7 +6,10 @@ use rive_graph::{
     PathVertexNode, ShapePaintKind, ShapePaintNode, ShapePaintPathKind, ShapePaintStateNode,
     SortedDrawableNode, StrokeEffectNode,
 };
-use rive_schema::{definition_by_name, object_supports_property};
+use rive_schema::{
+    CoreRegistryFieldKind, FieldKind, core_registry_field_kind_by_property_key, definition_by_name,
+    definition_by_type_key, object_supports_property,
+};
 use std::collections::BTreeMap;
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 
@@ -2748,6 +2751,7 @@ impl RuntimeStateTransition {
 
     fn allow(
         &self,
+        artboard: &ArtboardInstance,
         inputs: &[StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
         bindable_integers: &[StateMachineBindableIntegerInstance],
@@ -2766,6 +2770,7 @@ impl RuntimeStateTransition {
     ) -> TransitionAllowance {
         if !self.conditions.iter().all(|condition| {
             condition.evaluate(
+                artboard,
                 inputs,
                 bindable_numbers,
                 bindable_integers,
@@ -3356,6 +3361,33 @@ enum RuntimeTransitionCondition {
         right_bindable_global_id: u32,
         op: TransitionConditionOp,
     },
+    ComponentNumber {
+        local_id: usize,
+        transform_property: Option<TransformProperty>,
+        source_value: f32,
+        op: TransitionConditionOp,
+        value: f32,
+    },
+    ComponentBoolean {
+        source_value: bool,
+        op: TransitionConditionOp,
+        value: bool,
+    },
+    ComponentString {
+        source_value: Vec<u8>,
+        op: TransitionConditionOp,
+        value: Vec<u8>,
+    },
+    ComponentColor {
+        source_value: u32,
+        op: TransitionConditionOp,
+        value: u32,
+    },
+    ComponentUint {
+        source_value: u64,
+        op: TransitionConditionOp,
+        value: u64,
+    },
     ArtboardNumber {
         value: f32,
         op: TransitionConditionOp,
@@ -3366,6 +3398,7 @@ enum RuntimeTransitionCondition {
 impl RuntimeTransitionCondition {
     fn from_object(
         file: &RuntimeFile,
+        graph: &ArtboardGraph,
         object: &RuntimeObject,
         artboard_dimensions: RuntimeArtboardDimensions,
     ) -> Option<Self> {
@@ -3408,6 +3441,9 @@ impl RuntimeTransitionCondition {
                         ),
                         threshold: right.double_property("value").unwrap_or(0.0),
                     });
+                }
+                if left.type_name == "TransitionPropertyComponentComparator" {
+                    return Self::from_component_literal(file, graph, object, left, right);
                 }
                 if left.type_name != "TransitionPropertyViewModelComparator" {
                     return None;
@@ -3535,8 +3571,140 @@ impl RuntimeTransitionCondition {
         }
     }
 
+    fn from_component_literal(
+        file: &RuntimeFile,
+        graph: &ArtboardGraph,
+        condition: &RuntimeObject,
+        left: &RuntimeObject,
+        right: &RuntimeObject,
+    ) -> Option<Self> {
+        let local_id = usize::try_from(left.uint_property("objectId")?).ok()?;
+        let property_key = u16::try_from(left.uint_property("propertyKey")?).ok()?;
+        let kind = RuntimeComponentComparandKind::from_property_key(property_key)?;
+        let op = TransitionConditionOp::from_value(condition.uint_property("opValue").unwrap_or(0));
+        let source_object = graph
+            .local_objects
+            .iter()
+            .find(|local| local.local_id == local_id)
+            .and_then(|local| file.object(local.global_id as usize));
+        let supports_property = source_object
+            .is_some_and(|object| object_supports_property(object.type_key, property_key));
+
+        match (kind, right.type_name) {
+            (RuntimeComponentComparandKind::NumberDouble, "TransitionValueNumberComparator") => {
+                Some(Self::ComponentNumber {
+                    local_id,
+                    transform_property: supports_property
+                        .then(|| transform_property_for_key(property_key))
+                        .flatten(),
+                    source_value: source_object
+                        .filter(|_| supports_property)
+                        .and_then(|object| {
+                            runtime_object_double_property_by_key(object, property_key)
+                        })
+                        .unwrap_or(0.0),
+                    op,
+                    value: right.double_property("value").unwrap_or(0.0),
+                })
+            }
+            (RuntimeComponentComparandKind::NumberFromUint, "TransitionValueNumberComparator") => {
+                Some(Self::ComponentNumber {
+                    local_id,
+                    transform_property: None,
+                    source_value: source_object
+                        .filter(|_| supports_property)
+                        .and_then(|object| {
+                            runtime_object_uint_property_by_key(object, property_key)
+                        })
+                        .map(|value| value as f32)
+                        .unwrap_or(0.0),
+                    op,
+                    value: right.double_property("value").unwrap_or(0.0),
+                })
+            }
+            (RuntimeComponentComparandKind::Boolean, "TransitionValueBooleanComparator") => {
+                Some(Self::ComponentBoolean {
+                    source_value: source_object
+                        .filter(|_| supports_property)
+                        .and_then(|object| {
+                            runtime_object_bool_property_by_key(object, property_key)
+                        })
+                        .unwrap_or(false),
+                    op,
+                    value: right.bool_property("value").unwrap_or(false),
+                })
+            }
+            (RuntimeComponentComparandKind::String, "TransitionValueStringComparator") => {
+                Some(Self::ComponentString {
+                    source_value: source_object
+                        .filter(|_| supports_property)
+                        .and_then(|object| {
+                            runtime_object_string_property_by_key(object, property_key)
+                        })
+                        .unwrap_or_default(),
+                    op,
+                    value: right
+                        .string_property_bytes("value")
+                        .unwrap_or_default()
+                        .to_vec(),
+                })
+            }
+            (RuntimeComponentComparandKind::Color, "TransitionValueColorComparator") => {
+                Some(Self::ComponentColor {
+                    source_value: source_object
+                        .filter(|_| supports_property)
+                        .and_then(|object| {
+                            runtime_object_color_property_by_key(object, property_key)
+                        })
+                        .unwrap_or(0),
+                    op,
+                    value: right.color_property("value").unwrap_or(0),
+                })
+            }
+            (RuntimeComponentComparandKind::Enum, "TransitionValueEnumComparator") => {
+                Some(Self::ComponentUint {
+                    source_value: source_object
+                        .filter(|_| supports_property)
+                        .and_then(|object| {
+                            runtime_object_uint_property_by_key(object, property_key)
+                        })
+                        .unwrap_or(0),
+                    op,
+                    value: right.uint_property("value").unwrap_or(u64::from(u32::MAX)),
+                })
+            }
+            (RuntimeComponentComparandKind::Trigger, "TransitionValueTriggerComparator") => {
+                Some(Self::ComponentUint {
+                    source_value: source_object
+                        .filter(|_| supports_property)
+                        .and_then(|object| {
+                            runtime_object_uint_property_by_key(object, property_key)
+                        })
+                        .unwrap_or(0),
+                    op,
+                    value: right.uint_property("value").unwrap_or(0),
+                })
+            }
+            (RuntimeComponentComparandKind::Asset, "TransitionValueAssetComparator")
+            | (RuntimeComponentComparandKind::Artboard, "TransitionValueArtboardComparator") => {
+                Some(Self::ComponentUint {
+                    source_value: source_object
+                        .filter(|_| supports_property)
+                        .and_then(|object| {
+                            runtime_object_uint_property_by_key(object, property_key)
+                        })
+                        .unwrap_or(0),
+                    op,
+                    value: right.uint_property("value").unwrap_or(u64::from(u32::MAX)),
+                })
+            }
+            _ => None,
+        }
+    }
+
     fn evaluate(
         &self,
+        artboard: &ArtboardInstance,
         inputs: &[StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
         bindable_integers: &[StateMachineBindableIntegerInstance],
@@ -3702,6 +3870,38 @@ impl RuntimeTransitionCondition {
                 );
                 op.compare_bool(left == right, true)
             }
+            Self::ComponentNumber {
+                local_id,
+                transform_property,
+                source_value,
+                op,
+                value,
+            } => {
+                let input_value = transform_property
+                    .and_then(|property| artboard.transform_property(*local_id, property))
+                    .unwrap_or(*source_value);
+                op.compare(input_value, *value)
+            }
+            Self::ComponentBoolean {
+                source_value,
+                op,
+                value,
+            } => op.compare_bool(*source_value, *value),
+            Self::ComponentString {
+                source_value,
+                op,
+                value,
+            } => op.compare_bytes_equal_only(source_value, value),
+            Self::ComponentColor {
+                source_value,
+                op,
+                value,
+            } => op.compare_u32_equal_only(*source_value, *value),
+            Self::ComponentUint {
+                source_value,
+                op,
+                value,
+            } => op.compare_u64_equal_only(*source_value, *value),
             Self::ArtboardNumber {
                 value,
                 op,
@@ -3738,6 +3938,112 @@ impl RuntimeTransitionCondition {
             }
             _ => {}
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeComponentComparandKind {
+    NumberDouble,
+    NumberFromUint,
+    Boolean,
+    String,
+    Color,
+    Enum,
+    Trigger,
+    Asset,
+    Artboard,
+    ViewModel,
+}
+
+impl RuntimeComponentComparandKind {
+    fn from_property_key(property_key: u16) -> Option<Self> {
+        match core_registry_field_kind_by_property_key(property_key)? {
+            CoreRegistryFieldKind::Double => Some(Self::NumberDouble),
+            CoreRegistryFieldKind::Bool => Some(Self::Boolean),
+            CoreRegistryFieldKind::StringOrBytes => Some(Self::String),
+            CoreRegistryFieldKind::Color => Some(Self::Color),
+            CoreRegistryFieldKind::Uint => {
+                if component_property_key_matches(
+                    property_key,
+                    &[
+                        ("CustomPropertyEnum", "propertyValue"),
+                        ("ViewModelInstanceEnum", "propertyValue"),
+                    ],
+                ) {
+                    return Some(Self::Enum);
+                }
+                if component_property_key_matches(
+                    property_key,
+                    &[
+                        ("CustomPropertyTrigger", "propertyValue"),
+                        ("ViewModelInstanceTrigger", "propertyValue"),
+                    ],
+                ) {
+                    return Some(Self::Trigger);
+                }
+                if property_key_for_name("ViewModelInstanceAsset", "propertyValue")
+                    == Some(property_key)
+                {
+                    return Some(Self::Asset);
+                }
+                if property_key_for_name("ViewModelInstanceArtboard", "propertyValue")
+                    == Some(property_key)
+                {
+                    return Some(Self::Artboard);
+                }
+                if property_key_for_name("ViewModelInstanceViewModel", "propertyValue")
+                    == Some(property_key)
+                {
+                    return Some(Self::ViewModel);
+                }
+                Some(Self::NumberFromUint)
+            }
+        }
+    }
+}
+
+fn component_property_key_matches(property_key: u16, properties: &[(&str, &str)]) -> bool {
+    properties.iter().any(|(type_name, property_name)| {
+        property_key_for_name(type_name, property_name) == Some(property_key)
+    })
+}
+
+fn runtime_property_name_by_key(object: &RuntimeObject, property_key: u16) -> Option<&'static str> {
+    definition_by_type_key(object.type_key)?
+        .property_by_key_in_hierarchy(property_key)
+        .map(|property| property.name)
+}
+
+fn runtime_object_double_property_by_key(object: &RuntimeObject, property_key: u16) -> Option<f32> {
+    object.double_property(runtime_property_name_by_key(object, property_key)?)
+}
+
+fn runtime_object_uint_property_by_key(object: &RuntimeObject, property_key: u16) -> Option<u64> {
+    object.uint_property(runtime_property_name_by_key(object, property_key)?)
+}
+
+fn runtime_object_bool_property_by_key(object: &RuntimeObject, property_key: u16) -> Option<bool> {
+    object.bool_property(runtime_property_name_by_key(object, property_key)?)
+}
+
+fn runtime_object_color_property_by_key(object: &RuntimeObject, property_key: u16) -> Option<u32> {
+    object.color_property(runtime_property_name_by_key(object, property_key)?)
+}
+
+fn runtime_object_string_property_by_key(
+    object: &RuntimeObject,
+    property_key: u16,
+) -> Option<Vec<u8>> {
+    let property =
+        definition_by_type_key(object.type_key)?.property_by_key_in_hierarchy(property_key)?;
+    match property.runtime_type {
+        FieldKind::String => object
+            .string_property_bytes(property.name)
+            .map(|value| value.to_vec()),
+        FieldKind::Bytes => object
+            .bytes_property(property.name)
+            .map(|value| value.to_vec()),
+        _ => None,
     }
 }
 
@@ -5165,6 +5471,7 @@ impl StateMachineLayerInstance {
                 self.current_state_index == Some(state_index),
             );
             match transition.allow(
+                artboard,
                 inputs,
                 bindable_numbers,
                 bindable_integers,
@@ -5248,6 +5555,7 @@ impl StateMachineLayerInstance {
                 self.current_state_index == Some(state_index),
             );
             match transition.allow(
+                artboard,
                 inputs,
                 bindable_numbers,
                 bindable_integers,
@@ -6366,6 +6674,7 @@ fn build_state_machines(
                                                     .filter_map(|condition| {
                                                         RuntimeTransitionCondition::from_object(
                                                             file,
+                                                            graph,
                                                             condition,
                                                             artboard_dimensions,
                                                         )

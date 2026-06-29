@@ -652,6 +652,13 @@ pub struct ComponentListNode {
     pub global_id: u32,
     pub type_name: &'static str,
     pub name: Option<String>,
+    pub map_rules: Vec<ComponentListMapRuleNode>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ComponentListMapRuleNode {
+    pub view_model_id: i64,
+    pub artboard_id: i64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -2318,7 +2325,29 @@ fn component_lists(file: &RuntimeFile, local_objects: &[LocalObject]) -> Vec<Com
                 global_id: local_object.global_id,
                 type_name: object.type_name,
                 name: object_name(object),
+                map_rules: component_list_map_rules(file, object),
             })
+        })
+        .collect()
+}
+
+fn component_list_map_rules(
+    file: &RuntimeFile,
+    component_list: &RuntimeObject,
+) -> Vec<ComponentListMapRuleNode> {
+    let mut map_rules = BTreeMap::new();
+    for rule in file.artboard_component_list_map_rules_for_object(component_list) {
+        map_rules.insert(
+            cpp_i32_from_runtime_uint(rule.view_model_id),
+            cpp_i32_from_runtime_uint(rule.artboard_id),
+        );
+    }
+
+    map_rules
+        .into_iter()
+        .map(|(view_model_id, artboard_id)| ComponentListMapRuleNode {
+            view_model_id,
+            artboard_id,
         })
         .collect()
 }
@@ -4360,6 +4389,10 @@ fn local_object_global_id(local_objects: &[LocalObject], local_id: usize) -> Opt
     local_objects
         .get(local_id)
         .and_then(|local_object| local_object.type_name.map(|_| local_object.global_id))
+}
+
+fn cpp_i32_from_runtime_uint(value: u64) -> i64 {
+    i64::from(value as u32 as i32)
 }
 
 fn local_object_reference<'a>(

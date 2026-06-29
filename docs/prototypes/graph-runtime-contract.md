@@ -145,8 +145,10 @@ The existing `rive-graph` prototype already covers:
 - Static `on_added_clean` artboard host registries for exact C++
   `NestedArtboard`, `NestedArtboardLeaf`, `NestedArtboardLayout`, and
   `ArtboardComponentList` objects, matching `m_NestedArtboards`,
-  `m_ComponentLists`, and `m_ArtboardHosts` without admitting nested-artboard,
-  component-list, cloning, layout, or advance behavior.
+  `m_ComponentLists`, and `m_ArtboardHosts`, plus static
+  `ArtboardComponentList` map-rule tables from `ArtboardListMapRule`
+  registration, without admitting nested-artboard, component-list, cloning,
+  layout, data-context binding, or advance behavior.
 - Static `on_added_clean` joystick registration facts, matching `m_Joysticks`,
   `m_JoysticksApplyBeforeUpdate`, resolved x/y animations, and the nested remap
   animation dependents collected by `Joystick::addDependents` without admitting

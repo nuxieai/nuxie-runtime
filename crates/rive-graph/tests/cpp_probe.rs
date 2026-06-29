@@ -2637,6 +2637,94 @@ fn cpp_artboard_host_registration_is_tracked_by_graph_model() {
 }
 
 #[test]
+fn graph_projects_artboard_component_list_map_rules() {
+    let parent_id_key = property_key_for_name("Component", "parentId");
+    let view_model_id_key = property_key_for_name("ArtboardListMapRule", "viewModelId");
+    let artboard_id_key = property_key_for_name("ArtboardListMapRule", "artboardId");
+
+    let bytes = synthetic_runtime_file(7157, |bytes| {
+        push_object(bytes, "Backboard", &[]);
+        push_object(bytes, "Artboard", &[]);
+        push_object(bytes, "ArtboardComponentList", &[(parent_id_key, 0)]);
+        push_object(
+            bytes,
+            "ArtboardListMapRule",
+            &[
+                (parent_id_key, 1),
+                (view_model_id_key, 7),
+                (artboard_id_key, 2),
+            ],
+        );
+        push_object(
+            bytes,
+            "ArtboardListMapRule",
+            &[
+                (parent_id_key, 1),
+                (view_model_id_key, 3),
+                (artboard_id_key, 1),
+            ],
+        );
+        push_object(
+            bytes,
+            "ArtboardListMapRule",
+            &[
+                (parent_id_key, 1),
+                (view_model_id_key, 7),
+                (artboard_id_key, 4),
+            ],
+        );
+    });
+
+    let (_, rust) = read_graph_from_bytes(&bytes, "synthetic/component_list_map_rules.riv");
+    let artboard = &rust.artboards[0];
+
+    assert_eq!(artboard.component_lists.len(), 1);
+    assert_eq!(
+        artboard.component_lists[0]
+            .map_rules
+            .iter()
+            .map(|rule| (rule.view_model_id, rule.artboard_id))
+            .collect::<Vec<_>>(),
+        vec![(3, 1), (7, 4)],
+        "ArtboardComponentList::addMapRule stores a resolved table keyed by viewModelId, so duplicate keys overwrite and output is deterministic"
+    );
+}
+
+#[test]
+fn cpp_artboard_component_list_map_rule_registration_is_tracked_by_graph_model() {
+    let runtime_dir = reference_runtime_dir();
+    let rule_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/artboard_list_map_rule.cpp"))
+            .expect("read C++ artboard_list_map_rule.cpp"),
+    );
+    let on_added_dirty_body =
+        cpp_function_body(&rule_source, "StatusCodeArtboardListMapRule::onAddedDirty");
+    assert!(
+        on_added_dirty_body.contains("Super::onAddedDirty(context);"),
+        "ArtboardListMapRule::onAddedDirty stopped preserving ordinary component import"
+    );
+    assert!(
+        on_added_dirty_body.contains("!parent()->is<ArtboardComponentList>()"),
+        "ArtboardListMapRule::onAddedDirty no longer validates ArtboardComponentList parentage"
+    );
+    assert!(
+        on_added_dirty_body.contains("parent()->as<ArtboardComponentList>()->addMapRule(this);"),
+        "ArtboardListMapRule::onAddedDirty no longer registers on its component list"
+    );
+
+    let list_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/artboard_component_list.cpp"))
+            .expect("read C++ artboard_component_list.cpp"),
+    );
+    let add_map_rule_body =
+        cpp_function_body(&list_source, "voidArtboardComponentList::addMapRule");
+    assert!(
+        add_map_rule_body.contains("m_artboardMapRules[rule->viewModelId()]=rule->artboardId();"),
+        "ArtboardComponentList::addMapRule no longer overwrites the map table by viewModelId"
+    );
+}
+
+#[test]
 fn graph_projects_joystick_registration_and_schedule_facts() {
     let parent_id_key = property_key_for_name("Component", "parentId");
     let handle_source_id_key = property_key_for_name("Joystick", "handleSourceId");
@@ -5379,7 +5467,57 @@ fn compare_artboards(cpp: &CppProbeFile, runtime: &RuntimeFile, rust: &GraphFile
         }
 
         compare_artboard_import_collections(cpp_artboard, rust_artboard, index, label);
+        compare_artboard_component_lists(cpp_artboard, rust_artboard, index, label);
         compare_artboard_draw_graph(cpp_artboard, rust_artboard, index, label);
+    }
+}
+
+fn compare_artboard_component_lists(
+    cpp_artboard: &CppArtboard,
+    rust_artboard: &rive_graph::ArtboardGraph,
+    artboard_index: usize,
+    label: &str,
+) {
+    let rust_lists = rust_artboard
+        .component_lists
+        .iter()
+        .map(|component_list| (component_list.local_id, component_list))
+        .collect::<BTreeMap<_, _>>();
+
+    assert_eq!(
+        cpp_artboard.artboard_component_lists.len(),
+        rust_artboard.component_lists.len(),
+        "artboard {artboard_index} component list count mismatch for {label}"
+    );
+
+    for cpp_list in &cpp_artboard.artboard_component_lists {
+        let rust_list = rust_lists.get(&cpp_list.local_id).unwrap_or_else(|| {
+            panic!(
+                "missing Rust component list local id {} in artboard {artboard_index} for {label}",
+                cpp_list.local_id
+            )
+        });
+
+        assert_eq!(
+            cpp_list.core_type,
+            type_key_for_name(rust_list.type_name),
+            "component list {} type mismatch in artboard {artboard_index} for {label}",
+            cpp_list.local_id
+        );
+        assert_eq!(
+            cpp_list
+                .map_rules
+                .iter()
+                .map(|rule| (rule.view_model_id, rule.artboard_id))
+                .collect::<Vec<_>>(),
+            rust_list
+                .map_rules
+                .iter()
+                .map(|rule| (rule.view_model_id, rule.artboard_id))
+                .collect::<Vec<_>>(),
+            "component list {} map-rule table mismatch in artboard {artboard_index} for {label}",
+            cpp_list.local_id
+        );
     }
 }
 
@@ -6345,6 +6483,8 @@ struct CppArtboard {
     n_slicer_details: Vec<CppNSlicerDetails>,
     #[serde(default, rename = "shapePaintContainers")]
     shape_paint_containers: Vec<CppShapePaintContainer>,
+    #[serde(default, rename = "artboardComponentLists")]
+    artboard_component_lists: Vec<CppArtboardComponentList>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -6368,6 +6508,24 @@ struct CppComponent {
     graph_order: usize,
     #[serde(default, rename = "childrenLocal")]
     children_local: Vec<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppArtboardComponentList {
+    #[serde(rename = "localId")]
+    local_id: usize,
+    #[serde(rename = "coreType")]
+    core_type: u16,
+    #[serde(default, rename = "mapRules")]
+    map_rules: Vec<CppArtboardListMapRule>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppArtboardListMapRule {
+    #[serde(rename = "viewModelId")]
+    view_model_id: i64,
+    #[serde(rename = "artboardId")]
+    artboard_id: i64,
 }
 
 #[derive(Debug, Deserialize)]

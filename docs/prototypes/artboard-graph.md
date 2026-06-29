@@ -5,7 +5,8 @@ Ticket: `#6`
 Next seam contract: post-import graph/runtime work is governed by
 [`graph-runtime-contract.md`](graph-runtime-contract.md). Use that document to
 decide whether new work belongs in `rive-graph`, `rive-binary`, or a later
-runtime crate.
+runtime crate. The finite completion checklist lives in
+[`graph-runtime-completion-matrix.md`](graph-runtime-completion-matrix.md).
 
 Question: what is the smallest useful Rust implementation of the artboard runtime graph lifecycle?
 

@@ -6,6 +6,9 @@ This document starts the next milestone after binary import parity. It defines
 the `rive-graph` seam so post-import graph work can move forward without pulling
 new runtime behavior back into `rive-binary`.
 
+Completion is tracked in
+[`graph-runtime-completion-matrix.md`](graph-runtime-completion-matrix.md).
+
 ## Formal Goal
 
 Define and implement the next runtime seam around `rive-graph`: consume the

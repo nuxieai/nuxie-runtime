@@ -207,6 +207,10 @@ The existing `rive-graph` prototype already covers:
 - Dependency nodes for real imported components plus synthetic path composers
   and text variation helpers, with a topological node order and a filtered
   real-component local-ID order.
+- C++ `Artboard::sortDependencies` graph-order projection on
+  `ComponentNode::graph_order`, using only root-reachable `buildDependencies`
+  edges for dirt-depth parity while keeping the complete dependency orders as
+  graph diagnostics over all projected relationship edges.
 - Dependency edges for C++ `parent()->addDependent(this)` parent relationships,
   targeted constraints, IK constraints, IK chain off-branch children,
   draw-target drawable references, draw-rule target references, clipping sources,

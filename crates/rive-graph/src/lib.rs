@@ -2945,6 +2945,9 @@ fn component_has_parent_child_dependency(object: &RuntimeObject) -> bool {
     if definition.is_a("TargetedConstraint") || definition.is_a("TextModifier") {
         return false;
     }
+    if object.type_name == "Mesh" {
+        return true;
+    }
 
     definition.is_a("TransformComponent")
         || definition.is_a("Constraint")
@@ -4078,7 +4081,7 @@ fn build_dependency_order(
     dependency_nodes: &[DependencyNode],
     dependency_node_edges: &[DependencyNodeEdge],
 ) -> DependencyOrder {
-    let mut node_order = Vec::new();
+    let mut complete_node_order = Vec::new();
     let mut node_cycles = Vec::new();
     let mut permanent = BTreeSet::new();
     let mut temporary = BTreeSet::new();
@@ -4091,23 +4094,37 @@ fn build_dependency_order(
         .filter_map(|component| component_node_by_local.get(&component.local_id).copied())
         .collect::<Vec<_>>();
     let mut dependents_by_source = BTreeMap::<usize, Vec<usize>>::new();
+    let mut graph_order_dependents_by_source = BTreeMap::<usize, Vec<usize>>::new();
 
     for edge in dependency_node_edges {
         push_unique(
             dependents_by_source.entry(edge.source_node).or_default(),
             edge.dependent_node,
         );
+        if dependency_kind_affects_component_graph_order(edge.kind) {
+            push_unique(
+                graph_order_dependents_by_source
+                    .entry(edge.source_node)
+                    .or_default(),
+                edge.dependent_node,
+            );
+        }
     }
 
+    let mut graph_node_order = Vec::new();
+    let mut graph_permanent = BTreeSet::new();
+    let mut graph_temporary = BTreeSet::new();
+    let mut graph_visiting = Vec::new();
+    let mut graph_node_cycles = Vec::new();
     for root in roots {
         visit_dependency_node(
             root,
-            &dependents_by_source,
-            &mut permanent,
-            &mut temporary,
-            &mut visiting,
-            &mut node_order,
-            &mut node_cycles,
+            &graph_order_dependents_by_source,
+            &mut graph_permanent,
+            &mut graph_temporary,
+            &mut graph_visiting,
+            &mut graph_node_order,
+            &mut graph_node_cycles,
         );
     }
 
@@ -4118,12 +4135,12 @@ fn build_dependency_order(
             &mut permanent,
             &mut temporary,
             &mut visiting,
-            &mut node_order,
+            &mut complete_node_order,
             &mut node_cycles,
         );
     }
 
-    let component_order = node_order
+    let component_order = complete_node_order
         .iter()
         .filter_map(|node_id| component_local_by_node.get(node_id).copied())
         .collect::<Vec<_>>();
@@ -4131,9 +4148,11 @@ fn build_dependency_order(
     for component in components.iter_mut() {
         component.graph_order = None;
     }
-    for (graph_order, local_id) in component_order.iter().enumerate() {
-        if let Some(index) = component_by_local.get(local_id) {
-            components[*index].graph_order = Some(graph_order);
+    for (graph_order, node_id) in graph_node_order.iter().enumerate() {
+        if let Some(local_id) = component_local_by_node.get(node_id) {
+            if let Some(index) = component_by_local.get(local_id) {
+                components[*index].graph_order = Some(graph_order);
+            }
         }
     }
 
@@ -4141,10 +4160,19 @@ fn build_dependency_order(
 
     DependencyOrder {
         component_order,
-        node_order,
+        node_order: complete_node_order,
         cycles,
         node_cycles,
     }
+}
+
+fn dependency_kind_affects_component_graph_order(kind: DependencyKind) -> bool {
+    !matches!(
+        kind,
+        DependencyKind::DrawTargetDrawable
+            | DependencyKind::DrawRulesTarget
+            | DependencyKind::ClippingSource
+    )
 }
 
 fn visit_dependency_node(

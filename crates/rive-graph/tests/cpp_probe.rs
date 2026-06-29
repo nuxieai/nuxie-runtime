@@ -1554,6 +1554,48 @@ fn graph_parent_child_dependencies_follow_cpp_build_dependency_hooks() {
 }
 
 #[test]
+fn graph_dependency_order_matches_cpp_front_insert_graph_order() {
+    let (_, rust) = read_graph(
+        &fixture("graph/dependency_test.riv"),
+        "graph/dependency_test.riv",
+    );
+    let artboard = &rust.artboards[0];
+
+    let graph_orders = artboard
+        .components
+        .iter()
+        .map(|component| (component.local_id, component.graph_order))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        graph_orders,
+        vec![
+            (0, Some(0)),
+            (1, Some(1)),
+            (2, Some(2)),
+            (3, Some(7)),
+            (4, Some(3)),
+            (5, Some(4)),
+            (6, None),
+            (7, None),
+            (8, None),
+            (9, None),
+            (11, None),
+            (12, None),
+            (13, Some(6)),
+            (14, None),
+            (15, None),
+            (16, None),
+        ],
+        "ComponentNode::graph_order mirrors C++ Artboard::sortDependencies for root-reachable graph nodes while leaving unreachable import-only components explicit as None"
+    );
+    assert_eq!(
+        dependency_node_for_path_composer(artboard, 4),
+        16,
+        "the synthetic PathComposer consumes C++ graph-order slot 5 between PointsPath local 5 and Stroke local 13"
+    );
+}
+
+#[test]
 fn cpp_parent_dependency_hooks_are_tracked_by_graph_model() {
     let runtime_dir = reference_runtime_dir();
     assert!(
@@ -4115,6 +4157,12 @@ fn graph_dependency_order_includes_skinning_dependencies() {
     assert!(
         artboard
             .dependency_edges
+            .contains(&edge(0, 5, DependencyKind::ParentChild)),
+        "Mesh::buildDependencies also registers an exact Mesh parent dependency"
+    );
+    assert!(
+        artboard
+            .dependency_edges
             .contains(&edge(10, 9, DependencyKind::SkinPointsPath)),
         "PointsPath::buildDependencies makes a skinned points path depend on its Skin"
     );
@@ -4631,6 +4679,24 @@ fn cpp_skinning_dependency_methods_are_tracked_by_graph_model() {
     assert!(
         skin_add_tendon_body.contains("m_Tendons.push_back(tendon);"),
         "Skin::addTendon no longer preserves Tendon registration order"
+    );
+
+    let mesh_source = compact_cpp_source(
+        &std::fs::read_to_string(runtime_dir.join("src/shapes/mesh.cpp"))
+            .expect("read C++ mesh.cpp"),
+    );
+    let mesh_body = cpp_function_body(&mesh_source, "voidMesh::buildDependencies()");
+    assert!(
+        mesh_body.contains("Super::buildDependencies();"),
+        "Mesh::buildDependencies stopped preserving inherited dependencies"
+    );
+    assert!(
+        mesh_body.contains("skin()->addDependent(this);"),
+        "Mesh::buildDependencies no longer depends on its skin"
+    );
+    assert!(
+        mesh_body.contains("parent()->addDependent(this);"),
+        "Mesh::buildDependencies no longer registers its explicit parent dependency"
     );
 
     let bone_source = compact_cpp_source(
@@ -5220,6 +5286,12 @@ fn compare_artboards(cpp: &CppProbeFile, runtime: &RuntimeFile, rust: &GraphFile
             assert_eq!(
                 cpp_component.parent_local, rust_component.parent_local,
                 "component {} resolved parent mismatch in artboard {index} for {label}",
+                cpp_component.local_id
+            );
+            assert_eq!(
+                cpp_component.graph_order,
+                rust_component.graph_order.unwrap_or(0),
+                "component {} graph order mismatch in artboard {index} for {label}",
                 cpp_component.local_id
             );
         }
@@ -6210,6 +6282,8 @@ struct CppComponent {
     parent_id: u64,
     #[serde(rename = "parentLocal")]
     parent_local: Option<usize>,
+    #[serde(rename = "graphOrder")]
+    graph_order: usize,
 }
 
 #[derive(Debug, Deserialize)]

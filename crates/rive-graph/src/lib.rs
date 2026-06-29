@@ -806,6 +806,7 @@ pub struct SkeletalBoneNode {
 pub struct SkeletalSkinNode {
     pub skin_local: usize,
     pub skin_global: u32,
+    pub world_transform: [f32; 6],
     pub skinnable_local: Option<usize>,
     pub skinnable_global: Option<u32>,
     pub skinnable_type_name: Option<&'static str>,
@@ -819,6 +820,7 @@ pub struct SkeletalTendonNode {
     pub bone_local: Option<usize>,
     pub bone_global: Option<u32>,
     pub bone_type_name: Option<&'static str>,
+    pub inverse_bind: [f32; 6],
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -2461,6 +2463,34 @@ fn optional_u32_property(object: Option<&RuntimeObject>, property: &str) -> Opti
         .and_then(|value| u32::try_from(value).ok())
 }
 
+fn mat2d_property_array(object: &RuntimeObject) -> [f32; 6] {
+    [
+        object.double_property("xx").unwrap_or(1.0),
+        object.double_property("xy").unwrap_or(0.0),
+        object.double_property("yx").unwrap_or(0.0),
+        object.double_property("yy").unwrap_or(1.0),
+        object.double_property("tx").unwrap_or(0.0),
+        object.double_property("ty").unwrap_or(0.0),
+    ]
+}
+
+fn invert_mat2d_or_identity(matrix: [f32; 6]) -> [f32; 6] {
+    let [a, b, c, d, e, f] = matrix;
+    let determinant = a * d - c * b;
+    if determinant == 0.0 {
+        return [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
+    }
+
+    [
+        d / determinant,
+        -b / determinant,
+        -c / determinant,
+        a / determinant,
+        (c * f - d * e) / determinant,
+        (b * e - a * f) / determinant,
+    ]
+}
+
 fn parametric_path(path: &RuntimeObject) -> Option<ParametricPathNode> {
     match path.type_name {
         "Ellipse" => Some(ParametricPathNode::Ellipse {
@@ -2783,6 +2813,7 @@ fn skeletal_skins(file: &RuntimeFile, local_objects: &[LocalObject]) -> Vec<Skel
             Some(SkeletalSkinNode {
                 skin_local: local_object.local_id,
                 skin_global: local_object.global_id,
+                world_transform: mat2d_property_array(skin),
                 skinnable_local,
                 skinnable_global: skinnable_local
                     .and_then(|local_id| local_object_global_id(local_objects, local_id)),
@@ -2827,6 +2858,7 @@ fn skeletal_skin_tendons(
                 bone_global: bone_local
                     .and_then(|local_id| local_object_global_id(local_objects, local_id)),
                 bone_type_name,
+                inverse_bind: invert_mat2d_or_identity(mat2d_property_array(tendon)),
             })
         })
         .collect()

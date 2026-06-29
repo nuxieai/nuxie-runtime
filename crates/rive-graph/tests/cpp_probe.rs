@@ -5180,17 +5180,27 @@ fn graph_projects_skeletal_registration_facts() {
             push_bytes_property(bytes, "Mesh", "triangleIndexBytes", &[0]);
         });
         push_object(bytes, "MeshVertex", &[(mesh_vertex_parent_id_key, 7)]);
-        push_object(bytes, "Skin", &[(skin_parent_id_key, 7)]);
-        push_object(
-            bytes,
-            "Tendon",
-            &[(tendon_parent_id_key, 9), (bone_id_key, 1)],
-        );
-        push_object(
-            bytes,
-            "Tendon",
-            &[(tendon_parent_id_key, 9), (bone_id_key, 3)],
-        );
+        push_object_with_properties(bytes, "Skin", |bytes| {
+            push_uint_property(bytes, "Skin", "parentId", 7);
+            push_f32_property(bytes, "Skin", "xx", 1.0);
+            push_f32_property(bytes, "Skin", "xy", 0.25);
+            push_f32_property(bytes, "Skin", "yx", -0.5);
+            push_f32_property(bytes, "Skin", "yy", 2.0);
+            push_f32_property(bytes, "Skin", "tx", 3.0);
+            push_f32_property(bytes, "Skin", "ty", 4.0);
+        });
+        push_object_with_properties(bytes, "Tendon", |bytes| {
+            push_uint_property(bytes, "Tendon", "parentId", 9);
+            push_uint_property(bytes, "Tendon", "boneId", 1);
+            push_f32_property(bytes, "Tendon", "tx", 2.0);
+            push_f32_property(bytes, "Tendon", "ty", 3.0);
+        });
+        push_object_with_properties(bytes, "Tendon", |bytes| {
+            push_uint_property(bytes, "Tendon", "parentId", 9);
+            push_uint_property(bytes, "Tendon", "boneId", 3);
+            push_f32_property(bytes, "Tendon", "xx", 0.0);
+            push_f32_property(bytes, "Tendon", "yy", 0.0);
+        });
         push_object(bytes, "PointsPath", &[(points_path_parent_id_key, 0)]);
         push_object(bytes, "Skin", &[(skin_parent_id_key, 12)]);
         push_object(
@@ -5229,6 +5239,7 @@ fn graph_projects_skeletal_registration_facts() {
             .iter()
             .map(|skin| (
                 skin.skin_local,
+                skin.world_transform,
                 skin.skinnable_local,
                 skin.skinnable_type_name,
                 skin.tendons
@@ -5238,6 +5249,7 @@ fn graph_projects_skeletal_registration_facts() {
                             tendon.tendon_local,
                             tendon.bone_local,
                             tendon.bone_type_name,
+                            tendon.inverse_bind,
                         )
                     })
                     .collect::<Vec<_>>()
@@ -5246,18 +5258,28 @@ fn graph_projects_skeletal_registration_facts() {
         vec![
             (
                 9,
+                [1.0, 0.25, -0.5, 2.0, 3.0, 4.0],
                 Some(7),
                 Some("Mesh"),
-                vec![(10, Some(1), Some("RootBone")), (11, Some(3), Some("Bone"))]
+                vec![
+                    (
+                        10,
+                        Some(1),
+                        Some("RootBone"),
+                        [1.0, -0.0, -0.0, 1.0, -2.0, -3.0]
+                    ),
+                    (11, Some(3), Some("Bone"), [1.0, 0.0, 0.0, 1.0, 0.0, 0.0])
+                ]
             ),
             (
                 13,
+                [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
                 Some(12),
                 Some("PointsPath"),
-                vec![(14, Some(2), Some("Bone"))]
+                vec![(14, Some(2), Some("Bone"), [1.0, 0.0, 0.0, 1.0, 0.0, 0.0])]
             )
         ],
-        "Skin::onAddedDirty caches exact skinnables and Tendon::onAddedClean registers valid tendons in Skin order"
+        "Skin::onAddedDirty caches exact skinnables and matrices, and Tendon::onAddedClean registers valid inverse-bind tendons in Skin order"
     );
 }
 
@@ -5588,6 +5610,19 @@ fn cpp_skinning_dependency_methods_are_tracked_by_graph_model() {
         "Skin::buildDependencies no longer depends on IK peer constraint parents; audit skin dependency modeling"
     );
     let skin_on_added_dirty_body = cpp_function_body(&skin_source, "StatusCodeSkin::onAddedDirty");
+    for (slot, accessor) in [
+        (0, "xx"),
+        (1, "xy"),
+        (2, "yx"),
+        (3, "yy"),
+        (4, "tx"),
+        (5, "ty"),
+    ] {
+        assert!(
+            skin_on_added_dirty_body.contains(&format!("m_WorldTransform[{slot}]={accessor}();")),
+            "Skin::onAddedDirty no longer copies {accessor} into m_WorldTransform[{slot}]"
+        );
+    }
     assert!(
         skin_on_added_dirty_body.contains("m_Skinnable=Skinnable::from(parent());"),
         "Skin::onAddedDirty no longer resolves the parent through Skinnable::from"
@@ -5601,6 +5636,18 @@ fn cpp_skinning_dependency_methods_are_tracked_by_graph_model() {
         skin_add_tendon_body.contains("m_Tendons.push_back(tendon);"),
         "Skin::addTendon no longer preserves Tendon registration order"
     );
+    let skin_update_body = cpp_function_body(&skin_source, "voidSkin::update(ComponentDirtvalue)");
+    assert!(
+        skin_update_body
+            .contains("autoworld=tendon->bone()->worldTransform()*tendon->inverseBind();"),
+        "Skin::update no longer composes bone world transform with tendon inverse bind"
+    );
+    for slot in 0..6 {
+        assert!(
+            skin_update_body.contains(&format!("m_BoneTransforms[bidx++]=world[{slot}];")),
+            "Skin::update no longer copies world[{slot}] into the bone transform buffer"
+        );
+    }
 
     let mesh_source = compact_cpp_source(
         &std::fs::read_to_string(runtime_dir.join("src/shapes/mesh.cpp"))
@@ -5665,6 +5712,23 @@ fn cpp_skinning_dependency_methods_are_tracked_by_graph_model() {
     );
     let tendon_on_added_dirty_body =
         cpp_function_body(&tendon_source, "StatusCodeTendon::onAddedDirty");
+    for (slot, accessor) in [
+        (0, "xx"),
+        (1, "xy"),
+        (2, "yx"),
+        (3, "yy"),
+        (4, "tx"),
+        (5, "ty"),
+    ] {
+        assert!(
+            tendon_on_added_dirty_body.contains(&format!("bind[{slot}]={accessor}();")),
+            "Tendon::onAddedDirty no longer copies {accessor} into bind[{slot}]"
+        );
+    }
+    assert!(
+        tendon_on_added_dirty_body.contains("bind.invert(&m_InverseBind);"),
+        "Tendon::onAddedDirty no longer computes inverse bind with identity fallback semantics"
+    );
     assert!(
         tendon_on_added_dirty_body.contains("m_Bone=static_cast<Bone*>(coreObject);"),
         "Tendon::onAddedDirty no longer caches the resolved Bone"

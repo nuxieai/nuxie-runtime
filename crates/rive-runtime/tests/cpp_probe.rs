@@ -2164,6 +2164,142 @@ fn runtime_draw_command_stream_exposes_rounded_point_path_payloads_like_cpp_prob
 }
 
 #[test]
+fn runtime_draw_command_stream_deforms_weighted_points_path_payloads_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_weighted_points_path_payloads.riv";
+    let bytes = synthetic_runtime_file(8221, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "RootBone", |bytes| {
+            push_uint_property(bytes, "RootBone", "parentId", 0);
+            push_f32_property(bytes, "RootBone", "x", 10.0);
+            push_f32_property(bytes, "RootBone", "y", 20.0);
+        });
+        push_object_with_properties(bytes, "Shape", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "Fill", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 2);
+            push_uint_property(bytes, "Fill", "fillRule", 2);
+        });
+        push_object_with_properties(bytes, "SolidColor", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 3);
+            push_color_property(bytes, "SolidColor", "colorValue", 0xff24_68ac);
+        });
+        push_object_with_properties(bytes, "PointsPath", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 2);
+            push_bool_property(bytes, "PointsCommonPath", "isClosed", true);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 5);
+            push_f32_property(bytes, "Vertex", "x", 1.0);
+            push_f32_property(bytes, "Vertex", "y", 2.0);
+        });
+        push_object_with_properties(bytes, "Weight", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 6);
+            push_uint_property(bytes, "Weight", "values", 255);
+            push_uint_property(bytes, "Weight", "indices", 1);
+        });
+        push_object_with_properties(bytes, "CubicMirroredVertex", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 5);
+            push_f32_property(bytes, "Vertex", "x", 5.0);
+            push_f32_property(bytes, "Vertex", "y", 2.0);
+            push_f32_property(bytes, "CubicMirroredVertex", "distance", 2.0);
+        });
+        push_object_with_properties(bytes, "CubicWeight", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 8);
+            push_uint_property(bytes, "Weight", "values", 255);
+            push_uint_property(bytes, "Weight", "indices", 1);
+            push_uint_property(bytes, "CubicWeight", "inValues", 255);
+            push_uint_property(bytes, "CubicWeight", "inIndices", 1);
+            push_uint_property(bytes, "CubicWeight", "outValues", 255);
+            push_uint_property(bytes, "CubicWeight", "outIndices", 1);
+        });
+        push_object_with_properties(bytes, "Skin", |bytes| {
+            push_uint_property(bytes, "Skin", "parentId", 5);
+            push_f32_property(bytes, "Skin", "tx", 5.0);
+            push_f32_property(bytes, "Skin", "ty", -1.0);
+        });
+        push_object_with_properties(bytes, "Tendon", |bytes| {
+            push_uint_property(bytes, "Tendon", "parentId", 10);
+            push_uint_property(bytes, "Tendon", "boneId", 1);
+            push_f32_property(bytes, "Tendon", "tx", 2.0);
+            push_f32_property(bytes, "Tendon", "ty", 3.0);
+        });
+    });
+
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let (_, graph, mut rust) = read_rust_graph_instance_from_bytes(&bytes, label);
+    rust.update_components();
+
+    let artboard = graph
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing Rust artboard for {label}"));
+    let rust_paints = rust
+        .draw_commands(artboard)
+        .into_iter()
+        .flat_map(|command| command.shape_paints)
+        .collect::<Vec<_>>();
+    let cpp_paints = cpp.artboards[0]
+        .draw_command_stream
+        .iter()
+        .flat_map(|command| command.shape_paint_commands.iter())
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        cpp_paints.len(),
+        1,
+        "C++ should emit one visible weighted shape paint"
+    );
+    assert_eq!(
+        rust_paints.len(),
+        1,
+        "Rust should emit one visible weighted shape paint"
+    );
+    let cpp_paint = cpp_paints[0];
+    let rust_paint = &rust_paints[0];
+    assert_eq!(cpp_paint.paint_local, Some(rust_paint.paint_local));
+    assert_eq!(cpp_paint.path_kind(), rust_paint.path_kind);
+
+    let expected_path_commands = vec![
+        RuntimePathCommand::Move { x: 14.0, y: 18.0 },
+        RuntimePathCommand::Cubic {
+            x1: 14.0,
+            y1: 18.0,
+            x2: 16.0,
+            y2: 18.0,
+            x3: 18.0,
+            y3: 18.0,
+        },
+        RuntimePathCommand::Cubic {
+            x1: 20.0,
+            y1: 18.0,
+            x2: 14.0,
+            y2: 18.0,
+            x3: 14.0,
+            y3: 18.0,
+        },
+        RuntimePathCommand::Close,
+    ];
+    let cpp_path_commands = cpp_paint.path_commands();
+    assert_path_commands_close(
+        &cpp_path_commands,
+        &expected_path_commands,
+        "C++ weighted points path commands",
+    );
+    assert_path_commands_close(
+        &rust_paint.path_commands,
+        &cpp_path_commands,
+        "Rust weighted points path commands",
+    );
+}
+
+#[test]
 fn runtime_draw_command_stream_exposes_gradient_paint_payloads_like_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");

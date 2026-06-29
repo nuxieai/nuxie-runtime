@@ -46,10 +46,11 @@ Before extending this payload, answer:
 If not, defer it to the skin-deformation, NSlicer/deformer, mesh, or renderer
 slice that owns the live behavior.
 
-## Next Slice
+## Follow-Up Slice
 
-The next weighted-geometry slice should implement a narrow runtime deformation
-context for skinned `PointsPath`:
+The follow-up weighted-geometry slice is implemented by
+`docs/prototypes/runtime-weighted-points-path-command-contract.md`. That slice
+adds the narrow runtime deformation context for skinned `PointsPath`:
 
 - find the `SkeletalSkinNode` whose skinnable is the path;
 - build C++-ordered skin bone transforms from runtime component world

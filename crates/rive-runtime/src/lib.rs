@@ -336,17 +336,53 @@ impl ArtboardInstance {
             else {
                 continue;
             };
+            let weighted_context = self.runtime_weighted_path_context(path, graph);
+            let path_transform = if weighted_context.is_some() {
+                Mat2D::IDENTITY
+            } else {
+                path_world
+            };
             let transform = match path_kind {
-                ShapePaintPathKind::World => path_world,
+                ShapePaintPathKind::World => path_transform,
                 ShapePaintPathKind::Local | ShapePaintPathKind::LocalClockwise => {
-                    inverse_shape_world.multiply(path_world)
+                    inverse_shape_world.multiply(path_transform)
                 }
             };
 
-            commands.extend(path_commands(path, path_kind, transform));
+            commands.extend(path_commands(
+                path,
+                path_kind,
+                transform,
+                weighted_context.as_ref(),
+            ));
         }
 
         commands
+    }
+
+    fn runtime_weighted_path_context(
+        &self,
+        path: &PathGeometryNode,
+        graph: &ArtboardGraph,
+    ) -> Option<WeightedPathContext> {
+        let skin = graph
+            .skeletal_skins
+            .iter()
+            .find(|skin| skin.skinnable_local == Some(path.local_id))?;
+        let mut bone_transforms = vec![Mat2D::IDENTITY];
+        for tendon in &skin.tendons {
+            let bone = self.component(tendon.bone_local?)?;
+            bone_transforms.push(
+                bone.transform
+                    .world_transform
+                    .multiply(Mat2D(tendon.inverse_bind)),
+            );
+        }
+
+        Some(WeightedPathContext {
+            skin_world_transform: Mat2D(skin.world_transform),
+            bone_transforms,
+        })
     }
 
     pub fn state_machine(&self, index: usize) -> Option<&RuntimeStateMachine> {
@@ -862,10 +898,11 @@ fn path_commands(
     path: &PathGeometryNode,
     path_kind: ShapePaintPathKind,
     transform: Mat2D,
+    weighted_context: Option<&WeightedPathContext>,
 ) -> Vec<RuntimePathCommand> {
     match path.type_name {
         "Ellipse" => ellipse_path_commands(path, path_kind, transform),
-        "PointsPath" => points_path_commands(path, path_kind, transform),
+        "PointsPath" => points_path_commands(path, path_kind, transform, weighted_context),
         "Polygon" => polygon_path_commands(path, path_kind, transform),
         "Rectangle" => rectangle_path_commands(path, path_kind, transform),
         "Star" => star_path_commands(path, path_kind, transform),
@@ -878,9 +915,23 @@ fn points_path_commands(
     path: &PathGeometryNode,
     path_kind: ShapePaintPathKind,
     transform: Mat2D,
+    weighted_context: Option<&WeightedPathContext>,
 ) -> Vec<RuntimePathCommand> {
     if path.type_name != "PointsPath" || path.vertices.len() < 2 {
         return Vec::new();
+    }
+    if path
+        .vertices
+        .iter()
+        .any(|vertex| vertex.weight_local.is_some())
+    {
+        let Some(weighted_context) = weighted_context else {
+            return Vec::new();
+        };
+        let Some(deformed_path) = deformed_points_path(path, weighted_context) else {
+            return Vec::new();
+        };
+        return points_path_commands(&deformed_path, path_kind, transform, None);
     }
     if path
         .vertices
@@ -1044,7 +1095,7 @@ fn rectangle_path_commands(
         ],
     };
 
-    points_path_commands(&virtual_path, path_kind, transform)
+    points_path_commands(&virtual_path, path_kind, transform, None)
 }
 
 const CIRCLE_CONSTANT: f32 = 0.552_284_8;
@@ -1227,7 +1278,7 @@ fn closed_straight_vertices_path_commands(
         vertices,
     };
 
-    points_path_commands(&virtual_path, path_kind, transform)
+    points_path_commands(&virtual_path, path_kind, transform, None)
 }
 
 fn triangle_path_commands(
@@ -1283,14 +1334,112 @@ fn virtual_straight_vertex(x: f32, y: f32, radius: f32) -> PathVertexNode {
 }
 
 fn is_supported_point_path_vertex(vertex: &PathVertexNode) -> bool {
-    if vertex.weight_local.is_some() {
-        return false;
-    }
     match vertex.type_name {
         "StraightVertex" => true,
         "CubicDetachedVertex" | "CubicAsymmetricVertex" | "CubicMirroredVertex" => true,
         _ => false,
     }
+}
+
+#[derive(Debug, Clone)]
+struct WeightedPathContext {
+    skin_world_transform: Mat2D,
+    bone_transforms: Vec<Mat2D>,
+}
+
+impl WeightedPathContext {
+    fn deform_point(&self, point: (f32, f32), indices: u32, weights: u32) -> Option<(f32, f32)> {
+        let mut blended = [0.0; 6];
+        for index in 0..4 {
+            let shift = index * 8;
+            let weight = ((weights >> shift) & 0xff) as u8;
+            if weight == 0 {
+                continue;
+            }
+            let bone_index = ((indices >> shift) & 0xff) as usize;
+            let bone_transform = self.bone_transforms.get(bone_index)?;
+            let normalized_weight = f32::from(weight) / 255.0;
+            for (target, value) in blended.iter_mut().zip(bone_transform.0) {
+                *target += value * normalized_weight;
+            }
+        }
+
+        let (x, y) = self.skin_world_transform.transform_point(point.0, point.1);
+        Some(Mat2D(blended).transform_point(x, y))
+    }
+}
+
+fn deformed_points_path(
+    path: &PathGeometryNode,
+    weighted_context: &WeightedPathContext,
+) -> Option<PathGeometryNode> {
+    let mut deformed_path = path.clone();
+    for vertex in &mut deformed_path.vertices {
+        if vertex.weight_local.is_none() {
+            continue;
+        }
+
+        let original = vertex.clone();
+        if !is_supported_point_path_vertex(&original) {
+            return None;
+        }
+
+        let translation = weighted_context.deform_point(
+            vertex_translation(&original),
+            original.weight_indices.unwrap_or(1),
+            original.weight_values.unwrap_or(255),
+        )?;
+        vertex.x = translation.0;
+        vertex.y = translation.1;
+
+        if let Some((in_point, out_point)) = cubic_vertex_points(&original) {
+            let in_point = weighted_context.deform_point(
+                in_point,
+                original.weight_in_indices.unwrap_or(1),
+                original.weight_in_values.unwrap_or(255),
+            )?;
+            let out_point = weighted_context.deform_point(
+                out_point,
+                original.weight_out_indices.unwrap_or(1),
+                original.weight_out_values.unwrap_or(255),
+            )?;
+            set_detached_cubic_points(vertex, translation, in_point, out_point);
+        }
+
+        clear_vertex_weight(vertex);
+    }
+
+    Some(deformed_path)
+}
+
+fn set_detached_cubic_points(
+    vertex: &mut PathVertexNode,
+    translation: (f32, f32),
+    in_point: (f32, f32),
+    out_point: (f32, f32),
+) {
+    let in_vector = subtract_point(in_point, translation);
+    let out_vector = subtract_point(out_point, translation);
+    vertex.type_name = "CubicDetachedVertex";
+    vertex.radius = 0.0;
+    vertex.rotation = 0.0;
+    vertex.distance = 0.0;
+    vertex.in_rotation = in_vector.1.atan2(in_vector.0);
+    vertex.in_distance = vector_length(in_vector);
+    vertex.out_rotation = out_vector.1.atan2(out_vector.0);
+    vertex.out_distance = vector_length(out_vector);
+}
+
+fn clear_vertex_weight(vertex: &mut PathVertexNode) {
+    vertex.weight_local = None;
+    vertex.weight_global = None;
+    vertex.weight_type_name = None;
+    vertex.weight_values = None;
+    vertex.weight_indices = None;
+    vertex.weight_in_values = None;
+    vertex.weight_in_indices = None;
+    vertex.weight_out_values = None;
+    vertex.weight_out_indices = None;
 }
 
 fn vertex_translation(vertex: &PathVertexNode) -> (f32, f32) {
@@ -1366,12 +1515,16 @@ fn vertex_render_out_point(vertex: &PathVertexNode) -> (f32, f32) {
 }
 
 fn normalize_vector(vector: (f32, f32)) -> ((f32, f32), f32) {
-    let length = (vector.0 * vector.0 + vector.1 * vector.1).sqrt();
+    let length = vector_length(vector);
     if length > 0.0 {
         ((vector.0 / length, vector.1 / length), length)
     } else {
         (vector, length)
     }
+}
+
+fn vector_length(vector: (f32, f32)) -> f32 {
+    (vector.0 * vector.0 + vector.1 * vector.1).sqrt()
 }
 
 fn scale_and_add_point(point: (f32, f32), vector: (f32, f32), scale: f32) -> (f32, f32) {

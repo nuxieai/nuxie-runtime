@@ -764,7 +764,7 @@ impl RuntimeStateTransition {
         self.state_to_index.is_some()
             && self.condition_count == self.conditions.len()
             && !self.has_unsupported_interpolator
-            && self.flags & (Self::DISABLED | Self::ENABLE_EARLY_EXIT) == 0
+            && self.flags & Self::DISABLED == 0
     }
 
     fn allow(
@@ -806,6 +806,10 @@ impl RuntimeStateTransition {
 
     fn pause_on_exit(&self) -> bool {
         self.flags & Self::PAUSE_ON_EXIT == Self::PAUSE_ON_EXIT
+    }
+
+    fn enable_early_exit(&self) -> bool {
+        self.flags & Self::ENABLE_EARLY_EXIT == Self::ENABLE_EARLY_EXIT
     }
 
     fn transition_duration_seconds(&self, animation_from: Option<&RuntimeLinearAnimation>) -> f32 {
@@ -1430,6 +1434,7 @@ struct StateMachineLayerInstance {
     transition_mix_from: f32,
     transition_source_paused: bool,
     transition_interpolator: Option<RuntimeTransitionInterpolator>,
+    transition_enable_early_exit: bool,
     waiting_for_exit: bool,
 }
 
@@ -1452,6 +1457,7 @@ impl StateMachineLayerInstance {
             transition_mix_from: 1.0,
             transition_source_paused: false,
             transition_interpolator: None,
+            transition_enable_early_exit: false,
             waiting_for_exit: false,
         };
         instance.refresh_current_animation(artboard, layer);
@@ -1496,7 +1502,7 @@ impl StateMachineLayerInstance {
         layer_index: usize,
         inputs: &mut [StateMachineInputInstance],
     ) -> bool {
-        if self.is_transitioning() {
+        if self.is_transitioning() && !self.transition_enable_early_exit {
             return false;
         }
         self.waiting_for_exit = false;
@@ -1618,6 +1624,7 @@ impl StateMachineLayerInstance {
             self.transition_mix = 0.0;
             self.transition_source_paused = transition.pause_on_exit();
             self.transition_interpolator = transition.interpolator;
+            self.transition_enable_early_exit = transition.enable_early_exit();
             self.update_transition_mix(0.0);
         } else {
             self.clear_transition_source();
@@ -1632,6 +1639,7 @@ impl StateMachineLayerInstance {
         self.transition_mix_from = 1.0;
         self.transition_source_paused = false;
         self.transition_interpolator = None;
+        self.transition_enable_early_exit = false;
     }
 
     fn is_transitioning(&self) -> bool {

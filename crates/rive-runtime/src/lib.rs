@@ -739,6 +739,7 @@ pub struct RuntimeLayerState {
     speed: f32,
     flags: u64,
     fire_actions: Vec<RuntimeStateMachineFireEvent>,
+    listener_actions: Vec<RuntimeScheduledListenerFireEvent>,
     transitions: Vec<RuntimeStateTransition>,
 }
 
@@ -756,6 +757,14 @@ impl RuntimeLayerState {
     ) {
         fire_state_machine_events(&self.fire_actions, occurrence, reported_events);
     }
+
+    fn perform_listener_actions(
+        &self,
+        occurrence: StateMachineFireOccurrence,
+        reported_events: &mut Vec<StateMachineReportedEvent>,
+    ) {
+        perform_scheduled_listener_actions(&self.listener_actions, occurrence, reported_events);
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -768,6 +777,7 @@ struct RuntimeStateTransition {
     condition_count: usize,
     conditions: Vec<RuntimeTransitionCondition>,
     fire_actions: Vec<RuntimeStateMachineFireEvent>,
+    listener_actions: Vec<RuntimeScheduledListenerFireEvent>,
     interpolator: Option<RuntimeTransitionInterpolator>,
     has_unsupported_interpolator: bool,
 }
@@ -840,6 +850,14 @@ impl RuntimeStateTransition {
         fire_state_machine_events(&self.fire_actions, occurrence, reported_events);
     }
 
+    fn perform_listener_actions(
+        &self,
+        occurrence: StateMachineFireOccurrence,
+        reported_events: &mut Vec<StateMachineReportedEvent>,
+    ) {
+        perform_scheduled_listener_actions(&self.listener_actions, occurrence, reported_events);
+    }
+
     fn transition_duration_seconds(&self, animation_from: Option<&RuntimeLinearAnimation>) -> f32 {
         if self.duration == 0 {
             return 0.0;
@@ -885,6 +903,30 @@ struct RuntimeStateMachineFireEvent {
     event: StateMachineReportedEvent,
 }
 
+#[derive(Debug, Clone)]
+struct RuntimeScheduledListenerFireEvent {
+    flags: u64,
+    event: StateMachineReportedEvent,
+}
+
+impl RuntimeScheduledListenerFireEvent {
+    fn from_imported(action: &rive_binary::RuntimeListenerAction<'_>) -> Option<Self> {
+        if action.object.type_name != "ListenerFireEvent" {
+            return None;
+        }
+        let event = action.event?;
+        Some(Self {
+            flags: action.object.uint_property("flags").unwrap_or(0),
+            event: StateMachineReportedEvent {
+                event_local_index: action.event_local_index?,
+                event_core_type: u32::from(event.type_key),
+                name: event.string_property("name").map(ToOwned::to_owned),
+                seconds_delay: 0.0,
+            },
+        })
+    }
+}
+
 impl RuntimeStateMachineFireEvent {
     fn from_imported(action: &rive_binary::RuntimeStateMachineFireAction<'_>) -> Option<Self> {
         let event = action.event?;
@@ -922,6 +964,18 @@ fn fire_state_machine_events(
 ) {
     for action in fire_actions {
         if action.occurs_value == occurrence.value() {
+            reported_events.push(action.event.clone());
+        }
+    }
+}
+
+fn perform_scheduled_listener_actions(
+    listener_actions: &[RuntimeScheduledListenerFireEvent],
+    occurrence: StateMachineFireOccurrence,
+    reported_events: &mut Vec<StateMachineReportedEvent>,
+) {
+    for action in listener_actions {
+        if action.flags & 1 == occurrence.value() {
             reported_events.push(action.event.clone());
         }
     }
@@ -1550,6 +1604,7 @@ struct StateMachineLayerInstance {
     transition_interpolator: Option<RuntimeTransitionInterpolator>,
     transition_enable_early_exit: bool,
     transition_fire_actions: Vec<RuntimeStateMachineFireEvent>,
+    transition_listener_actions: Vec<RuntimeScheduledListenerFireEvent>,
     transition_completed: bool,
     waiting_for_exit: bool,
 }
@@ -1575,6 +1630,7 @@ impl StateMachineLayerInstance {
             transition_interpolator: None,
             transition_enable_early_exit: false,
             transition_fire_actions: Vec::new(),
+            transition_listener_actions: Vec::new(),
             transition_completed: false,
             waiting_for_exit: false,
         };
@@ -1804,6 +1860,8 @@ impl StateMachineLayerInstance {
             previous_state_index.and_then(|state_index| layer.states.get(state_index))
         {
             previous_state.fire_events(StateMachineFireOccurrence::AtEnd, reported_events);
+            previous_state
+                .perform_listener_actions(StateMachineFireOccurrence::AtEnd, reported_events);
         }
 
         if transition.pause_on_exit()
@@ -1827,14 +1885,18 @@ impl StateMachineLayerInstance {
         self.refresh_current_animation(artboard, layer);
         if let Some(current_state) = layer.states.get(state_to_index) {
             current_state.fire_events(StateMachineFireOccurrence::AtStart, reported_events);
+            current_state
+                .perform_listener_actions(StateMachineFireOccurrence::AtStart, reported_events);
         }
         transition.fire_events(StateMachineFireOccurrence::AtStart, reported_events);
+        transition.perform_listener_actions(StateMachineFireOccurrence::AtStart, reported_events);
         if previous_spilled_time != 0.0 {
             self.advance_current_animation(artboard, layer, previous_spilled_time);
         }
 
         if transition_duration_seconds == 0.0 {
             transition.fire_events(StateMachineFireOccurrence::AtEnd, reported_events);
+            transition.perform_listener_actions(StateMachineFireOccurrence::AtEnd, reported_events);
             self.clear_transition_source();
             return;
         }
@@ -1851,6 +1913,7 @@ impl StateMachineLayerInstance {
             self.transition_interpolator = transition.interpolator;
             self.transition_enable_early_exit = transition.enable_early_exit();
             self.transition_fire_actions = transition.fire_actions.clone();
+            self.transition_listener_actions = transition.listener_actions.clone();
             self.transition_completed = false;
             self.update_transition_mix(0.0, reported_events);
         } else {
@@ -1868,6 +1931,7 @@ impl StateMachineLayerInstance {
         self.transition_interpolator = None;
         self.transition_enable_early_exit = false;
         self.transition_fire_actions.clear();
+        self.transition_listener_actions.clear();
         self.transition_completed = false;
     }
 
@@ -1893,6 +1957,11 @@ impl StateMachineLayerInstance {
             self.transition_completed = true;
             fire_state_machine_events(
                 &self.transition_fire_actions,
+                StateMachineFireOccurrence::AtEnd,
+                reported_events,
+            );
+            perform_scheduled_listener_actions(
+                &self.transition_listener_actions,
                 StateMachineFireOccurrence::AtEnd,
                 reported_events,
             );
@@ -2323,6 +2392,11 @@ fn build_state_machines(
                                     .iter()
                                     .filter_map(RuntimeStateMachineFireEvent::from_imported)
                                     .collect(),
+                                listener_actions: state
+                                    .listener_actions
+                                    .iter()
+                                    .filter_map(RuntimeScheduledListenerFireEvent::from_imported)
+                                    .collect(),
                                 transitions: state
                                     .transitions
                                     .into_iter()
@@ -2363,6 +2437,13 @@ fn build_state_machines(
                                                 .iter()
                                                 .filter_map(
                                                     RuntimeStateMachineFireEvent::from_imported,
+                                                )
+                                                .collect(),
+                                            listener_actions: transition
+                                                .listener_actions
+                                                .iter()
+                                                .filter_map(
+                                                    RuntimeScheduledListenerFireEvent::from_imported,
                                                 )
                                                 .collect(),
                                             interpolator,

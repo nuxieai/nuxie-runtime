@@ -739,7 +739,7 @@ pub struct RuntimeLayerState {
     speed: f32,
     flags: u64,
     fire_actions: Vec<RuntimeStateMachineFireEvent>,
-    listener_actions: Vec<RuntimeScheduledListenerFireEvent>,
+    listener_actions: Vec<RuntimeScheduledListenerAction>,
     transitions: Vec<RuntimeStateTransition>,
 }
 
@@ -761,9 +761,15 @@ impl RuntimeLayerState {
     fn perform_listener_actions(
         &self,
         occurrence: StateMachineFireOccurrence,
+        inputs: &mut [StateMachineInputInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
-    ) {
-        perform_scheduled_listener_actions(&self.listener_actions, occurrence, reported_events);
+    ) -> bool {
+        perform_scheduled_listener_actions(
+            &self.listener_actions,
+            occurrence,
+            inputs,
+            reported_events,
+        )
     }
 }
 
@@ -777,7 +783,7 @@ struct RuntimeStateTransition {
     condition_count: usize,
     conditions: Vec<RuntimeTransitionCondition>,
     fire_actions: Vec<RuntimeStateMachineFireEvent>,
-    listener_actions: Vec<RuntimeScheduledListenerFireEvent>,
+    listener_actions: Vec<RuntimeScheduledListenerAction>,
     interpolator: Option<RuntimeTransitionInterpolator>,
     has_unsupported_interpolator: bool,
 }
@@ -853,9 +859,15 @@ impl RuntimeStateTransition {
     fn perform_listener_actions(
         &self,
         occurrence: StateMachineFireOccurrence,
+        inputs: &mut [StateMachineInputInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
-    ) {
-        perform_scheduled_listener_actions(&self.listener_actions, occurrence, reported_events);
+    ) -> bool {
+        perform_scheduled_listener_actions(
+            &self.listener_actions,
+            occurrence,
+            inputs,
+            reported_events,
+        )
     }
 
     fn transition_duration_seconds(&self, animation_from: Option<&RuntimeLinearAnimation>) -> f32 {
@@ -904,27 +916,71 @@ struct RuntimeStateMachineFireEvent {
 }
 
 #[derive(Debug, Clone)]
-struct RuntimeScheduledListenerFireEvent {
-    flags: u64,
-    event: StateMachineReportedEvent,
+enum RuntimeScheduledListenerAction {
+    FireEvent {
+        flags: u64,
+        event: StateMachineReportedEvent,
+    },
+    BoolChange {
+        flags: u64,
+        input_index: usize,
+        value: u64,
+    },
+    NumberChange {
+        flags: u64,
+        input_index: usize,
+        value: f32,
+    },
+    TriggerChange {
+        flags: u64,
+        input_index: usize,
+    },
 }
 
-impl RuntimeScheduledListenerFireEvent {
+impl RuntimeScheduledListenerAction {
     fn from_imported(action: &rive_binary::RuntimeListenerAction<'_>) -> Option<Self> {
-        if action.object.type_name != "ListenerFireEvent" {
-            return None;
+        let flags = action.object.uint_property("flags").unwrap_or(0);
+        match action.object.type_name {
+            "ListenerFireEvent" => {
+                let event = action.event?;
+                Some(Self::FireEvent {
+                    flags,
+                    event: StateMachineReportedEvent {
+                        event_local_index: action.event_local_index?,
+                        event_core_type: u32::from(event.type_key),
+                        name: event.string_property("name").map(ToOwned::to_owned),
+                        seconds_delay: 0.0,
+                    },
+                })
+            }
+            "ListenerBoolChange" => Some(Self::BoolChange {
+                flags,
+                input_index: listener_action_input_index(action)?,
+                value: action.object.uint_property("value").unwrap_or(1),
+            }),
+            "ListenerNumberChange" => Some(Self::NumberChange {
+                flags,
+                input_index: listener_action_input_index(action)?,
+                value: action.object.double_property("value").unwrap_or(0.0),
+            }),
+            "ListenerTriggerChange" => Some(Self::TriggerChange {
+                flags,
+                input_index: listener_action_input_index(action)?,
+            }),
+            _ => None,
         }
-        let event = action.event?;
-        Some(Self {
-            flags: action.object.uint_property("flags").unwrap_or(0),
-            event: StateMachineReportedEvent {
-                event_local_index: action.event_local_index?,
-                event_core_type: u32::from(event.type_key),
-                name: event.string_property("name").map(ToOwned::to_owned),
-                seconds_delay: 0.0,
-            },
-        })
     }
+}
+
+fn listener_action_input_index(action: &rive_binary::RuntimeListenerAction<'_>) -> Option<usize> {
+    if action
+        .object
+        .uint_property("nestedInputId")
+        .is_some_and(|nested_input_id| nested_input_id != u64::from(u32::MAX))
+    {
+        return None;
+    }
+    usize::try_from(action.object.uint_property("inputId")?).ok()
 }
 
 impl RuntimeStateMachineFireEvent {
@@ -970,15 +1026,48 @@ fn fire_state_machine_events(
 }
 
 fn perform_scheduled_listener_actions(
-    listener_actions: &[RuntimeScheduledListenerFireEvent],
+    listener_actions: &[RuntimeScheduledListenerAction],
     occurrence: StateMachineFireOccurrence,
+    inputs: &mut [StateMachineInputInstance],
     reported_events: &mut Vec<StateMachineReportedEvent>,
-) {
+) -> bool {
+    let mut changed_input = false;
     for action in listener_actions {
-        if action.flags & 1 == occurrence.value() {
-            reported_events.push(action.event.clone());
+        let flags = match action {
+            RuntimeScheduledListenerAction::FireEvent { flags, .. }
+            | RuntimeScheduledListenerAction::BoolChange { flags, .. }
+            | RuntimeScheduledListenerAction::NumberChange { flags, .. }
+            | RuntimeScheduledListenerAction::TriggerChange { flags, .. } => *flags,
+        };
+        if flags & 1 != occurrence.value() {
+            continue;
+        }
+        match action {
+            RuntimeScheduledListenerAction::FireEvent { event, .. } => {
+                reported_events.push(event.clone());
+            }
+            RuntimeScheduledListenerAction::BoolChange {
+                input_index, value, ..
+            } => {
+                if let Some(input) = inputs.get_mut(*input_index) {
+                    changed_input |= input.apply_listener_bool_change(*value);
+                }
+            }
+            RuntimeScheduledListenerAction::NumberChange {
+                input_index, value, ..
+            } => {
+                if let Some(input) = inputs.get_mut(*input_index) {
+                    changed_input |= input.set_number(*value);
+                }
+            }
+            RuntimeScheduledListenerAction::TriggerChange { input_index, .. } => {
+                if let Some(input) = inputs.get_mut(*input_index) {
+                    changed_input |= input.fire_trigger();
+                }
+            }
         }
     }
+    changed_input
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1552,6 +1641,24 @@ impl StateMachineInputInstance {
         }
     }
 
+    fn apply_listener_bool_change(&mut self, value: u64) -> bool {
+        match &mut self.value {
+            StateMachineInputValue::Bool(current) => {
+                let next = match value {
+                    0 => false,
+                    1 => true,
+                    _ => !*current,
+                };
+                if *current == next {
+                    return false;
+                }
+                *current = next;
+                true
+            }
+            _ => false,
+        }
+    }
+
     fn fire_trigger(&mut self) -> bool {
         match &mut self.value {
             StateMachineInputValue::Trigger { fired, .. } => {
@@ -1604,7 +1711,7 @@ struct StateMachineLayerInstance {
     transition_interpolator: Option<RuntimeTransitionInterpolator>,
     transition_enable_early_exit: bool,
     transition_fire_actions: Vec<RuntimeStateMachineFireEvent>,
-    transition_listener_actions: Vec<RuntimeScheduledListenerFireEvent>,
+    transition_listener_actions: Vec<RuntimeScheduledListenerAction>,
     transition_completed: bool,
     waiting_for_exit: bool,
 }
@@ -1648,7 +1755,7 @@ impl StateMachineLayerInstance {
         reported_events: &mut Vec<StateMachineReportedEvent>,
     ) -> StateMachineLayerAdvance {
         self.advance_current_animation(artboard, layer, elapsed_seconds);
-        self.update_transition_mix(elapsed_seconds, reported_events);
+        let input_changed = self.update_transition_mix(elapsed_seconds, inputs, reported_events);
         self.advance_transition_source_animation(artboard, layer, elapsed_seconds);
         self.apply_animations(artboard);
 
@@ -1664,6 +1771,7 @@ impl StateMachineLayerInstance {
         StateMachineLayerAdvance {
             changed_state,
             keep_going: changed_state
+                || input_changed
                 || self.is_transitioning()
                 || self.waiting_for_exit
                 || self.current_animation_keep_going,
@@ -1726,7 +1834,14 @@ impl StateMachineLayerInstance {
             };
             let transition = &state.transitions[transition_index];
             transition.use_inputs(inputs, layer_index);
-            self.change_state(artboard, layer, transition, state_to_index, reported_events);
+            self.change_state(
+                artboard,
+                layer,
+                transition,
+                state_to_index,
+                inputs,
+                reported_events,
+            );
             return true;
         }
 
@@ -1762,7 +1877,14 @@ impl StateMachineLayerInstance {
                 }
             }
             transition.use_inputs(inputs, layer_index);
-            self.change_state(artboard, layer, transition, state_to_index, reported_events);
+            self.change_state(
+                artboard,
+                layer,
+                transition,
+                state_to_index,
+                inputs,
+                reported_events,
+            );
             return true;
         }
         false
@@ -1847,6 +1969,7 @@ impl StateMachineLayerInstance {
         layer: &RuntimeStateMachineLayer,
         transition: &RuntimeStateTransition,
         state_to_index: usize,
+        inputs: &mut [StateMachineInputInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
     ) {
         let previous_state_index = self.current_state_index;
@@ -1860,8 +1983,11 @@ impl StateMachineLayerInstance {
             previous_state_index.and_then(|state_index| layer.states.get(state_index))
         {
             previous_state.fire_events(StateMachineFireOccurrence::AtEnd, reported_events);
-            previous_state
-                .perform_listener_actions(StateMachineFireOccurrence::AtEnd, reported_events);
+            previous_state.perform_listener_actions(
+                StateMachineFireOccurrence::AtEnd,
+                inputs,
+                reported_events,
+            );
         }
 
         if transition.pause_on_exit()
@@ -1885,18 +2011,29 @@ impl StateMachineLayerInstance {
         self.refresh_current_animation(artboard, layer);
         if let Some(current_state) = layer.states.get(state_to_index) {
             current_state.fire_events(StateMachineFireOccurrence::AtStart, reported_events);
-            current_state
-                .perform_listener_actions(StateMachineFireOccurrence::AtStart, reported_events);
+            current_state.perform_listener_actions(
+                StateMachineFireOccurrence::AtStart,
+                inputs,
+                reported_events,
+            );
         }
         transition.fire_events(StateMachineFireOccurrence::AtStart, reported_events);
-        transition.perform_listener_actions(StateMachineFireOccurrence::AtStart, reported_events);
+        transition.perform_listener_actions(
+            StateMachineFireOccurrence::AtStart,
+            inputs,
+            reported_events,
+        );
         if previous_spilled_time != 0.0 {
             self.advance_current_animation(artboard, layer, previous_spilled_time);
         }
 
         if transition_duration_seconds == 0.0 {
             transition.fire_events(StateMachineFireOccurrence::AtEnd, reported_events);
-            transition.perform_listener_actions(StateMachineFireOccurrence::AtEnd, reported_events);
+            transition.perform_listener_actions(
+                StateMachineFireOccurrence::AtEnd,
+                inputs,
+                reported_events,
+            );
             self.clear_transition_source();
             return;
         }
@@ -1915,7 +2052,7 @@ impl StateMachineLayerInstance {
             self.transition_fire_actions = transition.fire_actions.clone();
             self.transition_listener_actions = transition.listener_actions.clone();
             self.transition_completed = false;
-            self.update_transition_mix(0.0, reported_events);
+            self.update_transition_mix(0.0, inputs, reported_events);
         } else {
             self.clear_transition_source();
         }
@@ -1944,11 +2081,12 @@ impl StateMachineLayerInstance {
     fn update_transition_mix(
         &mut self,
         elapsed_seconds: f32,
+        inputs: &mut [StateMachineInputInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
-    ) {
+    ) -> bool {
         if self.transition_source_animation.is_none() || self.transition_duration_seconds == 0.0 {
             self.transition_mix = 1.0;
-            return;
+            return false;
         }
         self.transition_mix = (self.transition_mix
             + elapsed_seconds / self.transition_duration_seconds)
@@ -1963,8 +2101,11 @@ impl StateMachineLayerInstance {
             perform_scheduled_listener_actions(
                 &self.transition_listener_actions,
                 StateMachineFireOccurrence::AtEnd,
+                inputs,
                 reported_events,
-            );
+            )
+        } else {
+            false
         }
     }
 
@@ -2395,7 +2536,7 @@ fn build_state_machines(
                                 listener_actions: state
                                     .listener_actions
                                     .iter()
-                                    .filter_map(RuntimeScheduledListenerFireEvent::from_imported)
+                                    .filter_map(RuntimeScheduledListenerAction::from_imported)
                                     .collect(),
                                 transitions: state
                                     .transitions
@@ -2443,7 +2584,7 @@ fn build_state_machines(
                                                 .listener_actions
                                                 .iter()
                                                 .filter_map(
-                                                    RuntimeScheduledListenerFireEvent::from_imported,
+                                                    RuntimeScheduledListenerAction::from_imported,
                                                 )
                                                 .collect(),
                                             interpolator,

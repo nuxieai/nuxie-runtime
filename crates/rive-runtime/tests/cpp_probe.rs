@@ -760,6 +760,87 @@ fn push_scheduled_listener_fire_event(bytes: &mut Vec<u8>, event_local_id: u64, 
     });
 }
 
+fn synthetic_state_machine_scheduled_listener_input_change(
+    file_id: u64,
+    kind: SyntheticInputTransitionKind,
+) -> Vec<u8> {
+    const STATE_AT_START: u64 = 2 << 1;
+
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        match kind {
+            SyntheticInputTransitionKind::Bool => {
+                push_object_with_properties(bytes, "StateMachineBool", |bytes| {
+                    push_string_property(bytes, "StateMachineBool", "name", "armed");
+                });
+            }
+            SyntheticInputTransitionKind::Number => {
+                push_object_with_properties(bytes, "StateMachineNumber", |bytes| {
+                    push_string_property(bytes, "StateMachineNumber", "name", "level");
+                });
+            }
+            SyntheticInputTransitionKind::Trigger => {
+                push_object_with_properties(bytes, "StateMachineTrigger", |bytes| {
+                    push_string_property(bytes, "StateMachineTrigger", "name", "go");
+                });
+            }
+        }
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_scheduled_listener_input_change(bytes, kind, 0, STATE_AT_START);
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+        });
+        push_synthetic_transition_condition(bytes, kind);
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn push_scheduled_listener_input_change(
+    bytes: &mut Vec<u8>,
+    kind: SyntheticInputTransitionKind,
+    input_index: u64,
+    flags: u64,
+) {
+    match kind {
+        SyntheticInputTransitionKind::Bool => {
+            push_object_with_properties(bytes, "ListenerBoolChange", |bytes| {
+                push_uint_property(bytes, "ListenerBoolChange", "inputId", input_index);
+                push_uint_property(bytes, "ListenerBoolChange", "flags", flags);
+                push_uint_property(bytes, "ListenerBoolChange", "value", 1);
+            });
+        }
+        SyntheticInputTransitionKind::Number => {
+            push_object_with_properties(bytes, "ListenerNumberChange", |bytes| {
+                push_uint_property(bytes, "ListenerNumberChange", "inputId", input_index);
+                push_uint_property(bytes, "ListenerNumberChange", "flags", flags);
+                push_f32_property(bytes, "ListenerNumberChange", "value", 4.0);
+            });
+        }
+        SyntheticInputTransitionKind::Trigger => {
+            push_object_with_properties(bytes, "ListenerTriggerChange", |bytes| {
+                push_uint_property(bytes, "ListenerTriggerChange", "inputId", input_index);
+                push_uint_property(bytes, "ListenerTriggerChange", "flags", flags);
+            });
+        }
+    }
+}
+
 fn read_cpp_probe_bytes(probe: &Path, label: &str, bytes: &[u8]) -> CppProbeFile {
     read_cpp_probe_bytes_with_args(probe, label, bytes, &[])
 }
@@ -2274,6 +2355,67 @@ fn state_machine_scheduled_listener_fire_events_match_cpp_probe() {
         compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
     }
     compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn state_machine_scheduled_listener_input_changes_match_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    for (file_id, label, kind) in [
+        (
+            8253,
+            "synthetic/runtime_state_machine_scheduled_listener_bool_change_cpp.riv",
+            SyntheticInputTransitionKind::Bool,
+        ),
+        (
+            8254,
+            "synthetic/runtime_state_machine_scheduled_listener_number_change_cpp.riv",
+            SyntheticInputTransitionKind::Number,
+        ),
+        (
+            8255,
+            "synthetic/runtime_state_machine_scheduled_listener_trigger_change_cpp.riv",
+            SyntheticInputTransitionKind::Trigger,
+        ),
+    ] {
+        let bytes = synthetic_state_machine_scheduled_listener_input_change(file_id, kind);
+        let args = [
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+        ];
+
+        let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+        let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+        let mut state_machine = rust
+            .state_machine_instance(0)
+            .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+        let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+        let rust_reports = [(advanced, state_machine.clone())];
+        let report = rust.update_components();
+
+        let cpp_artboard = cpp
+            .artboards
+            .first()
+            .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+        assert_eq!(
+            cpp_artboard.runtime_state_machine_advances.len(),
+            rust_reports.len(),
+            "{label} state-machine report count mismatch"
+        );
+        for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+            .runtime_state_machine_advances
+            .iter()
+            .zip(&rust_reports)
+        {
+            compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+        }
+        compare_cpp_runtime_update(&cpp, &rust, &report, label);
+    }
 }
 
 #[test]

@@ -1441,6 +1441,91 @@ fn synthetic_state_machine_callback_keyframe_loop_edge(file_id: u64, loop_value:
     })
 }
 
+fn synthetic_state_machine_callback_keyframe_reverse_event(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "Event", |bytes| {
+            push_string_property(bytes, "Event", "name", "timeline-reverse-callback");
+        });
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "fps", 10);
+            push_uint_property(bytes, "LinearAnimation", "duration", 10);
+            push_f32_property(bytes, "LinearAnimation", "speed", -1.0);
+        });
+        push_object_with_properties(bytes, "KeyedObject", |bytes| {
+            push_uint_property(bytes, "KeyedObject", "objectId", 1);
+        });
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("Event", "trigger")),
+            );
+        });
+        push_keyframe_callback(bytes, 2);
+        push_keyframe_callback(bytes, 8);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn synthetic_state_machine_callback_keyframe_work_area_loop_event(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "Event", |bytes| {
+            push_string_property(bytes, "Event", "name", "timeline-work-area-callback");
+        });
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "fps", 10);
+            push_uint_property(bytes, "LinearAnimation", "duration", 20);
+            push_uint_property(bytes, "LinearAnimation", "loopValue", 1);
+            push_bool_property(bytes, "LinearAnimation", "enableWorkArea", true);
+            push_uint_property(bytes, "LinearAnimation", "workStart", 5);
+            push_uint_property(bytes, "LinearAnimation", "workEnd", 15);
+        });
+        push_object_with_properties(bytes, "KeyedObject", |bytes| {
+            push_uint_property(bytes, "KeyedObject", "objectId", 1);
+        });
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("Event", "trigger")),
+            );
+        });
+        push_keyframe_callback(bytes, 6);
+        push_keyframe_callback(bytes, 12);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn synthetic_state_machine_callback_keyframe_multi_bounce_event(file_id: u64) -> Vec<u8> {
+    synthetic_state_machine_callback_keyframe_loop_edge(file_id, 2)
+}
+
 fn push_state_machine_fire_event(bytes: &mut Vec<u8>, event_local_id: u64, occurs_value: u64) {
     push_object_with_properties(bytes, "StateMachineFireEvent", |bytes| {
         push_uint_property(bytes, "StateMachineFireEvent", "eventId", event_local_id);
@@ -6356,7 +6441,7 @@ fn state_machine_callback_keyframe_events_match_cpp_probe() {
     compare_cpp_runtime_update(&cpp, &rust, &report, label);
 }
 
-fn compare_state_machine_callback_keyframe_loop_edge(label: &str, bytes: Vec<u8>) {
+fn compare_state_machine_callback_keyframe_advance(label: &str, bytes: Vec<u8>, seconds: f32) {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
         return;
@@ -6368,7 +6453,7 @@ fn compare_state_machine_callback_keyframe_loop_edge(label: &str, bytes: Vec<u8>
         "0".to_owned(),
         "--runtime-advance-state-machine".to_owned(),
         "0".to_owned(),
-        "1.2".to_owned(),
+        seconds.to_string(),
     ];
 
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
@@ -6383,7 +6468,7 @@ fn compare_state_machine_callback_keyframe_loop_edge(label: &str, bytes: Vec<u8>
             state_machine.clone(),
         ),
         (
-            rust.advance_state_machine_instance(&mut state_machine, 1.2),
+            rust.advance_state_machine_instance(&mut state_machine, seconds),
             state_machine.clone(),
         ),
     ];
@@ -6410,17 +6495,46 @@ fn compare_state_machine_callback_keyframe_loop_edge(label: &str, bytes: Vec<u8>
 
 #[test]
 fn state_machine_callback_keyframe_loop_edge_events_match_cpp_probe() {
-    compare_state_machine_callback_keyframe_loop_edge(
+    compare_state_machine_callback_keyframe_advance(
         "synthetic/runtime_state_machine_callback_keyframe_loop_edge_cpp.riv",
         synthetic_state_machine_callback_keyframe_loop_edge(8365, 1),
+        1.2,
     );
 }
 
 #[test]
 fn state_machine_callback_keyframe_ping_pong_edge_events_match_cpp_probe() {
-    compare_state_machine_callback_keyframe_loop_edge(
+    compare_state_machine_callback_keyframe_advance(
         "synthetic/runtime_state_machine_callback_keyframe_ping_pong_edge_cpp.riv",
         synthetic_state_machine_callback_keyframe_loop_edge(8366, 2),
+        1.2,
+    );
+}
+
+#[test]
+fn state_machine_callback_keyframe_reverse_events_match_cpp_probe() {
+    compare_state_machine_callback_keyframe_advance(
+        "synthetic/runtime_state_machine_callback_keyframe_reverse_cpp.riv",
+        synthetic_state_machine_callback_keyframe_reverse_event(8367),
+        0.6,
+    );
+}
+
+#[test]
+fn state_machine_callback_keyframe_work_area_loop_events_match_cpp_probe() {
+    compare_state_machine_callback_keyframe_advance(
+        "synthetic/runtime_state_machine_callback_keyframe_work_area_loop_cpp.riv",
+        synthetic_state_machine_callback_keyframe_work_area_loop_event(8368),
+        1.2,
+    );
+}
+
+#[test]
+fn state_machine_callback_keyframe_multi_bounce_events_match_cpp_probe() {
+    compare_state_machine_callback_keyframe_advance(
+        "synthetic/runtime_state_machine_callback_keyframe_multi_bounce_cpp.riv",
+        synthetic_state_machine_callback_keyframe_multi_bounce_event(8369),
+        2.4,
     );
 }
 

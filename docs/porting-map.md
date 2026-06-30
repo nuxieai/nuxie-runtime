@@ -273,6 +273,7 @@ Additional current contract: `docs/prototypes/linear-animation-string-keyframe-r
 Additional current contract: `docs/prototypes/linear-animation-id-keyframe-runtime-contract.md`
 Additional current contract: `docs/prototypes/linear-animation-callback-keyframe-runtime-contract.md`
 Additional current contract: `docs/prototypes/linear-animation-callback-keyframe-loop-edge-runtime-contract.md`
+Additional current contract: `docs/prototypes/linear-animation-callback-keyframe-remaining-edge-runtime-contract.md`
 Current remaining-work audit: `docs/prototypes/state-machine-runtime-remaining-audit.md`
 
 ### Question
@@ -314,6 +315,8 @@ Current #11 update: `KeyFrameId` linear-animation application now routes through
 Current #11 update: the first `KeyFrameCallback` runtime slice now imports callback keyframes and reports crossed `Event.trigger` frames into the existing state-machine reported-event vector with C++ `secondsTo - frameSeconds` delay semantics. C++ probe coverage exercises an `AnimationState` crossing an event callback frame and compares event local ID, core type, name, and delay. Plain `LinearAnimationInstance` listener dispatch, listener-owned routing, hit testing, pointer/keyboard/gamepad input dispatch, audio playback, open-url side effects, nested-artboard event propagation, custom-property trigger callbacks, nested trigger callbacks, view-model trigger callbacks, reverse/work-area/multi-bounce callback edge cases, and callback-driven data-binding behavior remain later slices.
 
 Current #11 update: `KeyFrameCallback` event reporting now has dedicated loop-edge coverage for state-machine animations. C++ probes cover a forward `Loop` wrap and a `PingPong` end-frame bounce, including event local ID, core type, name, `secondsDelay`, current animation time, and `didLoop`. Reverse-playback loop edges, work-area loop edges, multi-bounce ping-pong advances, public listener dispatch, audio/open-url side effects, trigger callback targets, nested-artboard event propagation, and callback-driven data-binding behavior remain later slices.
+
+Current #11 update: remaining `KeyFrameCallback` state-machine edge coverage now includes reverse playback from the animation end time, enabled work-area loop wrapping, and multi-bounce ping-pong advances, all pinned against C++ reported-event payloads and current-animation timing. Public scene/listener dispatch, audio/open-url side effects, trigger callback targets, nested-artboard event propagation, and callback-driven data-binding behavior remain later slices.
 
 ## #12: Data Binding Graph
 

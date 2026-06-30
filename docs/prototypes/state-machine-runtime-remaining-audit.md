@@ -33,8 +33,6 @@ slice.
 - Public `LinearAnimationInstance`/scene callback dispatch: listener notification,
   audio playback, open-url side effects, nested-artboard event propagation, and
   callback targets other than `Event.trigger`.
-- Remaining callback edge coverage: reverse playback, work-area loop edges, and
-  multi-bounce ping-pong advances.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
 - Live view-model APIs and data-binding propagation: binding external contexts,

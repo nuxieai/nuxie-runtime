@@ -11409,16 +11409,26 @@ fn runtime_bindable_number_default_view_model_source(
                 return None;
             }
         }
-        Some(
-            RuntimeDataBindGraphConverter::OperationValue { .. }
-            | RuntimeDataBindGraphConverter::Formula { .. },
-        ) => {
+        Some(RuntimeDataBindGraphConverter::OperationValue { .. }) => {
             if let Some(value) = file.view_model_instance_number_value_for_object(source) {
                 RuntimeDataBindGraphValue::Number(value)
             } else if let Some(value) =
                 file.view_model_instance_symbol_list_index_value_for_object(source)
             {
                 RuntimeDataBindGraphValue::SymbolListIndex(value)
+            } else {
+                return None;
+            }
+        }
+        Some(RuntimeDataBindGraphConverter::Formula { .. }) => {
+            if let Some(value) = file.view_model_instance_number_value_for_object(source) {
+                RuntimeDataBindGraphValue::Number(value)
+            } else if let Some(value) =
+                file.view_model_instance_symbol_list_index_value_for_object(source)
+            {
+                RuntimeDataBindGraphValue::SymbolListIndex(value)
+            } else if let Some(value) = file.view_model_instance_boolean_value_for_object(source) {
+                RuntimeDataBindGraphValue::Boolean(value)
             } else {
                 return None;
             }

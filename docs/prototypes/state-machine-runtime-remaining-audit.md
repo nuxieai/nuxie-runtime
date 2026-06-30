@@ -241,6 +241,11 @@ slice.
   now cast to `f32` before entering the deterministic formula evaluator. A C++
   probe covers the symbol-list-index formula path through an existing
   blend-state consumer.
+- First `DataConverterFormula` non-number fallback slice: default-context
+  boolean sources feeding number targets now enter the formula converter and
+  write C++'s early fallback value `0.0`. A C++ probe uses a non-zero imported
+  bindable target default to prove the fallback write is observable through an
+  existing blend-state consumer.
 - First graph-owned view-model bindable slice: forward propagation for
   default-context `ViewModelInstanceViewModel.propertyValue` sources feeding
   `BindablePropertyViewModel.propertyValue` targets, covered by a C++ probe
@@ -299,7 +304,8 @@ slice.
   number-to-number converter group paths, and direct stateful
   data-converter-interpolator number smoothing plus grouped
   operation-value-to-interpolator number smoothing, deterministic formula
-  number/symbol-list-index-to-number conversion,
+  number/symbol-list-index-to-number conversion plus boolean fallback,
+  remaining formula fallback source kinds,
   data-binding update queues, relative paths, parent paths, and nested paths.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener

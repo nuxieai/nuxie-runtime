@@ -714,6 +714,20 @@ trigger increment, boolean-to-number, and enum-to-number, reverse propagation,
 update-queue parity, relative/parent/nested lookup, listener-owned data
 binding, and nested artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: `DataConverterToNumber` runtime execution now also admits
+default-context color sources feeding `BindablePropertyNumber.propertyValue`
+targets. The graph keeps the raw color source node value and converts it
+through the C++ signed `int32_t` cast before writing the number target. C++
+probe coverage verifies the converted value through a `BlendState1DViewModel`
+consumer. The contract is
+`docs/prototypes/data-binding-graph-to-number-color-converter-runtime-contract.md`.
+Stable public source handles, list/symbol/view-model bindables, string and
+symbol-list `DataConverterToNumber` input kinds, converters beyond boolean
+negation, trigger increment, boolean-to-number, enum-to-number, and
+color-to-number, reverse propagation, update-queue parity,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

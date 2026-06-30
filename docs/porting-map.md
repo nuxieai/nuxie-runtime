@@ -876,6 +876,20 @@ converter families, converter groups, reverse propagation, update-queue parity,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
 
+Current #12 update: `DataConverterStringPad` runtime execution now admits
+default-context string sources feeding `BindablePropertyString.propertyValue`
+targets. The graph stores imported `length`, `text`, and `padType` on the
+converter descriptor and uses the shared C++-modeled pad helper from
+`rive-binary` before writing the string target. C++ probe coverage verifies the
+padded string through a `TransitionViewModelCondition`. This closes the direct
+string-converter family for the default-context string-source-to-string-target
+runtime graph lane. The contract is
+`docs/prototypes/data-binding-graph-string-pad-converter-runtime-contract.md`.
+Stable public source handles, list/view-model bindables, converter groups,
+reverse propagation, update-queue parity, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

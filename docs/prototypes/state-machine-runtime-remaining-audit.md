@@ -158,6 +158,10 @@ slice.
   forward conversion for default-context string sources feeding string targets,
   covered by a C++ probe through an existing string transition-condition
   consumer.
+- `DataConverterStringPad` graph-owned converter execution slice: forward
+  conversion for default-context string sources feeding string targets,
+  including imported `length`, `text`, and `padType`, covered by a C++ probe
+  through an existing string transition-condition consumer.
 
 ## Remaining Runtime Slices
 
@@ -178,8 +182,8 @@ slice.
   string-to-number, symbol-list-index-to-number, number-to-string, and
   boolean-to-string, string-to-string, trigger-to-string,
   symbol-list-index-to-string, color-to-string, string-trim, and
-  string-remove-zeros paths, data-binding update queues, relative paths,
-  parent paths, and nested paths.
+  string-remove-zeros, and string-pad paths, data-binding update queues,
+  relative paths, parent paths, and nested paths.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener
   actions.

@@ -2940,6 +2940,11 @@ enum RuntimeDataBindGraphConverter {
         trim_type: u64,
     },
     StringRemoveZeros,
+    StringPad {
+        length: u64,
+        text: Vec<u8>,
+        pad_type: u64,
+    },
     Unsupported,
 }
 
@@ -4059,6 +4064,17 @@ impl RuntimeDataBindGraphSourceNode {
                 rive_binary::data_converter_string_remove_zeros_value(value),
             )),
             (Some(RuntimeDataBindGraphConverter::StringRemoveZeros), _) => None,
+            (
+                Some(RuntimeDataBindGraphConverter::StringPad {
+                    length,
+                    text,
+                    pad_type,
+                }),
+                RuntimeDataBindGraphValue::String(value),
+            ) => Some(RuntimeDataBindGraphValue::String(
+                rive_binary::data_converter_string_pad_value(value, *length, text, *pad_type),
+            )),
+            (Some(RuntimeDataBindGraphConverter::StringPad { .. }), _) => None,
             (Some(RuntimeDataBindGraphConverter::Unsupported), _) => None,
         }
     }
@@ -10770,6 +10786,14 @@ fn runtime_data_bind_graph_converter(
             trim_type: converter.uint_property("trimType").unwrap_or(1),
         },
         "DataConverterStringRemoveZeros" => RuntimeDataBindGraphConverter::StringRemoveZeros,
+        "DataConverterStringPad" => RuntimeDataBindGraphConverter::StringPad {
+            length: converter.uint_property("length").unwrap_or(1),
+            text: converter
+                .string_property_bytes("text")
+                .unwrap_or_default()
+                .to_vec(),
+            pad_type: converter.uint_property("padType").unwrap_or(0),
+        },
         _ => RuntimeDataBindGraphConverter::Unsupported,
     })
 }

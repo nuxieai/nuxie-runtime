@@ -9699,6 +9699,15 @@ pub fn data_converter_string_remove_zeros_value(value: &[u8]) -> Vec<u8> {
     cpp_remove_trailing_zeros(value)
 }
 
+pub fn data_converter_string_pad_value(
+    value: &[u8],
+    length: u64,
+    text: &[u8],
+    pad_type: u64,
+) -> Vec<u8> {
+    cpp_pad_string(value, length, text, pad_type)
+}
+
 fn cpp_format_number_to_string(value: f32, flags: u64, decimals: u64) -> Vec<u8> {
     const ROUND: u64 = 1 << 0;
     const TRAILING_ZEROS: u64 = 1 << 1;

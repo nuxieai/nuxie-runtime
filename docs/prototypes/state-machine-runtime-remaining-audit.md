@@ -145,6 +145,11 @@ slice.
   forward conversion for default-context color sources feeding string targets,
   including imported `colorFormat` descriptor bytes, covered by a C++ probe
   through an existing string transition-condition consumer.
+- `DataConverterToString` enum-source runtime graph probe: default-context
+  enum sources feeding string targets stay unsupported for C++ parity even
+  when imported `DataEnum` metadata is available. A C++ probe covers this
+  non-transition behavior through an existing string transition-condition
+  consumer.
 
 ## Remaining Runtime Slices
 

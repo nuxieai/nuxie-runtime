@@ -840,6 +840,18 @@ groups, reverse propagation, update-queue parity, relative/parent/nested
 lookup, listener-owned data binding, and nested artboard propagation remain
 follow-up `#12` slices.
 
+Current #12 update: `DataConverterToString` enum-source runtime graph behavior
+is now pinned as unsupported for default-context enum sources feeding
+`BindablePropertyString.propertyValue` targets. Even with resolvable imported
+`DataEnum` metadata, C++ does not take a string transition condition for this
+binding shape, so Rust does not admit enum sources into this string-target
+graph path. The contract is
+`docs/prototypes/data-binding-graph-to-string-enum-converter-runtime-contract.md`.
+Stable public source handles, list/view-model bindables, string converter
+families, converter groups, reverse propagation, update-queue parity,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

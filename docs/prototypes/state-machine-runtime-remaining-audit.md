@@ -62,7 +62,8 @@ slice.
   transition-condition consumer.
 - File-backed imported `ViewModelInstance` context binding through
   `RuntimeDataBindGraph` source path re-resolution, covered by a C++ probe
-  through an existing `BlendState1DViewModel` consumer.
+  through existing `BlendState1DViewModel` and boolean transition-condition
+  consumers.
 
 ## Remaining Runtime Slices
 
@@ -74,12 +75,13 @@ slice.
 - Live view-model APIs and data-binding propagation governed by
   `docs/prototypes/data-binding-graph-runtime-contract.md`: beyond the finite
   graph-routed default source-to-target `propertyValue` bind set listed above,
-  add external contexts beyond imported file-backed view-model instances,
-  source mutation APIs beyond the default
-  number/boolean/string/color/enum/asset/artboard/trigger source nodes,
+  add imported file-backed external context probes for
+  string/color/enum/asset/artboard/trigger sources, external contexts beyond
+  imported file-backed view-model instances, source mutation APIs beyond the
+  default number/boolean/string/color/enum/asset/artboard/trigger source nodes,
   list/symbol/view-model bindables, converters, data-binding update queues,
-  relative paths, parent paths, nested paths, and external trigger reset/report
-  identity for fire triggers and conditions.
+  relative paths, parent paths, nested paths, and external trigger
+  reset/report identity for fire triggers and conditions.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener
   actions.

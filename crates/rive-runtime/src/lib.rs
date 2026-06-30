@@ -21,6 +21,7 @@ pub struct ArtboardInstance {
     components: Vec<RuntimeComponent>,
     component_by_local: BTreeMap<usize, usize>,
     color_properties: BTreeMap<(usize, u16), u32>,
+    bool_properties: BTreeMap<(usize, u16), bool>,
     update_order: Vec<usize>,
     linear_animations: Vec<RuntimeLinearAnimation>,
     state_machines: Vec<RuntimeStateMachine>,
@@ -92,6 +93,7 @@ impl ArtboardInstance {
             components,
             component_by_local,
             color_properties: BTreeMap::new(),
+            bool_properties: BTreeMap::new(),
             update_order,
             linear_animations,
             state_machines,
@@ -457,6 +459,19 @@ impl ArtboardInstance {
         }
         self.color_properties
             .insert((local_id, property_key), value);
+        self.did_change = true;
+        true
+    }
+
+    fn bool_property(&self, local_id: usize, property_key: u16) -> Option<bool> {
+        self.bool_properties.get(&(local_id, property_key)).copied()
+    }
+
+    fn set_bool_property(&mut self, local_id: usize, property_key: u16, value: bool) -> bool {
+        if self.bool_property(local_id, property_key) == Some(value) {
+            return false;
+        }
+        self.bool_properties.insert((local_id, property_key), value);
         self.did_change = true;
         true
     }
@@ -838,7 +853,7 @@ fn runtime_shape_paint_command(
     shape_world: Mat2D,
     path_commands: Vec<RuntimePathCommand>,
 ) -> Option<RuntimeShapePaintCommand> {
-    if !paint.is_visible {
+    if !runtime_shape_paint_is_visible(artboard, paint) {
         return None;
     }
     let effect_path_commands = runtime_effect_path_commands(paint, &path_commands);
@@ -858,6 +873,21 @@ fn runtime_shape_paint_command(
         effect_path_commands,
         needs_save_operation,
     })
+}
+
+fn runtime_shape_paint_is_visible(artboard: &ArtboardInstance, paint: &ShapePaintNode) -> bool {
+    let Some(property_key) = shape_paint_is_visible_property_key() else {
+        return paint.is_visible;
+    };
+    match paint.paint_type {
+        ShapePaintKind::Fill | ShapePaintKind::Unknown => artboard
+            .bool_property(paint.local_id, property_key)
+            .unwrap_or(paint.is_visible),
+        ShapePaintKind::Stroke => artboard
+            .bool_property(paint.local_id, property_key)
+            .map(|visible| paint.is_visible && visible)
+            .unwrap_or(paint.is_visible),
+    }
 }
 
 fn runtime_shape_paint_blend_mode_value(
@@ -2229,6 +2259,16 @@ impl RuntimeLinearAnimation {
                         value,
                     );
                 }
+                if keyed_property.bool_property {
+                    let Some(value) = keyed_property.bool_value_at(seconds, self.fps) else {
+                        continue;
+                    };
+                    changed |= instance.set_bool_property(
+                        keyed_object.target_local_id,
+                        keyed_property.property_key,
+                        value,
+                    );
+                }
             }
         }
         changed
@@ -3465,13 +3505,13 @@ enum RuntimeTransitionCondition {
         op: TransitionConditionOp,
     },
     ComponentBoolean {
-        source_value: bool,
+        component: RuntimeComponentBoolValue,
         op: TransitionConditionOp,
         value: bool,
     },
     ComponentBooleanPair {
-        left: bool,
-        right: bool,
+        left: RuntimeComponentBoolValue,
+        right: RuntimeComponentBoolValue,
         op: TransitionConditionOp,
     },
     ComponentString {
@@ -3516,7 +3556,7 @@ enum RuntimeTransitionCondition {
         op: TransitionConditionOp,
     },
     ComponentViewModelBoolean {
-        component_value: bool,
+        component: RuntimeComponentBoolValue,
         bindable_global_id: u32,
         op: TransitionConditionOp,
     },
@@ -3815,9 +3855,10 @@ impl RuntimeTransitionCondition {
             }),
             (RuntimeComponentComparandKind::Boolean, RuntimeComponentComparandKind::Boolean) => {
                 Some(Self::ComponentViewModelBoolean {
-                    component_value: runtime_component_bool_value(
-                        source_object,
+                    component: RuntimeComponentBoolValue::from_parts(
+                        local_id,
                         property_key,
+                        source_object,
                         supports_property,
                     ),
                     bindable_global_id: bindable.id,
@@ -3972,12 +4013,12 @@ impl RuntimeTransitionCondition {
             }
             (RuntimeComponentComparandKind::Boolean, "TransitionValueBooleanComparator") => {
                 Some(Self::ComponentBoolean {
-                    source_value: source_object
-                        .filter(|_| supports_property)
-                        .and_then(|object| {
-                            runtime_object_bool_property_by_key(object, property_key)
-                        })
-                        .unwrap_or(false),
+                    component: RuntimeComponentBoolValue::from_parts(
+                        local_id,
+                        property_key,
+                        source_object,
+                        supports_property,
+                    ),
                     op,
                     value: right.bool_property("value").unwrap_or(false),
                 })
@@ -4120,14 +4161,16 @@ impl RuntimeTransitionCondition {
             }),
             (RuntimeComponentComparandKind::Boolean, RuntimeComponentComparandKind::Boolean) => {
                 Some(Self::ComponentBooleanPair {
-                    left: runtime_component_bool_value(
-                        left_source,
+                    left: RuntimeComponentBoolValue::from_parts(
+                        left_local_id,
                         left_property_key,
+                        left_source,
                         left_supports,
                     ),
-                    right: runtime_component_bool_value(
-                        right_source,
+                    right: RuntimeComponentBoolValue::from_parts(
+                        right_local_id,
                         right_property_key,
+                        right_source,
                         right_supports,
                     ),
                     op,
@@ -4365,11 +4408,13 @@ impl RuntimeTransitionCondition {
                 op.compare(left.value(artboard), right.value(artboard))
             }
             Self::ComponentBoolean {
-                source_value,
+                component,
                 op,
                 value,
-            } => op.compare_bool(*source_value, *value),
-            Self::ComponentBooleanPair { left, right, op } => op.compare_bool(*left, *right),
+            } => op.compare_bool(component.value(artboard), *value),
+            Self::ComponentBooleanPair { left, right, op } => {
+                op.compare_bool(left.value(artboard), right.value(artboard))
+            }
             Self::ComponentString {
                 source_value,
                 op,
@@ -4422,7 +4467,7 @@ impl RuntimeTransitionCondition {
                 op.compare_u64_equal_only(*component_value, view_model_value)
             }
             Self::ComponentViewModelBoolean {
-                component_value,
+                component,
                 bindable_global_id,
                 op,
             } => {
@@ -4431,7 +4476,7 @@ impl RuntimeTransitionCondition {
                 }
                 let view_model_value =
                     bindable_boolean_value(bindable_booleans, *bindable_global_id).unwrap_or(false);
-                op.compare_bool(*component_value, view_model_value)
+                op.compare_bool(component.value(artboard), view_model_value)
             }
             Self::ComponentViewModelString {
                 component_value,
@@ -4684,6 +4729,37 @@ impl RuntimeComponentNumberValue {
 }
 
 #[derive(Debug, Clone, Copy)]
+struct RuntimeComponentBoolValue {
+    local_id: usize,
+    property_key: Option<u16>,
+    source_value: bool,
+}
+
+impl RuntimeComponentBoolValue {
+    fn from_parts(
+        local_id: usize,
+        property_key: u16,
+        source_object: Option<&RuntimeObject>,
+        supports_property: bool,
+    ) -> Self {
+        Self {
+            local_id,
+            property_key: supports_property.then_some(property_key),
+            source_value: source_object
+                .filter(|_| supports_property)
+                .and_then(|object| runtime_object_bool_property_by_key(object, property_key))
+                .unwrap_or(false),
+        }
+    }
+
+    fn value(self, artboard: &ArtboardInstance) -> bool {
+        self.property_key
+            .and_then(|property_key| artboard.bool_property(self.local_id, property_key))
+            .unwrap_or(self.source_value)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
 struct RuntimeComponentColorValue {
     local_id: usize,
     property_key: Option<u16>,
@@ -4819,17 +4895,6 @@ fn runtime_component_uint_value(
         .filter(|_| supports_property)
         .and_then(|object| runtime_object_uint_property_by_key(object, property_key))
         .unwrap_or(0)
-}
-
-fn runtime_component_bool_value(
-    source_object: Option<&RuntimeObject>,
-    property_key: u16,
-    supports_property: bool,
-) -> bool {
-    source_object
-        .filter(|_| supports_property)
-        .and_then(|object| runtime_object_bool_property_by_key(object, property_key))
-        .unwrap_or(false)
 }
 
 fn runtime_component_string_value(
@@ -7136,8 +7201,11 @@ pub struct RuntimeKeyedProperty {
     pub transform_property: Option<TransformProperty>,
     pub color_property: bool,
     pub color_source_value: u32,
+    pub bool_property: bool,
+    pub bool_source_value: bool,
     pub key_frames: Vec<RuntimeKeyFrameDouble>,
     pub color_key_frames: Vec<RuntimeKeyFrameColor>,
+    pub bool_key_frames: Vec<RuntimeKeyFrameBool>,
 }
 
 impl RuntimeKeyedProperty {
@@ -7207,6 +7275,29 @@ impl RuntimeKeyedProperty {
         };
 
         Some(color_lerp(current, value, mix))
+    }
+
+    fn bool_value_at(&self, seconds: f32, fps: u64) -> Option<bool> {
+        if self.bool_key_frames.is_empty() {
+            return None;
+        }
+
+        let idx = closest_key_frame_index(&self.bool_key_frames, seconds, fps);
+        let value = if idx == 0 {
+            self.bool_key_frames[0].value
+        } else if idx < self.bool_key_frames.len() {
+            let from = &self.bool_key_frames[idx - 1];
+            let to = &self.bool_key_frames[idx];
+            if seconds == to.seconds(fps) {
+                to.value
+            } else {
+                from.value
+            }
+        } else {
+            self.bool_key_frames.last()?.value
+        };
+
+        Some(value)
     }
 
     fn closest_frame_index(&self, seconds: f32, fps: u64) -> usize {
@@ -7290,6 +7381,30 @@ impl RuntimeKeyFrameColor {
 }
 
 impl RuntimeKeyFrameTiming for RuntimeKeyFrameColor {
+    fn seconds(&self, fps: u64) -> f32 {
+        self.seconds(fps)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RuntimeKeyFrameBool {
+    pub global_id: u32,
+    pub frame: u64,
+    pub interpolation_type: u64,
+    pub interpolator_id: Option<u64>,
+    pub value: bool,
+}
+
+impl RuntimeKeyFrameBool {
+    fn seconds(&self, fps: u64) -> f32 {
+        if fps == 0 {
+            return 0.0;
+        }
+        self.frame as f32 / fps as f32
+    }
+}
+
+impl RuntimeKeyFrameTiming for RuntimeKeyFrameBool {
     fn seconds(&self, fps: u64) -> f32 {
         self.seconds(fps)
     }
@@ -7434,8 +7549,13 @@ fn build_linear_animations(
                         == Some(CoreRegistryFieldKind::Color),
                     color_source_value: runtime_object_color_property_by_key(target, property_key)
                         .unwrap_or(0),
+                    bool_property: core_registry_field_kind_by_property_key(property_key)
+                        == Some(CoreRegistryFieldKind::Bool),
+                    bool_source_value: runtime_object_bool_property_by_key(target, property_key)
+                        .unwrap_or(false),
                     key_frames: Vec::new(),
                     color_key_frames: Vec::new(),
+                    bool_key_frames: Vec::new(),
                 });
             current_keyed_property = Some((
                 keyed_object_index,
@@ -7476,6 +7596,22 @@ fn build_linear_animations(
                     interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
                     interpolator_id: normalized_interpolator_id(object),
                     value: object.color_property("value").unwrap_or(0),
+                });
+        }
+
+        if object.type_name == "KeyFrameBool" {
+            let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
+                continue;
+            };
+            animations[animation_index].keyed_objects[keyed_object_index].keyed_properties
+                [keyed_property_index]
+                .bool_key_frames
+                .push(RuntimeKeyFrameBool {
+                    global_id: global_id as u32,
+                    frame: object.uint_property("frame").unwrap_or(0),
+                    interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
+                    interpolator_id: normalized_interpolator_id(object),
+                    value: object.bool_property("value").unwrap_or(false),
                 });
         }
     }
@@ -8074,6 +8210,10 @@ fn solid_color_value_property_key() -> Option<u16> {
     property_key_for_name("SolidColor", "colorValue")
 }
 
+fn shape_paint_is_visible_property_key() -> Option<u16> {
+    property_key_for_name("ShapePaint", "isVisible")
+}
+
 fn property_key_for_name(type_name: &str, property_name: &str) -> Option<u16> {
     let definition = definition_by_name(type_name)?;
     if let Some(property) = definition
@@ -8425,6 +8565,7 @@ mod tests {
             components,
             component_by_local,
             color_properties: BTreeMap::new(),
+            bool_properties: BTreeMap::new(),
             update_order,
             linear_animations: Vec::new(),
             state_machines: Vec::new(),

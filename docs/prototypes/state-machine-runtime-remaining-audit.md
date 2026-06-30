@@ -481,6 +481,12 @@ slice.
   `OperationValue` and `OperationValue` group target edits are now pinned as
   delayed source-to-target dirty updates rather than immediate reverse
   conversion. Broader dirty-list target scheduling remains a follow-up slice.
+- First direct public-update target-to-source slice:
+  `StateMachineInstance::updateDataBinds(true)` now covers a converter-free
+  number main-`ToTarget | TwoWay` bind. The public update writes the edited
+  target into the default source, then reapplies source-to-target during the
+  same update while preserving the narrower state-machine bindable-property
+  dirty behavior.
 - First public-update reverse target-to-source slice:
   `StateMachineInstance::updateDataBinds(true)` now covers a direct
   `DataConverterOperationValue` main-`ToTarget | TwoWay` number bind. The

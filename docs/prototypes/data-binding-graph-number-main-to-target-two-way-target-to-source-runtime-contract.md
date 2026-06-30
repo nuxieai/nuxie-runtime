@@ -65,7 +65,9 @@ source-derived value back to the target through `convert`.
 - Immediate target-to-source reverse conversion for main-`ToTarget` two-way
   binds; the C++ probe path does not do this.
 - Public `DataBindContainer::updateDataBinds(true)` scheduler parity outside
-  the state-machine bindable-property action path.
+  the state-machine bindable-property action path; the direct no-converter
+  public-update variant is covered first by
+  `docs/prototypes/data-binding-graph-number-public-update-target-to-source-runtime-contract.md`.
 - Full C++ dirty-list scheduling for neighboring ordinary `ToTarget` binds.
 - Non-number target-to-source converter families.
 - System-operation, operation-view-model, rounder, and `DataConverterToNumber`

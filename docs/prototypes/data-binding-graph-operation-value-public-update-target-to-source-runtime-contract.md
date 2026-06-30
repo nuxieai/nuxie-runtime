@@ -11,6 +11,8 @@ not immediately reverse-convert a main-`ToTarget | TwoWay` target edit during
 path is different: when the same dirty bind is drained with
 `applyTargetToSource=true`, C++ calls `reverseConvert` before writing the
 view-model source, then reapplies source-to-target during the same update.
+The converter-free direct-number variant is covered separately by
+`docs/prototypes/data-binding-graph-number-public-update-target-to-source-runtime-contract.md`.
 The grouped `DataConverterGroup<OperationValue>` variant is covered separately
 by
 `docs/prototypes/data-binding-graph-operation-value-group-public-update-target-to-source-runtime-contract.md`.

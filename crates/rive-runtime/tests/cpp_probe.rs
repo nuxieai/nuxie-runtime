@@ -3128,6 +3128,15 @@ fn push_bindable_asset_data_bind(bytes: &mut Vec<u8>, value: u64) {
 }
 
 fn push_bindable_asset_data_bind_context(bytes: &mut Vec<u8>, value: u64, path: &[u32]) {
+    push_bindable_asset_data_bind_context_with_flags(bytes, value, path, 0);
+}
+
+fn push_bindable_asset_data_bind_context_with_flags(
+    bytes: &mut Vec<u8>,
+    value: u64,
+    path: &[u32],
+    flags: u64,
+) {
     let mut source_path_ids = Vec::new();
     for path_id in path {
         push_var_uint(&mut source_path_ids, u64::from(*path_id));
@@ -3146,6 +3155,9 @@ fn push_bindable_asset_data_bind_context(bytes: &mut Vec<u8>, value: u64, path: 
             )),
         );
         push_bytes_property(bytes, "DataBindContext", "sourcePathIds", &source_path_ids);
+        if flags != 0 {
+            push_uint_property(bytes, "DataBindContext", "flags", flags);
+        }
     });
 }
 
@@ -4931,6 +4943,71 @@ fn synthetic_state_machine_default_viewmodel_asset_condition(file_id: u64) -> Ve
         push_object_with_properties(bytes, "StateTransition", |bytes| {
             push_uint_property(bytes, "StateTransition", "stateToId", 3);
         });
+        push_bindable_asset_data_bind_context(bytes, 4, &[0, 0]);
+        push_object_with_properties(bytes, "TransitionViewModelCondition", |bytes| {
+            push_uint_property(bytes, "TransitionViewModelCondition", "opValue", 0);
+        });
+        push_object_with_properties(bytes, "TransitionPropertyViewModelComparator", |_| {});
+        push_object_with_properties(bytes, "TransitionValueAssetComparator", |bytes| {
+            push_uint_property(bytes, "TransitionValueAssetComparator", "value", 11);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn synthetic_state_machine_default_viewmodel_asset_target_to_source_condition(
+    file_id: u64,
+) -> Vec<u8> {
+    const DATA_BIND_TO_SOURCE: u64 = 1 << 0;
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyAssetImage", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyAssetImage", "name", "image");
+        });
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceAssetImage", |bytes| {
+            push_uint_property(
+                bytes,
+                "ViewModelInstanceAssetImage",
+                "viewModelPropertyId",
+                0,
+            );
+            push_uint_property(bytes, "ViewModelInstanceAssetImage", "propertyValue", 4);
+        });
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+        });
+        push_bindable_asset_data_bind_context_with_flags(
+            bytes,
+            4,
+            &[0, 0],
+            DATA_BIND_TO_SOURCE | DATA_BIND_TWO_WAY,
+        );
         push_bindable_asset_data_bind_context(bytes, 4, &[0, 0]);
         push_object_with_properties(bytes, "TransitionViewModelCondition", |bytes| {
             push_uint_property(bytes, "TransitionViewModelCondition", "opValue", 0);
@@ -15249,6 +15326,96 @@ fn state_machine_default_viewmodel_asset_bind_source_matches_cpp_probe() {
         state_machine.bind_default_view_model_context(),
         "{label} failed to bind default view-model context"
     );
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 1.0),
+        state_machine.clone(),
+    ));
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+    {
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn state_machine_default_viewmodel_asset_target_to_source_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_asset_target_to_source_cpp.riv";
+    let bytes = synthetic_state_machine_default_viewmodel_asset_target_to_source_condition(8480);
+    let forced_value = 11_u64;
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine-data-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-state-machine-bindable-asset".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        forced_value.to_string(),
+        "--runtime-advance-state-machine-data-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    let mut rust_reports = Vec::new();
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    assert!(
+        state_machine.bind_default_view_model_context(),
+        "{label} failed to bind default view-model context"
+    );
+    assert!(
+        state_machine.advance_data_context(),
+        "{label} failed to advance initial data context"
+    );
+    rust_reports.push((false, state_machine.clone()));
+    assert!(
+        state_machine.set_bindable_asset_for_data_bind(0, forced_value),
+        "{label} failed to mutate bindable asset"
+    );
+    assert!(
+        state_machine.advance_data_context(),
+        "{label} failed to advance mutated data context"
+    );
+    rust_reports.push((false, state_machine.clone()));
     rust_reports.push((
         rust.advance_state_machine_instance(&mut state_machine, 0.0),
         state_machine.clone(),

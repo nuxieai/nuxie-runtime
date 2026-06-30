@@ -1168,6 +1168,20 @@ fn push_bindable_asset_data_bind(bytes: &mut Vec<u8>, value: u64) {
     push_object_with_properties(bytes, "DataBind", |_| {});
 }
 
+fn push_bindable_trigger_data_bind(bytes: &mut Vec<u8>, value: u64) {
+    push_object_with_properties(bytes, "BindablePropertyTrigger", |bytes| {
+        push_uint_property(bytes, "BindablePropertyTrigger", "propertyValue", value);
+    });
+    push_object_with_properties(bytes, "DataBind", |_| {});
+}
+
+fn push_bindable_artboard_data_bind(bytes: &mut Vec<u8>, value: u64) {
+    push_object_with_properties(bytes, "BindablePropertyArtboard", |bytes| {
+        push_uint_property(bytes, "BindablePropertyArtboard", "propertyValue", value);
+    });
+    push_object_with_properties(bytes, "DataBind", |_| {});
+}
+
 fn push_bindable_trigger_data_bind_context(bytes: &mut Vec<u8>, path: &[u32]) {
     let mut source_path_ids = Vec::new();
     for path_id in path {
@@ -1986,6 +2000,8 @@ enum SyntheticComponentViewModelBindable<'a> {
     String(&'a str),
     Enum(u64),
     Asset(u64),
+    Trigger(u64),
+    Artboard(u64),
 }
 
 fn push_synthetic_component_viewmodel_bindable(
@@ -2013,6 +2029,12 @@ fn push_synthetic_component_viewmodel_bindable(
         }
         SyntheticComponentViewModelBindable::Asset(value) => {
             push_bindable_asset_data_bind(bytes, value);
+        }
+        SyntheticComponentViewModelBindable::Trigger(value) => {
+            push_bindable_trigger_data_bind(bytes, value);
+        }
+        SyntheticComponentViewModelBindable::Artboard(value) => {
+            push_bindable_artboard_data_bind(bytes, value);
         }
     }
 }
@@ -7803,6 +7825,10 @@ fn state_machine_component_viewmodel_conditions_match_cpp_probe() {
                     "0".to_owned(),
                     value.to_string(),
                 ]),
+                SyntheticComponentViewModelBindable::Trigger(_)
+                | SyntheticComponentViewModelBindable::Artboard(_) => {
+                    unreachable!("trigger/artboard mutations are outside this scalar test")
+                }
             }
         }
         args.extend([
@@ -7876,7 +7902,189 @@ fn state_machine_component_viewmodel_conditions_match_cpp_probe() {
                     "{} failed to mutate bindable asset",
                     case.label
                 ),
+                SyntheticComponentViewModelBindable::Trigger(_)
+                | SyntheticComponentViewModelBindable::Artboard(_) => {
+                    unreachable!("trigger/artboard mutations are outside this scalar test")
+                }
             }
+        }
+        rust_reports.push((
+            rust.advance_state_machine_instance(&mut state_machine, 0.0),
+            state_machine.clone(),
+        ));
+        rust_reports.push((
+            rust.advance_state_machine_instance(&mut state_machine, 1.0),
+            state_machine.clone(),
+        ));
+        let report = rust.update_components();
+
+        let cpp_artboard = cpp
+            .artboards
+            .first()
+            .unwrap_or_else(|| panic!("missing C++ artboard for {}", case.label));
+        assert_eq!(
+            cpp_artboard.runtime_state_machine_advances.len(),
+            rust_reports.len(),
+            "{} state-machine report count mismatch",
+            case.label
+        );
+        for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+            .runtime_state_machine_advances
+            .iter()
+            .zip(&rust_reports)
+        {
+            compare_state_machine_advance(
+                cpp_state_machine,
+                rust_state_machine,
+                *advanced,
+                case.label,
+            );
+        }
+        compare_cpp_runtime_update(&cpp, &rust, &report, case.label);
+    }
+}
+
+#[test]
+fn state_machine_component_viewmodel_trigger_artboard_conditions_match_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    const NODE_ID: u64 = 1;
+
+    struct Case<'a> {
+        label: &'a str,
+        bytes: Vec<u8>,
+        bind_context: bool,
+    }
+
+    let trigger_value_key = property_key_for_name("CustomPropertyTrigger", "propertyValue");
+    let artboard_value_key = property_key_for_name("ViewModelInstanceArtboard", "propertyValue");
+
+    for case in [
+        Case {
+            label: "synthetic/runtime_state_machine_component_viewmodel_trigger_no_context_cpp.riv",
+            bytes: synthetic_state_machine_component_viewmodel_condition(
+                8349,
+                SyntheticComponentViewModelOrder::ComponentLeft,
+                SyntheticComponentViewModelBindable::Trigger(0),
+                NODE_ID,
+                trigger_value_key,
+                0,
+            ),
+            bind_context: false,
+        },
+        Case {
+            label: "synthetic/runtime_state_machine_component_viewmodel_trigger_component_left_cpp.riv",
+            bytes: synthetic_state_machine_component_viewmodel_condition(
+                8350,
+                SyntheticComponentViewModelOrder::ComponentLeft,
+                SyntheticComponentViewModelBindable::Trigger(0),
+                NODE_ID,
+                trigger_value_key,
+                0,
+            ),
+            bind_context: true,
+        },
+        Case {
+            label: "synthetic/runtime_state_machine_viewmodel_component_trigger_not_equal_cpp.riv",
+            bytes: synthetic_state_machine_component_viewmodel_condition(
+                8351,
+                SyntheticComponentViewModelOrder::ViewModelLeft,
+                SyntheticComponentViewModelBindable::Trigger(1),
+                NODE_ID,
+                trigger_value_key,
+                1,
+            ),
+            bind_context: true,
+        },
+        Case {
+            label: "synthetic/runtime_state_machine_viewmodel_component_trigger_ordered_false_cpp.riv",
+            bytes: synthetic_state_machine_component_viewmodel_condition(
+                8352,
+                SyntheticComponentViewModelOrder::ViewModelLeft,
+                SyntheticComponentViewModelBindable::Trigger(1),
+                NODE_ID,
+                trigger_value_key,
+                5,
+            ),
+            bind_context: true,
+        },
+        Case {
+            label: "synthetic/runtime_state_machine_component_viewmodel_artboard_component_left_cpp.riv",
+            bytes: synthetic_state_machine_component_viewmodel_condition(
+                8353,
+                SyntheticComponentViewModelOrder::ComponentLeft,
+                SyntheticComponentViewModelBindable::Artboard(0),
+                NODE_ID,
+                artboard_value_key,
+                0,
+            ),
+            bind_context: true,
+        },
+        Case {
+            label: "synthetic/runtime_state_machine_viewmodel_component_artboard_not_equal_cpp.riv",
+            bytes: synthetic_state_machine_component_viewmodel_condition(
+                8354,
+                SyntheticComponentViewModelOrder::ViewModelLeft,
+                SyntheticComponentViewModelBindable::Artboard(7),
+                NODE_ID,
+                artboard_value_key,
+                1,
+            ),
+            bind_context: true,
+        },
+        Case {
+            label: "synthetic/runtime_state_machine_viewmodel_component_artboard_ordered_false_cpp.riv",
+            bytes: synthetic_state_machine_component_viewmodel_condition(
+                8355,
+                SyntheticComponentViewModelOrder::ViewModelLeft,
+                SyntheticComponentViewModelBindable::Artboard(7),
+                NODE_ID,
+                artboard_value_key,
+                5,
+            ),
+            bind_context: true,
+        },
+    ] {
+        let mut args = vec![
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+        ];
+        if case.bind_context {
+            args.extend([
+                "--runtime-bind-empty-state-machine-context".to_owned(),
+                "0".to_owned(),
+            ]);
+        }
+        args.extend([
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "1".to_owned(),
+        ]);
+
+        let cpp = read_cpp_probe_bytes_with_args(&probe, case.label, &case.bytes, &args);
+        let (_, mut rust) = read_rust_instance_from_bytes(&case.bytes, case.label);
+        let mut state_machine = rust
+            .state_machine_instance(0)
+            .unwrap_or_else(|| panic!("missing Rust state-machine instance for {}", case.label));
+
+        let mut rust_reports = Vec::new();
+        rust_reports.push((
+            rust.advance_state_machine_instance(&mut state_machine, 0.0),
+            state_machine.clone(),
+        ));
+        if case.bind_context {
+            assert!(
+                state_machine.bind_empty_data_context(),
+                "{} failed to bind empty data context",
+                case.label
+            );
         }
         rust_reports.push((
             rust.advance_state_machine_instance(&mut state_machine, 0.0),

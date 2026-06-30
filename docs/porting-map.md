@@ -264,6 +264,7 @@ Additional current contract: `docs/prototypes/state-machine-artboard-component-c
 Additional current contract: `docs/prototypes/state-machine-component-viewmodel-condition-runtime-contract.md`
 Additional current contract: `docs/prototypes/state-machine-component-artboard-unsupported-condition-audit.md`
 Additional current contract: `docs/prototypes/state-machine-component-viewmodel-pointer-unsupported-condition-audit.md`
+Additional current contract: `docs/prototypes/state-machine-component-viewmodel-trigger-artboard-condition-runtime-contract.md`
 
 ### Question
 
@@ -283,9 +284,11 @@ Current #11 update: left-artboard/right-component `TransitionViewModelCondition`
 
 Current #11 update: component/ViewModel scalar `TransitionViewModelCondition` comparisons now support `TransitionPropertyComponentComparator` paired with `TransitionPropertyViewModelComparator` in either order for number/integer, bool, string/bytes, color, enum, and asset kinds. Coverage includes data-context gating, static component values, mutable component transforms, mutated ViewModel bindable values, missing/unsupported component defaults, incompatible kind rejection, and both component-left/ViewModel-right and ViewModel-left/component-right direction. Component/ViewModel trigger, artboard, and pointer semantics, component-left/artboard-right if a later C++ audit finds a supported shape, and runtime-layout-driven artboard dimensions remain later slices.
 
-Current #11 update: component-left/artboard-right `TransitionViewModelCondition` comparisons have been audited and are intentionally unsupported because C++ only appends `TransitionPropertyArtboardComparator` comparable kinds on the left side. A C++ probe rejection test now guards Rust against adding a mirrored direction that C++ does not support. Component/ViewModel trigger, artboard, and pointer semantics plus runtime-layout-driven artboard dimensions remain later slices.
+Current #11 update: component-left/artboard-right `TransitionViewModelCondition` comparisons have been audited and are intentionally unsupported because C++ only appends `TransitionPropertyArtboardComparator` comparable kinds on the left side. A C++ probe rejection test now guards Rust against adding a mirrored direction that C++ does not support. Runtime-layout-driven artboard dimensions remain a later slice.
 
-Current #11 update: component/ViewModel pointer `TransitionViewModelCondition` comparisons have been audited and are intentionally unsupported because C++'s `ComparisonShape::ViewModel` construction only accepts `TransitionPropertyViewModelComparator`, even though a component ViewModel comparand class is declared. C++ probe rejection coverage now guards both component-left/ViewModel-right and ViewModel-left/component-right directions. Component/ViewModel trigger and artboard semantics plus runtime-layout-driven artboard dimensions remain later slices.
+Current #11 update: component/ViewModel pointer `TransitionViewModelCondition` comparisons have been audited and are intentionally unsupported because C++'s `ComparisonShape::ViewModel` construction only accepts `TransitionPropertyViewModelComparator`, even though a component ViewModel comparand class is declared. C++ probe rejection coverage now guards both component-left/ViewModel-right and ViewModel-left/component-right directions. Runtime-layout-driven artboard dimensions remain a later slice.
+
+Current #11 update: component/ViewModel trigger and artboard `TransitionViewModelCondition` comparisons now support `TransitionPropertyComponentComparator` paired with `TransitionPropertyViewModelComparator` in either supported order for C++ `ComparisonShape::Uint32` semantics. Runtime trigger bindables now preserve imported `BindablePropertyTrigger.propertyValue` separately from trigger source/reset behavior, runtime artboard bindables preserve imported `BindablePropertyArtboard.propertyValue` with the C++ `BindablePropertyId` missing-id default, and C++ probe coverage guards data-context gating, trigger/artboard equality, not-equality, ordered-operation false behavior, and both comparator orders. Runtime-layout-driven artboard dimensions remain a later slice.
 
 ## #12: Data Binding Graph
 

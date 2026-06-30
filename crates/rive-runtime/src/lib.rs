@@ -2421,6 +2421,7 @@ pub struct RuntimeStateMachine {
     bindable_strings: Vec<RuntimeBindableString>,
     bindable_enums: Vec<RuntimeBindableEnum>,
     bindable_assets: Vec<RuntimeBindableAsset>,
+    bindable_artboards: Vec<RuntimeBindableArtboard>,
     bindable_triggers: Vec<RuntimeBindableTrigger>,
     bindable_view_models: Vec<RuntimeBindableViewModel>,
     bindable_booleans: Vec<RuntimeBindableBoolean>,
@@ -2495,8 +2496,15 @@ struct RuntimeBindableAsset {
 }
 
 #[derive(Debug, Clone)]
+struct RuntimeBindableArtboard {
+    global_id: u32,
+    value: u64,
+}
+
+#[derive(Debug, Clone)]
 struct RuntimeBindableTrigger {
     global_id: u32,
+    value: u64,
     source: RuntimeBindableTriggerSource,
 }
 
@@ -2759,6 +2767,7 @@ impl RuntimeStateTransition {
         bindable_strings: &[StateMachineBindableStringInstance],
         bindable_enums: &[StateMachineBindableEnumInstance],
         bindable_assets: &[StateMachineBindableAssetInstance],
+        bindable_artboards: &[StateMachineBindableArtboardInstance],
         bindable_triggers: &[StateMachineBindableTriggerInstance],
         bindable_view_models: &[StateMachineBindableViewModelInstance],
         bindable_booleans: &[StateMachineBindableBooleanInstance],
@@ -2778,6 +2787,7 @@ impl RuntimeStateTransition {
                 bindable_strings,
                 bindable_enums,
                 bindable_assets,
+                bindable_artboards,
                 bindable_triggers,
                 bindable_view_models,
                 bindable_booleans,
@@ -3447,6 +3457,16 @@ enum RuntimeTransitionCondition {
         bindable_global_id: u32,
         op: TransitionConditionOp,
     },
+    ComponentViewModelTrigger {
+        component_value: u64,
+        bindable_global_id: u32,
+        op: TransitionConditionOp,
+    },
+    ComponentViewModelArtboard {
+        component_value: u64,
+        bindable_global_id: u32,
+        op: TransitionConditionOp,
+    },
     ArtboardComponentNumber {
         value: f32,
         op: TransitionConditionOp,
@@ -3774,6 +3794,28 @@ impl RuntimeTransitionCondition {
                     op,
                 })
             }
+            (RuntimeComponentComparandKind::Trigger, RuntimeComponentComparandKind::Trigger) => {
+                Some(Self::ComponentViewModelTrigger {
+                    component_value: runtime_component_uint_value(
+                        source_object,
+                        property_key,
+                        supports_property,
+                    ),
+                    bindable_global_id: bindable.id,
+                    op,
+                })
+            }
+            (RuntimeComponentComparandKind::Artboard, RuntimeComponentComparandKind::Artboard) => {
+                Some(Self::ComponentViewModelArtboard {
+                    component_value: runtime_component_uint_value(
+                        source_object,
+                        property_key,
+                        supports_property,
+                    ),
+                    bindable_global_id: bindable.id,
+                    op,
+                })
+            }
             _ => None,
         }
     }
@@ -4080,6 +4122,7 @@ impl RuntimeTransitionCondition {
         bindable_strings: &[StateMachineBindableStringInstance],
         bindable_enums: &[StateMachineBindableEnumInstance],
         bindable_assets: &[StateMachineBindableAssetInstance],
+        bindable_artboards: &[StateMachineBindableArtboardInstance],
         bindable_triggers: &[StateMachineBindableTriggerInstance],
         bindable_view_models: &[StateMachineBindableViewModelInstance],
         bindable_booleans: &[StateMachineBindableBooleanInstance],
@@ -4361,6 +4404,30 @@ impl RuntimeTransitionCondition {
                 }
                 let view_model_value =
                     bindable_asset_value(bindable_assets, *bindable_global_id).unwrap_or(0);
+                op.compare_u64_equal_only(*component_value, view_model_value)
+            }
+            Self::ComponentViewModelTrigger {
+                component_value,
+                bindable_global_id,
+                op,
+            } => {
+                if !data_context_present {
+                    return false;
+                }
+                let view_model_value =
+                    bindable_trigger_value(bindable_triggers, *bindable_global_id).unwrap_or(0);
+                op.compare_u64_equal_only(*component_value, view_model_value)
+            }
+            Self::ComponentViewModelArtboard {
+                component_value,
+                bindable_global_id,
+                op,
+            } => {
+                if !data_context_present {
+                    return false;
+                }
+                let view_model_value =
+                    bindable_artboard_value(bindable_artboards, *bindable_global_id).unwrap_or(0);
                 op.compare_u64_equal_only(*component_value, view_model_value)
             }
             Self::ArtboardComponentNumber {
@@ -4781,6 +4848,7 @@ pub struct StateMachineInstance {
     bindable_strings: Vec<StateMachineBindableStringInstance>,
     bindable_enums: Vec<StateMachineBindableEnumInstance>,
     bindable_assets: Vec<StateMachineBindableAssetInstance>,
+    bindable_artboards: Vec<StateMachineBindableArtboardInstance>,
     bindable_triggers: Vec<StateMachineBindableTriggerInstance>,
     bindable_view_models: Vec<StateMachineBindableViewModelInstance>,
     bindable_booleans: Vec<StateMachineBindableBooleanInstance>,
@@ -4861,6 +4929,11 @@ impl StateMachineInstance {
             .iter()
             .map(StateMachineBindableAssetInstance::new)
             .collect::<Vec<_>>();
+        let bindable_artboards = state_machine
+            .bindable_artboards
+            .iter()
+            .map(StateMachineBindableArtboardInstance::new)
+            .collect::<Vec<_>>();
         let bindable_triggers = state_machine
             .bindable_triggers
             .iter()
@@ -4897,6 +4970,7 @@ impl StateMachineInstance {
             bindable_strings,
             bindable_enums,
             bindable_assets,
+            bindable_artboards,
             bindable_triggers,
             bindable_view_models,
             bindable_booleans,
@@ -5194,6 +5268,7 @@ impl StateMachineInstance {
                 &self.bindable_strings,
                 &self.bindable_enums,
                 &self.bindable_assets,
+                &self.bindable_artboards,
                 &self.bindable_triggers,
                 &self.bindable_view_models,
                 &self.bindable_booleans,
@@ -5589,8 +5664,34 @@ fn bindable_asset_value(
 }
 
 #[derive(Debug, Clone)]
+struct StateMachineBindableArtboardInstance {
+    global_id: u32,
+    value: u64,
+}
+
+impl StateMachineBindableArtboardInstance {
+    fn new(bindable_artboard: &RuntimeBindableArtboard) -> Self {
+        Self {
+            global_id: bindable_artboard.global_id,
+            value: bindable_artboard.value,
+        }
+    }
+}
+
+fn bindable_artboard_value(
+    bindable_artboards: &[StateMachineBindableArtboardInstance],
+    global_id: u32,
+) -> Option<u64> {
+    bindable_artboards
+        .iter()
+        .find(|bindable_artboard| bindable_artboard.global_id == global_id)
+        .map(|bindable_artboard| bindable_artboard.value)
+}
+
+#[derive(Debug, Clone)]
 struct StateMachineBindableTriggerInstance {
     global_id: u32,
+    value: u64,
     source: RuntimeBindableTriggerSource,
 }
 
@@ -5598,9 +5699,20 @@ impl StateMachineBindableTriggerInstance {
     fn new(bindable_trigger: &RuntimeBindableTrigger) -> Self {
         Self {
             global_id: bindable_trigger.global_id,
+            value: bindable_trigger.value,
             source: bindable_trigger.source,
         }
     }
+}
+
+fn bindable_trigger_value(
+    bindable_triggers: &[StateMachineBindableTriggerInstance],
+    global_id: u32,
+) -> Option<u64> {
+    bindable_triggers
+        .iter()
+        .find(|bindable_trigger| bindable_trigger.global_id == global_id)
+        .map(|bindable_trigger| bindable_trigger.value)
 }
 
 fn bindable_trigger_source_global_id(
@@ -5890,6 +6002,7 @@ impl StateMachineLayerInstance {
         bindable_strings: &[StateMachineBindableStringInstance],
         bindable_enums: &[StateMachineBindableEnumInstance],
         bindable_assets: &[StateMachineBindableAssetInstance],
+        bindable_artboards: &[StateMachineBindableArtboardInstance],
         bindable_triggers: &[StateMachineBindableTriggerInstance],
         bindable_view_models: &[StateMachineBindableViewModelInstance],
         bindable_booleans: &[StateMachineBindableBooleanInstance],
@@ -5928,6 +6041,7 @@ impl StateMachineLayerInstance {
                 bindable_strings,
                 bindable_enums,
                 bindable_assets,
+                bindable_artboards,
                 bindable_triggers,
                 bindable_view_models,
                 bindable_booleans,
@@ -5964,6 +6078,7 @@ impl StateMachineLayerInstance {
         bindable_strings: &[StateMachineBindableStringInstance],
         bindable_enums: &[StateMachineBindableEnumInstance],
         bindable_assets: &[StateMachineBindableAssetInstance],
+        bindable_artboards: &[StateMachineBindableArtboardInstance],
         bindable_triggers: &[StateMachineBindableTriggerInstance],
         bindable_view_models: &[StateMachineBindableViewModelInstance],
         bindable_booleans: &[StateMachineBindableBooleanInstance],
@@ -5988,6 +6103,7 @@ impl StateMachineLayerInstance {
             bindable_strings,
             bindable_enums,
             bindable_assets,
+            bindable_artboards,
             bindable_triggers,
             bindable_view_models,
             bindable_booleans,
@@ -6010,6 +6126,7 @@ impl StateMachineLayerInstance {
             bindable_strings,
             bindable_enums,
             bindable_assets,
+            bindable_artboards,
             bindable_triggers,
             bindable_view_models,
             bindable_booleans,
@@ -6033,6 +6150,7 @@ impl StateMachineLayerInstance {
         bindable_strings: &[StateMachineBindableStringInstance],
         bindable_enums: &[StateMachineBindableEnumInstance],
         bindable_assets: &[StateMachineBindableAssetInstance],
+        bindable_artboards: &[StateMachineBindableArtboardInstance],
         bindable_triggers: &[StateMachineBindableTriggerInstance],
         bindable_view_models: &[StateMachineBindableViewModelInstance],
         bindable_booleans: &[StateMachineBindableBooleanInstance],
@@ -6061,6 +6179,7 @@ impl StateMachineLayerInstance {
                 bindable_strings,
                 bindable_enums,
                 bindable_assets,
+                bindable_artboards,
                 bindable_triggers,
                 bindable_view_models,
                 bindable_booleans,
@@ -6110,6 +6229,7 @@ impl StateMachineLayerInstance {
                 bindable_strings,
                 bindable_enums,
                 bindable_assets,
+                bindable_artboards,
                 bindable_triggers,
                 bindable_view_models,
                 bindable_booleans,
@@ -6158,6 +6278,7 @@ impl StateMachineLayerInstance {
         bindable_strings: &[StateMachineBindableStringInstance],
         bindable_enums: &[StateMachineBindableEnumInstance],
         bindable_assets: &[StateMachineBindableAssetInstance],
+        bindable_artboards: &[StateMachineBindableArtboardInstance],
         bindable_triggers: &[StateMachineBindableTriggerInstance],
         bindable_view_models: &[StateMachineBindableViewModelInstance],
         bindable_booleans: &[StateMachineBindableBooleanInstance],
@@ -6194,6 +6315,7 @@ impl StateMachineLayerInstance {
                 bindable_strings,
                 bindable_enums,
                 bindable_assets,
+                bindable_artboards,
                 bindable_triggers,
                 bindable_view_models,
                 bindable_booleans,
@@ -7197,6 +7319,7 @@ fn build_state_machines(
             let bindable_strings = runtime_bindable_strings(file, &state_machine);
             let bindable_enums = runtime_bindable_enums(file, &state_machine);
             let bindable_assets = runtime_bindable_assets(file, &state_machine);
+            let bindable_artboards = runtime_bindable_artboards(file, &state_machine);
             let bindable_triggers = runtime_bindable_triggers(file, &state_machine);
             let bindable_view_models = runtime_bindable_view_models(file, &state_machine);
             let bindable_booleans = runtime_bindable_booleans(file, &state_machine);
@@ -7218,6 +7341,7 @@ fn build_state_machines(
                 bindable_strings,
                 bindable_enums,
                 bindable_assets,
+                bindable_artboards,
                 bindable_triggers,
                 bindable_view_models,
                 bindable_booleans,
@@ -7515,6 +7639,31 @@ fn runtime_bindable_assets(
     values.into_values().collect()
 }
 
+fn runtime_bindable_artboards(
+    file: &RuntimeFile,
+    state_machine: &rive_binary::RuntimeStateMachine<'_>,
+) -> Vec<RuntimeBindableArtboard> {
+    let mut values = BTreeMap::<u32, RuntimeBindableArtboard>::new();
+    for data_bind in &state_machine.data_binds {
+        let Some(target) = file.data_bind_target_for_object(data_bind) else {
+            continue;
+        };
+        if target.type_name != "BindablePropertyArtboard" {
+            continue;
+        }
+        values
+            .entry(target.id)
+            .or_insert_with(|| RuntimeBindableArtboard {
+                global_id: target.id,
+                value: target
+                    .uint_property("propertyValue")
+                    .unwrap_or(u64::from(u32::MAX)),
+            });
+    }
+
+    values.into_values().collect()
+}
+
 fn runtime_bindable_triggers(
     file: &RuntimeFile,
     state_machine: &rive_binary::RuntimeStateMachine<'_>,
@@ -7528,11 +7677,16 @@ fn runtime_bindable_triggers(
             continue;
         }
         let source = runtime_bindable_trigger_source(file, data_bind);
+        let value = target.uint_property("propertyValue").unwrap_or(0);
         values
             .entry(target.id)
-            .and_modify(|bindable_trigger| bindable_trigger.source = source)
+            .and_modify(|bindable_trigger| {
+                bindable_trigger.value = value;
+                bindable_trigger.source = source;
+            })
             .or_insert_with(|| RuntimeBindableTrigger {
                 global_id: target.id,
+                value,
                 source,
             });
     }

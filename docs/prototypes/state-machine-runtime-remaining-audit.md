@@ -224,6 +224,11 @@ slice.
   reports, and Rust probe tests can compare default-context string bind values
   directly. This is the enabling slice for string-target dirty parity without
   adding new runtime semantics.
+- Number-to-string main-to-target dirty slice: direct `DataConverterToString`
+  number-to-string binds now follow C++ state-machine target-dirty behavior for
+  main-`ToTarget | TwoWay` string targets. Explicit data-context advancement
+  preserves a manual string target edit, then normal state-machine advancement
+  overwrites it from the unchanged number source through C++ number formatting.
 - First `DataConverterToString` graph-owned converter execution slice:
   forward conversion for default-context number sources feeding string targets,
   covered by a C++ probe through an existing string transition-condition

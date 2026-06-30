@@ -26,6 +26,9 @@ family.
   evaluation.
 - C++ probe coverage through an observable string
   `TransitionViewModelCondition` consumer.
+- Main-`ToTarget | TwoWay` target-dirty behavior for the direct number-to-string
+  path is covered by
+  `docs/prototypes/data-binding-graph-to-string-number-main-to-target-two-way-target-dirty-runtime-contract.md`.
 
 ## Out Of Scope
 
@@ -36,7 +39,7 @@ family.
 - Formulas, operation converters, interpolators, and stateful converter
   advancement.
 - Reverse target-to-source propagation.
-- Dirty/update queue parity beyond the existing graph-owned apply point.
+- Dirty/update queue parity beyond the linked state-machine target-dirty path.
 - Relative, parent, and nested source path lookup.
 - Listener-owned data-binding contexts and nested artboard propagation.
 

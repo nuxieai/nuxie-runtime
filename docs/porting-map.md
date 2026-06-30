@@ -1082,6 +1082,19 @@ trigger, view-model, and list binding reports, public API design, broader
 dirty/update queues, relative/parent/nested lookup, listener-owned data binding,
 and nested artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: direct `DataConverterToString` number-to-string binds now
+cover the main-`ToTarget | TwoWay` state-machine target-dirty path for
+default-context string targets. A manual edit to the
+`BindablePropertyString.propertyValue` target is preserved through explicit
+data-context advancement, then the next normal state-machine advance reapplies
+the unchanged number source through C++ number-to-string formatting, including
+when elapsed time is zero. The contract is
+`docs/prototypes/data-binding-graph-to-string-number-main-to-target-two-way-target-dirty-runtime-contract.md`.
+Other `DataConverterToString` input kinds, string converter families and
+groups, public-queue reverse conversion, broader dirty/update queues,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
+
 Current #12 update: the first `DataConverterToString` runtime slice now
 supports default-context number sources feeding
 `BindablePropertyString.propertyValue` targets. String source nodes can carry a

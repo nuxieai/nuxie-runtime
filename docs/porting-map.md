@@ -586,6 +586,19 @@ converters, reverse propagation, update-queue parity, relative/parent/nested
 lookup, listener-owned data binding, external trigger reset/report identity,
 and nested artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: owned runtime view-model contexts now also cover enum
+sources as raw `propertyValue` integers. Rust exposes
+`RuntimeOwnedViewModelInstance::set_enum_by_property_index`, and the graph
+resolves owned `ViewModelInstanceEnum` values into existing enum source nodes
+before state-machine transition evaluation. The C++ probe mirrors this with
+`--runtime-bind-owned-view-model-enum-state-machine-context`, mutating the
+owned C++ runtime enum by value index. The contract is
+`docs/prototypes/data-binding-graph-owned-view-model-enum-context-runtime-contract.md`.
+Owned asset/artboard/trigger values, stable public source handles, converters,
+reverse propagation, update-queue parity, relative/parent/nested lookup,
+listener-owned data binding, external trigger reset/report identity, and nested
+artboard propagation remain follow-up `#12` slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

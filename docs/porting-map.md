@@ -1354,6 +1354,18 @@ group shapes, reverse propagation, update-queue parity, relative/parent/nested
 lookup, listener-owned data binding, and nested artboard propagation remain
 follow-up `#12` slices.
 
+Current #12 update: the admitted string `DataConverterGroup` path now also
+covers the main-`ToTarget | TwoWay` state-machine target-dirty behavior for
+default-context string targets. A manual `BindablePropertyString.propertyValue`
+edit survives explicit data-context advancement, then the next normal
+state-machine advance reapplies the unchanged string source through imported
+trim-then-pad group conversion in C++ child order, including when elapsed time
+is zero. The contract is
+`docs/prototypes/data-binding-graph-string-converter-group-main-to-target-two-way-target-dirty-runtime-contract.md`.
+Cross-type and number converter groups, reverse propagation, broader
+dirty/update queues, relative/parent/nested lookup, listener-owned data
+binding, and nested artboard propagation remain follow-up `#12` slices.
+
 Current #12 update: the first cross-type `DataConverterGroup` runtime execution
 slice now admits default-context number sources feeding
 `BindablePropertyString.propertyValue` targets when the resolved group starts

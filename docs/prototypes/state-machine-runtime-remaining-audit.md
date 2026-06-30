@@ -324,6 +324,12 @@ slice.
   composition for default-context string sources feeding string targets through
   already-supported direct string converters, covered by a C++ probe through an
   existing string transition-condition consumer.
+- String converter-group main-to-target dirty slice: the admitted
+  `DataConverterStringTrim -> DataConverterStringPad` group now follows C++
+  state-machine target-dirty behavior for main-`ToTarget | TwoWay` string
+  targets, preserving the manual target edit through explicit data-context
+  advancement and then overwriting it from the unchanged string source through
+  ordered group conversion on the next normal advance.
 - First cross-type `DataConverterGroup` graph-owned converter execution slice:
   forward composition for default-context number sources feeding string targets
   through a group whose first effective child is `DataConverterToString`,

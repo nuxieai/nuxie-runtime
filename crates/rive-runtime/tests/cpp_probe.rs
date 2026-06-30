@@ -4648,6 +4648,15 @@ fn synthetic_state_machine_default_viewmodel_string_pad_converter_condition_with
 fn synthetic_state_machine_default_viewmodel_string_converter_group_condition(
     file_id: u64,
 ) -> Vec<u8> {
+    synthetic_state_machine_default_viewmodel_string_converter_group_condition_with_flags(
+        file_id, 0,
+    )
+}
+
+fn synthetic_state_machine_default_viewmodel_string_converter_group_condition_with_flags(
+    file_id: u64,
+    data_bind_flags: u64,
+) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "ViewModel", |bytes| {
             push_string_property(bytes, "ViewModel", "name", "Root");
@@ -4696,7 +4705,13 @@ fn synthetic_state_machine_default_viewmodel_string_converter_group_condition(
         push_object_with_properties(bytes, "StateTransition", |bytes| {
             push_uint_property(bytes, "StateTransition", "stateToId", 3);
         });
-        push_bindable_string_data_bind_context_with_converter(bytes, "idle", &[0, 0], Some(2));
+        push_bindable_string_data_bind_context_with_converter_and_flags(
+            bytes,
+            "idle",
+            &[0, 0],
+            Some(2),
+            data_bind_flags,
+        );
         push_object_with_properties(bytes, "TransitionViewModelCondition", |bytes| {
             push_uint_property(bytes, "TransitionViewModelCondition", "opValue", 0);
         });
@@ -15914,6 +15929,19 @@ fn string_pad_main_to_target_two_way_target_dirty_matches_cpp_probe() {
         8520,
         DATA_BIND_TWO_WAY,
     );
+    assert_string_main_to_target_two_way_target_dirty_matches_cpp_probe(label, bytes);
+}
+
+#[test]
+fn string_converter_group_main_to_target_two_way_target_dirty_matches_cpp_probe() {
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_string_converter_group_main_to_target_two_way_target_dirty_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_string_converter_group_condition_with_flags(
+            8521,
+            DATA_BIND_TWO_WAY,
+        );
     assert_string_main_to_target_two_way_target_dirty_matches_cpp_probe(label, bytes);
 }
 

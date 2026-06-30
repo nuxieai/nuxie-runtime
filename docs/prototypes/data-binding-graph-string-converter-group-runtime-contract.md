@@ -10,6 +10,10 @@ This slice proves group composition and child ordering without admitting every
 converter type, stateful converter behavior, or cross-type group source
 admission.
 
+Main-`ToTarget | TwoWay` target-dirty behavior for this string converter-group
+path is covered separately by
+`docs/prototypes/data-binding-graph-string-converter-group-main-to-target-two-way-target-dirty-runtime-contract.md`.
+
 ## In Scope
 
 - State-machine-owned `DataBindContext` objects whose target property is
@@ -34,7 +38,7 @@ admission.
 - Stateful converter advancement and converter reset/dirty scheduling.
 - Owned or external view-model converter-group contexts.
 - Reverse target-to-source propagation.
-- Dirty/update queue parity beyond the existing graph-owned apply point.
+- Dirty/update queue parity beyond the linked state-machine target-dirty path.
 - Relative, parent, and nested source path lookup.
 - Nested artboard propagation.
 

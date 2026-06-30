@@ -4565,6 +4565,21 @@ impl RuntimeDataBindGraph {
         &mut self,
         numbers: &[StateMachineBindableNumberInstance],
     ) -> bool {
+        self.apply_default_view_model_number_targets_to_sources_with_options(numbers, false)
+    }
+
+    fn apply_default_view_model_number_public_update_targets_to_sources(
+        &mut self,
+        numbers: &[StateMachineBindableNumberInstance],
+    ) -> bool {
+        self.apply_default_view_model_number_targets_to_sources_with_options(numbers, true)
+    }
+
+    fn apply_default_view_model_number_targets_to_sources_with_options(
+        &mut self,
+        numbers: &[StateMachineBindableNumberInstance],
+        include_deferred_main_to_target: bool,
+    ) -> bool {
         if !self.default_view_model_source_context_bound() {
             return false;
         }
@@ -4580,10 +4595,16 @@ impl RuntimeDataBindGraph {
             let Some(source) = self.sources.get_mut(binding.source.0) else {
                 continue;
             };
-            if !source.target_to_source_dirty {
+            let target_to_source_dirty = source.target_to_source_dirty
+                || (include_deferred_main_to_target
+                    && source.source_to_target_dirty_after_immediate);
+            if !target_to_source_dirty {
                 continue;
             }
             source.target_to_source_dirty = false;
+            if include_deferred_main_to_target {
+                source.source_to_target_dirty_after_immediate = false;
+            }
             let Some(value) = numbers
                 .iter()
                 .find(|number| number.global_id == global_id)
@@ -9564,6 +9585,20 @@ impl StateMachineInstance {
             {
                 self.sync_default_view_model_triggers_from_active();
             }
+        }
+        true
+    }
+
+    pub fn update_data_binds_apply_target_to_source(&mut self) -> bool {
+        if !self.data_bind_graph.data_context_present() {
+            return false;
+        }
+        if self.data_bind_graph.default_view_model_context_bound() {
+            self.data_bind_graph
+                .apply_default_view_model_number_public_update_targets_to_sources(
+                    &self.bindable_numbers,
+                );
+            self.apply_default_view_model_bindings(true, RuntimeDataBindGraphApplyPhase::Immediate);
         }
         true
     }

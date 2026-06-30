@@ -1823,6 +1823,20 @@ source/target propagation, imported/owned contexts, pending add/remove
 behavior, re-entry protection, relative/parent/nested lookup, listener-owned
 data binding, and nested artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: the first public `updateDataBinds(true)` reverse-converter
+target-to-source path is now probe-backed for a direct
+`DataConverterOperationValue` main-`ToTarget | TwoWay` number bind. The C++
+probe exposes `--runtime-update-state-machine-data-binds`, Rust mirrors it
+through `StateMachineInstance::update_data_binds_apply_target_to_source`, and
+the test verifies that the edited bindable target is reverse-converted into the
+default view-model source before source-to-target reapplication leaves the
+target at the edited value. The contract is
+`docs/prototypes/data-binding-graph-operation-value-public-update-target-to-source-runtime-contract.md`.
+Public-update coverage for other converters and groups, full dirty-list
+scheduler parity, imported/owned contexts, pending add/remove behavior,
+re-entry protection, relative/parent/nested lookup, listener-owned data
+binding, and nested artboard propagation remain follow-up `#12` slices.
+
 Current #12 update: owned runtime view-model contexts now cover the first
 live view-model pointer replacement path. `RuntimeOwnedViewModelInstance`
 records root `ViewModelPropertyViewModel` properties plus the imported instance

@@ -481,6 +481,12 @@ slice.
   `OperationValue` and `OperationValue` group target edits are now pinned as
   delayed source-to-target dirty updates rather than immediate reverse
   conversion. Broader dirty-list target scheduling remains a follow-up slice.
+- First public-update reverse target-to-source slice:
+  `StateMachineInstance::updateDataBinds(true)` now covers a direct
+  `DataConverterOperationValue` main-`ToTarget | TwoWay` number bind. The
+  public update reverse-converts the edited target into the source, then
+  reapplies source-to-target in the same update while preserving the narrower
+  state-machine bindable-property dirty behavior.
 - First graph-owned view-model bindable slice: forward propagation for
   default-context `ViewModelInstanceViewModel.propertyValue` sources feeding
   `BindablePropertyViewModel.propertyValue` targets, covered by a C++ probe

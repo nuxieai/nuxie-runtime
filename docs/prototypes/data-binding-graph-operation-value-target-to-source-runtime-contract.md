@@ -10,6 +10,9 @@ main `ToSource` bindings call `convert`, while main `ToTarget` two-way bindings
 call `reverseConvert`. The representative fixture in this contract is a
 `ToSource | TwoWay` bind, so the numeric target is converted with
 `DataConverterOperationValue::convert` before writing the view-model source.
+The first public `updateDataBinds(true)` main-`ToTarget | TwoWay`
+`reverseConvert` path is covered separately by
+`docs/prototypes/data-binding-graph-operation-value-public-update-target-to-source-runtime-contract.md`.
 
 ## In Scope
 

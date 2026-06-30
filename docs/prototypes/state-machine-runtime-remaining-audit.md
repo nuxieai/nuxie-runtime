@@ -64,6 +64,9 @@ slice.
   `RuntimeDataBindGraph` source path re-resolution, covered by a C++ probe
   through existing `BlendState1DViewModel`, boolean transition-condition, and
   string/color/enum/asset/artboard/trigger transition-condition consumers.
+- Owned runtime `ViewModelInstance` number context binding through
+  `RuntimeDataBindGraph` source path re-resolution, covered by a C++ probe
+  through an existing `BlendState1DViewModel` consumer.
 
 ## Remaining Runtime Slices
 
@@ -75,8 +78,9 @@ slice.
 - Live view-model APIs and data-binding propagation governed by
   `docs/prototypes/data-binding-graph-runtime-contract.md`: beyond the finite
   graph-routed default and imported-file-backed external source-to-target
-  `propertyValue` bind sets listed above, add external contexts beyond imported
-  file-backed view-model instances, source mutation APIs beyond the default
+  `propertyValue` bind sets and owned number context listed above, add owned
+  boolean/string/color/enum/asset/artboard/trigger contexts, source mutation
+  APIs beyond the default
   number/boolean/string/color/enum/asset/artboard/trigger source nodes,
   list/symbol/view-model bindables, converters, data-binding update queues,
   relative paths, parent paths, nested paths, and external trigger reset/report

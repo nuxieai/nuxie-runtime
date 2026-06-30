@@ -2897,6 +2897,7 @@ enum RuntimeDataBindGraphContextKind {
     Empty,
     DefaultViewModel,
     ImportedViewModel,
+    OwnedViewModel,
 }
 
 #[derive(Debug, Clone)]
@@ -2950,6 +2951,22 @@ enum RuntimeDataBindGraphValue {
 }
 
 impl RuntimeDataBindGraphValue {
+    fn resolve_from_owned_view_model_instance(
+        &self,
+        context: &RuntimeOwnedViewModelInstance,
+        path: &[u32],
+    ) -> Option<Self> {
+        if path.len() != 2 || usize::try_from(path[0]).ok()? != context.view_model_index {
+            return None;
+        }
+        match self {
+            Self::Number(_) => context
+                .number_value_by_property_index(usize::try_from(path[1]).ok()?)
+                .map(Self::Number),
+            _ => None,
+        }
+    }
+
     fn resolve_from_view_model_instance(
         &self,
         file: &RuntimeFile,
@@ -2999,6 +3016,63 @@ struct RuntimeDataBindGraphTargetsMut<'a> {
     assets: &'a mut [StateMachineBindableAssetInstance],
     artboards: &'a mut [StateMachineBindableArtboardInstance],
     triggers: &'a mut [StateMachineBindableTriggerInstance],
+}
+
+#[derive(Debug, Clone)]
+pub struct RuntimeOwnedViewModelInstance {
+    view_model_index: usize,
+    numbers: Vec<RuntimeOwnedViewModelNumber>,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeOwnedViewModelNumber {
+    property_index: usize,
+    value: f32,
+}
+
+impl RuntimeOwnedViewModelInstance {
+    pub fn new(file: &RuntimeFile, view_model_index: usize) -> Option<Self> {
+        let view_model = file.view_model(view_model_index)?;
+        let numbers = view_model
+            .properties
+            .into_iter()
+            .enumerate()
+            .filter_map(|(property_index, property)| {
+                (property.type_name == "ViewModelPropertyNumber").then_some(
+                    RuntimeOwnedViewModelNumber {
+                        property_index,
+                        value: 0.0,
+                    },
+                )
+            })
+            .collect::<Vec<_>>();
+        Some(Self {
+            view_model_index,
+            numbers,
+        })
+    }
+
+    pub fn set_number_by_property_index(&mut self, property_index: usize, value: f32) -> bool {
+        let Some(number) = self
+            .numbers
+            .iter_mut()
+            .find(|number| number.property_index == property_index)
+        else {
+            return false;
+        };
+        if number.value == value {
+            return false;
+        }
+        number.value = value;
+        true
+    }
+
+    fn number_value_by_property_index(&self, property_index: usize) -> Option<f32> {
+        self.numbers
+            .iter()
+            .find(|number| number.property_index == property_index)
+            .map(|number| number.value)
+    }
 }
 
 impl RuntimeDataBindGraph {
@@ -3173,6 +3247,7 @@ impl RuntimeDataBindGraph {
             self.context_kind,
             RuntimeDataBindGraphContextKind::DefaultViewModel
                 | RuntimeDataBindGraphContextKind::ImportedViewModel
+                | RuntimeDataBindGraphContextKind::OwnedViewModel
         )
     }
 
@@ -3228,6 +3303,23 @@ impl RuntimeDataBindGraph {
             }
         }
         self.context_kind = RuntimeDataBindGraphContextKind::ImportedViewModel;
+        self.default_view_model_bindings_dirty = true;
+        true
+    }
+
+    fn bind_owned_view_model_context(&mut self, context: &RuntimeOwnedViewModelInstance) -> bool {
+        for source in &mut self.sources {
+            if let Some(value) = source
+                .value
+                .resolve_from_owned_view_model_instance(context, &source.path)
+            {
+                source.value = value;
+                source.bound = true;
+            } else {
+                source.bound = false;
+            }
+        }
+        self.context_kind = RuntimeDataBindGraphContextKind::OwnedViewModel;
         self.default_view_model_bindings_dirty = true;
         true
     }
@@ -6582,6 +6674,17 @@ impl StateMachineInstance {
             view_model_index,
             instance_index,
         ) {
+            return false;
+        }
+        self.needs_advance = true;
+        true
+    }
+
+    pub fn bind_owned_view_model_context(
+        &mut self,
+        context: &RuntimeOwnedViewModelInstance,
+    ) -> bool {
+        if !self.data_bind_graph.bind_owned_view_model_context(context) {
             return false;
         }
         self.needs_advance = true;

@@ -532,6 +532,22 @@ converters, reverse propagation, update-queue parity, relative/parent/nested
 lookup, listener-owned data binding, external trigger reset/report identity,
 and nested artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: the first owned runtime view-model context path now covers
+number sources. Rust exposes `RuntimeOwnedViewModelInstance::new` plus
+`set_number_by_property_index`, and
+`StateMachineInstance::bind_owned_view_model_context` refreshes matching graph
+number source nodes from the owned context. The C++ probe mirrors this with
+`--runtime-bind-owned-view-model-number-state-machine-context`, creating
+`File::createViewModelInstance(...)`, mutating a
+`ViewModelInstanceNumberRuntime` property, and binding the owned instance to
+the state machine. The contract is
+`docs/prototypes/data-binding-graph-owned-view-model-number-context-runtime-contract.md`.
+Owned boolean/string/color/enum/asset/artboard/trigger values, stable public
+source handles, converters, reverse propagation, update-queue parity,
+relative/parent/nested lookup, listener-owned data binding, external trigger
+reset/report identity, and nested artboard propagation remain follow-up `#12`
+slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

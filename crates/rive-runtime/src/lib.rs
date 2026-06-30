@@ -2936,7 +2936,7 @@ struct RuntimeDataBindGraphSourceNode {
     view_model_instance_ids: Vec<u32>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 enum RuntimeDataBindGraphConverter {
     BooleanNegate,
     TriggerIncrement,
@@ -2948,6 +2948,14 @@ enum RuntimeDataBindGraphConverter {
     },
     Rounder {
         decimals: u64,
+    },
+    RangeMapper {
+        min_input: f32,
+        max_input: f32,
+        min_output: f32,
+        max_output: f32,
+        flags: u64,
+        interpolation_type: u64,
     },
     StringTrim {
         trim_type: u64,
@@ -4305,6 +4313,30 @@ fn runtime_data_bind_graph_convert_value(
             Some(RuntimeDataBindGraphValue::Number(0.0))
         }
         (
+            RuntimeDataBindGraphConverter::RangeMapper {
+                min_input,
+                max_input,
+                min_output,
+                max_output,
+                flags,
+                interpolation_type,
+            },
+            RuntimeDataBindGraphValue::Number(value),
+        ) => Some(RuntimeDataBindGraphValue::Number(
+            runtime_data_bind_graph_convert_range_mapper(
+                *value,
+                *min_input,
+                *max_input,
+                *min_output,
+                *max_output,
+                *flags,
+                *interpolation_type,
+            ),
+        )),
+        (RuntimeDataBindGraphConverter::RangeMapper { .. }, _) => {
+            Some(RuntimeDataBindGraphValue::Number(0.0))
+        }
+        (
             RuntimeDataBindGraphConverter::StringTrim { trim_type },
             RuntimeDataBindGraphValue::String(value),
         ) => Some(RuntimeDataBindGraphValue::String(
@@ -4338,6 +4370,57 @@ fn runtime_data_bind_graph_convert_value(
         }
         (RuntimeDataBindGraphConverter::Unsupported, _) => None,
     }
+}
+
+fn runtime_data_bind_graph_convert_range_mapper(
+    input: f32,
+    min_input: f32,
+    max_input: f32,
+    min_output: f32,
+    max_output: f32,
+    flags: u64,
+    interpolation_type: u64,
+) -> f32 {
+    if min_output == max_output {
+        return min_output;
+    }
+
+    const CLAMP_LOWER: u64 = 1 << 0;
+    const CLAMP_UPPER: u64 = 1 << 1;
+    const MODULO: u64 = 1 << 2;
+    const REVERSE: u64 = 1 << 3;
+
+    let mut value = input;
+    if value < min_input && flags & CLAMP_LOWER != 0 {
+        value = min_input;
+    } else if value > max_input && flags & CLAMP_UPPER != 0 {
+        value = max_input;
+    }
+    if (value < min_input || value > max_input) && flags & MODULO != 0 {
+        value =
+            (runtime_data_bind_graph_positive_mod(value, max_input - min_input) + min_input).abs();
+    }
+
+    let mut percent = (value - min_input) / (max_input - min_input);
+    if flags & REVERSE != 0 {
+        percent = 1.0 - percent;
+    }
+    if interpolation_type == 0 {
+        percent = if percent <= 0.0 { 0.0 } else { 1.0 };
+    }
+
+    percent * max_output + (1.0 - percent) * min_output
+}
+
+fn runtime_data_bind_graph_positive_mod(value: f32, mut range: f32) -> f32 {
+    if range < 0.0 {
+        range = -range;
+    }
+    let mut value = value % range;
+    if value < 0.0 {
+        value += range;
+    }
+    value
 }
 
 fn runtime_data_bind_graph_converter_starts_with_to_string(
@@ -11176,6 +11259,23 @@ fn runtime_data_bind_graph_converter_for_object(
         "DataConverterRounder" => RuntimeDataBindGraphConverter::Rounder {
             decimals: converter.uint_property("decimals").unwrap_or(0),
         },
+        "DataConverterRangeMapper" => {
+            if file
+                .resolved_interpolator_for_data_converter_object(converter)
+                .is_some()
+            {
+                RuntimeDataBindGraphConverter::Unsupported
+            } else {
+                RuntimeDataBindGraphConverter::RangeMapper {
+                    min_input: converter.double_property("minInput").unwrap_or(1.0),
+                    max_input: converter.double_property("maxInput").unwrap_or(1.0),
+                    min_output: converter.double_property("minOutput").unwrap_or(1.0),
+                    max_output: converter.double_property("maxOutput").unwrap_or(1.0),
+                    flags: converter.uint_property("flags").unwrap_or(0),
+                    interpolation_type: converter.uint_property("interpolationType").unwrap_or(1),
+                }
+            }
+        }
         "DataConverterStringTrim" => RuntimeDataBindGraphConverter::StringTrim {
             trim_type: converter.uint_property("trimType").unwrap_or(1),
         },

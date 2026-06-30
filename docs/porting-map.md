@@ -815,6 +815,19 @@ families, converter groups, reverse propagation, update-queue parity,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
 
+Current #12 update: the first `DataConverterRangeMapper` runtime execution
+slice now admits default-context number sources feeding
+`BindablePropertyNumber.propertyValue` targets when the converter has no
+resolved custom interpolator. The graph stores imported range bounds, flags,
+and `interpolationType`, then applies the C++ forward range-mapping behavior
+before writing the number target. C++ probe coverage verifies an upper-clamped
+input through a `BlendState1DViewModel` consumer. The contract is
+`docs/prototypes/data-binding-graph-range-mapper-converter-runtime-contract.md`.
+Stable public source handles, list/view-model bindables, reverse conversion,
+resolved converter interpolators, remaining converter families, converter
+groups, update-queue parity, relative/parent/nested lookup, listener-owned data
+binding, and nested artboard propagation remain follow-up `#12` slices.
+
 Current #12 update: the first `DataConverterToString` runtime slice now
 supports default-context number sources feeding
 `BindablePropertyString.propertyValue` targets. String source nodes can carry a

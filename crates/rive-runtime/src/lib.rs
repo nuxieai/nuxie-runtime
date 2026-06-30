@@ -2814,6 +2814,13 @@ enum RuntimeBindableViewModelSource {
 struct RuntimeBindableBoolean {
     global_id: u32,
     data_bind_indices: Vec<usize>,
+    default_view_model_sources: Vec<RuntimeBindableBooleanDefaultViewModelSource>,
+    value: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RuntimeBindableBooleanDefaultViewModelSource {
+    data_bind_index: usize,
     value: bool,
 }
 
@@ -5275,6 +5282,7 @@ pub struct StateMachineInstance {
     data_context_present: bool,
     data_context_view_model_bound: bool,
     default_view_model_number_bindings_dirty: bool,
+    default_view_model_boolean_bindings_dirty: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -5398,6 +5406,7 @@ impl StateMachineInstance {
             data_context_present: false,
             data_context_view_model_bound: false,
             default_view_model_number_bindings_dirty: false,
+            default_view_model_boolean_bindings_dirty: false,
         }
     }
 
@@ -5604,6 +5613,7 @@ impl StateMachineInstance {
         self.data_context_present = true;
         self.data_context_view_model_bound = true;
         self.default_view_model_number_bindings_dirty = true;
+        self.default_view_model_boolean_bindings_dirty = true;
         self.needs_advance = true;
         true
     }
@@ -5668,6 +5678,7 @@ impl StateMachineInstance {
         self.changed_state_count = 0;
         self.needs_advance = false;
         self.apply_default_view_model_number_bindings(state_machine);
+        self.apply_default_view_model_boolean_bindings(state_machine);
         let mut keep_going = false;
         for (layer_index, (layer_instance, layer)) in self
             .layers
@@ -5739,6 +5750,41 @@ impl StateMachineInstance {
                 .find(|bindable_number| bindable_number.global_id == global_id)
             {
                 bindable_number.set_value(value);
+            }
+        }
+    }
+
+    fn apply_default_view_model_boolean_bindings(&mut self, state_machine: &RuntimeStateMachine) {
+        if !self.data_context_view_model_bound || !self.default_view_model_boolean_bindings_dirty {
+            return;
+        }
+        self.default_view_model_boolean_bindings_dirty = false;
+
+        let mut sources = state_machine
+            .bindable_booleans
+            .iter()
+            .flat_map(|bindable_boolean| {
+                bindable_boolean
+                    .default_view_model_sources
+                    .iter()
+                    .map(|source| {
+                        (
+                            source.data_bind_index,
+                            bindable_boolean.global_id,
+                            source.value,
+                        )
+                    })
+            })
+            .collect::<Vec<_>>();
+        sources.sort_by_key(|(data_bind_index, _, _)| *data_bind_index);
+
+        for (_, global_id, value) in sources {
+            if let Some(bindable_boolean) = self
+                .bindable_booleans
+                .iter_mut()
+                .find(|bindable_boolean| bindable_boolean.global_id == global_id)
+            {
+                bindable_boolean.set_value(value);
             }
         }
     }
@@ -8825,11 +8871,39 @@ fn runtime_bindable_booleans(
             .or_insert_with(|| RuntimeBindableBoolean {
                 global_id: target.id,
                 data_bind_indices: vec![data_bind_index],
+                default_view_model_sources: Vec::new(),
                 value: target.bool_property("propertyValue").unwrap_or(false),
             });
+        if let Some(source) =
+            runtime_bindable_boolean_default_view_model_source(file, data_bind_index, data_bind)
+        {
+            values.entry(target.id).and_modify(|bindable_boolean| {
+                bindable_boolean.default_view_model_sources.push(source)
+            });
+        }
     }
 
     values.into_values().collect()
+}
+
+fn runtime_bindable_boolean_default_view_model_source(
+    file: &RuntimeFile,
+    data_bind_index: usize,
+    data_bind: &RuntimeObject,
+) -> Option<RuntimeBindableBooleanDefaultViewModelSource> {
+    let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
+    if property_key_for_name("BindablePropertyBoolean", "propertyValue") != Some(property_key) {
+        return None;
+    }
+    let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
+    let default_instance = file.view_model_default_instance(0)?;
+    let source =
+        file.data_context_view_model_property_for_instance(default_instance.object, &path)?;
+    let value = file.view_model_instance_boolean_value_for_object(source)?;
+    Some(RuntimeBindableBooleanDefaultViewModelSource {
+        data_bind_index,
+        value,
+    })
 }
 
 fn runtime_default_view_model_triggers(file: &RuntimeFile) -> Vec<RuntimeViewModelTrigger> {

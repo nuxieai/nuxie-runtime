@@ -36,10 +36,10 @@ slice.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
 - Live view-model APIs and data-binding propagation beyond the first default
-  `ViewModelInstanceNumber` source-to-target bind: binding external contexts,
-  source mutation APIs, non-number bindables, converters, data-binding update
-  queues, relative paths, parent paths, and nested paths for fire triggers and
-  conditions.
+  `ViewModelInstanceNumber` and `ViewModelInstanceBoolean` source-to-target
+  binds: binding external contexts, source mutation APIs, remaining non-number
+  bindables, converters, data-binding update queues, relative paths, parent
+  paths, and nested paths for fire triggers and conditions.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener
   actions.

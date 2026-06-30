@@ -38,6 +38,9 @@ source-derived value back to the target through `convert`.
   source-to-target conversion after a bindable target mutation dirties the bind
   is covered by
   `docs/prototypes/data-binding-graph-to-number-scalar-main-to-target-two-way-target-dirty-runtime-contract.md`.
+- Direct `DataConverterListToLength` source-to-target conversion after a
+  bindable target mutation dirties the bind is covered by
+  `docs/prototypes/data-binding-graph-list-to-length-main-to-target-two-way-target-dirty-runtime-contract.md`.
 - Direct deterministic `DataConverterFormula` source-to-target conversion after
   a bindable target mutation dirties the bind is covered by
   `docs/prototypes/data-binding-graph-formula-main-to-target-two-way-target-dirty-runtime-contract.md`.
@@ -64,8 +67,8 @@ source-derived value back to the target through `convert`.
 - Non-number target-to-source converter families.
 - System-operation, operation-view-model, rounder, and `DataConverterToNumber`
   converter cases beyond the direct paths, interpolator, formula cases beyond
-  the direct deterministic number path, string, number-to-list, list, or
-  scripted converters.
+  the direct deterministic number path, string, number-to-list, list cases
+  beyond direct list-to-length, or scripted converters.
 - Imported and owned view-model contexts.
 - Pending add/remove behavior, observer-list parity, re-entry protection,
   relative/parent/nested lookup, listener-owned data binding, nested artboards,
@@ -92,5 +95,8 @@ source-derived value back to the target through `convert`.
 - `TwoWay` boolean, enum, color, and symbol-list-index
   `DataConverterToNumber` binds apply source-to-target through `convert` at
   both normal state-machine advance points around a manual target edit.
+- A `TwoWay` `DataConverterListToLength` bind applies source-to-target through
+  the imported list length at both normal state-machine advance points around a
+  manual target edit.
 - The mutating bind's exact source and target values match the C++ probe after
   each explicit runtime action.

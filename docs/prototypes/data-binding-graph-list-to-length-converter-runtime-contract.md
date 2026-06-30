@@ -18,6 +18,8 @@ imported list size needed by the converter.
 - `DataConverterListToLength` feeding `BindablePropertyNumber.propertyValue`.
 - Imported-file and imported-instance context rebinding for list length through
   the existing graph source resolution path.
+- Main-`ToTarget | TwoWay` state-machine target-dirty behavior is covered by
+  `docs/prototypes/data-binding-graph-list-to-length-main-to-target-two-way-target-dirty-runtime-contract.md`.
 - C++ probe coverage through an existing `BlendState1DViewModel` consumer.
 
 ## Out Of Scope
@@ -26,6 +28,7 @@ imported list size needed by the converter.
 - List mutation APIs and update-queue propagation.
 - `DataConverterNumberToList` and generated runtime list items.
 - Reverse conversion.
+- Dirty/update queue parity beyond the linked state-machine target-dirty path.
 - Owned runtime view-model list contexts.
 - Relative-path, parent-path, nested-path, and listener-owned behavior.
 

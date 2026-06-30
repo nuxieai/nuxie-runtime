@@ -844,6 +844,19 @@ Stable public source handles, list targets, list mutation APIs,
 broader update-queue parity, relative/parent/nested lookup, listener-owned
 data binding, and nested artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: direct `DataConverterListToLength` now also covers
+main-`ToTarget | TwoWay` state-machine target-dirty behavior for
+default-context number targets. A manual edit to the
+`BindablePropertyNumber.propertyValue` target is preserved through explicit
+data-context advancement, then the next normal state-machine advance overwrites
+the target from the unchanged imported list source length. The contract is
+`docs/prototypes/data-binding-graph-list-to-length-main-to-target-two-way-target-dirty-runtime-contract.md`.
+Stable public source handles, list targets, list mutation APIs,
+`DataConverterNumberToList`, generated runtime list items, main-`ToSource |
+TwoWay` behavior for list-to-length, broader update-queue parity,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
+
 Current #12 update: `DataConverterRounder` runtime execution now admits
 default-context number sources feeding `BindablePropertyNumber.propertyValue`
 targets. The graph stores imported `decimals` on the converter descriptor and

@@ -143,6 +143,12 @@ slice.
   read-only imported list length for default-context list sources feeding
   number targets, covered by a C++ probe through an existing blend-state
   consumer.
+- List-to-length main-to-target dirty slice: direct
+  `DataConverterListToLength` now follows C++ state-machine target-dirty
+  behavior for main-`ToTarget | TwoWay` list-to-number binds. Explicit
+  data-context advancement preserves a manual bindable number target edit,
+  then normal state-machine advancement overwrites it from the unchanged
+  imported list length.
 - `DataConverterRounder` graph-owned converter execution slice: forward
   conversion for default-context number sources feeding number targets,
   including imported `decimals`, covered by a C++ probe through an existing

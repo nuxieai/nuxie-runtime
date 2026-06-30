@@ -2729,6 +2729,13 @@ fn synthetic_state_machine_default_viewmodel_number_interpolator_group_blend_sta
 }
 
 fn synthetic_state_machine_default_viewmodel_list_to_length_blend_state(file_id: u64) -> Vec<u8> {
+    synthetic_state_machine_default_viewmodel_list_to_length_blend_state_with_flags(file_id, 0)
+}
+
+fn synthetic_state_machine_default_viewmodel_list_to_length_blend_state_with_flags(
+    file_id: u64,
+    data_bind_flags: u64,
+) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "ViewModel", |bytes| {
             push_string_property(bytes, "ViewModel", "name", "Root");
@@ -2764,7 +2771,13 @@ fn synthetic_state_machine_default_viewmodel_list_to_length_blend_state(file_id:
         push_object_with_properties(bytes, "StateTransition", |bytes| {
             push_uint_property(bytes, "StateTransition", "stateToId", 2);
         });
-        push_bindable_number_data_bind_context_with_converter(bytes, 0.0, &[0, 0], Some(0));
+        push_bindable_number_data_bind_context_with_converter_and_flags(
+            bytes,
+            0.0,
+            &[0, 0],
+            Some(0),
+            data_bind_flags,
+        );
         push_object_with_properties(bytes, "BlendState1DViewModel", |_| {});
         push_blend_animation_1d(bytes, 0, 0.0);
         push_blend_animation_1d(bytes, 1, 2.0);
@@ -11759,7 +11772,7 @@ fn state_machine_default_viewmodel_string_to_number_converter_matches_cpp_probe(
     compare_cpp_runtime_update(&cpp, &rust, &report, label);
 }
 
-fn assert_to_number_main_to_target_two_way_target_dirty_matches_cpp_probe(
+fn assert_number_main_to_target_two_way_target_dirty_matches_cpp_probe(
     label: &str,
     bytes: Vec<u8>,
 ) {
@@ -11852,7 +11865,7 @@ fn to_number_boolean_main_to_target_two_way_target_dirty_matches_cpp_probe() {
             8505,
             DATA_BIND_TWO_WAY,
         );
-    assert_to_number_main_to_target_two_way_target_dirty_matches_cpp_probe(label, bytes);
+    assert_number_main_to_target_two_way_target_dirty_matches_cpp_probe(label, bytes);
 }
 
 #[test]
@@ -11865,7 +11878,7 @@ fn to_number_enum_main_to_target_two_way_target_dirty_matches_cpp_probe() {
             8506,
             DATA_BIND_TWO_WAY,
         );
-    assert_to_number_main_to_target_two_way_target_dirty_matches_cpp_probe(label, bytes);
+    assert_number_main_to_target_two_way_target_dirty_matches_cpp_probe(label, bytes);
 }
 
 #[test]
@@ -11878,7 +11891,7 @@ fn to_number_color_main_to_target_two_way_target_dirty_matches_cpp_probe() {
             8507,
             DATA_BIND_TWO_WAY,
         );
-    assert_to_number_main_to_target_two_way_target_dirty_matches_cpp_probe(label, bytes);
+    assert_number_main_to_target_two_way_target_dirty_matches_cpp_probe(label, bytes);
 }
 
 #[test]
@@ -11891,7 +11904,7 @@ fn to_number_string_main_to_target_two_way_target_dirty_matches_cpp_probe() {
             8504,
             DATA_BIND_TWO_WAY,
         );
-    assert_to_number_main_to_target_two_way_target_dirty_matches_cpp_probe(label, bytes);
+    assert_number_main_to_target_two_way_target_dirty_matches_cpp_probe(label, bytes);
 }
 
 #[test]
@@ -11904,7 +11917,7 @@ fn to_number_symbol_list_index_main_to_target_two_way_target_dirty_matches_cpp_p
             8508,
             DATA_BIND_TWO_WAY,
         );
-    assert_to_number_main_to_target_two_way_target_dirty_matches_cpp_probe(label, bytes);
+    assert_number_main_to_target_two_way_target_dirty_matches_cpp_probe(label, bytes);
 }
 
 #[test]
@@ -15418,6 +15431,18 @@ fn state_machine_default_viewmodel_list_to_length_converter_matches_cpp_probe() 
         compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
     }
     compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn list_to_length_main_to_target_two_way_target_dirty_matches_cpp_probe() {
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_list_to_length_main_to_target_two_way_target_dirty_cpp.riv";
+    let bytes = synthetic_state_machine_default_viewmodel_list_to_length_blend_state_with_flags(
+        8509,
+        DATA_BIND_TWO_WAY,
+    );
+    assert_number_main_to_target_two_way_target_dirty_matches_cpp_probe(label, bytes);
 }
 
 #[test]

@@ -890,6 +890,20 @@ reverse propagation, update-queue parity, relative/parent/nested lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 
+Current #12 update: the first `DataConverterGroup` runtime execution slice now
+admits default-context string sources feeding
+`BindablePropertyString.propertyValue` targets when the resolved group is made
+from already-supported direct string converters. The graph stores ordered child
+converter descriptors from imported `DataConverterGroupItem.converterId`
+metadata, applies each child output into the next child, and treats cyclic or
+unresolved children as unsupported. C++ probe coverage verifies a trim-then-pad
+group through a `TransitionViewModelCondition`. The contract is
+`docs/prototypes/data-binding-graph-string-converter-group-runtime-contract.md`.
+Stable public source handles, list/view-model bindables, remaining converter
+group shapes, reverse propagation, update-queue parity, relative/parent/nested
+lookup, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

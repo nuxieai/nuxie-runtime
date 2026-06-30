@@ -10,7 +10,7 @@ use rive_schema::{
     CoreRegistryFieldKind, FieldKind, core_registry_field_kind_by_property_key, definition_by_name,
     definition_by_type_key, is_callback_property_key, object_supports_property,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 
 #[derive(Debug, Clone)]
@@ -2945,6 +2945,7 @@ enum RuntimeDataBindGraphConverter {
         text: Vec<u8>,
         pad_type: u64,
     },
+    Group(Vec<RuntimeDataBindGraphConverter>),
     Unsupported,
 }
 
@@ -3966,117 +3967,128 @@ impl RuntimeDataBindGraph {
 
 impl RuntimeDataBindGraphSourceNode {
     fn converted_value(&self) -> Option<RuntimeDataBindGraphValue> {
-        match (self.converter.as_ref(), &self.value) {
-            (None, value) => Some(value.clone()),
-            (
-                Some(RuntimeDataBindGraphConverter::BooleanNegate),
-                RuntimeDataBindGraphValue::Boolean(value),
-            ) => Some(RuntimeDataBindGraphValue::Boolean(!value)),
-            (Some(RuntimeDataBindGraphConverter::BooleanNegate), _) => None,
-            (
-                Some(RuntimeDataBindGraphConverter::TriggerIncrement),
-                RuntimeDataBindGraphValue::Trigger(value),
-            ) => Some(RuntimeDataBindGraphValue::Trigger(u64::from(
-                (*value as u32).wrapping_add(1),
-            ))),
-            (Some(RuntimeDataBindGraphConverter::TriggerIncrement), _) => None,
-            (
-                Some(RuntimeDataBindGraphConverter::ToNumber),
-                RuntimeDataBindGraphValue::Number(value),
-            ) => Some(RuntimeDataBindGraphValue::Number(*value)),
-            (
-                Some(RuntimeDataBindGraphConverter::ToNumber),
-                RuntimeDataBindGraphValue::Boolean(value),
-            ) => Some(RuntimeDataBindGraphValue::Number(if *value {
+        match self.converter.as_ref() {
+            None => Some(self.value.clone()),
+            Some(converter) => runtime_data_bind_graph_convert_value(converter, &self.value),
+        }
+    }
+}
+
+fn runtime_data_bind_graph_convert_value(
+    converter: &RuntimeDataBindGraphConverter,
+    value: &RuntimeDataBindGraphValue,
+) -> Option<RuntimeDataBindGraphValue> {
+    match (converter, value) {
+        (
+            RuntimeDataBindGraphConverter::BooleanNegate,
+            RuntimeDataBindGraphValue::Boolean(value),
+        ) => Some(RuntimeDataBindGraphValue::Boolean(!value)),
+        (RuntimeDataBindGraphConverter::BooleanNegate, _) => None,
+        (
+            RuntimeDataBindGraphConverter::TriggerIncrement,
+            RuntimeDataBindGraphValue::Trigger(value),
+        ) => Some(RuntimeDataBindGraphValue::Trigger(u64::from(
+            (*value as u32).wrapping_add(1),
+        ))),
+        (RuntimeDataBindGraphConverter::TriggerIncrement, _) => None,
+        (RuntimeDataBindGraphConverter::ToNumber, RuntimeDataBindGraphValue::Number(value)) => {
+            Some(RuntimeDataBindGraphValue::Number(*value))
+        }
+        (RuntimeDataBindGraphConverter::ToNumber, RuntimeDataBindGraphValue::Boolean(value)) => {
+            Some(RuntimeDataBindGraphValue::Number(if *value {
                 1.0
             } else {
                 0.0
-            })),
-            (
-                Some(RuntimeDataBindGraphConverter::ToNumber),
-                RuntimeDataBindGraphValue::Enum(value),
-            ) => Some(RuntimeDataBindGraphValue::Number(*value as f32)),
-            (
-                Some(RuntimeDataBindGraphConverter::ToNumber),
-                RuntimeDataBindGraphValue::Color(value),
-            ) => Some(RuntimeDataBindGraphValue::Number((*value as i32) as f32)),
-            (
-                Some(RuntimeDataBindGraphConverter::ToNumber),
-                RuntimeDataBindGraphValue::SymbolListIndex(value),
-            ) => Some(RuntimeDataBindGraphValue::Number(*value as f32)),
-            (
-                Some(RuntimeDataBindGraphConverter::ToNumber),
-                RuntimeDataBindGraphValue::String(value),
-            ) => Some(RuntimeDataBindGraphValue::Number(
-                rive_binary::data_converter_to_number_string_value(value),
-            )),
-            (Some(RuntimeDataBindGraphConverter::ToNumber), _) => None,
-            (
-                Some(RuntimeDataBindGraphConverter::ToString {
-                    flags, decimals, ..
-                }),
-                RuntimeDataBindGraphValue::Number(value),
-            ) => Some(RuntimeDataBindGraphValue::String(
-                rive_binary::data_converter_to_string_number_value(*value, *flags, *decimals),
-            )),
-            (
-                Some(RuntimeDataBindGraphConverter::ToString { .. }),
-                RuntimeDataBindGraphValue::Boolean(value),
-            ) => Some(RuntimeDataBindGraphValue::String(
-                rive_binary::data_converter_to_string_boolean_value(*value),
-            )),
-            (
-                Some(RuntimeDataBindGraphConverter::ToString { .. }),
-                RuntimeDataBindGraphValue::String(value),
-            ) => Some(RuntimeDataBindGraphValue::String(
-                rive_binary::data_converter_to_string_string_value(value),
-            )),
-            (
-                Some(RuntimeDataBindGraphConverter::ToString { .. }),
-                RuntimeDataBindGraphValue::Trigger(value),
-            ) => Some(RuntimeDataBindGraphValue::String(
-                rive_binary::data_converter_to_string_trigger_value(*value),
-            )),
-            (
-                Some(RuntimeDataBindGraphConverter::ToString { .. }),
-                RuntimeDataBindGraphValue::SymbolListIndex(value),
-            ) => Some(RuntimeDataBindGraphValue::String(
-                rive_binary::data_converter_to_string_symbol_list_index_value(*value),
-            )),
-            (
-                Some(RuntimeDataBindGraphConverter::ToString { color_format, .. }),
-                RuntimeDataBindGraphValue::Color(value),
-            ) => Some(RuntimeDataBindGraphValue::String(
-                rive_binary::data_converter_to_string_color_value(*value, color_format),
-            )),
-            (Some(RuntimeDataBindGraphConverter::ToString { .. }), _) => None,
-            (
-                Some(RuntimeDataBindGraphConverter::StringTrim { trim_type }),
-                RuntimeDataBindGraphValue::String(value),
-            ) => Some(RuntimeDataBindGraphValue::String(
-                rive_binary::data_converter_string_trim_value(value, *trim_type),
-            )),
-            (Some(RuntimeDataBindGraphConverter::StringTrim { .. }), _) => None,
-            (
-                Some(RuntimeDataBindGraphConverter::StringRemoveZeros),
-                RuntimeDataBindGraphValue::String(value),
-            ) => Some(RuntimeDataBindGraphValue::String(
-                rive_binary::data_converter_string_remove_zeros_value(value),
-            )),
-            (Some(RuntimeDataBindGraphConverter::StringRemoveZeros), _) => None,
-            (
-                Some(RuntimeDataBindGraphConverter::StringPad {
-                    length,
-                    text,
-                    pad_type,
-                }),
-                RuntimeDataBindGraphValue::String(value),
-            ) => Some(RuntimeDataBindGraphValue::String(
-                rive_binary::data_converter_string_pad_value(value, *length, text, *pad_type),
-            )),
-            (Some(RuntimeDataBindGraphConverter::StringPad { .. }), _) => None,
-            (Some(RuntimeDataBindGraphConverter::Unsupported), _) => None,
+            }))
         }
+        (RuntimeDataBindGraphConverter::ToNumber, RuntimeDataBindGraphValue::Enum(value)) => {
+            Some(RuntimeDataBindGraphValue::Number(*value as f32))
+        }
+        (RuntimeDataBindGraphConverter::ToNumber, RuntimeDataBindGraphValue::Color(value)) => {
+            Some(RuntimeDataBindGraphValue::Number((*value as i32) as f32))
+        }
+        (
+            RuntimeDataBindGraphConverter::ToNumber,
+            RuntimeDataBindGraphValue::SymbolListIndex(value),
+        ) => Some(RuntimeDataBindGraphValue::Number(*value as f32)),
+        (RuntimeDataBindGraphConverter::ToNumber, RuntimeDataBindGraphValue::String(value)) => {
+            Some(RuntimeDataBindGraphValue::Number(
+                rive_binary::data_converter_to_number_string_value(value),
+            ))
+        }
+        (RuntimeDataBindGraphConverter::ToNumber, _) => None,
+        (
+            RuntimeDataBindGraphConverter::ToString {
+                flags, decimals, ..
+            },
+            RuntimeDataBindGraphValue::Number(value),
+        ) => Some(RuntimeDataBindGraphValue::String(
+            rive_binary::data_converter_to_string_number_value(*value, *flags, *decimals),
+        )),
+        (
+            RuntimeDataBindGraphConverter::ToString { .. },
+            RuntimeDataBindGraphValue::Boolean(value),
+        ) => Some(RuntimeDataBindGraphValue::String(
+            rive_binary::data_converter_to_string_boolean_value(*value),
+        )),
+        (
+            RuntimeDataBindGraphConverter::ToString { .. },
+            RuntimeDataBindGraphValue::String(value),
+        ) => Some(RuntimeDataBindGraphValue::String(
+            rive_binary::data_converter_to_string_string_value(value),
+        )),
+        (
+            RuntimeDataBindGraphConverter::ToString { .. },
+            RuntimeDataBindGraphValue::Trigger(value),
+        ) => Some(RuntimeDataBindGraphValue::String(
+            rive_binary::data_converter_to_string_trigger_value(*value),
+        )),
+        (
+            RuntimeDataBindGraphConverter::ToString { .. },
+            RuntimeDataBindGraphValue::SymbolListIndex(value),
+        ) => Some(RuntimeDataBindGraphValue::String(
+            rive_binary::data_converter_to_string_symbol_list_index_value(*value),
+        )),
+        (
+            RuntimeDataBindGraphConverter::ToString { color_format, .. },
+            RuntimeDataBindGraphValue::Color(value),
+        ) => Some(RuntimeDataBindGraphValue::String(
+            rive_binary::data_converter_to_string_color_value(*value, color_format),
+        )),
+        (RuntimeDataBindGraphConverter::ToString { .. }, _) => None,
+        (
+            RuntimeDataBindGraphConverter::StringTrim { trim_type },
+            RuntimeDataBindGraphValue::String(value),
+        ) => Some(RuntimeDataBindGraphValue::String(
+            rive_binary::data_converter_string_trim_value(value, *trim_type),
+        )),
+        (RuntimeDataBindGraphConverter::StringTrim { .. }, _) => None,
+        (
+            RuntimeDataBindGraphConverter::StringRemoveZeros,
+            RuntimeDataBindGraphValue::String(value),
+        ) => Some(RuntimeDataBindGraphValue::String(
+            rive_binary::data_converter_string_remove_zeros_value(value),
+        )),
+        (RuntimeDataBindGraphConverter::StringRemoveZeros, _) => None,
+        (
+            RuntimeDataBindGraphConverter::StringPad {
+                length,
+                text,
+                pad_type,
+            },
+            RuntimeDataBindGraphValue::String(value),
+        ) => Some(RuntimeDataBindGraphValue::String(
+            rive_binary::data_converter_string_pad_value(value, *length, text, *pad_type),
+        )),
+        (RuntimeDataBindGraphConverter::StringPad { .. }, _) => None,
+        (RuntimeDataBindGraphConverter::Group(converters), value) => {
+            let mut value = value.clone();
+            for converter in converters {
+                value = runtime_data_bind_graph_convert_value(converter, &value)?;
+            }
+            Some(value)
+        }
+        (RuntimeDataBindGraphConverter::Unsupported, _) => None,
     }
 }
 
@@ -10770,7 +10782,31 @@ fn runtime_data_bind_graph_converter(
     data_bind: &RuntimeObject,
 ) -> Option<RuntimeDataBindGraphConverter> {
     let converter = file.resolved_data_converter_for_data_bind_object(data_bind)?;
-    Some(match converter.type_name {
+    runtime_data_bind_graph_converter_for_object(file, converter, &mut BTreeSet::new())
+}
+
+fn runtime_data_bind_graph_converter_for_object(
+    file: &RuntimeFile,
+    converter: &RuntimeObject,
+    visiting: &mut BTreeSet<u32>,
+) -> Option<RuntimeDataBindGraphConverter> {
+    if !visiting.insert(converter.id) {
+        return Some(RuntimeDataBindGraphConverter::Unsupported);
+    }
+
+    let graph_converter = match converter.type_name {
+        "DataConverterGroup" => RuntimeDataBindGraphConverter::Group(
+            file.data_converter_group_items_for_object(converter)
+                .into_iter()
+                .map(|item| {
+                    item.converter
+                        .and_then(|converter| {
+                            runtime_data_bind_graph_converter_for_object(file, converter, visiting)
+                        })
+                        .unwrap_or(RuntimeDataBindGraphConverter::Unsupported)
+                })
+                .collect(),
+        ),
         "DataConverterBooleanNegate" => RuntimeDataBindGraphConverter::BooleanNegate,
         "DataConverterTrigger" => RuntimeDataBindGraphConverter::TriggerIncrement,
         "DataConverterToNumber" => RuntimeDataBindGraphConverter::ToNumber,
@@ -10795,7 +10831,10 @@ fn runtime_data_bind_graph_converter(
             pad_type: converter.uint_property("padType").unwrap_or(0),
         },
         _ => RuntimeDataBindGraphConverter::Unsupported,
-    })
+    };
+
+    visiting.remove(&converter.id);
+    Some(graph_converter)
 }
 
 fn runtime_default_view_model_triggers(file: &RuntimeFile) -> Vec<RuntimeViewModelTrigger> {

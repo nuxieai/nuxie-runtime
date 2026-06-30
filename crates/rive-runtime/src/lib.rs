@@ -2966,6 +2966,9 @@ impl RuntimeDataBindGraphValue {
             Self::Boolean(_) => context
                 .boolean_value_by_property_index(usize::try_from(path[1]).ok()?)
                 .map(Self::Boolean),
+            Self::String(_) => context
+                .string_value_by_property_index(usize::try_from(path[1]).ok()?)
+                .map(|value| Self::String(value.to_vec())),
             _ => None,
         }
     }
@@ -3026,6 +3029,7 @@ pub struct RuntimeOwnedViewModelInstance {
     view_model_index: usize,
     numbers: Vec<RuntimeOwnedViewModelNumber>,
     booleans: Vec<RuntimeOwnedViewModelBoolean>,
+    strings: Vec<RuntimeOwnedViewModelString>,
 }
 
 #[derive(Debug, Clone)]
@@ -3040,11 +3044,18 @@ struct RuntimeOwnedViewModelBoolean {
     value: bool,
 }
 
+#[derive(Debug, Clone)]
+struct RuntimeOwnedViewModelString {
+    property_index: usize,
+    value: Vec<u8>,
+}
+
 impl RuntimeOwnedViewModelInstance {
     pub fn new(file: &RuntimeFile, view_model_index: usize) -> Option<Self> {
         let view_model = file.view_model(view_model_index)?;
         let mut numbers = Vec::new();
         let mut booleans = Vec::new();
+        let mut strings = Vec::new();
         for (property_index, property) in view_model.properties.into_iter().enumerate() {
             match property.type_name {
                 "ViewModelPropertyNumber" => numbers.push(RuntimeOwnedViewModelNumber {
@@ -3055,6 +3066,10 @@ impl RuntimeOwnedViewModelInstance {
                     property_index,
                     value: false,
                 }),
+                "ViewModelPropertyString" => strings.push(RuntimeOwnedViewModelString {
+                    property_index,
+                    value: Vec::new(),
+                }),
                 _ => {}
             }
         }
@@ -3062,6 +3077,7 @@ impl RuntimeOwnedViewModelInstance {
             view_model_index,
             numbers,
             booleans,
+            strings,
         })
     }
 
@@ -3095,6 +3111,21 @@ impl RuntimeOwnedViewModelInstance {
         true
     }
 
+    pub fn set_string_by_property_index(&mut self, property_index: usize, value: &[u8]) -> bool {
+        let Some(string) = self
+            .strings
+            .iter_mut()
+            .find(|string| string.property_index == property_index)
+        else {
+            return false;
+        };
+        if string.value == value {
+            return false;
+        }
+        string.value = value.to_vec();
+        true
+    }
+
     fn number_value_by_property_index(&self, property_index: usize) -> Option<f32> {
         self.numbers
             .iter()
@@ -3107,6 +3138,13 @@ impl RuntimeOwnedViewModelInstance {
             .iter()
             .find(|boolean| boolean.property_index == property_index)
             .map(|boolean| boolean.value)
+    }
+
+    fn string_value_by_property_index(&self, property_index: usize) -> Option<&[u8]> {
+        self.strings
+            .iter()
+            .find(|string| string.property_index == property_index)
+            .map(|string| string.value.as_slice())
     }
 }
 

@@ -250,6 +250,12 @@ slice.
   string targets, preserving the manual edit through explicit data-context
   advancement and then overwriting it from the unchanged raw symbol-list-index
   source on the next normal advance.
+- Color-to-string main-to-target dirty slice: direct `DataConverterToString`
+  color-to-string binds now follow the same C++ state-machine target-dirty
+  behavior for main-`ToTarget | TwoWay` string targets, preserving the manual
+  edit through explicit data-context advancement and then overwriting it from
+  the unchanged color source through imported `colorFormat` conversion on the
+  next normal advance.
 - First `DataConverterToString` graph-owned converter execution slice:
   forward conversion for default-context number sources feeding string targets,
   covered by a C++ probe through an existing string transition-condition

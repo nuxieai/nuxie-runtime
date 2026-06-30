@@ -655,6 +655,22 @@ reverse propagation, update-queue parity, relative/parent/nested lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 
+Current #12 update: the first graph-owned runtime converter slice now supports
+stateless forward `DataConverterBooleanNegate` execution on default-context
+`DataBindContext -> BindablePropertyBoolean.propertyValue` edges. Graph source
+nodes carry a small converter descriptor: no-converter bindings keep direct
+source-to-target behavior, boolean-negate bindings invert the source before
+target writes, and converter-bearing bindings whose converter has not been
+admitted remain unapplied instead of pretending to be pass-through. C++ probe
+coverage verifies a default boolean source converted through
+`DataConverterBooleanNegate` before `TransitionViewModelCondition` evaluation.
+The contract is
+`docs/prototypes/data-binding-graph-boolean-negate-converter-runtime-contract.md`.
+Stable public source handles, list/symbol/view-model bindables, converters
+beyond boolean negation, reverse propagation, update-queue parity,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

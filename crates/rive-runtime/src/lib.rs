@@ -2872,6 +2872,7 @@ struct RuntimeBindableBoolean {
 struct RuntimeBindableBooleanDefaultViewModelSource {
     data_bind_index: usize,
     path: Vec<u32>,
+    converter: Option<RuntimeDataBindGraphConverter>,
     value: bool,
 }
 
@@ -2917,8 +2918,15 @@ struct RuntimeDataBindGraphTargetHandle(usize);
 struct RuntimeDataBindGraphSourceNode {
     path: Vec<u32>,
     bound: bool,
+    converter: Option<RuntimeDataBindGraphConverter>,
     default_value: RuntimeDataBindGraphValue,
     value: RuntimeDataBindGraphValue,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeDataBindGraphConverter {
+    BooleanNegate,
+    Unsupported,
 }
 
 #[derive(Debug, Clone)]
@@ -3355,6 +3363,7 @@ impl RuntimeDataBindGraph {
                     &mut default_view_model_bindings,
                     source.data_bind_index,
                     &source.path,
+                    None,
                     RuntimeDataBindGraphTarget::Number {
                         global_id: bindable.global_id,
                     },
@@ -3370,6 +3379,7 @@ impl RuntimeDataBindGraph {
                     &mut default_view_model_bindings,
                     source.data_bind_index,
                     &source.path,
+                    source.converter,
                     RuntimeDataBindGraphTarget::Boolean {
                         global_id: bindable.global_id,
                     },
@@ -3385,6 +3395,7 @@ impl RuntimeDataBindGraph {
                     &mut default_view_model_bindings,
                     source.data_bind_index,
                     &source.path,
+                    None,
                     RuntimeDataBindGraphTarget::String {
                         global_id: bindable.global_id,
                     },
@@ -3400,6 +3411,7 @@ impl RuntimeDataBindGraph {
                     &mut default_view_model_bindings,
                     source.data_bind_index,
                     &source.path,
+                    None,
                     RuntimeDataBindGraphTarget::Color {
                         global_id: bindable.global_id,
                     },
@@ -3415,6 +3427,7 @@ impl RuntimeDataBindGraph {
                     &mut default_view_model_bindings,
                     source.data_bind_index,
                     &source.path,
+                    None,
                     RuntimeDataBindGraphTarget::Enum {
                         global_id: bindable.global_id,
                     },
@@ -3430,6 +3443,7 @@ impl RuntimeDataBindGraph {
                     &mut default_view_model_bindings,
                     source.data_bind_index,
                     &source.path,
+                    None,
                     RuntimeDataBindGraphTarget::Asset {
                         global_id: bindable.global_id,
                     },
@@ -3445,6 +3459,7 @@ impl RuntimeDataBindGraph {
                     &mut default_view_model_bindings,
                     source.data_bind_index,
                     &source.path,
+                    None,
                     RuntimeDataBindGraphTarget::Artboard {
                         global_id: bindable.global_id,
                     },
@@ -3460,6 +3475,7 @@ impl RuntimeDataBindGraph {
                     &mut default_view_model_bindings,
                     source.data_bind_index,
                     &source.path,
+                    None,
                     RuntimeDataBindGraphTarget::Trigger {
                         global_id: bindable.global_id,
                     },
@@ -3485,6 +3501,7 @@ impl RuntimeDataBindGraph {
         bindings: &mut Vec<RuntimeDataBindGraphDefaultBinding>,
         data_bind_index: usize,
         path: &[u32],
+        converter: Option<RuntimeDataBindGraphConverter>,
         target: RuntimeDataBindGraphTarget,
         value: RuntimeDataBindGraphValue,
     ) {
@@ -3492,6 +3509,7 @@ impl RuntimeDataBindGraph {
         sources.push(RuntimeDataBindGraphSourceNode {
             path: path.to_vec(),
             bound: true,
+            converter,
             default_value: value.clone(),
             value,
         });
@@ -3914,7 +3932,24 @@ impl RuntimeDataBindGraph {
             let Some(target) = self.targets.get(binding.target.0) else {
                 continue;
             };
-            targets.apply_default_view_model_binding(&target.target, &source.value);
+            let Some(value) = source.converted_value() else {
+                continue;
+            };
+            targets.apply_default_view_model_binding(&target.target, &value);
+        }
+    }
+}
+
+impl RuntimeDataBindGraphSourceNode {
+    fn converted_value(&self) -> Option<RuntimeDataBindGraphValue> {
+        match (self.converter, &self.value) {
+            (None, value) => Some(value.clone()),
+            (
+                Some(RuntimeDataBindGraphConverter::BooleanNegate),
+                RuntimeDataBindGraphValue::Boolean(value),
+            ) => Some(RuntimeDataBindGraphValue::Boolean(!value)),
+            (Some(RuntimeDataBindGraphConverter::BooleanNegate), _) => None,
+            (Some(RuntimeDataBindGraphConverter::Unsupported), _) => None,
         }
     }
 }
@@ -10550,7 +10585,19 @@ fn runtime_bindable_boolean_default_view_model_source(
     Some(RuntimeBindableBooleanDefaultViewModelSource {
         data_bind_index,
         path: path.to_vec(),
+        converter: runtime_data_bind_graph_converter(file, data_bind),
         value,
+    })
+}
+
+fn runtime_data_bind_graph_converter(
+    file: &RuntimeFile,
+    data_bind: &RuntimeObject,
+) -> Option<RuntimeDataBindGraphConverter> {
+    let converter = file.resolved_data_converter_for_data_bind_object(data_bind)?;
+    Some(match converter.type_name {
+        "DataConverterBooleanNegate" => RuntimeDataBindGraphConverter::BooleanNegate,
+        _ => RuntimeDataBindGraphConverter::Unsupported,
     })
 }
 

@@ -276,6 +276,7 @@ Additional current contract: `docs/prototypes/linear-animation-callback-keyframe
 Additional current contract: `docs/prototypes/linear-animation-callback-keyframe-remaining-edge-runtime-contract.md`
 Additional current contract: `docs/prototypes/state-machine-default-viewmodel-number-binding-runtime-contract.md`
 Additional current contract: `docs/prototypes/state-machine-default-viewmodel-boolean-binding-runtime-contract.md`
+Additional current contract: `docs/prototypes/state-machine-default-viewmodel-string-binding-runtime-contract.md`
 Current remaining-work audit: `docs/prototypes/state-machine-runtime-remaining-audit.md`
 
 ### Question
@@ -323,6 +324,8 @@ Current #11 update: remaining `KeyFrameCallback` state-machine edge coverage now
 Current #11 update: the first live source-to-target data-bind path is in place for state-machine-owned `DataBindContext` objects targeting cloned `BindablePropertyNumber.propertyValue`. When the default root view-model context is bound, Rust resolves `sourcePathIds` against the imported default `ViewModelInstance`, applies a `ViewModelInstanceNumber` source to the cloned bindable before state-machine layer evaluation, and verifies that an existing `BlendState1DViewModel` consumer observes the C++ value. External context binding, source mutation APIs, non-number bindables, converters, generalized update queues, relative/parent/nested paths, listener-owned data binding, and nested artboard propagation remain later slices.
 
 Current #11 update: default-context source-to-target binding now covers cloned `BindablePropertyBoolean.propertyValue` as the first non-number bindable path. Rust resolves a default `ViewModelInstanceBoolean` source through `DataBindContext.sourcePathIds`, applies it before transition evaluation, and verifies a boolean `TransitionViewModelCondition` against C++. External context binding, source mutation APIs, string/color/enum/asset/artboard source binds, converters, generalized update queues, relative/parent/nested paths, listener-owned data binding, and nested artboard propagation remain later slices.
+
+Current #11 update: default-context source-to-target binding now covers cloned `BindablePropertyString.propertyValue`. Rust preserves `ViewModelInstanceString` bytes resolved through `DataBindContext.sourcePathIds`, applies them before transition evaluation, and verifies a string `TransitionViewModelCondition` against C++. External context binding, source mutation APIs, color/enum/asset/artboard source binds, converters, generalized update queues, relative/parent/nested paths, listener-owned data binding, and nested artboard propagation remain later slices.
 
 ## #12: Data Binding Graph
 

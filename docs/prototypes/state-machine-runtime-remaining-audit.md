@@ -320,8 +320,10 @@ slice.
   sources now follow C++ main-direction converter dispatch for the mutating
   bind, with exact C++ probe reports for direct, `OperationValue`, and
   `OperationValue` group source/target values. Main `ToSource` cases use
-  `convert` and forward group order; main `ToTarget` two-way reverse variants
-  and broader dirty-list target scheduling remain follow-up slices.
+  `convert` and forward group order; main `ToTarget | TwoWay`
+  `OperationValue` and `OperationValue` group target edits are now pinned as
+  delayed source-to-target dirty updates rather than immediate reverse
+  conversion. Broader dirty-list target scheduling remains a follow-up slice.
 - First graph-owned view-model bindable slice: forward propagation for
   default-context `ViewModelInstanceViewModel.propertyValue` sources feeding
   `BindablePropertyViewModel.propertyValue` targets, covered by a C++ probe

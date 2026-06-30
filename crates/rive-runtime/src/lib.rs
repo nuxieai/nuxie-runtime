@@ -2953,6 +2953,7 @@ struct RuntimeDataBindGraphSourceNode {
     flags: u64,
     bound: bool,
     target_to_source_dirty: bool,
+    source_to_target_dirty_after_immediate: bool,
     converter: Option<RuntimeDataBindGraphConverter>,
     converter_state: RuntimeDataBindGraphConverterState,
     default_value: RuntimeDataBindGraphValue,
@@ -3829,6 +3830,7 @@ impl RuntimeDataBindGraph {
             flags,
             bound: true,
             target_to_source_dirty: false,
+            source_to_target_dirty_after_immediate: false,
             converter,
             converter_state,
             default_value: value.clone(),
@@ -4258,7 +4260,11 @@ impl RuntimeDataBindGraph {
         )
     }
 
-    fn mark_number_target_dirty_for_data_bind(&mut self, data_bind_index: usize) -> bool {
+    fn mark_target_dirty_for_data_bind(
+        &mut self,
+        data_bind_index: usize,
+        target_matches: impl FnOnce(RuntimeDataBindGraphTarget) -> bool,
+    ) -> bool {
         if !self.default_view_model_source_context_bound() {
             return false;
         }
@@ -4272,260 +4278,89 @@ impl RuntimeDataBindGraph {
         let Some(target) = self.targets.get(binding.target.0) else {
             return false;
         };
-        if !matches!(target.target, RuntimeDataBindGraphTarget::Number { .. }) {
+        if !target_matches(target.target) {
             return false;
         }
+
+        let mut defer_source_to_target = false;
         let Some(source) = self.sources.get_mut(binding.source.0) else {
             return false;
         };
         if !source.applies_target_to_source() {
             return false;
         }
-        source.target_to_source_dirty = true;
+        if source.is_main_to_source() {
+            source.target_to_source_dirty = true;
+        } else if source.applies_source_to_target() {
+            source.source_to_target_dirty_after_immediate = true;
+            defer_source_to_target = true;
+        } else {
+            return false;
+        }
+        if defer_source_to_target {
+            self.mark_default_view_model_bindings_dirty();
+        }
         true
+    }
+
+    fn mark_number_target_dirty_for_data_bind(&mut self, data_bind_index: usize) -> bool {
+        self.mark_target_dirty_for_data_bind(data_bind_index, |target| {
+            matches!(target, RuntimeDataBindGraphTarget::Number { .. })
+        })
     }
 
     fn mark_integer_target_dirty_for_data_bind(&mut self, data_bind_index: usize) -> bool {
-        if !self.default_view_model_source_context_bound() {
-            return false;
-        }
-        let Some(binding) = self
-            .default_view_model_bindings
-            .iter()
-            .find(|binding| binding.data_bind_index == data_bind_index)
-        else {
-            return false;
-        };
-        let Some(target) = self.targets.get(binding.target.0) else {
-            return false;
-        };
-        if !matches!(target.target, RuntimeDataBindGraphTarget::Integer { .. }) {
-            return false;
-        }
-        let Some(source) = self.sources.get_mut(binding.source.0) else {
-            return false;
-        };
-        if !source.applies_target_to_source() {
-            return false;
-        }
-        source.target_to_source_dirty = true;
-        true
+        self.mark_target_dirty_for_data_bind(data_bind_index, |target| {
+            matches!(target, RuntimeDataBindGraphTarget::Integer { .. })
+        })
     }
 
     fn mark_boolean_target_dirty_for_data_bind(&mut self, data_bind_index: usize) -> bool {
-        if !self.default_view_model_source_context_bound() {
-            return false;
-        }
-        let Some(binding) = self
-            .default_view_model_bindings
-            .iter()
-            .find(|binding| binding.data_bind_index == data_bind_index)
-        else {
-            return false;
-        };
-        let Some(target) = self.targets.get(binding.target.0) else {
-            return false;
-        };
-        if !matches!(target.target, RuntimeDataBindGraphTarget::Boolean { .. }) {
-            return false;
-        }
-        let Some(source) = self.sources.get_mut(binding.source.0) else {
-            return false;
-        };
-        if !source.applies_target_to_source() {
-            return false;
-        }
-        source.target_to_source_dirty = true;
-        true
+        self.mark_target_dirty_for_data_bind(data_bind_index, |target| {
+            matches!(target, RuntimeDataBindGraphTarget::Boolean { .. })
+        })
     }
 
     fn mark_string_target_dirty_for_data_bind(&mut self, data_bind_index: usize) -> bool {
-        if !self.default_view_model_source_context_bound() {
-            return false;
-        }
-        let Some(binding) = self
-            .default_view_model_bindings
-            .iter()
-            .find(|binding| binding.data_bind_index == data_bind_index)
-        else {
-            return false;
-        };
-        let Some(target) = self.targets.get(binding.target.0) else {
-            return false;
-        };
-        if !matches!(target.target, RuntimeDataBindGraphTarget::String { .. }) {
-            return false;
-        }
-        let Some(source) = self.sources.get_mut(binding.source.0) else {
-            return false;
-        };
-        if !source.applies_target_to_source() {
-            return false;
-        }
-        source.target_to_source_dirty = true;
-        true
+        self.mark_target_dirty_for_data_bind(data_bind_index, |target| {
+            matches!(target, RuntimeDataBindGraphTarget::String { .. })
+        })
     }
 
     fn mark_color_target_dirty_for_data_bind(&mut self, data_bind_index: usize) -> bool {
-        if !self.default_view_model_source_context_bound() {
-            return false;
-        }
-        let Some(binding) = self
-            .default_view_model_bindings
-            .iter()
-            .find(|binding| binding.data_bind_index == data_bind_index)
-        else {
-            return false;
-        };
-        let Some(target) = self.targets.get(binding.target.0) else {
-            return false;
-        };
-        if !matches!(target.target, RuntimeDataBindGraphTarget::Color { .. }) {
-            return false;
-        }
-        let Some(source) = self.sources.get_mut(binding.source.0) else {
-            return false;
-        };
-        if !source.applies_target_to_source() {
-            return false;
-        }
-        source.target_to_source_dirty = true;
-        true
+        self.mark_target_dirty_for_data_bind(data_bind_index, |target| {
+            matches!(target, RuntimeDataBindGraphTarget::Color { .. })
+        })
     }
 
     fn mark_enum_target_dirty_for_data_bind(&mut self, data_bind_index: usize) -> bool {
-        if !self.default_view_model_source_context_bound() {
-            return false;
-        }
-        let Some(binding) = self
-            .default_view_model_bindings
-            .iter()
-            .find(|binding| binding.data_bind_index == data_bind_index)
-        else {
-            return false;
-        };
-        let Some(target) = self.targets.get(binding.target.0) else {
-            return false;
-        };
-        if !matches!(target.target, RuntimeDataBindGraphTarget::Enum { .. }) {
-            return false;
-        }
-        let Some(source) = self.sources.get_mut(binding.source.0) else {
-            return false;
-        };
-        if !source.applies_target_to_source() {
-            return false;
-        }
-        source.target_to_source_dirty = true;
-        true
+        self.mark_target_dirty_for_data_bind(data_bind_index, |target| {
+            matches!(target, RuntimeDataBindGraphTarget::Enum { .. })
+        })
     }
 
     fn mark_asset_target_dirty_for_data_bind(&mut self, data_bind_index: usize) -> bool {
-        if !self.default_view_model_source_context_bound() {
-            return false;
-        }
-        let Some(binding) = self
-            .default_view_model_bindings
-            .iter()
-            .find(|binding| binding.data_bind_index == data_bind_index)
-        else {
-            return false;
-        };
-        let Some(target) = self.targets.get(binding.target.0) else {
-            return false;
-        };
-        if !matches!(target.target, RuntimeDataBindGraphTarget::Asset { .. }) {
-            return false;
-        }
-        let Some(source) = self.sources.get_mut(binding.source.0) else {
-            return false;
-        };
-        if !source.applies_target_to_source() {
-            return false;
-        }
-        source.target_to_source_dirty = true;
-        true
+        self.mark_target_dirty_for_data_bind(data_bind_index, |target| {
+            matches!(target, RuntimeDataBindGraphTarget::Asset { .. })
+        })
     }
 
     fn mark_artboard_target_dirty_for_data_bind(&mut self, data_bind_index: usize) -> bool {
-        if !self.default_view_model_source_context_bound() {
-            return false;
-        }
-        let Some(binding) = self
-            .default_view_model_bindings
-            .iter()
-            .find(|binding| binding.data_bind_index == data_bind_index)
-        else {
-            return false;
-        };
-        let Some(target) = self.targets.get(binding.target.0) else {
-            return false;
-        };
-        if !matches!(target.target, RuntimeDataBindGraphTarget::Artboard { .. }) {
-            return false;
-        }
-        let Some(source) = self.sources.get_mut(binding.source.0) else {
-            return false;
-        };
-        if !source.applies_target_to_source() {
-            return false;
-        }
-        source.target_to_source_dirty = true;
-        true
+        self.mark_target_dirty_for_data_bind(data_bind_index, |target| {
+            matches!(target, RuntimeDataBindGraphTarget::Artboard { .. })
+        })
     }
 
     fn mark_trigger_target_dirty_for_data_bind(&mut self, data_bind_index: usize) -> bool {
-        if !self.default_view_model_source_context_bound() {
-            return false;
-        }
-        let Some(binding) = self
-            .default_view_model_bindings
-            .iter()
-            .find(|binding| binding.data_bind_index == data_bind_index)
-        else {
-            return false;
-        };
-        let Some(target) = self.targets.get(binding.target.0) else {
-            return false;
-        };
-        if !matches!(target.target, RuntimeDataBindGraphTarget::Trigger { .. }) {
-            return false;
-        }
-        let Some(source) = self.sources.get_mut(binding.source.0) else {
-            return false;
-        };
-        if !source.applies_target_to_source() {
-            return false;
-        }
-        source.target_to_source_dirty = true;
-        true
+        self.mark_target_dirty_for_data_bind(data_bind_index, |target| {
+            matches!(target, RuntimeDataBindGraphTarget::Trigger { .. })
+        })
     }
 
     fn mark_view_model_target_dirty_for_data_bind(&mut self, data_bind_index: usize) -> bool {
-        if !self.default_view_model_source_context_bound() {
-            return false;
-        }
-        let Some(binding) = self
-            .default_view_model_bindings
-            .iter()
-            .find(|binding| binding.data_bind_index == data_bind_index)
-        else {
-            return false;
-        };
-        let Some(target) = self.targets.get(binding.target.0) else {
-            return false;
-        };
-        if !matches!(target.target, RuntimeDataBindGraphTarget::ViewModel { .. }) {
-            return false;
-        }
-        let Some(source) = self.sources.get_mut(binding.source.0) else {
-            return false;
-        };
-        if !source.applies_target_to_source() {
-            return false;
-        }
-        source.target_to_source_dirty = true;
-        true
+        self.mark_target_dirty_for_data_bind(data_bind_index, |target| {
+            matches!(target, RuntimeDataBindGraphTarget::ViewModel { .. })
+        })
     }
 
     fn imported_view_model_target_value_for_data_bind(
@@ -5299,6 +5134,12 @@ impl RuntimeDataBindGraph {
             {
                 continue;
             }
+            if matches!(phase, RuntimeDataBindGraphApplyPhase::Immediate)
+                && source.source_to_target_dirty_after_immediate
+            {
+                skipped_dirty_binding = true;
+                continue;
+            }
             let Some(target) = self.targets.get(binding.target.0) else {
                 continue;
             };
@@ -5316,6 +5157,7 @@ impl RuntimeDataBindGraph {
                 continue;
             };
             targets.apply_default_view_model_binding(&target.target, &value);
+            source.source_to_target_dirty_after_immediate = false;
         }
         self.default_view_model_bindings_dirty = skipped_dirty_binding;
     }

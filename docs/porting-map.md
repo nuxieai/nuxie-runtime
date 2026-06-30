@@ -1428,12 +1428,19 @@ contracts are
 `docs/prototypes/data-binding-graph-operation-value-target-to-source-runtime-contract.md`,
 and
 `docs/prototypes/data-binding-graph-operation-value-group-target-to-source-runtime-contract.md`.
-Main-`ToTarget` two-way reverse variants, exact broader dirty-list scheduler
-parity for neighboring ordinary `ToTarget` bindable targets, symbol-list-index
-sources, other converter families, list source/target propagation,
-imported/owned contexts, pending add/remove behavior, re-entry protection,
-relative/parent/nested lookup, listener-owned data binding, and nested artboard
-propagation remain follow-up `#12` slices.
+
+Current #12 update: main-`ToTarget | TwoWay` number bindings with
+`DataConverterOperationValue` and `DataConverterGroup<OperationValue>` now pin
+C++'s target-dirty behavior. A manual bindable target edit is preserved through
+explicit `advancedDataContext()`, does not run `reverseConvert`, and is
+overwritten from the unchanged source through forward `convert` on the next
+normal state-machine advance. The contract is
+`docs/prototypes/data-binding-graph-number-main-to-target-two-way-target-to-source-runtime-contract.md`.
+Exact broader dirty-list scheduler parity for neighboring ordinary `ToTarget`
+bindable targets, symbol-list-index sources, other converter families, list
+source/target propagation, imported/owned contexts, pending add/remove
+behavior, re-entry protection, relative/parent/nested lookup, listener-owned
+data binding, and nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: owned runtime view-model contexts now cover the first
 live view-model pointer replacement path. `RuntimeOwnedViewModelInstance`

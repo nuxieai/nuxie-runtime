@@ -244,6 +244,12 @@ slice.
   behavior for main-`ToTarget | TwoWay` string targets, preserving the manual
   edit through explicit data-context advancement and then overwriting it from
   the unchanged trigger count on the next normal advance.
+- Symbol-list-index-to-string main-to-target dirty slice: direct
+  `DataConverterToString` symbol-list-index-to-string binds now follow the
+  same C++ state-machine target-dirty behavior for main-`ToTarget | TwoWay`
+  string targets, preserving the manual edit through explicit data-context
+  advancement and then overwriting it from the unchanged raw symbol-list-index
+  source on the next normal advance.
 - First `DataConverterToString` graph-owned converter execution slice:
   forward conversion for default-context number sources feeding string targets,
   covered by a C++ probe through an existing string transition-condition

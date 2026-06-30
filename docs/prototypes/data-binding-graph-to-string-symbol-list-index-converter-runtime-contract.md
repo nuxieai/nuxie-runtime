@@ -23,6 +23,9 @@ expand public symbol-list source APIs or the wider string converter family.
   evaluation.
 - C++ probe coverage through an observable string
   `TransitionViewModelCondition` consumer.
+- Main-`ToTarget | TwoWay` target-dirty behavior for the direct
+  symbol-list-index-to-string path is covered by
+  `docs/prototypes/data-binding-graph-to-string-symbol-list-index-main-to-target-two-way-target-dirty-runtime-contract.md`.
 
 ## Out Of Scope
 
@@ -34,7 +37,7 @@ expand public symbol-list source APIs or the wider string converter family.
 - String trim/pad/remove-zero converters, converter groups, formulas,
   operation converters, interpolators, and stateful converter advancement.
 - Reverse target-to-source propagation.
-- Dirty/update queue parity beyond the existing graph-owned apply point.
+- Dirty/update queue parity beyond the linked state-machine target-dirty path.
 - Relative, parent, and nested source path lookup.
 - Nested artboard propagation.
 

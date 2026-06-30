@@ -5853,6 +5853,9 @@ fn runtime_data_bind_graph_convert_value(
         ) => Some(RuntimeDataBindGraphValue::String(
             rive_binary::data_converter_to_string_color_value(*value, color_format),
         )),
+        (RuntimeDataBindGraphConverter::ToString { .. }, RuntimeDataBindGraphValue::Enum(_)) => {
+            Some(RuntimeDataBindGraphValue::String(Vec::new()))
+        }
         (RuntimeDataBindGraphConverter::ToString { .. }, _) => None,
         (
             RuntimeDataBindGraphConverter::OperationValue {
@@ -9281,12 +9284,16 @@ impl StateMachineInstance {
     }
 
     pub fn bindable_string_value_for_data_bind(&self, data_bind_index: usize) -> Option<&[u8]> {
-        let global_id = self
+        if let Some(value) = self
             .data_bind_graph
-            .string_target_global_id_for_data_bind(data_bind_index)?;
+            .string_target_global_id_for_data_bind(data_bind_index)
+            .and_then(|global_id| bindable_string_value(&self.bindable_strings, global_id))
+        {
+            return Some(value);
+        }
         self.bindable_strings
             .iter()
-            .find(|bindable_string| bindable_string.global_id == global_id)
+            .find(|bindable_string| bindable_string.has_data_bind_index(data_bind_index))
             .map(|bindable_string| bindable_string.value.as_slice())
     }
 
@@ -12888,6 +12895,8 @@ fn runtime_bindable_string_default_view_model_source(
             RuntimeDataBindGraphValue::SymbolListIndex(value)
         } else if let Some(value) = file.view_model_instance_color_value_for_object(source) {
             RuntimeDataBindGraphValue::Color(value)
+        } else if source.type_name == "ViewModelInstanceEnum" {
+            RuntimeDataBindGraphValue::Enum(source.uint_property("propertyValue")?)
         } else {
             return None;
         }

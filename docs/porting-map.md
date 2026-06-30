@@ -1159,6 +1159,18 @@ groups, public-queue reverse conversion, broader dirty/update queues,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
 
+Current #12 update: direct `DataConverterToString` enum-to-string binds are now
+explicitly pinned to C++'s empty-string fallback for the main-`ToTarget |
+TwoWay` state-machine target-dirty path. A manual
+`BindablePropertyString.propertyValue` edit survives explicit data-context
+advancement, then the next normal state-machine advance overwrites it with an
+empty string instead of enum metadata, matching C++'s display-label-unsupported
+default-context string-target graph behavior. The contract is
+`docs/prototypes/data-binding-graph-to-string-enum-main-to-target-two-way-target-dirty-runtime-contract.md`.
+String converter families and groups, public-queue reverse conversion, broader
+dirty/update queues, relative/parent/nested lookup, listener-owned data binding,
+and nested artboard propagation remain follow-up `#12` slices.
+
 Current #12 update: the first `DataConverterToString` runtime slice now
 supports default-context number sources feeding
 `BindablePropertyString.propertyValue` targets. String source nodes can carry a
@@ -1244,11 +1256,11 @@ lookup, listener-owned data binding, and nested artboard propagation remain
 follow-up `#12` slices.
 
 Current #12 update: `DataConverterToString` enum-source runtime graph behavior
-is now pinned as unsupported for default-context enum sources feeding
-`BindablePropertyString.propertyValue` targets. Even with resolvable imported
-`DataEnum` metadata, C++ does not take a string transition condition for this
-binding shape, so Rust does not admit enum sources into this string-target
-graph path. The contract is
+is now pinned to C++'s empty-string fallback for default-context enum sources
+feeding `BindablePropertyString.propertyValue` targets. Even with resolvable
+imported `DataEnum` metadata, C++ does not take a string transition condition
+for the enum display label, so Rust admits enum sources into this string-target
+graph path only to write the same empty fallback. The contract is
 `docs/prototypes/data-binding-graph-to-string-enum-converter-runtime-contract.md`.
 Stable public source handles, list/view-model bindables, string converter
 families, converter groups, reverse propagation, update-queue parity,

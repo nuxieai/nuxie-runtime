@@ -256,6 +256,12 @@ slice.
   edit through explicit data-context advancement and then overwriting it from
   the unchanged color source through imported `colorFormat` conversion on the
   next normal advance.
+- Enum-to-string display-label-unsupported main-to-target dirty slice: direct
+  `DataConverterToString` enum-to-string binds use C++'s empty-string fallback
+  for the default-context string-target runtime graph path even with
+  main-`ToTarget | TwoWay` flags, preserving the manual target edit through
+  explicit data-context advancement and then overwriting it with an empty
+  string on the next normal advance.
 - First `DataConverterToString` graph-owned converter execution slice:
   forward conversion for default-context number sources feeding string targets,
   covered by a C++ probe through an existing string transition-condition
@@ -281,10 +287,10 @@ slice.
   including imported `colorFormat` descriptor bytes, covered by a C++ probe
   through an existing string transition-condition consumer.
 - `DataConverterToString` enum-source runtime graph probe: default-context
-  enum sources feeding string targets stay unsupported for C++ parity even
-  when imported `DataEnum` metadata is available. A C++ probe covers this
-  non-transition behavior through an existing string transition-condition
-  consumer.
+  enum sources feeding string targets use C++'s empty-string fallback instead
+  of enum display-label conversion even when imported `DataEnum` metadata is
+  available. A C++ probe covers this non-transition behavior through an
+  existing string transition-condition consumer.
 - `DataConverterStringTrim` graph-owned converter execution slice: forward
   conversion for default-context string sources feeding string targets,
   including imported `trimType`, covered by a C++ probe through an existing

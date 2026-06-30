@@ -685,6 +685,22 @@ beyond boolean negation and trigger increment, reverse propagation,
 update-queue parity, relative/parent/nested lookup, listener-owned data
 binding, and nested artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: graph-owned runtime converter execution now supports the
+first cross-type source-to-target converter case:
+`DataConverterToNumber` for default-context boolean sources feeding
+`BindablePropertyNumber.propertyValue` targets. Number source nodes now carry a
+graph value instead of assuming every number target is sourced by a number; the
+admitted converter path converts `true -> 1.0` and `false -> 0.0` before target
+writes while preserving the existing no-converter number path. C++ probe
+coverage verifies the converted value through a `BlendState1DViewModel`
+consumer. The contract is
+`docs/prototypes/data-binding-graph-to-number-boolean-converter-runtime-contract.md`.
+Stable public source handles, list/symbol/view-model bindables, remaining
+`DataConverterToNumber` input kinds, converters beyond boolean negation,
+trigger increment, and boolean-to-number, reverse propagation,
+update-queue parity, relative/parent/nested lookup, listener-owned data
+binding, and nested artboard propagation remain follow-up `#12` slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

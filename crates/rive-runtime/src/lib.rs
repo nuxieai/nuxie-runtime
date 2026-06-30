@@ -23,6 +23,7 @@ pub struct ArtboardInstance {
     color_properties: BTreeMap<(usize, u16), u32>,
     bool_properties: BTreeMap<(usize, u16), bool>,
     uint_properties: BTreeMap<(usize, u16), u64>,
+    string_properties: BTreeMap<(usize, u16), Vec<u8>>,
     update_order: Vec<usize>,
     linear_animations: Vec<RuntimeLinearAnimation>,
     state_machines: Vec<RuntimeStateMachine>,
@@ -96,6 +97,7 @@ impl ArtboardInstance {
             color_properties: BTreeMap::new(),
             bool_properties: BTreeMap::new(),
             uint_properties: BTreeMap::new(),
+            string_properties: BTreeMap::new(),
             update_order,
             linear_animations,
             state_machines,
@@ -487,6 +489,22 @@ impl ArtboardInstance {
             return false;
         }
         self.uint_properties.insert((local_id, property_key), value);
+        self.did_change = true;
+        true
+    }
+
+    fn string_property(&self, local_id: usize, property_key: u16) -> Option<&[u8]> {
+        self.string_properties
+            .get(&(local_id, property_key))
+            .map(Vec::as_slice)
+    }
+
+    fn set_string_property(&mut self, local_id: usize, property_key: u16, value: Vec<u8>) -> bool {
+        if self.string_property(local_id, property_key) == Some(value.as_slice()) {
+            return false;
+        }
+        self.string_properties
+            .insert((local_id, property_key), value);
         self.did_change = true;
         true
     }
@@ -2294,6 +2312,16 @@ impl RuntimeLinearAnimation {
                         value,
                     );
                 }
+                if keyed_property.string_property {
+                    let Some(value) = keyed_property.string_value_at(seconds, self.fps) else {
+                        continue;
+                    };
+                    changed |= instance.set_string_property(
+                        keyed_object.target_local_id,
+                        keyed_property.property_key,
+                        value,
+                    );
+                }
             }
         }
         changed
@@ -3540,13 +3568,13 @@ enum RuntimeTransitionCondition {
         op: TransitionConditionOp,
     },
     ComponentString {
-        source_value: Vec<u8>,
+        component: RuntimeComponentStringValue,
         op: TransitionConditionOp,
         value: Vec<u8>,
     },
     ComponentStringPair {
-        left: Vec<u8>,
-        right: Vec<u8>,
+        left: RuntimeComponentStringValue,
+        right: RuntimeComponentStringValue,
         op: TransitionConditionOp,
     },
     ComponentColor {
@@ -3586,7 +3614,7 @@ enum RuntimeTransitionCondition {
         op: TransitionConditionOp,
     },
     ComponentViewModelString {
-        component_value: Vec<u8>,
+        component: RuntimeComponentStringValue,
         bindable_global_id: u32,
         op: TransitionConditionOp,
     },
@@ -3893,9 +3921,10 @@ impl RuntimeTransitionCondition {
             }
             (RuntimeComponentComparandKind::String, RuntimeComponentComparandKind::String) => {
                 Some(Self::ComponentViewModelString {
-                    component_value: runtime_component_string_value(
-                        source_object,
+                    component: RuntimeComponentStringValue::from_parts(
+                        local_id,
                         property_key,
+                        source_object,
                         supports_property,
                     ),
                     bindable_global_id: bindable.id,
@@ -4055,12 +4084,12 @@ impl RuntimeTransitionCondition {
             }
             (RuntimeComponentComparandKind::String, "TransitionValueStringComparator") => {
                 Some(Self::ComponentString {
-                    source_value: source_object
-                        .filter(|_| supports_property)
-                        .and_then(|object| {
-                            runtime_object_string_property_by_key(object, property_key)
-                        })
-                        .unwrap_or_default(),
+                    component: RuntimeComponentStringValue::from_parts(
+                        local_id,
+                        property_key,
+                        source_object,
+                        supports_property,
+                    ),
                     op,
                     value: right
                         .string_property_bytes("value")
@@ -4210,14 +4239,16 @@ impl RuntimeTransitionCondition {
             }
             (RuntimeComponentComparandKind::String, RuntimeComponentComparandKind::String) => {
                 Some(Self::ComponentStringPair {
-                    left: runtime_component_string_value(
-                        left_source,
+                    left: RuntimeComponentStringValue::from_parts(
+                        left_local_id,
                         left_property_key,
+                        left_source,
                         left_supports,
                     ),
-                    right: runtime_component_string_value(
-                        right_source,
+                    right: RuntimeComponentStringValue::from_parts(
+                        right_local_id,
                         right_property_key,
+                        right_source,
                         right_supports,
                     ),
                     op,
@@ -4450,12 +4481,12 @@ impl RuntimeTransitionCondition {
                 op.compare_bool(left.value(artboard), right.value(artboard))
             }
             Self::ComponentString {
-                source_value,
+                component,
                 op,
                 value,
-            } => op.compare_bytes_equal_only(source_value, value),
+            } => op.compare_bytes_equal_only(component.value(artboard), value),
             Self::ComponentStringPair { left, right, op } => {
-                op.compare_bytes_equal_only(left, right)
+                op.compare_bytes_equal_only(left.value(artboard), right.value(artboard))
             }
             Self::ComponentColor {
                 component,
@@ -4515,7 +4546,7 @@ impl RuntimeTransitionCondition {
                 op.compare_bool(component.value(artboard), view_model_value)
             }
             Self::ComponentViewModelString {
-                component_value,
+                component,
                 bindable_global_id,
                 op,
             } => {
@@ -4524,7 +4555,7 @@ impl RuntimeTransitionCondition {
                 }
                 let view_model_value =
                     bindable_string_value(bindable_strings, *bindable_global_id).unwrap_or(&[]);
-                op.compare_bytes_equal_only(component_value, view_model_value)
+                op.compare_bytes_equal_only(component.value(artboard), view_model_value)
             }
             Self::ComponentViewModelColor {
                 component,
@@ -4809,6 +4840,38 @@ impl RuntimeComponentUintValue {
     }
 }
 
+#[derive(Debug, Clone)]
+struct RuntimeComponentStringValue {
+    local_id: usize,
+    property_key: Option<u16>,
+    source_value: Vec<u8>,
+}
+
+impl RuntimeComponentStringValue {
+    fn from_parts(
+        local_id: usize,
+        property_key: u16,
+        source_object: Option<&RuntimeObject>,
+        supports_property: bool,
+    ) -> Self {
+        Self {
+            local_id,
+            property_key: supports_property.then_some(property_key),
+            source_value: runtime_component_string_value(
+                source_object,
+                property_key,
+                supports_property,
+            ),
+        }
+    }
+
+    fn value<'a>(&'a self, artboard: &'a ArtboardInstance) -> &'a [u8] {
+        self.property_key
+            .and_then(|property_key| artboard.string_property(self.local_id, property_key))
+            .unwrap_or(&self.source_value)
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 struct RuntimeComponentBoolValue {
     local_id: usize,
@@ -4932,6 +4995,15 @@ fn runtime_property_name_by_key(object: &RuntimeObject, property_key: u16) -> Op
     definition_by_type_key(object.type_key)?
         .property_by_key_in_hierarchy(property_key)
         .map(|property| property.name)
+}
+
+fn runtime_object_field_kind_by_key(
+    object: &RuntimeObject,
+    property_key: u16,
+) -> Option<FieldKind> {
+    definition_by_type_key(object.type_key)?
+        .property_by_key_in_hierarchy(property_key)
+        .map(|property| property.runtime_type)
 }
 
 fn runtime_object_double_property_by_key(object: &RuntimeObject, property_key: u16) -> Option<f32> {
@@ -7285,10 +7357,12 @@ pub struct RuntimeKeyedProperty {
     pub bool_property: bool,
     pub bool_source_value: bool,
     pub uint_property: bool,
+    pub string_property: bool,
     pub key_frames: Vec<RuntimeKeyFrameDouble>,
     pub color_key_frames: Vec<RuntimeKeyFrameColor>,
     pub bool_key_frames: Vec<RuntimeKeyFrameBool>,
     pub uint_key_frames: Vec<RuntimeKeyFrameUint>,
+    pub string_key_frames: Vec<RuntimeKeyFrameString>,
 }
 
 impl RuntimeKeyedProperty {
@@ -7404,6 +7478,29 @@ impl RuntimeKeyedProperty {
         };
 
         Some(value)
+    }
+
+    fn string_value_at(&self, seconds: f32, fps: u64) -> Option<Vec<u8>> {
+        if self.string_key_frames.is_empty() {
+            return None;
+        }
+
+        let idx = closest_key_frame_index(&self.string_key_frames, seconds, fps);
+        let value = if idx == 0 {
+            &self.string_key_frames[0].value
+        } else if idx < self.string_key_frames.len() {
+            let from = &self.string_key_frames[idx - 1];
+            let to = &self.string_key_frames[idx];
+            if seconds == to.seconds(fps) {
+                &to.value
+            } else {
+                &from.value
+            }
+        } else {
+            &self.string_key_frames.last()?.value
+        };
+
+        Some(value.clone())
     }
 
     fn closest_frame_index(&self, seconds: f32, fps: u64) -> usize {
@@ -7535,6 +7632,30 @@ impl RuntimeKeyFrameUint {
 }
 
 impl RuntimeKeyFrameTiming for RuntimeKeyFrameUint {
+    fn seconds(&self, fps: u64) -> f32 {
+        self.seconds(fps)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RuntimeKeyFrameString {
+    pub global_id: u32,
+    pub frame: u64,
+    pub interpolation_type: u64,
+    pub interpolator_id: Option<u64>,
+    pub value: Vec<u8>,
+}
+
+impl RuntimeKeyFrameString {
+    fn seconds(&self, fps: u64) -> f32 {
+        if fps == 0 {
+            return 0.0;
+        }
+        self.frame as f32 / fps as f32
+    }
+}
+
+impl RuntimeKeyFrameTiming for RuntimeKeyFrameString {
     fn seconds(&self, fps: u64) -> f32 {
         self.seconds(fps)
     }
@@ -7685,10 +7806,13 @@ fn build_linear_animations(
                         .unwrap_or(false),
                     uint_property: core_registry_field_kind_by_property_key(property_key)
                         == Some(CoreRegistryFieldKind::Uint),
+                    string_property: runtime_object_field_kind_by_key(target, property_key)
+                        == Some(FieldKind::String),
                     key_frames: Vec::new(),
                     color_key_frames: Vec::new(),
                     bool_key_frames: Vec::new(),
                     uint_key_frames: Vec::new(),
+                    string_key_frames: Vec::new(),
                 });
             current_keyed_property = Some((
                 keyed_object_index,
@@ -7761,6 +7885,25 @@ fn build_linear_animations(
                     interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
                     interpolator_id: normalized_interpolator_id(object),
                     value: object.uint_property("value").unwrap_or(0),
+                });
+        }
+
+        if object.type_name == "KeyFrameString" {
+            let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
+                continue;
+            };
+            animations[animation_index].keyed_objects[keyed_object_index].keyed_properties
+                [keyed_property_index]
+                .string_key_frames
+                .push(RuntimeKeyFrameString {
+                    global_id: global_id as u32,
+                    frame: object.uint_property("frame").unwrap_or(0),
+                    interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
+                    interpolator_id: normalized_interpolator_id(object),
+                    value: object
+                        .string_property_bytes("value")
+                        .unwrap_or_default()
+                        .to_vec(),
                 });
         }
     }
@@ -8716,6 +8859,7 @@ mod tests {
             color_properties: BTreeMap::new(),
             bool_properties: BTreeMap::new(),
             uint_properties: BTreeMap::new(),
+            string_properties: BTreeMap::new(),
             update_order,
             linear_animations: Vec::new(),
             state_machines: Vec::new(),

@@ -671,6 +671,20 @@ beyond boolean negation, reverse propagation, update-queue parity,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
 
+Current #12 update: graph-owned runtime converter execution now also supports
+stateless forward `DataConverterTrigger` execution on default-context
+`DataBindContext -> BindablePropertyTrigger.propertyValue` edges. Trigger
+source nodes carry the same converter descriptor as boolean sources, and the
+graph applies the C++ trigger increment rule with `uint32_t` wrapping semantics
+before target writes. C++ probe coverage verifies a default trigger source
+converted through `DataConverterTrigger` before `TransitionViewModelCondition`
+evaluation. The contract is
+`docs/prototypes/data-binding-graph-trigger-converter-runtime-contract.md`.
+Stable public source handles, list/symbol/view-model bindables, converters
+beyond boolean negation and trigger increment, reverse propagation,
+update-queue parity, relative/parent/nested lookup, listener-owned data
+binding, and nested artboard propagation remain follow-up `#12` slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

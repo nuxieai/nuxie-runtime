@@ -2845,6 +2845,7 @@ enum RuntimeBindableTriggerSource {
 struct RuntimeBindableTriggerDefaultViewModelSource {
     data_bind_index: usize,
     path: Vec<u32>,
+    converter: Option<RuntimeDataBindGraphConverter>,
     value: u64,
 }
 
@@ -2926,6 +2927,7 @@ struct RuntimeDataBindGraphSourceNode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RuntimeDataBindGraphConverter {
     BooleanNegate,
+    TriggerIncrement,
     Unsupported,
 }
 
@@ -3475,7 +3477,7 @@ impl RuntimeDataBindGraph {
                     &mut default_view_model_bindings,
                     source.data_bind_index,
                     &source.path,
-                    None,
+                    source.converter,
                     RuntimeDataBindGraphTarget::Trigger {
                         global_id: bindable.global_id,
                     },
@@ -3949,6 +3951,13 @@ impl RuntimeDataBindGraphSourceNode {
                 RuntimeDataBindGraphValue::Boolean(value),
             ) => Some(RuntimeDataBindGraphValue::Boolean(!value)),
             (Some(RuntimeDataBindGraphConverter::BooleanNegate), _) => None,
+            (
+                Some(RuntimeDataBindGraphConverter::TriggerIncrement),
+                RuntimeDataBindGraphValue::Trigger(value),
+            ) => Some(RuntimeDataBindGraphValue::Trigger(u64::from(
+                (*value as u32).wrapping_add(1),
+            ))),
+            (Some(RuntimeDataBindGraphConverter::TriggerIncrement), _) => None,
             (Some(RuntimeDataBindGraphConverter::Unsupported), _) => None,
         }
     }
@@ -10464,6 +10473,7 @@ fn runtime_bindable_trigger_default_view_model_source(
     Some(RuntimeBindableTriggerDefaultViewModelSource {
         data_bind_index,
         path: path.to_vec(),
+        converter: runtime_data_bind_graph_converter(file, data_bind),
         value,
     })
 }
@@ -10597,6 +10607,7 @@ fn runtime_data_bind_graph_converter(
     let converter = file.resolved_data_converter_for_data_bind_object(data_bind)?;
     Some(match converter.type_name {
         "DataConverterBooleanNegate" => RuntimeDataBindGraphConverter::BooleanNegate,
+        "DataConverterTrigger" => RuntimeDataBindGraphConverter::TriggerIncrement,
         _ => RuntimeDataBindGraphConverter::Unsupported,
     })
 }

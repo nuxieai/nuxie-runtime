@@ -909,10 +909,27 @@ view-model number operand before writing the primary
 `ViewModelInstanceNumber.propertyValue` source. The contract is
 `docs/prototypes/data-binding-graph-operation-viewmodel-target-to-source-runtime-contract.md`.
 Stable public source handles, list/view-model bindables, public-queue reverse
-conversion, main-`ToTarget | TwoWay` operation-view-model dirty behavior, live
-dependency propagation when the secondary operation source changes,
-imported/owned context recomputation for the secondary operand, dedicated
-grouped operation-view-model probe coverage, formula functions/randoms,
+conversion, live dependency propagation when the secondary operation source
+changes, imported/owned context recomputation for the secondary operand,
+dedicated grouped operation-view-model probe coverage, formula
+functions/randoms, interpolator, number-to-list, scripted converters, broader
+dirty/update queues, relative/parent/nested lookup, listener-owned data
+binding, and nested artboard propagation remain follow-up `#12` slices.
+
+Current #12 update: direct `DataConverterOperationViewModel` now also covers
+the main-`ToTarget | TwoWay` state-machine target-dirty path for
+default-context number binds. A manual edit to the
+`BindablePropertyNumber.propertyValue` target is preserved through explicit
+data-context advancement, then the next normal state-machine advance overwrites
+the target from the unchanged primary source through forward
+`DataConverterOperationViewModel::convert` with the imported secondary
+view-model number operand. The contract is
+`docs/prototypes/data-binding-graph-operation-viewmodel-main-to-target-two-way-target-dirty-runtime-contract.md`.
+Stable public source handles, list/view-model bindables, public-queue reverse
+conversion, live dependency propagation when the secondary operation source
+changes, imported/owned context recomputation for the secondary operand,
+dedicated grouped operation-view-model probe coverage, main-`ToTarget | TwoWay`
+dirty behavior for other converter families, formula functions/randoms,
 interpolator, number-to-list, scripted converters, broader dirty/update queues,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.

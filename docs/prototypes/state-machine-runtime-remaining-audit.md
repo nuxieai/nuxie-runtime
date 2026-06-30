@@ -163,6 +163,12 @@ slice.
   target-to-source writes. The edited target value flows through `convert`
   with the imported secondary view-model number operand before writing the
   primary source.
+- Operation-view-model main-to-target dirty slice: direct
+  `DataConverterOperationViewModel` now follows C++ state-machine target-dirty
+  behavior for main-`ToTarget | TwoWay` number binds. Explicit data-context
+  advancement preserves a manual bindable target edit, then normal
+  state-machine advancement overwrites it from the unchanged primary source
+  through forward conversion with the imported secondary operand.
 - First system operation-value converter slice: direct
   `DataConverterSystemNormalizer` and `DataConverterSystemDegsToRads`
   conversion for default-context number sources feeding number targets when

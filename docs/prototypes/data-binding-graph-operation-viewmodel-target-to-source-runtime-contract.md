@@ -28,7 +28,8 @@ view-model number operand, before writing the primary view-model number source.
 
 ## Out Of Scope
 
-- Main-`ToTarget | TwoWay` operation-view-model dirty behavior.
+- Main-`ToTarget | TwoWay` operation-view-model dirty behavior, covered by
+  `docs/prototypes/data-binding-graph-operation-viewmodel-main-to-target-two-way-target-dirty-runtime-contract.md`.
 - Public `DataBindContainer::updateDataBinds(true)` scheduler parity and
   public-queue `reverseConvert` behavior.
 - Live dependency/dirt propagation when the secondary operation source changes.

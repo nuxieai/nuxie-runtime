@@ -34,6 +34,9 @@ source-derived value back to the target through `convert`.
 - Direct system operation-value source-to-target conversion after a bindable
   target mutation dirties the bind is covered by
   `docs/prototypes/data-binding-graph-system-operation-value-main-to-target-two-way-target-dirty-runtime-contract.md`.
+- Direct operation-view-model source-to-target conversion after a bindable
+  target mutation dirties the bind is covered by
+  `docs/prototypes/data-binding-graph-operation-viewmodel-main-to-target-two-way-target-dirty-runtime-contract.md`.
 - Explicit `advancedDataContext()` preserving the manual target edit before
   the next normal state-machine advance overwrites it.
 - Exact C++ probe reporting for the mutating number bind's source and target
@@ -49,9 +52,9 @@ source-derived value back to the target through `convert`.
   the state-machine bindable-property action path.
 - Full C++ dirty-list scheduling for neighboring ordinary `ToTarget` binds.
 - Non-number target-to-source converter families.
-- System-operation converter cases beyond the direct number path, interpolator,
-  formula cases beyond the direct deterministic number path, string,
-  number-to-list, list, or scripted converters.
+- System-operation and operation-view-model converter cases beyond the direct
+  number paths, interpolator, formula cases beyond the direct deterministic
+  number path, string, number-to-list, list, or scripted converters.
 - Imported and owned view-model contexts.
 - Pending add/remove behavior, observer-list parity, re-entry protection,
   relative/parent/nested lookup, listener-owned data binding, nested artboards,

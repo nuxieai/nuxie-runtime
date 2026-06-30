@@ -2950,6 +2950,11 @@ enum RuntimeDataBindGraphConverter {
         operation_type: u64,
         operation_value: f32,
     },
+    SystemOperationValue {
+        operation_type: u64,
+        operation_value: f32,
+        reverse: bool,
+    },
     Rounder {
         decimals: u64,
     },
@@ -4334,6 +4339,29 @@ fn runtime_data_bind_graph_convert_value(
             Some(RuntimeDataBindGraphValue::Number(0.0))
         }
         (
+            RuntimeDataBindGraphConverter::SystemOperationValue {
+                operation_type,
+                operation_value,
+                reverse,
+            },
+            RuntimeDataBindGraphValue::Number(value),
+        ) => Some(RuntimeDataBindGraphValue::Number(if *reverse {
+            runtime_data_bind_graph_reverse_convert_operation_value(
+                *value,
+                *operation_value,
+                *operation_type,
+            )
+        } else {
+            runtime_data_bind_graph_convert_operation_value(
+                *value,
+                *operation_value,
+                *operation_type,
+            )
+        })),
+        (RuntimeDataBindGraphConverter::SystemOperationValue { .. }, _) => {
+            Some(RuntimeDataBindGraphValue::Number(0.0))
+        }
+        (
             RuntimeDataBindGraphConverter::Rounder { decimals },
             RuntimeDataBindGraphValue::Number(value),
         ) => {
@@ -4402,6 +4430,32 @@ fn runtime_data_bind_graph_convert_value(
             Some(value)
         }
         (RuntimeDataBindGraphConverter::Unsupported, _) => None,
+    }
+}
+
+fn runtime_data_bind_graph_reverse_convert_operation_value(
+    input: f32,
+    operation_value: f32,
+    operation_type: u64,
+) -> f32 {
+    match operation_type {
+        0 => input - operation_value,
+        1 => input + operation_value,
+        2 => input / operation_value,
+        3 => input * operation_value,
+        4 => input,
+        5 => input.powf(2.0),
+        6 => input.powf(1.0 / operation_value),
+        7 => input.ln(),
+        8 => input.exp(),
+        9 => input.acos(),
+        10 => input.asin(),
+        11 => input.atan(),
+        12 => input.cos(),
+        13 => input.sin(),
+        14 => input.tan(),
+        15..=18 => input,
+        _ => operation_value,
     }
 }
 
@@ -11298,6 +11352,22 @@ fn runtime_data_bind_graph_converter(
     data_bind: &RuntimeObject,
 ) -> Option<RuntimeDataBindGraphConverter> {
     let converter = file.resolved_data_converter_for_data_bind_object(data_bind)?;
+    if matches!(
+        converter.type_name,
+        "DataConverterSystemDegsToRads" | "DataConverterSystemNormalizer"
+    ) {
+        let flags = data_bind.uint_property("flags").unwrap_or(0);
+        let to_target = flags & 0b10 != 0 || flags & 0b1 == 0;
+        return Some(if to_target {
+            RuntimeDataBindGraphConverter::SystemOperationValue {
+                operation_type: converter.uint_property("operationType").unwrap_or(0),
+                operation_value: converter.double_property("operationValue").unwrap_or(1.0),
+                reverse: flags & 0b1 != 0,
+            }
+        } else {
+            RuntimeDataBindGraphConverter::Unsupported
+        });
+    }
     runtime_data_bind_graph_converter_for_object(file, converter, &mut BTreeSet::new())
 }
 

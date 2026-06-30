@@ -856,6 +856,23 @@ scripted converters, converter groups involving operation converters,
 update-queue parity, relative/parent/nested lookup, listener-owned data
 binding, and nested artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: direct `DataConverterSystemNormalizer` and
+`DataConverterSystemDegsToRads` runtime execution now admits default-context
+number sources feeding `BindablePropertyNumber.propertyValue` targets when C++
+`DataBind::toTarget()` is true. The graph stores imported `operationType`,
+`operationValue`, and the source-to-target direction choice from
+`DataBind.flags`, applying forward operation-value arithmetic for default
+`ToTarget` flags and reverse operation-value arithmetic for
+`TwoWay | ToSource` flags. C++ probe coverage verifies both concrete converter
+types through a `BlendState1DViewModel` consumer. The contract is
+`docs/prototypes/data-binding-graph-system-operation-value-converter-runtime-contract.md`.
+Stable public source handles, list/view-model bindables, `ToSource`-only
+update-queue behavior, target-to-source propagation, operation-view-model,
+formula, interpolator, number-to-list, and scripted converters, converter
+groups involving system converters, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
+
 Current #12 update: the first `DataConverterToString` runtime slice now
 supports default-context number sources feeding
 `BindablePropertyString.propertyValue` targets. String source nodes can carry a

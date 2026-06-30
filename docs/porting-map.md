@@ -574,6 +574,18 @@ converters, reverse propagation, update-queue parity, relative/parent/nested
 lookup, listener-owned data binding, external trigger reset/report identity,
 and nested artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: owned runtime view-model contexts now also cover color
+sources as packed ARGB values. Rust exposes
+`RuntimeOwnedViewModelInstance::set_color_by_property_index`, and the graph
+resolves owned `ViewModelInstanceColor` values into existing color source nodes
+before state-machine transition evaluation. The C++ probe mirrors this with
+`--runtime-bind-owned-view-model-color-state-machine-context`. The contract is
+`docs/prototypes/data-binding-graph-owned-view-model-color-context-runtime-contract.md`.
+Owned enum/asset/artboard/trigger values, stable public source handles,
+converters, reverse propagation, update-queue parity, relative/parent/nested
+lookup, listener-owned data binding, external trigger reset/report identity,
+and nested artboard propagation remain follow-up `#12` slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

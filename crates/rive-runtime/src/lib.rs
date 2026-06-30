@@ -2969,6 +2969,9 @@ impl RuntimeDataBindGraphValue {
             Self::String(_) => context
                 .string_value_by_property_index(usize::try_from(path[1]).ok()?)
                 .map(|value| Self::String(value.to_vec())),
+            Self::Color(_) => context
+                .color_value_by_property_index(usize::try_from(path[1]).ok()?)
+                .map(Self::Color),
             _ => None,
         }
     }
@@ -3030,6 +3033,7 @@ pub struct RuntimeOwnedViewModelInstance {
     numbers: Vec<RuntimeOwnedViewModelNumber>,
     booleans: Vec<RuntimeOwnedViewModelBoolean>,
     strings: Vec<RuntimeOwnedViewModelString>,
+    colors: Vec<RuntimeOwnedViewModelColor>,
 }
 
 #[derive(Debug, Clone)]
@@ -3050,12 +3054,19 @@ struct RuntimeOwnedViewModelString {
     value: Vec<u8>,
 }
 
+#[derive(Debug, Clone)]
+struct RuntimeOwnedViewModelColor {
+    property_index: usize,
+    value: u32,
+}
+
 impl RuntimeOwnedViewModelInstance {
     pub fn new(file: &RuntimeFile, view_model_index: usize) -> Option<Self> {
         let view_model = file.view_model(view_model_index)?;
         let mut numbers = Vec::new();
         let mut booleans = Vec::new();
         let mut strings = Vec::new();
+        let mut colors = Vec::new();
         for (property_index, property) in view_model.properties.into_iter().enumerate() {
             match property.type_name {
                 "ViewModelPropertyNumber" => numbers.push(RuntimeOwnedViewModelNumber {
@@ -3070,6 +3081,10 @@ impl RuntimeOwnedViewModelInstance {
                     property_index,
                     value: Vec::new(),
                 }),
+                "ViewModelPropertyColor" => colors.push(RuntimeOwnedViewModelColor {
+                    property_index,
+                    value: 0,
+                }),
                 _ => {}
             }
         }
@@ -3078,6 +3093,7 @@ impl RuntimeOwnedViewModelInstance {
             numbers,
             booleans,
             strings,
+            colors,
         })
     }
 
@@ -3126,6 +3142,21 @@ impl RuntimeOwnedViewModelInstance {
         true
     }
 
+    pub fn set_color_by_property_index(&mut self, property_index: usize, value: u32) -> bool {
+        let Some(color) = self
+            .colors
+            .iter_mut()
+            .find(|color| color.property_index == property_index)
+        else {
+            return false;
+        };
+        if color.value == value {
+            return false;
+        }
+        color.value = value;
+        true
+    }
+
     fn number_value_by_property_index(&self, property_index: usize) -> Option<f32> {
         self.numbers
             .iter()
@@ -3145,6 +3176,13 @@ impl RuntimeOwnedViewModelInstance {
             .iter()
             .find(|string| string.property_index == property_index)
             .map(|string| string.value.as_slice())
+    }
+
+    fn color_value_by_property_index(&self, property_index: usize) -> Option<u32> {
+        self.colors
+            .iter()
+            .find(|color| color.property_index == property_index)
+            .map(|color| color.value)
     }
 }
 

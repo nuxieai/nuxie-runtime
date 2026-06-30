@@ -327,6 +327,12 @@ slice.
   bindable target edit is preserved through explicit `advancedDataContext()`
   and then overwritten from the unchanged source through forward
   `convert` on the next normal state-machine advance.
+- Range-mapper group target-to-source slice: the first direct
+  `DataConverterGroup` containing a `DataConverterRangeMapper` now covers a
+  main-`ToSource | TwoWay` number bind. The group runs
+  `RangeMapper -> OperationValue` in C++ forward group order before writing
+  the source, with a second direct bind observing the grouped source value
+  after normal state-machine advancement.
 - First exact number target-to-source direction slice: default-context number
   sources now follow C++ main-direction converter dispatch for the mutating
   bind, with exact C++ probe reports for direct, `OperationValue`, and

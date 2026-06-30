@@ -1426,12 +1426,28 @@ is
 `docs/prototypes/data-binding-graph-range-mapper-target-to-source-runtime-contract.md`.
 Main-`ToTarget | TwoWay` range-mapper edits through the state-machine
 bindable-property action path are now covered by the shared number dirty
-contract below. Public `DataBindContainer::updateDataBinds(true)` scheduling
-outside that path, range-mapper groups in target-to-source scheduling,
-remaining converter families, list source/target propagation, imported/owned
-contexts, broader dirty/update queues, pending add/remove behavior, re-entry
-protection, relative/parent/nested lookup, listener-owned data binding, and
-nested artboard propagation remain follow-up `#12` slices.
+contract below. At that point, public
+`DataBindContainer::updateDataBinds(true)` scheduling outside that path,
+range-mapper groups in target-to-source scheduling, remaining converter
+families, list source/target propagation, imported/owned contexts, broader
+dirty/update queues, pending add/remove behavior, re-entry protection,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remained follow-up `#12` slices.
+
+Current #12 update: range-mapper target-to-source execution now includes the
+first direct `DataConverterGroup` shape containing a `DataConverterRangeMapper`.
+A main-`ToSource | TwoWay` grouped number bind applies child converters in C++
+forward group order (`RangeMapper -> OperationValue`) before writing the
+source, and a second direct bind observes that grouped source value after
+normal source-to-target application. The contract is
+`docs/prototypes/data-binding-graph-range-mapper-group-target-to-source-runtime-contract.md`.
+Main-`ToTarget | TwoWay` reverse group scheduling, public
+`DataBindContainer::updateDataBinds(true)` scheduling, resolved-interpolator
+range-mapper group children, stateful converter children, remaining converter
+families, list source/target propagation, imported/owned contexts, broader
+dirty/update queues, pending add/remove behavior, re-entry protection,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
 
 Current #12 update: graph-owned number target-to-source binding now pins C++
 main-direction converter dispatch with exact source/target probe reporting. A

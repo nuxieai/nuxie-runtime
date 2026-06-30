@@ -37,7 +37,9 @@ the full public `updateDataBinds(true)` scheduler path remains out of scope.
   the state-machine bindable-property action path.
 - Exact `advancedDataContext()` source-to-target scheduling for neighboring
   ordinary `ToTarget` observer binds.
-- Range-mapper groups in target-to-source runtime scheduling.
+- Range-mapper groups beyond the first direct
+  `RangeMapper -> OperationValue` target-to-source group covered by
+  `docs/prototypes/data-binding-graph-range-mapper-group-target-to-source-runtime-contract.md`.
 - Non-number range-mapper sources or targets.
 - Formula, number-to-list, generated-list, scripted, and stateful converter
   scheduling.

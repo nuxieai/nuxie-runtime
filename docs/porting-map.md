@@ -1169,6 +1169,21 @@ scripted scheduling, broader `DataBindContainer` dirty queues,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
 
+Current #12 update: deterministic `DataConverterFormula` runtime execution now
+also admits the remaining graph-represented non-number fallback sources for the
+current number-target path: enum, color, string, and trigger. The graph carries
+each source kind into the formula converter so C++'s early non-number branch
+writes `0.0` instead of skipping the bind. C++ probe coverage uses non-zero
+imported bindable target defaults through the existing `BlendState1DViewModel`
+consumer to prove each fallback write is observable. The contract is
+`docs/prototypes/data-binding-graph-formula-remaining-fallbacks-runtime-contract.md`.
+Formula functions/randoms, formula parent-source binding and dirt propagation,
+asset/artboard/view-model/list formula sources, reverse conversion,
+target-to-source queues, number-to-list/generated-list/scripted scheduling,
+broader `DataBindContainer` dirty queues, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
+
 Current #12 update: `BindablePropertyViewModel.propertyValue` now has its first
 graph-owned source binding slice. Default-context
 `ViewModelInstanceViewModel.propertyValue` sources resolve through the

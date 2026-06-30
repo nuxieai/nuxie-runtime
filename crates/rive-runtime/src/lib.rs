@@ -11429,6 +11429,16 @@ fn runtime_bindable_number_default_view_model_source(
                 RuntimeDataBindGraphValue::SymbolListIndex(value)
             } else if let Some(value) = file.view_model_instance_boolean_value_for_object(source) {
                 RuntimeDataBindGraphValue::Boolean(value)
+            } else if source.type_name == "ViewModelInstanceEnum" {
+                RuntimeDataBindGraphValue::Enum(source.uint_property("propertyValue")?)
+            } else if let Some(value) = file.view_model_instance_color_value_for_object(source) {
+                RuntimeDataBindGraphValue::Color(value)
+            } else if let Some(value) =
+                file.view_model_instance_string_value_bytes_for_object(source)
+            {
+                RuntimeDataBindGraphValue::String(value.to_vec())
+            } else if let Some(value) = file.view_model_instance_trigger_count_for_object(source) {
+                RuntimeDataBindGraphValue::Trigger(value)
             } else {
                 return None;
             }

@@ -246,6 +246,12 @@ slice.
   write C++'s early fallback value `0.0`. A C++ probe uses a non-zero imported
   bindable target default to prove the fallback write is observable through an
   existing blend-state consumer.
+- Remaining graph-represented `DataConverterFormula` non-number fallback
+  slice: default-context enum, color, string, and trigger sources feeding
+  number targets now enter the formula converter and write C++'s early fallback
+  value `0.0`. A C++ probe matrix uses non-zero imported bindable target
+  defaults to prove each fallback write is observable through an existing
+  blend-state consumer.
 - First graph-owned view-model bindable slice: forward propagation for
   default-context `ViewModelInstanceViewModel.propertyValue` sources feeding
   `BindablePropertyViewModel.propertyValue` targets, covered by a C++ probe
@@ -304,8 +310,8 @@ slice.
   number-to-number converter group paths, and direct stateful
   data-converter-interpolator number smoothing plus grouped
   operation-value-to-interpolator number smoothing, deterministic formula
-  number/symbol-list-index-to-number conversion plus boolean fallback,
-  remaining formula fallback source kinds,
+  number/symbol-list-index-to-number conversion plus graph-represented
+  non-number fallbacks,
   data-binding update queues, relative paths, parent paths, and nested paths.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener

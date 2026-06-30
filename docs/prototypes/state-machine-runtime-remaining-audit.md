@@ -268,6 +268,12 @@ slice.
   through explicit data-context advancement and then overwriting it from the
   unchanged string source through imported trim conversion on the next normal
   advance.
+- String-remove-zeros main-to-target dirty slice: direct
+  `DataConverterStringRemoveZeros` binds now follow C++ state-machine
+  target-dirty behavior for main-`ToTarget | TwoWay` string targets,
+  preserving the manual target edit through explicit data-context advancement
+  and then overwriting it from the unchanged string source through remove-zero
+  conversion on the next normal advance.
 - First `DataConverterToString` graph-owned converter execution slice:
   forward conversion for default-context number sources feeding string targets,
   covered by a C++ probe through an existing string transition-condition

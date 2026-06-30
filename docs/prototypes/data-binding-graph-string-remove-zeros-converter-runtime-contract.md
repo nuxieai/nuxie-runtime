@@ -20,6 +20,9 @@ conversion.
 - Direct `DataConverterStringRemoveZeros` converters.
 - Forward source-to-target conversion covered by a C++ probe through an
   existing string transition-condition consumer.
+- Main-`ToTarget | TwoWay` target-dirty behavior for the direct remove-zeros
+  path is covered by
+  `docs/prototypes/data-binding-graph-string-remove-zeros-main-to-target-two-way-target-dirty-runtime-contract.md`.
 
 ## Out Of Scope
 
@@ -29,7 +32,7 @@ conversion.
 - Non-string sources feeding `DataConverterStringRemoveZeros`.
 - Owned or external view-model remove-zero contexts.
 - Reverse target-to-source propagation.
-- Dirty/update queue parity beyond the existing graph-owned apply point.
+- Dirty/update queue parity beyond the linked state-machine target-dirty path.
 - Relative, parent, and nested source path lookup.
 - Nested artboard propagation.
 

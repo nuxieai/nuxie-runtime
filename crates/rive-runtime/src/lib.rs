@@ -3972,6 +3972,10 @@ impl RuntimeDataBindGraphSourceNode {
             } else {
                 0.0
             })),
+            (
+                Some(RuntimeDataBindGraphConverter::ToNumber),
+                RuntimeDataBindGraphValue::Enum(value),
+            ) => Some(RuntimeDataBindGraphValue::Number(*value as f32)),
             (Some(RuntimeDataBindGraphConverter::ToNumber), _) => None,
             (Some(RuntimeDataBindGraphConverter::Unsupported), _) => None,
         }
@@ -10112,6 +10116,8 @@ fn runtime_bindable_number_default_view_model_source(
             RuntimeDataBindGraphValue::Number(value)
         } else if let Some(value) = file.view_model_instance_boolean_value_for_object(source) {
             RuntimeDataBindGraphValue::Boolean(value)
+        } else if source.type_name == "ViewModelInstanceEnum" {
+            RuntimeDataBindGraphValue::Enum(source.uint_property("propertyValue")?)
         } else {
             return None;
         }

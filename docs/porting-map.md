@@ -701,6 +701,19 @@ trigger increment, and boolean-to-number, reverse propagation,
 update-queue parity, relative/parent/nested lookup, listener-owned data
 binding, and nested artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: `DataConverterToNumber` runtime execution now also admits
+default-context enum sources feeding `BindablePropertyNumber.propertyValue`
+targets. The graph keeps the raw enum `propertyValue` as the source node value
+and converts it to `f32` before number target writes. C++ probe coverage
+verifies the converted value through a `BlendState1DViewModel` consumer. The
+contract is
+`docs/prototypes/data-binding-graph-to-number-enum-converter-runtime-contract.md`.
+Stable public source handles, list/symbol/view-model bindables, remaining
+`DataConverterToNumber` input kinds, converters beyond boolean negation,
+trigger increment, boolean-to-number, and enum-to-number, reverse propagation,
+update-queue parity, relative/parent/nested lookup, listener-owned data
+binding, and nested artboard propagation remain follow-up `#12` slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

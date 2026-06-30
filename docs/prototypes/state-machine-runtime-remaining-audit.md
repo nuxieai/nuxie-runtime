@@ -295,6 +295,12 @@ slice.
   bind drives an existing symbol-list-index-to-string transition-condition
   consumer. This matches C++'s uint-like target path; there is no separate
   `BindablePropertySymbolListIndex` schema type.
+- Trigger graph-owned target-to-source slice: direct default-context trigger
+  sources feeding trigger targets now honor `ToSource | TwoWay` target mutation
+  on explicit data-context advance. A C++ probe uses two binds to the same
+  source so a mutated first bind writes the trigger source before a second bind
+  drives an existing trigger-to-string transition-condition consumer, while the
+  existing trigger reset still runs after source-to-target application.
 - First graph-owned view-model bindable slice: forward propagation for
   default-context `ViewModelInstanceViewModel.propertyValue` sources feeding
   `BindablePropertyViewModel.propertyValue` targets, covered by a C++ probe
@@ -355,7 +361,7 @@ slice.
   operation-value-to-interpolator number smoothing, deterministic formula
   number/symbol-list-index-to-number conversion plus graph-represented
   non-number fallbacks,
-  first direct number/boolean/string/color/enum/asset/artboard/symbol-list-index
+  first direct number/boolean/string/color/enum/asset/artboard/symbol-list-index/trigger
   target-to-source propagation,
   data-binding update queues, remaining target-to-source value kinds and
   reverse converters, relative paths, parent paths, and nested paths.

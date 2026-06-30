@@ -1320,6 +1320,23 @@ dirty queues, pending add/remove behavior, re-entry protection,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
 
+Current #12 update: graph-owned target-to-source runtime behavior now also
+covers direct default-context trigger binds. Mutating a
+`BindablePropertyTrigger.propertyValue` target for a `ToSource | TwoWay`
+`DataBindContext` marks that graph binding dirty; explicit
+`advance_data_context` writes the target trigger count back into the bound
+`ViewModelInstanceTrigger.propertyValue` source before normal source-to-target
+application, and the existing trigger reset still runs afterward. C++ probe
+coverage uses two binds to the same source so the second bind's existing
+trigger-to-string `TransitionViewModelCondition` consumer observes the
+target-to-source write without adding new probe report fields. The contract is
+`docs/prototypes/data-binding-graph-trigger-target-to-source-runtime-contract.md`.
+Target-to-source for view-model and list value kinds, pure `ToSource` without
+`TwoWay`, reverse converter execution, imported/owned contexts, pending dirty
+queues, pending add/remove behavior, re-entry protection,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
+
 Current #12 update: `BindablePropertyViewModel.propertyValue` now has its first
 graph-owned source binding slice. Default-context
 `ViewModelInstanceViewModel.propertyValue` sources resolve through the

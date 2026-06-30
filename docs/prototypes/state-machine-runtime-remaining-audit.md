@@ -88,6 +88,10 @@ slice.
 - Owned runtime `ViewModelInstanceTrigger` context binding through
   `RuntimeDataBindGraph` source path re-resolution, covered by a C++ probe
   through an existing transition-condition consumer.
+- External and owned view-model trigger identity for `StateMachineFireTrigger`,
+  trigger/self conditions, default trigger reports, and explicit data-context
+  trigger reset, covered by C++ probes for non-default imported and owned
+  trigger contexts.
 
 ## Remaining Runtime Slices
 
@@ -104,8 +108,7 @@ slice.
   above, add source mutation APIs beyond the default
   number/boolean/string/color/enum/asset/artboard/trigger source nodes,
   list/symbol/view-model bindables, converters, data-binding update queues,
-  relative paths, parent paths, nested paths, and external trigger reset/report
-  identity for fire triggers and conditions.
+  relative paths, parent paths, and nested paths.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener
   actions.

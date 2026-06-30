@@ -529,8 +529,8 @@ transition-condition paths. The contract is
 `docs/prototypes/data-binding-graph-external-view-model-context-runtime-contract.md`.
 Arbitrary user-created runtime view-model instances, public source handles,
 converters, reverse propagation, update-queue parity, relative/parent/nested
-lookup, listener-owned data binding, external trigger reset/report identity,
-and nested artboard propagation remain follow-up `#12` slices.
+lookup, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
 
 Current #12 update: the first owned runtime view-model context path now covers
 number sources. Rust exposes `RuntimeOwnedViewModelInstance::new` plus
@@ -544,9 +544,8 @@ the state machine. The contract is
 `docs/prototypes/data-binding-graph-owned-view-model-number-context-runtime-contract.md`.
 Owned boolean/string/color/enum/asset/artboard/trigger values, stable public
 source handles, converters, reverse propagation, update-queue parity,
-relative/parent/nested lookup, listener-owned data binding, external trigger
-reset/report identity, and nested artboard propagation remain follow-up `#12`
-slices.
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
 
 Current #12 update: owned runtime view-model contexts now also cover boolean
 sources. Rust exposes `RuntimeOwnedViewModelInstance::set_boolean_by_property_index`,
@@ -557,9 +556,8 @@ The contract is
 `docs/prototypes/data-binding-graph-owned-view-model-boolean-context-runtime-contract.md`.
 Owned string/color/enum/asset/artboard/trigger values, stable public source
 handles, converters, reverse propagation, update-queue parity,
-relative/parent/nested lookup, listener-owned data binding, external trigger
-reset/report identity, and nested artboard propagation remain follow-up `#12`
-slices.
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
 
 Current #12 update: owned runtime view-model contexts now also cover string
 sources as raw bytes. Rust exposes
@@ -571,8 +569,8 @@ contract is
 `docs/prototypes/data-binding-graph-owned-view-model-string-context-runtime-contract.md`.
 Owned color/enum/asset/artboard/trigger values, stable public source handles,
 converters, reverse propagation, update-queue parity, relative/parent/nested
-lookup, listener-owned data binding, external trigger reset/report identity,
-and nested artboard propagation remain follow-up `#12` slices.
+lookup, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
 
 Current #12 update: owned runtime view-model contexts now also cover color
 sources as packed ARGB values. Rust exposes
@@ -583,8 +581,8 @@ before state-machine transition evaluation. The C++ probe mirrors this with
 `docs/prototypes/data-binding-graph-owned-view-model-color-context-runtime-contract.md`.
 Owned enum/asset/artboard/trigger values, stable public source handles,
 converters, reverse propagation, update-queue parity, relative/parent/nested
-lookup, listener-owned data binding, external trigger reset/report identity,
-and nested artboard propagation remain follow-up `#12` slices.
+lookup, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
 
 Current #12 update: owned runtime view-model contexts now also cover enum
 sources as raw `propertyValue` integers. Rust exposes
@@ -596,8 +594,8 @@ owned C++ runtime enum by value index. The contract is
 `docs/prototypes/data-binding-graph-owned-view-model-enum-context-runtime-contract.md`.
 Owned asset/artboard/trigger values, stable public source handles, converters,
 reverse propagation, update-queue parity, relative/parent/nested lookup,
-listener-owned data binding, external trigger reset/report identity, and nested
-artboard propagation remain follow-up `#12` slices.
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
 
 Current #12 update: owned runtime view-model contexts now also cover asset
 image sources as raw `propertyValue` integers. Rust exposes
@@ -609,8 +607,8 @@ the fresh C++ asset instance value before binding. The contract is
 `docs/prototypes/data-binding-graph-owned-view-model-asset-context-runtime-contract.md`.
 Owned artboard/trigger values, stable public source handles, converters,
 reverse propagation, update-queue parity, relative/parent/nested lookup,
-listener-owned data binding, external trigger reset/report identity, and nested
-artboard propagation remain follow-up `#12` slices.
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
 
 Current #12 update: owned runtime view-model contexts now also cover artboard
 sources as raw `propertyValue` integers. Rust exposes
@@ -622,8 +620,8 @@ the fresh C++ artboard instance value before binding. The contract is
 `docs/prototypes/data-binding-graph-owned-view-model-artboard-context-runtime-contract.md`.
 Owned trigger values, stable public source handles, converters, reverse
 propagation, update-queue parity, relative/parent/nested lookup,
-listener-owned data binding, external trigger reset/report identity, and nested
-artboard propagation remain follow-up `#12` slices.
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
 
 Current #12 update: owned runtime view-model contexts now also cover trigger
 sources as raw trigger-count `propertyValue` integers. Rust exposes
@@ -636,9 +634,26 @@ the fresh C++ trigger instance value before binding. The contract is
 The finite owned source-node context set now covers
 number/boolean/string/color/enum/asset/artboard/trigger. Stable public source
 handles, converters, reverse propagation, update-queue parity,
-relative/parent/nested lookup, listener-owned data binding, external trigger
-reset/report identity, and nested artboard propagation remain follow-up `#12`
-slices.
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
+
+Current #12 update: external and owned trigger identity for
+`StateMachineFireTrigger`, trigger/self conditions, and explicit
+`advancedDataContext()` reset is now separated from the default imported
+trigger report view. `StateMachineInstance` keeps the C++ probe-visible default
+`ViewModelInstanceTrigger` report values distinct from the active bound
+non-default imported or owned trigger context; firing and reset mutate the
+active context, and graph-owned trigger source nodes reset on data-context
+advance so raw `BindablePropertyTrigger.propertyValue` bindings do not retain
+stale active counts. C++ probe coverage binds both non-default imported and
+owned trigger contexts, fires state-machine trigger actions, advances the data
+context, and verifies the default imported trigger report identity remains
+unchanged. The contract is
+`docs/prototypes/data-binding-graph-external-trigger-identity-runtime-contract.md`.
+Stable public source handles, list/symbol/view-model bindables, converters,
+reverse propagation, update-queue parity, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
 
 ## #13: Nested Artboards And Hosts
 

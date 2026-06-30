@@ -3861,6 +3861,40 @@ impl RuntimeDataBindGraph {
         Some(global_id)
     }
 
+    fn reset_bound_trigger_sources(&mut self) -> bool {
+        if !self.default_view_model_context_bound() {
+            return false;
+        }
+        let default_context_bound = self.default_view_model_source_context_bound();
+        let mut changed = false;
+        for source in &mut self.sources {
+            if !source.bound {
+                continue;
+            }
+            let RuntimeDataBindGraphValue::Trigger(value) = &mut source.value else {
+                continue;
+            };
+            if *value != 0 {
+                changed = true;
+            }
+            *value = 0;
+            if default_context_bound {
+                let RuntimeDataBindGraphValue::Trigger(default_value) = &mut source.default_value
+                else {
+                    continue;
+                };
+                if *default_value != 0 {
+                    changed = true;
+                }
+                *default_value = 0;
+            }
+        }
+        if changed {
+            self.default_view_model_bindings_dirty = true;
+        }
+        changed
+    }
+
     fn apply_default_view_model_bindings(
         &mut self,
         mut targets: RuntimeDataBindGraphTargetsMut<'_>,
@@ -6436,6 +6470,7 @@ pub struct StateMachineInstance {
     bindable_triggers: Vec<StateMachineBindableTriggerInstance>,
     bindable_view_models: Vec<StateMachineBindableViewModelInstance>,
     bindable_booleans: Vec<StateMachineBindableBooleanInstance>,
+    default_view_model_triggers: Vec<StateMachineViewModelTriggerInstance>,
     view_model_triggers: Vec<StateMachineViewModelTriggerInstance>,
     layers: Vec<StateMachineLayerInstance>,
     reported_events: Vec<StateMachineReportedEvent>,
@@ -6537,6 +6572,7 @@ impl StateMachineInstance {
             .iter()
             .map(StateMachineViewModelTriggerInstance::new)
             .collect::<Vec<_>>();
+        let default_view_model_triggers = view_model_triggers.clone();
         let layers = state_machine
             .layers
             .iter()
@@ -6557,6 +6593,7 @@ impl StateMachineInstance {
             bindable_triggers,
             bindable_view_models,
             bindable_booleans,
+            default_view_model_triggers,
             view_model_triggers,
             layers,
             reported_events: Vec::new(),
@@ -6902,9 +6939,19 @@ impl StateMachineInstance {
                 })
         }) {
             if let Some(trigger) = self
-                .view_model_triggers
+                .default_view_model_triggers
                 .iter_mut()
                 .find(|trigger| trigger.global_id == trigger_global_id)
+            {
+                trigger.set_value(value);
+            }
+            if self
+                .data_bind_graph
+                .default_view_model_source_context_bound()
+                && let Some(trigger) = self
+                    .view_model_triggers
+                    .iter_mut()
+                    .find(|trigger| trigger.global_id == trigger_global_id)
             {
                 trigger.set_value(value);
             }
@@ -6925,6 +6972,7 @@ impl StateMachineInstance {
         if !self.data_bind_graph.bind_default_view_model_context() {
             return false;
         }
+        self.bind_active_default_view_model_triggers();
         self.needs_advance = true;
         true
     }
@@ -6942,6 +6990,7 @@ impl StateMachineInstance {
         ) {
             return false;
         }
+        self.bind_active_imported_view_model_triggers(file, view_model_index, instance_index);
         self.needs_advance = true;
         true
     }
@@ -6953,6 +7002,7 @@ impl StateMachineInstance {
         if !self.data_bind_graph.bind_owned_view_model_context(context) {
             return false;
         }
+        self.bind_active_owned_view_model_triggers(context);
         self.needs_advance = true;
         true
     }
@@ -6964,6 +7014,13 @@ impl StateMachineInstance {
         if self.data_bind_graph.default_view_model_context_bound() {
             for trigger in &mut self.view_model_triggers {
                 trigger.reset();
+            }
+            self.data_bind_graph.reset_bound_trigger_sources();
+            if self
+                .data_bind_graph
+                .default_view_model_source_context_bound()
+            {
+                self.sync_default_view_model_triggers_from_active();
             }
         }
         true
@@ -6992,17 +7049,17 @@ impl StateMachineInstance {
     }
 
     pub fn view_model_trigger_count(&self, index: usize) -> Option<u64> {
-        self.view_model_triggers
+        self.default_view_model_triggers
             .get(index)
             .map(StateMachineViewModelTriggerInstance::value)
     }
 
     pub fn view_model_trigger_value_count(&self) -> usize {
-        self.view_model_triggers.len()
+        self.default_view_model_triggers.len()
     }
 
     pub fn view_model_trigger_property_id(&self, index: usize) -> Option<u32> {
-        self.view_model_triggers
+        self.default_view_model_triggers
             .get(index)
             .map(StateMachineViewModelTriggerInstance::view_model_property_id)
     }
@@ -7055,6 +7112,12 @@ impl StateMachineInstance {
         for input in &mut self.inputs {
             input.advanced();
         }
+        if self
+            .data_bind_graph
+            .default_view_model_source_context_bound()
+        {
+            self.sync_default_view_model_triggers_from_active();
+        }
         self.needs_advance = keep_going || !self.reported_events.is_empty();
         self.needs_advance
     }
@@ -7071,6 +7134,77 @@ impl StateMachineInstance {
                 artboards: &mut self.bindable_artboards,
                 triggers: &mut self.bindable_triggers,
             });
+    }
+
+    fn bind_active_default_view_model_triggers(&mut self) {
+        self.view_model_triggers = self.default_view_model_triggers.clone();
+    }
+
+    fn bind_active_imported_view_model_triggers(
+        &mut self,
+        file: &RuntimeFile,
+        view_model_index: usize,
+        instance_index: usize,
+    ) {
+        let instance = file
+            .view_model(view_model_index)
+            .and_then(|view_model| view_model.instances.into_iter().nth(instance_index));
+        let Ok(view_model_path_id) = u32::try_from(view_model_index) else {
+            self.reset_active_view_model_triggers();
+            return;
+        };
+        let Some(instance) = instance else {
+            self.reset_active_view_model_triggers();
+            return;
+        };
+
+        let mut active = self.default_view_model_triggers.clone();
+        for trigger in &mut active {
+            let path = [view_model_path_id, trigger.view_model_property_id];
+            let value = file
+                .data_context_view_model_property_for_instance(instance.object, &path)
+                .and_then(|source| file.view_model_instance_trigger_count_for_object(source));
+            if let Some(value) = value {
+                trigger.replace_value(value);
+            } else {
+                trigger.reset();
+            }
+        }
+        self.view_model_triggers = active;
+    }
+
+    fn bind_active_owned_view_model_triggers(&mut self, context: &RuntimeOwnedViewModelInstance) {
+        let mut active = self.default_view_model_triggers.clone();
+        for trigger in &mut active {
+            let value = usize::try_from(trigger.view_model_property_id)
+                .ok()
+                .and_then(|property_index| context.trigger_value_by_property_index(property_index));
+            if let Some(value) = value {
+                trigger.replace_value(value);
+            } else {
+                trigger.reset();
+            }
+        }
+        self.view_model_triggers = active;
+    }
+
+    fn reset_active_view_model_triggers(&mut self) {
+        self.view_model_triggers = self.default_view_model_triggers.clone();
+        for trigger in &mut self.view_model_triggers {
+            trigger.reset();
+        }
+    }
+
+    fn sync_default_view_model_triggers_from_active(&mut self) {
+        for default_trigger in &mut self.default_view_model_triggers {
+            if let Some(active_trigger) = self
+                .view_model_triggers
+                .iter()
+                .find(|trigger| trigger.global_id == default_trigger.global_id)
+            {
+                *default_trigger = active_trigger.clone();
+            }
+        }
     }
 }
 
@@ -7650,6 +7784,12 @@ impl StateMachineViewModelTriggerInstance {
         self.value = value;
         self.changed = true;
         true
+    }
+
+    fn replace_value(&mut self, value: u64) {
+        self.value = value;
+        self.changed = false;
+        self.used_layers.clear();
     }
 
     fn reset(&mut self) {

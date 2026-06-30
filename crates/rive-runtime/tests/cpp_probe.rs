@@ -1537,6 +1537,13 @@ fn push_state_machine_fire_event(bytes: &mut Vec<u8>, event_local_id: u64, occur
 }
 
 fn synthetic_state_machine_fire_trigger_actions(file_id: u64) -> Vec<u8> {
+    synthetic_state_machine_fire_trigger_actions_with_alternate(file_id, false)
+}
+
+fn synthetic_state_machine_fire_trigger_actions_with_alternate(
+    file_id: u64,
+    include_alternate: bool,
+) -> Vec<u8> {
     const AT_START: u64 = 0;
     const AT_END: u64 = 1;
 
@@ -1556,6 +1563,16 @@ fn synthetic_state_machine_fire_trigger_actions(file_id: u64) -> Vec<u8> {
             push_uint_property(bytes, "ViewModelInstanceTrigger", "viewModelPropertyId", 0);
             push_uint_property(bytes, "ViewModelInstanceTrigger", "propertyValue", 3);
         });
+        if include_alternate {
+            push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+                push_string_property(bytes, "ViewModelInstance", "name", "alternate");
+                push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+            });
+            push_object_with_properties(bytes, "ViewModelInstanceTrigger", |bytes| {
+                push_uint_property(bytes, "ViewModelInstanceTrigger", "viewModelPropertyId", 0);
+                push_uint_property(bytes, "ViewModelInstanceTrigger", "propertyValue", 0);
+            });
+        }
         push_object_with_properties(bytes, "Artboard", |_| {});
         push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
         push_animation_for_single_node(bytes, 1, 2.0, 12.0);
@@ -7412,6 +7429,149 @@ fn state_machine_viewmodel_trigger_reset_matches_cpp_probe() {
     assert!(
         state_machine.bind_default_view_model_context(),
         "{label} failed to bind default view-model context"
+    );
+    let mut rust_reports = Vec::new();
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    rust_reports.push((advanced, state_machine.clone()));
+    assert!(state_machine.set_bool(0, true));
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    rust_reports.push((advanced, state_machine.clone()));
+    assert!(
+        state_machine.advance_data_context(),
+        "{label} failed to advance data context"
+    );
+    rust_reports.push((false, state_machine.clone()));
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+    {
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn state_machine_external_viewmodel_fire_trigger_identity_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_external_viewmodel_fire_trigger_identity_cpp.riv";
+    let bytes = synthetic_state_machine_fire_trigger_actions_with_alternate(8403, true);
+    let args = [
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-state-machine-bool".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "true".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine-data-context".to_owned(),
+        "0".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    assert!(
+        state_machine.bind_view_model_instance_context(&runtime, 0, 1),
+        "{label} failed to bind external view-model instance context"
+    );
+    let mut rust_reports = Vec::new();
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    rust_reports.push((advanced, state_machine.clone()));
+    assert!(state_machine.set_bool(0, true));
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    rust_reports.push((advanced, state_machine.clone()));
+    assert!(
+        state_machine.advance_data_context(),
+        "{label} failed to advance data context"
+    );
+    rust_reports.push((false, state_machine.clone()));
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+    {
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn state_machine_owned_viewmodel_fire_trigger_identity_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_owned_viewmodel_fire_trigger_identity_cpp.riv";
+    let bytes = synthetic_state_machine_fire_trigger_actions(8404);
+    let args = [
+        "--runtime-bind-owned-view-model-trigger-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-state-machine-bool".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "true".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine-data-context".to_owned(),
+        "0".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    let context = RuntimeOwnedViewModelInstance::new(&runtime, 0)
+        .unwrap_or_else(|| panic!("missing Rust owned view-model context for {label}"));
+
+    assert!(
+        state_machine.bind_owned_view_model_context(&context),
+        "{label} failed to bind owned view-model context"
     );
     let mut rust_reports = Vec::new();
     let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);

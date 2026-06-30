@@ -33,8 +33,8 @@ slice.
   `ViewModelInstanceNumber`, `ViewModelInstanceBoolean`,
   `ViewModelInstanceString`, `ViewModelInstanceColor`,
   `ViewModelInstanceEnum`, `ViewModelInstanceAssetImage`,
-  `ViewModelInstanceArtboard`, and `ViewModelInstanceTrigger` sources covered
-  by current probes.
+  `ViewModelInstanceArtboard`, and `ViewModelInstanceTrigger` sources routed
+  through `RuntimeDataBindGraph` and covered by current probes.
 
 ## Remaining Runtime Slices
 
@@ -44,12 +44,11 @@ slice.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
 - Live view-model APIs and data-binding propagation governed by
-  `docs/prototypes/data-binding-graph-runtime-contract.md`: first migrate the
-  finite default source-to-target `propertyValue` bind set listed above behind a
-  `RuntimeDataBindGraph`, then add binding external contexts, source mutation
-  APIs, list/symbol/view-model bindables, converters, data-binding update
-  queues, relative paths, parent paths, and nested paths for fire triggers and
-  conditions.
+  `docs/prototypes/data-binding-graph-runtime-contract.md`: beyond the finite
+  graph-routed default source-to-target `propertyValue` bind set listed above,
+  add binding external contexts, source mutation APIs, list/symbol/view-model
+  bindables, converters, data-binding update queues, relative paths, parent
+  paths, and nested paths for fire triggers and conditions.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener
   actions.

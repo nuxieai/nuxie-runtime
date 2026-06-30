@@ -2874,6 +2874,306 @@ struct RuntimeViewModelTrigger {
 }
 
 #[derive(Debug, Clone)]
+struct RuntimeDataBindGraph {
+    data_context_present: bool,
+    default_view_model_context_bound: bool,
+    default_view_model_bindings_dirty: bool,
+    default_view_model_bindings: Vec<RuntimeDataBindGraphDefaultBinding>,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeDataBindGraphDefaultBinding {
+    data_bind_index: usize,
+    target: RuntimeDataBindGraphTarget,
+    value: RuntimeDataBindGraphValue,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum RuntimeDataBindGraphTarget {
+    Number { global_id: u32 },
+    Boolean { global_id: u32 },
+    String { global_id: u32 },
+    Color { global_id: u32 },
+    Enum { global_id: u32 },
+    Asset { global_id: u32 },
+    Artboard { global_id: u32 },
+    Trigger { global_id: u32 },
+}
+
+#[derive(Debug, Clone)]
+enum RuntimeDataBindGraphValue {
+    Number(f32),
+    Boolean(bool),
+    String(Vec<u8>),
+    Color(u32),
+    Enum(u64),
+    Asset(u64),
+    Artboard(u64),
+    Trigger(u64),
+}
+
+struct RuntimeDataBindGraphTargetsMut<'a> {
+    numbers: &'a mut [StateMachineBindableNumberInstance],
+    booleans: &'a mut [StateMachineBindableBooleanInstance],
+    strings: &'a mut [StateMachineBindableStringInstance],
+    colors: &'a mut [StateMachineBindableColorInstance],
+    enums: &'a mut [StateMachineBindableEnumInstance],
+    assets: &'a mut [StateMachineBindableAssetInstance],
+    artboards: &'a mut [StateMachineBindableArtboardInstance],
+    triggers: &'a mut [StateMachineBindableTriggerInstance],
+}
+
+impl RuntimeDataBindGraph {
+    fn new(state_machine: &RuntimeStateMachine) -> Self {
+        let mut default_view_model_bindings = Vec::new();
+
+        for bindable in &state_machine.bindable_numbers {
+            default_view_model_bindings.extend(bindable.default_view_model_sources.iter().map(
+                |source| RuntimeDataBindGraphDefaultBinding {
+                    data_bind_index: source.data_bind_index,
+                    target: RuntimeDataBindGraphTarget::Number {
+                        global_id: bindable.global_id,
+                    },
+                    value: RuntimeDataBindGraphValue::Number(source.value),
+                },
+            ));
+        }
+        for bindable in &state_machine.bindable_booleans {
+            default_view_model_bindings.extend(bindable.default_view_model_sources.iter().map(
+                |source| RuntimeDataBindGraphDefaultBinding {
+                    data_bind_index: source.data_bind_index,
+                    target: RuntimeDataBindGraphTarget::Boolean {
+                        global_id: bindable.global_id,
+                    },
+                    value: RuntimeDataBindGraphValue::Boolean(source.value),
+                },
+            ));
+        }
+        for bindable in &state_machine.bindable_strings {
+            default_view_model_bindings.extend(bindable.default_view_model_sources.iter().map(
+                |source| RuntimeDataBindGraphDefaultBinding {
+                    data_bind_index: source.data_bind_index,
+                    target: RuntimeDataBindGraphTarget::String {
+                        global_id: bindable.global_id,
+                    },
+                    value: RuntimeDataBindGraphValue::String(source.value.clone()),
+                },
+            ));
+        }
+        for bindable in &state_machine.bindable_colors {
+            default_view_model_bindings.extend(bindable.default_view_model_sources.iter().map(
+                |source| RuntimeDataBindGraphDefaultBinding {
+                    data_bind_index: source.data_bind_index,
+                    target: RuntimeDataBindGraphTarget::Color {
+                        global_id: bindable.global_id,
+                    },
+                    value: RuntimeDataBindGraphValue::Color(source.value),
+                },
+            ));
+        }
+        for bindable in &state_machine.bindable_enums {
+            default_view_model_bindings.extend(bindable.default_view_model_sources.iter().map(
+                |source| RuntimeDataBindGraphDefaultBinding {
+                    data_bind_index: source.data_bind_index,
+                    target: RuntimeDataBindGraphTarget::Enum {
+                        global_id: bindable.global_id,
+                    },
+                    value: RuntimeDataBindGraphValue::Enum(source.value),
+                },
+            ));
+        }
+        for bindable in &state_machine.bindable_assets {
+            default_view_model_bindings.extend(bindable.default_view_model_sources.iter().map(
+                |source| RuntimeDataBindGraphDefaultBinding {
+                    data_bind_index: source.data_bind_index,
+                    target: RuntimeDataBindGraphTarget::Asset {
+                        global_id: bindable.global_id,
+                    },
+                    value: RuntimeDataBindGraphValue::Asset(source.value),
+                },
+            ));
+        }
+        for bindable in &state_machine.bindable_artboards {
+            default_view_model_bindings.extend(bindable.default_view_model_sources.iter().map(
+                |source| RuntimeDataBindGraphDefaultBinding {
+                    data_bind_index: source.data_bind_index,
+                    target: RuntimeDataBindGraphTarget::Artboard {
+                        global_id: bindable.global_id,
+                    },
+                    value: RuntimeDataBindGraphValue::Artboard(source.value),
+                },
+            ));
+        }
+        for bindable in &state_machine.bindable_triggers {
+            default_view_model_bindings.extend(bindable.default_view_model_sources.iter().map(
+                |source| RuntimeDataBindGraphDefaultBinding {
+                    data_bind_index: source.data_bind_index,
+                    target: RuntimeDataBindGraphTarget::Trigger {
+                        global_id: bindable.global_id,
+                    },
+                    value: RuntimeDataBindGraphValue::Trigger(source.value),
+                },
+            ));
+        }
+
+        default_view_model_bindings.sort_by_key(|binding| binding.data_bind_index);
+
+        Self {
+            data_context_present: false,
+            default_view_model_context_bound: false,
+            default_view_model_bindings_dirty: false,
+            default_view_model_bindings,
+        }
+    }
+
+    fn data_context_present(&self) -> bool {
+        self.data_context_present
+    }
+
+    fn default_view_model_context_bound(&self) -> bool {
+        self.default_view_model_context_bound
+    }
+
+    fn bind_empty_data_context(&mut self) -> bool {
+        if self.data_context_present {
+            return false;
+        }
+        self.data_context_present = true;
+        self.default_view_model_context_bound = false;
+        self.default_view_model_bindings_dirty = false;
+        true
+    }
+
+    fn bind_default_view_model_context(&mut self) -> bool {
+        if self.data_context_present && self.default_view_model_context_bound {
+            return false;
+        }
+        self.data_context_present = true;
+        self.default_view_model_context_bound = true;
+        self.default_view_model_bindings_dirty = true;
+        true
+    }
+
+    fn apply_default_view_model_bindings(
+        &mut self,
+        mut targets: RuntimeDataBindGraphTargetsMut<'_>,
+    ) {
+        if !self.default_view_model_context_bound || !self.default_view_model_bindings_dirty {
+            return;
+        }
+        self.default_view_model_bindings_dirty = false;
+
+        for binding in &self.default_view_model_bindings {
+            targets.apply_default_view_model_binding(binding);
+        }
+    }
+}
+
+impl RuntimeDataBindGraphTargetsMut<'_> {
+    fn apply_default_view_model_binding(&mut self, binding: &RuntimeDataBindGraphDefaultBinding) {
+        match (&binding.target, &binding.value) {
+            (
+                RuntimeDataBindGraphTarget::Number { global_id },
+                RuntimeDataBindGraphValue::Number(value),
+            ) => {
+                if let Some(target) = self
+                    .numbers
+                    .iter_mut()
+                    .find(|target| target.global_id == *global_id)
+                {
+                    target.set_value(*value);
+                }
+            }
+            (
+                RuntimeDataBindGraphTarget::Boolean { global_id },
+                RuntimeDataBindGraphValue::Boolean(value),
+            ) => {
+                if let Some(target) = self
+                    .booleans
+                    .iter_mut()
+                    .find(|target| target.global_id == *global_id)
+                {
+                    target.set_value(*value);
+                }
+            }
+            (
+                RuntimeDataBindGraphTarget::String { global_id },
+                RuntimeDataBindGraphValue::String(value),
+            ) => {
+                if let Some(target) = self
+                    .strings
+                    .iter_mut()
+                    .find(|target| target.global_id == *global_id)
+                {
+                    target.set_value(value);
+                }
+            }
+            (
+                RuntimeDataBindGraphTarget::Color { global_id },
+                RuntimeDataBindGraphValue::Color(value),
+            ) => {
+                if let Some(target) = self
+                    .colors
+                    .iter_mut()
+                    .find(|target| target.global_id == *global_id)
+                {
+                    target.set_value(*value);
+                }
+            }
+            (
+                RuntimeDataBindGraphTarget::Enum { global_id },
+                RuntimeDataBindGraphValue::Enum(value),
+            ) => {
+                if let Some(target) = self
+                    .enums
+                    .iter_mut()
+                    .find(|target| target.global_id == *global_id)
+                {
+                    target.set_value(*value);
+                }
+            }
+            (
+                RuntimeDataBindGraphTarget::Asset { global_id },
+                RuntimeDataBindGraphValue::Asset(value),
+            ) => {
+                if let Some(target) = self
+                    .assets
+                    .iter_mut()
+                    .find(|target| target.global_id == *global_id)
+                {
+                    target.set_value(*value);
+                }
+            }
+            (
+                RuntimeDataBindGraphTarget::Artboard { global_id },
+                RuntimeDataBindGraphValue::Artboard(value),
+            ) => {
+                if let Some(target) = self
+                    .artboards
+                    .iter_mut()
+                    .find(|target| target.global_id == *global_id)
+                {
+                    target.set_value(*value);
+                }
+            }
+            (
+                RuntimeDataBindGraphTarget::Trigger { global_id },
+                RuntimeDataBindGraphValue::Trigger(value),
+            ) => {
+                if let Some(target) = self
+                    .triggers
+                    .iter_mut()
+                    .find(|target| target.global_id == *global_id)
+                {
+                    target.set_value(*value);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct RuntimeStateMachineLayer {
     pub global_id: u32,
     pub name: Option<String>,
@@ -5321,16 +5621,7 @@ pub struct StateMachineInstance {
     reported_events: Vec<StateMachineReportedEvent>,
     changed_state_count: usize,
     needs_advance: bool,
-    data_context_present: bool,
-    data_context_view_model_bound: bool,
-    default_view_model_number_bindings_dirty: bool,
-    default_view_model_boolean_bindings_dirty: bool,
-    default_view_model_string_bindings_dirty: bool,
-    default_view_model_color_bindings_dirty: bool,
-    default_view_model_enum_bindings_dirty: bool,
-    default_view_model_asset_bindings_dirty: bool,
-    default_view_model_artboard_bindings_dirty: bool,
-    default_view_model_trigger_bindings_dirty: bool,
+    data_bind_graph: RuntimeDataBindGraph,
 }
 
 #[derive(Debug, Clone)]
@@ -5451,16 +5742,7 @@ impl StateMachineInstance {
             reported_events: Vec::new(),
             changed_state_count: 0,
             needs_advance: false,
-            data_context_present: false,
-            data_context_view_model_bound: false,
-            default_view_model_number_bindings_dirty: false,
-            default_view_model_boolean_bindings_dirty: false,
-            default_view_model_string_bindings_dirty: false,
-            default_view_model_color_bindings_dirty: false,
-            default_view_model_enum_bindings_dirty: false,
-            default_view_model_asset_bindings_dirty: false,
-            default_view_model_artboard_bindings_dirty: false,
-            default_view_model_trigger_bindings_dirty: false,
+            data_bind_graph: RuntimeDataBindGraph::new(state_machine),
         }
     }
 
@@ -5651,38 +5933,26 @@ impl StateMachineInstance {
     }
 
     pub fn bind_empty_data_context(&mut self) -> bool {
-        if self.data_context_present {
+        if !self.data_bind_graph.bind_empty_data_context() {
             return false;
         }
-        self.data_context_present = true;
-        self.data_context_view_model_bound = false;
         self.needs_advance = true;
         true
     }
 
     pub fn bind_default_view_model_context(&mut self) -> bool {
-        if self.data_context_present && self.data_context_view_model_bound {
+        if !self.data_bind_graph.bind_default_view_model_context() {
             return false;
         }
-        self.data_context_present = true;
-        self.data_context_view_model_bound = true;
-        self.default_view_model_number_bindings_dirty = true;
-        self.default_view_model_boolean_bindings_dirty = true;
-        self.default_view_model_string_bindings_dirty = true;
-        self.default_view_model_color_bindings_dirty = true;
-        self.default_view_model_enum_bindings_dirty = true;
-        self.default_view_model_asset_bindings_dirty = true;
-        self.default_view_model_artboard_bindings_dirty = true;
-        self.default_view_model_trigger_bindings_dirty = true;
         self.needs_advance = true;
         true
     }
 
     pub fn advance_data_context(&mut self) -> bool {
-        if !self.data_context_present {
+        if !self.data_bind_graph.data_context_present() {
             return false;
         }
-        if self.data_context_view_model_bound {
+        if self.data_bind_graph.default_view_model_context_bound() {
             for trigger in &mut self.view_model_triggers {
                 trigger.reset();
             }
@@ -5737,14 +6007,9 @@ impl StateMachineInstance {
         self.reported_events.clear();
         self.changed_state_count = 0;
         self.needs_advance = false;
-        self.apply_default_view_model_number_bindings(state_machine);
-        self.apply_default_view_model_boolean_bindings(state_machine);
-        self.apply_default_view_model_string_bindings(state_machine);
-        self.apply_default_view_model_color_bindings(state_machine);
-        self.apply_default_view_model_enum_bindings(state_machine);
-        self.apply_default_view_model_asset_bindings(state_machine);
-        self.apply_default_view_model_artboard_bindings(state_machine);
-        self.apply_default_view_model_trigger_bindings(state_machine);
+        self.apply_default_view_model_bindings();
+        let data_context_present = self.data_bind_graph.data_context_present();
+        let data_context_view_model_bound = self.data_bind_graph.default_view_model_context_bound();
         let mut keep_going = false;
         for (layer_index, (layer_instance, layer)) in self
             .layers
@@ -5768,8 +6033,8 @@ impl StateMachineInstance {
                 &self.bindable_triggers,
                 &self.bindable_view_models,
                 &self.bindable_booleans,
-                self.data_context_present,
-                self.data_context_view_model_bound,
+                data_context_present,
+                data_context_view_model_bound,
                 &mut self.view_model_triggers,
                 &mut self.reported_events,
             );
@@ -5785,278 +6050,18 @@ impl StateMachineInstance {
         self.needs_advance
     }
 
-    fn apply_default_view_model_number_bindings(&mut self, state_machine: &RuntimeStateMachine) {
-        if !self.data_context_view_model_bound || !self.default_view_model_number_bindings_dirty {
-            return;
-        }
-        self.default_view_model_number_bindings_dirty = false;
-
-        let mut sources = state_machine
-            .bindable_numbers
-            .iter()
-            .flat_map(|bindable_number| {
-                bindable_number
-                    .default_view_model_sources
-                    .iter()
-                    .map(|source| {
-                        (
-                            source.data_bind_index,
-                            bindable_number.global_id,
-                            source.value,
-                        )
-                    })
-            })
-            .collect::<Vec<_>>();
-        sources.sort_by_key(|(data_bind_index, _, _)| *data_bind_index);
-
-        for (_, global_id, value) in sources {
-            if let Some(bindable_number) = self
-                .bindable_numbers
-                .iter_mut()
-                .find(|bindable_number| bindable_number.global_id == global_id)
-            {
-                bindable_number.set_value(value);
-            }
-        }
-    }
-
-    fn apply_default_view_model_boolean_bindings(&mut self, state_machine: &RuntimeStateMachine) {
-        if !self.data_context_view_model_bound || !self.default_view_model_boolean_bindings_dirty {
-            return;
-        }
-        self.default_view_model_boolean_bindings_dirty = false;
-
-        let mut sources = state_machine
-            .bindable_booleans
-            .iter()
-            .flat_map(|bindable_boolean| {
-                bindable_boolean
-                    .default_view_model_sources
-                    .iter()
-                    .map(|source| {
-                        (
-                            source.data_bind_index,
-                            bindable_boolean.global_id,
-                            source.value,
-                        )
-                    })
-            })
-            .collect::<Vec<_>>();
-        sources.sort_by_key(|(data_bind_index, _, _)| *data_bind_index);
-
-        for (_, global_id, value) in sources {
-            if let Some(bindable_boolean) = self
-                .bindable_booleans
-                .iter_mut()
-                .find(|bindable_boolean| bindable_boolean.global_id == global_id)
-            {
-                bindable_boolean.set_value(value);
-            }
-        }
-    }
-
-    fn apply_default_view_model_string_bindings(&mut self, state_machine: &RuntimeStateMachine) {
-        if !self.data_context_view_model_bound || !self.default_view_model_string_bindings_dirty {
-            return;
-        }
-        self.default_view_model_string_bindings_dirty = false;
-
-        let mut sources = state_machine
-            .bindable_strings
-            .iter()
-            .flat_map(|bindable_string| {
-                bindable_string
-                    .default_view_model_sources
-                    .iter()
-                    .map(|source| (source.data_bind_index, bindable_string.global_id, source))
-            })
-            .collect::<Vec<_>>();
-        sources.sort_by_key(|(data_bind_index, _, _)| *data_bind_index);
-
-        for (_, global_id, source) in sources {
-            if let Some(bindable_string) = self
-                .bindable_strings
-                .iter_mut()
-                .find(|bindable_string| bindable_string.global_id == global_id)
-            {
-                bindable_string.set_value(&source.value);
-            }
-        }
-    }
-
-    fn apply_default_view_model_color_bindings(&mut self, state_machine: &RuntimeStateMachine) {
-        if !self.data_context_view_model_bound || !self.default_view_model_color_bindings_dirty {
-            return;
-        }
-        self.default_view_model_color_bindings_dirty = false;
-
-        let mut sources = state_machine
-            .bindable_colors
-            .iter()
-            .flat_map(|bindable_color| {
-                bindable_color
-                    .default_view_model_sources
-                    .iter()
-                    .map(|source| {
-                        (
-                            source.data_bind_index,
-                            bindable_color.global_id,
-                            source.value,
-                        )
-                    })
-            })
-            .collect::<Vec<_>>();
-        sources.sort_by_key(|(data_bind_index, _, _)| *data_bind_index);
-
-        for (_, global_id, value) in sources {
-            if let Some(bindable_color) = self
-                .bindable_colors
-                .iter_mut()
-                .find(|bindable_color| bindable_color.global_id == global_id)
-            {
-                bindable_color.set_value(value);
-            }
-        }
-    }
-
-    fn apply_default_view_model_enum_bindings(&mut self, state_machine: &RuntimeStateMachine) {
-        if !self.data_context_view_model_bound || !self.default_view_model_enum_bindings_dirty {
-            return;
-        }
-        self.default_view_model_enum_bindings_dirty = false;
-
-        let mut sources = state_machine
-            .bindable_enums
-            .iter()
-            .flat_map(|bindable_enum| {
-                bindable_enum
-                    .default_view_model_sources
-                    .iter()
-                    .map(|source| {
-                        (
-                            source.data_bind_index,
-                            bindable_enum.global_id,
-                            source.value,
-                        )
-                    })
-            })
-            .collect::<Vec<_>>();
-        sources.sort_by_key(|(data_bind_index, _, _)| *data_bind_index);
-
-        for (_, global_id, value) in sources {
-            if let Some(bindable_enum) = self
-                .bindable_enums
-                .iter_mut()
-                .find(|bindable_enum| bindable_enum.global_id == global_id)
-            {
-                bindable_enum.set_value(value);
-            }
-        }
-    }
-
-    fn apply_default_view_model_asset_bindings(&mut self, state_machine: &RuntimeStateMachine) {
-        if !self.data_context_view_model_bound || !self.default_view_model_asset_bindings_dirty {
-            return;
-        }
-        self.default_view_model_asset_bindings_dirty = false;
-
-        let mut sources = state_machine
-            .bindable_assets
-            .iter()
-            .flat_map(|bindable_asset| {
-                bindable_asset
-                    .default_view_model_sources
-                    .iter()
-                    .map(|source| {
-                        (
-                            source.data_bind_index,
-                            bindable_asset.global_id,
-                            source.value,
-                        )
-                    })
-            })
-            .collect::<Vec<_>>();
-        sources.sort_by_key(|(data_bind_index, _, _)| *data_bind_index);
-
-        for (_, global_id, value) in sources {
-            if let Some(bindable_asset) = self
-                .bindable_assets
-                .iter_mut()
-                .find(|bindable_asset| bindable_asset.global_id == global_id)
-            {
-                bindable_asset.set_value(value);
-            }
-        }
-    }
-
-    fn apply_default_view_model_artboard_bindings(&mut self, state_machine: &RuntimeStateMachine) {
-        if !self.data_context_view_model_bound || !self.default_view_model_artboard_bindings_dirty {
-            return;
-        }
-        self.default_view_model_artboard_bindings_dirty = false;
-
-        let mut sources = state_machine
-            .bindable_artboards
-            .iter()
-            .flat_map(|bindable_artboard| {
-                bindable_artboard
-                    .default_view_model_sources
-                    .iter()
-                    .map(|source| {
-                        (
-                            source.data_bind_index,
-                            bindable_artboard.global_id,
-                            source.value,
-                        )
-                    })
-            })
-            .collect::<Vec<_>>();
-        sources.sort_by_key(|(data_bind_index, _, _)| *data_bind_index);
-
-        for (_, global_id, value) in sources {
-            if let Some(bindable_artboard) = self
-                .bindable_artboards
-                .iter_mut()
-                .find(|bindable_artboard| bindable_artboard.global_id == global_id)
-            {
-                bindable_artboard.set_value(value);
-            }
-        }
-    }
-
-    fn apply_default_view_model_trigger_bindings(&mut self, state_machine: &RuntimeStateMachine) {
-        if !self.data_context_view_model_bound || !self.default_view_model_trigger_bindings_dirty {
-            return;
-        }
-        self.default_view_model_trigger_bindings_dirty = false;
-
-        let mut sources = state_machine
-            .bindable_triggers
-            .iter()
-            .flat_map(|bindable_trigger| {
-                bindable_trigger
-                    .default_view_model_sources
-                    .iter()
-                    .map(|source| {
-                        (
-                            source.data_bind_index,
-                            bindable_trigger.global_id,
-                            source.value,
-                        )
-                    })
-            })
-            .collect::<Vec<_>>();
-        sources.sort_by_key(|(data_bind_index, _, _)| *data_bind_index);
-
-        for (_, global_id, value) in sources {
-            if let Some(bindable_trigger) = self
-                .bindable_triggers
-                .iter_mut()
-                .find(|bindable_trigger| bindable_trigger.global_id == global_id)
-            {
-                bindable_trigger.set_value(value);
-            }
-        }
+    fn apply_default_view_model_bindings(&mut self) {
+        self.data_bind_graph
+            .apply_default_view_model_bindings(RuntimeDataBindGraphTargetsMut {
+                numbers: &mut self.bindable_numbers,
+                booleans: &mut self.bindable_booleans,
+                strings: &mut self.bindable_strings,
+                colors: &mut self.bindable_colors,
+                enums: &mut self.bindable_enums,
+                assets: &mut self.bindable_assets,
+                artboards: &mut self.bindable_artboards,
+                triggers: &mut self.bindable_triggers,
+            });
     }
 }
 

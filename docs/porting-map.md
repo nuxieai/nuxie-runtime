@@ -371,6 +371,17 @@ external contexts, public source mutation APIs, converters, reverse propagation,
 relative paths, parent paths, nested paths, listener-owned data binding, and
 nested artboard propagation remain follow-up slices.
 
+Current #12 update: `RuntimeDataBindGraph` now owns state-machine data-context
+presence, default-view-model context binding state, one default-context dirty
+bit, and a sorted default source-to-target binding queue for the finite
+`propertyValue` set already covered by C++ probes. `StateMachineInstance` no
+longer carries eight per-type default dirty flags or eight per-type default
+apply methods. The migration contract is
+`docs/prototypes/data-binding-graph-default-context-migration-runtime-contract.md`.
+External contexts, public source mutation APIs, converters, reverse
+propagation, relative/parent/nested path lookup, listener-owned data binding,
+and nested artboard propagation remain follow-up `#12` slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

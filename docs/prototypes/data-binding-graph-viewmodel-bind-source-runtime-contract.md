@@ -20,8 +20,8 @@ view-model mutation, or general data-context traversal.
   `ViewModelPropertyViewModel.viewModelReferenceId` and `propertyValue` resolve
   to an imported referenced view-model instance.
 - Runtime graph source and target nodes carrying view-model pointer identity.
-- Forward source-to-target propagation before state-machine transition
-  evaluation.
+- Forward source-to-target propagation on explicit data-context advance before
+  the next state-machine transition evaluation.
 - C++ probe coverage through an existing `TransitionViewModelCondition` pointer
   comparison.
 
@@ -43,6 +43,8 @@ view-model mutation, or general data-context traversal.
   `StateMachineBindableViewModelInstance`.
 - Default-context graph construction discovers
   `BindablePropertyViewModel.propertyValue` data-bind sources.
+- Regular state-machine advance keeps view-model pointer targets dirty instead
+  of applying them early; explicit data-context advance applies them.
 - Pointer equality comparisons distinguish a graph-bound imported view-model
   instance from a null bindable.
 - Existing root-context/null pointer comparison probes continue to pass.

@@ -924,15 +924,30 @@ graph-owned source binding slice. Default-context
 `ViewModelInstanceViewModel.propertyValue` sources resolve through the
 binary-layer C++ view-model reference model, carry imported view-model instance
 identity as a runtime graph value, and write that identity into
-state-machine bindable view-model targets before transition evaluation. C++
-probe coverage verifies the bound pointer through a
-`TransitionViewModelCondition` pointer comparison against a null bindable. The
-contract is
+state-machine bindable view-model targets on explicit data-context advance
+before the next transition evaluation. C++ probe coverage verifies the bound
+pointer through a `TransitionViewModelCondition` pointer comparison against a
+null bindable. The contract is
 `docs/prototypes/data-binding-graph-viewmodel-bind-source-runtime-contract.md`.
-Stable public source handles, list bindables, public view-model pointer
-mutation, reverse propagation, update-queue parity, relative/parent/nested
-lookup, listener-owned data binding, and nested artboard propagation remain
-follow-up `#12` slices.
+Stable public source handles, list bindables, reverse propagation, broader
+update-queue parity, relative/parent/nested lookup, listener-owned data
+binding, and nested artboard propagation remain follow-up `#12` slices.
+
+Current #12 update: default-context view-model pointer sources now have a
+probe-backed raw mutation path. `RuntimeDataBindGraph` stores the imported
+instance IDs for the source's referenced view model, so
+`StateMachineInstance::set_default_view_model_view_model_source_for_data_bind`
+can accept a referenced instance index. Like C++, this generated-setter-style
+raw index write does not relink the cached imported
+`referenceViewModelInstance`, so explicit `advance_data_context` does not make a
+pointer equality transition observe a new instance. The C++ probe gained
+`--runtime-set-default-view-model-source-viewmodel`, and coverage verifies this
+non-relinking behavior. The contract is
+`docs/prototypes/data-binding-graph-viewmodel-source-mutation-runtime-contract.md`.
+Stable public source handles, list bindables, non-default view-model pointer
+mutation through live relink APIs, reverse propagation, broader update-queue
+parity, relative/parent/nested lookup, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
 
 ## #13: Nested Artboards And Hosts
 

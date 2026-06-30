@@ -174,13 +174,22 @@ slice.
 - First graph-owned view-model bindable slice: forward propagation for
   default-context `ViewModelInstanceViewModel.propertyValue` sources feeding
   `BindablePropertyViewModel.propertyValue` targets, covered by a C++ probe
-  through an existing view-model pointer transition-condition consumer.
+  through an existing view-model pointer transition-condition consumer and the
+  explicit data-context advance timing C++ requires for this target kind.
+- First raw view-model pointer source mutation slice: default-context
+  `ViewModelInstanceViewModel.propertyValue` index writes by referenced
+  instance index, covered by a C++ probe proving the generated setter does not
+  relink the cached imported pointer observed by an existing view-model pointer
+  transition-condition consumer.
 
 ## Remaining Runtime Slices
 
 - Scene callback dispatch side effects: listener notification, audio playback,
   open-url side effects, nested-artboard event propagation, and callback
   targets other than `Event.trigger`.
+- Live view-model pointer relink APIs: owned/imported replacement paths that
+  update cached `referenceViewModelInstance` pointers rather than only raw
+  generated `propertyValue` indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
 - Live view-model APIs and data-binding propagation governed by
@@ -190,7 +199,7 @@ slice.
   number/boolean/string/color/enum/asset/artboard/trigger contexts listed
   above, add source mutation APIs beyond the default
   number/boolean/string/color/enum/asset/artboard/trigger source nodes,
-  list/symbol bindables and public view-model pointer mutation, converters
+  list/symbol bindables and non-default view-model pointer mutation, converters
   beyond the admitted boolean
   negate, trigger, boolean-to-number, enum-to-number, color-to-number, and
   string-to-number, symbol-list-index-to-number, number-to-string, and

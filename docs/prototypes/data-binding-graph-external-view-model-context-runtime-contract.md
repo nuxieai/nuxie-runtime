@@ -53,5 +53,6 @@ Default-context source mutation APIs remain unchanged.
 - C++ probe-backed state-machine tests verify non-default imported
   `ViewModelInstanceNumber`, `ViewModelInstanceBoolean`,
   `ViewModelInstanceString`, `ViewModelInstanceColor`, `ViewModelInstanceEnum`,
-  `ViewModelInstanceAssetImage`, and `ViewModelInstanceArtboard` sources
-  through existing `BlendState1DViewModel` and transition-condition consumers.
+  `ViewModelInstanceAssetImage`, `ViewModelInstanceArtboard`, and
+  `ViewModelInstanceTrigger` sources through existing `BlendState1DViewModel`
+  and transition-condition consumers.

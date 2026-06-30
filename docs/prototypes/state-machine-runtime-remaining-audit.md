@@ -63,7 +63,7 @@ slice.
 - File-backed imported `ViewModelInstance` context binding through
   `RuntimeDataBindGraph` source path re-resolution, covered by a C++ probe
   through existing `BlendState1DViewModel`, boolean transition-condition, and
-  string/color/enum/asset/artboard transition-condition consumers.
+  string/color/enum/asset/artboard/trigger transition-condition consumers.
 
 ## Remaining Runtime Slices
 
@@ -74,9 +74,8 @@ slice.
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
 - Live view-model APIs and data-binding propagation governed by
   `docs/prototypes/data-binding-graph-runtime-contract.md`: beyond the finite
-  graph-routed default source-to-target `propertyValue` bind set listed above,
-  add imported file-backed external context probes for
-  trigger sources, external contexts beyond imported
+  graph-routed default and imported-file-backed external source-to-target
+  `propertyValue` bind sets listed above, add external contexts beyond imported
   file-backed view-model instances, source mutation APIs beyond the default
   number/boolean/string/color/enum/asset/artboard/trigger source nodes,
   list/symbol/view-model bindables, converters, data-binding update queues,

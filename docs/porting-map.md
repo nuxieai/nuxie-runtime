@@ -523,14 +523,14 @@ probe mirrors this with
 instance. C++ probe-backed consumers cover non-default
 `ViewModelInstanceNumber`, `ViewModelInstanceBoolean`,
 `ViewModelInstanceString`, `ViewModelInstanceColor`, `ViewModelInstanceEnum`,
-`ViewModelInstanceAssetImage`, and `ViewModelInstanceArtboard` sources through
-`BlendState1DViewModel` and transition-condition paths. The contract is
+`ViewModelInstanceAssetImage`, `ViewModelInstanceArtboard`, and
+`ViewModelInstanceTrigger` sources through `BlendState1DViewModel` and
+transition-condition paths. The contract is
 `docs/prototypes/data-binding-graph-external-view-model-context-runtime-contract.md`.
-External trigger source-context probes, arbitrary
-user-created runtime view-model instances, public source handles, converters,
-reverse propagation, update-queue parity, relative/parent/nested lookup,
-listener-owned data binding, external trigger reset/report identity, and nested
-artboard propagation remain follow-up `#12` slices.
+Arbitrary user-created runtime view-model instances, public source handles,
+converters, reverse propagation, update-queue parity, relative/parent/nested
+lookup, listener-owned data binding, external trigger reset/report identity,
+and nested artboard propagation remain follow-up `#12` slices.
 
 ## #13: Nested Artboards And Hosts
 

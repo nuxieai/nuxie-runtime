@@ -2809,6 +2809,14 @@ fn synthetic_state_machine_default_viewmodel_trigger_condition(file_id: u64) -> 
             push_uint_property(bytes, "ViewModelInstanceTrigger", "viewModelPropertyId", 0);
             push_uint_property(bytes, "ViewModelInstanceTrigger", "propertyValue", 0);
         });
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "alternate");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceTrigger", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceTrigger", "viewModelPropertyId", 0);
+            push_uint_property(bytes, "ViewModelInstanceTrigger", "propertyValue", 0);
+        });
         push_object_with_properties(bytes, "Artboard", |_| {});
         push_object_with_properties(bytes, "Node", |bytes| {
             push_uint_property(bytes, "Node", "parentId", 0);
@@ -9832,6 +9840,90 @@ fn state_machine_default_viewmodel_trigger_bind_source_matches_cpp_probe() {
     assert!(
         state_machine.bind_default_view_model_context(),
         "{label} failed to bind default view-model context"
+    );
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 1.0),
+        state_machine.clone(),
+    ));
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+    {
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn state_machine_external_viewmodel_trigger_bind_source_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_external_viewmodel_trigger_bind_cpp.riv";
+    let bytes = synthetic_state_machine_default_viewmodel_trigger_condition(8394);
+    let default_value = 3_u64;
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-default-view-model-source-trigger".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        default_value.to_string(),
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    let mut rust_reports = Vec::new();
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    assert!(
+        state_machine.bind_default_view_model_context(),
+        "{label} failed to bind default view-model context"
+    );
+    assert!(
+        state_machine.set_default_view_model_trigger_source_for_data_bind(0, default_value),
+        "{label} failed to mutate default view-model trigger source"
+    );
+    assert!(
+        state_machine.bind_view_model_instance_context(&runtime, 0, 1),
+        "{label} failed to bind external view-model instance context"
     );
     rust_reports.push((
         rust.advance_state_machine_instance(&mut state_machine, 0.0),

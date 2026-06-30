@@ -3016,7 +3016,9 @@ impl RuntimeDataBindGraphValue {
             Self::Enum(_) => context
                 .enum_value_by_property_index(usize::try_from(path[1]).ok()?)
                 .map(Self::Enum),
-            Self::SymbolListIndex(_) => None,
+            Self::SymbolListIndex(_) => context
+                .symbol_list_index_value_by_property_index(usize::try_from(path[1]).ok()?)
+                .map(Self::SymbolListIndex),
             Self::Asset(_) => context
                 .asset_value_by_property_index(usize::try_from(path[1]).ok()?)
                 .map(Self::Asset),
@@ -3103,6 +3105,7 @@ pub struct RuntimeOwnedViewModelInstance {
     strings: Vec<RuntimeOwnedViewModelString>,
     colors: Vec<RuntimeOwnedViewModelColor>,
     enums: Vec<RuntimeOwnedViewModelEnum>,
+    symbol_list_indices: Vec<RuntimeOwnedViewModelSymbolListIndex>,
     assets: Vec<RuntimeOwnedViewModelAsset>,
     artboards: Vec<RuntimeOwnedViewModelArtboard>,
     triggers: Vec<RuntimeOwnedViewModelTrigger>,
@@ -3140,6 +3143,12 @@ struct RuntimeOwnedViewModelEnum {
 }
 
 #[derive(Debug, Clone)]
+struct RuntimeOwnedViewModelSymbolListIndex {
+    property_index: usize,
+    value: u64,
+}
+
+#[derive(Debug, Clone)]
 struct RuntimeOwnedViewModelAsset {
     property_index: usize,
     value: u64,
@@ -3172,6 +3181,7 @@ impl RuntimeOwnedViewModelInstance {
         let mut strings = Vec::new();
         let mut colors = Vec::new();
         let mut enums = Vec::new();
+        let mut symbol_list_indices = Vec::new();
         let mut assets = Vec::new();
         let mut artboards = Vec::new();
         let mut triggers = Vec::new();
@@ -3200,6 +3210,12 @@ impl RuntimeOwnedViewModelInstance {
                     property_index,
                     value: 0,
                 }),
+                "ViewModelPropertySymbolListIndex" => {
+                    symbol_list_indices.push(RuntimeOwnedViewModelSymbolListIndex {
+                        property_index,
+                        value: 0,
+                    })
+                }
                 "ViewModelPropertyAsset" | "ViewModelPropertyAssetImage" => {
                     assets.push(RuntimeOwnedViewModelAsset {
                         property_index,
@@ -3254,6 +3270,7 @@ impl RuntimeOwnedViewModelInstance {
             strings,
             colors,
             enums,
+            symbol_list_indices,
             assets,
             artboards,
             triggers,
@@ -3333,6 +3350,25 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         }
         enum_value.value = value;
+        true
+    }
+
+    pub fn set_symbol_list_index_by_property_index(
+        &mut self,
+        property_index: usize,
+        value: u64,
+    ) -> bool {
+        let Some(symbol_list_index) = self
+            .symbol_list_indices
+            .iter_mut()
+            .find(|symbol_list_index| symbol_list_index.property_index == property_index)
+        else {
+            return false;
+        };
+        if symbol_list_index.value == value {
+            return false;
+        }
+        symbol_list_index.value = value;
         true
     }
 
@@ -3441,6 +3477,13 @@ impl RuntimeOwnedViewModelInstance {
             .iter()
             .find(|enum_value| enum_value.property_index == property_index)
             .map(|enum_value| enum_value.value)
+    }
+
+    fn symbol_list_index_value_by_property_index(&self, property_index: usize) -> Option<u64> {
+        self.symbol_list_indices
+            .iter()
+            .find(|symbol_list_index| symbol_list_index.property_index == property_index)
+            .map(|symbol_list_index| symbol_list_index.value)
     }
 
     fn asset_value_by_property_index(&self, property_index: usize) -> Option<u64> {

@@ -629,6 +629,21 @@ reverse propagation, update-queue parity, relative/parent/nested lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 
+Current #12 update: owned runtime view-model contexts now also cover
+symbol-list-index sources as raw `propertyValue` integers. Rust exposes
+`RuntimeOwnedViewModelInstance::set_symbol_list_index_by_property_index`, and
+the graph resolves owned `ViewModelInstanceSymbolListIndex` values into
+existing symbol-list-index source nodes before state-machine transition
+evaluation. The C++ probe mirrors this with
+`--runtime-bind-owned-view-model-symbol-list-index-state-machine-context`,
+mutating the fresh C++ symbol-list-index instance value before binding. The
+contract is
+`docs/prototypes/data-binding-graph-owned-view-model-symbol-list-index-context-runtime-contract.md`.
+Owned asset/artboard/trigger values, stable public source handles, converters,
+reverse propagation, update-queue parity, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
+
 Current #12 update: owned runtime view-model contexts now also cover asset
 image sources as raw `propertyValue` integers. Rust exposes
 `RuntimeOwnedViewModelInstance::set_asset_by_property_index`, and the graph
@@ -664,10 +679,10 @@ with `--runtime-bind-owned-view-model-trigger-state-machine-context`, mutating
 the fresh C++ trigger instance value before binding. The contract is
 `docs/prototypes/data-binding-graph-owned-view-model-trigger-context-runtime-contract.md`.
 The finite owned source-node context set now covers
-number/boolean/string/color/enum/asset/artboard/trigger. Stable public source
-handles, converters, reverse propagation, update-queue parity,
-relative/parent/nested lookup, listener-owned data binding, and nested artboard
-propagation remain follow-up `#12` slices.
+number/boolean/string/color/enum/symbol-list-index/asset/artboard/trigger.
+Stable public source handles, converters, reverse propagation,
+update-queue parity, relative/parent/nested lookup, listener-owned data
+binding, and nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: external and owned trigger identity for
 `StateMachineFireTrigger`, trigger/self conditions, and explicit

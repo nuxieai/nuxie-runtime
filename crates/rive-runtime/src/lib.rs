@@ -4317,6 +4317,19 @@ fn runtime_data_bind_graph_convert_value(
                 *operation_type,
             ),
         )),
+        (
+            RuntimeDataBindGraphConverter::OperationValue {
+                operation_type,
+                operation_value,
+            },
+            RuntimeDataBindGraphValue::SymbolListIndex(value),
+        ) => Some(RuntimeDataBindGraphValue::Number(
+            runtime_data_bind_graph_convert_operation_value(
+                *value as f32,
+                *operation_value,
+                *operation_type,
+            ),
+        )),
         (RuntimeDataBindGraphConverter::OperationValue { .. }, _) => {
             Some(RuntimeDataBindGraphValue::Number(0.0))
         }
@@ -10671,26 +10684,42 @@ fn runtime_bindable_number_default_view_model_source(
     let source =
         file.data_context_view_model_property_for_instance(default_instance.object, &path)?;
     let converter = runtime_data_bind_graph_converter(file, data_bind);
-    let value = if converter == Some(RuntimeDataBindGraphConverter::ToNumber) {
-        if let Some(value) = file.view_model_instance_number_value_for_object(source) {
-            RuntimeDataBindGraphValue::Number(value)
-        } else if let Some(value) = file.view_model_instance_boolean_value_for_object(source) {
-            RuntimeDataBindGraphValue::Boolean(value)
-        } else if source.type_name == "ViewModelInstanceEnum" {
-            RuntimeDataBindGraphValue::Enum(source.uint_property("propertyValue")?)
-        } else if let Some(value) = file.view_model_instance_color_value_for_object(source) {
-            RuntimeDataBindGraphValue::Color(value)
-        } else if let Some(value) = file.view_model_instance_string_value_bytes_for_object(source) {
-            RuntimeDataBindGraphValue::String(value.to_vec())
-        } else if let Some(value) =
-            file.view_model_instance_symbol_list_index_value_for_object(source)
-        {
-            RuntimeDataBindGraphValue::SymbolListIndex(value)
-        } else {
-            return None;
+    let value = match converter.as_ref() {
+        Some(RuntimeDataBindGraphConverter::ToNumber) => {
+            if let Some(value) = file.view_model_instance_number_value_for_object(source) {
+                RuntimeDataBindGraphValue::Number(value)
+            } else if let Some(value) = file.view_model_instance_boolean_value_for_object(source) {
+                RuntimeDataBindGraphValue::Boolean(value)
+            } else if source.type_name == "ViewModelInstanceEnum" {
+                RuntimeDataBindGraphValue::Enum(source.uint_property("propertyValue")?)
+            } else if let Some(value) = file.view_model_instance_color_value_for_object(source) {
+                RuntimeDataBindGraphValue::Color(value)
+            } else if let Some(value) =
+                file.view_model_instance_string_value_bytes_for_object(source)
+            {
+                RuntimeDataBindGraphValue::String(value.to_vec())
+            } else if let Some(value) =
+                file.view_model_instance_symbol_list_index_value_for_object(source)
+            {
+                RuntimeDataBindGraphValue::SymbolListIndex(value)
+            } else {
+                return None;
+            }
         }
-    } else {
-        RuntimeDataBindGraphValue::Number(file.view_model_instance_number_value_for_object(source)?)
+        Some(RuntimeDataBindGraphConverter::OperationValue { .. }) => {
+            if let Some(value) = file.view_model_instance_number_value_for_object(source) {
+                RuntimeDataBindGraphValue::Number(value)
+            } else if let Some(value) =
+                file.view_model_instance_symbol_list_index_value_for_object(source)
+            {
+                RuntimeDataBindGraphValue::SymbolListIndex(value)
+            } else {
+                return None;
+            }
+        }
+        _ => RuntimeDataBindGraphValue::Number(
+            file.view_model_instance_number_value_for_object(source)?,
+        ),
     };
     Some(RuntimeBindableNumberDefaultViewModelSource {
         data_bind_index,

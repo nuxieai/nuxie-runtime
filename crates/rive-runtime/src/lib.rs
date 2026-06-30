@@ -2941,6 +2941,7 @@ enum RuntimeDataBindGraphConverter {
     BooleanNegate,
     TriggerIncrement,
     ToNumber,
+    ListToLength,
     ToString {
         flags: u64,
         decimals: u64,
@@ -3010,6 +3011,7 @@ enum RuntimeDataBindGraphValue {
     Color(u32),
     Enum(u64),
     SymbolListIndex(u64),
+    ListLength(usize),
     Asset(u64),
     Artboard(u64),
     Trigger(u64),
@@ -3044,6 +3046,7 @@ impl RuntimeDataBindGraphValue {
             Self::SymbolListIndex(_) => context
                 .symbol_list_index_value_by_property_index(usize::try_from(path[1]).ok()?)
                 .map(Self::SymbolListIndex),
+            Self::ListLength(_) => None,
             Self::Asset(_) => context
                 .asset_value_by_property_index(usize::try_from(path[1]).ok()?)
                 .map(Self::Asset),
@@ -3087,6 +3090,9 @@ impl RuntimeDataBindGraphValue {
             Self::SymbolListIndex(_) => file
                 .view_model_instance_symbol_list_index_value_for_object(source)
                 .map(Self::SymbolListIndex),
+            Self::ListLength(_) => file
+                .view_model_instance_list_size_for_object(source)
+                .map(Self::ListLength),
             Self::Asset(_) => (source.type_name == "ViewModelInstanceAssetImage")
                 .then(|| source.uint_property("propertyValue"))
                 .flatten()
@@ -4275,6 +4281,13 @@ fn runtime_data_bind_graph_convert_value(
             ))
         }
         (RuntimeDataBindGraphConverter::ToNumber, _) => None,
+        (
+            RuntimeDataBindGraphConverter::ListToLength,
+            RuntimeDataBindGraphValue::ListLength(value),
+        ) => Some(RuntimeDataBindGraphValue::Number(*value as f32)),
+        (RuntimeDataBindGraphConverter::ListToLength, _) => {
+            Some(RuntimeDataBindGraphValue::Number(0.0))
+        }
         (
             RuntimeDataBindGraphConverter::ToString {
                 flags, decimals, ..
@@ -10814,6 +10827,9 @@ fn runtime_bindable_number_default_view_model_source(
                 return None;
             }
         }
+        Some(RuntimeDataBindGraphConverter::ListToLength) => RuntimeDataBindGraphValue::ListLength(
+            file.view_model_instance_list_size_for_object(source)?,
+        ),
         _ => RuntimeDataBindGraphValue::Number(
             file.view_model_instance_number_value_for_object(source)?,
         ),
@@ -11439,6 +11455,7 @@ fn runtime_data_bind_graph_converter_for_object(
         "DataConverterBooleanNegate" => RuntimeDataBindGraphConverter::BooleanNegate,
         "DataConverterTrigger" => RuntimeDataBindGraphConverter::TriggerIncrement,
         "DataConverterToNumber" => RuntimeDataBindGraphConverter::ToNumber,
+        "DataConverterListToLength" => RuntimeDataBindGraphConverter::ListToLength,
         "DataConverterToString" => RuntimeDataBindGraphConverter::ToString {
             flags: converter.uint_property("flags").unwrap_or(0),
             decimals: converter.uint_property("decimals").unwrap_or(0),

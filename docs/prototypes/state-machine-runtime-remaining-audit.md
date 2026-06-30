@@ -129,6 +129,10 @@ slice.
   `DataConverterToNumber` forward conversion for default-context
   symbol-list-index sources feeding number targets, covered by a C++ probe
   through an existing blend-state consumer.
+- `DataConverterListToLength` graph-owned converter execution slice:
+  read-only imported list length for default-context list sources feeding
+  number targets, covered by a C++ probe through an existing blend-state
+  consumer.
 - `DataConverterRounder` graph-owned converter execution slice: forward
   conversion for default-context number sources feeding number targets,
   including imported `decimals`, covered by a C++ probe through an existing
@@ -265,8 +269,9 @@ slice.
   boolean-to-string, string-to-string, trigger-to-string,
   symbol-list-index-to-string, color-to-string, string-trim, and
   string-remove-zeros, string-pad, rounder, range-mapper with/without resolved
-  interpolator, operation-value number/symbol-list-index,
-  system-operation-value direct number, operation-view-model default-number,
+  interpolator, list-to-length default list, operation-value
+  number/symbol-list-index, system-operation-value direct number,
+  operation-view-model default-number,
   string converter group, number-to-string converter group, and
   number-to-number converter group paths,
   data-binding update queues, relative paths, parent paths, and nested paths.

@@ -803,6 +803,18 @@ beyond the admitted boolean negation, trigger increment, and currently covered
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
 
+Current #12 update: the first list-source converter path now admits
+`DataConverterListToLength` for default-context `ViewModelInstanceList`
+sources feeding `BindablePropertyNumber.propertyValue` targets. The graph
+carries the imported list item count as a finite source value and converts it
+to a number before state-machine evaluation. C++ probe coverage verifies the
+length through a `BlendState1DViewModel` consumer. The contract is
+`docs/prototypes/data-binding-graph-list-to-length-converter-runtime-contract.md`.
+Stable public source handles, list targets, list mutation APIs,
+`DataConverterNumberToList`, generated runtime list items, reverse conversion,
+broader update-queue parity, relative/parent/nested lookup, listener-owned
+data binding, and nested artboard propagation remain follow-up `#12` slices.
+
 Current #12 update: `DataConverterRounder` runtime execution now admits
 default-context number sources feeding `BindablePropertyNumber.propertyValue`
 targets. The graph stores imported `decimals` on the converter descriptor and

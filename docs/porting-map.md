@@ -474,10 +474,24 @@ bound. The C++ probe mirrors this with
 mutating the resolved `ViewModelInstanceAssetImage.propertyValue`. The contract
 is
 `docs/prototypes/data-binding-graph-default-asset-source-mutation-runtime-contract.md`.
-Artboard/trigger sources, external contexts, public source handles, converters,
-reverse propagation, update-queue parity, relative/parent/nested lookup,
-listener-owned data binding, and nested artboard propagation remain follow-up
-`#12` slices.
+Trigger sources, external contexts, public source handles, converters, reverse
+propagation, update-queue parity, relative/parent/nested lookup, listener-owned
+data binding, and nested artboard propagation remain follow-up `#12` slices.
+
+Current #12 update: graph-owned source mutation now also covers default
+`ViewModelInstanceArtboard` sources. Rust exposes
+`StateMachineInstance::set_default_view_model_artboard_source_for_data_bind`,
+which mutates the selected `RuntimeDataBindGraph` artboard source node as a raw
+uint property value and dirties the default edge when the default context is
+bound. The C++ probe mirrors this with
+`--runtime-set-default-view-model-source-artboard`, resolving
+`DataBindContext.sourcePathIds` against the default view-model instance and
+mutating the resolved `ViewModelInstanceArtboard.propertyValue`. The contract
+is
+`docs/prototypes/data-binding-graph-default-artboard-source-mutation-runtime-contract.md`.
+Trigger sources, external contexts, public source handles, converters, reverse
+propagation, update-queue parity, relative/parent/nested lookup, listener-owned
+data binding, and nested artboard propagation remain follow-up `#12` slices.
 
 ## #13: Nested Artboards And Hosts
 

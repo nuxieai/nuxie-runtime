@@ -3293,6 +3293,35 @@ impl RuntimeDataBindGraph {
         true
     }
 
+    fn set_default_view_model_artboard_source_for_data_bind(
+        &mut self,
+        data_bind_index: usize,
+        value: u64,
+    ) -> bool {
+        let Some(source) = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .map(|binding| binding.source)
+        else {
+            return false;
+        };
+        let Some(source) = self.sources.get_mut(source.0) else {
+            return false;
+        };
+        let RuntimeDataBindGraphValue::Artboard(current) = &mut source.value else {
+            return false;
+        };
+        if *current == value {
+            return false;
+        }
+        *current = value;
+        if self.default_view_model_context_bound {
+            self.default_view_model_bindings_dirty = true;
+        }
+        true
+    }
+
     fn apply_default_view_model_bindings(
         &mut self,
         mut targets: RuntimeDataBindGraphTargetsMut<'_>,
@@ -6264,6 +6293,21 @@ impl StateMachineInstance {
         if !self
             .data_bind_graph
             .set_default_view_model_asset_source_for_data_bind(data_bind_index, value)
+        {
+            return false;
+        }
+        self.needs_advance = true;
+        true
+    }
+
+    pub fn set_default_view_model_artboard_source_for_data_bind(
+        &mut self,
+        data_bind_index: usize,
+        value: u64,
+    ) -> bool {
+        if !self
+            .data_bind_graph
+            .set_default_view_model_artboard_source_for_data_bind(data_bind_index, value)
         {
             return false;
         }

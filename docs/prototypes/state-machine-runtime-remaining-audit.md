@@ -54,6 +54,9 @@ slice.
 - Graph-owned default `ViewModelInstanceAssetImage` source-node mutation by
   state-machine data-bind index, covered by a C++ probe through an existing
   transition-condition consumer.
+- Graph-owned default `ViewModelInstanceArtboard` source-node mutation by
+  state-machine data-bind index, covered by a C++ probe through an existing
+  transition-condition consumer.
 
 ## Remaining Runtime Slices
 
@@ -66,9 +69,10 @@ slice.
   `docs/prototypes/data-binding-graph-runtime-contract.md`: beyond the finite
   graph-routed default source-to-target `propertyValue` bind set listed above,
   add binding external contexts, source mutation APIs beyond the default
-  number/boolean/string/color/enum/asset source nodes, list/symbol/view-model
-  bindables, converters, data-binding update queues, relative paths, parent
-  paths, and nested paths for fire triggers and conditions.
+  number/boolean/string/color/enum/asset/artboard source nodes,
+  list/symbol/view-model bindables, converters, data-binding update queues,
+  relative paths, parent paths, and nested paths for fire triggers and
+  conditions.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener
   actions.

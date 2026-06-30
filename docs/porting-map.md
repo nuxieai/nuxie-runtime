@@ -728,6 +728,21 @@ color-to-number, reverse propagation, update-queue parity,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
 
+Current #12 update: `DataConverterToNumber` runtime execution now also admits
+default-context string sources feeding `BindablePropertyNumber.propertyValue`
+targets. The graph keeps raw string bytes from `ViewModelInstanceString` source
+nodes and converts them through the binary crate's C++ `std::atof`-style
+numeric-prefix parser before writing the number target. C++ probe coverage
+verifies the converted value through a `BlendState1DViewModel` consumer using a
+string with a numeric prefix and trailing bytes. The contract is
+`docs/prototypes/data-binding-graph-to-number-string-converter-runtime-contract.md`.
+Stable public source handles, list/symbol/view-model bindables, symbol-list
+`DataConverterToNumber` input kinds, converters beyond boolean negation,
+trigger increment, boolean-to-number, enum-to-number, color-to-number, and
+string-to-number, reverse propagation, update-queue parity,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

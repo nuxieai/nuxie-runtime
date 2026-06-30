@@ -3980,6 +3980,12 @@ impl RuntimeDataBindGraphSourceNode {
                 Some(RuntimeDataBindGraphConverter::ToNumber),
                 RuntimeDataBindGraphValue::Color(value),
             ) => Some(RuntimeDataBindGraphValue::Number((*value as i32) as f32)),
+            (
+                Some(RuntimeDataBindGraphConverter::ToNumber),
+                RuntimeDataBindGraphValue::String(value),
+            ) => Some(RuntimeDataBindGraphValue::Number(
+                rive_binary::data_converter_to_number_string_value(value),
+            )),
             (Some(RuntimeDataBindGraphConverter::ToNumber), _) => None,
             (Some(RuntimeDataBindGraphConverter::Unsupported), _) => None,
         }
@@ -10124,6 +10130,8 @@ fn runtime_bindable_number_default_view_model_source(
             RuntimeDataBindGraphValue::Enum(source.uint_property("propertyValue")?)
         } else if let Some(value) = file.view_model_instance_color_value_for_object(source) {
             RuntimeDataBindGraphValue::Color(value)
+        } else if let Some(value) = file.view_model_instance_string_value_bytes_for_object(source) {
+            RuntimeDataBindGraphValue::String(value.to_vec())
         } else {
             return None;
         }

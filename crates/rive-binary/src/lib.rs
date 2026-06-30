@@ -9889,6 +9889,10 @@ fn cpp_pad_string(value: &[u8], length: u64, text: &[u8], pad_type: u64) -> Vec<
     output
 }
 
+pub fn data_converter_to_number_string_value(value: &[u8]) -> f32 {
+    cpp_atof_f32(value)
+}
+
 fn cpp_atof_f32(value: &[u8]) -> f32 {
     let mut start = 0usize;
     while start < value.len() && value[start].is_ascii_whitespace() {

@@ -316,6 +316,10 @@ slice.
   sources with `DataConverterBooleanNegate` now apply C++'s symmetric
   `reverseConvert` before writing the source, covered by a C++ probe through a
   second direct boolean bind and transition-condition consumer.
+- First numeric reverse `OperationValue` target-to-source slice:
+  default-context number sources now apply C++ operation-value reverse math
+  before writing the source, covered by a multiply-operation C++ probe through
+  a second direct number bind and blend-state consumer.
 - First graph-owned view-model bindable slice: forward propagation for
   default-context `ViewModelInstanceViewModel.propertyValue` sources feeding
   `BindablePropertyViewModel.propertyValue` targets, covered by a C++ probe

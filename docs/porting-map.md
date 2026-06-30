@@ -1415,6 +1415,22 @@ queues, pending add/remove behavior, re-entry protection, relative/parent/nested
 lookup, listener-owned data binding, and nested artboard propagation remain
 follow-up `#12` slices.
 
+Current #12 update: direct `DataConverterOperationValue::reverseConvert`
+runtime behavior now participates in graph-owned number target-to-source
+binding. A default-context number fixture mutates a
+`BindablePropertyNumber.propertyValue` target on a `ToSource | TwoWay` bind
+with a multiply `DataConverterOperationValue`; explicit `advance_data_context`
+applies the C++ reverse operation before writing the
+`ViewModelInstanceNumber.propertyValue` source, and a second ordinary
+`ToTarget` number bind observes the reversed source value through an existing
+blend-state consumer. The contract is
+`docs/prototypes/data-binding-graph-operation-value-target-to-source-runtime-contract.md`.
+Reverse conversion for symbol-list-index sources, other converter families,
+converter groups, list source/target propagation, imported/owned contexts,
+broader dirty/update queues, pending add/remove behavior, re-entry protection,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
+
 Current #12 update: owned runtime view-model contexts now cover the first
 live view-model pointer replacement path. `RuntimeOwnedViewModelInstance`
 records root `ViewModelPropertyViewModel` properties plus the imported instance

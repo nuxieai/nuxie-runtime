@@ -4693,14 +4693,14 @@ impl RuntimeDataBindGraph {
                 continue;
             }
             source.target_to_source_dirty = false;
-            if !source.bound || !source.supports_direct_number_target_to_source() {
-                continue;
-            }
             let Some(value) = numbers
                 .iter()
                 .find(|number| number.global_id == global_id)
                 .map(|number| number.value)
             else {
+                continue;
+            };
+            let Some(value) = source.number_target_to_source_value(value) else {
                 continue;
             };
             let RuntimeDataBindGraphValue::Number(source_value) = &mut source.value else {
@@ -5287,10 +5287,31 @@ impl RuntimeDataBindGraphSourceNode {
         data_bind_flags_apply_target_to_source(self.flags)
     }
 
-    fn supports_direct_number_target_to_source(&self) -> bool {
+    fn supports_number_target_to_source(&self) -> bool {
         self.applies_target_to_source()
-            && self.converter.is_none()
+            && matches!(
+                self.converter.as_ref(),
+                None | Some(RuntimeDataBindGraphConverter::OperationValue { .. })
+            )
             && matches!(self.value, RuntimeDataBindGraphValue::Number(_))
+    }
+
+    fn number_target_to_source_value(&self, value: f32) -> Option<f32> {
+        if !self.supports_number_target_to_source() {
+            return None;
+        }
+        match self.converter.as_ref() {
+            None => Some(value),
+            Some(RuntimeDataBindGraphConverter::OperationValue {
+                operation_type,
+                operation_value,
+            }) => Some(runtime_data_bind_graph_reverse_convert_operation_value(
+                value,
+                *operation_value,
+                *operation_type,
+            )),
+            _ => None,
+        }
     }
 
     fn supports_direct_symbol_list_index_target_to_source(&self) -> bool {

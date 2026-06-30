@@ -117,6 +117,10 @@ slice.
   sources feeding number targets, covered by a C++ probe through an existing
   blend-state consumer and the binary crate's C++ `std::atof`-style parser
   model.
+- Fifth cross-type graph-owned converter execution slice:
+  `DataConverterToNumber` forward conversion for default-context
+  symbol-list-index sources feeding number targets, covered by a C++ probe
+  through an existing blend-state consumer.
 
 ## Remaining Runtime Slices
 
@@ -134,8 +138,8 @@ slice.
   number/boolean/string/color/enum/asset/artboard/trigger source nodes,
   list/symbol/view-model bindables, converters beyond the admitted boolean
   negate, trigger, boolean-to-number, enum-to-number, color-to-number, and
-  string-to-number paths, data-binding update queues, relative paths, parent
-  paths, and nested paths.
+  string-to-number and symbol-list-index-to-number paths, data-binding update
+  queues, relative paths, parent paths, and nested paths.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener
   actions.

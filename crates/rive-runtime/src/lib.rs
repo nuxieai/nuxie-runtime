@@ -2957,6 +2957,7 @@ enum RuntimeDataBindGraphValue {
     String(Vec<u8>),
     Color(u32),
     Enum(u64),
+    SymbolListIndex(u64),
     Asset(u64),
     Artboard(u64),
     Trigger(u64),
@@ -2987,6 +2988,7 @@ impl RuntimeDataBindGraphValue {
             Self::Enum(_) => context
                 .enum_value_by_property_index(usize::try_from(path[1]).ok()?)
                 .map(Self::Enum),
+            Self::SymbolListIndex(_) => None,
             Self::Asset(_) => context
                 .asset_value_by_property_index(usize::try_from(path[1]).ok()?)
                 .map(Self::Asset),
@@ -3024,6 +3026,9 @@ impl RuntimeDataBindGraphValue {
                 .then(|| source.uint_property("propertyValue"))
                 .flatten()
                 .map(Self::Enum),
+            Self::SymbolListIndex(_) => file
+                .view_model_instance_symbol_list_index_value_for_object(source)
+                .map(Self::SymbolListIndex),
             Self::Asset(_) => (source.type_name == "ViewModelInstanceAssetImage")
                 .then(|| source.uint_property("propertyValue"))
                 .flatten()
@@ -3980,6 +3985,10 @@ impl RuntimeDataBindGraphSourceNode {
                 Some(RuntimeDataBindGraphConverter::ToNumber),
                 RuntimeDataBindGraphValue::Color(value),
             ) => Some(RuntimeDataBindGraphValue::Number((*value as i32) as f32)),
+            (
+                Some(RuntimeDataBindGraphConverter::ToNumber),
+                RuntimeDataBindGraphValue::SymbolListIndex(value),
+            ) => Some(RuntimeDataBindGraphValue::Number(*value as f32)),
             (
                 Some(RuntimeDataBindGraphConverter::ToNumber),
                 RuntimeDataBindGraphValue::String(value),
@@ -10132,6 +10141,10 @@ fn runtime_bindable_number_default_view_model_source(
             RuntimeDataBindGraphValue::Color(value)
         } else if let Some(value) = file.view_model_instance_string_value_bytes_for_object(source) {
             RuntimeDataBindGraphValue::String(value.to_vec())
+        } else if let Some(value) =
+            file.view_model_instance_symbol_list_index_value_for_object(source)
+        {
+            RuntimeDataBindGraphValue::SymbolListIndex(value)
         } else {
             return None;
         }

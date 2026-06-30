@@ -743,6 +743,19 @@ string-to-number, reverse propagation, update-queue parity,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
 
+Current #12 update: `DataConverterToNumber` runtime execution now also admits
+default-context symbol-list-index sources feeding
+`BindablePropertyNumber.propertyValue` targets. The graph keeps the raw
+`ViewModelInstanceSymbolListIndex.propertyValue` source node value and converts
+it to `f32` before writing the number target. C++ probe coverage verifies the
+converted value through a `BlendState1DViewModel` consumer. The contract is
+`docs/prototypes/data-binding-graph-to-number-symbol-list-index-converter-runtime-contract.md`.
+Stable public source handles, list/view-model bindables, converter families
+beyond the admitted boolean negation, trigger increment, and currently covered
+`DataConverterToNumber` input set, reverse propagation, update-queue parity,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

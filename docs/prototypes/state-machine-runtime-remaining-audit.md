@@ -85,6 +85,9 @@ slice.
 - Owned runtime `ViewModelInstanceArtboard` context binding through
   `RuntimeDataBindGraph` source path re-resolution, covered by a C++ probe
   through an existing transition-condition consumer.
+- Owned runtime `ViewModelInstanceTrigger` context binding through
+  `RuntimeDataBindGraph` source path re-resolution, covered by a C++ probe
+  through an existing transition-condition consumer.
 
 ## Remaining Runtime Slices
 
@@ -97,8 +100,8 @@ slice.
   `docs/prototypes/data-binding-graph-runtime-contract.md`: beyond the finite
   graph-routed default and imported-file-backed external source-to-target
   `propertyValue` bind sets and owned
-  number/boolean/string/color/enum/asset/artboard contexts listed above, add
-  owned trigger contexts, source mutation APIs beyond the default
+  number/boolean/string/color/enum/asset/artboard/trigger contexts listed
+  above, add source mutation APIs beyond the default
   number/boolean/string/color/enum/asset/artboard/trigger source nodes,
   list/symbol/view-model bindables, converters, data-binding update queues,
   relative paths, parent paths, nested paths, and external trigger reset/report

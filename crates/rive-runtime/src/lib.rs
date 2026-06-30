@@ -2981,7 +2981,9 @@ impl RuntimeDataBindGraphValue {
             Self::Artboard(_) => context
                 .artboard_value_by_property_index(usize::try_from(path[1]).ok()?)
                 .map(Self::Artboard),
-            _ => None,
+            Self::Trigger(_) => context
+                .trigger_value_by_property_index(usize::try_from(path[1]).ok()?)
+                .map(Self::Trigger),
         }
     }
 
@@ -3046,6 +3048,7 @@ pub struct RuntimeOwnedViewModelInstance {
     enums: Vec<RuntimeOwnedViewModelEnum>,
     assets: Vec<RuntimeOwnedViewModelAsset>,
     artboards: Vec<RuntimeOwnedViewModelArtboard>,
+    triggers: Vec<RuntimeOwnedViewModelTrigger>,
 }
 
 #[derive(Debug, Clone)]
@@ -3090,6 +3093,12 @@ struct RuntimeOwnedViewModelArtboard {
     value: u64,
 }
 
+#[derive(Debug, Clone)]
+struct RuntimeOwnedViewModelTrigger {
+    property_index: usize,
+    value: u64,
+}
+
 impl RuntimeOwnedViewModelInstance {
     pub fn new(file: &RuntimeFile, view_model_index: usize) -> Option<Self> {
         let view_model = file.view_model(view_model_index)?;
@@ -3100,6 +3109,7 @@ impl RuntimeOwnedViewModelInstance {
         let mut enums = Vec::new();
         let mut assets = Vec::new();
         let mut artboards = Vec::new();
+        let mut triggers = Vec::new();
         for (property_index, property) in view_model.properties.into_iter().enumerate() {
             match property.type_name {
                 "ViewModelPropertyNumber" => numbers.push(RuntimeOwnedViewModelNumber {
@@ -3134,6 +3144,10 @@ impl RuntimeOwnedViewModelInstance {
                     property_index,
                     value: 0,
                 }),
+                "ViewModelPropertyTrigger" => triggers.push(RuntimeOwnedViewModelTrigger {
+                    property_index,
+                    value: 0,
+                }),
                 _ => {}
             }
         }
@@ -3146,6 +3160,7 @@ impl RuntimeOwnedViewModelInstance {
             enums,
             assets,
             artboards,
+            triggers,
         })
     }
 
@@ -3254,6 +3269,21 @@ impl RuntimeOwnedViewModelInstance {
         true
     }
 
+    pub fn set_trigger_by_property_index(&mut self, property_index: usize, value: u64) -> bool {
+        let Some(trigger) = self
+            .triggers
+            .iter_mut()
+            .find(|trigger| trigger.property_index == property_index)
+        else {
+            return false;
+        };
+        if trigger.value == value {
+            return false;
+        }
+        trigger.value = value;
+        true
+    }
+
     fn number_value_by_property_index(&self, property_index: usize) -> Option<f32> {
         self.numbers
             .iter()
@@ -3301,6 +3331,13 @@ impl RuntimeOwnedViewModelInstance {
             .iter()
             .find(|artboard| artboard.property_index == property_index)
             .map(|artboard| artboard.value)
+    }
+
+    fn trigger_value_by_property_index(&self, property_index: usize) -> Option<u64> {
+        self.triggers
+            .iter()
+            .find(|trigger| trigger.property_index == property_index)
+            .map(|trigger| trigger.value)
     }
 }
 

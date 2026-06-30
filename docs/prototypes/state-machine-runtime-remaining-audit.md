@@ -188,6 +188,14 @@ slice.
   advance. The C++ probe covers the matching
   `ViewModelInstanceRuntime::replaceViewModelByName` path through an existing
   view-model pointer transition-condition consumer.
+- First owned generated child identity slice: root
+  `ViewModelPropertyViewModel` properties in `RuntimeOwnedViewModelInstance`
+  default to a non-null owned pointer identity when their referenced view model
+  exists, matching the nested child created by C++
+  `File::createViewModelInstance(viewModel)` before
+  `replaceViewModelByName`. The C++ probe covers binding that owned root
+  without replacement through an existing view-model pointer
+  transition-condition consumer.
 
 ## Remaining Runtime Slices
 
@@ -195,10 +203,9 @@ slice.
   open-url side effects, nested-artboard event propagation, and callback
   targets other than `Event.trigger`.
 - Live view-model pointer relink APIs beyond the first owned root-property
-  path: default and imported replacement paths, nested owned paths, and
-  unmutated generated-owned child identity that update or expose cached
-  `referenceViewModelInstance` pointers rather than only raw generated
-  `propertyValue` indexes.
+  path: default and imported replacement paths, and nested owned paths that
+  update or expose cached `referenceViewModelInstance` pointers rather than
+  only raw generated `propertyValue` indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
 - Live view-model APIs and data-binding propagation governed by

@@ -3215,12 +3215,21 @@ impl RuntimeOwnedViewModelInstance {
                     value: 0,
                 }),
                 "ViewModelPropertyViewModel" => {
-                    let view_model_instance_ids = property
+                    let referenced_view_model = property
                         .uint_property("viewModelReferenceId")
                         .and_then(|view_model_reference_id| {
                             usize::try_from(view_model_reference_id).ok()
                         })
-                        .and_then(|view_model_index| file.view_model(view_model_index))
+                        .and_then(|view_model_index| file.view_model(view_model_index));
+                    let value = if referenced_view_model.is_some() {
+                        RuntimeViewModelPointer::OwnedGenerated {
+                            view_model_index,
+                            property_index,
+                        }
+                    } else {
+                        RuntimeViewModelPointer::Null
+                    };
+                    let view_model_instance_ids = referenced_view_model
                         .map(|view_model| {
                             view_model
                                 .instances
@@ -3231,7 +3240,7 @@ impl RuntimeOwnedViewModelInstance {
                         .unwrap_or_default();
                     view_models.push(RuntimeOwnedViewModelViewModel {
                         property_index,
-                        value: RuntimeViewModelPointer::Null,
+                        value,
                         view_model_instance_ids,
                     });
                 }
@@ -8069,7 +8078,13 @@ impl StateMachineBindableViewModelInstance {
 enum RuntimeViewModelPointer {
     Null,
     DataContextRoot,
-    Imported { object_id: u32 },
+    OwnedGenerated {
+        view_model_index: usize,
+        property_index: usize,
+    },
+    Imported {
+        object_id: u32,
+    },
 }
 
 fn bindable_view_model_value(

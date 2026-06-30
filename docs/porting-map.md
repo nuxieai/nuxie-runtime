@@ -967,6 +967,23 @@ reverse propagation, broader update-queue parity, relative/parent/nested
 lookup, listener-owned data binding, and nested artboard propagation remain
 follow-up `#12` slices.
 
+Current #12 update: owned runtime view-model contexts now also model C++'s
+generated nested child before any replacement. Valid root
+`ViewModelPropertyViewModel` sources in `RuntimeOwnedViewModelInstance` default
+to a non-null owned pointer identity, so binding an owned root context without
+calling `set_view_model_by_property_index` matches
+`File::createViewModelInstance(viewModel)` and can drive
+`BindablePropertyViewModel.propertyValue` pointer comparisons against `null`.
+The C++ probe mirrors this with
+`--runtime-bind-owned-view-model-viewmodel-default-state-machine-context`, which
+creates and binds the owned root without `replaceViewModelByName`. The contract
+is
+`docs/prototypes/data-binding-graph-owned-viewmodel-generated-child-runtime-contract.md`.
+Stable public source handles, list bindables, default/imported-context
+view-model pointer relink APIs, reverse propagation, broader update-queue
+parity, relative/parent/nested lookup, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

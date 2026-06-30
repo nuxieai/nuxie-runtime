@@ -7888,6 +7888,22 @@ fn build_linear_animations(
                 });
         }
 
+        if object.type_name == "KeyFrameId" {
+            let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
+                continue;
+            };
+            animations[animation_index].keyed_objects[keyed_object_index].keyed_properties
+                [keyed_property_index]
+                .uint_key_frames
+                .push(RuntimeKeyFrameUint {
+                    global_id: global_id as u32,
+                    frame: object.uint_property("frame").unwrap_or(0),
+                    interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
+                    interpolator_id: normalized_interpolator_id(object),
+                    value: object.uint_property("value").unwrap_or(0),
+                });
+        }
+
         if object.type_name == "KeyFrameString" {
             let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
                 continue;

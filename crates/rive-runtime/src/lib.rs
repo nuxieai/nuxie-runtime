@@ -8,7 +8,7 @@ use rive_graph::{
 };
 use rive_schema::{
     CoreRegistryFieldKind, FieldKind, core_registry_field_kind_by_property_key, definition_by_name,
-    definition_by_type_key, object_supports_property,
+    definition_by_type_key, is_callback_property_key, object_supports_property,
 };
 use std::collections::BTreeMap;
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
@@ -542,6 +542,18 @@ impl ArtboardInstance {
             return false;
         };
         instance.advance(animation, elapsed_seconds)
+    }
+
+    pub fn advance_linear_animation_instance_with_events(
+        &self,
+        instance: &mut LinearAnimationInstance,
+        elapsed_seconds: f32,
+        reported_events: &mut Vec<StateMachineReportedEvent>,
+    ) -> bool {
+        let Some(animation) = self.linear_animation(instance.animation_index) else {
+            return false;
+        };
+        instance.advance_with_events(animation, elapsed_seconds, reported_events)
     }
 
     pub fn apply_linear_animation_instance(
@@ -2327,6 +2339,34 @@ impl RuntimeLinearAnimation {
         changed
     }
 
+    fn report_keyed_callbacks(
+        &self,
+        seconds_from: f32,
+        seconds_to: f32,
+        speed_direction: f32,
+        from_pong: bool,
+        reported_events: &mut Vec<StateMachineReportedEvent>,
+    ) {
+        let starting_time = self.start_time_with_speed(speed_direction);
+        let is_at_start_frame = starting_time == seconds_from;
+
+        if is_at_start_frame && from_pong {
+            return;
+        }
+
+        for keyed_object in &self.keyed_objects {
+            for keyed_property in &keyed_object.keyed_properties {
+                keyed_property.report_keyed_callbacks(
+                    seconds_from,
+                    seconds_to,
+                    self.fps,
+                    is_at_start_frame,
+                    reported_events,
+                );
+            }
+        }
+    }
+
     fn start_seconds(&self) -> f32 {
         self.frame_to_seconds(self.start_frame())
     }
@@ -2498,6 +2538,24 @@ impl LinearAnimationInstance {
     }
 
     fn advance(&mut self, animation: &RuntimeLinearAnimation, elapsed_seconds: f32) -> bool {
+        self.advance_and_report(animation, elapsed_seconds, None)
+    }
+
+    fn advance_with_events(
+        &mut self,
+        animation: &RuntimeLinearAnimation,
+        elapsed_seconds: f32,
+        reported_events: &mut Vec<StateMachineReportedEvent>,
+    ) -> bool {
+        self.advance_and_report(animation, elapsed_seconds, Some(reported_events))
+    }
+
+    fn advance_and_report(
+        &mut self,
+        animation: &RuntimeLinearAnimation,
+        elapsed_seconds: f32,
+        mut reported_events: Option<&mut Vec<StateMachineReportedEvent>>,
+    ) -> bool {
         let delta_seconds = elapsed_seconds * animation.speed * self.direction;
         self.spilled_time = 0.0;
         if delta_seconds == 0.0 {
@@ -2509,7 +2567,17 @@ impl LinearAnimationInstance {
         self.total_time += delta_seconds.abs();
         let kill_spilled_time = !self.keep_going_with_speed_multiplier(animation, elapsed_seconds);
 
+        let mut last_time = self.time;
         self.time += delta_seconds;
+        if let Some(events) = reported_events.as_mut() {
+            animation.report_keyed_callbacks(
+                last_time,
+                self.time,
+                self.speed_direction,
+                false,
+                *events,
+            );
+        }
         let fps = animation.fps_as_f32();
         if fps == 0.0 {
             self.did_loop = false;
@@ -2550,6 +2618,15 @@ impl LinearAnimationInstance {
                     frames = start + remainder;
                     self.time = frames / fps;
                     did_loop = true;
+                    if let Some(events) = reported_events.as_mut() {
+                        animation.report_keyed_callbacks(
+                            0.0,
+                            self.time,
+                            self.speed_direction,
+                            false,
+                            *events,
+                        );
+                    }
                 } else if range != 0.0 && direction == -1 && frames <= start {
                     let delta_frames = delta_seconds * fps;
                     let remainder = ((start - frames) % range).abs();
@@ -2558,23 +2635,47 @@ impl LinearAnimationInstance {
                     frames = end - remainder;
                     self.time = frames / fps;
                     did_loop = true;
+                    if let Some(events) = reported_events.as_mut() {
+                        animation.report_keyed_callbacks(
+                            end / fps,
+                            self.time,
+                            self.speed_direction,
+                            false,
+                            *events,
+                        );
+                    }
                 }
             }
-            AnimationLoop::PingPong => loop {
-                if direction == 1 && frames >= end {
-                    self.spilled_time = (frames - end) / fps;
-                    frames = end + (end - frames);
-                } else if direction == -1 && frames < start {
-                    self.spilled_time = (start - frames) / fps;
-                    frames = start + (start - frames);
-                } else {
-                    break;
+            AnimationLoop::PingPong => {
+                let mut from_pong = true;
+                loop {
+                    if direction == 1 && frames >= end {
+                        self.spilled_time = (frames - end) / fps;
+                        frames = end + (end - frames);
+                        last_time = end / fps;
+                    } else if direction == -1 && frames < start {
+                        self.spilled_time = (start - frames) / fps;
+                        frames = start + (start - frames);
+                        last_time = start / fps;
+                    } else {
+                        break;
+                    }
+                    self.time = frames / fps;
+                    self.direction *= -1.0;
+                    direction *= -1;
+                    did_loop = true;
+                    if let Some(events) = reported_events.as_mut() {
+                        animation.report_keyed_callbacks(
+                            last_time,
+                            self.time,
+                            self.speed_direction,
+                            from_pong,
+                            *events,
+                        );
+                    }
+                    from_pong = !from_pong;
                 }
-                self.time = frames / fps;
-                self.direction *= -1.0;
-                direction *= -1;
-                did_loop = true;
-            },
+            }
         }
 
         if kill_spilled_time {
@@ -6318,7 +6419,14 @@ impl StateMachineLayerInstance {
         view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
     ) -> StateMachineLayerAdvance {
-        self.advance_current_animation(artboard, layer, elapsed_seconds, inputs, bindable_numbers);
+        self.advance_current_animation(
+            artboard,
+            layer,
+            elapsed_seconds,
+            inputs,
+            bindable_numbers,
+            reported_events,
+        );
         let input_changed = self.update_transition_mix(
             elapsed_seconds,
             inputs,
@@ -6332,6 +6440,7 @@ impl StateMachineLayerInstance {
             elapsed_seconds,
             inputs,
             bindable_numbers,
+            reported_events,
         );
         self.apply_animations(artboard);
 
@@ -6792,6 +6901,7 @@ impl StateMachineLayerInstance {
                 previous_spilled_time,
                 inputs,
                 bindable_numbers,
+                reported_events,
             );
         }
 
@@ -6978,15 +7088,26 @@ impl StateMachineLayerInstance {
         elapsed_seconds: f32,
         inputs: &[StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
+        reported_events: &mut Vec<StateMachineReportedEvent>,
     ) -> bool {
         if let Some(blend_state) = self.current_blend_state_1d.as_mut() {
-            self.current_animation_keep_going =
-                blend_state.advance(artboard, inputs, bindable_numbers, elapsed_seconds);
+            self.current_animation_keep_going = blend_state.advance_with_events(
+                artboard,
+                inputs,
+                bindable_numbers,
+                elapsed_seconds,
+                reported_events,
+            );
             return self.current_animation_keep_going;
         }
         if let Some(blend_state) = self.current_blend_state_direct.as_mut() {
-            self.current_animation_keep_going =
-                blend_state.advance(artboard, inputs, bindable_numbers, elapsed_seconds);
+            self.current_animation_keep_going = blend_state.advance_with_events(
+                artboard,
+                inputs,
+                bindable_numbers,
+                elapsed_seconds,
+                reported_events,
+            );
             return self.current_animation_keep_going;
         }
         let Some(animation_instance) = self.current_animation.as_mut() else {
@@ -7004,8 +7125,11 @@ impl StateMachineLayerInstance {
             self.current_animation_keep_going = false;
             return false;
         };
-        self.current_animation_keep_going =
-            animation_instance.advance(animation, elapsed_seconds * state.speed);
+        self.current_animation_keep_going = animation_instance.advance_with_events(
+            animation,
+            elapsed_seconds * state.speed,
+            reported_events,
+        );
         self.current_animation_keep_going
     }
 
@@ -7016,6 +7140,7 @@ impl StateMachineLayerInstance {
         elapsed_seconds: f32,
         inputs: &[StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
+        reported_events: &mut Vec<StateMachineReportedEvent>,
     ) -> bool {
         if !self.is_transitioning() {
             return false;
@@ -7024,10 +7149,22 @@ impl StateMachineLayerInstance {
             return false;
         }
         if let Some(blend_state) = self.transition_source_blend_state_1d.as_mut() {
-            return blend_state.advance(artboard, inputs, bindable_numbers, elapsed_seconds);
+            return blend_state.advance_with_events(
+                artboard,
+                inputs,
+                bindable_numbers,
+                elapsed_seconds,
+                reported_events,
+            );
         }
         if let Some(blend_state) = self.transition_source_blend_state_direct.as_mut() {
-            return blend_state.advance(artboard, inputs, bindable_numbers, elapsed_seconds);
+            return blend_state.advance_with_events(
+                artboard,
+                inputs,
+                bindable_numbers,
+                elapsed_seconds,
+                reported_events,
+            );
         }
         let Some(animation_instance) = self.transition_source_animation.as_mut() else {
             return false;
@@ -7041,7 +7178,11 @@ impl StateMachineLayerInstance {
         let Some(animation) = artboard.linear_animation(animation_instance.animation_index) else {
             return false;
         };
-        animation_instance.advance(animation, elapsed_seconds * state.speed)
+        animation_instance.advance_with_events(
+            animation,
+            elapsed_seconds * state.speed,
+            reported_events,
+        )
     }
 
     fn apply_animations(&self, artboard: &mut ArtboardInstance) -> bool {
@@ -7136,10 +7277,48 @@ impl BlendState1DInstance {
         bindable_numbers: &[StateMachineBindableNumberInstance],
         elapsed_seconds: f32,
     ) -> bool {
+        self.advance_and_report(artboard, inputs, bindable_numbers, elapsed_seconds, None)
+    }
+
+    fn advance_with_events(
+        &mut self,
+        artboard: &ArtboardInstance,
+        inputs: &[StateMachineInputInstance],
+        bindable_numbers: &[StateMachineBindableNumberInstance],
+        elapsed_seconds: f32,
+        reported_events: &mut Vec<StateMachineReportedEvent>,
+    ) -> bool {
+        self.advance_and_report(
+            artboard,
+            inputs,
+            bindable_numbers,
+            elapsed_seconds,
+            Some(reported_events),
+        )
+    }
+
+    fn advance_and_report(
+        &mut self,
+        artboard: &ArtboardInstance,
+        inputs: &[StateMachineInputInstance],
+        bindable_numbers: &[StateMachineBindableNumberInstance],
+        elapsed_seconds: f32,
+        mut reported_events: Option<&mut Vec<StateMachineReportedEvent>>,
+    ) -> bool {
         for animation in &mut self.animations {
             if artboard.linear_animation_instance_keep_going(&animation.animation) {
-                artboard
-                    .advance_linear_animation_instance(&mut animation.animation, elapsed_seconds);
+                if let Some(events) = reported_events.as_mut() {
+                    artboard.advance_linear_animation_instance_with_events(
+                        &mut animation.animation,
+                        elapsed_seconds,
+                        *events,
+                    );
+                } else {
+                    artboard.advance_linear_animation_instance(
+                        &mut animation.animation,
+                        elapsed_seconds,
+                    );
+                }
             }
         }
 
@@ -7281,10 +7460,48 @@ impl BlendStateDirectInstance {
         bindable_numbers: &[StateMachineBindableNumberInstance],
         elapsed_seconds: f32,
     ) -> bool {
+        self.advance_and_report(artboard, inputs, bindable_numbers, elapsed_seconds, None)
+    }
+
+    fn advance_with_events(
+        &mut self,
+        artboard: &ArtboardInstance,
+        inputs: &[StateMachineInputInstance],
+        bindable_numbers: &[StateMachineBindableNumberInstance],
+        elapsed_seconds: f32,
+        reported_events: &mut Vec<StateMachineReportedEvent>,
+    ) -> bool {
+        self.advance_and_report(
+            artboard,
+            inputs,
+            bindable_numbers,
+            elapsed_seconds,
+            Some(reported_events),
+        )
+    }
+
+    fn advance_and_report(
+        &mut self,
+        artboard: &ArtboardInstance,
+        inputs: &[StateMachineInputInstance],
+        bindable_numbers: &[StateMachineBindableNumberInstance],
+        elapsed_seconds: f32,
+        mut reported_events: Option<&mut Vec<StateMachineReportedEvent>>,
+    ) -> bool {
         for animation in &mut self.animations {
             if artboard.linear_animation_instance_keep_going(&animation.animation) {
-                artboard
-                    .advance_linear_animation_instance(&mut animation.animation, elapsed_seconds);
+                if let Some(events) = reported_events.as_mut() {
+                    artboard.advance_linear_animation_instance_with_events(
+                        &mut animation.animation,
+                        elapsed_seconds,
+                        *events,
+                    );
+                } else {
+                    artboard.advance_linear_animation_instance(
+                        &mut animation.animation,
+                        elapsed_seconds,
+                    );
+                }
             }
         }
 
@@ -7358,11 +7575,13 @@ pub struct RuntimeKeyedProperty {
     pub bool_source_value: bool,
     pub uint_property: bool,
     pub string_property: bool,
+    callback_event: Option<StateMachineReportedEvent>,
     pub key_frames: Vec<RuntimeKeyFrameDouble>,
     pub color_key_frames: Vec<RuntimeKeyFrameColor>,
     pub bool_key_frames: Vec<RuntimeKeyFrameBool>,
     pub uint_key_frames: Vec<RuntimeKeyFrameUint>,
     pub string_key_frames: Vec<RuntimeKeyFrameString>,
+    callback_key_frames: Vec<RuntimeKeyFrameCallback>,
 }
 
 impl RuntimeKeyedProperty {
@@ -7503,6 +7722,57 @@ impl RuntimeKeyedProperty {
         Some(value.clone())
     }
 
+    fn report_keyed_callbacks(
+        &self,
+        seconds_from: f32,
+        seconds_to: f32,
+        fps: u64,
+        is_at_start_frame: bool,
+        reported_events: &mut Vec<StateMachineReportedEvent>,
+    ) {
+        if self.callback_key_frames.is_empty() || seconds_from == seconds_to {
+            return;
+        }
+        let Some(event) = self.callback_event.as_ref() else {
+            return;
+        };
+
+        let is_forward = seconds_from <= seconds_to;
+        let mut from_exact_offset = 0;
+        let to_exact_offset = usize::from(is_forward);
+        if is_forward {
+            if !is_at_start_frame {
+                from_exact_offset = 1;
+            }
+        } else if is_at_start_frame {
+            from_exact_offset = 1;
+        }
+
+        let mut index = closest_key_frame_index_with_exact_offset(
+            &self.callback_key_frames,
+            seconds_from,
+            fps,
+            from_exact_offset,
+        );
+        let mut index_to = closest_key_frame_index_with_exact_offset(
+            &self.callback_key_frames,
+            seconds_to,
+            fps,
+            to_exact_offset,
+        );
+        if index_to < index {
+            std::mem::swap(&mut index, &mut index_to);
+        }
+
+        while index_to > index {
+            let key_frame = &self.callback_key_frames[index];
+            let mut reported_event = event.clone();
+            reported_event.seconds_delay = seconds_to - key_frame.seconds(fps);
+            reported_events.push(reported_event);
+            index += 1;
+        }
+    }
+
     fn closest_frame_index(&self, seconds: f32, fps: u64) -> usize {
         closest_key_frame_index(&self.key_frames, seconds, fps)
     }
@@ -7516,6 +7786,15 @@ fn closest_key_frame_index<T: RuntimeKeyFrameTiming>(
     key_frames: &[T],
     seconds: f32,
     fps: u64,
+) -> usize {
+    closest_key_frame_index_with_exact_offset(key_frames, seconds, fps, 0)
+}
+
+fn closest_key_frame_index_with_exact_offset<T: RuntimeKeyFrameTiming>(
+    key_frames: &[T],
+    seconds: f32,
+    fps: u64,
+    exact_offset: usize,
 ) -> usize {
     let last = key_frames.len() - 1;
     if seconds > key_frames[last].seconds(fps) {
@@ -7535,7 +7814,7 @@ fn closest_key_frame_index<T: RuntimeKeyFrameTiming>(
             }
             end = mid - 1;
         } else {
-            return mid;
+            return mid + exact_offset;
         }
     }
     start
@@ -7662,6 +7941,27 @@ impl RuntimeKeyFrameTiming for RuntimeKeyFrameString {
 }
 
 #[derive(Debug, Clone)]
+pub struct RuntimeKeyFrameCallback {
+    pub global_id: u32,
+    pub frame: u64,
+}
+
+impl RuntimeKeyFrameCallback {
+    fn seconds(&self, fps: u64) -> f32 {
+        if fps == 0 {
+            return 0.0;
+        }
+        self.frame as f32 / fps as f32
+    }
+}
+
+impl RuntimeKeyFrameTiming for RuntimeKeyFrameCallback {
+    fn seconds(&self, fps: u64) -> f32 {
+        self.seconds(fps)
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct RuntimeComponent {
     pub local_id: usize,
     pub global_id: u32,
@@ -7695,6 +7995,31 @@ impl RuntimeComponent {
     pub fn is_collapsed(&self) -> bool {
         self.dirt.contains(ComponentDirt::COLLAPSED)
     }
+}
+
+fn callback_event_for_keyed_property(
+    target_local_id: usize,
+    target: &RuntimeObject,
+    property_key: u16,
+) -> Option<StateMachineReportedEvent> {
+    if !is_callback_property_key(property_key) {
+        return None;
+    }
+    let definition = definition_by_type_key(target.type_key)?;
+    if !definition.is_a("Event") {
+        return None;
+    }
+    let property = definition.property_by_key_in_hierarchy(property_key)?;
+    if property.name != "trigger" {
+        return None;
+    }
+
+    Some(StateMachineReportedEvent {
+        event_local_index: target_local_id,
+        event_core_type: u32::from(target.type_key),
+        name: target.string_property("name").map(ToOwned::to_owned),
+        seconds_delay: 0.0,
+    })
 }
 
 fn build_linear_animations(
@@ -7808,11 +8133,17 @@ fn build_linear_animations(
                         == Some(CoreRegistryFieldKind::Uint),
                     string_property: runtime_object_field_kind_by_key(target, property_key)
                         == Some(FieldKind::String),
+                    callback_event: callback_event_for_keyed_property(
+                        target_local_id,
+                        target,
+                        property_key,
+                    ),
                     key_frames: Vec::new(),
                     color_key_frames: Vec::new(),
                     bool_key_frames: Vec::new(),
                     uint_key_frames: Vec::new(),
                     string_key_frames: Vec::new(),
+                    callback_key_frames: Vec::new(),
                 });
             current_keyed_property = Some((
                 keyed_object_index,
@@ -7920,6 +8251,19 @@ fn build_linear_animations(
                         .string_property_bytes("value")
                         .unwrap_or_default()
                         .to_vec(),
+                });
+        }
+
+        if object.type_name == "KeyFrameCallback" {
+            let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
+                continue;
+            };
+            animations[animation_index].keyed_objects[keyed_object_index].keyed_properties
+                [keyed_property_index]
+                .callback_key_frames
+                .push(RuntimeKeyFrameCallback {
+                    global_id: global_id as u32,
+                    frame: object.uint_property("frame").unwrap_or(0),
                 });
         }
     }

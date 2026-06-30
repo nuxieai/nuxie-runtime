@@ -20,6 +20,9 @@ source-to-string target runtime graph lane: trim, remove-zeros, and pad.
   and `padType` descriptors.
 - Forward source-to-target conversion covered by a C++ probe through an
   existing string transition-condition consumer.
+- Main-`ToTarget | TwoWay` target-dirty behavior for the direct string-pad path
+  is covered by
+  `docs/prototypes/data-binding-graph-string-pad-main-to-target-two-way-target-dirty-runtime-contract.md`.
 
 ## Out Of Scope
 
@@ -28,7 +31,7 @@ source-to-string target runtime graph lane: trim, remove-zeros, and pad.
 - Non-string sources feeding `DataConverterStringPad`.
 - Owned or external view-model string-pad contexts.
 - Reverse target-to-source propagation.
-- Dirty/update queue parity beyond the existing graph-owned apply point.
+- Dirty/update queue parity beyond the linked state-machine target-dirty path.
 - Relative, parent, and nested source path lookup.
 - Nested artboard propagation.
 

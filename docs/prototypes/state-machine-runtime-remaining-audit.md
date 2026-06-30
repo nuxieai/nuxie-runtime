@@ -274,6 +274,11 @@ slice.
   preserving the manual target edit through explicit data-context advancement
   and then overwriting it from the unchanged string source through remove-zero
   conversion on the next normal advance.
+- String-pad main-to-target dirty slice: direct `DataConverterStringPad` binds
+  now follow C++ state-machine target-dirty behavior for main-`ToTarget |
+  TwoWay` string targets, preserving the manual target edit through explicit
+  data-context advancement and then overwriting it from the unchanged string
+  source through imported pad conversion on the next normal advance.
 - First `DataConverterToString` graph-owned converter execution slice:
   forward conversion for default-context number sources feeding string targets,
   covered by a C++ probe through an existing string transition-condition

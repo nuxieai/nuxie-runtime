@@ -1251,6 +1251,22 @@ add/remove behavior, re-entry protection, relative/parent/nested lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 
+Current #12 update: graph-owned target-to-source runtime behavior now also
+covers direct default-context enum binds. Mutating a
+`BindablePropertyEnum.propertyValue` target for a `ToSource | TwoWay`
+`DataBindContext` marks that graph binding dirty; explicit
+`advance_data_context` writes the target enum value back into the bound
+`ViewModelInstanceEnum.propertyValue` source before normal source-to-target
+application. C++ probe coverage uses two binds to the same source so the second
+bind's existing `TransitionViewModelCondition` consumer observes the
+target-to-source write without adding new probe report fields. The contract is
+`docs/prototypes/data-binding-graph-enum-target-to-source-runtime-contract.md`.
+Target-to-source for asset, artboard, trigger, symbol-list-index, view-model,
+and list value kinds, pure `ToSource` without `TwoWay`, reverse converter
+execution, imported/owned contexts, pending dirty queues, pending add/remove
+behavior, re-entry protection, relative/parent/nested lookup, listener-owned
+data binding, and nested artboard propagation remain follow-up `#12` slices.
+
 Current #12 update: `BindablePropertyViewModel.propertyValue` now has its first
 graph-owned source binding slice. Default-context
 `ViewModelInstanceViewModel.propertyValue` sources resolve through the

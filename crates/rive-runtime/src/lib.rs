@@ -2799,6 +2799,7 @@ struct RuntimeBindableEnum {
 struct RuntimeBindableEnumDefaultViewModelSource {
     data_bind_index: usize,
     path: Vec<u32>,
+    flags: u64,
     value: u64,
 }
 
@@ -3683,7 +3684,7 @@ impl RuntimeDataBindGraph {
                     &mut default_view_model_bindings,
                     source.data_bind_index,
                     &source.path,
-                    0,
+                    source.flags,
                     None,
                     RuntimeDataBindGraphTarget::Enum {
                         global_id: bindable.global_id,
@@ -4330,6 +4331,33 @@ impl RuntimeDataBindGraph {
         true
     }
 
+    fn mark_enum_target_dirty_for_data_bind(&mut self, data_bind_index: usize) -> bool {
+        if !self.default_view_model_source_context_bound() {
+            return false;
+        }
+        let Some(binding) = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+        else {
+            return false;
+        };
+        let Some(target) = self.targets.get(binding.target.0) else {
+            return false;
+        };
+        if !matches!(target.target, RuntimeDataBindGraphTarget::Enum { .. }) {
+            return false;
+        }
+        let Some(source) = self.sources.get_mut(binding.source.0) else {
+            return false;
+        };
+        if !source.applies_target_to_source() {
+            return false;
+        }
+        source.target_to_source_dirty = true;
+        true
+    }
+
     fn default_view_model_trigger_target_global_id_for_data_bind(
         &self,
         data_bind_index: usize,
@@ -4626,6 +4654,61 @@ impl RuntimeDataBindGraph {
         changed
     }
 
+    fn apply_default_view_model_enum_targets_to_sources(
+        &mut self,
+        enums: &[StateMachineBindableEnumInstance],
+    ) -> bool {
+        if !self.default_view_model_source_context_bound() {
+            return false;
+        }
+        let mut changed = false;
+
+        for binding in self.default_view_model_bindings.clone() {
+            let Some(target) = self.targets.get(binding.target.0) else {
+                continue;
+            };
+            let RuntimeDataBindGraphTarget::Enum { global_id } = target.target else {
+                continue;
+            };
+            let Some(source) = self.sources.get_mut(binding.source.0) else {
+                continue;
+            };
+            if !source.target_to_source_dirty {
+                continue;
+            }
+            source.target_to_source_dirty = false;
+            if !source.bound || !source.supports_direct_enum_target_to_source() {
+                continue;
+            }
+            let Some(value) = enums
+                .iter()
+                .find(|r#enum| r#enum.global_id == global_id)
+                .map(|r#enum| r#enum.value)
+            else {
+                continue;
+            };
+            let RuntimeDataBindGraphValue::Enum(source_value) = &mut source.value else {
+                continue;
+            };
+            if *source_value != value {
+                *source_value = value;
+                changed = true;
+            }
+            let RuntimeDataBindGraphValue::Enum(default_value) = &mut source.default_value else {
+                continue;
+            };
+            if *default_value != value {
+                *default_value = value;
+                changed = true;
+            }
+        }
+
+        if changed {
+            self.mark_default_view_model_bindings_dirty();
+        }
+        changed
+    }
+
     fn apply_default_view_model_bindings(
         &mut self,
         mut targets: RuntimeDataBindGraphTargetsMut<'_>,
@@ -4699,6 +4782,12 @@ impl RuntimeDataBindGraphSourceNode {
         self.applies_target_to_source()
             && self.converter.is_none()
             && matches!(self.value, RuntimeDataBindGraphValue::Color(_))
+    }
+
+    fn supports_direct_enum_target_to_source(&self) -> bool {
+        self.applies_target_to_source()
+            && self.converter.is_none()
+            && matches!(self.value, RuntimeDataBindGraphValue::Enum(_))
     }
 
     fn reset_converter_state(&mut self) {
@@ -8445,6 +8534,8 @@ impl StateMachineInstance {
         if !bindable_enum.set_value(value) {
             return false;
         }
+        self.data_bind_graph
+            .mark_enum_target_dirty_for_data_bind(data_bind_index);
         self.needs_advance = true;
         true
     }
@@ -8725,6 +8816,8 @@ impl StateMachineInstance {
                 .apply_default_view_model_string_targets_to_sources(&self.bindable_strings);
             self.data_bind_graph
                 .apply_default_view_model_color_targets_to_sources(&self.bindable_colors);
+            self.data_bind_graph
+                .apply_default_view_model_enum_targets_to_sources(&self.bindable_enums);
             self.apply_default_view_model_bindings(true, RuntimeDataBindGraphApplyPhase::Immediate);
             for trigger in &mut self.view_model_triggers {
                 trigger.reset();
@@ -12086,6 +12179,7 @@ fn runtime_bindable_enum_default_view_model_source(
     Some(RuntimeBindableEnumDefaultViewModelSource {
         data_bind_index,
         path: path.to_vec(),
+        flags: data_bind.uint_property("flags").unwrap_or(0),
         value,
     })
 }

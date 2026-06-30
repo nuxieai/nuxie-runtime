@@ -218,6 +218,12 @@ slice.
   slice: forward composition for default-context number sources feeding number
   targets through an `OperationValue -> Rounder` group, covered by a C++ probe
   through an existing blend-state consumer.
+- First stateful `DataConverterInterpolator` graph-owned converter execution
+  slice: direct default-context number sources feeding number targets now own
+  per-source interpolator state, warm C++'s two-advance startup gate, defer
+  initialized zero-second retargets until a positive elapsed pass, and keep the
+  state machine advancing while interpolation remains active. A C++ probe
+  covers retargeting through an existing blend-state consumer.
 - First graph-owned view-model bindable slice: forward propagation for
   default-context `ViewModelInstanceViewModel.propertyValue` sources feeding
   `BindablePropertyViewModel.propertyValue` targets, covered by a C++ probe
@@ -272,8 +278,9 @@ slice.
   interpolator, list-to-length default list, operation-value
   number/symbol-list-index, system-operation-value direct number,
   operation-view-model default-number,
-  string converter group, number-to-string converter group, and
-  number-to-number converter group paths,
+  string converter group, number-to-string converter group,
+  number-to-number converter group paths, and direct stateful
+  data-converter-interpolator number smoothing,
   data-binding update queues, relative paths, parent paths, and nested paths.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener

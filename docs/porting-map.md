@@ -1093,6 +1093,22 @@ randoms, generated lists, or target-to-source queues, relative/parent/nested
 lookup, listener-owned data binding, and nested artboard propagation remain
 follow-up `#12` slices.
 
+Current #12 update: the first stateful runtime data-converter slice now admits
+direct `DataConverterInterpolator` bindings for default-context number sources
+feeding `BindablePropertyNumber.propertyValue` targets. `RuntimeDataBindGraph`
+owns per-source interpolator state, imports duration plus optional resolved
+cubic/elastic interpolator descriptors, follows C++'s two-advance startup gate,
+defers initialized zero-second retargets until a positive elapsed pass, and
+keeps the state machine advancing while smoothing is active. C++ probe coverage
+warms the converter, mutates the default source, and verifies partial/final
+smoothing through an existing `BlendState1DViewModel` consumer. The contract is
+`docs/prototypes/data-binding-graph-interpolator-converter-runtime-contract.md`.
+Interpolator children inside converter groups, reverse conversion,
+target-to-source queues, formula/number-to-list/generated-list/scripted
+stateful scheduling, broader `DataBindContainer` dirty queues,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
+
 Current #12 update: `BindablePropertyViewModel.propertyValue` now has its first
 graph-owned source binding slice. Default-context
 `ViewModelInstanceViewModel.propertyValue` sources resolve through the

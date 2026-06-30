@@ -2931,6 +2931,7 @@ struct RuntimeDataBindGraphSourceNode {
     path: Vec<u32>,
     bound: bool,
     converter: Option<RuntimeDataBindGraphConverter>,
+    converter_state: RuntimeDataBindGraphConverterState,
     default_value: RuntimeDataBindGraphValue,
     value: RuntimeDataBindGraphValue,
     view_model_instance_ids: Vec<u32>,
@@ -2981,8 +2982,31 @@ enum RuntimeDataBindGraphConverter {
         text: Vec<u8>,
         pad_type: u64,
     },
+    Interpolator {
+        duration: f32,
+        interpolator: Option<RuntimeTransitionInterpolator>,
+    },
     Group(Vec<RuntimeDataBindGraphConverter>),
     Unsupported,
+}
+
+#[derive(Debug, Clone)]
+enum RuntimeDataBindGraphConverterState {
+    None,
+    Interpolator(RuntimeDataBindGraphInterpolatorState),
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct RuntimeDataBindGraphStatefulAdvance {
+    changed: bool,
+    keep_going: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum RuntimeDataBindGraphApplyPhase {
+    BeforeStatefulAdvance,
+    AfterStatefulAdvance { elapsed_positive: bool },
+    Immediate,
 }
 
 #[derive(Debug, Clone)]
@@ -3725,10 +3749,12 @@ impl RuntimeDataBindGraph {
         value: RuntimeDataBindGraphValue,
     ) -> RuntimeDataBindGraphSourceHandle {
         let source = RuntimeDataBindGraphSourceHandle(sources.len());
+        let converter_state = RuntimeDataBindGraphConverterState::for_converter(converter.as_ref());
         sources.push(RuntimeDataBindGraphSourceNode {
             path: path.to_vec(),
             bound: true,
             converter,
+            converter_state,
             default_value: value.clone(),
             value,
             view_model_instance_ids: Vec::new(),
@@ -3768,6 +3794,7 @@ impl RuntimeDataBindGraph {
         if self.data_context_present() {
             return false;
         }
+        self.reset_converter_states();
         self.context_kind = RuntimeDataBindGraphContextKind::Empty;
         self.default_view_model_bindings_dirty = false;
         true
@@ -3780,6 +3807,7 @@ impl RuntimeDataBindGraph {
         for source in &mut self.sources {
             source.value = source.default_value.clone();
             source.bound = true;
+            source.reset_converter_state();
         }
         self.context_kind = RuntimeDataBindGraphContextKind::DefaultViewModel;
         self.mark_default_view_model_bindings_dirty();
@@ -3810,6 +3838,7 @@ impl RuntimeDataBindGraph {
             } else {
                 source.bound = false;
             }
+            source.reset_converter_state();
         }
         self.context_kind = RuntimeDataBindGraphContextKind::ImportedViewModel;
         self.mark_default_view_model_bindings_dirty();
@@ -3827,10 +3856,17 @@ impl RuntimeDataBindGraph {
             } else {
                 source.bound = false;
             }
+            source.reset_converter_state();
         }
         self.context_kind = RuntimeDataBindGraphContextKind::OwnedViewModel;
         self.mark_default_view_model_bindings_dirty();
         true
+    }
+
+    fn reset_converter_states(&mut self) {
+        for source in &mut self.sources {
+            source.reset_converter_state();
+        }
     }
 
     fn set_default_view_model_number_source_for_data_bind(
@@ -4195,17 +4231,44 @@ impl RuntimeDataBindGraph {
         changed
     }
 
+    fn advance_stateful_converters(
+        &mut self,
+        elapsed_seconds: f32,
+    ) -> RuntimeDataBindGraphStatefulAdvance {
+        if !self.default_view_model_context_bound() {
+            return RuntimeDataBindGraphStatefulAdvance::default();
+        }
+        let mut keep_going = false;
+        let mut changed = false;
+        for source in &mut self.sources {
+            if !source.bound {
+                continue;
+            }
+            let advance = source.advance_stateful_converter(elapsed_seconds);
+            changed |= advance.changed;
+            keep_going |= advance.keep_going;
+        }
+        if changed {
+            self.mark_default_view_model_bindings_dirty();
+        }
+        RuntimeDataBindGraphStatefulAdvance {
+            changed,
+            keep_going,
+        }
+    }
+
     fn apply_default_view_model_bindings(
         &mut self,
         mut targets: RuntimeDataBindGraphTargetsMut<'_>,
+        phase: RuntimeDataBindGraphApplyPhase,
     ) {
         if !self.default_view_model_context_bound() || !self.default_view_model_bindings_dirty {
             return;
         }
         let mut skipped_dirty_binding = false;
 
-        for binding in &self.default_view_model_bindings {
-            let Some(source) = self.sources.get(binding.source.0) else {
+        for binding in self.default_view_model_bindings.clone() {
+            let Some(source) = self.sources.get_mut(binding.source.0) else {
                 continue;
             };
             if !source.bound {
@@ -4220,6 +4283,10 @@ impl RuntimeDataBindGraph {
                 skipped_dirty_binding = true;
                 continue;
             }
+            if source.should_skip_binding_for_phase(phase) {
+                skipped_dirty_binding = true;
+                continue;
+            }
             let Some(value) = source.converted_value() else {
                 continue;
             };
@@ -4230,12 +4297,437 @@ impl RuntimeDataBindGraph {
 }
 
 impl RuntimeDataBindGraphSourceNode {
-    fn converted_value(&self) -> Option<RuntimeDataBindGraphValue> {
+    fn reset_converter_state(&mut self) {
+        self.converter_state =
+            RuntimeDataBindGraphConverterState::for_converter(self.converter.as_ref());
+    }
+
+    fn advance_stateful_converter(
+        &mut self,
+        elapsed_seconds: f32,
+    ) -> RuntimeDataBindGraphStatefulAdvance {
+        let Some(RuntimeDataBindGraphConverter::Interpolator {
+            duration,
+            interpolator,
+        }) = self.converter.as_ref()
+        else {
+            return RuntimeDataBindGraphStatefulAdvance::default();
+        };
+        self.converter_state
+            .advance_interpolator(*duration, *interpolator, elapsed_seconds)
+    }
+
+    fn should_skip_binding_for_phase(&self, phase: RuntimeDataBindGraphApplyPhase) -> bool {
+        if !matches!(
+            self.converter,
+            Some(RuntimeDataBindGraphConverter::Interpolator { .. })
+        ) || !self.converter_state.is_initialized_stateful()
+        {
+            return false;
+        }
+        match phase {
+            RuntimeDataBindGraphApplyPhase::BeforeStatefulAdvance => true,
+            RuntimeDataBindGraphApplyPhase::AfterStatefulAdvance { elapsed_positive } => {
+                !elapsed_positive
+            }
+            RuntimeDataBindGraphApplyPhase::Immediate => false,
+        }
+    }
+
+    fn converted_value(&mut self) -> Option<RuntimeDataBindGraphValue> {
         match self.converter.as_ref() {
             None => Some(self.value.clone()),
+            Some(
+                converter @ RuntimeDataBindGraphConverter::Interpolator {
+                    duration,
+                    interpolator,
+                },
+            ) => self.converter_state.convert_interpolator(
+                converter,
+                *duration,
+                *interpolator,
+                &self.value,
+            ),
             Some(converter) => runtime_data_bind_graph_convert_value(converter, &self.value),
         }
     }
+}
+
+impl RuntimeDataBindGraphConverterState {
+    fn for_converter(converter: Option<&RuntimeDataBindGraphConverter>) -> Self {
+        match converter {
+            Some(RuntimeDataBindGraphConverter::Interpolator { .. }) => {
+                Self::Interpolator(RuntimeDataBindGraphInterpolatorState::new())
+            }
+            _ => Self::None,
+        }
+    }
+
+    fn convert_interpolator(
+        &mut self,
+        converter: &RuntimeDataBindGraphConverter,
+        duration: f32,
+        interpolator: Option<RuntimeTransitionInterpolator>,
+        value: &RuntimeDataBindGraphValue,
+    ) -> Option<RuntimeDataBindGraphValue> {
+        if matches!(self, Self::None) {
+            *self = Self::for_converter(Some(converter));
+        }
+        match self {
+            Self::Interpolator(state) => state.convert(duration, interpolator, value),
+            Self::None => None,
+        }
+    }
+
+    fn advance_interpolator(
+        &mut self,
+        duration: f32,
+        interpolator: Option<RuntimeTransitionInterpolator>,
+        elapsed_seconds: f32,
+    ) -> RuntimeDataBindGraphStatefulAdvance {
+        match self {
+            Self::Interpolator(state) => state.advance(duration, interpolator, elapsed_seconds),
+            Self::None => RuntimeDataBindGraphStatefulAdvance::default(),
+        }
+    }
+
+    fn is_initialized_stateful(&self) -> bool {
+        match self {
+            Self::Interpolator(state) => state.is_initialized(),
+            Self::None => false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+struct RuntimeDataBindGraphInterpolatorState {
+    advance_count: u8,
+    advancer: Option<RuntimeDataBindGraphInterpolatorAdvancer>,
+}
+
+impl RuntimeDataBindGraphInterpolatorState {
+    fn new() -> Self {
+        Self::default()
+    }
+
+    fn is_initialized(&self) -> bool {
+        self.advancer.is_some()
+    }
+
+    fn convert(
+        &mut self,
+        duration: f32,
+        _interpolator: Option<RuntimeTransitionInterpolator>,
+        input: &RuntimeDataBindGraphValue,
+    ) -> Option<RuntimeDataBindGraphValue> {
+        if duration == 0.0
+            && let Some(advancer) = &mut self.advancer
+        {
+            if let Some(input_value) = RuntimeDataBindGraphInterpolatorValue::from_graph(input) {
+                advancer.reset_to_start(&input_value);
+            }
+            return Some(input.clone());
+        }
+
+        if self.advancer.is_none() {
+            let Some(input_value) = RuntimeDataBindGraphInterpolatorValue::from_graph(input) else {
+                return Some(input.clone());
+            };
+            self.advancer = Some(RuntimeDataBindGraphInterpolatorAdvancer::new(&input_value));
+        }
+
+        let Some(input_value) = RuntimeDataBindGraphInterpolatorValue::from_graph(input) else {
+            return Some(input.clone());
+        };
+        let advancer = self.advancer.as_mut().expect("advancer initialized");
+        if self.advance_count < 2 {
+            advancer.reset_values(&input_value);
+        } else {
+            advancer.update_values(&input_value);
+        }
+        Some(advancer.current_value().to_graph_value())
+    }
+
+    fn advance(
+        &mut self,
+        duration: f32,
+        interpolator: Option<RuntimeTransitionInterpolator>,
+        elapsed_seconds: f32,
+    ) -> RuntimeDataBindGraphStatefulAdvance {
+        if self.advance_count < 2 && elapsed_seconds > 0.0 {
+            self.advance_count += 1;
+        }
+        let Some(advancer) = &mut self.advancer else {
+            return RuntimeDataBindGraphStatefulAdvance {
+                changed: true,
+                keep_going: true,
+            };
+        };
+        advancer.advance(duration, interpolator, elapsed_seconds)
+    }
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeDataBindGraphInterpolatorAdvancer {
+    animation_data_a: RuntimeDataBindGraphInterpolatorAnimationData,
+    animation_data_b: RuntimeDataBindGraphInterpolatorAnimationData,
+    current_value: RuntimeDataBindGraphInterpolatorValue,
+    is_smoothing_animation: bool,
+}
+
+impl RuntimeDataBindGraphInterpolatorAdvancer {
+    fn new(input: &RuntimeDataBindGraphInterpolatorValue) -> Self {
+        let default_value = input.default_for_kind();
+        Self {
+            animation_data_a: RuntimeDataBindGraphInterpolatorAnimationData::new(
+                default_value.clone(),
+            ),
+            animation_data_b: RuntimeDataBindGraphInterpolatorAnimationData::new(
+                default_value.clone(),
+            ),
+            current_value: default_value,
+            is_smoothing_animation: false,
+        }
+    }
+
+    fn current_value(&self) -> &RuntimeDataBindGraphInterpolatorValue {
+        &self.current_value
+    }
+
+    fn reset_values(&mut self, input: &RuntimeDataBindGraphInterpolatorValue) {
+        if self.is_smoothing_animation {
+            self.animation_data_b.reset_values(input);
+        } else {
+            self.animation_data_a.reset_values(input);
+        }
+        self.current_value.copy_from(input);
+    }
+
+    fn reset_to_start(&mut self, input: &RuntimeDataBindGraphInterpolatorValue) {
+        self.reset_values(input);
+        self.is_smoothing_animation = false;
+        self.animation_data_a.elapsed_seconds = 0.0;
+        self.animation_data_b.elapsed_seconds = 0.0;
+    }
+
+    fn update_values(&mut self, input: &RuntimeDataBindGraphInterpolatorValue) {
+        if self.current_animation_data().to.compare(input) {
+            return;
+        }
+
+        if self.current_animation_data().elapsed_seconds != 0.0 {
+            if self.is_smoothing_animation {
+                self.animation_data_a
+                    .copy_from(&self.animation_data_b.clone());
+            }
+            self.is_smoothing_animation = true;
+        } else {
+            self.is_smoothing_animation = false;
+        }
+
+        let current_value = self.current_value.clone();
+        let animation_data = self.current_animation_data_mut();
+        animation_data.from.copy_from(&current_value);
+        animation_data.to.copy_from(input);
+        animation_data.elapsed_seconds = 0.0;
+    }
+
+    fn advance(
+        &mut self,
+        duration: f32,
+        interpolator: Option<RuntimeTransitionInterpolator>,
+        elapsed_seconds: f32,
+    ) -> RuntimeDataBindGraphStatefulAdvance {
+        let animation_index = self.current_animation_index();
+        if self.animation_data(animation_index).to == self.current_value || elapsed_seconds == 0.0 {
+            return RuntimeDataBindGraphStatefulAdvance::default();
+        }
+
+        let previous_value = self.current_value.clone();
+        self.advance_animation_data(duration, interpolator, elapsed_seconds, animation_index);
+        RuntimeDataBindGraphStatefulAdvance {
+            changed: self.current_value != previous_value,
+            keep_going: self.animation_data(animation_index).elapsed_seconds < duration,
+        }
+    }
+
+    fn advance_animation_data(
+        &mut self,
+        duration: f32,
+        interpolator: Option<RuntimeTransitionInterpolator>,
+        elapsed_seconds: f32,
+        animation_index: usize,
+    ) {
+        if self.is_smoothing_animation {
+            let factor = runtime_data_bind_graph_interpolator_factor(
+                duration,
+                interpolator,
+                self.animation_data_a.elapsed_seconds,
+            );
+            let interpolated = self.animation_data_a.interpolate(factor);
+            self.animation_data_b.from.copy_from(&interpolated);
+            if factor == 1.0 {
+                self.animation_data_a
+                    .copy_from(&self.animation_data_b.clone());
+                self.is_smoothing_animation = false;
+            } else {
+                self.animation_data_a.elapsed_seconds += elapsed_seconds;
+            }
+        }
+
+        if self.animation_data(animation_index).elapsed_seconds >= duration {
+            self.current_value
+                .copy_from(&self.animation_data(animation_index).to.clone());
+            if self.is_smoothing_animation {
+                self.is_smoothing_animation = false;
+                self.animation_data_a
+                    .copy_from(&self.animation_data_b.clone());
+                self.animation_data_a.elapsed_seconds = 0.0;
+                self.animation_data_b.elapsed_seconds = 0.0;
+            } else {
+                self.animation_data_a.elapsed_seconds = 0.0;
+            }
+            return;
+        }
+
+        self.animation_data_mut(animation_index).elapsed_seconds += elapsed_seconds;
+        let factor = runtime_data_bind_graph_interpolator_factor(
+            duration,
+            interpolator,
+            self.animation_data(animation_index).elapsed_seconds,
+        );
+        let interpolated = self.animation_data(animation_index).interpolate(factor);
+        self.current_value.copy_from(&interpolated);
+    }
+
+    fn current_animation_data(&self) -> &RuntimeDataBindGraphInterpolatorAnimationData {
+        self.animation_data(self.current_animation_index())
+    }
+
+    fn current_animation_data_mut(&mut self) -> &mut RuntimeDataBindGraphInterpolatorAnimationData {
+        self.animation_data_mut(self.current_animation_index())
+    }
+
+    fn current_animation_index(&self) -> usize {
+        usize::from(self.is_smoothing_animation)
+    }
+
+    fn animation_data(&self, index: usize) -> &RuntimeDataBindGraphInterpolatorAnimationData {
+        if index == 0 {
+            &self.animation_data_a
+        } else {
+            &self.animation_data_b
+        }
+    }
+
+    fn animation_data_mut(
+        &mut self,
+        index: usize,
+    ) -> &mut RuntimeDataBindGraphInterpolatorAnimationData {
+        if index == 0 {
+            &mut self.animation_data_a
+        } else {
+            &mut self.animation_data_b
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeDataBindGraphInterpolatorAnimationData {
+    elapsed_seconds: f32,
+    from: RuntimeDataBindGraphInterpolatorValue,
+    to: RuntimeDataBindGraphInterpolatorValue,
+}
+
+impl RuntimeDataBindGraphInterpolatorAnimationData {
+    fn new(value: RuntimeDataBindGraphInterpolatorValue) -> Self {
+        Self {
+            elapsed_seconds: 0.0,
+            from: value.clone(),
+            to: value,
+        }
+    }
+
+    fn reset_values(&mut self, input: &RuntimeDataBindGraphInterpolatorValue) {
+        self.from.copy_from(input);
+        self.to.copy_from(input);
+    }
+
+    fn copy_from(&mut self, source: &Self) {
+        self.from.copy_from(&source.from);
+        self.to.copy_from(&source.to);
+        self.elapsed_seconds = source.elapsed_seconds;
+    }
+
+    fn interpolate(&self, factor: f32) -> RuntimeDataBindGraphInterpolatorValue {
+        self.from.interpolate(&self.to, factor)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum RuntimeDataBindGraphInterpolatorValue {
+    Number(f32),
+    Color(u32),
+}
+
+impl RuntimeDataBindGraphInterpolatorValue {
+    fn from_graph(value: &RuntimeDataBindGraphValue) -> Option<Self> {
+        match value {
+            RuntimeDataBindGraphValue::Number(value) => Some(Self::Number(*value)),
+            RuntimeDataBindGraphValue::Color(value) => Some(Self::Color(*value)),
+            _ => None,
+        }
+    }
+
+    fn default_for_kind(&self) -> Self {
+        match self {
+            Self::Number(_) => Self::Number(0.0),
+            Self::Color(_) => Self::Color(0),
+        }
+    }
+
+    fn copy_from(&mut self, source: &Self) {
+        if std::mem::discriminant(self) == std::mem::discriminant(source) {
+            *self = source.clone();
+        }
+    }
+
+    fn compare(&self, comparand: &Self) -> bool {
+        self == comparand
+    }
+
+    fn interpolate(&self, to: &Self, factor: f32) -> Self {
+        match (self, to) {
+            (Self::Number(from), Self::Number(to)) => {
+                Self::Number(*to * factor + *from * (1.0 - factor))
+            }
+            (Self::Color(from), Self::Color(to)) => Self::Color(color_lerp(*from, *to, factor)),
+            _ => self.clone(),
+        }
+    }
+
+    fn to_graph_value(&self) -> RuntimeDataBindGraphValue {
+        match self {
+            Self::Number(value) => RuntimeDataBindGraphValue::Number(*value),
+            Self::Color(value) => RuntimeDataBindGraphValue::Color(*value),
+        }
+    }
+}
+
+fn runtime_data_bind_graph_interpolator_factor(
+    duration: f32,
+    interpolator: Option<RuntimeTransitionInterpolator>,
+    elapsed_seconds: f32,
+) -> f32 {
+    let mut factor = if duration > 0.0 {
+        f32::min(1.0, elapsed_seconds / duration)
+    } else {
+        1.0
+    };
+    if let Some(interpolator) = interpolator {
+        factor = interpolator.transform(factor);
+    }
+    factor
 }
 
 fn runtime_data_bind_graph_convert_value(
@@ -4478,6 +4970,7 @@ fn runtime_data_bind_graph_convert_value(
             }
             Some(value)
         }
+        (RuntimeDataBindGraphConverter::Interpolator { .. }, _) => None,
         (RuntimeDataBindGraphConverter::Unsupported, _) => None,
     }
 }
@@ -7742,7 +8235,7 @@ impl StateMachineInstance {
             return false;
         }
         if self.data_bind_graph.default_view_model_context_bound() {
-            self.apply_default_view_model_bindings(true);
+            self.apply_default_view_model_bindings(true, RuntimeDataBindGraphApplyPhase::Immediate);
             for trigger in &mut self.view_model_triggers {
                 trigger.reset();
             }
@@ -7804,7 +8297,19 @@ impl StateMachineInstance {
         self.reported_events.clear();
         self.changed_state_count = 0;
         self.needs_advance = false;
-        self.apply_default_view_model_bindings(false);
+        self.apply_default_view_model_bindings(
+            false,
+            RuntimeDataBindGraphApplyPhase::BeforeStatefulAdvance,
+        );
+        let data_bind_advance = self
+            .data_bind_graph
+            .advance_stateful_converters(elapsed_seconds);
+        self.apply_default_view_model_bindings(
+            false,
+            RuntimeDataBindGraphApplyPhase::AfterStatefulAdvance {
+                elapsed_positive: elapsed_seconds > 0.0,
+            },
+        );
         let data_context_present = self.data_bind_graph.data_context_present();
         let data_context_view_model_bound = self.data_bind_graph.default_view_model_context_bound();
         let mut keep_going = false;
@@ -7849,13 +8354,18 @@ impl StateMachineInstance {
         {
             self.sync_default_view_model_triggers_from_active();
         }
-        self.needs_advance = keep_going || !self.reported_events.is_empty();
+        self.needs_advance =
+            data_bind_advance.keep_going || keep_going || !self.reported_events.is_empty();
         self.needs_advance
     }
 
-    fn apply_default_view_model_bindings(&mut self, include_view_models: bool) {
-        self.data_bind_graph
-            .apply_default_view_model_bindings(RuntimeDataBindGraphTargetsMut {
+    fn apply_default_view_model_bindings(
+        &mut self,
+        include_view_models: bool,
+        phase: RuntimeDataBindGraphApplyPhase,
+    ) {
+        self.data_bind_graph.apply_default_view_model_bindings(
+            RuntimeDataBindGraphTargetsMut {
                 numbers: &mut self.bindable_numbers,
                 booleans: &mut self.bindable_booleans,
                 strings: &mut self.bindable_strings,
@@ -7866,7 +8376,9 @@ impl StateMachineInstance {
                 triggers: &mut self.bindable_triggers,
                 view_models: &mut self.bindable_view_models,
                 include_view_models,
-            });
+            },
+            phase,
+        );
     }
 
     fn bind_active_default_view_model_triggers(&mut self) {
@@ -11427,13 +11939,14 @@ fn runtime_data_bind_graph_converter(
             RuntimeDataBindGraphConverter::Unsupported
         });
     }
-    runtime_data_bind_graph_converter_for_object(file, converter, &mut BTreeSet::new())
+    runtime_data_bind_graph_converter_for_object(file, converter, &mut BTreeSet::new(), true)
 }
 
 fn runtime_data_bind_graph_converter_for_object(
     file: &RuntimeFile,
     converter: &RuntimeObject,
     visiting: &mut BTreeSet<u32>,
+    allow_stateful_interpolator: bool,
 ) -> Option<RuntimeDataBindGraphConverter> {
     if !visiting.insert(converter.id) {
         return Some(RuntimeDataBindGraphConverter::Unsupported);
@@ -11446,7 +11959,9 @@ fn runtime_data_bind_graph_converter_for_object(
                 .map(|item| {
                     item.converter
                         .and_then(|converter| {
-                            runtime_data_bind_graph_converter_for_object(file, converter, visiting)
+                            runtime_data_bind_graph_converter_for_object(
+                                file, converter, visiting, false,
+                            )
                         })
                         .unwrap_or(RuntimeDataBindGraphConverter::Unsupported)
                 })
@@ -11492,11 +12007,33 @@ fn runtime_data_bind_graph_converter_for_object(
                 .to_vec(),
             pad_type: converter.uint_property("padType").unwrap_or(0),
         },
+        "DataConverterInterpolator" if allow_stateful_interpolator => {
+            runtime_data_bind_graph_interpolator_converter(file, converter)
+        }
+        "DataConverterInterpolator" => RuntimeDataBindGraphConverter::Unsupported,
         _ => RuntimeDataBindGraphConverter::Unsupported,
     };
 
     visiting.remove(&converter.id);
     Some(graph_converter)
+}
+
+fn runtime_data_bind_graph_interpolator_converter(
+    file: &RuntimeFile,
+    converter: &RuntimeObject,
+) -> RuntimeDataBindGraphConverter {
+    let interpolator = match file.resolved_interpolator_for_data_converter_object(converter) {
+        Some(interpolator) => match RuntimeTransitionInterpolator::from_object(interpolator) {
+            Some(interpolator) => Some(interpolator),
+            None => return RuntimeDataBindGraphConverter::Unsupported,
+        },
+        None => None,
+    };
+
+    RuntimeDataBindGraphConverter::Interpolator {
+        duration: converter.double_property("duration").unwrap_or(1.0),
+        interpolator,
+    }
 }
 
 fn runtime_data_bind_graph_range_mapper_converter(

@@ -9,7 +9,8 @@ C++ target-to-source converter dispatch follows the binding's main direction.
 For the representative `ToSource | TwoWay` fixture in this contract,
 `DataConverterGroup::convert` runs children from first to last before writing
 the view-model source. Main `ToTarget` two-way reverse group order remains a
-separate target-to-source variant.
+separate target-to-source variant covered first by
+`docs/prototypes/data-binding-graph-operation-value-group-public-update-target-to-source-runtime-contract.md`.
 
 ## In Scope
 

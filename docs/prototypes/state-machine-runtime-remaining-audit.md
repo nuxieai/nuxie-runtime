@@ -487,6 +487,12 @@ slice.
   public update reverse-converts the edited target into the source, then
   reapplies source-to-target in the same update while preserving the narrower
   state-machine bindable-property dirty behavior.
+- First grouped public-update reverse target-to-source slice:
+  `StateMachineInstance::updateDataBinds(true)` now covers a
+  `DataConverterGroup<OperationValue>` main-`ToTarget | TwoWay` number bind.
+  The grouped public update reverse-converts children in C++ reverse group
+  order, writes the source, then reapplies source-to-target in forward group
+  order during the same public update.
 - First graph-owned view-model bindable slice: forward propagation for
   default-context `ViewModelInstanceViewModel.propertyValue` sources feeding
   `BindablePropertyViewModel.propertyValue` targets, covered by a C++ probe

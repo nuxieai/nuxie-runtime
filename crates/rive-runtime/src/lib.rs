@@ -4805,14 +4805,14 @@ impl RuntimeDataBindGraph {
                 continue;
             }
             source.target_to_source_dirty = false;
-            if !source.bound || !source.supports_direct_boolean_target_to_source() {
-                continue;
-            }
             let Some(value) = booleans
                 .iter()
                 .find(|boolean| boolean.global_id == global_id)
                 .map(|boolean| boolean.value)
             else {
+                continue;
+            };
+            let Some(value) = source.boolean_target_to_source_value(value) else {
                 continue;
             };
             let RuntimeDataBindGraphValue::Boolean(source_value) = &mut source.value else {
@@ -5299,10 +5299,24 @@ impl RuntimeDataBindGraphSourceNode {
             && matches!(self.value, RuntimeDataBindGraphValue::SymbolListIndex(_))
     }
 
-    fn supports_direct_boolean_target_to_source(&self) -> bool {
+    fn supports_boolean_target_to_source(&self) -> bool {
         self.applies_target_to_source()
-            && self.converter.is_none()
+            && matches!(
+                self.converter.as_ref(),
+                None | Some(RuntimeDataBindGraphConverter::BooleanNegate)
+            )
             && matches!(self.value, RuntimeDataBindGraphValue::Boolean(_))
+    }
+
+    fn boolean_target_to_source_value(&self, value: bool) -> Option<bool> {
+        if !self.supports_boolean_target_to_source() {
+            return None;
+        }
+        match self.converter.as_ref() {
+            None => Some(value),
+            Some(RuntimeDataBindGraphConverter::BooleanNegate) => Some(!value),
+            _ => None,
+        }
     }
 
     fn supports_direct_string_target_to_source(&self) -> bool {

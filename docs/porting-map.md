@@ -1400,6 +1400,21 @@ imported/owned contexts, broader dirty/update queues, pending add/remove
 behavior, re-entry protection, relative/parent/nested lookup, listener-owned
 data binding, and nested artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: reverse-converter target-to-source runtime behavior has
+started with `DataConverterBooleanNegate`. A default-context boolean fixture
+now mutates a `BindablePropertyBoolean.propertyValue` target on a
+`ToSource | TwoWay` bind with `DataConverterBooleanNegate`; explicit
+`advance_data_context` applies C++'s symmetric `reverseConvert` negation before
+writing the `ViewModelInstanceBoolean.propertyValue` source, and a second
+ordinary `ToTarget` boolean bind observes the reversed source value through an
+existing transition-condition consumer. The contract is
+`docs/prototypes/data-binding-graph-boolean-negate-target-to-source-runtime-contract.md`.
+Reverse conversion for other converters and converter groups, list
+source/target propagation, imported/owned contexts, broader dirty/update
+queues, pending add/remove behavior, re-entry protection, relative/parent/nested
+lookup, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
+
 Current #12 update: owned runtime view-model contexts now cover the first
 live view-model pointer replacement path. `RuntimeOwnedViewModelInstance`
 records root `ViewModelPropertyViewModel` properties plus the imported instance

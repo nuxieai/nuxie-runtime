@@ -312,6 +312,10 @@ slice.
   now has representative probe coverage without the `TwoWay` flag. A
   default-context number fixture proves pure `ToSource` target mutation writes
   back to the source while a second `ToTarget` bind observes the updated value.
+- First reverse-converter target-to-source slice: default-context boolean
+  sources with `DataConverterBooleanNegate` now apply C++'s symmetric
+  `reverseConvert` before writing the source, covered by a C++ probe through a
+  second direct boolean bind and transition-condition consumer.
 - First graph-owned view-model bindable slice: forward propagation for
   default-context `ViewModelInstanceViewModel.propertyValue` sources feeding
   `BindablePropertyViewModel.propertyValue` targets, covered by a C++ probe

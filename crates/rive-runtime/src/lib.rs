@@ -2751,6 +2751,15 @@ struct RuntimeBindableNumberDefaultViewModelSource {
 struct RuntimeBindableInteger {
     global_id: u32,
     data_bind_indices: Vec<usize>,
+    default_view_model_sources: Vec<RuntimeBindableIntegerDefaultViewModelSource>,
+    value: u64,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeBindableIntegerDefaultViewModelSource {
+    data_bind_index: usize,
+    path: Vec<u32>,
+    flags: u64,
     value: u64,
 }
 
@@ -3037,6 +3046,7 @@ struct RuntimeDataBindGraphTargetNode {
 #[derive(Debug, Clone, Copy)]
 enum RuntimeDataBindGraphTarget {
     Number { global_id: u32 },
+    Integer { global_id: u32 },
     Boolean { global_id: u32 },
     String { global_id: u32 },
     Color { global_id: u32 },
@@ -3172,6 +3182,7 @@ impl RuntimeDataBindGraphValue {
 
 struct RuntimeDataBindGraphTargetsMut<'a> {
     numbers: &'a mut [StateMachineBindableNumberInstance],
+    integers: &'a mut [StateMachineBindableIntegerInstance],
     booleans: &'a mut [StateMachineBindableBooleanInstance],
     strings: &'a mut [StateMachineBindableStringInstance],
     colors: &'a mut [StateMachineBindableColorInstance],
@@ -3624,6 +3635,23 @@ impl RuntimeDataBindGraph {
                         global_id: bindable.global_id,
                     },
                     source.value.clone(),
+                );
+            }
+        }
+        for bindable in &state_machine.bindable_integers {
+            for source in &bindable.default_view_model_sources {
+                Self::push_default_view_model_binding(
+                    &mut sources,
+                    &mut targets,
+                    &mut default_view_model_bindings,
+                    source.data_bind_index,
+                    &source.path,
+                    source.flags,
+                    None,
+                    RuntimeDataBindGraphTarget::Integer {
+                        global_id: bindable.global_id,
+                    },
+                    RuntimeDataBindGraphValue::SymbolListIndex(source.value),
                 );
             }
         }
@@ -4252,6 +4280,33 @@ impl RuntimeDataBindGraph {
         true
     }
 
+    fn mark_integer_target_dirty_for_data_bind(&mut self, data_bind_index: usize) -> bool {
+        if !self.default_view_model_source_context_bound() {
+            return false;
+        }
+        let Some(binding) = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+        else {
+            return false;
+        };
+        let Some(target) = self.targets.get(binding.target.0) else {
+            return false;
+        };
+        if !matches!(target.target, RuntimeDataBindGraphTarget::Integer { .. }) {
+            return false;
+        }
+        let Some(source) = self.sources.get_mut(binding.source.0) else {
+            return false;
+        };
+        if !source.applies_target_to_source() {
+            return false;
+        }
+        source.target_to_source_dirty = true;
+        true
+    }
+
     fn mark_boolean_target_dirty_for_data_bind(&mut self, data_bind_index: usize) -> bool {
         if !self.default_view_model_source_context_bound() {
             return false;
@@ -4530,6 +4585,63 @@ impl RuntimeDataBindGraph {
                 changed = true;
             }
             let RuntimeDataBindGraphValue::Number(default_value) = &mut source.default_value else {
+                continue;
+            };
+            if *default_value != value {
+                *default_value = value;
+                changed = true;
+            }
+        }
+
+        if changed {
+            self.mark_default_view_model_bindings_dirty();
+        }
+        changed
+    }
+
+    fn apply_default_view_model_symbol_list_index_targets_to_sources(
+        &mut self,
+        integers: &[StateMachineBindableIntegerInstance],
+    ) -> bool {
+        if !self.default_view_model_source_context_bound() {
+            return false;
+        }
+        let mut changed = false;
+
+        for binding in self.default_view_model_bindings.clone() {
+            let Some(target) = self.targets.get(binding.target.0) else {
+                continue;
+            };
+            let RuntimeDataBindGraphTarget::Integer { global_id } = target.target else {
+                continue;
+            };
+            let Some(source) = self.sources.get_mut(binding.source.0) else {
+                continue;
+            };
+            if !source.target_to_source_dirty {
+                continue;
+            }
+            source.target_to_source_dirty = false;
+            if !source.bound || !source.supports_direct_symbol_list_index_target_to_source() {
+                continue;
+            }
+            let Some(value) = integers
+                .iter()
+                .find(|integer| integer.global_id == global_id)
+                .map(|integer| integer.value)
+            else {
+                continue;
+            };
+            let RuntimeDataBindGraphValue::SymbolListIndex(source_value) = &mut source.value else {
+                continue;
+            };
+            if *source_value != value {
+                *source_value = value;
+                changed = true;
+            }
+            let RuntimeDataBindGraphValue::SymbolListIndex(default_value) =
+                &mut source.default_value
+            else {
                 continue;
             };
             if *default_value != value {
@@ -4931,6 +5043,12 @@ impl RuntimeDataBindGraphSourceNode {
         self.applies_target_to_source()
             && self.converter.is_none()
             && matches!(self.value, RuntimeDataBindGraphValue::Number(_))
+    }
+
+    fn supports_direct_symbol_list_index_target_to_source(&self) -> bool {
+        self.applies_target_to_source()
+            && self.converter.is_none()
+            && matches!(self.value, RuntimeDataBindGraphValue::SymbolListIndex(_))
     }
 
     fn supports_direct_boolean_target_to_source(&self) -> bool {
@@ -5855,6 +5973,18 @@ impl RuntimeDataBindGraphTargetsMut<'_> {
             ) => {
                 if let Some(target) = self
                     .numbers
+                    .iter_mut()
+                    .find(|target| target.global_id == *global_id)
+                {
+                    target.set_value(*value);
+                }
+            }
+            (
+                RuntimeDataBindGraphTarget::Integer { global_id },
+                RuntimeDataBindGraphValue::SymbolListIndex(value),
+            ) => {
+                if let Some(target) = self
+                    .integers
                     .iter_mut()
                     .find(|target| target.global_id == *global_id)
                 {
@@ -8660,6 +8790,8 @@ impl StateMachineInstance {
         if !bindable_integer.set_value(value) {
             return false;
         }
+        self.data_bind_graph
+            .mark_integer_target_dirty_for_data_bind(data_bind_index);
         self.needs_advance = true;
         true
     }
@@ -8994,6 +9126,10 @@ impl StateMachineInstance {
             self.data_bind_graph
                 .apply_default_view_model_number_targets_to_sources(&self.bindable_numbers);
             self.data_bind_graph
+                .apply_default_view_model_symbol_list_index_targets_to_sources(
+                    &self.bindable_integers,
+                );
+            self.data_bind_graph
                 .apply_default_view_model_boolean_targets_to_sources(&self.bindable_booleans);
             self.data_bind_graph
                 .apply_default_view_model_string_targets_to_sources(&self.bindable_strings);
@@ -9137,6 +9273,7 @@ impl StateMachineInstance {
         self.data_bind_graph.apply_default_view_model_bindings(
             RuntimeDataBindGraphTargetsMut {
                 numbers: &mut self.bindable_numbers,
+                integers: &mut self.bindable_integers,
                 booleans: &mut self.bindable_booleans,
                 strings: &mut self.bindable_strings,
                 colors: &mut self.bindable_colors,
@@ -12166,11 +12303,44 @@ fn runtime_bindable_integers(
             .or_insert_with(|| RuntimeBindableInteger {
                 global_id: target.id,
                 data_bind_indices: vec![data_bind_index],
+                default_view_model_sources: Vec::new(),
                 value: target.uint_property("propertyValue").unwrap_or(0),
             });
+        if let Some(source) =
+            runtime_bindable_integer_default_view_model_source(file, data_bind_index, data_bind)
+        {
+            values.entry(target.id).and_modify(|bindable_integer| {
+                bindable_integer.default_view_model_sources.push(source)
+            });
+        }
     }
 
     values.into_values().collect()
+}
+
+fn runtime_bindable_integer_default_view_model_source(
+    file: &RuntimeFile,
+    data_bind_index: usize,
+    data_bind: &RuntimeObject,
+) -> Option<RuntimeBindableIntegerDefaultViewModelSource> {
+    let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
+    if property_key_for_name("BindablePropertyInteger", "propertyValue") != Some(property_key) {
+        return None;
+    }
+    if runtime_data_bind_graph_converter(file, data_bind).is_some() {
+        return None;
+    }
+    let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
+    let default_instance = file.view_model_default_instance(0)?;
+    let source =
+        file.data_context_view_model_property_for_instance(default_instance.object, &path)?;
+    let value = file.view_model_instance_symbol_list_index_value_for_object(source)?;
+    Some(RuntimeBindableIntegerDefaultViewModelSource {
+        data_bind_index,
+        path: path.to_vec(),
+        flags: data_bind.uint_property("flags").unwrap_or(0),
+        value,
+    })
 }
 
 fn runtime_bindable_colors(

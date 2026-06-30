@@ -287,6 +287,14 @@ slice.
   on explicit data-context advance. A C++ probe uses two binds to the same
   source so a mutated first bind writes the source before a second bind drives
   an existing transition-condition consumer.
+- Symbol-list-index graph-owned target-to-source slice: direct default-context
+  symbol-list-index sources feeding `BindablePropertyInteger.propertyValue`
+  targets now honor `ToSource | TwoWay` target mutation on explicit
+  data-context advance. A C++ probe uses two binds to the same source so a
+  mutated integer target writes the symbol-list-index source before a second
+  bind drives an existing symbol-list-index-to-string transition-condition
+  consumer. This matches C++'s uint-like target path; there is no separate
+  `BindablePropertySymbolListIndex` schema type.
 - First graph-owned view-model bindable slice: forward propagation for
   default-context `ViewModelInstanceViewModel.propertyValue` sources feeding
   `BindablePropertyViewModel.propertyValue` targets, covered by a C++ probe
@@ -347,8 +355,8 @@ slice.
   operation-value-to-interpolator number smoothing, deterministic formula
   number/symbol-list-index-to-number conversion plus graph-represented
   non-number fallbacks,
-  first direct number/boolean/string/color/enum/asset/artboard target-to-source
-  propagation,
+  first direct number/boolean/string/color/enum/asset/artboard/symbol-list-index
+  target-to-source propagation,
   data-binding update queues, remaining target-to-source value kinds and
   reverse converters, relative paths, parent paths, and nested paths.
 - Nested artboard and nested animation/state-machine remapping.

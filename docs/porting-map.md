@@ -1055,6 +1055,20 @@ groups involving system converters, broader dirty/update queues,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
 
+Current #12 update: direct `DataConverterInterpolator` now also covers the
+main-`ToTarget | TwoWay` state-machine target-dirty path for default-context
+number binds after warming C++'s direct interpolator startup gate. A manual
+edit to the `BindablePropertyNumber.propertyValue` target is preserved through
+explicit data-context advancement, then the next normal state-machine advance
+reapplies the warmed direct interpolator source-to-target converter state even
+when elapsed time is zero. The contract is
+`docs/prototypes/data-binding-graph-interpolator-main-to-target-two-way-target-dirty-runtime-contract.md`.
+Stable public source handles, list/view-model bindables, grouped
+interpolators, public-queue reverse conversion, number-to-list, scripted
+converters, broader dirty/update queues, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
+
 Current #12 update: the first `DataConverterToString` runtime slice now
 supports default-context number sources feeding
 `BindablePropertyString.propertyValue` targets. String source nodes can carry a

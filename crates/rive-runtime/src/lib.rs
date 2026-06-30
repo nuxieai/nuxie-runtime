@@ -5168,7 +5168,9 @@ impl RuntimeDataBindGraph {
                 skipped_dirty_binding = true;
                 continue;
             }
-            if source.should_skip_binding_for_phase(phase) {
+            if source.should_skip_binding_for_phase(phase)
+                && !source.source_to_target_dirty_after_immediate
+            {
                 skipped_dirty_binding = true;
                 continue;
             }

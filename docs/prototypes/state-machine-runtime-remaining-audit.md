@@ -213,6 +213,12 @@ slice.
   number binds. Explicit data-context advancement preserves a manual bindable
   target edit, then normal state-machine advancement overwrites it from the
   unchanged source through system-converter forward operation-value arithmetic.
+- Direct interpolator main-to-target dirty slice: warmed direct
+  `DataConverterInterpolator` state now follows C++ state-machine target-dirty
+  behavior for main-`ToTarget | TwoWay` number binds. Explicit data-context
+  advancement preserves a manual bindable target edit, then normal
+  state-machine advancement reapplies the warmed direct interpolator
+  source-to-target converter state even when elapsed time is zero.
 - First `DataConverterToString` graph-owned converter execution slice:
   forward conversion for default-context number sources feeding string targets,
   covered by a C++ probe through an existing string transition-condition

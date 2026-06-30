@@ -24,11 +24,15 @@ needs to ask `rive-binary` for object data on every frame.
   remains and reapplies the current converted value before layer evaluation.
 - Duration and resolved cubic/elastic interpolator descriptors use the same
   factor math as existing transition/range-mapper interpolation.
+- Main-`ToTarget | TwoWay` state-machine target-dirty behavior for the direct
+  interpolator path is covered by
+  `docs/prototypes/data-binding-graph-interpolator-main-to-target-two-way-target-dirty-runtime-contract.md`.
 
 ## Out Of Scope
 
 - `DataConverterInterpolator` inside `DataConverterGroup`.
 - Reverse conversion and target-to-source bindings.
+- Dirty/update queue parity beyond the linked state-machine target-dirty path.
 - Formula, number-to-list, generated-list, scripted, or context-aware converter
   scheduling.
 - General `DataBindContainer` dirty queues, persisted polling, relative paths,

@@ -2946,6 +2946,10 @@ enum RuntimeDataBindGraphConverter {
         decimals: u64,
         color_format: Vec<u8>,
     },
+    OperationValue {
+        operation_type: u64,
+        operation_value: f32,
+    },
     Rounder {
         decimals: u64,
     },
@@ -4301,6 +4305,22 @@ fn runtime_data_bind_graph_convert_value(
         )),
         (RuntimeDataBindGraphConverter::ToString { .. }, _) => None,
         (
+            RuntimeDataBindGraphConverter::OperationValue {
+                operation_type,
+                operation_value,
+            },
+            RuntimeDataBindGraphValue::Number(value),
+        ) => Some(RuntimeDataBindGraphValue::Number(
+            runtime_data_bind_graph_convert_operation_value(
+                *value,
+                *operation_value,
+                *operation_type,
+            ),
+        )),
+        (RuntimeDataBindGraphConverter::OperationValue { .. }, _) => {
+            Some(RuntimeDataBindGraphValue::Number(0.0))
+        }
+        (
             RuntimeDataBindGraphConverter::Rounder { decimals },
             RuntimeDataBindGraphValue::Number(value),
         ) => {
@@ -4369,6 +4389,35 @@ fn runtime_data_bind_graph_convert_value(
             Some(value)
         }
         (RuntimeDataBindGraphConverter::Unsupported, _) => None,
+    }
+}
+
+fn runtime_data_bind_graph_convert_operation_value(
+    input: f32,
+    operation_value: f32,
+    operation_type: u64,
+) -> f32 {
+    match operation_type {
+        0 => input + operation_value,
+        1 => input - operation_value,
+        2 => input * operation_value,
+        3 => input / operation_value,
+        4 => runtime_data_bind_graph_positive_mod(input, operation_value),
+        5 => input.sqrt(),
+        6 => input.powf(operation_value),
+        7 => input.exp(),
+        8 => input.ln(),
+        9 => input.cos(),
+        10 => input.sin(),
+        11 => input.tan(),
+        12 => input.acos(),
+        13 => input.asin(),
+        14 => input.atan(),
+        15 => input.atan2(operation_value),
+        16 => input.round(),
+        17 => input.floor(),
+        18 => input.ceil(),
+        _ => operation_value,
     }
 }
 
@@ -11255,6 +11304,10 @@ fn runtime_data_bind_graph_converter_for_object(
                 .string_property_bytes("colorFormat")
                 .unwrap_or_default()
                 .to_vec(),
+        },
+        "DataConverterOperationValue" => RuntimeDataBindGraphConverter::OperationValue {
+            operation_type: converter.uint_property("operationType").unwrap_or(0),
+            operation_value: converter.double_property("operationValue").unwrap_or(1.0),
         },
         "DataConverterRounder" => RuntimeDataBindGraphConverter::Rounder {
             decimals: converter.uint_property("decimals").unwrap_or(0),

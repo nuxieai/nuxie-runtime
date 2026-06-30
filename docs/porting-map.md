@@ -828,6 +828,20 @@ resolved converter interpolators, remaining converter families, converter
 groups, update-queue parity, relative/parent/nested lookup, listener-owned data
 binding, and nested artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: the first `DataConverterOperationValue` runtime execution
+slice now admits default-context number sources feeding
+`BindablePropertyNumber.propertyValue` targets. The graph stores imported
+`operationType` and `operationValue`, then applies C++ forward arithmetic
+behavior before writing the number target. C++ probe coverage verifies every
+C++ `ArithmeticOperation` discriminant through a `BlendState1DViewModel`
+consumer. The contract is
+`docs/prototypes/data-binding-graph-operation-value-converter-runtime-contract.md`.
+Stable public source handles, list/view-model bindables, reverse conversion,
+operation-view-model, system, formula, interpolator, number-to-list, and
+scripted converters, converter groups involving operation converters,
+update-queue parity, relative/parent/nested lookup, listener-owned data
+binding, and nested artboard propagation remain follow-up `#12` slices.
+
 Current #12 update: the first `DataConverterToString` runtime slice now
 supports default-context number sources feeding
 `BindablePropertyString.propertyValue` targets. String source nodes can carry a

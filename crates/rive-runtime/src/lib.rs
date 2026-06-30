@@ -2982,12 +2982,22 @@ enum RuntimeDataBindGraphConverter {
         text: Vec<u8>,
         pad_type: u64,
     },
+    Formula {
+        tokens: Vec<RuntimeDataBindGraphFormulaToken>,
+    },
     Interpolator {
         duration: f32,
         interpolator: Option<RuntimeTransitionInterpolator>,
     },
     Group(Vec<RuntimeDataBindGraphConverter>),
     Unsupported,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum RuntimeDataBindGraphFormulaToken {
+    Input,
+    Value(f32),
+    Operation { operation_type: u64 },
 }
 
 #[derive(Debug, Clone)]
@@ -4975,6 +4985,15 @@ fn runtime_data_bind_graph_convert_value(
             rive_binary::data_converter_string_pad_value(value, *length, text, *pad_type),
         )),
         (RuntimeDataBindGraphConverter::StringPad { .. }, _) => None,
+        (
+            RuntimeDataBindGraphConverter::Formula { tokens },
+            RuntimeDataBindGraphValue::Number(value),
+        ) => Some(RuntimeDataBindGraphValue::Number(
+            runtime_data_bind_graph_convert_formula(*value, tokens),
+        )),
+        (RuntimeDataBindGraphConverter::Formula { .. }, _) => {
+            Some(RuntimeDataBindGraphValue::Number(0.0))
+        }
         (RuntimeDataBindGraphConverter::Group(converters), value) => {
             let mut value = value.clone();
             for converter in converters {
@@ -4984,6 +5003,50 @@ fn runtime_data_bind_graph_convert_value(
         }
         (RuntimeDataBindGraphConverter::Interpolator { .. }, _) => None,
         (RuntimeDataBindGraphConverter::Unsupported, _) => None,
+    }
+}
+
+fn runtime_data_bind_graph_convert_formula(
+    input: f32,
+    tokens: &[RuntimeDataBindGraphFormulaToken],
+) -> f32 {
+    let mut result = input;
+    let mut stack = Vec::new();
+    for token in tokens {
+        match token {
+            RuntimeDataBindGraphFormulaToken::Input => stack.push(input),
+            RuntimeDataBindGraphFormulaToken::Value(value) => stack.push(*value),
+            RuntimeDataBindGraphFormulaToken::Operation { operation_type } => {
+                if stack.len() > 1 {
+                    let right = stack.pop().expect("stack length checked");
+                    let left = stack.pop().expect("stack length checked");
+                    stack.push(runtime_data_bind_graph_apply_formula_operation(
+                        left,
+                        right,
+                        *operation_type,
+                    ));
+                }
+            }
+        }
+    }
+    if stack.len() == 1 {
+        result = stack.pop().expect("stack length checked");
+    }
+    result
+}
+
+fn runtime_data_bind_graph_apply_formula_operation(
+    left: f32,
+    right: f32,
+    operation_type: u64,
+) -> f32 {
+    match operation_type {
+        0 => left + right,
+        1 => left - right,
+        2 => left * right,
+        3 => left / right,
+        4 => runtime_data_bind_graph_positive_mod(left, right),
+        _ => 0.0,
     }
 }
 
@@ -12019,6 +12082,7 @@ fn runtime_data_bind_graph_converter_for_object(
                 .to_vec(),
             pad_type: converter.uint_property("padType").unwrap_or(0),
         },
+        "DataConverterFormula" => runtime_data_bind_graph_formula_converter(file, converter),
         "DataConverterInterpolator" if allow_stateful_interpolator => {
             runtime_data_bind_graph_interpolator_converter(file, converter)
         }
@@ -12028,6 +12092,29 @@ fn runtime_data_bind_graph_converter_for_object(
 
     visiting.remove(&converter.id);
     Some(graph_converter)
+}
+
+fn runtime_data_bind_graph_formula_converter(
+    file: &RuntimeFile,
+    converter: &RuntimeObject,
+) -> RuntimeDataBindGraphConverter {
+    let mut tokens = Vec::new();
+    for token in file.data_converter_formula_tokens_for_object(converter) {
+        match token.type_name {
+            "FormulaTokenInput" => tokens.push(RuntimeDataBindGraphFormulaToken::Input),
+            "FormulaTokenValue" => tokens.push(RuntimeDataBindGraphFormulaToken::Value(
+                token.double_property("operationValue").unwrap_or(1.0),
+            )),
+            "FormulaTokenOperation" => {
+                tokens.push(RuntimeDataBindGraphFormulaToken::Operation {
+                    operation_type: token.uint_property("operationType").unwrap_or(0),
+                });
+            }
+            _ => return RuntimeDataBindGraphConverter::Unsupported,
+        }
+    }
+
+    RuntimeDataBindGraphConverter::Formula { tokens }
 }
 
 fn runtime_data_bind_graph_interpolator_converter(

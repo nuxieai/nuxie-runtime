@@ -230,6 +230,12 @@ slice.
   `DataConverterInterpolator` child. Group child state is stored in imported
   group-item order, group advance aggregates child activity, and a C++ probe
   covers retargeting through an existing blend-state consumer.
+- First deterministic `DataConverterFormula` graph-owned converter execution
+  slice: default-context number sources feeding number targets can now evaluate
+  imported formula output queues made from input, value, and operation tokens,
+  including C++ stack collapse and arithmetic operation behavior. A C++ probe
+  covers deterministic formula operations through an existing blend-state
+  consumer.
 - First graph-owned view-model bindable slice: forward propagation for
   default-context `ViewModelInstanceViewModel.propertyValue` sources feeding
   `BindablePropertyViewModel.propertyValue` targets, covered by a C++ probe
@@ -287,7 +293,8 @@ slice.
   string converter group, number-to-string converter group,
   number-to-number converter group paths, and direct stateful
   data-converter-interpolator number smoothing plus grouped
-  operation-value-to-interpolator number smoothing,
+  operation-value-to-interpolator number smoothing, deterministic formula
+  number-to-number conversion,
   data-binding update queues, relative paths, parent paths, and nested paths.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener

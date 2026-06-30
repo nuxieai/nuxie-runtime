@@ -1124,6 +1124,21 @@ broader `DataBindContainer` dirty queues, relative/parent/nested lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 
+Current #12 update: the first deterministic `DataConverterFormula` runtime
+execution slice now admits default-context number sources feeding
+`BindablePropertyNumber.propertyValue` targets. Runtime formula descriptors are
+built from the binary-layer C++ output queue, support `FormulaTokenInput`,
+`FormulaTokenValue`, and `FormulaTokenOperation`, and use the same stack
+collapse plus arithmetic operation behavior as C++ for deterministic formulas.
+C++ probe coverage verifies the formula output through the existing
+`BlendState1DViewModel` consumer. The contract is
+`docs/prototypes/data-binding-graph-formula-converter-runtime-contract.md`.
+Formula functions/randoms, formula parent-source binding and dirt propagation,
+reverse conversion, target-to-source queues, number-to-list/generated-list/
+scripted scheduling, broader `DataBindContainer` dirty queues,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
+
 Current #12 update: `BindablePropertyViewModel.propertyValue` now has its first
 graph-owned source binding slice. Default-context
 `ViewModelInstanceViewModel.propertyValue` sources resolve through the

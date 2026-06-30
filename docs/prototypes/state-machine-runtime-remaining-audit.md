@@ -38,10 +38,11 @@ slice.
 - Live view-model APIs and data-binding propagation beyond the first default
   `ViewModelInstanceNumber`, `ViewModelInstanceBoolean`,
   `ViewModelInstanceString`, `ViewModelInstanceColor`, and
-  `ViewModelInstanceEnum` source-to-target binds: binding external contexts,
-  source mutation APIs, remaining non-number bindables, converters,
-  data-binding update queues, relative paths, parent paths, and nested paths
-  for fire triggers and conditions.
+  `ViewModelInstanceEnum`, and `ViewModelInstanceAssetImage`
+  source-to-target binds: binding external contexts, source mutation APIs,
+  remaining non-number bindables, converters, data-binding update queues,
+  relative paths, parent paths, and nested paths for fire triggers and
+  conditions.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener
   actions.

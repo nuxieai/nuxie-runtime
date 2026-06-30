@@ -279,6 +279,7 @@ Additional current contract: `docs/prototypes/state-machine-default-viewmodel-bo
 Additional current contract: `docs/prototypes/state-machine-default-viewmodel-string-binding-runtime-contract.md`
 Additional current contract: `docs/prototypes/state-machine-default-viewmodel-color-binding-runtime-contract.md`
 Additional current contract: `docs/prototypes/state-machine-default-viewmodel-enum-binding-runtime-contract.md`
+Additional current contract: `docs/prototypes/state-machine-default-viewmodel-asset-binding-runtime-contract.md`
 Current remaining-work audit: `docs/prototypes/state-machine-runtime-remaining-audit.md`
 
 ### Question
@@ -332,6 +333,8 @@ Current #11 update: default-context source-to-target binding now covers cloned `
 Current #11 update: default-context source-to-target binding now covers cloned `BindablePropertyColor.propertyValue`. Rust applies a default `ViewModelInstanceColor` resolved through `DataBindContext.sourcePathIds` before transition evaluation and verifies a color `TransitionViewModelCondition` against C++. External context binding, source mutation APIs, enum/asset/artboard source binds, converters, generalized update queues, relative/parent/nested paths, listener-owned data binding, and nested artboard propagation remain later slices.
 
 Current #11 update: default-context source-to-target binding now covers cloned `BindablePropertyEnum.propertyValue`. Rust copies the raw default `ViewModelInstanceEnum.propertyValue` resolved through `DataBindContext.sourcePathIds` before transition evaluation, matching C++ `DataBindContextValueEnum` rather than clamping through runtime enum helpers, and verifies an enum `TransitionViewModelCondition` against C++. External context binding, source mutation APIs, asset/artboard source binds, converters, generalized update queues, relative/parent/nested paths, listener-owned data binding, `Solo` name mapping, and nested artboard propagation remain later slices.
+
+Current #11 update: default-context source-to-target binding now covers cloned `BindablePropertyAsset.propertyValue` as observed by asset transition comparands. Rust copies the raw default `ViewModelInstanceAssetImage.propertyValue` resolved through `DataBindContext.sourcePathIds` before transition evaluation and verifies an asset `TransitionViewModelCondition` against C++. External context binding, source mutation APIs, artboard source binds, render-image/imageValue side effects, `Image.setAsset` target binding, converters, generalized update queues, relative/parent/nested paths, listener-owned data binding, and nested artboard propagation remain later slices.
 
 ## #12: Data Binding Graph
 

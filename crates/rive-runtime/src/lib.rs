@@ -3026,7 +3026,9 @@ impl RuntimeDataBindGraphValue {
             Self::Trigger(_) => context
                 .trigger_value_by_property_index(usize::try_from(path[1]).ok()?)
                 .map(Self::Trigger),
-            Self::ViewModel(_) => None,
+            Self::ViewModel(_) => context
+                .view_model_value_by_property_index(usize::try_from(path[1]).ok()?)
+                .map(Self::ViewModel),
         }
     }
 
@@ -3104,6 +3106,7 @@ pub struct RuntimeOwnedViewModelInstance {
     assets: Vec<RuntimeOwnedViewModelAsset>,
     artboards: Vec<RuntimeOwnedViewModelArtboard>,
     triggers: Vec<RuntimeOwnedViewModelTrigger>,
+    view_models: Vec<RuntimeOwnedViewModelViewModel>,
 }
 
 #[derive(Debug, Clone)]
@@ -3154,6 +3157,13 @@ struct RuntimeOwnedViewModelTrigger {
     value: u64,
 }
 
+#[derive(Debug, Clone)]
+struct RuntimeOwnedViewModelViewModel {
+    property_index: usize,
+    value: RuntimeViewModelPointer,
+    view_model_instance_ids: Vec<u32>,
+}
+
 impl RuntimeOwnedViewModelInstance {
     pub fn new(file: &RuntimeFile, view_model_index: usize) -> Option<Self> {
         let view_model = file.view_model(view_model_index)?;
@@ -3165,6 +3175,7 @@ impl RuntimeOwnedViewModelInstance {
         let mut assets = Vec::new();
         let mut artboards = Vec::new();
         let mut triggers = Vec::new();
+        let mut view_models = Vec::new();
         for (property_index, property) in view_model.properties.into_iter().enumerate() {
             match property.type_name {
                 "ViewModelPropertyNumber" => numbers.push(RuntimeOwnedViewModelNumber {
@@ -3203,6 +3214,27 @@ impl RuntimeOwnedViewModelInstance {
                     property_index,
                     value: 0,
                 }),
+                "ViewModelPropertyViewModel" => {
+                    let view_model_instance_ids = property
+                        .uint_property("viewModelReferenceId")
+                        .and_then(|view_model_reference_id| {
+                            usize::try_from(view_model_reference_id).ok()
+                        })
+                        .and_then(|view_model_index| file.view_model(view_model_index))
+                        .map(|view_model| {
+                            view_model
+                                .instances
+                                .into_iter()
+                                .map(|instance| instance.object.id)
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    view_models.push(RuntimeOwnedViewModelViewModel {
+                        property_index,
+                        value: RuntimeViewModelPointer::Null,
+                        view_model_instance_ids,
+                    });
+                }
                 _ => {}
             }
         }
@@ -3216,6 +3248,7 @@ impl RuntimeOwnedViewModelInstance {
             assets,
             artboards,
             triggers,
+            view_models,
         })
     }
 
@@ -3339,6 +3372,33 @@ impl RuntimeOwnedViewModelInstance {
         true
     }
 
+    pub fn set_view_model_by_property_index(
+        &mut self,
+        property_index: usize,
+        instance_index: usize,
+    ) -> bool {
+        let Some(view_model) = self
+            .view_models
+            .iter_mut()
+            .find(|view_model| view_model.property_index == property_index)
+        else {
+            return false;
+        };
+        let Some(object_id) = view_model
+            .view_model_instance_ids
+            .get(instance_index)
+            .copied()
+        else {
+            return false;
+        };
+        let value = RuntimeViewModelPointer::Imported { object_id };
+        if view_model.value == value {
+            return false;
+        }
+        view_model.value = value;
+        true
+    }
+
     fn number_value_by_property_index(&self, property_index: usize) -> Option<f32> {
         self.numbers
             .iter()
@@ -3393,6 +3453,16 @@ impl RuntimeOwnedViewModelInstance {
             .iter()
             .find(|trigger| trigger.property_index == property_index)
             .map(|trigger| trigger.value)
+    }
+
+    fn view_model_value_by_property_index(
+        &self,
+        property_index: usize,
+    ) -> Option<RuntimeViewModelPointer> {
+        self.view_models
+            .iter()
+            .find(|view_model| view_model.property_index == property_index)
+            .map(|view_model| view_model.value)
     }
 }
 

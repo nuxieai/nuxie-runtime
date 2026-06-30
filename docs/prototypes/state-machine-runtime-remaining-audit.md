@@ -181,22 +181,31 @@ slice.
   instance index, covered by a C++ probe proving the generated setter does not
   relink the cached imported pointer observed by an existing view-model pointer
   transition-condition consumer.
+- First owned view-model pointer relink slice: root
+  `ViewModelPropertyViewModel` properties in `RuntimeOwnedViewModelInstance`
+  can be set by referenced imported instance index, then resolved into
+  `BindablePropertyViewModel.propertyValue` targets on explicit data-context
+  advance. The C++ probe covers the matching
+  `ViewModelInstanceRuntime::replaceViewModelByName` path through an existing
+  view-model pointer transition-condition consumer.
 
 ## Remaining Runtime Slices
 
 - Scene callback dispatch side effects: listener notification, audio playback,
   open-url side effects, nested-artboard event propagation, and callback
   targets other than `Event.trigger`.
-- Live view-model pointer relink APIs: owned/imported replacement paths that
-  update cached `referenceViewModelInstance` pointers rather than only raw
-  generated `propertyValue` indexes.
+- Live view-model pointer relink APIs beyond the first owned root-property
+  path: default and imported replacement paths, nested owned paths, and
+  unmutated generated-owned child identity that update or expose cached
+  `referenceViewModelInstance` pointers rather than only raw generated
+  `propertyValue` indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
 - Live view-model APIs and data-binding propagation governed by
   `docs/prototypes/data-binding-graph-runtime-contract.md`: beyond the finite
   graph-routed default and imported-file-backed external source-to-target
   `propertyValue` bind sets and owned
-  number/boolean/string/color/enum/asset/artboard/trigger contexts listed
+  number/boolean/string/color/enum/asset/artboard/trigger/view-model contexts listed
   above, add source mutation APIs beyond the default
   number/boolean/string/color/enum/asset/artboard/trigger source nodes,
   list/symbol bindables and non-default view-model pointer mutation, converters

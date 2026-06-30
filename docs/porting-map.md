@@ -1201,6 +1201,20 @@ number-to-list/generated-list/scripted scheduling, broader dirty queues,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
 
+Current #12 update: deterministic `DataConverterFormula` now also covers the
+main-`ToTarget | TwoWay` state-machine target-dirty path for direct number
+binds. A manual edit to a formula-bound `BindablePropertyNumber.propertyValue`
+target is preserved through explicit data-context advancement, then the next
+normal state-machine advance overwrites the target from the unchanged source
+through deterministic formula `convert`. The contract is
+`docs/prototypes/data-binding-graph-formula-main-to-target-two-way-target-dirty-runtime-contract.md`.
+Formula functions/randoms, formula parent-source binding and dirt propagation,
+asset/artboard/view-model/list formula sources, formula groups, public
+`DataBindContainer::updateDataBinds(true)` formula reverse scheduling,
+number-to-list/generated-list/scripted scheduling, broader dirty queues,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
+
 Current #12 update: the first graph-owned target-to-source runtime path now
 covers direct default-context number binds. Mutating a
 `BindablePropertyNumber.propertyValue` target for a `ToSource | TwoWay`

@@ -31,7 +31,9 @@ after the target-to-source write changes the source.
 
 ## Out Of Scope
 
-- Main-`ToTarget | TwoWay` formula reverse scheduling.
+- Main-`ToTarget | TwoWay` formula target-dirty behavior, covered by
+  `docs/prototypes/data-binding-graph-formula-main-to-target-two-way-target-dirty-runtime-contract.md`.
+- Public-queue `DataConverterFormula::reverseConvert` scheduling.
 - Public `DataBindContainer::updateDataBinds(true)` scheduler parity.
 - Exact `advancedDataContext()` source-to-target scheduling for neighboring
   ordinary `ToTarget` observer binds.

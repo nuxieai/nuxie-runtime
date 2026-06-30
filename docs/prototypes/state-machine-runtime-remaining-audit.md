@@ -340,6 +340,12 @@ slice.
   same formula-bound target refreshes from that changed source during explicit
   data-context advancement, with a second direct bind observing the
   formula-written source value after normal state-machine advancement.
+- Formula main-to-target dirty slice: direct deterministic
+  `DataConverterFormula` now follows C++ state-machine target-dirty behavior
+  for main-`ToTarget | TwoWay` number binds. Explicit data-context advancement
+  preserves a manual bindable target edit, then normal state-machine
+  advancement overwrites it from the unchanged source through formula
+  `convert`.
 - First exact number target-to-source direction slice: default-context number
   sources now follow C++ main-direction converter dispatch for the mutating
   bind, with exact C++ probe reports for direct, `OperationValue`, and

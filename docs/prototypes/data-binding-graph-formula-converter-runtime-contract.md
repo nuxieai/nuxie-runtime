@@ -37,7 +37,10 @@ adding randoms, functions, reverse propagation, or formula-owned source binding.
 - Target-to-source formula propagation beyond the first direct deterministic
   number case covered by
   `docs/prototypes/data-binding-graph-formula-target-to-source-runtime-contract.md`.
-- Main-`ToTarget | TwoWay` formula reverse scheduling.
+- Main-`ToTarget | TwoWay` formula target-dirty behavior beyond the direct
+  deterministic number case covered by
+  `docs/prototypes/data-binding-graph-formula-main-to-target-two-way-target-dirty-runtime-contract.md`.
+- Public-queue `DataConverterFormula::reverseConvert` scheduling.
 - Formula converter groups beyond any composition already admitted by the
   generic graph group executor.
 - Number-to-list, generated-list, scripted, and live context-aware converters.

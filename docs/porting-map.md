@@ -540,12 +540,27 @@ probe mirrors this with
 instance. C++ probe-backed consumers cover non-default
 `ViewModelInstanceNumber`, `ViewModelInstanceBoolean`,
 `ViewModelInstanceString`, `ViewModelInstanceColor`, `ViewModelInstanceEnum`,
-`ViewModelInstanceAssetImage`, `ViewModelInstanceArtboard`, and
-`ViewModelInstanceTrigger` sources through `BlendState1DViewModel` and
-transition-condition paths. The contract is
+`ViewModelInstanceAssetImage`, `ViewModelInstanceArtboard`,
+`ViewModelInstanceTrigger`, and `ViewModelInstanceSymbolListIndex` sources
+through `BlendState1DViewModel` and transition-condition paths. The contract is
 `docs/prototypes/data-binding-graph-external-view-model-context-runtime-contract.md`.
 Arbitrary user-created runtime view-model instances, public source handles,
 converters, reverse propagation, update-queue parity, relative/parent/nested
+lookup, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
+
+Current #12 update: imported file-backed context binding now explicitly covers
+`ViewModelInstanceSymbolListIndex` sources. The existing
+`StateMachineInstance::bind_view_model_instance_context` graph path resolves
+the selected imported instance's raw symbol-list-index value and feeds it into
+the admitted `DataConverterToString` target path. The C++ probe mirrors this
+with `StateMachineInstance::bindViewModelInstance(...)` and a fixture whose
+default root value differs from the imported alternate value, proving the graph
+refreshes the external source instead of falling back to default or target
+initial state. The contract is
+`docs/prototypes/data-binding-graph-external-symbol-list-index-context-runtime-contract.md`.
+Owned runtime symbol-list-index contexts, stable public source handles, list
+bindables, reverse propagation, update-queue parity, relative/parent/nested
 lookup, listener-owned data binding, and nested artboard propagation remain
 follow-up `#12` slices.
 

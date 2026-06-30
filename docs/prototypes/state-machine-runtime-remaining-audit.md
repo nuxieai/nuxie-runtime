@@ -66,7 +66,8 @@ slice.
 - File-backed imported `ViewModelInstance` context binding through
   `RuntimeDataBindGraph` source path re-resolution, covered by a C++ probe
   through existing `BlendState1DViewModel`, boolean transition-condition, and
-  string/color/enum/asset/artboard/trigger transition-condition consumers.
+  string/color/enum/asset/artboard/trigger/symbol-list-index
+  transition-condition consumers.
 - Owned runtime `ViewModelInstance` number context binding through
   `RuntimeDataBindGraph` source path re-resolution, covered by a C++ probe
   through an existing `BlendState1DViewModel` consumer.

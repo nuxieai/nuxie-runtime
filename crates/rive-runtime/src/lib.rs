@@ -2936,6 +2936,9 @@ enum RuntimeDataBindGraphConverter {
         decimals: u64,
         color_format: Vec<u8>,
     },
+    StringTrim {
+        trim_type: u64,
+    },
     Unsupported,
 }
 
@@ -4041,6 +4044,13 @@ impl RuntimeDataBindGraphSourceNode {
                 rive_binary::data_converter_to_string_color_value(*value, color_format),
             )),
             (Some(RuntimeDataBindGraphConverter::ToString { .. }), _) => None,
+            (
+                Some(RuntimeDataBindGraphConverter::StringTrim { trim_type }),
+                RuntimeDataBindGraphValue::String(value),
+            ) => Some(RuntimeDataBindGraphValue::String(
+                rive_binary::data_converter_string_trim_value(value, *trim_type),
+            )),
+            (Some(RuntimeDataBindGraphConverter::StringTrim { .. }), _) => None,
             (Some(RuntimeDataBindGraphConverter::Unsupported), _) => None,
         }
     }
@@ -10747,6 +10757,9 @@ fn runtime_data_bind_graph_converter(
                 .string_property_bytes("colorFormat")
                 .unwrap_or_default()
                 .to_vec(),
+        },
+        "DataConverterStringTrim" => RuntimeDataBindGraphConverter::StringTrim {
+            trim_type: converter.uint_property("trimType").unwrap_or(1),
         },
         _ => RuntimeDataBindGraphConverter::Unsupported,
     })

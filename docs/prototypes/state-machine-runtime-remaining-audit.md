@@ -316,6 +316,12 @@ slice.
   sources with `DataConverterBooleanNegate` now apply C++'s symmetric
   `reverseConvert` before writing the source, covered by a C++ probe through a
   second direct boolean bind and transition-condition consumer.
+- Range-mapper target-to-source slice: default-context number sources with
+  `DataConverterRangeMapper` now cover the reachable main-`ToSource | TwoWay`
+  state-machine target-to-source path, plus Rust reverse primitive parity for
+  C++ `calculateReverseRange()` swapping input/output ranges. Public
+  `updateDataBinds(true)` scheduling for main-`ToTarget | TwoWay`
+  range-mapper target edits remains a follow-up slice.
 - First exact number target-to-source direction slice: default-context number
   sources now follow C++ main-direction converter dispatch for the mutating
   bind, with exact C++ probe reports for direct, `OperationValue`, and

@@ -6000,6 +6000,30 @@ fn runtime_data_bind_graph_reverse_convert_value(
             ),
         )),
         (RuntimeDataBindGraphConverter::OperationValue { .. }, _) => None,
+        (
+            RuntimeDataBindGraphConverter::RangeMapper {
+                min_input,
+                max_input,
+                min_output,
+                max_output,
+                flags,
+                interpolation_type,
+                interpolator,
+            },
+            RuntimeDataBindGraphValue::Number(value),
+        ) => Some(RuntimeDataBindGraphValue::Number(
+            runtime_data_bind_graph_convert_range_mapper(
+                *value,
+                *min_output,
+                *max_output,
+                *min_input,
+                *max_input,
+                *flags,
+                *interpolation_type,
+                *interpolator,
+            ),
+        )),
+        (RuntimeDataBindGraphConverter::RangeMapper { .. }, _) => None,
         (RuntimeDataBindGraphConverter::Group(converters), value) => {
             let mut value = value.clone();
             for converter in converters.iter().rev() {
@@ -13930,6 +13954,60 @@ mod tests {
         assert_eq!(ComponentDirt::SCRIPT_UPDATE.0, 1 << 14);
         assert_eq!(ComponentDirt::CLIPPING.0, 1 << 15);
         assert_eq!(ComponentDirt::FILTHY.0, 0xFFFE);
+    }
+
+    #[test]
+    fn range_mapper_reverse_conversion_swaps_input_and_output_ranges() {
+        let converter = RuntimeDataBindGraphConverter::RangeMapper {
+            min_input: 0.0,
+            max_input: 10.0,
+            min_output: 100.0,
+            max_output: 200.0,
+            flags: 0,
+            interpolation_type: 1,
+            interpolator: None,
+        };
+
+        let Some(RuntimeDataBindGraphValue::Number(value)) =
+            runtime_data_bind_graph_reverse_convert_value(
+                &converter,
+                &RuntimeDataBindGraphValue::Number(160.0),
+            )
+        else {
+            panic!("range mapper reverse conversion did not return a number");
+        };
+
+        assert!(
+            (value - 6.0).abs() <= 0.0001,
+            "range mapper reverse conversion mismatch: expected 6, got {value}"
+        );
+    }
+
+    #[test]
+    fn range_mapper_reverse_conversion_preserves_reverse_flag() {
+        let converter = RuntimeDataBindGraphConverter::RangeMapper {
+            min_input: 0.0,
+            max_input: 10.0,
+            min_output: 100.0,
+            max_output: 200.0,
+            flags: 1 << 3,
+            interpolation_type: 1,
+            interpolator: None,
+        };
+
+        let Some(RuntimeDataBindGraphValue::Number(value)) =
+            runtime_data_bind_graph_reverse_convert_value(
+                &converter,
+                &RuntimeDataBindGraphValue::Number(160.0),
+            )
+        else {
+            panic!("range mapper reverse conversion did not return a number");
+        };
+
+        assert!(
+            (value - 4.0).abs() <= 0.0001,
+            "range mapper reverse conversion mismatch: expected 4, got {value}"
+        );
     }
 
     #[test]

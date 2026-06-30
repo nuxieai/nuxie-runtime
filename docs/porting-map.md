@@ -1409,11 +1409,28 @@ writing the `ViewModelInstanceBoolean.propertyValue` source, and a second
 ordinary `ToTarget` boolean bind observes the reversed source value through an
 existing transition-condition consumer. The contract is
 `docs/prototypes/data-binding-graph-boolean-negate-target-to-source-runtime-contract.md`.
-Reverse conversion for other converters and converter groups, list
-source/target propagation, imported/owned contexts, broader dirty/update
+At that point, reverse conversion for other converters and converter groups,
+list source/target propagation, imported/owned contexts, broader dirty/update
 queues, pending add/remove behavior, re-entry protection, relative/parent/nested
-lookup, listener-owned data binding, and nested artboard propagation remain
+lookup, listener-owned data binding, and nested artboard propagation remained
 follow-up `#12` slices.
+
+Current #12 update: `DataConverterRangeMapper` now has graph-owned
+target-to-source coverage for the reachable main-`ToSource | TwoWay` path and
+the Rust reverse primitive. The state-machine probe mutates a range-mapped
+`BindablePropertyNumber.propertyValue` target, verifies the exact mutating bind
+reports, and verifies a second direct number bind after normal source-to-target
+application. The reverse primitive mirrors C++ `calculateReverseRange()` by
+swapping input/output ranges while preserving range-mapper flags. The contract
+is
+`docs/prototypes/data-binding-graph-range-mapper-target-to-source-runtime-contract.md`.
+Public `DataBindContainer::updateDataBinds(true)` scheduling for
+main-`ToTarget | TwoWay` range-mapper target edits, range-mapper groups in
+target-to-source scheduling, remaining converter families, list source/target
+propagation, imported/owned contexts, broader dirty/update queues, pending
+add/remove behavior, re-entry protection, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
 
 Current #12 update: graph-owned number target-to-source binding now pins C++
 main-direction converter dispatch with exact source/target probe reporting. A

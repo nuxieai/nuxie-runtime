@@ -4596,7 +4596,10 @@ impl RuntimeDataBindGraph {
                     if source.is_main_to_source()
                         && matches!(
                             source.converter.as_ref(),
-                            Some(RuntimeDataBindGraphConverter::Formula { .. })
+                            Some(
+                                RuntimeDataBindGraphConverter::Formula { .. }
+                                    | RuntimeDataBindGraphConverter::SystemOperationValue { .. }
+                            )
                         )
                     {
                         source.source_to_target_dirty_after_target_to_source = true;

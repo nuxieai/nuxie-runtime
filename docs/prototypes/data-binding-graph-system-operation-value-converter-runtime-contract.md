@@ -27,7 +27,10 @@ only the cases where C++ `DataBind::toTarget()` is true.
 ## Out Of Scope
 
 - `ToSource`-only binds where C++ `DataBind::toTarget()` is false.
-- Target-to-source propagation and update-queue scheduling.
+- Target-to-source propagation beyond the direct main-`ToSource | TwoWay`
+  number case covered by
+  `docs/prototypes/data-binding-graph-system-operation-value-target-to-source-runtime-contract.md`.
+- Public update-queue scheduling.
 - Reverse graph propagation as a public runtime operation.
 - Symbol-list-index inputs to system converters.
 - `DataConverterOperationViewModel`.

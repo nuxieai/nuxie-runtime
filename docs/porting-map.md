@@ -917,6 +917,24 @@ groups involving system converters, relative/parent/nested lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 
+Current #12 update: direct `DataConverterSystemNormalizer` and
+`DataConverterSystemDegsToRads` now also cover the main-`ToSource | TwoWay`
+target-to-source path for default-context number binds. C++ calls
+`convert` for the main-direction target-to-source dispatch, and these system
+converters' `convert` methods select operation-value reverse arithmetic when
+the authored direction is `ToSource`, before writing the
+`ViewModelInstanceNumber.propertyValue` source; the same bindable target is
+then refreshed from the changed source during explicit data-context
+advancement. The contract is
+`docs/prototypes/data-binding-graph-system-operation-value-target-to-source-runtime-contract.md`.
+Stable public source handles, list/view-model bindables, `ToSource`-only
+update-queue behavior, main-`ToTarget | TwoWay` system-converter dirty
+behavior, operation-view-model target-to-source, formula functions/randoms,
+interpolator, number-to-list, scripted converters, converter groups involving
+system converters, broader dirty/update queues, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
+
 Current #12 update: the first `DataConverterToString` runtime slice now
 supports default-context number sources feeding
 `BindablePropertyString.propertyValue` targets. String source nodes can carry a

@@ -164,6 +164,13 @@ slice.
   C++ `DataBind::toTarget()` is true, including default `ToTarget` forward
   arithmetic and `TwoWay | ToSource` reverse arithmetic, covered by a C++
   probe through an existing blend-state consumer.
+- System operation-value target-to-source slice: direct
+  `DataConverterSystemNormalizer` and `DataConverterSystemDegsToRads` now
+  cover main-`ToSource | TwoWay` number target-to-source writes. C++ calls
+  `convert` for the main-direction dispatch, and each system converter's
+  `convert` method delegates to operation-value reverse arithmetic before the
+  source write, after which the same bindable target refreshes from the changed
+  source during explicit data-context advancement.
 - First `DataConverterToString` graph-owned converter execution slice:
   forward conversion for default-context number sources feeding string targets,
   covered by a C++ probe through an existing string transition-condition

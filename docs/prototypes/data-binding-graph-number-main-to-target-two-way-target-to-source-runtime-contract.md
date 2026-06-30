@@ -34,6 +34,10 @@ source-derived value back to the target through `convert`.
 - Direct string-to-number `DataConverterToNumber` source-to-target conversion
   after a bindable target mutation dirties the bind is covered by
   `docs/prototypes/data-binding-graph-to-number-string-main-to-target-two-way-target-dirty-runtime-contract.md`.
+- Direct boolean, enum, color, and symbol-list-index `DataConverterToNumber`
+  source-to-target conversion after a bindable target mutation dirties the bind
+  is covered by
+  `docs/prototypes/data-binding-graph-to-number-scalar-main-to-target-two-way-target-dirty-runtime-contract.md`.
 - Direct deterministic `DataConverterFormula` source-to-target conversion after
   a bindable target mutation dirties the bind is covered by
   `docs/prototypes/data-binding-graph-formula-main-to-target-two-way-target-dirty-runtime-contract.md`.
@@ -85,5 +89,8 @@ source-derived value back to the target through `convert`.
 - A `TwoWay` string-to-number `DataConverterToNumber` bind applies
   source-to-target through `convert` at both normal state-machine advance
   points around a manual target edit.
+- `TwoWay` boolean, enum, color, and symbol-list-index
+  `DataConverterToNumber` binds apply source-to-target through `convert` at
+  both normal state-machine advance points around a manual target edit.
 - The mutating bind's exact source and target values match the C++ probe after
   each explicit runtime action.

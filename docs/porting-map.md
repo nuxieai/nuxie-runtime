@@ -805,6 +805,20 @@ scripted converters, broader dirty/update queues, relative/parent/nested
 lookup, listener-owned data binding, and nested artboard propagation remain
 follow-up `#12` slices.
 
+Current #12 update: the remaining direct scalar `DataConverterToNumber` paths
+now also cover main-`ToTarget | TwoWay` state-machine target-dirty behavior for
+default-context number targets. Boolean, enum, color, and symbol-list-index
+sources preserve a manual `BindablePropertyNumber.propertyValue` edit through
+explicit data-context advancement, then normal state-machine advancement
+overwrites the target from the unchanged source through forward
+`DataConverterToNumber::convert`. The contract is
+`docs/prototypes/data-binding-graph-to-number-scalar-main-to-target-two-way-target-dirty-runtime-contract.md`.
+Stable public source handles, list/view-model bindables, public-queue reverse
+conversion, converter groups, formula functions/randoms, interpolator,
+number-to-list, scripted converters, broader dirty/update queues,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
+
 Current #12 update: `DataConverterToNumber` runtime execution now also admits
 default-context symbol-list-index sources feeding
 `BindablePropertyNumber.propertyValue` targets. The graph keeps the raw

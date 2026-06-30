@@ -20,14 +20,19 @@ The previously admitted boolean-to-number and number pass-through cases stay
 unchanged. Other `DataConverterToNumber` source kinds remain out of scope for
 this runtime slice.
 
+Main-`ToTarget | TwoWay` state-machine target-dirty behavior for this enum
+path is covered by
+`docs/prototypes/data-binding-graph-to-number-scalar-main-to-target-two-way-target-dirty-runtime-contract.md`.
+
 ## Out Of Scope
 
 This slice does not add string-to-number parsing, color-to-number conversion,
 symbol-list index conversion, list/view-model values, enum label/name mapping,
 converter groups, formulas, interpolation/smoothing, reverse conversion,
-target-to-source propagation, dirty/update queues, converter lifecycle hooks,
-relative/parent paths, nested paths, listener-owned data binding, or nested
-artboard propagation.
+target-to-source propagation, dirty/update queues beyond the linked
+state-machine target-dirty path, converter lifecycle hooks, relative/parent
+paths, nested paths, listener-owned data binding, or nested artboard
+propagation.
 
 ## Completion Checks
 

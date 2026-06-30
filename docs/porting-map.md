@@ -1088,10 +1088,10 @@ from already-supported number-output converters. C++ probe coverage verifies an
 The contract is
 `docs/prototypes/data-binding-graph-number-converter-group-runtime-contract.md`.
 Stable public source handles, list/view-model bindables, reverse conversion,
-group children requiring live context binding, stateful interpolators, formula
-randoms, generated lists, or target-to-source queues, relative/parent/nested
-lookup, listener-owned data binding, and nested artboard propagation remain
-follow-up `#12` slices.
+group children requiring live context binding beyond the first admitted
+interpolator child path, formula randoms, generated lists, or target-to-source
+queues, relative/parent/nested lookup, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: the first stateful runtime data-converter slice now admits
 direct `DataConverterInterpolator` bindings for default-context number sources
@@ -1103,11 +1103,26 @@ keeps the state machine advancing while smoothing is active. C++ probe coverage
 warms the converter, mutates the default source, and verifies partial/final
 smoothing through an existing `BlendState1DViewModel` consumer. The contract is
 `docs/prototypes/data-binding-graph-interpolator-converter-runtime-contract.md`.
-Interpolator children inside converter groups, reverse conversion,
+Broader converter-group stateful scheduling, reverse conversion,
 target-to-source queues, formula/number-to-list/generated-list/scripted
 stateful scheduling, broader `DataBindContainer` dirty queues,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
+
+Current #12 update: stateful converter execution now extends through the first
+`DataConverterGroup` path containing an interpolator child. Runtime group
+converter state is stored as a tree matching imported group item order, so
+already-admitted stateless number converters can feed a stateful
+`DataConverterInterpolator` child and group advance aggregates child activity.
+C++ probe coverage verifies an `OperationValue -> DataConverterInterpolator`
+group after source mutation through the existing `BlendState1DViewModel`
+consumer. The contract is
+`docs/prototypes/data-binding-graph-interpolator-converter-group-runtime-contract.md`.
+Reverse group conversion, target-to-source queues, formula/number-to-list/
+generated-list/scripted stateful scheduling, context-aware group children,
+broader `DataBindContainer` dirty queues, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
 
 Current #12 update: `BindablePropertyViewModel.propertyValue` now has its first
 graph-owned source binding slice. Default-context

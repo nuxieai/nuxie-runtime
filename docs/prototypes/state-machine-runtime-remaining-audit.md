@@ -224,6 +224,12 @@ slice.
   initialized zero-second retargets until a positive elapsed pass, and keep the
   state machine advancing while interpolation remains active. A C++ probe
   covers retargeting through an existing blend-state consumer.
+- First stateful `DataConverterGroup` graph-owned converter execution slice:
+  default-context number sources feeding number targets can now run an
+  admitted stateless number converter followed by a stateful
+  `DataConverterInterpolator` child. Group child state is stored in imported
+  group-item order, group advance aggregates child activity, and a C++ probe
+  covers retargeting through an existing blend-state consumer.
 - First graph-owned view-model bindable slice: forward propagation for
   default-context `ViewModelInstanceViewModel.propertyValue` sources feeding
   `BindablePropertyViewModel.propertyValue` targets, covered by a C++ probe
@@ -280,7 +286,8 @@ slice.
   operation-view-model default-number,
   string converter group, number-to-string converter group,
   number-to-number converter group paths, and direct stateful
-  data-converter-interpolator number smoothing,
+  data-converter-interpolator number smoothing plus grouped
+  operation-value-to-interpolator number smoothing,
   data-binding update queues, relative paths, parent paths, and nested paths.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener

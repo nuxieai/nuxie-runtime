@@ -2994,6 +2994,7 @@ enum RuntimeDataBindGraphConverter {
 enum RuntimeDataBindGraphConverterState {
     None,
     Interpolator(RuntimeDataBindGraphInterpolatorState),
+    Group(Vec<RuntimeDataBindGraphConverterState>),
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -4306,23 +4307,12 @@ impl RuntimeDataBindGraphSourceNode {
         &mut self,
         elapsed_seconds: f32,
     ) -> RuntimeDataBindGraphStatefulAdvance {
-        let Some(RuntimeDataBindGraphConverter::Interpolator {
-            duration,
-            interpolator,
-        }) = self.converter.as_ref()
-        else {
-            return RuntimeDataBindGraphStatefulAdvance::default();
-        };
         self.converter_state
-            .advance_interpolator(*duration, *interpolator, elapsed_seconds)
+            .advance_converter(self.converter.as_ref(), elapsed_seconds)
     }
 
     fn should_skip_binding_for_phase(&self, phase: RuntimeDataBindGraphApplyPhase) -> bool {
-        if !matches!(
-            self.converter,
-            Some(RuntimeDataBindGraphConverter::Interpolator { .. })
-        ) || !self.converter_state.is_initialized_stateful()
-        {
+        if !self.converter_state.is_initialized_stateful() {
             return false;
         }
         match phase {
@@ -4337,18 +4327,7 @@ impl RuntimeDataBindGraphSourceNode {
     fn converted_value(&mut self) -> Option<RuntimeDataBindGraphValue> {
         match self.converter.as_ref() {
             None => Some(self.value.clone()),
-            Some(
-                converter @ RuntimeDataBindGraphConverter::Interpolator {
-                    duration,
-                    interpolator,
-                },
-            ) => self.converter_state.convert_interpolator(
-                converter,
-                *duration,
-                *interpolator,
-                &self.value,
-            ),
-            Some(converter) => runtime_data_bind_graph_convert_value(converter, &self.value),
+            Some(converter) => self.converter_state.convert_value(converter, &self.value),
         }
     }
 }
@@ -4359,41 +4338,74 @@ impl RuntimeDataBindGraphConverterState {
             Some(RuntimeDataBindGraphConverter::Interpolator { .. }) => {
                 Self::Interpolator(RuntimeDataBindGraphInterpolatorState::new())
             }
+            Some(RuntimeDataBindGraphConverter::Group(converters)) => Self::Group(
+                converters
+                    .iter()
+                    .map(|converter| Self::for_converter(Some(converter)))
+                    .collect(),
+            ),
             _ => Self::None,
         }
     }
 
-    fn convert_interpolator(
+    fn convert_value(
         &mut self,
         converter: &RuntimeDataBindGraphConverter,
-        duration: f32,
-        interpolator: Option<RuntimeTransitionInterpolator>,
         value: &RuntimeDataBindGraphValue,
     ) -> Option<RuntimeDataBindGraphValue> {
-        if matches!(self, Self::None) {
-            *self = Self::for_converter(Some(converter));
-        }
-        match self {
-            Self::Interpolator(state) => state.convert(duration, interpolator, value),
-            Self::None => None,
+        match (converter, self) {
+            (
+                RuntimeDataBindGraphConverter::Interpolator {
+                    duration,
+                    interpolator,
+                },
+                Self::Interpolator(state),
+            ) => state.convert(*duration, *interpolator, value),
+            (RuntimeDataBindGraphConverter::Group(converters), Self::Group(states))
+                if converters.len() == states.len() =>
+            {
+                let mut value = value.clone();
+                for (converter, state) in converters.iter().zip(states) {
+                    value = state.convert_value(converter, &value)?;
+                }
+                Some(value)
+            }
+            _ => runtime_data_bind_graph_convert_value(converter, value),
         }
     }
 
-    fn advance_interpolator(
+    fn advance_converter(
         &mut self,
-        duration: f32,
-        interpolator: Option<RuntimeTransitionInterpolator>,
+        converter: Option<&RuntimeDataBindGraphConverter>,
         elapsed_seconds: f32,
     ) -> RuntimeDataBindGraphStatefulAdvance {
-        match self {
-            Self::Interpolator(state) => state.advance(duration, interpolator, elapsed_seconds),
-            Self::None => RuntimeDataBindGraphStatefulAdvance::default(),
+        match (converter, self) {
+            (
+                Some(RuntimeDataBindGraphConverter::Interpolator {
+                    duration,
+                    interpolator,
+                }),
+                Self::Interpolator(state),
+            ) => state.advance(*duration, *interpolator, elapsed_seconds),
+            (Some(RuntimeDataBindGraphConverter::Group(converters)), Self::Group(states))
+                if converters.len() == states.len() =>
+            {
+                let mut aggregate = RuntimeDataBindGraphStatefulAdvance::default();
+                for (converter, state) in converters.iter().zip(states) {
+                    let advance = state.advance_converter(Some(converter), elapsed_seconds);
+                    aggregate.changed |= advance.changed;
+                    aggregate.keep_going |= advance.keep_going;
+                }
+                aggregate
+            }
+            _ => RuntimeDataBindGraphStatefulAdvance::default(),
         }
     }
 
     fn is_initialized_stateful(&self) -> bool {
         match self {
             Self::Interpolator(state) => state.is_initialized(),
+            Self::Group(states) => states.iter().any(Self::is_initialized_stateful),
             Self::None => false,
         }
     }
@@ -11960,7 +11972,7 @@ fn runtime_data_bind_graph_converter_for_object(
                     item.converter
                         .and_then(|converter| {
                             runtime_data_bind_graph_converter_for_object(
-                                file, converter, visiting, false,
+                                file, converter, visiting, true,
                             )
                         })
                         .unwrap_or(RuntimeDataBindGraphConverter::Unsupported)

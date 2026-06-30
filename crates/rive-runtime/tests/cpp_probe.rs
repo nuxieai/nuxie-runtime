@@ -14493,12 +14493,16 @@ fn state_machine_default_viewmodel_string_bind_source_matches_cpp_probe() {
         rust_reports.len(),
         "{label} state-machine report count mismatch"
     );
-    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+    for (step, (cpp_state_machine, (advanced, rust_state_machine))) in cpp_artboard
         .runtime_state_machine_advances
         .iter()
         .zip(&rust_reports)
+        .enumerate()
     {
         compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+        if step > 0 {
+            compare_state_machine_string_binding(cpp_state_machine, rust_state_machine, 0, label);
+        }
     }
     compare_cpp_runtime_update(&cpp, &rust, &report, label);
 }
@@ -22727,6 +22731,47 @@ fn compare_state_machine_number_binding(
     }
 }
 
+fn compare_state_machine_string_binding(
+    cpp: &CppRuntimeStateMachineAdvance,
+    rust: &StateMachineInstance,
+    data_bind_index: usize,
+    label: &str,
+) {
+    let binding = cpp
+        .string_bindings
+        .iter()
+        .find(|binding| binding.data_bind_index == data_bind_index)
+        .unwrap_or_else(|| panic!("missing C++ string binding {data_bind_index} for {label}"));
+    match (
+        binding.source_value.as_deref(),
+        rust.default_view_model_string_source_value_for_data_bind(data_bind_index),
+    ) {
+        (Some(cpp), Some(rust)) => assert_eq!(
+            cpp.as_bytes(),
+            rust,
+            "{label} string binding {data_bind_index} sourceValue mismatch"
+        ),
+        (None, None) => {}
+        (cpp, rust) => panic!(
+            "{label} string binding {data_bind_index} sourceValue presence mismatch: C++ {cpp:?}, Rust {rust:?}"
+        ),
+    }
+    match (
+        binding.target_value.as_deref(),
+        rust.bindable_string_value_for_data_bind(data_bind_index),
+    ) {
+        (Some(cpp), Some(rust)) => assert_eq!(
+            cpp.as_bytes(),
+            rust,
+            "{label} string binding {data_bind_index} targetValue mismatch"
+        ),
+        (None, None) => {}
+        (cpp, rust) => panic!(
+            "{label} string binding {data_bind_index} targetValue presence mismatch: C++ {cpp:?}, Rust {rust:?}"
+        ),
+    }
+}
+
 fn compare_cpp_runtime_update(
     cpp: &CppProbeFile,
     rust: &ArtboardInstance,
@@ -23164,6 +23209,8 @@ struct CppRuntimeStateMachineAdvance {
     view_model_bindings: Vec<CppRuntimeStateMachineViewModelBinding>,
     #[serde(default, rename = "numberBindings")]
     number_bindings: Vec<CppRuntimeStateMachineNumberBinding>,
+    #[serde(default, rename = "stringBindings")]
+    string_bindings: Vec<CppRuntimeStateMachineStringBinding>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -23211,6 +23258,16 @@ struct CppRuntimeStateMachineNumberBinding {
     source_value: Option<f32>,
     #[serde(rename = "targetValue")]
     target_value: Option<f32>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppRuntimeStateMachineStringBinding {
+    #[serde(rename = "dataBindIndex")]
+    data_bind_index: usize,
+    #[serde(rename = "sourceValue")]
+    source_value: Option<String>,
+    #[serde(rename = "targetValue")]
+    target_value: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

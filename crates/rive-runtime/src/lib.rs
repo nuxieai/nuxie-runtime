@@ -4435,6 +4435,21 @@ impl RuntimeDataBindGraph {
         Some(value)
     }
 
+    fn default_view_model_string_source_value_for_data_bind(
+        &self,
+        data_bind_index: usize,
+    ) -> Option<&[u8]> {
+        let binding = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)?;
+        let source = self.sources.get(binding.source.0)?;
+        let RuntimeDataBindGraphValue::String(value) = &source.value else {
+            return None;
+        };
+        Some(value.as_slice())
+    }
+
     fn number_target_global_id_for_data_bind(&self, data_bind_index: usize) -> Option<u32> {
         let target = self
             .default_view_model_bindings
@@ -4442,6 +4457,18 @@ impl RuntimeDataBindGraph {
             .find(|binding| binding.data_bind_index == data_bind_index)
             .and_then(|binding| self.targets.get(binding.target.0))?;
         let RuntimeDataBindGraphTarget::Number { global_id } = target.target else {
+            return None;
+        };
+        Some(global_id)
+    }
+
+    fn string_target_global_id_for_data_bind(&self, data_bind_index: usize) -> Option<u32> {
+        let target = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .and_then(|binding| self.targets.get(binding.target.0))?;
+        let RuntimeDataBindGraphTarget::String { global_id } = target.target else {
             return None;
         };
         Some(global_id)
@@ -9243,6 +9270,24 @@ impl StateMachineInstance {
             .iter()
             .find(|bindable_number| bindable_number.global_id == global_id)
             .map(|bindable_number| bindable_number.value)
+    }
+
+    pub fn default_view_model_string_source_value_for_data_bind(
+        &self,
+        data_bind_index: usize,
+    ) -> Option<&[u8]> {
+        self.data_bind_graph
+            .default_view_model_string_source_value_for_data_bind(data_bind_index)
+    }
+
+    pub fn bindable_string_value_for_data_bind(&self, data_bind_index: usize) -> Option<&[u8]> {
+        let global_id = self
+            .data_bind_graph
+            .string_target_global_id_for_data_bind(data_bind_index)?;
+        self.bindable_strings
+            .iter()
+            .find(|bindable_string| bindable_string.global_id == global_id)
+            .map(|bindable_string| bindable_string.value.as_slice())
     }
 
     pub fn set_default_view_model_number_source_for_data_bind(

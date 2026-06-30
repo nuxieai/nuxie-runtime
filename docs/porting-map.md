@@ -1069,6 +1069,19 @@ converters, broader dirty/update queues, relative/parent/nested lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 
+Current #12 update: the C++ runtime probe now emits exact `stringBindings`
+source/target snapshots for state-machine `BindablePropertyString` data binds,
+and the Rust probe harness can compare those values directly for
+default-context string sources and string bindable targets. This is the narrow
+reporting seam needed before adding main-`ToTarget | TwoWay` string target-dirty
+parity tests, because earlier string converter coverage inferred behavior
+through transition-condition consumers. The contract is
+`docs/prototypes/data-binding-graph-string-binding-report-runtime-contract.md`.
+Main-`ToTarget | TwoWay` string target-dirty behavior, enum, asset, artboard,
+trigger, view-model, and list binding reports, public API design, broader
+dirty/update queues, relative/parent/nested lookup, listener-owned data binding,
+and nested artboard propagation remain follow-up `#12` slices.
+
 Current #12 update: the first `DataConverterToString` runtime slice now
 supports default-context number sources feeding
 `BindablePropertyString.propertyValue` targets. String source nodes can carry a

@@ -219,6 +219,11 @@ slice.
   advancement preserves a manual bindable target edit, then normal
   state-machine advancement reapplies the warmed direct interpolator
   source-to-target converter state even when elapsed time is zero.
+- String binding report seam: the C++ probe now emits exact source/target
+  `stringBindings` snapshots beside existing number and view-model binding
+  reports, and Rust probe tests can compare default-context string bind values
+  directly. This is the enabling slice for string-target dirty parity without
+  adding new runtime semantics.
 - First `DataConverterToString` graph-owned converter execution slice:
   forward conversion for default-context number sources feeding string targets,
   covered by a C++ probe through an existing string transition-condition

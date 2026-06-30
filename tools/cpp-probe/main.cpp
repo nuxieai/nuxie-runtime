@@ -398,6 +398,15 @@ struct RuntimeStateMachineNumberBindingReport
     float targetValue;
 };
 
+struct RuntimeStateMachineStringBindingReport
+{
+    size_t dataBindIndex;
+    bool hasSource;
+    std::string sourceValue;
+    bool hasTarget;
+    std::string targetValue;
+};
+
 struct RuntimeStateMachineAdvanceReport
 {
     size_t stateMachineIndex;
@@ -410,6 +419,7 @@ struct RuntimeStateMachineAdvanceReport
     std::vector<RuntimeStateMachineViewModelTriggerReport> viewModelTriggers;
     std::vector<RuntimeStateMachineViewModelBindingReport> viewModelBindings;
     std::vector<RuntimeStateMachineNumberBindingReport> numberBindings;
+    std::vector<RuntimeStateMachineStringBindingReport> stringBindings;
 };
 
 class RuntimeAnimationEventReporter : public rive::KeyedCallbackReporter
@@ -1172,6 +1182,80 @@ collect_number_binding_reports(rive::StateMachineInstance* stateMachine)
             report.hasTarget = true;
             report.targetValue =
                 bindableProperty->as<rive::BindablePropertyNumber>()
+                    ->propertyValue();
+        }
+
+        reports.push_back(report);
+    }
+    return reports;
+}
+
+std::vector<RuntimeStateMachineStringBindingReport>
+collect_string_binding_reports(rive::StateMachineInstance* stateMachine)
+{
+    std::vector<RuntimeStateMachineStringBindingReport> reports;
+    if (stateMachine == nullptr)
+    {
+        return reports;
+    }
+    auto sourceStateMachine = stateMachine->stateMachine();
+    if (sourceStateMachine == nullptr)
+    {
+        return reports;
+    }
+
+    for (size_t dataBindIndex = 0;
+         dataBindIndex < sourceStateMachine->dataBindCount();
+         ++dataBindIndex)
+    {
+        auto dataBind = sourceStateMachine->dataBind(dataBindIndex);
+        auto target = dataBind == nullptr ? nullptr : dataBind->target();
+        if (target == nullptr || !target->is<rive::BindablePropertyString>())
+        {
+            continue;
+        }
+
+        RuntimeStateMachineStringBindingReport report;
+        report.dataBindIndex = dataBindIndex;
+        report.hasSource = false;
+        report.sourceValue = "";
+        report.hasTarget = false;
+        report.targetValue = "";
+
+        auto bindableProperty = stateMachine->bindablePropertyInstance(
+            target->as<rive::BindablePropertyString>());
+        auto flags = static_cast<rive::DataBindFlags>(dataBind->flags());
+        bool toSource =
+            (flags & rive::DataBindFlags::ToSource) ==
+            rive::DataBindFlags::ToSource;
+        auto liveDataBind =
+            bindableProperty == nullptr
+                ? nullptr
+                : (toSource ? stateMachine->bindableDataBindToSource(
+                                  bindableProperty)
+                            : stateMachine->bindableDataBindToTarget(
+                                  bindableProperty));
+
+        auto source = liveDataBind == nullptr ? nullptr : liveDataBind->source();
+        if (source == nullptr && dataBind->is<rive::DataBindContext>() &&
+            stateMachine->dataContext() != nullptr)
+        {
+            source = stateMachine->dataContext()->getViewModelProperty(
+                dataBind->as<rive::DataBindContext>()->sourcePathIds());
+        }
+        if (source != nullptr && source->is<rive::ViewModelInstanceString>())
+        {
+            report.hasSource = true;
+            report.sourceValue =
+                source->as<rive::ViewModelInstanceString>()->propertyValue();
+        }
+
+        if (bindableProperty != nullptr &&
+            bindableProperty->is<rive::BindablePropertyString>())
+        {
+            report.hasTarget = true;
+            report.targetValue =
+                bindableProperty->as<rive::BindablePropertyString>()
                     ->propertyValue();
         }
 
@@ -2251,6 +2335,8 @@ apply_runtime_state_machine_advances(rive::File* file,
             collect_view_model_binding_reports(file, stateMachine.get());
         report.numberBindings =
             collect_number_binding_reports(stateMachine.get());
+        report.stringBindings =
+            collect_string_binding_reports(stateMachine.get());
         reports.push_back(report);
     }
     return reports;
@@ -2373,6 +2459,35 @@ void write_runtime_state_machine_advance_reports(
             if (binding.hasTarget)
             {
                 out << binding.targetValue;
+            }
+            else
+            {
+                out << "null";
+            }
+            out << '}';
+        }
+        out << "],\"stringBindings\":[";
+        for (size_t j = 0; j < report.stringBindings.size(); ++j)
+        {
+            if (j != 0)
+            {
+                out << ',';
+            }
+            const auto& binding = report.stringBindings[j];
+            out << "{\"dataBindIndex\":" << binding.dataBindIndex;
+            out << ",\"sourceValue\":";
+            if (binding.hasSource)
+            {
+                write_json_string(out, binding.sourceValue);
+            }
+            else
+            {
+                out << "null";
+            }
+            out << ",\"targetValue\":";
+            if (binding.hasTarget)
+            {
+                write_json_string(out, binding.targetValue);
             }
             else
             {

@@ -274,6 +274,7 @@ Additional current contract: `docs/prototypes/linear-animation-id-keyframe-runti
 Additional current contract: `docs/prototypes/linear-animation-callback-keyframe-runtime-contract.md`
 Additional current contract: `docs/prototypes/linear-animation-callback-keyframe-loop-edge-runtime-contract.md`
 Additional current contract: `docs/prototypes/linear-animation-callback-keyframe-remaining-edge-runtime-contract.md`
+Additional current contract: `docs/prototypes/linear-animation-instance-callback-report-runtime-contract.md`
 Additional current contract: `docs/prototypes/state-machine-default-viewmodel-number-binding-runtime-contract.md`
 Additional current contract: `docs/prototypes/state-machine-default-viewmodel-boolean-binding-runtime-contract.md`
 Additional current contract: `docs/prototypes/state-machine-default-viewmodel-string-binding-runtime-contract.md`
@@ -325,6 +326,8 @@ Current #11 update: the first `KeyFrameCallback` runtime slice now imports callb
 Current #11 update: `KeyFrameCallback` event reporting now has dedicated loop-edge coverage for state-machine animations. C++ probes cover a forward `Loop` wrap and a `PingPong` end-frame bounce, including event local ID, core type, name, `secondsDelay`, current animation time, and `didLoop`. Reverse-playback loop edges, work-area loop edges, multi-bounce ping-pong advances, public listener dispatch, audio/open-url side effects, trigger callback targets, nested-artboard event propagation, and callback-driven data-binding behavior remain later slices.
 
 Current #11 update: remaining `KeyFrameCallback` state-machine edge coverage now includes reverse playback from the animation end time, enabled work-area loop wrapping, and multi-bounce ping-pong advances, all pinned against C++ reported-event payloads and current-animation timing. Public scene/listener dispatch, audio/open-url side effects, trigger callback targets, nested-artboard event propagation, and callback-driven data-binding behavior remain later slices.
+
+Current #11 update: plain public `LinearAnimationInstance` callback reporting is now probe-backed for `Event.trigger` keyframes through Rust's `advance_linear_animation_instance_with_events` seam. The C++ probe records callback payloads from `LinearAnimationInstance::advance(seconds, KeyedCallbackReporter*)`, and Rust verifies event local ID, core type, name, delay, and animation timing against it. `Scene::advanceAndApply` listener notification, audio/open-url side effects, callback targets other than `Event.trigger`, nested-artboard event propagation, and callback-driven data binding remain later slices.
 
 Current #11 update: the first live source-to-target data-bind path is in place for state-machine-owned `DataBindContext` objects targeting cloned `BindablePropertyNumber.propertyValue`. When the default root view-model context is bound, Rust resolves `sourcePathIds` against the imported default `ViewModelInstance`, applies a `ViewModelInstanceNumber` source to the cloned bindable before state-machine layer evaluation, and verifies that an existing `BlendState1DViewModel` consumer observes the C++ value. External context binding, source mutation APIs, non-number bindables, converters, generalized update queues, relative/parent/nested paths, listener-owned data binding, and nested artboard propagation remain later slices.
 

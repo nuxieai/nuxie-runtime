@@ -6947,6 +6947,94 @@ fn state_machine_blend_state_random_transition_matches_cpp_probe() {
 }
 
 #[test]
+fn linear_animation_instance_callback_events_match_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_linear_animation_instance_callback_event_cpp.riv";
+    let bytes = synthetic_state_machine_callback_keyframe_event(8378);
+    let seconds = 0.6;
+    let mix = 1.0;
+    let cpp = read_cpp_probe_bytes_with_args(
+        &probe,
+        label,
+        &bytes,
+        &[
+            "--runtime-advance-animation".to_owned(),
+            "0".to_owned(),
+            seconds.to_string(),
+            mix.to_string(),
+        ],
+    );
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut animation = rust
+        .linear_animation_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust animation instance for {label}"));
+    let mut reported_events = Vec::new();
+    let keep_going = rust.advance_linear_animation_instance_with_events(
+        &mut animation,
+        seconds,
+        &mut reported_events,
+    );
+    rust.apply_linear_animation_instance(&animation, mix);
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    let cpp_animation = cpp_artboard
+        .runtime_animation_advances
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ animation advance report for {label}"));
+    let runtime_animation = rust
+        .linear_animation(0)
+        .unwrap_or_else(|| panic!("missing Rust runtime animation for {label}"));
+    let keep_going_after = rust.linear_animation_instance_keep_going(&animation);
+    compare_animation_advance(
+        cpp_animation,
+        runtime_animation,
+        &animation,
+        keep_going,
+        keep_going_after,
+        label,
+    );
+    assert_eq!(
+        cpp_animation.reported_events.len(),
+        reported_events.len(),
+        "{label} reported event count mismatch"
+    );
+    for (event_index, cpp_event) in cpp_animation.reported_events.iter().enumerate() {
+        let rust_event = reported_events
+            .get(event_index)
+            .unwrap_or_else(|| panic!("missing Rust reported event {event_index} for {label}"));
+        assert_eq!(
+            cpp_event.event_local,
+            Some(rust_event.event_local_index()),
+            "{label} reported event {event_index} local ID mismatch"
+        );
+        assert_eq!(
+            cpp_event.event_core_type,
+            Some(rust_event.event_core_type()),
+            "{label} reported event {event_index} core type mismatch"
+        );
+        assert_eq!(
+            cpp_event.event_name.as_deref(),
+            rust_event.name(),
+            "{label} reported event {event_index} name mismatch"
+        );
+        assert_close(
+            cpp_event.seconds_delay,
+            rust_event.seconds_delay(),
+            &format!("{label} reported event {event_index} secondsDelay"),
+        );
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
 fn state_machine_fire_events_match_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
@@ -11726,6 +11814,8 @@ struct CppRuntimeAnimationAdvance {
     did_loop: bool,
     #[serde(rename = "loopValue")]
     loop_value: i64,
+    #[serde(default, rename = "reportedEvents")]
+    reported_events: Vec<CppRuntimeStateMachineReportedEvent>,
 }
 
 #[derive(Debug, Deserialize)]

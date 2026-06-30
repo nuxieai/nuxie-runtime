@@ -13,6 +13,8 @@ slice.
 - Direct linear-animation application for transform doubles, solid colors,
   paint visibility bools, generic uint/ID values, strings, and the first
   callback event reports.
+- Public `LinearAnimationInstance` `Event.trigger` callback reports through
+  the Rust event-vector seam for plain animation-instance advancement.
 - `LinearAnimationInstance` playback timing for simple state-machine usage,
   including loop, ping-pong, work-area, spill, and keep-going behavior.
 - Simple animation states, blend states, blend-state transitions, transition
@@ -36,9 +38,9 @@ slice.
 
 ## Remaining Runtime Slices
 
-- Public `LinearAnimationInstance`/scene callback dispatch: listener notification,
-  audio playback, open-url side effects, nested-artboard event propagation, and
-  callback targets other than `Event.trigger`.
+- Scene callback dispatch side effects: listener notification, audio playback,
+  open-url side effects, nested-artboard event propagation, and callback
+  targets other than `Event.trigger`.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
 - Live view-model APIs and data-binding propagation beyond the finite default

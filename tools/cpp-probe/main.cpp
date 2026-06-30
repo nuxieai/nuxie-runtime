@@ -57,6 +57,7 @@
 #include "rive/animation/cubic_ease_interpolator.hpp"
 #include "rive/animation/elastic_interpolator.hpp"
 #include "rive/animation/keyed_object.hpp"
+#include "rive/animation/keyed_callback_reporter.hpp"
 #include "rive/animation/keyed_property.hpp"
 #include "rive/animation/keyframe.hpp"
 #include "rive/animation/animation_state.hpp"
@@ -274,6 +275,16 @@ struct RuntimeAnimationAdvance
     float mix;
 };
 
+struct RuntimeStateMachineReportedEventReport
+{
+    bool hasEvent;
+    bool hasEventLocal;
+    size_t eventLocal;
+    int coreType;
+    std::string name;
+    float secondsDelay;
+};
+
 struct RuntimeAnimationAdvanceReport
 {
     size_t animationIndex;
@@ -289,6 +300,7 @@ struct RuntimeAnimationAdvanceReport
     float spilledTime;
     bool didLoop;
     int loopValue;
+    std::vector<RuntimeStateMachineReportedEventReport> reportedEvents;
 };
 
 enum class RuntimeStateMachineActionKind
@@ -328,16 +340,6 @@ struct RuntimeStateMachineCurrentAnimationReport
     bool didLoop;
 };
 
-struct RuntimeStateMachineReportedEventReport
-{
-    bool hasEvent;
-    bool hasEventLocal;
-    size_t eventLocal;
-    int coreType;
-    std::string name;
-    float secondsDelay;
-};
-
 struct RuntimeStateMachineViewModelTriggerReport
 {
     size_t index;
@@ -355,6 +357,50 @@ struct RuntimeStateMachineAdvanceReport
     std::vector<RuntimeStateMachineCurrentAnimationReport> currentAnimations;
     std::vector<RuntimeStateMachineReportedEventReport> reportedEvents;
     std::vector<RuntimeStateMachineViewModelTriggerReport> viewModelTriggers;
+};
+
+class RuntimeAnimationEventReporter : public rive::KeyedCallbackReporter
+{
+public:
+    RuntimeAnimationEventReporter(const std::vector<rive::Core*>& objects) :
+        m_objects(objects)
+    {}
+
+    void reportKeyedCallback(uint32_t objectId,
+                             uint32_t propertyKey,
+                             float elapsedSeconds) override
+    {
+        if (propertyKey != rive::EventBase::triggerPropertyKey ||
+            objectId >= m_objects.size())
+        {
+            return;
+        }
+        auto object = m_objects[objectId];
+        if (object == nullptr || !object->isTypeOf(rive::EventBase::typeKey))
+        {
+            return;
+        }
+
+        auto event = object->as<rive::Event>();
+        RuntimeStateMachineReportedEventReport reportedEvent;
+        reportedEvent.hasEvent = true;
+        reportedEvent.hasEventLocal = true;
+        reportedEvent.eventLocal = objectId;
+        reportedEvent.coreType = event->coreType();
+        reportedEvent.name = event->name();
+        reportedEvent.secondsDelay = elapsedSeconds;
+        m_reportedEvents.push_back(reportedEvent);
+    }
+
+    const std::vector<RuntimeStateMachineReportedEventReport>& reportedEvents()
+        const
+    {
+        return m_reportedEvents;
+    }
+
+private:
+    const std::vector<rive::Core*>& m_objects;
+    std::vector<RuntimeStateMachineReportedEventReport> m_reportedEvents;
 };
 
 struct ProbeOptions
@@ -737,6 +783,7 @@ void apply_runtime_animation_applications(rive::ArtboardInstance* instance,
 
 std::vector<RuntimeAnimationAdvanceReport> apply_runtime_animation_advances(
     rive::ArtboardInstance* instance,
+    const std::vector<rive::Core*>& objects,
     const ProbeOptions& options)
 {
     std::vector<RuntimeAnimationAdvanceReport> reports;
@@ -752,7 +799,8 @@ std::vector<RuntimeAnimationAdvanceReport> apply_runtime_animation_advances(
         {
             continue;
         }
-        bool advanced = animation->advance(advance.seconds);
+        RuntimeAnimationEventReporter reporter(objects);
+        bool advanced = animation->advance(advance.seconds, &reporter);
         animation->apply(advance.mix);
         reports.push_back(RuntimeAnimationAdvanceReport{
             advance.animationIndex,
@@ -768,9 +816,56 @@ std::vector<RuntimeAnimationAdvanceReport> apply_runtime_animation_advances(
             animation->spilledTime(),
             animation->didLoop(),
             animation->loopValue(),
+            reporter.reportedEvents(),
         });
     }
     return reports;
+}
+
+void write_runtime_reported_events(
+    std::ostream& out,
+    const std::vector<RuntimeStateMachineReportedEventReport>& reportedEvents)
+{
+    out << '[';
+    for (size_t j = 0; j < reportedEvents.size(); ++j)
+    {
+        if (j != 0)
+        {
+            out << ',';
+        }
+        const auto& event = reportedEvents[j];
+        out << "{\"index\":" << j;
+        out << ",\"eventLocal\":";
+        if (event.hasEventLocal)
+        {
+            out << event.eventLocal;
+        }
+        else
+        {
+            out << "null";
+        }
+        out << ",\"eventCoreType\":";
+        if (event.hasEvent)
+        {
+            out << event.coreType;
+        }
+        else
+        {
+            out << "null";
+        }
+        out << ",\"eventName\":";
+        if (event.hasEvent)
+        {
+            write_json_string(out, event.name);
+        }
+        else
+        {
+            out << "null";
+        }
+        out << ",\"secondsDelay\":" << event.secondsDelay;
+        out << '}';
+    }
+    out << ']';
 }
 
 void write_runtime_animation_advance_reports(
@@ -798,6 +893,8 @@ void write_runtime_animation_advance_reports(
         out << ",\"spilledTime\":" << report.spilledTime;
         out << ",\"didLoop\":" << (report.didLoop ? "true" : "false");
         out << ",\"loopValue\":" << report.loopValue;
+        out << ",\"reportedEvents\":";
+        write_runtime_reported_events(out, report.reportedEvents);
         out << '}';
     }
     out << ']';
@@ -1163,46 +1260,9 @@ void write_runtime_state_machine_advance_reports(
                 << (animation.didLoop ? "true" : "false");
             out << '}';
         }
-        out << "],\"reportedEvents\":[";
-        for (size_t j = 0; j < report.reportedEvents.size(); ++j)
-        {
-            if (j != 0)
-            {
-                out << ',';
-            }
-            const auto& event = report.reportedEvents[j];
-            out << "{\"index\":" << j;
-            out << ",\"eventLocal\":";
-            if (event.hasEventLocal)
-            {
-                out << event.eventLocal;
-            }
-            else
-            {
-                out << "null";
-            }
-            out << ",\"eventCoreType\":";
-            if (event.hasEvent)
-            {
-                out << event.coreType;
-            }
-            else
-            {
-                out << "null";
-            }
-            out << ",\"eventName\":";
-            if (event.hasEvent)
-            {
-                write_json_string(out, event.name);
-            }
-            else
-            {
-                out << "null";
-            }
-            out << ",\"secondsDelay\":" << event.secondsDelay;
-            out << '}';
-        }
-        out << "],\"viewModelTriggers\":[";
+        out << "],\"reportedEvents\":";
+        write_runtime_reported_events(out, report.reportedEvents);
+        out << ",\"viewModelTriggers\":[";
         for (size_t j = 0; j < report.viewModelTriggers.size(); ++j)
         {
             if (j != 0)
@@ -5691,7 +5751,7 @@ void write_artboard(std::ostream& out,
     apply_runtime_artboard_size_mutations(artboard, options);
     apply_runtime_animation_applications(instanceArtboard, options);
     auto runtimeAnimationAdvanceReports =
-        apply_runtime_animation_advances(instanceArtboard, options);
+        apply_runtime_animation_advances(instanceArtboard, objects, options);
     auto runtimeStateMachineAdvanceReports =
         apply_runtime_state_machine_advances(
             file, instanceArtboard, options, localIds);

@@ -4,7 +4,7 @@ use rive_runtime::{
     ArtboardInstance, ComponentDirt, Mat2D, RuntimeComponent, RuntimeDrawCommandKind,
     RuntimeFeatherState, RuntimeGradientStop, RuntimeOwnedViewModelInstance, RuntimePathCommand,
     RuntimeShapePaintKind, RuntimeShapePaintPathKind, RuntimeShapePaintState,
-    StateMachineInputKind, TransformProperty,
+    StateMachineInputKind, StateMachineInstance, TransformProperty,
 };
 use rive_schema::definition_by_name;
 use serde::Deserialize;
@@ -6191,7 +6191,7 @@ fn synthetic_state_machine_default_viewmodel_boolean_negate_target_to_source_con
         });
         push_bindable_boolean_data_bind_context_with_converter_and_flags(
             bytes,
-            false,
+            true,
             &[0, 0],
             Some(0),
             DATA_BIND_TO_SOURCE | DATA_BIND_TWO_WAY,
@@ -13411,6 +13411,7 @@ fn state_machine_default_viewmodel_number_target_to_source_matches_cpp_probe() {
         .zip(&rust_reports)
     {
         compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+        compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, label);
     }
     compare_cpp_runtime_update(&cpp, &rust, &report, label);
 }
@@ -13500,6 +13501,7 @@ fn state_machine_default_viewmodel_number_pure_target_to_source_matches_cpp_prob
         .zip(&rust_reports)
     {
         compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+        compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, label);
     }
     compare_cpp_runtime_update(&cpp, &rust, &report, label);
 }
@@ -13585,6 +13587,7 @@ fn state_machine_default_viewmodel_number_operation_value_target_to_source_match
         .zip(&rust_reports)
     {
         compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+        compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, label);
     }
     compare_cpp_runtime_update(&cpp, &rust, &report, label);
 }
@@ -13671,6 +13674,7 @@ fn state_machine_default_viewmodel_number_operation_value_group_target_to_source
         .zip(&rust_reports)
     {
         compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+        compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, label);
     }
     compare_cpp_runtime_update(&cpp, &rust, &report, label);
 }
@@ -20854,6 +20858,47 @@ fn compare_state_machine_advance(
     }
 }
 
+fn compare_state_machine_number_binding(
+    cpp: &CppRuntimeStateMachineAdvance,
+    rust: &StateMachineInstance,
+    data_bind_index: usize,
+    label: &str,
+) {
+    let binding = cpp
+        .number_bindings
+        .iter()
+        .find(|binding| binding.data_bind_index == data_bind_index)
+        .unwrap_or_else(|| panic!("missing C++ number binding {data_bind_index} for {label}"));
+    match (
+        binding.source_value,
+        rust.default_view_model_number_source_value_for_data_bind(data_bind_index),
+    ) {
+        (Some(cpp), Some(rust)) => assert_close(
+            rust,
+            cpp,
+            &format!("{label} number binding {data_bind_index} sourceValue"),
+        ),
+        (None, None) => {}
+        (cpp, rust) => panic!(
+            "{label} number binding {data_bind_index} sourceValue presence mismatch: C++ {cpp:?}, Rust {rust:?}"
+        ),
+    }
+    match (
+        binding.target_value,
+        rust.bindable_number_value_for_data_bind(data_bind_index),
+    ) {
+        (Some(cpp), Some(rust)) => assert_close(
+            rust,
+            cpp,
+            &format!("{label} number binding {data_bind_index} targetValue"),
+        ),
+        (None, None) => {}
+        (cpp, rust) => panic!(
+            "{label} number binding {data_bind_index} targetValue presence mismatch: C++ {cpp:?}, Rust {rust:?}"
+        ),
+    }
+}
+
 fn compare_cpp_runtime_update(
     cpp: &CppProbeFile,
     rust: &ArtboardInstance,
@@ -21289,6 +21334,8 @@ struct CppRuntimeStateMachineAdvance {
     view_model_triggers: Vec<CppRuntimeStateMachineViewModelTrigger>,
     #[serde(default, rename = "viewModelBindings")]
     view_model_bindings: Vec<CppRuntimeStateMachineViewModelBinding>,
+    #[serde(default, rename = "numberBindings")]
+    number_bindings: Vec<CppRuntimeStateMachineNumberBinding>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -21326,6 +21373,16 @@ struct CppRuntimeStateMachineViewModelBinding {
     source_instance_index: Option<usize>,
     #[serde(rename = "targetInstanceIndex")]
     target_instance_index: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppRuntimeStateMachineNumberBinding {
+    #[serde(rename = "dataBindIndex")]
+    data_bind_index: usize,
+    #[serde(rename = "sourceValue")]
+    source_value: Option<f32>,
+    #[serde(rename = "targetValue")]
+    target_value: Option<f32>,
 }
 
 #[derive(Debug, Deserialize)]

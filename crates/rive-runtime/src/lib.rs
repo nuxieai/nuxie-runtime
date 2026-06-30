@@ -4583,6 +4583,33 @@ impl RuntimeDataBindGraph {
         self.view_model_instance_index_for_data_bind_value(data_bind_index, *value)
     }
 
+    fn default_view_model_number_source_value_for_data_bind(
+        &self,
+        data_bind_index: usize,
+    ) -> Option<f32> {
+        let binding = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)?;
+        let source = self.sources.get(binding.source.0)?;
+        let RuntimeDataBindGraphValue::Number(value) = source.value else {
+            return None;
+        };
+        Some(value)
+    }
+
+    fn number_target_global_id_for_data_bind(&self, data_bind_index: usize) -> Option<u32> {
+        let target = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .and_then(|binding| self.targets.get(binding.target.0))?;
+        let RuntimeDataBindGraphTarget::Number { global_id } = target.target else {
+            return None;
+        };
+        Some(global_id)
+    }
+
     fn view_model_target_global_id_for_data_bind(&self, data_bind_index: usize) -> Option<u32> {
         let target = self
             .default_view_model_bindings
@@ -4677,7 +4704,7 @@ impl RuntimeDataBindGraph {
         if !self.default_view_model_source_context_bound() {
             return false;
         }
-        let mut changed = false;
+        let mut updates = Vec::<(Vec<u32>, f32)>::new();
 
         for binding in self.default_view_model_bindings.clone() {
             let Some(target) = self.targets.get(binding.target.0) else {
@@ -4703,19 +4730,30 @@ impl RuntimeDataBindGraph {
             let Some(value) = source.number_target_to_source_value(value) else {
                 continue;
             };
-            let RuntimeDataBindGraphValue::Number(source_value) = &mut source.value else {
-                continue;
-            };
-            if *source_value != value {
-                *source_value = value;
-                changed = true;
-            }
-            let RuntimeDataBindGraphValue::Number(default_value) = &mut source.default_value else {
-                continue;
-            };
-            if *default_value != value {
-                *default_value = value;
-                changed = true;
+            updates.push((source.path.clone(), value));
+        }
+
+        let mut changed = false;
+        for (path, value) in updates {
+            for source in &mut self.sources {
+                if !source.bound || source.path != path {
+                    continue;
+                }
+                let RuntimeDataBindGraphValue::Number(source_value) = &mut source.value else {
+                    continue;
+                };
+                if *source_value != value {
+                    *source_value = value;
+                    changed = true;
+                }
+                let RuntimeDataBindGraphValue::Number(default_value) = &mut source.default_value
+                else {
+                    continue;
+                };
+                if *default_value != value {
+                    *default_value = value;
+                    changed = true;
+                }
             }
         }
 
@@ -5256,6 +5294,11 @@ impl RuntimeDataBindGraph {
             if !source.applies_source_to_target() {
                 continue;
             }
+            if matches!(phase, RuntimeDataBindGraphApplyPhase::Immediate)
+                && source.is_main_to_source()
+            {
+                continue;
+            }
             let Some(target) = self.targets.get(binding.target.0) else {
                 continue;
             };
@@ -5287,6 +5330,10 @@ impl RuntimeDataBindGraphSourceNode {
         data_bind_flags_apply_target_to_source(self.flags)
     }
 
+    fn is_main_to_source(&self) -> bool {
+        self.flags & DATA_BIND_FLAG_DIRECTION_TO_SOURCE != 0
+    }
+
     fn number_target_to_source_value(&self, value: f32) -> Option<f32> {
         if !self.bound
             || !self.applies_target_to_source()
@@ -5296,6 +5343,10 @@ impl RuntimeDataBindGraphSourceNode {
         }
         let value = match self.converter.as_ref() {
             None => RuntimeDataBindGraphValue::Number(value),
+            Some(converter) if self.is_main_to_source() => runtime_data_bind_graph_convert_value(
+                converter,
+                &RuntimeDataBindGraphValue::Number(value),
+            )?,
             Some(converter) => runtime_data_bind_graph_reverse_convert_value(
                 converter,
                 &RuntimeDataBindGraphValue::Number(value),
@@ -5322,6 +5373,10 @@ impl RuntimeDataBindGraphSourceNode {
         }
         let value = match self.converter.as_ref() {
             None => RuntimeDataBindGraphValue::Boolean(value),
+            Some(converter) if self.is_main_to_source() => runtime_data_bind_graph_convert_value(
+                converter,
+                &RuntimeDataBindGraphValue::Boolean(value),
+            )?,
             Some(converter) => runtime_data_bind_graph_reverse_convert_value(
                 converter,
                 &RuntimeDataBindGraphValue::Boolean(value),
@@ -9282,6 +9337,24 @@ impl StateMachineInstance {
             .map(|bindable_view_model| bindable_view_model.value)?;
         self.data_bind_graph
             .view_model_instance_index_for_data_bind_value(data_bind_index, value)
+    }
+
+    pub fn default_view_model_number_source_value_for_data_bind(
+        &self,
+        data_bind_index: usize,
+    ) -> Option<f32> {
+        self.data_bind_graph
+            .default_view_model_number_source_value_for_data_bind(data_bind_index)
+    }
+
+    pub fn bindable_number_value_for_data_bind(&self, data_bind_index: usize) -> Option<f32> {
+        let global_id = self
+            .data_bind_graph
+            .number_target_global_id_for_data_bind(data_bind_index)?;
+        self.bindable_numbers
+            .iter()
+            .find(|bindable_number| bindable_number.global_id == global_id)
+            .map(|bindable_number| bindable_number.value)
     }
 
     pub fn set_default_view_model_number_source_for_data_bind(

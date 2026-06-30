@@ -389,6 +389,15 @@ struct RuntimeStateMachineViewModelBindingReport
     size_t targetInstanceIndex;
 };
 
+struct RuntimeStateMachineNumberBindingReport
+{
+    size_t dataBindIndex;
+    bool hasSource;
+    float sourceValue;
+    bool hasTarget;
+    float targetValue;
+};
+
 struct RuntimeStateMachineAdvanceReport
 {
     size_t stateMachineIndex;
@@ -400,6 +409,7 @@ struct RuntimeStateMachineAdvanceReport
     std::vector<RuntimeStateMachineReportedEventReport> reportedEvents;
     std::vector<RuntimeStateMachineViewModelTriggerReport> viewModelTriggers;
     std::vector<RuntimeStateMachineViewModelBindingReport> viewModelBindings;
+    std::vector<RuntimeStateMachineNumberBindingReport> numberBindings;
 };
 
 class RuntimeAnimationEventReporter : public rive::KeyedCallbackReporter
@@ -1096,6 +1106,80 @@ collect_view_model_binding_reports(rive::File* file,
     return reports;
 }
 
+std::vector<RuntimeStateMachineNumberBindingReport>
+collect_number_binding_reports(rive::StateMachineInstance* stateMachine)
+{
+    std::vector<RuntimeStateMachineNumberBindingReport> reports;
+    if (stateMachine == nullptr)
+    {
+        return reports;
+    }
+    auto sourceStateMachine = stateMachine->stateMachine();
+    if (sourceStateMachine == nullptr)
+    {
+        return reports;
+    }
+
+    for (size_t dataBindIndex = 0;
+         dataBindIndex < sourceStateMachine->dataBindCount();
+         ++dataBindIndex)
+    {
+        auto dataBind = sourceStateMachine->dataBind(dataBindIndex);
+        auto target = dataBind == nullptr ? nullptr : dataBind->target();
+        if (target == nullptr || !target->is<rive::BindablePropertyNumber>())
+        {
+            continue;
+        }
+
+        RuntimeStateMachineNumberBindingReport report;
+        report.dataBindIndex = dataBindIndex;
+        report.hasSource = false;
+        report.sourceValue = 0.0f;
+        report.hasTarget = false;
+        report.targetValue = 0.0f;
+
+        auto bindableProperty = stateMachine->bindablePropertyInstance(
+            target->as<rive::BindablePropertyNumber>());
+        auto flags = static_cast<rive::DataBindFlags>(dataBind->flags());
+        bool toSource =
+            (flags & rive::DataBindFlags::ToSource) ==
+            rive::DataBindFlags::ToSource;
+        auto liveDataBind =
+            bindableProperty == nullptr
+                ? nullptr
+                : (toSource ? stateMachine->bindableDataBindToSource(
+                                  bindableProperty)
+                            : stateMachine->bindableDataBindToTarget(
+                                  bindableProperty));
+
+        auto source = liveDataBind == nullptr ? nullptr : liveDataBind->source();
+        if (source == nullptr && dataBind->is<rive::DataBindContext>() &&
+            stateMachine->dataContext() != nullptr)
+        {
+            source = stateMachine->dataContext()->getViewModelProperty(
+                dataBind->as<rive::DataBindContext>()->sourcePathIds());
+        }
+        if (source != nullptr && source->is<rive::ViewModelInstanceNumber>())
+        {
+            report.hasSource = true;
+            report.sourceValue =
+                source->as<rive::ViewModelInstanceNumber>()->propertyValue();
+        }
+
+        if (bindableProperty != nullptr &&
+            bindableProperty->is<rive::BindablePropertyNumber>())
+        {
+            report.hasTarget = true;
+            report.targetValue =
+                bindableProperty->as<rive::BindablePropertyNumber>()
+                    ->propertyValue();
+        }
+
+        reports.push_back(report);
+    }
+    return reports;
+}
+
 std::vector<RuntimeStateMachineAdvanceReport>
 apply_runtime_state_machine_advances(rive::File* file,
                                      rive::ArtboardInstance* instance,
@@ -1162,6 +1246,14 @@ apply_runtime_state_machine_advances(rive::File* file,
                 {
                     bindableProperty->as<rive::BindablePropertyNumber>()
                         ->propertyValue(action.numberValue);
+                    auto sourceDataBind =
+                        stateMachine->bindableDataBindToSource(
+                            bindableProperty);
+                    if (sourceDataBind != nullptr)
+                    {
+                        sourceDataBind->updateSourceBinding(true);
+                        stateMachine->updateDataBinds(false);
+                    }
                 }
             }
             continue;
@@ -2157,6 +2249,8 @@ apply_runtime_state_machine_advances(rive::File* file,
             collect_default_view_model_trigger_reports(file);
         report.viewModelBindings =
             collect_view_model_binding_reports(file, stateMachine.get());
+        report.numberBindings =
+            collect_number_binding_reports(stateMachine.get());
         reports.push_back(report);
     }
     return reports;
@@ -2250,6 +2344,35 @@ void write_runtime_state_machine_advance_reports(
             if (binding.hasTarget)
             {
                 out << binding.targetInstanceIndex;
+            }
+            else
+            {
+                out << "null";
+            }
+            out << '}';
+        }
+        out << "],\"numberBindings\":[";
+        for (size_t j = 0; j < report.numberBindings.size(); ++j)
+        {
+            if (j != 0)
+            {
+                out << ',';
+            }
+            const auto& binding = report.numberBindings[j];
+            out << "{\"dataBindIndex\":" << binding.dataBindIndex;
+            out << ",\"sourceValue\":";
+            if (binding.hasSource)
+            {
+                out << binding.sourceValue;
+            }
+            else
+            {
+                out << "null";
+            }
+            out << ",\"targetValue\":";
+            if (binding.hasTarget)
+            {
+                out << binding.targetValue;
             }
             else
             {

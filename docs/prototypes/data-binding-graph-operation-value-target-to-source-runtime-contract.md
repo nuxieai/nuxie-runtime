@@ -2,14 +2,14 @@
 
 ## Purpose
 
-Admit direct `DataConverterOperationValue::reverseConvert` execution in the
-runtime graph target-to-source path.
+Admit direct `DataConverterOperationValue` execution in the runtime graph
+target-to-source path.
 
-C++ applies `DataConverterOperationValue::reverseConvert` when a two-way or
-to-source number bind writes a changed numeric target back into a numeric view
-model source. Rust already models C++ operation-value forward math and carries
-the matching reverse helper for system-operation converters; this slice wires
-that reverse helper into graph-owned number target-to-source binding.
+C++ target-to-source converter dispatch follows the binding's main direction:
+main `ToSource` bindings call `convert`, while main `ToTarget` two-way bindings
+call `reverseConvert`. The representative fixture in this contract is a
+`ToSource | TwoWay` bind, so the numeric target is converted with
+`DataConverterOperationValue::convert` before writing the view-model source.
 
 ## In Scope
 
@@ -18,10 +18,9 @@ that reverse helper into graph-owned number target-to-source binding.
 - `ViewModelInstanceNumber.propertyValue` source values.
 - `BindablePropertyNumber.propertyValue` targets.
 - A direct `DataConverterOperationValue` on a `ToSource | TwoWay` data bind.
-- C++ reverse operation-value math for numeric sources and targets.
-- C++ probe coverage with a representative multiply reverse case, plus a
-  second direct `ToTarget` bind to the same source observed through an existing
-  blend-state consumer.
+- C++ main-direction operation-value math for numeric sources and targets.
+- C++ probe coverage with a representative multiply case, including exact
+  source/target number binding reports for the mutating bind.
 
 ## Out Of Scope
 
@@ -38,8 +37,9 @@ that reverse helper into graph-owned number target-to-source binding.
 ## Completion Checks
 
 - A mutated numeric target on an `OperationValue` target-to-source bind is
-  reverse-converted before writing the default view-model number source.
-- The same source path is marked dirty so a second ordinary `ToTarget` bind
-  observes the reversed source value on the same explicit data-context advance.
+  converted according to C++ main-direction dispatch before writing the default
+  view-model number source.
+- The mutating bind's source and target values are compared directly against
+  the C++ probe after each explicit runtime action.
 - Existing direct number target-to-source and forward OperationValue tests
   still pass.

@@ -548,6 +548,19 @@ relative/parent/nested lookup, listener-owned data binding, external trigger
 reset/report identity, and nested artboard propagation remain follow-up `#12`
 slices.
 
+Current #12 update: owned runtime view-model contexts now also cover boolean
+sources. Rust exposes `RuntimeOwnedViewModelInstance::set_boolean_by_property_index`,
+and the graph resolves owned `ViewModelInstanceBoolean` values into existing
+boolean source nodes before state-machine transition evaluation. The C++ probe
+mirrors this with `--runtime-bind-owned-view-model-bool-state-machine-context`.
+The contract is
+`docs/prototypes/data-binding-graph-owned-view-model-boolean-context-runtime-contract.md`.
+Owned string/color/enum/asset/artboard/trigger values, stable public source
+handles, converters, reverse propagation, update-queue parity,
+relative/parent/nested lookup, listener-owned data binding, external trigger
+reset/report identity, and nested artboard propagation remain follow-up `#12`
+slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

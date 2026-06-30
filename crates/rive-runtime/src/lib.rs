@@ -2963,6 +2963,9 @@ impl RuntimeDataBindGraphValue {
             Self::Number(_) => context
                 .number_value_by_property_index(usize::try_from(path[1]).ok()?)
                 .map(Self::Number),
+            Self::Boolean(_) => context
+                .boolean_value_by_property_index(usize::try_from(path[1]).ok()?)
+                .map(Self::Boolean),
             _ => None,
         }
     }
@@ -3022,6 +3025,7 @@ struct RuntimeDataBindGraphTargetsMut<'a> {
 pub struct RuntimeOwnedViewModelInstance {
     view_model_index: usize,
     numbers: Vec<RuntimeOwnedViewModelNumber>,
+    booleans: Vec<RuntimeOwnedViewModelBoolean>,
 }
 
 #[derive(Debug, Clone)]
@@ -3030,25 +3034,34 @@ struct RuntimeOwnedViewModelNumber {
     value: f32,
 }
 
+#[derive(Debug, Clone)]
+struct RuntimeOwnedViewModelBoolean {
+    property_index: usize,
+    value: bool,
+}
+
 impl RuntimeOwnedViewModelInstance {
     pub fn new(file: &RuntimeFile, view_model_index: usize) -> Option<Self> {
         let view_model = file.view_model(view_model_index)?;
-        let numbers = view_model
-            .properties
-            .into_iter()
-            .enumerate()
-            .filter_map(|(property_index, property)| {
-                (property.type_name == "ViewModelPropertyNumber").then_some(
-                    RuntimeOwnedViewModelNumber {
-                        property_index,
-                        value: 0.0,
-                    },
-                )
-            })
-            .collect::<Vec<_>>();
+        let mut numbers = Vec::new();
+        let mut booleans = Vec::new();
+        for (property_index, property) in view_model.properties.into_iter().enumerate() {
+            match property.type_name {
+                "ViewModelPropertyNumber" => numbers.push(RuntimeOwnedViewModelNumber {
+                    property_index,
+                    value: 0.0,
+                }),
+                "ViewModelPropertyBoolean" => booleans.push(RuntimeOwnedViewModelBoolean {
+                    property_index,
+                    value: false,
+                }),
+                _ => {}
+            }
+        }
         Some(Self {
             view_model_index,
             numbers,
+            booleans,
         })
     }
 
@@ -3067,11 +3080,33 @@ impl RuntimeOwnedViewModelInstance {
         true
     }
 
+    pub fn set_boolean_by_property_index(&mut self, property_index: usize, value: bool) -> bool {
+        let Some(boolean) = self
+            .booleans
+            .iter_mut()
+            .find(|boolean| boolean.property_index == property_index)
+        else {
+            return false;
+        };
+        if boolean.value == value {
+            return false;
+        }
+        boolean.value = value;
+        true
+    }
+
     fn number_value_by_property_index(&self, property_index: usize) -> Option<f32> {
         self.numbers
             .iter()
             .find(|number| number.property_index == property_index)
             .map(|number| number.value)
+    }
+
+    fn boolean_value_by_property_index(&self, property_index: usize) -> Option<bool> {
+        self.booleans
+            .iter()
+            .find(|boolean| boolean.property_index == property_index)
+            .map(|boolean| boolean.value)
     }
 }
 

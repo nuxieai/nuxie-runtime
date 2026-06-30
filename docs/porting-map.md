@@ -1139,6 +1139,20 @@ scripted scheduling, broader `DataBindContainer` dirty queues,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
 
+Current #12 update: deterministic `DataConverterFormula` runtime execution now
+also admits default-context symbol-list-index sources feeding
+`BindablePropertyNumber.propertyValue` targets. The graph carries imported
+`ViewModelInstanceSymbolListIndex.propertyValue` source values into the formula
+converter as `f32`, matching C++ `DataValueSymbolListIndex` conversion before
+formula stack evaluation. C++ probe coverage verifies the converted formula
+output through the existing `BlendState1DViewModel` consumer. The contract is
+`docs/prototypes/data-binding-graph-formula-symbol-list-index-converter-runtime-contract.md`.
+Formula functions/randoms, formula parent-source binding and dirt propagation,
+reverse conversion, target-to-source queues, number-to-list/generated-list/
+scripted scheduling, broader `DataBindContainer` dirty queues,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
+
 Current #12 update: `BindablePropertyViewModel.propertyValue` now has its first
 graph-owned source binding slice. Default-context
 `ViewModelInstanceViewModel.propertyValue` sources resolve through the

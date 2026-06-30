@@ -4991,6 +4991,12 @@ fn runtime_data_bind_graph_convert_value(
         ) => Some(RuntimeDataBindGraphValue::Number(
             runtime_data_bind_graph_convert_formula(*value, tokens),
         )),
+        (
+            RuntimeDataBindGraphConverter::Formula { tokens },
+            RuntimeDataBindGraphValue::SymbolListIndex(value),
+        ) => Some(RuntimeDataBindGraphValue::Number(
+            runtime_data_bind_graph_convert_formula(*value as f32, tokens),
+        )),
         (RuntimeDataBindGraphConverter::Formula { .. }, _) => {
             Some(RuntimeDataBindGraphValue::Number(0.0))
         }
@@ -11403,7 +11409,10 @@ fn runtime_bindable_number_default_view_model_source(
                 return None;
             }
         }
-        Some(RuntimeDataBindGraphConverter::OperationValue { .. }) => {
+        Some(
+            RuntimeDataBindGraphConverter::OperationValue { .. }
+            | RuntimeDataBindGraphConverter::Formula { .. },
+        ) => {
             if let Some(value) = file.view_model_instance_number_value_for_object(source) {
                 RuntimeDataBindGraphValue::Number(value)
             } else if let Some(value) =

@@ -236,6 +236,11 @@ slice.
   including C++ stack collapse and arithmetic operation behavior. A C++ probe
   covers deterministic formula operations through an existing blend-state
   consumer.
+- Second deterministic `DataConverterFormula` graph-owned converter execution
+  slice: default-context symbol-list-index sources feeding number targets are
+  now cast to `f32` before entering the deterministic formula evaluator. A C++
+  probe covers the symbol-list-index formula path through an existing
+  blend-state consumer.
 - First graph-owned view-model bindable slice: forward propagation for
   default-context `ViewModelInstanceViewModel.propertyValue` sources feeding
   `BindablePropertyViewModel.propertyValue` targets, covered by a C++ probe
@@ -294,7 +299,7 @@ slice.
   number-to-number converter group paths, and direct stateful
   data-converter-interpolator number smoothing plus grouped
   operation-value-to-interpolator number smoothing, deterministic formula
-  number-to-number conversion,
+  number/symbol-list-index-to-number conversion,
   data-binding update queues, relative paths, parent paths, and nested paths.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener

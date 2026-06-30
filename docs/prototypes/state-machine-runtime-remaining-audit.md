@@ -234,6 +234,11 @@ slice.
   behavior for main-`ToTarget | TwoWay` string targets, overwriting a preserved
   manual string edit from the unchanged boolean source on the next normal
   advance.
+- String-to-string main-to-target dirty slice: direct `DataConverterToString`
+  string-to-string binds now follow the same C++ state-machine target-dirty
+  behavior for main-`ToTarget | TwoWay` string targets, preserving the manual
+  edit through explicit data-context advancement and then overwriting it from
+  the unchanged string source on the next normal advance.
 - First `DataConverterToString` graph-owned converter execution slice:
   forward conversion for default-context number sources feeding string targets,
   covered by a C++ probe through an existing string transition-condition

@@ -158,6 +158,11 @@ slice.
   slice: forward conversion for default-context number sources feeding number
   targets, using a second imported default view-model number as the operation
   operand and covered by a C++ probe through an existing blend-state consumer.
+- Operation-view-model target-to-source slice: direct
+  `DataConverterOperationViewModel` now covers main-`ToSource | TwoWay` number
+  target-to-source writes. The edited target value flows through `convert`
+  with the imported secondary view-model number operand before writing the
+  primary source.
 - First system operation-value converter slice: direct
   `DataConverterSystemNormalizer` and `DataConverterSystemDegsToRads`
   conversion for default-context number sources feeding number targets when

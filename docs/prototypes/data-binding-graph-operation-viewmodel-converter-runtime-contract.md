@@ -25,7 +25,10 @@ evaluation.
 
 ## Out Of Scope
 
-- Reverse conversion.
+- Target-to-source propagation beyond the direct main-`ToSource | TwoWay`
+  number case covered by
+  `docs/prototypes/data-binding-graph-operation-viewmodel-target-to-source-runtime-contract.md`.
+- Public-queue reverse conversion.
 - Live dependency/dirt propagation when the secondary operation source changes.
 - Recomputing the secondary operand for imported or owned context rebinding.
 - Missing, non-number, relative-path, parent-path, or nested secondary

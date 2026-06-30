@@ -900,6 +900,23 @@ number-to-list, and scripted converters, relative/parent/nested lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 
+Current #12 update: direct `DataConverterOperationViewModel` now also covers
+the main-`ToSource | TwoWay` target-to-source path for default-context number
+binds. A manual edit to a
+`BindablePropertyNumber.propertyValue` target is passed through
+`DataConverterOperationViewModel::convert` with the imported secondary
+view-model number operand before writing the primary
+`ViewModelInstanceNumber.propertyValue` source. The contract is
+`docs/prototypes/data-binding-graph-operation-viewmodel-target-to-source-runtime-contract.md`.
+Stable public source handles, list/view-model bindables, public-queue reverse
+conversion, main-`ToTarget | TwoWay` operation-view-model dirty behavior, live
+dependency propagation when the secondary operation source changes,
+imported/owned context recomputation for the secondary operand, dedicated
+grouped operation-view-model probe coverage, formula functions/randoms,
+interpolator, number-to-list, scripted converters, broader dirty/update queues,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
+
 Current #12 update: direct `DataConverterSystemNormalizer` and
 `DataConverterSystemDegsToRads` runtime execution now admits default-context
 number sources feeding `BindablePropertyNumber.propertyValue` targets when C++

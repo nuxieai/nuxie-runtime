@@ -510,6 +510,25 @@ public source handles, converters, reverse propagation, update-queue parity,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
 
+Current #12 update: the data-binding graph now stores source path metadata and
+can bind an imported file-backed `ViewModelInstance` as the active
+state-machine data context. Rust exposes
+`StateMachineInstance::bind_view_model_instance_context`, which resolves the
+existing finite `propertyValue` source-node set against the selected
+`RuntimeFile` view-model instance, marks missing/type-incompatible sources
+unbound, and dirties the graph for the next state-machine advance. The C++
+probe mirrors this with
+`--runtime-bind-view-model-instance-state-machine-context`, calling
+`StateMachineInstance::bindViewModelInstance(...)` on the selected imported
+instance. The first C++ probe-backed consumer covers a non-default
+`ViewModelInstanceNumber` source through `BlendState1DViewModel`. The contract
+is
+`docs/prototypes/data-binding-graph-external-view-model-context-runtime-contract.md`.
+Arbitrary user-created runtime view-model instances, public source handles,
+converters, reverse propagation, update-queue parity, relative/parent/nested
+lookup, listener-owned data binding, external trigger reset/report identity,
+and nested artboard propagation remain follow-up `#12` slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

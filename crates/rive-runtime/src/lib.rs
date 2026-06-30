@@ -2738,9 +2738,10 @@ struct RuntimeBindableNumber {
     value: f32,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct RuntimeBindableNumberDefaultViewModelSource {
     data_bind_index: usize,
+    path: Vec<u32>,
     value: f32,
 }
 
@@ -2759,9 +2760,10 @@ struct RuntimeBindableColor {
     value: u32,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct RuntimeBindableColorDefaultViewModelSource {
     data_bind_index: usize,
+    path: Vec<u32>,
     value: u32,
 }
 
@@ -2776,6 +2778,7 @@ struct RuntimeBindableString {
 #[derive(Debug, Clone)]
 struct RuntimeBindableStringDefaultViewModelSource {
     data_bind_index: usize,
+    path: Vec<u32>,
     value: Vec<u8>,
 }
 
@@ -2787,9 +2790,10 @@ struct RuntimeBindableEnum {
     value: u64,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct RuntimeBindableEnumDefaultViewModelSource {
     data_bind_index: usize,
+    path: Vec<u32>,
     value: u64,
 }
 
@@ -2801,9 +2805,10 @@ struct RuntimeBindableAsset {
     value: u64,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct RuntimeBindableAssetDefaultViewModelSource {
     data_bind_index: usize,
+    path: Vec<u32>,
     value: u64,
 }
 
@@ -2814,9 +2819,10 @@ struct RuntimeBindableArtboard {
     value: u64,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct RuntimeBindableArtboardDefaultViewModelSource {
     data_bind_index: usize,
+    path: Vec<u32>,
     value: u64,
 }
 
@@ -2834,9 +2840,10 @@ enum RuntimeBindableTriggerSource {
     DefaultViewModelTrigger { trigger_global_id: u32 },
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct RuntimeBindableTriggerDefaultViewModelSource {
     data_bind_index: usize,
+    path: Vec<u32>,
     value: u64,
 }
 
@@ -2860,9 +2867,10 @@ struct RuntimeBindableBoolean {
     value: bool,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct RuntimeBindableBooleanDefaultViewModelSource {
     data_bind_index: usize,
+    path: Vec<u32>,
     value: bool,
 }
 
@@ -2875,12 +2883,19 @@ struct RuntimeViewModelTrigger {
 
 #[derive(Debug, Clone)]
 struct RuntimeDataBindGraph {
-    data_context_present: bool,
-    default_view_model_context_bound: bool,
+    context_kind: RuntimeDataBindGraphContextKind,
     default_view_model_bindings_dirty: bool,
     sources: Vec<RuntimeDataBindGraphSourceNode>,
     targets: Vec<RuntimeDataBindGraphTargetNode>,
     default_view_model_bindings: Vec<RuntimeDataBindGraphDefaultBinding>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeDataBindGraphContextKind {
+    None,
+    Empty,
+    DefaultViewModel,
+    ImportedViewModel,
 }
 
 #[derive(Debug, Clone)]
@@ -2898,6 +2913,9 @@ struct RuntimeDataBindGraphTargetHandle(usize);
 
 #[derive(Debug, Clone)]
 struct RuntimeDataBindGraphSourceNode {
+    path: Vec<u32>,
+    bound: bool,
+    default_value: RuntimeDataBindGraphValue,
     value: RuntimeDataBindGraphValue,
 }
 
@@ -2930,6 +2948,47 @@ enum RuntimeDataBindGraphValue {
     Trigger(u64),
 }
 
+impl RuntimeDataBindGraphValue {
+    fn resolve_from_view_model_instance(
+        &self,
+        file: &RuntimeFile,
+        view_model_instance: &RuntimeObject,
+        path: &[u32],
+    ) -> Option<Self> {
+        let source =
+            file.data_context_view_model_property_for_instance(view_model_instance, path)?;
+        match self {
+            Self::Number(_) => file
+                .view_model_instance_number_value_for_object(source)
+                .map(Self::Number),
+            Self::Boolean(_) => file
+                .view_model_instance_boolean_value_for_object(source)
+                .map(Self::Boolean),
+            Self::String(_) => file
+                .view_model_instance_string_value_bytes_for_object(source)
+                .map(|value| Self::String(value.to_vec())),
+            Self::Color(_) => file
+                .view_model_instance_color_value_for_object(source)
+                .map(Self::Color),
+            Self::Enum(_) => (source.type_name == "ViewModelInstanceEnum")
+                .then(|| source.uint_property("propertyValue"))
+                .flatten()
+                .map(Self::Enum),
+            Self::Asset(_) => (source.type_name == "ViewModelInstanceAssetImage")
+                .then(|| source.uint_property("propertyValue"))
+                .flatten()
+                .map(Self::Asset),
+            Self::Artboard(_) => (source.type_name == "ViewModelInstanceArtboard")
+                .then(|| source.uint_property("propertyValue"))
+                .flatten()
+                .map(Self::Artboard),
+            Self::Trigger(_) => file
+                .view_model_instance_trigger_count_for_object(source)
+                .map(Self::Trigger),
+        }
+    }
+}
+
 struct RuntimeDataBindGraphTargetsMut<'a> {
     numbers: &'a mut [StateMachineBindableNumberInstance],
     booleans: &'a mut [StateMachineBindableBooleanInstance],
@@ -2954,6 +3013,7 @@ impl RuntimeDataBindGraph {
                     &mut targets,
                     &mut default_view_model_bindings,
                     source.data_bind_index,
+                    &source.path,
                     RuntimeDataBindGraphTarget::Number {
                         global_id: bindable.global_id,
                     },
@@ -2968,6 +3028,7 @@ impl RuntimeDataBindGraph {
                     &mut targets,
                     &mut default_view_model_bindings,
                     source.data_bind_index,
+                    &source.path,
                     RuntimeDataBindGraphTarget::Boolean {
                         global_id: bindable.global_id,
                     },
@@ -2982,6 +3043,7 @@ impl RuntimeDataBindGraph {
                     &mut targets,
                     &mut default_view_model_bindings,
                     source.data_bind_index,
+                    &source.path,
                     RuntimeDataBindGraphTarget::String {
                         global_id: bindable.global_id,
                     },
@@ -2996,6 +3058,7 @@ impl RuntimeDataBindGraph {
                     &mut targets,
                     &mut default_view_model_bindings,
                     source.data_bind_index,
+                    &source.path,
                     RuntimeDataBindGraphTarget::Color {
                         global_id: bindable.global_id,
                     },
@@ -3010,6 +3073,7 @@ impl RuntimeDataBindGraph {
                     &mut targets,
                     &mut default_view_model_bindings,
                     source.data_bind_index,
+                    &source.path,
                     RuntimeDataBindGraphTarget::Enum {
                         global_id: bindable.global_id,
                     },
@@ -3024,6 +3088,7 @@ impl RuntimeDataBindGraph {
                     &mut targets,
                     &mut default_view_model_bindings,
                     source.data_bind_index,
+                    &source.path,
                     RuntimeDataBindGraphTarget::Asset {
                         global_id: bindable.global_id,
                     },
@@ -3038,6 +3103,7 @@ impl RuntimeDataBindGraph {
                     &mut targets,
                     &mut default_view_model_bindings,
                     source.data_bind_index,
+                    &source.path,
                     RuntimeDataBindGraphTarget::Artboard {
                         global_id: bindable.global_id,
                     },
@@ -3052,6 +3118,7 @@ impl RuntimeDataBindGraph {
                     &mut targets,
                     &mut default_view_model_bindings,
                     source.data_bind_index,
+                    &source.path,
                     RuntimeDataBindGraphTarget::Trigger {
                         global_id: bindable.global_id,
                     },
@@ -3063,8 +3130,7 @@ impl RuntimeDataBindGraph {
         default_view_model_bindings.sort_by_key(|binding| binding.data_bind_index);
 
         Self {
-            data_context_present: false,
-            default_view_model_context_bound: false,
+            context_kind: RuntimeDataBindGraphContextKind::None,
             default_view_model_bindings_dirty: false,
             sources,
             targets,
@@ -3077,11 +3143,17 @@ impl RuntimeDataBindGraph {
         targets: &mut Vec<RuntimeDataBindGraphTargetNode>,
         bindings: &mut Vec<RuntimeDataBindGraphDefaultBinding>,
         data_bind_index: usize,
+        path: &[u32],
         target: RuntimeDataBindGraphTarget,
         value: RuntimeDataBindGraphValue,
     ) {
         let source = RuntimeDataBindGraphSourceHandle(sources.len());
-        sources.push(RuntimeDataBindGraphSourceNode { value });
+        sources.push(RuntimeDataBindGraphSourceNode {
+            path: path.to_vec(),
+            bound: true,
+            default_value: value.clone(),
+            value,
+        });
         let target_handle = RuntimeDataBindGraphTargetHandle(targets.len());
         targets.push(RuntimeDataBindGraphTargetNode { target });
         bindings.push(RuntimeDataBindGraphDefaultBinding {
@@ -3092,29 +3164,69 @@ impl RuntimeDataBindGraph {
     }
 
     fn data_context_present(&self) -> bool {
-        self.data_context_present
+        self.context_kind != RuntimeDataBindGraphContextKind::None
     }
 
     fn default_view_model_context_bound(&self) -> bool {
-        self.default_view_model_context_bound
+        matches!(
+            self.context_kind,
+            RuntimeDataBindGraphContextKind::DefaultViewModel
+                | RuntimeDataBindGraphContextKind::ImportedViewModel
+        )
+    }
+
+    fn default_view_model_source_context_bound(&self) -> bool {
+        self.context_kind == RuntimeDataBindGraphContextKind::DefaultViewModel
     }
 
     fn bind_empty_data_context(&mut self) -> bool {
-        if self.data_context_present {
+        if self.data_context_present() {
             return false;
         }
-        self.data_context_present = true;
-        self.default_view_model_context_bound = false;
+        self.context_kind = RuntimeDataBindGraphContextKind::Empty;
         self.default_view_model_bindings_dirty = false;
         true
     }
 
     fn bind_default_view_model_context(&mut self) -> bool {
-        if self.data_context_present && self.default_view_model_context_bound {
+        if self.context_kind == RuntimeDataBindGraphContextKind::DefaultViewModel {
             return false;
         }
-        self.data_context_present = true;
-        self.default_view_model_context_bound = true;
+        for source in &mut self.sources {
+            source.value = source.default_value.clone();
+            source.bound = true;
+        }
+        self.context_kind = RuntimeDataBindGraphContextKind::DefaultViewModel;
+        self.default_view_model_bindings_dirty = true;
+        true
+    }
+
+    fn bind_view_model_instance_context(
+        &mut self,
+        file: &RuntimeFile,
+        view_model_index: usize,
+        instance_index: usize,
+    ) -> bool {
+        let Some(view_model) = file.view_model(view_model_index) else {
+            return false;
+        };
+        let Some(instance) = view_model.instances.into_iter().nth(instance_index) else {
+            return false;
+        };
+
+        for source in &mut self.sources {
+            if let Some(value) =
+                source
+                    .value
+                    .resolve_from_view_model_instance(file, instance.object, &source.path)
+            {
+                source.value = value;
+                source.bound = true;
+            } else {
+                source.bound = false;
+            }
+        }
+        self.context_kind = RuntimeDataBindGraphContextKind::ImportedViewModel;
         self.default_view_model_bindings_dirty = true;
         true
     }
@@ -3124,6 +3236,7 @@ impl RuntimeDataBindGraph {
         data_bind_index: usize,
         value: f32,
     ) -> bool {
+        let default_context_bound = self.default_view_model_source_context_bound();
         let Some(source) = self
             .default_view_model_bindings
             .iter()
@@ -3135,14 +3248,16 @@ impl RuntimeDataBindGraph {
         let Some(source) = self.sources.get_mut(source.0) else {
             return false;
         };
-        let RuntimeDataBindGraphValue::Number(current) = &mut source.value else {
+        let RuntimeDataBindGraphValue::Number(current) = &mut source.default_value else {
             return false;
         };
         if *current == value {
             return false;
         }
         *current = value;
-        if self.default_view_model_context_bound {
+        if default_context_bound {
+            source.value = RuntimeDataBindGraphValue::Number(value);
+            source.bound = true;
             self.default_view_model_bindings_dirty = true;
         }
         true
@@ -3153,6 +3268,7 @@ impl RuntimeDataBindGraph {
         data_bind_index: usize,
         value: bool,
     ) -> bool {
+        let default_context_bound = self.default_view_model_source_context_bound();
         let Some(source) = self
             .default_view_model_bindings
             .iter()
@@ -3164,14 +3280,16 @@ impl RuntimeDataBindGraph {
         let Some(source) = self.sources.get_mut(source.0) else {
             return false;
         };
-        let RuntimeDataBindGraphValue::Boolean(current) = &mut source.value else {
+        let RuntimeDataBindGraphValue::Boolean(current) = &mut source.default_value else {
             return false;
         };
         if *current == value {
             return false;
         }
         *current = value;
-        if self.default_view_model_context_bound {
+        if default_context_bound {
+            source.value = RuntimeDataBindGraphValue::Boolean(value);
+            source.bound = true;
             self.default_view_model_bindings_dirty = true;
         }
         true
@@ -3182,6 +3300,7 @@ impl RuntimeDataBindGraph {
         data_bind_index: usize,
         value: &[u8],
     ) -> bool {
+        let default_context_bound = self.default_view_model_source_context_bound();
         let Some(source) = self
             .default_view_model_bindings
             .iter()
@@ -3193,14 +3312,16 @@ impl RuntimeDataBindGraph {
         let Some(source) = self.sources.get_mut(source.0) else {
             return false;
         };
-        let RuntimeDataBindGraphValue::String(current) = &mut source.value else {
+        let RuntimeDataBindGraphValue::String(current) = &mut source.default_value else {
             return false;
         };
         if current == value {
             return false;
         }
         *current = value.to_vec();
-        if self.default_view_model_context_bound {
+        if default_context_bound {
+            source.value = RuntimeDataBindGraphValue::String(value.to_vec());
+            source.bound = true;
             self.default_view_model_bindings_dirty = true;
         }
         true
@@ -3211,6 +3332,7 @@ impl RuntimeDataBindGraph {
         data_bind_index: usize,
         value: u32,
     ) -> bool {
+        let default_context_bound = self.default_view_model_source_context_bound();
         let Some(source) = self
             .default_view_model_bindings
             .iter()
@@ -3222,14 +3344,16 @@ impl RuntimeDataBindGraph {
         let Some(source) = self.sources.get_mut(source.0) else {
             return false;
         };
-        let RuntimeDataBindGraphValue::Color(current) = &mut source.value else {
+        let RuntimeDataBindGraphValue::Color(current) = &mut source.default_value else {
             return false;
         };
         if *current == value {
             return false;
         }
         *current = value;
-        if self.default_view_model_context_bound {
+        if default_context_bound {
+            source.value = RuntimeDataBindGraphValue::Color(value);
+            source.bound = true;
             self.default_view_model_bindings_dirty = true;
         }
         true
@@ -3240,6 +3364,7 @@ impl RuntimeDataBindGraph {
         data_bind_index: usize,
         value: u64,
     ) -> bool {
+        let default_context_bound = self.default_view_model_source_context_bound();
         let Some(source) = self
             .default_view_model_bindings
             .iter()
@@ -3251,14 +3376,16 @@ impl RuntimeDataBindGraph {
         let Some(source) = self.sources.get_mut(source.0) else {
             return false;
         };
-        let RuntimeDataBindGraphValue::Enum(current) = &mut source.value else {
+        let RuntimeDataBindGraphValue::Enum(current) = &mut source.default_value else {
             return false;
         };
         if *current == value {
             return false;
         }
         *current = value;
-        if self.default_view_model_context_bound {
+        if default_context_bound {
+            source.value = RuntimeDataBindGraphValue::Enum(value);
+            source.bound = true;
             self.default_view_model_bindings_dirty = true;
         }
         true
@@ -3269,6 +3396,7 @@ impl RuntimeDataBindGraph {
         data_bind_index: usize,
         value: u64,
     ) -> bool {
+        let default_context_bound = self.default_view_model_source_context_bound();
         let Some(source) = self
             .default_view_model_bindings
             .iter()
@@ -3280,14 +3408,16 @@ impl RuntimeDataBindGraph {
         let Some(source) = self.sources.get_mut(source.0) else {
             return false;
         };
-        let RuntimeDataBindGraphValue::Asset(current) = &mut source.value else {
+        let RuntimeDataBindGraphValue::Asset(current) = &mut source.default_value else {
             return false;
         };
         if *current == value {
             return false;
         }
         *current = value;
-        if self.default_view_model_context_bound {
+        if default_context_bound {
+            source.value = RuntimeDataBindGraphValue::Asset(value);
+            source.bound = true;
             self.default_view_model_bindings_dirty = true;
         }
         true
@@ -3298,6 +3428,7 @@ impl RuntimeDataBindGraph {
         data_bind_index: usize,
         value: u64,
     ) -> bool {
+        let default_context_bound = self.default_view_model_source_context_bound();
         let Some(source) = self
             .default_view_model_bindings
             .iter()
@@ -3309,14 +3440,16 @@ impl RuntimeDataBindGraph {
         let Some(source) = self.sources.get_mut(source.0) else {
             return false;
         };
-        let RuntimeDataBindGraphValue::Artboard(current) = &mut source.value else {
+        let RuntimeDataBindGraphValue::Artboard(current) = &mut source.default_value else {
             return false;
         };
         if *current == value {
             return false;
         }
         *current = value;
-        if self.default_view_model_context_bound {
+        if default_context_bound {
+            source.value = RuntimeDataBindGraphValue::Artboard(value);
+            source.bound = true;
             self.default_view_model_bindings_dirty = true;
         }
         true
@@ -3327,6 +3460,7 @@ impl RuntimeDataBindGraph {
         data_bind_index: usize,
         value: u64,
     ) -> bool {
+        let default_context_bound = self.default_view_model_source_context_bound();
         let Some(source) = self
             .default_view_model_bindings
             .iter()
@@ -3338,14 +3472,16 @@ impl RuntimeDataBindGraph {
         let Some(source) = self.sources.get_mut(source.0) else {
             return false;
         };
-        let RuntimeDataBindGraphValue::Trigger(current) = &mut source.value else {
+        let RuntimeDataBindGraphValue::Trigger(current) = &mut source.default_value else {
             return false;
         };
         if *current == value {
             return false;
         }
         *current = value;
-        if self.default_view_model_context_bound {
+        if default_context_bound {
+            source.value = RuntimeDataBindGraphValue::Trigger(value);
+            source.bound = true;
             self.default_view_model_bindings_dirty = true;
         }
         true
@@ -3370,7 +3506,7 @@ impl RuntimeDataBindGraph {
         &mut self,
         mut targets: RuntimeDataBindGraphTargetsMut<'_>,
     ) {
-        if !self.default_view_model_context_bound || !self.default_view_model_bindings_dirty {
+        if !self.default_view_model_context_bound() || !self.default_view_model_bindings_dirty {
             return;
         }
         self.default_view_model_bindings_dirty = false;
@@ -3379,6 +3515,9 @@ impl RuntimeDataBindGraph {
             let Some(source) = self.sources.get(binding.source.0) else {
                 continue;
             };
+            if !source.bound {
+                continue;
+            }
             let Some(target) = self.targets.get(binding.target.0) else {
                 continue;
             };
@@ -6412,6 +6551,23 @@ impl StateMachineInstance {
         true
     }
 
+    pub fn bind_view_model_instance_context(
+        &mut self,
+        file: &RuntimeFile,
+        view_model_index: usize,
+        instance_index: usize,
+    ) -> bool {
+        if !self.data_bind_graph.bind_view_model_instance_context(
+            file,
+            view_model_index,
+            instance_index,
+        ) {
+            return false;
+        }
+        self.needs_advance = true;
+        true
+    }
+
     pub fn advance_data_context(&mut self) -> bool {
         if !self.data_bind_graph.data_context_present() {
             return false;
@@ -9359,6 +9515,7 @@ fn runtime_bindable_number_default_view_model_source(
     let value = file.view_model_instance_number_value_for_object(source)?;
     Some(RuntimeBindableNumberDefaultViewModelSource {
         data_bind_index,
+        path: path.to_vec(),
         value,
     })
 }
@@ -9437,6 +9594,7 @@ fn runtime_bindable_color_default_view_model_source(
     let value = file.view_model_instance_color_value_for_object(source)?;
     Some(RuntimeBindableColorDefaultViewModelSource {
         data_bind_index,
+        path: path.to_vec(),
         value,
     })
 }
@@ -9495,6 +9653,7 @@ fn runtime_bindable_string_default_view_model_source(
         .to_vec();
     Some(RuntimeBindableStringDefaultViewModelSource {
         data_bind_index,
+        path: path.to_vec(),
         value,
     })
 }
@@ -9553,6 +9712,7 @@ fn runtime_bindable_enum_default_view_model_source(
     let value = source.uint_property("propertyValue")?;
     Some(RuntimeBindableEnumDefaultViewModelSource {
         data_bind_index,
+        path: path.to_vec(),
         value,
     })
 }
@@ -9611,6 +9771,7 @@ fn runtime_bindable_asset_default_view_model_source(
     let value = source.uint_property("propertyValue")?;
     Some(RuntimeBindableAssetDefaultViewModelSource {
         data_bind_index,
+        path: path.to_vec(),
         value,
     })
 }
@@ -9667,6 +9828,7 @@ fn runtime_bindable_artboard_default_view_model_source(
     let value = source.uint_property("propertyValue")?;
     Some(RuntimeBindableArtboardDefaultViewModelSource {
         data_bind_index,
+        path: path.to_vec(),
         value,
     })
 }
@@ -9727,6 +9889,7 @@ fn runtime_bindable_trigger_default_view_model_source(
     let value = file.view_model_instance_trigger_count_for_object(source)?;
     Some(RuntimeBindableTriggerDefaultViewModelSource {
         data_bind_index,
+        path: path.to_vec(),
         value,
     })
 }
@@ -9847,6 +10010,7 @@ fn runtime_bindable_boolean_default_view_model_source(
     let value = file.view_model_instance_boolean_value_for_object(source)?;
     Some(RuntimeBindableBooleanDefaultViewModelSource {
         data_bind_index,
+        path: path.to_vec(),
         value,
     })
 }

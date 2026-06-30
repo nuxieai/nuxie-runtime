@@ -326,6 +326,7 @@ enum class RuntimeStateMachineActionKind
     SetDefaultViewModelSourceTrigger,
     BindEmptyContext,
     BindDefaultViewModelContext,
+    BindViewModelInstanceContext,
     FireTrigger,
 };
 
@@ -335,6 +336,8 @@ struct RuntimeStateMachineAction
     size_t stateMachineIndex;
     size_t inputIndex;
     size_t dataBindIndex;
+    size_t viewModelIndex = 0;
+    size_t viewModelInstanceIndex = 0;
     float seconds;
     bool boolValue;
     float numberValue;
@@ -1422,6 +1425,25 @@ apply_runtime_state_machine_advances(rive::File* file,
                 auto dataContext = rive::make_rcp<rive::DataContext>(
                     rive::ref_rcp(viewModelInstance));
                 stateMachine->bindDataContext(dataContext);
+            }
+            continue;
+        }
+        if (action.kind ==
+            RuntimeStateMachineActionKind::BindViewModelInstanceContext)
+        {
+            auto viewModel =
+                file != nullptr && action.viewModelIndex < file->viewModelCount()
+                    ? file->viewModel(action.viewModelIndex)
+                    : nullptr;
+            auto viewModelInstance =
+                viewModel != nullptr &&
+                        action.viewModelInstanceIndex < viewModel->instanceCount()
+                    ? viewModel->instance(action.viewModelInstanceIndex)
+                    : nullptr;
+            if (viewModelInstance != nullptr)
+            {
+                stateMachine->bindViewModelInstance(
+                    rive::ref_rcp(viewModelInstance));
             }
             continue;
         }
@@ -8097,6 +8119,32 @@ int main(int argc, const char* argv[])
             continue;
         }
 
+        if (is_arg(argv[i],
+                   "--runtime-bind-view-model-instance-state-machine-context"))
+        {
+            if (i + 3 >= argc)
+            {
+                std::cerr << "--runtime-bind-view-model-instance-state-machine-context requires stateMachineIndex viewModelIndex instanceIndex\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind =
+                RuntimeStateMachineActionKind::BindViewModelInstanceContext;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.viewModelIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.viewModelInstanceIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
         if (is_arg(argv[i], "--runtime-fire-state-machine-trigger"))
         {
             if (i + 2 >= argc)
@@ -8148,7 +8196,7 @@ int main(int argc, const char* argv[])
 
     if (filename == nullptr)
     {
-        std::cerr << "usage: rive_cpp_probe [--converter-samples] [--number-to-list-samples] [--property-values] [--file-property-values] [--no-advance] [--runtime-update] [--instance-artboards] [--runtime-set-double localId propertyKey value] [--runtime-collapse-component localId value] [--runtime-set-artboard-size width height] [--runtime-apply-animation animationIndex seconds mix] [--runtime-advance-animation animationIndex seconds mix] [--runtime-advance-state-machine stateMachineIndex seconds] [--runtime-advance-state-machine-data-context stateMachineIndex] [--runtime-set-state-machine-bool stateMachineIndex inputIndex value] [--runtime-set-state-machine-number stateMachineIndex inputIndex value] [--runtime-set-state-machine-bindable-number stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-bool stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-integer stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-color stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-string stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-enum stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-asset stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-number stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-bool stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-string stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-color stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-enum stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-asset stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-artboard stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-trigger stateMachineIndex dataBindIndex value] [--runtime-bind-empty-state-machine-context stateMachineIndex] [--runtime-bind-default-view-model-state-machine-context stateMachineIndex] [--runtime-fire-state-machine-trigger stateMachineIndex inputIndex] [--complete-view-model-properties] [--data-context-lookups] --file "
+        std::cerr << "usage: rive_cpp_probe [--converter-samples] [--number-to-list-samples] [--property-values] [--file-property-values] [--no-advance] [--runtime-update] [--instance-artboards] [--runtime-set-double localId propertyKey value] [--runtime-collapse-component localId value] [--runtime-set-artboard-size width height] [--runtime-apply-animation animationIndex seconds mix] [--runtime-advance-animation animationIndex seconds mix] [--runtime-advance-state-machine stateMachineIndex seconds] [--runtime-advance-state-machine-data-context stateMachineIndex] [--runtime-set-state-machine-bool stateMachineIndex inputIndex value] [--runtime-set-state-machine-number stateMachineIndex inputIndex value] [--runtime-set-state-machine-bindable-number stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-bool stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-integer stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-color stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-string stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-enum stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-asset stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-number stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-bool stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-string stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-color stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-enum stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-asset stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-artboard stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-trigger stateMachineIndex dataBindIndex value] [--runtime-bind-empty-state-machine-context stateMachineIndex] [--runtime-bind-default-view-model-state-machine-context stateMachineIndex] [--runtime-bind-view-model-instance-state-machine-context stateMachineIndex viewModelIndex instanceIndex] [--runtime-fire-state-machine-trigger stateMachineIndex inputIndex] [--complete-view-model-properties] [--data-context-lookups] --file "
                      "path/to/file.riv\n";
         return 2;
     }

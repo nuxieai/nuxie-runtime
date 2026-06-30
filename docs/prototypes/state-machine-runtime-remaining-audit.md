@@ -60,6 +60,9 @@ slice.
 - Graph-owned default `ViewModelInstanceTrigger` source-node mutation by
   state-machine data-bind index, covered by a C++ probe through an existing
   transition-condition consumer.
+- File-backed imported `ViewModelInstance` context binding through
+  `RuntimeDataBindGraph` source path re-resolution, covered by a C++ probe
+  through an existing `BlendState1DViewModel` consumer.
 
 ## Remaining Runtime Slices
 
@@ -71,11 +74,12 @@ slice.
 - Live view-model APIs and data-binding propagation governed by
   `docs/prototypes/data-binding-graph-runtime-contract.md`: beyond the finite
   graph-routed default source-to-target `propertyValue` bind set listed above,
-  add binding external contexts, source mutation APIs beyond the default
+  add external contexts beyond imported file-backed view-model instances,
+  source mutation APIs beyond the default
   number/boolean/string/color/enum/asset/artboard/trigger source nodes,
   list/symbol/view-model bindables, converters, data-binding update queues,
-  relative paths, parent paths, and nested paths for fire triggers and
-  conditions.
+  relative paths, parent paths, nested paths, and external trigger reset/report
+  identity for fire triggers and conditions.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener
   actions.

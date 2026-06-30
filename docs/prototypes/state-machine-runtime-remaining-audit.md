@@ -162,6 +162,11 @@ slice.
   binds. Explicit data-context advancement preserves a manual bindable target
   edit, then normal state-machine advancement overwrites it from the unchanged
   source through forward rounder conversion.
+- Rounder public-update target-to-source slice: direct `DataConverterRounder`
+  now covers public `updateDataBinds(true)` for main-`ToTarget | TwoWay`
+  number binds. The public update writes the edited target through C++ base
+  `reverseConvert` pass-through, then reapplies source-to-target through
+  rounder conversion in the same update.
 - First `DataConverterRangeMapper` graph-owned converter execution slice:
   forward conversion for default-context number sources feeding number targets
   without resolved custom interpolators, including imported range bounds,

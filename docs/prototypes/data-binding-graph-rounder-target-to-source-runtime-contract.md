@@ -10,6 +10,10 @@ main `ToSource` bindings call `convert`, while main `ToTarget` two-way bindings
 call `reverseConvert`. The representative fixture in this contract is a
 `ToSource | TwoWay` bind, so the numeric target is rounded with
 `DataConverterRounder::convert` before writing the view-model source.
+The main-`ToTarget | TwoWay` public update path, where C++ base
+`reverseConvert` passes the target value through before rounder reapplication,
+is covered by
+`docs/prototypes/data-binding-graph-rounder-public-update-target-to-source-runtime-contract.md`.
 
 ## In Scope
 
@@ -25,8 +29,8 @@ call `reverseConvert`. The representative fixture in this contract is a
 
 ## Out Of Scope
 
-- Public `DataBindContainer::updateDataBinds(true)` scheduler parity and
-  public-queue `reverseConvert` behavior.
+- Broader public `DataBindContainer::updateDataBinds(true)` scheduler parity
+  beyond the direct rounder dirty bind.
 - Main-`ToTarget | TwoWay` rounder target-dirty behavior, covered by
   `docs/prototypes/data-binding-graph-rounder-main-to-target-two-way-target-dirty-runtime-contract.md`.
 - `DataConverterGroup::reverseConvert` ordering.

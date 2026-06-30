@@ -6097,6 +6097,11 @@ fn runtime_data_bind_graph_reverse_convert_value(
             ),
         )),
         (RuntimeDataBindGraphConverter::RangeMapper { .. }, _) => None,
+        (
+            RuntimeDataBindGraphConverter::Rounder { .. },
+            RuntimeDataBindGraphValue::Number(value),
+        ) => Some(RuntimeDataBindGraphValue::Number(*value)),
+        (RuntimeDataBindGraphConverter::Rounder { .. }, _) => None,
         (RuntimeDataBindGraphConverter::Group(converters), value) => {
             let mut value = value.clone();
             for converter in converters.iter().rev() {

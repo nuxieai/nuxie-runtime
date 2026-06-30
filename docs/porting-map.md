@@ -599,6 +599,19 @@ reverse propagation, update-queue parity, relative/parent/nested lookup,
 listener-owned data binding, external trigger reset/report identity, and nested
 artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: owned runtime view-model contexts now also cover asset
+image sources as raw `propertyValue` integers. Rust exposes
+`RuntimeOwnedViewModelInstance::set_asset_by_property_index`, and the graph
+resolves owned `ViewModelInstanceAssetImage` values into existing asset source
+nodes before state-machine transition evaluation. The C++ probe mirrors this
+with `--runtime-bind-owned-view-model-asset-state-machine-context`, mutating
+the fresh C++ asset instance value before binding. The contract is
+`docs/prototypes/data-binding-graph-owned-view-model-asset-context-runtime-contract.md`.
+Owned artboard/trigger values, stable public source handles, converters,
+reverse propagation, update-queue parity, relative/parent/nested lookup,
+listener-owned data binding, external trigger reset/report identity, and nested
+artboard propagation remain follow-up `#12` slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

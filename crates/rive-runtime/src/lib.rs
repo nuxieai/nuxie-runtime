@@ -2975,6 +2975,9 @@ impl RuntimeDataBindGraphValue {
             Self::Enum(_) => context
                 .enum_value_by_property_index(usize::try_from(path[1]).ok()?)
                 .map(Self::Enum),
+            Self::Asset(_) => context
+                .asset_value_by_property_index(usize::try_from(path[1]).ok()?)
+                .map(Self::Asset),
             _ => None,
         }
     }
@@ -3038,6 +3041,7 @@ pub struct RuntimeOwnedViewModelInstance {
     strings: Vec<RuntimeOwnedViewModelString>,
     colors: Vec<RuntimeOwnedViewModelColor>,
     enums: Vec<RuntimeOwnedViewModelEnum>,
+    assets: Vec<RuntimeOwnedViewModelAsset>,
 }
 
 #[derive(Debug, Clone)]
@@ -3070,6 +3074,12 @@ struct RuntimeOwnedViewModelEnum {
     value: u64,
 }
 
+#[derive(Debug, Clone)]
+struct RuntimeOwnedViewModelAsset {
+    property_index: usize,
+    value: u64,
+}
+
 impl RuntimeOwnedViewModelInstance {
     pub fn new(file: &RuntimeFile, view_model_index: usize) -> Option<Self> {
         let view_model = file.view_model(view_model_index)?;
@@ -3078,6 +3088,7 @@ impl RuntimeOwnedViewModelInstance {
         let mut strings = Vec::new();
         let mut colors = Vec::new();
         let mut enums = Vec::new();
+        let mut assets = Vec::new();
         for (property_index, property) in view_model.properties.into_iter().enumerate() {
             match property.type_name {
                 "ViewModelPropertyNumber" => numbers.push(RuntimeOwnedViewModelNumber {
@@ -3102,6 +3113,12 @@ impl RuntimeOwnedViewModelInstance {
                     property_index,
                     value: 0,
                 }),
+                "ViewModelPropertyAsset" | "ViewModelPropertyAssetImage" => {
+                    assets.push(RuntimeOwnedViewModelAsset {
+                        property_index,
+                        value: 0,
+                    })
+                }
                 _ => {}
             }
         }
@@ -3112,6 +3129,7 @@ impl RuntimeOwnedViewModelInstance {
             strings,
             colors,
             enums,
+            assets,
         })
     }
 
@@ -3190,6 +3208,21 @@ impl RuntimeOwnedViewModelInstance {
         true
     }
 
+    pub fn set_asset_by_property_index(&mut self, property_index: usize, value: u64) -> bool {
+        let Some(asset) = self
+            .assets
+            .iter_mut()
+            .find(|asset| asset.property_index == property_index)
+        else {
+            return false;
+        };
+        if asset.value == value {
+            return false;
+        }
+        asset.value = value;
+        true
+    }
+
     fn number_value_by_property_index(&self, property_index: usize) -> Option<f32> {
         self.numbers
             .iter()
@@ -3223,6 +3256,13 @@ impl RuntimeOwnedViewModelInstance {
             .iter()
             .find(|enum_value| enum_value.property_index == property_index)
             .map(|enum_value| enum_value.value)
+    }
+
+    fn asset_value_by_property_index(&self, property_index: usize) -> Option<u64> {
+        self.assets
+            .iter()
+            .find(|asset| asset.property_index == property_index)
+            .map(|asset| asset.value)
     }
 }
 

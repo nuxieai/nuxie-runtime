@@ -11,6 +11,10 @@ reverse math from the authored data-bind direction inside the converter
 method. For a main-`ToSource | TwoWay` bind, C++ target-to-source dispatch calls
 `convert`, and these system converters' `convert` methods then delegate to
 `DataConverterOperationValue::reverseConvert`.
+The main-`ToTarget | TwoWay` public update path, where C++ dispatches
+`reverseConvert` and the system converter delegates to operation-value
+`convert`, is covered by
+`docs/prototypes/data-binding-graph-system-operation-value-public-update-target-to-source-runtime-contract.md`.
 
 ## In Scope
 
@@ -35,8 +39,8 @@ method. For a main-`ToSource | TwoWay` bind, C++ target-to-source dispatch calls
 - `ToSource`-only binds without `TwoWay`.
 - Main-`ToTarget | TwoWay` system-converter dirty behavior, covered by
   `docs/prototypes/data-binding-graph-system-operation-value-main-to-target-two-way-target-dirty-runtime-contract.md`.
-- Public `DataBindContainer::updateDataBinds(true)` scheduler parity and
-  public-queue `reverseConvert` behavior.
+- Broader public `DataBindContainer::updateDataBinds(true)` scheduler parity
+  beyond the direct system-operation dirty bind.
 - Symbol-list-index inputs to system converters.
 - `DataConverterOperationViewModel`.
 - Formula, interpolator, number-to-list, and scripted converters.

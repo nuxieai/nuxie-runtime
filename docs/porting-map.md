@@ -1827,7 +1827,7 @@ Current #12 update: the first public `updateDataBinds(true)`
 target-to-source paths are now probe-backed for main-`ToTarget | TwoWay`
 number binds with no converter, direct `DataConverterOperationValue`, grouped
 `DataConverterGroup<OperationValue>`, direct `DataConverterRangeMapper`, and
-direct `DataConverterRounder`.
+direct `DataConverterRounder`, plus direct system operation-value converters.
 The C++ probe exposes `--runtime-update-state-machine-data-binds`, Rust
 mirrors it through
 `StateMachineInstance::update_data_binds_apply_target_to_source`, and the
@@ -1838,8 +1838,9 @@ leaves the target at the edited value. The contracts are
 `docs/prototypes/data-binding-graph-operation-value-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-operation-value-group-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-range-mapper-public-update-target-to-source-runtime-contract.md`,
+`docs/prototypes/data-binding-graph-rounder-public-update-target-to-source-runtime-contract.md`,
 and
-`docs/prototypes/data-binding-graph-rounder-public-update-target-to-source-runtime-contract.md`.
+`docs/prototypes/data-binding-graph-system-operation-value-public-update-target-to-source-runtime-contract.md`.
 Public-update coverage for range-mapper groups, other converter families,
 mixed/stateful groups, full dirty-list scheduler parity, imported/owned
 contexts, pending add/remove behavior, re-entry protection,

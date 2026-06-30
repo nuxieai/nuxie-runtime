@@ -218,6 +218,12 @@ slice.
   number binds. Explicit data-context advancement preserves a manual bindable
   target edit, then normal state-machine advancement overwrites it from the
   unchanged source through system-converter forward operation-value arithmetic.
+- System operation-value public-update target-to-source slice: direct
+  `DataConverterSystemNormalizer` and `DataConverterSystemDegsToRads` now
+  cover public `updateDataBinds(true)` for main-`ToTarget | TwoWay` number
+  binds. The public update dispatches C++ `reverseConvert`, which selects
+  operation-value forward arithmetic from the authored `ToTarget` direction,
+  writes the source, then reapplies source-to-target in the same update.
 - Direct interpolator main-to-target dirty slice: warmed direct
   `DataConverterInterpolator` state now follows C++ state-machine target-dirty
   behavior for main-`ToTarget | TwoWay` number binds. Explicit data-context

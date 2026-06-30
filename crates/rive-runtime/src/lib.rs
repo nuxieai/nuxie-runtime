@@ -4092,6 +4092,18 @@ fn runtime_data_bind_graph_convert_value(
     }
 }
 
+fn runtime_data_bind_graph_converter_starts_with_to_string(
+    converter: Option<&RuntimeDataBindGraphConverter>,
+) -> bool {
+    match converter {
+        Some(RuntimeDataBindGraphConverter::ToString { .. }) => true,
+        Some(RuntimeDataBindGraphConverter::Group(converters)) => {
+            runtime_data_bind_graph_converter_starts_with_to_string(converters.first())
+        }
+        _ => false,
+    }
+}
+
 impl RuntimeDataBindGraphTargetsMut<'_> {
     fn apply_default_view_model_binding(
         &mut self,
@@ -10379,10 +10391,7 @@ fn runtime_bindable_string_default_view_model_source(
     let source =
         file.data_context_view_model_property_for_instance(default_instance.object, &path)?;
     let converter = runtime_data_bind_graph_converter(file, data_bind);
-    let value = if matches!(
-        converter,
-        Some(RuntimeDataBindGraphConverter::ToString { .. })
-    ) {
+    let value = if runtime_data_bind_graph_converter_starts_with_to_string(converter.as_ref()) {
         if let Some(value) = file.view_model_instance_number_value_for_object(source) {
             RuntimeDataBindGraphValue::Number(value)
         } else if let Some(value) = file.view_model_instance_boolean_value_for_object(source) {

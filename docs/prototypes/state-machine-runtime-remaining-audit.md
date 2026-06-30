@@ -166,6 +166,11 @@ slice.
   composition for default-context string sources feeding string targets through
   already-supported direct string converters, covered by a C++ probe through an
   existing string transition-condition consumer.
+- First cross-type `DataConverterGroup` graph-owned converter execution slice:
+  forward composition for default-context number sources feeding string targets
+  through a group whose first effective child is `DataConverterToString`,
+  covered by a C++ probe through an existing string transition-condition
+  consumer.
 
 ## Remaining Runtime Slices
 
@@ -186,7 +191,8 @@ slice.
   string-to-number, symbol-list-index-to-number, number-to-string, and
   boolean-to-string, string-to-string, trigger-to-string,
   symbol-list-index-to-string, color-to-string, string-trim, and
-  string-remove-zeros, string-pad, and string converter group paths,
+  string-remove-zeros, string-pad, string converter group, and number-to-string
+  converter group paths,
   data-binding update queues, relative paths, parent paths, and nested paths.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener

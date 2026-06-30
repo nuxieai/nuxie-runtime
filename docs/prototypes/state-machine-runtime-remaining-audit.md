@@ -301,6 +301,13 @@ slice.
   source so a mutated first bind writes the trigger source before a second bind
   drives an existing trigger-to-string transition-condition consumer, while the
   existing trigger reset still runs after source-to-target application.
+- View-model graph-owned target-to-source slice: direct default-context
+  `ViewModelInstanceViewModel.propertyValue` sources feeding
+  `BindablePropertyViewModel.propertyValue` targets now honor
+  `ToSource | TwoWay` target mutation on explicit data-context advance. A C++
+  probe reports source and target pointer instance indexes directly because
+  post-relink transition comparator evaluation can dereference a missing
+  to-target data bind for a to-source view-model fixture.
 - First graph-owned view-model bindable slice: forward propagation for
   default-context `ViewModelInstanceViewModel.propertyValue` sources feeding
   `BindablePropertyViewModel.propertyValue` targets, covered by a C++ probe
@@ -361,9 +368,9 @@ slice.
   operation-value-to-interpolator number smoothing, deterministic formula
   number/symbol-list-index-to-number conversion plus graph-represented
   non-number fallbacks,
-  first direct number/boolean/string/color/enum/asset/artboard/symbol-list-index/trigger
+  first direct number/boolean/string/color/enum/asset/artboard/symbol-list-index/trigger/view-model
   target-to-source propagation,
-  data-binding update queues, remaining target-to-source value kinds and
+  data-binding update queues, remaining list target-to-source behavior and
   reverse converters, relative paths, parent paths, and nested paths.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener

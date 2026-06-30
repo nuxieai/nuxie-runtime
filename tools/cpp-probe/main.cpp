@@ -138,6 +138,7 @@
 #include "rive/data_bind/converters/data_converter_to_string.hpp"
 #include "rive/data_bind/converters/data_converter_trigger.hpp"
 #include "rive/data_bind/data_bind.hpp"
+#include "rive/data_bind_flags.hpp"
 #include "rive/data_bind/bindable_property_artboard.hpp"
 #include "rive/data_bind/bindable_property_asset.hpp"
 #include "rive/data_bind/bindable_property_boolean.hpp"
@@ -146,6 +147,7 @@
 #include "rive/data_bind/bindable_property_integer.hpp"
 #include "rive/data_bind/bindable_property_number.hpp"
 #include "rive/data_bind/bindable_property_string.hpp"
+#include "rive/data_bind/bindable_property_viewmodel.hpp"
 #define private public
 #define protected public
 #include "rive/data_bind/data_bind_context.hpp"
@@ -161,6 +163,7 @@
 #include "rive/data_bind/data_values/data_value_string.hpp"
 #include "rive/data_bind/data_values/data_value_symbol_list_index.hpp"
 #include "rive/data_bind/data_values/data_value_trigger.hpp"
+#include "rive/generated/data_bind/bindable_property_id_base.hpp"
 #include "rive/draw_rules.hpp"
 #include "rive/draw_target.hpp"
 #include "rive/drawable.hpp"
@@ -319,6 +322,7 @@ enum class RuntimeStateMachineActionKind
     SetBindableAsset,
     SetBindableArtboard,
     SetBindableBoolean,
+    SetBindableViewModel,
     SetDefaultViewModelSourceNumber,
     SetDefaultViewModelSourceBoolean,
     SetDefaultViewModelSourceString,
@@ -374,6 +378,17 @@ struct RuntimeStateMachineViewModelTriggerReport
     uint32_t value;
 };
 
+struct RuntimeStateMachineViewModelBindingReport
+{
+    size_t dataBindIndex;
+    bool hasSource;
+    size_t sourceViewModelIndex;
+    size_t sourceInstanceIndex;
+    bool hasTarget;
+    size_t targetViewModelIndex;
+    size_t targetInstanceIndex;
+};
+
 struct RuntimeStateMachineAdvanceReport
 {
     size_t stateMachineIndex;
@@ -384,6 +399,7 @@ struct RuntimeStateMachineAdvanceReport
     std::vector<RuntimeStateMachineCurrentAnimationReport> currentAnimations;
     std::vector<RuntimeStateMachineReportedEventReport> reportedEvents;
     std::vector<RuntimeStateMachineViewModelTriggerReport> viewModelTriggers;
+    std::vector<RuntimeStateMachineViewModelBindingReport> viewModelBindings;
 };
 
 class RuntimeAnimationEventReporter : public rive::KeyedCallbackReporter
@@ -964,6 +980,122 @@ collect_default_view_model_trigger_reports(rive::File* file)
     return reports;
 }
 
+bool find_view_model_instance_location(rive::File* file,
+                                       rive::ViewModelInstance* instance,
+                                       size_t* viewModelIndex,
+                                       size_t* instanceIndex)
+{
+    if (file == nullptr || instance == nullptr)
+    {
+        return false;
+    }
+    for (size_t i = 0; i < file->viewModelCount(); ++i)
+    {
+        auto viewModel = file->viewModel(i);
+        if (viewModel == nullptr)
+        {
+            continue;
+        }
+        for (size_t j = 0; j < viewModel->instanceCount(); ++j)
+        {
+            if (viewModel->instance(j) == instance)
+            {
+                *viewModelIndex = i;
+                *instanceIndex = j;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+std::vector<RuntimeStateMachineViewModelBindingReport>
+collect_view_model_binding_reports(rive::File* file,
+                                   rive::StateMachineInstance* stateMachine)
+{
+    std::vector<RuntimeStateMachineViewModelBindingReport> reports;
+    if (file == nullptr || stateMachine == nullptr)
+    {
+        return reports;
+    }
+    auto sourceStateMachine = stateMachine->stateMachine();
+    if (sourceStateMachine == nullptr)
+    {
+        return reports;
+    }
+
+    for (size_t dataBindIndex = 0;
+         dataBindIndex < sourceStateMachine->dataBindCount();
+         ++dataBindIndex)
+    {
+        auto dataBind = sourceStateMachine->dataBind(dataBindIndex);
+        auto target = dataBind == nullptr ? nullptr : dataBind->target();
+        if (target == nullptr ||
+            !target->is<rive::BindablePropertyViewModel>())
+        {
+            continue;
+        }
+
+        RuntimeStateMachineViewModelBindingReport report;
+        report.dataBindIndex = dataBindIndex;
+        report.hasSource = false;
+        report.sourceViewModelIndex = 0;
+        report.sourceInstanceIndex = 0;
+        report.hasTarget = false;
+        report.targetViewModelIndex = 0;
+        report.targetInstanceIndex = 0;
+
+        auto bindableProperty = stateMachine->bindablePropertyInstance(
+            target->as<rive::BindablePropertyViewModel>());
+        auto flags = static_cast<rive::DataBindFlags>(dataBind->flags());
+        bool toSource =
+            (flags & rive::DataBindFlags::ToSource) ==
+            rive::DataBindFlags::ToSource;
+        auto liveDataBind =
+            bindableProperty == nullptr
+                ? nullptr
+                : (toSource ? stateMachine->bindableDataBindToSource(
+                                  bindableProperty)
+                            : stateMachine->bindableDataBindToTarget(
+                                  bindableProperty));
+
+        auto source = liveDataBind == nullptr ? nullptr : liveDataBind->source();
+        if (source == nullptr && dataBind->is<rive::DataBindContext>() &&
+            stateMachine->dataContext() != nullptr)
+        {
+            source = stateMachine->dataContext()->getViewModelProperty(
+                dataBind->as<rive::DataBindContext>()->sourcePathIds());
+        }
+        if (source != nullptr &&
+            source->is<rive::ViewModelInstanceViewModel>())
+        {
+            auto reference = source->as<rive::ViewModelInstanceViewModel>()
+                                 ->referenceViewModelInstance();
+            report.hasSource = find_view_model_instance_location(
+                file,
+                reference.get(),
+                &report.sourceViewModelIndex,
+                &report.sourceInstanceIndex);
+        }
+
+        if (bindableProperty != nullptr &&
+            bindableProperty->is<rive::BindablePropertyViewModel>())
+        {
+            auto reference =
+                bindableProperty->as<rive::BindablePropertyViewModel>()
+                    ->viewModelInstanceValue();
+            report.hasTarget = find_view_model_instance_location(
+                file,
+                reference,
+                &report.targetViewModelIndex,
+                &report.targetInstanceIndex);
+        }
+
+        reports.push_back(report);
+    }
+    return reports;
+}
+
 std::vector<RuntimeStateMachineAdvanceReport>
 apply_runtime_state_machine_advances(rive::File* file,
                                      rive::ArtboardInstance* instance,
@@ -1180,6 +1312,114 @@ apply_runtime_state_machine_advances(rive::File* file,
                 {
                     bindableProperty->as<rive::BindablePropertyArtboard>()
                         ->propertyValue(action.uintValue);
+                }
+            }
+            continue;
+        }
+        if (action.kind == RuntimeStateMachineActionKind::SetBindableViewModel)
+        {
+            auto sourceStateMachine = stateMachine->stateMachine();
+            auto dataBind =
+                sourceStateMachine == nullptr
+                    ? nullptr
+                    : sourceStateMachine->dataBind(action.dataBindIndex);
+            auto target = dataBind == nullptr ? nullptr : dataBind->target();
+            if (target != nullptr &&
+                target->is<rive::BindablePropertyViewModel>())
+            {
+                auto bindableProperty = stateMachine->bindablePropertyInstance(
+                    target->as<rive::BindablePropertyViewModel>());
+                auto viewModel =
+                    file != nullptr && file->viewModelCount() > 0
+                        ? file->viewModel(0)
+                        : nullptr;
+                auto viewModelInstance =
+                    viewModel != nullptr && viewModel->instanceCount() > 0
+                        ? viewModel->instance(0)
+                        : nullptr;
+                rive::ViewModelInstance* referencedInstance = nullptr;
+                if (dataBind != nullptr &&
+                    dataBind->is<rive::DataBindContext>() &&
+                    viewModelInstance != nullptr)
+                {
+                    rive::DataContext context(rive::ref_rcp(viewModelInstance));
+                    auto source = context.getViewModelProperty(
+                        dataBind->as<rive::DataBindContext>()->sourcePathIds());
+                    if (source != nullptr &&
+                        source->is<rive::ViewModelInstanceViewModel>())
+                    {
+                        auto sourceViewModel =
+                            source->as<rive::ViewModelInstanceViewModel>();
+                        auto sourceProperty =
+                            sourceViewModel->viewModelProperty();
+                        if (sourceProperty != nullptr &&
+                            sourceProperty
+                                ->is<rive::ViewModelPropertyViewModel>())
+                        {
+                            auto referencedViewModelProperty =
+                                sourceProperty->as<
+                                    rive::ViewModelPropertyViewModel>();
+                            auto referencedViewModel =
+                                file != nullptr &&
+                                        referencedViewModelProperty
+                                                ->viewModelReferenceId() <
+                                            file->viewModelCount()
+                                    ? file->viewModel(
+                                          referencedViewModelProperty
+                                              ->viewModelReferenceId())
+                                    : nullptr;
+                            referencedInstance =
+                                referencedViewModel != nullptr &&
+                                        action.uintValue <
+                                            referencedViewModel->instanceCount()
+                                    ? referencedViewModel->instance(
+                                          action.uintValue)
+                                    : nullptr;
+                        }
+                        if (referencedInstance == nullptr)
+                        {
+                            auto currentReferenced =
+                                sourceViewModel->referenceViewModelInstance();
+                            auto referencedViewModel =
+                                file != nullptr && currentReferenced != nullptr &&
+                                        currentReferenced->viewModelId() <
+                                            file->viewModelCount()
+                                    ? file->viewModel(
+                                          currentReferenced->viewModelId())
+                                    : nullptr;
+                            referencedInstance =
+                                referencedViewModel != nullptr &&
+                                        action.uintValue <
+                                            referencedViewModel->instanceCount()
+                                    ? referencedViewModel->instance(
+                                          action.uintValue)
+                                    : nullptr;
+                        }
+                    }
+                }
+                if (bindableProperty != nullptr &&
+                    bindableProperty->is<rive::BindablePropertyViewModel>())
+                {
+                    auto bindableViewModel =
+                        bindableProperty->as<rive::BindablePropertyViewModel>();
+                    bindableViewModel->viewModelInstanceValue(
+                        referencedInstance);
+                    rive::CoreRegistry::setUint(
+                        bindableViewModel,
+                        rive::BindablePropertyIdBase::
+                            propertyValuePropertyKey,
+                        referencedInstance != nullptr
+                            ? rive::ViewModelInstance::pointerKey(
+                                  referencedInstance)
+                            : rive::BindablePropertyViewModel::defaultValue);
+                    auto sourceDataBind =
+                        stateMachine->bindableDataBindToSource(
+                            bindableViewModel);
+                    if (sourceDataBind != nullptr)
+                    {
+                        sourceDataBind->updateSourceBinding(true);
+                        stateMachine->updateDataBinds(false);
+                    }
                 }
             }
             continue;
@@ -1915,6 +2155,8 @@ apply_runtime_state_machine_advances(rive::File* file,
         }
         report.viewModelTriggers =
             collect_default_view_model_trigger_reports(file);
+        report.viewModelBindings =
+            collect_view_model_binding_reports(file, stateMachine.get());
         reports.push_back(report);
     }
     return reports;
@@ -1966,6 +2208,53 @@ void write_runtime_state_machine_advance_reports(
             out << ",\"viewModelPropertyId\":"
                 << trigger.viewModelPropertyId;
             out << ",\"value\":" << trigger.value;
+            out << '}';
+        }
+        out << "],\"viewModelBindings\":[";
+        for (size_t j = 0; j < report.viewModelBindings.size(); ++j)
+        {
+            if (j != 0)
+            {
+                out << ',';
+            }
+            const auto& binding = report.viewModelBindings[j];
+            out << "{\"dataBindIndex\":" << binding.dataBindIndex;
+            out << ",\"sourceViewModelIndex\":";
+            if (binding.hasSource)
+            {
+                out << binding.sourceViewModelIndex;
+            }
+            else
+            {
+                out << "null";
+            }
+            out << ",\"sourceInstanceIndex\":";
+            if (binding.hasSource)
+            {
+                out << binding.sourceInstanceIndex;
+            }
+            else
+            {
+                out << "null";
+            }
+            out << ",\"targetViewModelIndex\":";
+            if (binding.hasTarget)
+            {
+                out << binding.targetViewModelIndex;
+            }
+            else
+            {
+                out << "null";
+            }
+            out << ",\"targetInstanceIndex\":";
+            if (binding.hasTarget)
+            {
+                out << binding.targetInstanceIndex;
+            }
+            else
+            {
+                out << "null";
+            }
             out << '}';
         }
         out << "]}";
@@ -8319,6 +8608,29 @@ int main(int argc, const char* argv[])
             continue;
         }
 
+        if (is_arg(argv[i], "--runtime-set-state-machine-bindable-viewmodel"))
+        {
+            if (i + 3 >= argc)
+            {
+                std::cerr << "--runtime-set-state-machine-bindable-viewmodel requires stateMachineIndex dataBindIndex referencedInstanceIndex\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::SetBindableViewModel;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            action.uintValue = static_cast<uint32_t>(
+                std::strtoull(argv[++i], nullptr, 10));
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
         if (is_arg(argv[i], "--runtime-set-default-view-model-source-number"))
         {
             if (i + 3 >= argc)
@@ -8979,7 +9291,7 @@ int main(int argc, const char* argv[])
 
     if (filename == nullptr)
     {
-        std::cerr << "usage: rive_cpp_probe [--converter-samples] [--number-to-list-samples] [--property-values] [--file-property-values] [--no-advance] [--runtime-update] [--instance-artboards] [--runtime-set-double localId propertyKey value] [--runtime-collapse-component localId value] [--runtime-set-artboard-size width height] [--runtime-apply-animation animationIndex seconds mix] [--runtime-advance-animation animationIndex seconds mix] [--runtime-advance-state-machine stateMachineIndex seconds] [--runtime-advance-state-machine-data-context stateMachineIndex] [--runtime-set-state-machine-bool stateMachineIndex inputIndex value] [--runtime-set-state-machine-number stateMachineIndex inputIndex value] [--runtime-set-state-machine-bindable-number stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-bool stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-integer stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-color stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-string stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-enum stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-asset stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-artboard stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-number stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-bool stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-string stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-color stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-enum stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-asset stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-artboard stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-trigger stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-viewmodel stateMachineIndex dataBindIndex value] [--runtime-bind-empty-state-machine-context stateMachineIndex] [--runtime-bind-default-view-model-state-machine-context stateMachineIndex] [--runtime-bind-view-model-instance-state-machine-context stateMachineIndex viewModelIndex instanceIndex] [--runtime-bind-owned-view-model-number-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-bool-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-string-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-color-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-enum-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-asset-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-artboard-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-trigger-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-fire-state-machine-trigger stateMachineIndex inputIndex] [--complete-view-model-properties] [--data-context-lookups] --file "
+        std::cerr << "usage: rive_cpp_probe [--converter-samples] [--number-to-list-samples] [--property-values] [--file-property-values] [--no-advance] [--runtime-update] [--instance-artboards] [--runtime-set-double localId propertyKey value] [--runtime-collapse-component localId value] [--runtime-set-artboard-size width height] [--runtime-apply-animation animationIndex seconds mix] [--runtime-advance-animation animationIndex seconds mix] [--runtime-advance-state-machine stateMachineIndex seconds] [--runtime-advance-state-machine-data-context stateMachineIndex] [--runtime-set-state-machine-bool stateMachineIndex inputIndex value] [--runtime-set-state-machine-number stateMachineIndex inputIndex value] [--runtime-set-state-machine-bindable-number stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-bool stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-integer stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-color stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-string stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-enum stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-asset stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-artboard stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-viewmodel stateMachineIndex dataBindIndex referencedInstanceIndex] [--runtime-set-default-view-model-source-number stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-bool stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-string stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-color stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-enum stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-asset stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-artboard stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-trigger stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-viewmodel stateMachineIndex dataBindIndex value] [--runtime-bind-empty-state-machine-context stateMachineIndex] [--runtime-bind-default-view-model-state-machine-context stateMachineIndex] [--runtime-bind-view-model-instance-state-machine-context stateMachineIndex viewModelIndex instanceIndex] [--runtime-bind-owned-view-model-number-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-bool-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-string-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-color-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-enum-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-asset-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-artboard-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-trigger-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-fire-state-machine-trigger stateMachineIndex inputIndex] [--complete-view-model-properties] [--data-context-lookups] --file "
                      "path/to/file.riv\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-viewmodel-state-machine-context stateMachineIndex viewModelIndex propertyIndex value\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-viewmodel-default-state-machine-context stateMachineIndex viewModelIndex propertyIndex\n";

@@ -1331,7 +1331,7 @@ coverage uses two binds to the same source so the second bind's existing
 trigger-to-string `TransitionViewModelCondition` consumer observes the
 target-to-source write without adding new probe report fields. The contract is
 `docs/prototypes/data-binding-graph-trigger-target-to-source-runtime-contract.md`.
-Target-to-source for view-model and list value kinds, pure `ToSource` without
+Target-to-source for list value kinds, pure `ToSource` without
 `TwoWay`, reverse converter execution, imported/owned contexts, pending dirty
 queues, pending add/remove behavior, re-entry protection,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
@@ -1366,6 +1366,25 @@ Stable public source handles, list bindables, non-default view-model pointer
 mutation through live relink APIs, reverse propagation, broader update-queue
 parity, relative/parent/nested lookup, listener-owned data binding, and nested
 artboard propagation remain follow-up `#12` slices.
+
+Current #12 update: graph-owned target-to-source runtime behavior now also
+covers direct default-context view-model pointer binds. Mutating a
+`BindablePropertyViewModel.propertyValue` target for a `ToSource | TwoWay`
+`DataBindContext` marks that graph binding dirty; explicit
+`advance_data_context` resolves the requested referenced imported instance,
+relinks the bound `ViewModelInstanceViewModel` graph source, and propagates the
+same pointer identity to other graph source nodes sharing the same source path
+before normal source-to-target application. The C++ probe gained
+`--runtime-set-state-machine-bindable-viewmodel` plus direct
+`viewModelBindings` reports because post-relink transition evaluation can
+dereference a missing to-target data bind for a to-source view-model fixture.
+The contract is
+`docs/prototypes/data-binding-graph-viewmodel-target-to-source-runtime-contract.md`.
+Target-to-source for list value kinds, pure `ToSource` without `TwoWay`,
+reverse converter execution, imported/owned contexts, broader dirty/update
+queues, pending add/remove behavior, re-entry protection,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
 
 Current #12 update: owned runtime view-model contexts now cover the first
 live view-model pointer replacement path. `RuntimeOwnedViewModelInstance`

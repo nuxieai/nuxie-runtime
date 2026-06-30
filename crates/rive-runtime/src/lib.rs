@@ -2871,6 +2871,7 @@ struct RuntimeBindableTriggerDefaultViewModelSource {
 #[derive(Debug, Clone)]
 struct RuntimeBindableViewModel {
     global_id: u32,
+    data_bind_indices: Vec<usize>,
     source: RuntimeBindableViewModelSource,
     default_view_model_sources: Vec<RuntimeBindableViewModelDefaultViewModelSource>,
 }
@@ -2885,6 +2886,8 @@ enum RuntimeBindableViewModelSource {
 struct RuntimeBindableViewModelDefaultViewModelSource {
     data_bind_index: usize,
     path: Vec<u32>,
+    flags: u64,
+    converter: Option<RuntimeDataBindGraphConverter>,
     value: RuntimeViewModelPointer,
     view_model_instance_ids: Vec<u32>,
 }
@@ -3784,8 +3787,8 @@ impl RuntimeDataBindGraph {
                     &mut default_view_model_bindings,
                     source.data_bind_index,
                     &source.path,
-                    0,
-                    None,
+                    source.flags,
+                    source.converter.clone(),
                     RuntimeDataBindGraphTarget::ViewModel {
                         global_id: bindable.global_id,
                     },
@@ -4498,6 +4501,100 @@ impl RuntimeDataBindGraph {
         true
     }
 
+    fn mark_view_model_target_dirty_for_data_bind(&mut self, data_bind_index: usize) -> bool {
+        if !self.default_view_model_source_context_bound() {
+            return false;
+        }
+        let Some(binding) = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+        else {
+            return false;
+        };
+        let Some(target) = self.targets.get(binding.target.0) else {
+            return false;
+        };
+        if !matches!(target.target, RuntimeDataBindGraphTarget::ViewModel { .. }) {
+            return false;
+        }
+        let Some(source) = self.sources.get_mut(binding.source.0) else {
+            return false;
+        };
+        if !source.applies_target_to_source() {
+            return false;
+        }
+        source.target_to_source_dirty = true;
+        true
+    }
+
+    fn imported_view_model_target_value_for_data_bind(
+        &self,
+        data_bind_index: usize,
+        instance_index: usize,
+    ) -> Option<RuntimeViewModelPointer> {
+        let binding = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)?;
+        let target = self.targets.get(binding.target.0)?;
+        let RuntimeDataBindGraphTarget::ViewModel { .. } = target.target else {
+            return None;
+        };
+        let source = self.sources.get(binding.source.0)?;
+        let object_id = source
+            .view_model_instance_ids
+            .get(instance_index)
+            .copied()?;
+        Some(RuntimeViewModelPointer::Imported { object_id })
+    }
+
+    fn view_model_instance_index_for_data_bind_value(
+        &self,
+        data_bind_index: usize,
+        value: RuntimeViewModelPointer,
+    ) -> Option<usize> {
+        let binding = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)?;
+        let source = self.sources.get(binding.source.0)?;
+        let RuntimeViewModelPointer::Imported { object_id } = value else {
+            return None;
+        };
+        source
+            .view_model_instance_ids
+            .iter()
+            .position(|candidate| *candidate == object_id)
+    }
+
+    fn default_view_model_view_model_source_instance_index_for_data_bind(
+        &self,
+        data_bind_index: usize,
+    ) -> Option<usize> {
+        let binding = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)?;
+        let source = self.sources.get(binding.source.0)?;
+        let RuntimeDataBindGraphValue::ViewModel(value) = &source.value else {
+            return None;
+        };
+        self.view_model_instance_index_for_data_bind_value(data_bind_index, *value)
+    }
+
+    fn view_model_target_global_id_for_data_bind(&self, data_bind_index: usize) -> Option<u32> {
+        let target = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .and_then(|binding| self.targets.get(binding.target.0))?;
+        let RuntimeDataBindGraphTarget::ViewModel { global_id } = target.target else {
+            return None;
+        };
+        Some(global_id)
+    }
+
     fn default_view_model_trigger_target_global_id_for_data_bind(
         &self,
         data_bind_index: usize,
@@ -5073,6 +5170,72 @@ impl RuntimeDataBindGraph {
         changed
     }
 
+    fn apply_default_view_model_view_model_targets_to_sources(
+        &mut self,
+        view_models: &[StateMachineBindableViewModelInstance],
+    ) -> bool {
+        if !self.default_view_model_source_context_bound() {
+            return false;
+        }
+        let mut updates = Vec::<(Vec<u32>, RuntimeViewModelPointer)>::new();
+
+        for binding in self.default_view_model_bindings.clone() {
+            let Some(target) = self.targets.get(binding.target.0) else {
+                continue;
+            };
+            let RuntimeDataBindGraphTarget::ViewModel { global_id } = target.target else {
+                continue;
+            };
+            let Some(source) = self.sources.get_mut(binding.source.0) else {
+                continue;
+            };
+            if !source.target_to_source_dirty {
+                continue;
+            }
+            source.target_to_source_dirty = false;
+            if !source.bound || !source.supports_direct_view_model_target_to_source() {
+                continue;
+            }
+            let Some(value) = view_models
+                .iter()
+                .find(|view_model| view_model.global_id == global_id)
+                .map(|view_model| view_model.value)
+            else {
+                continue;
+            };
+            updates.push((source.path.clone(), value));
+        }
+
+        let mut changed = false;
+        for (path, value) in updates {
+            for source in &mut self.sources {
+                if !source.bound || source.path != path {
+                    continue;
+                }
+                let RuntimeDataBindGraphValue::ViewModel(source_value) = &mut source.value else {
+                    continue;
+                };
+                if *source_value != value {
+                    *source_value = value;
+                    changed = true;
+                }
+                let RuntimeDataBindGraphValue::ViewModel(default_value) = &mut source.default_value
+                else {
+                    continue;
+                };
+                if *default_value != value {
+                    *default_value = value;
+                    changed = true;
+                }
+            }
+        }
+
+        if changed {
+            self.mark_default_view_model_bindings_dirty();
+        }
+        changed
+    }
+
     fn apply_default_view_model_bindings(
         &mut self,
         mut targets: RuntimeDataBindGraphTargetsMut<'_>,
@@ -5176,6 +5339,12 @@ impl RuntimeDataBindGraphSourceNode {
         self.applies_target_to_source()
             && self.converter.is_none()
             && matches!(self.value, RuntimeDataBindGraphValue::Trigger(_))
+    }
+
+    fn supports_direct_view_model_target_to_source(&self) -> bool {
+        self.applies_target_to_source()
+            && self.converter.is_none()
+            && matches!(self.value, RuntimeDataBindGraphValue::ViewModel(_))
     }
 
     fn reset_converter_state(&mut self) {
@@ -9001,6 +9170,57 @@ impl StateMachineInstance {
         true
     }
 
+    pub fn set_bindable_view_model_for_data_bind(
+        &mut self,
+        data_bind_index: usize,
+        instance_index: usize,
+    ) -> bool {
+        let Some(value) = self
+            .data_bind_graph
+            .imported_view_model_target_value_for_data_bind(data_bind_index, instance_index)
+        else {
+            return false;
+        };
+        let Some(bindable_view_model) = self
+            .bindable_view_models
+            .iter_mut()
+            .find(|bindable_view_model| bindable_view_model.has_data_bind_index(data_bind_index))
+        else {
+            return false;
+        };
+        if !bindable_view_model.set_imported_value(value) {
+            return false;
+        }
+        self.data_bind_graph
+            .mark_view_model_target_dirty_for_data_bind(data_bind_index);
+        self.needs_advance = true;
+        true
+    }
+
+    pub fn default_view_model_view_model_source_instance_index_for_data_bind(
+        &self,
+        data_bind_index: usize,
+    ) -> Option<usize> {
+        self.data_bind_graph
+            .default_view_model_view_model_source_instance_index_for_data_bind(data_bind_index)
+    }
+
+    pub fn bindable_view_model_instance_index_for_data_bind(
+        &self,
+        data_bind_index: usize,
+    ) -> Option<usize> {
+        let global_id = self
+            .data_bind_graph
+            .view_model_target_global_id_for_data_bind(data_bind_index)?;
+        let value = self
+            .bindable_view_models
+            .iter()
+            .find(|bindable_view_model| bindable_view_model.global_id == global_id)
+            .map(|bindable_view_model| bindable_view_model.value)?;
+        self.data_bind_graph
+            .view_model_instance_index_for_data_bind_value(data_bind_index, value)
+    }
+
     pub fn set_default_view_model_number_source_for_data_bind(
         &mut self,
         data_bind_index: usize,
@@ -9255,6 +9475,8 @@ impl StateMachineInstance {
                 .apply_default_view_model_artboard_targets_to_sources(&self.bindable_artboards);
             self.data_bind_graph
                 .apply_default_view_model_trigger_targets_to_sources(&self.bindable_triggers);
+            self.data_bind_graph
+                .apply_default_view_model_view_model_targets_to_sources(&self.bindable_view_models);
             self.apply_default_view_model_bindings(true, RuntimeDataBindGraphApplyPhase::Immediate);
             for trigger in &mut self.view_model_triggers {
                 trigger.reset();
@@ -9945,6 +10167,7 @@ fn bindable_trigger_source_global_id(
 #[derive(Debug, Clone)]
 struct StateMachineBindableViewModelInstance {
     global_id: u32,
+    data_bind_indices: Vec<usize>,
     source: RuntimeBindableViewModelSource,
     value: RuntimeViewModelPointer,
 }
@@ -9953,6 +10176,7 @@ impl StateMachineBindableViewModelInstance {
     fn new(bindable_view_model: &RuntimeBindableViewModel) -> Self {
         Self {
             global_id: bindable_view_model.global_id,
+            data_bind_indices: bindable_view_model.data_bind_indices.clone(),
             source: bindable_view_model.source,
             value: RuntimeViewModelPointer::Null,
         }
@@ -9970,6 +10194,18 @@ impl StateMachineBindableViewModelInstance {
 
     fn set_value(&mut self, value: RuntimeViewModelPointer) {
         self.value = value;
+    }
+
+    fn has_data_bind_index(&self, data_bind_index: usize) -> bool {
+        self.data_bind_indices.contains(&data_bind_index)
+    }
+
+    fn set_imported_value(&mut self, value: RuntimeViewModelPointer) -> bool {
+        if self.value == value {
+            return false;
+        }
+        self.value = value;
+        true
     }
 }
 
@@ -12890,9 +13126,13 @@ fn runtime_bindable_view_models(
         let source = runtime_bindable_view_model_source(file, data_bind);
         values
             .entry(target.id)
-            .and_modify(|bindable_view_model| bindable_view_model.source = source)
+            .and_modify(|bindable_view_model| {
+                bindable_view_model.source = source;
+                bindable_view_model.data_bind_indices.push(data_bind_index);
+            })
             .or_insert_with(|| RuntimeBindableViewModel {
                 global_id: target.id,
+                data_bind_indices: vec![data_bind_index],
                 source,
                 default_view_model_sources: Vec::new(),
             });
@@ -12933,6 +13173,8 @@ fn runtime_bindable_view_model_default_view_model_source(
     Some(RuntimeBindableViewModelDefaultViewModelSource {
         data_bind_index,
         path: path.to_vec(),
+        flags: data_bind.uint_property("flags").unwrap_or(0),
+        converter: runtime_data_bind_graph_converter(file, data_bind),
         value: RuntimeViewModelPointer::Imported {
             object_id: reference.object.id,
         },

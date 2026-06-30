@@ -5287,31 +5287,24 @@ impl RuntimeDataBindGraphSourceNode {
         data_bind_flags_apply_target_to_source(self.flags)
     }
 
-    fn supports_number_target_to_source(&self) -> bool {
-        self.applies_target_to_source()
-            && matches!(
-                self.converter.as_ref(),
-                None | Some(RuntimeDataBindGraphConverter::OperationValue { .. })
-            )
-            && matches!(self.value, RuntimeDataBindGraphValue::Number(_))
-    }
-
     fn number_target_to_source_value(&self, value: f32) -> Option<f32> {
-        if !self.supports_number_target_to_source() {
+        if !self.bound
+            || !self.applies_target_to_source()
+            || !matches!(self.value, RuntimeDataBindGraphValue::Number(_))
+        {
             return None;
         }
-        match self.converter.as_ref() {
-            None => Some(value),
-            Some(RuntimeDataBindGraphConverter::OperationValue {
-                operation_type,
-                operation_value,
-            }) => Some(runtime_data_bind_graph_reverse_convert_operation_value(
-                value,
-                *operation_value,
-                *operation_type,
-            )),
-            _ => None,
-        }
+        let value = match self.converter.as_ref() {
+            None => RuntimeDataBindGraphValue::Number(value),
+            Some(converter) => runtime_data_bind_graph_reverse_convert_value(
+                converter,
+                &RuntimeDataBindGraphValue::Number(value),
+            )?,
+        };
+        let RuntimeDataBindGraphValue::Number(value) = value else {
+            return None;
+        };
+        Some(value)
     }
 
     fn supports_direct_symbol_list_index_target_to_source(&self) -> bool {
@@ -5320,24 +5313,24 @@ impl RuntimeDataBindGraphSourceNode {
             && matches!(self.value, RuntimeDataBindGraphValue::SymbolListIndex(_))
     }
 
-    fn supports_boolean_target_to_source(&self) -> bool {
-        self.applies_target_to_source()
-            && matches!(
-                self.converter.as_ref(),
-                None | Some(RuntimeDataBindGraphConverter::BooleanNegate)
-            )
-            && matches!(self.value, RuntimeDataBindGraphValue::Boolean(_))
-    }
-
     fn boolean_target_to_source_value(&self, value: bool) -> Option<bool> {
-        if !self.supports_boolean_target_to_source() {
+        if !self.bound
+            || !self.applies_target_to_source()
+            || !matches!(self.value, RuntimeDataBindGraphValue::Boolean(_))
+        {
             return None;
         }
-        match self.converter.as_ref() {
-            None => Some(value),
-            Some(RuntimeDataBindGraphConverter::BooleanNegate) => Some(!value),
-            _ => None,
-        }
+        let value = match self.converter.as_ref() {
+            None => RuntimeDataBindGraphValue::Boolean(value),
+            Some(converter) => runtime_data_bind_graph_reverse_convert_value(
+                converter,
+                &RuntimeDataBindGraphValue::Boolean(value),
+            )?,
+        };
+        let RuntimeDataBindGraphValue::Boolean(value) = value else {
+            return None;
+        };
+        Some(value)
     }
 
     fn supports_direct_string_target_to_source(&self) -> bool {
@@ -6083,6 +6076,41 @@ fn runtime_data_bind_graph_convert_value(
         }
         (RuntimeDataBindGraphConverter::Interpolator { .. }, _) => None,
         (RuntimeDataBindGraphConverter::Unsupported, _) => None,
+    }
+}
+
+fn runtime_data_bind_graph_reverse_convert_value(
+    converter: &RuntimeDataBindGraphConverter,
+    value: &RuntimeDataBindGraphValue,
+) -> Option<RuntimeDataBindGraphValue> {
+    match (converter, value) {
+        (
+            RuntimeDataBindGraphConverter::BooleanNegate,
+            RuntimeDataBindGraphValue::Boolean(value),
+        ) => Some(RuntimeDataBindGraphValue::Boolean(!value)),
+        (RuntimeDataBindGraphConverter::BooleanNegate, _) => None,
+        (
+            RuntimeDataBindGraphConverter::OperationValue {
+                operation_type,
+                operation_value,
+            },
+            RuntimeDataBindGraphValue::Number(value),
+        ) => Some(RuntimeDataBindGraphValue::Number(
+            runtime_data_bind_graph_reverse_convert_operation_value(
+                *value,
+                *operation_value,
+                *operation_type,
+            ),
+        )),
+        (RuntimeDataBindGraphConverter::OperationValue { .. }, _) => None,
+        (RuntimeDataBindGraphConverter::Group(converters), value) => {
+            let mut value = value.clone();
+            for converter in converters.iter().rev() {
+                value = runtime_data_bind_graph_reverse_convert_value(converter, &value)?;
+            }
+            Some(value)
+        }
+        _ => None,
     }
 }
 

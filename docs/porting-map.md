@@ -261,6 +261,7 @@ Contracts: `docs/prototypes/linear-animation-runtime-contract.md`, `docs/prototy
 Additional current contract: `docs/prototypes/state-machine-component-literal-condition-runtime-contract.md`
 Additional current contract: `docs/prototypes/state-machine-component-pair-condition-runtime-contract.md`
 Additional current contract: `docs/prototypes/state-machine-artboard-component-condition-runtime-contract.md`
+Additional current contract: `docs/prototypes/state-machine-component-viewmodel-condition-runtime-contract.md`
 
 ### Question
 
@@ -277,6 +278,8 @@ Current #11 update: the first component-comparand runtime slice supports `Transi
 Current #11 update: component-vs-component `TransitionPropertyComponentComparator` pairs now support C++ compatible number, bool, string/bytes, color, generic uint, enum, trigger, asset, and artboard comparisons, including mutable transform reads and missing/unsupported target default-value behavior. Component-vs-view-model, artboard-vs-component, component-vs-artboard, and component view-model pointer comparisons remain later slices.
 
 Current #11 update: left-artboard/right-component `TransitionViewModelCondition` comparisons now support C++ numeric-compatible `TransitionPropertyArtboardComparator` versus `TransitionPropertyComponentComparator` pairs. Coverage includes static artboard width/height/ratio values compared against static component numbers, mutable transform reads, missing/unsupported component target defaults, and generic uint-as-number component properties. Component-vs-view-model, component-left/artboard-right if a later C++ audit finds a supported shape, component view-model pointer comparisons, and runtime-layout-driven artboard dimensions remain later slices.
+
+Current #11 update: component/ViewModel scalar `TransitionViewModelCondition` comparisons now support `TransitionPropertyComponentComparator` paired with `TransitionPropertyViewModelComparator` in either order for number/integer, bool, string/bytes, color, enum, and asset kinds. Coverage includes data-context gating, static component values, mutable component transforms, mutated ViewModel bindable values, missing/unsupported component defaults, incompatible kind rejection, and both component-left/ViewModel-right and ViewModel-left/component-right direction. Component/ViewModel trigger, artboard, and pointer semantics, component-left/artboard-right if a later C++ audit finds a supported shape, and runtime-layout-driven artboard dimensions remain later slices.
 
 ## #12: Data Binding Graph
 

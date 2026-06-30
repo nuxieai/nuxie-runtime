@@ -3411,6 +3411,42 @@ enum RuntimeTransitionCondition {
         right: u64,
         op: TransitionConditionOp,
     },
+    ComponentViewModelNumber {
+        component: RuntimeComponentNumberValue,
+        view_model: RuntimeViewModelNumberValue,
+        component_on_left: bool,
+        op: TransitionConditionOp,
+    },
+    ComponentViewModelInteger {
+        component_value: u64,
+        bindable_global_id: u32,
+        op: TransitionConditionOp,
+    },
+    ComponentViewModelBoolean {
+        component_value: bool,
+        bindable_global_id: u32,
+        op: TransitionConditionOp,
+    },
+    ComponentViewModelString {
+        component_value: Vec<u8>,
+        bindable_global_id: u32,
+        op: TransitionConditionOp,
+    },
+    ComponentViewModelColor {
+        component_value: u32,
+        bindable_global_id: u32,
+        op: TransitionConditionOp,
+    },
+    ComponentViewModelEnum {
+        component_value: u64,
+        bindable_global_id: u32,
+        op: TransitionConditionOp,
+    },
+    ComponentViewModelAsset {
+        component_value: u64,
+        bindable_global_id: u32,
+        op: TransitionConditionOp,
+    },
     ArtboardComponentNumber {
         value: f32,
         op: TransitionConditionOp,
@@ -3486,6 +3522,16 @@ impl RuntimeTransitionCondition {
                     && right.type_name == "TransitionPropertyComponentComparator"
                 {
                     return Self::from_component_pair(file, graph, object, left, right);
+                }
+                if left.type_name == "TransitionPropertyComponentComparator"
+                    && right.type_name == "TransitionPropertyViewModelComparator"
+                {
+                    return Self::from_component_viewmodel(file, graph, object, left, right, true);
+                }
+                if left.type_name == "TransitionPropertyViewModelComparator"
+                    && right.type_name == "TransitionPropertyComponentComparator"
+                {
+                    return Self::from_component_viewmodel(file, graph, object, right, left, false);
                 }
                 if left.type_name == "TransitionPropertyComponentComparator" {
                     return Self::from_component_literal(file, graph, object, left, right);
@@ -3611,6 +3657,122 @@ impl RuntimeTransitionCondition {
                     });
                 }
                 None
+            }
+            _ => None,
+        }
+    }
+
+    fn from_component_viewmodel(
+        file: &RuntimeFile,
+        graph: &ArtboardGraph,
+        condition: &RuntimeObject,
+        component: &RuntimeObject,
+        viewmodel: &RuntimeObject,
+        component_on_left: bool,
+    ) -> Option<Self> {
+        let local_id = usize::try_from(component.uint_property("objectId")?).ok()?;
+        let property_key = u16::try_from(component.uint_property("propertyKey")?).ok()?;
+        let component_kind = RuntimeComponentComparandKind::from_property_key(property_key)?;
+        let bindable = file.latest_bindable_property_for_object(viewmodel)?;
+        let viewmodel_kind = RuntimeComponentComparandKind::from_bindable(bindable)?;
+        if !component_kind.is_compatible_with(viewmodel_kind) {
+            return None;
+        }
+
+        let op = TransitionConditionOp::from_value(condition.uint_property("opValue").unwrap_or(0));
+        let source_object = component_source_object(file, graph, local_id);
+        let supports_property = component_supports_property(source_object, property_key);
+
+        match (component_kind, viewmodel_kind) {
+            (
+                RuntimeComponentComparandKind::NumberDouble
+                | RuntimeComponentComparandKind::NumberFromUint,
+                RuntimeComponentComparandKind::NumberDouble
+                | RuntimeComponentComparandKind::NumberFromUint,
+            ) if component_kind == RuntimeComponentComparandKind::NumberFromUint
+                && viewmodel_kind == RuntimeComponentComparandKind::NumberFromUint =>
+            {
+                Some(Self::ComponentViewModelInteger {
+                    component_value: runtime_component_uint_value(
+                        source_object,
+                        property_key,
+                        supports_property,
+                    ),
+                    bindable_global_id: bindable.id,
+                    op,
+                })
+            }
+            (
+                RuntimeComponentComparandKind::NumberDouble
+                | RuntimeComponentComparandKind::NumberFromUint,
+                RuntimeComponentComparandKind::NumberDouble
+                | RuntimeComponentComparandKind::NumberFromUint,
+            ) => Some(Self::ComponentViewModelNumber {
+                component: RuntimeComponentNumberValue::from_parts(
+                    local_id,
+                    property_key,
+                    component_kind,
+                    source_object,
+                    supports_property,
+                )?,
+                view_model: RuntimeViewModelNumberValue::from_bindable(bindable)?,
+                component_on_left,
+                op,
+            }),
+            (RuntimeComponentComparandKind::Boolean, RuntimeComponentComparandKind::Boolean) => {
+                Some(Self::ComponentViewModelBoolean {
+                    component_value: runtime_component_bool_value(
+                        source_object,
+                        property_key,
+                        supports_property,
+                    ),
+                    bindable_global_id: bindable.id,
+                    op,
+                })
+            }
+            (RuntimeComponentComparandKind::String, RuntimeComponentComparandKind::String) => {
+                Some(Self::ComponentViewModelString {
+                    component_value: runtime_component_string_value(
+                        source_object,
+                        property_key,
+                        supports_property,
+                    ),
+                    bindable_global_id: bindable.id,
+                    op,
+                })
+            }
+            (RuntimeComponentComparandKind::Color, RuntimeComponentComparandKind::Color) => {
+                Some(Self::ComponentViewModelColor {
+                    component_value: runtime_component_color_value(
+                        source_object,
+                        property_key,
+                        supports_property,
+                    ),
+                    bindable_global_id: bindable.id,
+                    op,
+                })
+            }
+            (RuntimeComponentComparandKind::Enum, RuntimeComponentComparandKind::Enum) => {
+                Some(Self::ComponentViewModelEnum {
+                    component_value: runtime_component_uint_value(
+                        source_object,
+                        property_key,
+                        supports_property,
+                    ),
+                    bindable_global_id: bindable.id,
+                    op,
+                })
+            }
+            (RuntimeComponentComparandKind::Asset, RuntimeComponentComparandKind::Asset) => {
+                Some(Self::ComponentViewModelAsset {
+                    component_value: runtime_component_uint_value(
+                        source_object,
+                        property_key,
+                        supports_property,
+                    ),
+                    bindable_global_id: bindable.id,
+                    op,
+                })
             }
             _ => None,
         }
@@ -4112,6 +4274,95 @@ impl RuntimeTransitionCondition {
                 value,
             } => op.compare_u64_equal_only(*source_value, *value),
             Self::ComponentUintPair { left, right, op } => op.compare_u64_equal_only(*left, *right),
+            Self::ComponentViewModelNumber {
+                component,
+                view_model,
+                component_on_left,
+                op,
+            } => {
+                if !data_context_present {
+                    return false;
+                }
+                let component_value = component.value(artboard);
+                let view_model_value = view_model.value(bindable_numbers, bindable_integers);
+                if *component_on_left {
+                    op.compare(component_value, view_model_value)
+                } else {
+                    op.compare(view_model_value, component_value)
+                }
+            }
+            Self::ComponentViewModelInteger {
+                component_value,
+                bindable_global_id,
+                op,
+            } => {
+                if !data_context_present {
+                    return false;
+                }
+                let view_model_value =
+                    bindable_integer_value(bindable_integers, *bindable_global_id).unwrap_or(0);
+                op.compare_u64_equal_only(*component_value, view_model_value)
+            }
+            Self::ComponentViewModelBoolean {
+                component_value,
+                bindable_global_id,
+                op,
+            } => {
+                if !data_context_present {
+                    return false;
+                }
+                let view_model_value =
+                    bindable_boolean_value(bindable_booleans, *bindable_global_id).unwrap_or(false);
+                op.compare_bool(*component_value, view_model_value)
+            }
+            Self::ComponentViewModelString {
+                component_value,
+                bindable_global_id,
+                op,
+            } => {
+                if !data_context_present {
+                    return false;
+                }
+                let view_model_value =
+                    bindable_string_value(bindable_strings, *bindable_global_id).unwrap_or(&[]);
+                op.compare_bytes_equal_only(component_value, view_model_value)
+            }
+            Self::ComponentViewModelColor {
+                component_value,
+                bindable_global_id,
+                op,
+            } => {
+                if !data_context_present {
+                    return false;
+                }
+                let view_model_value =
+                    bindable_color_value(bindable_colors, *bindable_global_id).unwrap_or(0);
+                op.compare_u32_equal_only(*component_value, view_model_value)
+            }
+            Self::ComponentViewModelEnum {
+                component_value,
+                bindable_global_id,
+                op,
+            } => {
+                if !data_context_present {
+                    return false;
+                }
+                let view_model_value =
+                    bindable_enum_value(bindable_enums, *bindable_global_id).unwrap_or(0);
+                op.compare_u64_equal_only(*component_value, view_model_value)
+            }
+            Self::ComponentViewModelAsset {
+                component_value,
+                bindable_global_id,
+                op,
+            } => {
+                if !data_context_present {
+                    return false;
+                }
+                let view_model_value =
+                    bindable_asset_value(bindable_assets, *bindable_global_id).unwrap_or(0);
+                op.compare_u64_equal_only(*component_value, view_model_value)
+            }
             Self::ArtboardComponentNumber {
                 value,
                 op,
@@ -4216,6 +4467,22 @@ impl RuntimeComponentComparandKind {
         }
     }
 
+    fn from_bindable(bindable: &RuntimeObject) -> Option<Self> {
+        match bindable.type_name {
+            "BindablePropertyNumber" => Some(Self::NumberDouble),
+            "BindablePropertyInteger" => Some(Self::NumberFromUint),
+            "BindablePropertyBoolean" => Some(Self::Boolean),
+            "BindablePropertyString" => Some(Self::String),
+            "BindablePropertyColor" => Some(Self::Color),
+            "BindablePropertyEnum" => Some(Self::Enum),
+            "BindablePropertyTrigger" => Some(Self::Trigger),
+            "BindablePropertyAsset" => Some(Self::Asset),
+            "BindablePropertyArtboard" => Some(Self::Artboard),
+            "BindablePropertyViewModel" => Some(Self::ViewModel),
+            _ => None,
+        }
+    }
+
     fn is_number(self) -> bool {
         matches!(self, Self::NumberDouble | Self::NumberFromUint)
     }
@@ -4268,6 +4535,41 @@ impl RuntimeComponentNumberValue {
         self.transform_property
             .and_then(|property| artboard.transform_property(self.local_id, property))
             .unwrap_or(self.source_value)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum RuntimeViewModelNumberValue {
+    Number { bindable_global_id: u32 },
+    Integer { bindable_global_id: u32 },
+}
+
+impl RuntimeViewModelNumberValue {
+    fn from_bindable(bindable: &RuntimeObject) -> Option<Self> {
+        match bindable.type_name {
+            "BindablePropertyNumber" => Some(Self::Number {
+                bindable_global_id: bindable.id,
+            }),
+            "BindablePropertyInteger" => Some(Self::Integer {
+                bindable_global_id: bindable.id,
+            }),
+            _ => None,
+        }
+    }
+
+    fn value(
+        self,
+        bindable_numbers: &[StateMachineBindableNumberInstance],
+        bindable_integers: &[StateMachineBindableIntegerInstance],
+    ) -> f32 {
+        match self {
+            Self::Number { bindable_global_id } => {
+                bindable_number_value(bindable_numbers, bindable_global_id).unwrap_or(0.0)
+            }
+            Self::Integer { bindable_global_id } => {
+                bindable_integer_value(bindable_integers, bindable_global_id).unwrap_or(0) as f32
+            }
+        }
     }
 }
 

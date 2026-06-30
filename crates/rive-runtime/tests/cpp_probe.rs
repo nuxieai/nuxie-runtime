@@ -1915,6 +1915,160 @@ fn synthetic_state_machine_artboard_component_condition(
     })
 }
 
+#[derive(Clone, Copy)]
+enum SyntheticComponentViewModelOrder {
+    ComponentLeft,
+    ViewModelLeft,
+}
+
+#[derive(Clone, Copy)]
+enum SyntheticComponentViewModelBindable<'a> {
+    Number(f32),
+    Integer(u64),
+    Boolean(bool),
+    Color(u32),
+    String(&'a str),
+    Enum(u64),
+    Asset(u64),
+}
+
+fn push_synthetic_component_viewmodel_bindable(
+    bytes: &mut Vec<u8>,
+    bindable: SyntheticComponentViewModelBindable<'_>,
+) {
+    match bindable {
+        SyntheticComponentViewModelBindable::Number(value) => {
+            push_bindable_number_data_bind(bytes, value);
+        }
+        SyntheticComponentViewModelBindable::Integer(value) => {
+            push_bindable_integer_data_bind(bytes, value);
+        }
+        SyntheticComponentViewModelBindable::Boolean(value) => {
+            push_bindable_boolean_data_bind(bytes, value);
+        }
+        SyntheticComponentViewModelBindable::Color(value) => {
+            push_bindable_color_data_bind(bytes, value);
+        }
+        SyntheticComponentViewModelBindable::String(value) => {
+            push_bindable_string_data_bind(bytes, value);
+        }
+        SyntheticComponentViewModelBindable::Enum(value) => {
+            push_bindable_enum_data_bind(bytes, value);
+        }
+        SyntheticComponentViewModelBindable::Asset(value) => {
+            push_bindable_asset_data_bind(bytes, value);
+        }
+    }
+}
+
+fn push_synthetic_component_viewmodel_condition(
+    bytes: &mut Vec<u8>,
+    order: SyntheticComponentViewModelOrder,
+    bindable: SyntheticComponentViewModelBindable<'_>,
+    component_object_id: u64,
+    component_property_key: u16,
+    op_value: u64,
+) {
+    push_synthetic_component_viewmodel_bindable(bytes, bindable);
+    push_object_with_properties(bytes, "TransitionViewModelCondition", |bytes| {
+        push_uint_property(bytes, "TransitionViewModelCondition", "opValue", op_value);
+    });
+    let push_component = |bytes: &mut Vec<u8>| {
+        push_object_with_properties(bytes, "TransitionPropertyComponentComparator", |bytes| {
+            push_uint_property(
+                bytes,
+                "TransitionPropertyComponentComparator",
+                "objectId",
+                component_object_id,
+            );
+            push_uint_property(
+                bytes,
+                "TransitionPropertyComponentComparator",
+                "propertyKey",
+                u64::from(component_property_key),
+            );
+        });
+    };
+    match order {
+        SyntheticComponentViewModelOrder::ComponentLeft => {
+            push_component(bytes);
+            push_object_with_properties(bytes, "TransitionPropertyViewModelComparator", |_| {});
+        }
+        SyntheticComponentViewModelOrder::ViewModelLeft => {
+            push_object_with_properties(bytes, "TransitionPropertyViewModelComparator", |_| {});
+            push_component(bytes);
+        }
+    }
+}
+
+fn synthetic_state_machine_component_viewmodel_condition(
+    file_id: u64,
+    order: SyntheticComponentViewModelOrder,
+    bindable: SyntheticComponentViewModelBindable<'_>,
+    component_object_id: u64,
+    component_property_key: u16,
+    op_value: u64,
+) -> Vec<u8> {
+    const ANIMATED_NODE_ID: u64 = 6;
+
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "Node", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+            push_string_property(bytes, "Component", "name", "ready");
+            push_f32_property(bytes, "Node", "x", 4.0);
+            push_f32_property(bytes, "Node", "y", 3.0);
+            push_f32_property(bytes, "Node", "scaleX", 1.0);
+            push_f32_property(bytes, "Node", "scaleY", 1.0);
+            push_f32_property(bytes, "Node", "opacity", 1.0);
+        });
+        push_object_with_properties(bytes, "Shape", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "Fill", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 2);
+            push_bool_property(bytes, "ShapePaint", "isVisible", true);
+        });
+        push_object_with_properties(bytes, "SolidColor", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 3);
+            push_color_property(bytes, "SolidColor", "colorValue", 0xff11_2233);
+        });
+        push_object_with_properties(bytes, "Image", |bytes| {
+            push_uint_property(bytes, "Image", "parentId", 0);
+            push_uint_property(bytes, "Image", "assetId", 11);
+        });
+        push_transform_node(bytes, 0, 7.0, 11.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, ANIMATED_NODE_ID, 7.0, 17.0);
+        push_animation_for_single_node(bytes, ANIMATED_NODE_ID, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+        });
+        push_synthetic_component_viewmodel_condition(
+            bytes,
+            order,
+            bindable,
+            component_object_id,
+            component_property_key,
+            op_value,
+        );
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
 fn synthetic_state_machine_direct_blend_state_transition(file_id: u64) -> Vec<u8> {
     const ENABLE_EXIT_TIME: u64 = 1 << 2;
 
@@ -7213,6 +7367,377 @@ fn state_machine_artboard_component_conditions_match_cpp_probe() {
             compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
         }
         compare_cpp_runtime_update(&cpp, &rust, &report, label);
+    }
+}
+
+#[test]
+fn state_machine_component_viewmodel_conditions_match_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    const NODE_ID: u64 = 1;
+    const FILL_ID: u64 = 3;
+    const SOLID_COLOR_ID: u64 = 4;
+
+    struct Case<'a> {
+        label: &'a str,
+        bytes: Vec<u8>,
+        bind_context: bool,
+        component_x: Option<f32>,
+        bindable_mutation: Option<SyntheticComponentViewModelBindable<'a>>,
+    }
+
+    let node_x_key = property_key_for_name("Node", "x");
+    let node_parent_id_key = property_key_for_name("Node", "parentId");
+    let node_name_key = property_key_for_name("Node", "name");
+    let visible_key = property_key_for_name("ShapePaint", "isVisible");
+    let color_key = property_key_for_name("SolidColor", "colorValue");
+    let enum_value_key = property_key_for_name("CustomPropertyEnum", "propertyValue");
+    let asset_value_key = property_key_for_name("ViewModelInstanceAsset", "propertyValue");
+
+    for case in [
+        Case {
+            label: "synthetic/runtime_state_machine_component_viewmodel_no_context_cpp.riv",
+            bytes: synthetic_state_machine_component_viewmodel_condition(
+                8334,
+                SyntheticComponentViewModelOrder::ComponentLeft,
+                SyntheticComponentViewModelBindable::Number(3.0),
+                NODE_ID,
+                node_x_key,
+                5,
+            ),
+            bind_context: false,
+            component_x: None,
+            bindable_mutation: None,
+        },
+        Case {
+            label: "synthetic/runtime_state_machine_component_viewmodel_number_static_cpp.riv",
+            bytes: synthetic_state_machine_component_viewmodel_condition(
+                8335,
+                SyntheticComponentViewModelOrder::ComponentLeft,
+                SyntheticComponentViewModelBindable::Number(3.0),
+                NODE_ID,
+                node_x_key,
+                5,
+            ),
+            bind_context: true,
+            component_x: None,
+            bindable_mutation: None,
+        },
+        Case {
+            label: "synthetic/runtime_state_machine_component_viewmodel_component_mutated_cpp.riv",
+            bytes: synthetic_state_machine_component_viewmodel_condition(
+                8336,
+                SyntheticComponentViewModelOrder::ComponentLeft,
+                SyntheticComponentViewModelBindable::Number(10.0),
+                NODE_ID,
+                node_x_key,
+                5,
+            ),
+            bind_context: true,
+            component_x: Some(12.0),
+            bindable_mutation: None,
+        },
+        Case {
+            label: "synthetic/runtime_state_machine_viewmodel_component_number_mutated_cpp.riv",
+            bytes: synthetic_state_machine_component_viewmodel_condition(
+                8337,
+                SyntheticComponentViewModelOrder::ViewModelLeft,
+                SyntheticComponentViewModelBindable::Number(0.0),
+                NODE_ID,
+                node_x_key,
+                5,
+            ),
+            bind_context: true,
+            component_x: None,
+            bindable_mutation: Some(SyntheticComponentViewModelBindable::Number(5.0)),
+        },
+        Case {
+            label: "synthetic/runtime_state_machine_component_viewmodel_integer_cpp.riv",
+            bytes: synthetic_state_machine_component_viewmodel_condition(
+                8338,
+                SyntheticComponentViewModelOrder::ComponentLeft,
+                SyntheticComponentViewModelBindable::Integer(0),
+                NODE_ID,
+                node_parent_id_key,
+                0,
+            ),
+            bind_context: true,
+            component_x: None,
+            bindable_mutation: None,
+        },
+        Case {
+            label: "synthetic/runtime_state_machine_component_viewmodel_bool_cpp.riv",
+            bytes: synthetic_state_machine_component_viewmodel_condition(
+                8339,
+                SyntheticComponentViewModelOrder::ComponentLeft,
+                SyntheticComponentViewModelBindable::Boolean(true),
+                FILL_ID,
+                visible_key,
+                0,
+            ),
+            bind_context: true,
+            component_x: None,
+            bindable_mutation: None,
+        },
+        Case {
+            label: "synthetic/runtime_state_machine_component_viewmodel_string_cpp.riv",
+            bytes: synthetic_state_machine_component_viewmodel_condition(
+                8340,
+                SyntheticComponentViewModelOrder::ComponentLeft,
+                SyntheticComponentViewModelBindable::String("ready"),
+                NODE_ID,
+                node_name_key,
+                0,
+            ),
+            bind_context: true,
+            component_x: None,
+            bindable_mutation: None,
+        },
+        Case {
+            label: "synthetic/runtime_state_machine_viewmodel_component_color_cpp.riv",
+            bytes: synthetic_state_machine_component_viewmodel_condition(
+                8341,
+                SyntheticComponentViewModelOrder::ViewModelLeft,
+                SyntheticComponentViewModelBindable::Color(0xff11_2233),
+                SOLID_COLOR_ID,
+                color_key,
+                0,
+            ),
+            bind_context: true,
+            component_x: None,
+            bindable_mutation: None,
+        },
+        Case {
+            label: "synthetic/runtime_state_machine_component_viewmodel_enum_default_cpp.riv",
+            bytes: synthetic_state_machine_component_viewmodel_condition(
+                8342,
+                SyntheticComponentViewModelOrder::ComponentLeft,
+                SyntheticComponentViewModelBindable::Enum(0),
+                NODE_ID,
+                enum_value_key,
+                0,
+            ),
+            bind_context: true,
+            component_x: None,
+            bindable_mutation: None,
+        },
+        Case {
+            label: "synthetic/runtime_state_machine_component_viewmodel_asset_default_cpp.riv",
+            bytes: synthetic_state_machine_component_viewmodel_condition(
+                8343,
+                SyntheticComponentViewModelOrder::ComponentLeft,
+                SyntheticComponentViewModelBindable::Asset(0),
+                NODE_ID,
+                asset_value_key,
+                0,
+            ),
+            bind_context: true,
+            component_x: None,
+            bindable_mutation: None,
+        },
+        Case {
+            label: "synthetic/runtime_state_machine_component_viewmodel_missing_default_cpp.riv",
+            bytes: synthetic_state_machine_component_viewmodel_condition(
+                8344,
+                SyntheticComponentViewModelOrder::ComponentLeft,
+                SyntheticComponentViewModelBindable::Number(1.0),
+                99,
+                node_x_key,
+                4,
+            ),
+            bind_context: true,
+            component_x: None,
+            bindable_mutation: None,
+        },
+        Case {
+            label: "synthetic/runtime_state_machine_component_viewmodel_incompatible_cpp.riv",
+            bytes: synthetic_state_machine_component_viewmodel_condition(
+                8345,
+                SyntheticComponentViewModelOrder::ComponentLeft,
+                SyntheticComponentViewModelBindable::String("ready"),
+                NODE_ID,
+                node_x_key,
+                0,
+            ),
+            bind_context: true,
+            component_x: None,
+            bindable_mutation: None,
+        },
+    ] {
+        let mut args = vec![
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+        ];
+        if case.bind_context {
+            args.extend([
+                "--runtime-bind-empty-state-machine-context".to_owned(),
+                "0".to_owned(),
+            ]);
+        }
+        if let Some(value) = case.component_x {
+            args.extend([
+                "--runtime-set-double".to_owned(),
+                NODE_ID.to_string(),
+                node_x_key.to_string(),
+                value.to_string(),
+            ]);
+        }
+        if let Some(mutation) = case.bindable_mutation {
+            match mutation {
+                SyntheticComponentViewModelBindable::Number(value) => args.extend([
+                    "--runtime-set-state-machine-bindable-number".to_owned(),
+                    "0".to_owned(),
+                    "0".to_owned(),
+                    value.to_string(),
+                ]),
+                SyntheticComponentViewModelBindable::Integer(value) => args.extend([
+                    "--runtime-set-state-machine-bindable-integer".to_owned(),
+                    "0".to_owned(),
+                    "0".to_owned(),
+                    value.to_string(),
+                ]),
+                SyntheticComponentViewModelBindable::Boolean(value) => args.extend([
+                    "--runtime-set-state-machine-bindable-boolean".to_owned(),
+                    "0".to_owned(),
+                    "0".to_owned(),
+                    value.to_string(),
+                ]),
+                SyntheticComponentViewModelBindable::Color(value) => args.extend([
+                    "--runtime-set-state-machine-bindable-color".to_owned(),
+                    "0".to_owned(),
+                    "0".to_owned(),
+                    value.to_string(),
+                ]),
+                SyntheticComponentViewModelBindable::String(value) => args.extend([
+                    "--runtime-set-state-machine-bindable-string".to_owned(),
+                    "0".to_owned(),
+                    "0".to_owned(),
+                    value.to_owned(),
+                ]),
+                SyntheticComponentViewModelBindable::Enum(value) => args.extend([
+                    "--runtime-set-state-machine-bindable-enum".to_owned(),
+                    "0".to_owned(),
+                    "0".to_owned(),
+                    value.to_string(),
+                ]),
+                SyntheticComponentViewModelBindable::Asset(value) => args.extend([
+                    "--runtime-set-state-machine-bindable-asset".to_owned(),
+                    "0".to_owned(),
+                    "0".to_owned(),
+                    value.to_string(),
+                ]),
+            }
+        }
+        args.extend([
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "1".to_owned(),
+        ]);
+
+        let cpp = read_cpp_probe_bytes_with_args(&probe, case.label, &case.bytes, &args);
+        let (_, mut rust) = read_rust_instance_from_bytes(&case.bytes, case.label);
+        let mut state_machine = rust
+            .state_machine_instance(0)
+            .unwrap_or_else(|| panic!("missing Rust state-machine instance for {}", case.label));
+
+        let mut rust_reports = Vec::new();
+        rust_reports.push((
+            rust.advance_state_machine_instance(&mut state_machine, 0.0),
+            state_machine.clone(),
+        ));
+        if case.bind_context {
+            assert!(
+                state_machine.bind_empty_data_context(),
+                "{} failed to bind empty data context",
+                case.label
+            );
+        }
+        if let Some(value) = case.component_x {
+            assert!(
+                rust.set_transform_property(NODE_ID as usize, TransformProperty::X, value),
+                "{} failed to mutate component x",
+                case.label
+            );
+        }
+        if let Some(mutation) = case.bindable_mutation {
+            match mutation {
+                SyntheticComponentViewModelBindable::Number(value) => assert!(
+                    state_machine.set_bindable_number_for_data_bind(0, value),
+                    "{} failed to mutate bindable number",
+                    case.label
+                ),
+                SyntheticComponentViewModelBindable::Integer(value) => assert!(
+                    state_machine.set_bindable_integer_for_data_bind(0, value),
+                    "{} failed to mutate bindable integer",
+                    case.label
+                ),
+                SyntheticComponentViewModelBindable::Boolean(value) => assert!(
+                    state_machine.set_bindable_boolean_for_data_bind(0, value),
+                    "{} failed to mutate bindable boolean",
+                    case.label
+                ),
+                SyntheticComponentViewModelBindable::Color(value) => assert!(
+                    state_machine.set_bindable_color_for_data_bind(0, value),
+                    "{} failed to mutate bindable color",
+                    case.label
+                ),
+                SyntheticComponentViewModelBindable::String(value) => assert!(
+                    state_machine.set_bindable_string_for_data_bind(0, value.as_bytes()),
+                    "{} failed to mutate bindable string",
+                    case.label
+                ),
+                SyntheticComponentViewModelBindable::Enum(value) => assert!(
+                    state_machine.set_bindable_enum_for_data_bind(0, value),
+                    "{} failed to mutate bindable enum",
+                    case.label
+                ),
+                SyntheticComponentViewModelBindable::Asset(value) => assert!(
+                    state_machine.set_bindable_asset_for_data_bind(0, value),
+                    "{} failed to mutate bindable asset",
+                    case.label
+                ),
+            }
+        }
+        rust_reports.push((
+            rust.advance_state_machine_instance(&mut state_machine, 0.0),
+            state_machine.clone(),
+        ));
+        rust_reports.push((
+            rust.advance_state_machine_instance(&mut state_machine, 1.0),
+            state_machine.clone(),
+        ));
+        let report = rust.update_components();
+
+        let cpp_artboard = cpp
+            .artboards
+            .first()
+            .unwrap_or_else(|| panic!("missing C++ artboard for {}", case.label));
+        assert_eq!(
+            cpp_artboard.runtime_state_machine_advances.len(),
+            rust_reports.len(),
+            "{} state-machine report count mismatch",
+            case.label
+        );
+        for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+            .runtime_state_machine_advances
+            .iter()
+            .zip(&rust_reports)
+        {
+            compare_state_machine_advance(
+                cpp_state_machine,
+                rust_state_machine,
+                *advanced,
+                case.label,
+            );
+        }
+        compare_cpp_runtime_update(&cpp, &rust, &report, case.label);
     }
 }
 

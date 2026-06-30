@@ -2815,6 +2815,7 @@ struct RuntimeBindableAssetDefaultViewModelSource {
 #[derive(Debug, Clone)]
 struct RuntimeBindableArtboard {
     global_id: u32,
+    data_bind_indices: Vec<usize>,
     default_view_model_sources: Vec<RuntimeBindableArtboardDefaultViewModelSource>,
     value: u64,
 }
@@ -6393,6 +6394,25 @@ impl StateMachineInstance {
         true
     }
 
+    pub fn set_bindable_artboard_for_data_bind(
+        &mut self,
+        data_bind_index: usize,
+        value: u64,
+    ) -> bool {
+        let Some(bindable_artboard) = self
+            .bindable_artboards
+            .iter_mut()
+            .find(|bindable_artboard| bindable_artboard.has_data_bind_index(data_bind_index))
+        else {
+            return false;
+        };
+        if !bindable_artboard.set_value(value) {
+            return false;
+        }
+        self.needs_advance = true;
+        true
+    }
+
     pub fn set_default_view_model_number_source_for_data_bind(
         &mut self,
         data_bind_index: usize,
@@ -7061,6 +7081,7 @@ fn bindable_asset_value(
 #[derive(Debug, Clone)]
 struct StateMachineBindableArtboardInstance {
     global_id: u32,
+    data_bind_indices: Vec<usize>,
     value: u64,
 }
 
@@ -7068,6 +7089,7 @@ impl StateMachineBindableArtboardInstance {
     fn new(bindable_artboard: &RuntimeBindableArtboard) -> Self {
         Self {
             global_id: bindable_artboard.global_id,
+            data_bind_indices: bindable_artboard.data_bind_indices.clone(),
             value: bindable_artboard.value,
         }
     }
@@ -7078,6 +7100,10 @@ impl StateMachineBindableArtboardInstance {
         }
         self.value = value;
         true
+    }
+
+    fn has_data_bind_index(&self, data_bind_index: usize) -> bool {
+        self.data_bind_indices.contains(&data_bind_index)
     }
 }
 
@@ -9790,8 +9816,12 @@ fn runtime_bindable_artboards(
         }
         values
             .entry(target.id)
+            .and_modify(|bindable_artboard| {
+                bindable_artboard.data_bind_indices.push(data_bind_index)
+            })
             .or_insert_with(|| RuntimeBindableArtboard {
                 global_id: target.id,
+                data_bind_indices: vec![data_bind_index],
                 default_view_model_sources: Vec::new(),
                 value: target
                     .uint_property("propertyValue")

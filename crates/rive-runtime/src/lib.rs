@@ -2939,6 +2939,7 @@ enum RuntimeDataBindGraphConverter {
     StringTrim {
         trim_type: u64,
     },
+    StringRemoveZeros,
     Unsupported,
 }
 
@@ -4051,6 +4052,13 @@ impl RuntimeDataBindGraphSourceNode {
                 rive_binary::data_converter_string_trim_value(value, *trim_type),
             )),
             (Some(RuntimeDataBindGraphConverter::StringTrim { .. }), _) => None,
+            (
+                Some(RuntimeDataBindGraphConverter::StringRemoveZeros),
+                RuntimeDataBindGraphValue::String(value),
+            ) => Some(RuntimeDataBindGraphValue::String(
+                rive_binary::data_converter_string_remove_zeros_value(value),
+            )),
+            (Some(RuntimeDataBindGraphConverter::StringRemoveZeros), _) => None,
             (Some(RuntimeDataBindGraphConverter::Unsupported), _) => None,
         }
     }
@@ -10761,6 +10769,7 @@ fn runtime_data_bind_graph_converter(
         "DataConverterStringTrim" => RuntimeDataBindGraphConverter::StringTrim {
             trim_type: converter.uint_property("trimType").unwrap_or(1),
         },
+        "DataConverterStringRemoveZeros" => RuntimeDataBindGraphConverter::StringRemoveZeros,
         _ => RuntimeDataBindGraphConverter::Unsupported,
     })
 }

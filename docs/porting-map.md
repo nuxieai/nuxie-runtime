@@ -864,6 +864,18 @@ converter families, converter groups, reverse propagation, update-queue parity,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
 
+Current #12 update: `DataConverterStringRemoveZeros` runtime execution now
+admits default-context string sources feeding
+`BindablePropertyString.propertyValue` targets. The graph recognizes the direct
+converter and uses the shared C++-modeled trailing-zero remover from
+`rive-binary` before writing the string target. C++ probe coverage verifies the
+converted string through a `TransitionViewModelCondition`. The contract is
+`docs/prototypes/data-binding-graph-string-remove-zeros-converter-runtime-contract.md`.
+Stable public source handles, list/view-model bindables, remaining string
+converter families, converter groups, reverse propagation, update-queue parity,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

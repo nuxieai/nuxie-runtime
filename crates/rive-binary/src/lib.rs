@@ -9695,6 +9695,10 @@ pub fn data_converter_string_trim_value(value: &[u8], trim_type: u64) -> Vec<u8>
     cpp_trim_string(value, trim_type)
 }
 
+pub fn data_converter_string_remove_zeros_value(value: &[u8]) -> Vec<u8> {
+    cpp_remove_trailing_zeros(value)
+}
+
 fn cpp_format_number_to_string(value: f32, flags: u64, decimals: u64) -> Vec<u8> {
     const ROUND: u64 = 1 << 0;
     const TRAILING_ZEROS: u64 = 1 << 1;

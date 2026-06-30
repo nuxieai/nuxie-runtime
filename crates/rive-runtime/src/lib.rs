@@ -22,6 +22,7 @@ pub struct ArtboardInstance {
     component_by_local: BTreeMap<usize, usize>,
     color_properties: BTreeMap<(usize, u16), u32>,
     bool_properties: BTreeMap<(usize, u16), bool>,
+    uint_properties: BTreeMap<(usize, u16), u64>,
     update_order: Vec<usize>,
     linear_animations: Vec<RuntimeLinearAnimation>,
     state_machines: Vec<RuntimeStateMachine>,
@@ -94,6 +95,7 @@ impl ArtboardInstance {
             component_by_local,
             color_properties: BTreeMap::new(),
             bool_properties: BTreeMap::new(),
+            uint_properties: BTreeMap::new(),
             update_order,
             linear_animations,
             state_machines,
@@ -472,6 +474,19 @@ impl ArtboardInstance {
             return false;
         }
         self.bool_properties.insert((local_id, property_key), value);
+        self.did_change = true;
+        true
+    }
+
+    fn uint_property(&self, local_id: usize, property_key: u16) -> Option<u64> {
+        self.uint_properties.get(&(local_id, property_key)).copied()
+    }
+
+    fn set_uint_property(&mut self, local_id: usize, property_key: u16, value: u64) -> bool {
+        if self.uint_property(local_id, property_key) == Some(value) {
+            return false;
+        }
+        self.uint_properties.insert((local_id, property_key), value);
         self.did_change = true;
         true
     }
@@ -2269,6 +2284,16 @@ impl RuntimeLinearAnimation {
                         value,
                     );
                 }
+                if keyed_property.uint_property {
+                    let Some(value) = keyed_property.uint_value_at(seconds, self.fps) else {
+                        continue;
+                    };
+                    changed |= instance.set_uint_property(
+                        keyed_object.target_local_id,
+                        keyed_property.property_key,
+                        value,
+                    );
+                }
             }
         }
         changed
@@ -3535,13 +3560,13 @@ enum RuntimeTransitionCondition {
         op: TransitionConditionOp,
     },
     ComponentUint {
-        source_value: u64,
+        component: RuntimeComponentUintValue,
         op: TransitionConditionOp,
         value: u64,
     },
     ComponentUintPair {
-        left: u64,
-        right: u64,
+        left: RuntimeComponentUintValue,
+        right: RuntimeComponentUintValue,
         op: TransitionConditionOp,
     },
     ComponentViewModelNumber {
@@ -3551,7 +3576,7 @@ enum RuntimeTransitionCondition {
         op: TransitionConditionOp,
     },
     ComponentViewModelInteger {
-        component_value: u64,
+        component: RuntimeComponentUintValue,
         bindable_global_id: u32,
         op: TransitionConditionOp,
     },
@@ -3571,22 +3596,22 @@ enum RuntimeTransitionCondition {
         op: TransitionConditionOp,
     },
     ComponentViewModelEnum {
-        component_value: u64,
+        component: RuntimeComponentUintValue,
         bindable_global_id: u32,
         op: TransitionConditionOp,
     },
     ComponentViewModelAsset {
-        component_value: u64,
+        component: RuntimeComponentUintValue,
         bindable_global_id: u32,
         op: TransitionConditionOp,
     },
     ComponentViewModelTrigger {
-        component_value: u64,
+        component: RuntimeComponentUintValue,
         bindable_global_id: u32,
         op: TransitionConditionOp,
     },
     ComponentViewModelArtboard {
-        component_value: u64,
+        component: RuntimeComponentUintValue,
         bindable_global_id: u32,
         op: TransitionConditionOp,
     },
@@ -3827,9 +3852,10 @@ impl RuntimeTransitionCondition {
                 && viewmodel_kind == RuntimeComponentComparandKind::NumberFromUint =>
             {
                 Some(Self::ComponentViewModelInteger {
-                    component_value: runtime_component_uint_value(
-                        source_object,
+                    component: RuntimeComponentUintValue::from_parts(
+                        local_id,
                         property_key,
+                        source_object,
                         supports_property,
                     ),
                     bindable_global_id: bindable.id,
@@ -3890,9 +3916,10 @@ impl RuntimeTransitionCondition {
             }
             (RuntimeComponentComparandKind::Enum, RuntimeComponentComparandKind::Enum) => {
                 Some(Self::ComponentViewModelEnum {
-                    component_value: runtime_component_uint_value(
-                        source_object,
+                    component: RuntimeComponentUintValue::from_parts(
+                        local_id,
                         property_key,
+                        source_object,
                         supports_property,
                     ),
                     bindable_global_id: bindable.id,
@@ -3901,9 +3928,10 @@ impl RuntimeTransitionCondition {
             }
             (RuntimeComponentComparandKind::Asset, RuntimeComponentComparandKind::Asset) => {
                 Some(Self::ComponentViewModelAsset {
-                    component_value: runtime_component_uint_value(
-                        source_object,
+                    component: RuntimeComponentUintValue::from_parts(
+                        local_id,
                         property_key,
+                        source_object,
                         supports_property,
                     ),
                     bindable_global_id: bindable.id,
@@ -3912,9 +3940,10 @@ impl RuntimeTransitionCondition {
             }
             (RuntimeComponentComparandKind::Trigger, RuntimeComponentComparandKind::Trigger) => {
                 Some(Self::ComponentViewModelTrigger {
-                    component_value: runtime_component_uint_value(
-                        source_object,
+                    component: RuntimeComponentUintValue::from_parts(
+                        local_id,
                         property_key,
+                        source_object,
                         supports_property,
                     ),
                     bindable_global_id: bindable.id,
@@ -3923,9 +3952,10 @@ impl RuntimeTransitionCondition {
             }
             (RuntimeComponentComparandKind::Artboard, RuntimeComponentComparandKind::Artboard) => {
                 Some(Self::ComponentViewModelArtboard {
-                    component_value: runtime_component_uint_value(
-                        source_object,
+                    component: RuntimeComponentUintValue::from_parts(
+                        local_id,
                         property_key,
+                        source_object,
                         supports_property,
                     ),
                     bindable_global_id: bindable.id,
@@ -4052,24 +4082,24 @@ impl RuntimeTransitionCondition {
             }
             (RuntimeComponentComparandKind::Enum, "TransitionValueEnumComparator") => {
                 Some(Self::ComponentUint {
-                    source_value: source_object
-                        .filter(|_| supports_property)
-                        .and_then(|object| {
-                            runtime_object_uint_property_by_key(object, property_key)
-                        })
-                        .unwrap_or(0),
+                    component: RuntimeComponentUintValue::from_parts(
+                        local_id,
+                        property_key,
+                        source_object,
+                        supports_property,
+                    ),
                     op,
                     value: right.uint_property("value").unwrap_or(u64::from(u32::MAX)),
                 })
             }
             (RuntimeComponentComparandKind::Trigger, "TransitionValueTriggerComparator") => {
                 Some(Self::ComponentUint {
-                    source_value: source_object
-                        .filter(|_| supports_property)
-                        .and_then(|object| {
-                            runtime_object_uint_property_by_key(object, property_key)
-                        })
-                        .unwrap_or(0),
+                    component: RuntimeComponentUintValue::from_parts(
+                        local_id,
+                        property_key,
+                        source_object,
+                        supports_property,
+                    ),
                     op,
                     value: right.uint_property("value").unwrap_or(0),
                 })
@@ -4077,12 +4107,12 @@ impl RuntimeTransitionCondition {
             (RuntimeComponentComparandKind::Asset, "TransitionValueAssetComparator")
             | (RuntimeComponentComparandKind::Artboard, "TransitionValueArtboardComparator") => {
                 Some(Self::ComponentUint {
-                    source_value: source_object
-                        .filter(|_| supports_property)
-                        .and_then(|object| {
-                            runtime_object_uint_property_by_key(object, property_key)
-                        })
-                        .unwrap_or(0),
+                    component: RuntimeComponentUintValue::from_parts(
+                        local_id,
+                        property_key,
+                        source_object,
+                        supports_property,
+                    ),
                     op,
                     value: right.uint_property("value").unwrap_or(u64::from(u32::MAX)),
                 })
@@ -4124,14 +4154,16 @@ impl RuntimeTransitionCondition {
                 && right_kind == RuntimeComponentComparandKind::NumberFromUint =>
             {
                 Some(Self::ComponentUintPair {
-                    left: runtime_component_uint_value(
-                        left_source,
+                    left: RuntimeComponentUintValue::from_parts(
+                        left_local_id,
                         left_property_key,
+                        left_source,
                         left_supports,
                     ),
-                    right: runtime_component_uint_value(
-                        right_source,
+                    right: RuntimeComponentUintValue::from_parts(
+                        right_local_id,
                         right_property_key,
+                        right_source,
                         right_supports,
                     ),
                     op,
@@ -4213,14 +4245,16 @@ impl RuntimeTransitionCondition {
             | (RuntimeComponentComparandKind::Asset, RuntimeComponentComparandKind::Asset)
             | (RuntimeComponentComparandKind::Artboard, RuntimeComponentComparandKind::Artboard) => {
                 Some(Self::ComponentUintPair {
-                    left: runtime_component_uint_value(
-                        left_source,
+                    left: RuntimeComponentUintValue::from_parts(
+                        left_local_id,
                         left_property_key,
+                        left_source,
                         left_supports,
                     ),
-                    right: runtime_component_uint_value(
-                        right_source,
+                    right: RuntimeComponentUintValue::from_parts(
+                        right_local_id,
                         right_property_key,
+                        right_source,
                         right_supports,
                     ),
                     op,
@@ -4432,11 +4466,13 @@ impl RuntimeTransitionCondition {
                 op.compare_u32_equal_only(left.value(artboard), right.value(artboard))
             }
             Self::ComponentUint {
-                source_value,
+                component,
                 op,
                 value,
-            } => op.compare_u64_equal_only(*source_value, *value),
-            Self::ComponentUintPair { left, right, op } => op.compare_u64_equal_only(*left, *right),
+            } => op.compare_u64_equal_only(component.value(artboard), *value),
+            Self::ComponentUintPair { left, right, op } => {
+                op.compare_u64_equal_only(left.value(artboard), right.value(artboard))
+            }
             Self::ComponentViewModelNumber {
                 component,
                 view_model,
@@ -4455,7 +4491,7 @@ impl RuntimeTransitionCondition {
                 }
             }
             Self::ComponentViewModelInteger {
-                component_value,
+                component,
                 bindable_global_id,
                 op,
             } => {
@@ -4464,7 +4500,7 @@ impl RuntimeTransitionCondition {
                 }
                 let view_model_value =
                     bindable_integer_value(bindable_integers, *bindable_global_id).unwrap_or(0);
-                op.compare_u64_equal_only(*component_value, view_model_value)
+                op.compare_u64_equal_only(component.value(artboard), view_model_value)
             }
             Self::ComponentViewModelBoolean {
                 component,
@@ -4503,7 +4539,7 @@ impl RuntimeTransitionCondition {
                 op.compare_u32_equal_only(component.value(artboard), view_model_value)
             }
             Self::ComponentViewModelEnum {
-                component_value,
+                component,
                 bindable_global_id,
                 op,
             } => {
@@ -4512,10 +4548,10 @@ impl RuntimeTransitionCondition {
                 }
                 let view_model_value =
                     bindable_enum_value(bindable_enums, *bindable_global_id).unwrap_or(0);
-                op.compare_u64_equal_only(*component_value, view_model_value)
+                op.compare_u64_equal_only(component.value(artboard), view_model_value)
             }
             Self::ComponentViewModelAsset {
-                component_value,
+                component,
                 bindable_global_id,
                 op,
             } => {
@@ -4524,10 +4560,10 @@ impl RuntimeTransitionCondition {
                 }
                 let view_model_value =
                     bindable_asset_value(bindable_assets, *bindable_global_id).unwrap_or(0);
-                op.compare_u64_equal_only(*component_value, view_model_value)
+                op.compare_u64_equal_only(component.value(artboard), view_model_value)
             }
             Self::ComponentViewModelTrigger {
-                component_value,
+                component,
                 bindable_global_id,
                 op,
             } => {
@@ -4536,10 +4572,10 @@ impl RuntimeTransitionCondition {
                 }
                 let view_model_value =
                     bindable_trigger_value(bindable_triggers, *bindable_global_id).unwrap_or(0);
-                op.compare_u64_equal_only(*component_value, view_model_value)
+                op.compare_u64_equal_only(component.value(artboard), view_model_value)
             }
             Self::ComponentViewModelArtboard {
-                component_value,
+                component,
                 bindable_global_id,
                 op,
             } => {
@@ -4548,7 +4584,7 @@ impl RuntimeTransitionCondition {
                 }
                 let view_model_value =
                     bindable_artboard_value(bindable_artboards, *bindable_global_id).unwrap_or(0);
-                op.compare_u64_equal_only(*component_value, view_model_value)
+                op.compare_u64_equal_only(component.value(artboard), view_model_value)
             }
             Self::ArtboardComponentNumber {
                 property_type,
@@ -4686,6 +4722,7 @@ impl RuntimeComponentComparandKind {
 struct RuntimeComponentNumberValue {
     local_id: usize,
     transform_property: Option<TransformProperty>,
+    uint_property: Option<u16>,
     source_value: f32,
 }
 
@@ -4703,6 +4740,7 @@ impl RuntimeComponentNumberValue {
                 transform_property: supports_property
                     .then(|| transform_property_for_key(property_key))
                     .flatten(),
+                uint_property: None,
                 source_value: source_object
                     .filter(|_| supports_property)
                     .and_then(|object| runtime_object_double_property_by_key(object, property_key))
@@ -4711,6 +4749,7 @@ impl RuntimeComponentNumberValue {
             RuntimeComponentComparandKind::NumberFromUint => Some(Self {
                 local_id,
                 transform_property: None,
+                uint_property: supports_property.then_some(property_key),
                 source_value: runtime_component_uint_value(
                     source_object,
                     property_key,
@@ -4722,8 +4761,50 @@ impl RuntimeComponentNumberValue {
     }
 
     fn value(self, artboard: &ArtboardInstance) -> f32 {
-        self.transform_property
+        if let Some(value) = self
+            .transform_property
             .and_then(|property| artboard.transform_property(self.local_id, property))
+        {
+            return value;
+        }
+        if let Some(value) = self
+            .uint_property
+            .and_then(|property_key| artboard.uint_property(self.local_id, property_key))
+        {
+            return value as f32;
+        }
+        self.source_value
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RuntimeComponentUintValue {
+    local_id: usize,
+    property_key: Option<u16>,
+    source_value: u64,
+}
+
+impl RuntimeComponentUintValue {
+    fn from_parts(
+        local_id: usize,
+        property_key: u16,
+        source_object: Option<&RuntimeObject>,
+        supports_property: bool,
+    ) -> Self {
+        Self {
+            local_id,
+            property_key: supports_property.then_some(property_key),
+            source_value: runtime_component_uint_value(
+                source_object,
+                property_key,
+                supports_property,
+            ),
+        }
+    }
+
+    fn value(self, artboard: &ArtboardInstance) -> u64 {
+        self.property_key
+            .and_then(|property_key| artboard.uint_property(self.local_id, property_key))
             .unwrap_or(self.source_value)
     }
 }
@@ -7203,9 +7284,11 @@ pub struct RuntimeKeyedProperty {
     pub color_source_value: u32,
     pub bool_property: bool,
     pub bool_source_value: bool,
+    pub uint_property: bool,
     pub key_frames: Vec<RuntimeKeyFrameDouble>,
     pub color_key_frames: Vec<RuntimeKeyFrameColor>,
     pub bool_key_frames: Vec<RuntimeKeyFrameBool>,
+    pub uint_key_frames: Vec<RuntimeKeyFrameUint>,
 }
 
 impl RuntimeKeyedProperty {
@@ -7295,6 +7378,29 @@ impl RuntimeKeyedProperty {
             }
         } else {
             self.bool_key_frames.last()?.value
+        };
+
+        Some(value)
+    }
+
+    fn uint_value_at(&self, seconds: f32, fps: u64) -> Option<u64> {
+        if self.uint_key_frames.is_empty() {
+            return None;
+        }
+
+        let idx = closest_key_frame_index(&self.uint_key_frames, seconds, fps);
+        let value = if idx == 0 {
+            self.uint_key_frames[0].value
+        } else if idx < self.uint_key_frames.len() {
+            let from = &self.uint_key_frames[idx - 1];
+            let to = &self.uint_key_frames[idx];
+            if seconds == to.seconds(fps) {
+                to.value
+            } else {
+                from.value
+            }
+        } else {
+            self.uint_key_frames.last()?.value
         };
 
         Some(value)
@@ -7405,6 +7511,30 @@ impl RuntimeKeyFrameBool {
 }
 
 impl RuntimeKeyFrameTiming for RuntimeKeyFrameBool {
+    fn seconds(&self, fps: u64) -> f32 {
+        self.seconds(fps)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RuntimeKeyFrameUint {
+    pub global_id: u32,
+    pub frame: u64,
+    pub interpolation_type: u64,
+    pub interpolator_id: Option<u64>,
+    pub value: u64,
+}
+
+impl RuntimeKeyFrameUint {
+    fn seconds(&self, fps: u64) -> f32 {
+        if fps == 0 {
+            return 0.0;
+        }
+        self.frame as f32 / fps as f32
+    }
+}
+
+impl RuntimeKeyFrameTiming for RuntimeKeyFrameUint {
     fn seconds(&self, fps: u64) -> f32 {
         self.seconds(fps)
     }
@@ -7553,9 +7683,12 @@ fn build_linear_animations(
                         == Some(CoreRegistryFieldKind::Bool),
                     bool_source_value: runtime_object_bool_property_by_key(target, property_key)
                         .unwrap_or(false),
+                    uint_property: core_registry_field_kind_by_property_key(property_key)
+                        == Some(CoreRegistryFieldKind::Uint),
                     key_frames: Vec::new(),
                     color_key_frames: Vec::new(),
                     bool_key_frames: Vec::new(),
+                    uint_key_frames: Vec::new(),
                 });
             current_keyed_property = Some((
                 keyed_object_index,
@@ -7612,6 +7745,22 @@ fn build_linear_animations(
                     interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
                     interpolator_id: normalized_interpolator_id(object),
                     value: object.bool_property("value").unwrap_or(false),
+                });
+        }
+
+        if object.type_name == "KeyFrameUint" {
+            let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
+                continue;
+            };
+            animations[animation_index].keyed_objects[keyed_object_index].keyed_properties
+                [keyed_property_index]
+                .uint_key_frames
+                .push(RuntimeKeyFrameUint {
+                    global_id: global_id as u32,
+                    frame: object.uint_property("frame").unwrap_or(0),
+                    interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
+                    interpolator_id: normalized_interpolator_id(object),
+                    value: object.uint_property("value").unwrap_or(0),
                 });
         }
     }
@@ -8566,6 +8715,7 @@ mod tests {
             component_by_local,
             color_properties: BTreeMap::new(),
             bool_properties: BTreeMap::new(),
+            uint_properties: BTreeMap::new(),
             update_order,
             linear_animations: Vec::new(),
             state_machines: Vec::new(),

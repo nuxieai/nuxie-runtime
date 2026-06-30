@@ -212,6 +212,19 @@ fn push_keyframe_bool(bytes: &mut Vec<u8>, frame: u64, value: bool, interpolatio
     });
 }
 
+fn push_keyframe_uint(bytes: &mut Vec<u8>, frame: u64, value: u64, interpolation_type: u64) {
+    push_object_with_properties(bytes, "KeyFrameUint", |bytes| {
+        push_uint_property(bytes, "KeyFrameUint", "frame", frame);
+        push_uint_property(
+            bytes,
+            "KeyFrameUint",
+            "interpolationType",
+            interpolation_type,
+        );
+        push_uint_property(bytes, "KeyFrameUint", "value", value);
+    });
+}
+
 #[derive(Debug, Clone, Copy)]
 struct LinearAnimationFixtureOptions {
     duration: u64,
@@ -549,6 +562,73 @@ fn synthetic_state_machine_animated_component_bool_condition(file_id: u64) -> Ve
         });
         push_object_with_properties(bytes, "TransitionValueBooleanComparator", |bytes| {
             push_bool_property(bytes, "TransitionValueBooleanComparator", "value", false);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn synthetic_state_machine_animated_component_uint_condition(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "CustomPropertyEnum", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 0);
+            push_uint_property(bytes, "CustomPropertyEnum", "propertyValue", 1);
+        });
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "fps", 10);
+            push_uint_property(bytes, "LinearAnimation", "duration", 20);
+        });
+        push_object_with_properties(bytes, "KeyedObject", |bytes| {
+            push_uint_property(bytes, "KeyedObject", "objectId", 1);
+        });
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("CustomPropertyEnum", "propertyValue")),
+            );
+        });
+        push_keyframe_uint(bytes, 0, 3, 1);
+        push_keyframe_uint(bytes, 10, 7, 0);
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "fps", 10);
+            push_uint_property(bytes, "LinearAnimation", "duration", 20);
+        });
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+        });
+        push_object_with_properties(bytes, "TransitionViewModelCondition", |_| {});
+        push_object_with_properties(bytes, "TransitionPropertyComponentComparator", |bytes| {
+            push_uint_property(
+                bytes,
+                "TransitionPropertyComponentComparator",
+                "objectId",
+                1,
+            );
+            push_uint_property(
+                bytes,
+                "TransitionPropertyComponentComparator",
+                "propertyKey",
+                u64::from(property_key_for_name("CustomPropertyEnum", "propertyValue")),
+            );
+        });
+        push_object_with_properties(bytes, "TransitionValueEnumComparator", |bytes| {
+            push_uint_property(bytes, "TransitionValueEnumComparator", "value", 3);
         });
         push_object_with_properties(bytes, "AnimationState", |bytes| {
             push_uint_property(bytes, "AnimationState", "animationId", 1);
@@ -7771,6 +7851,66 @@ fn state_machine_component_bool_condition_reads_animated_bool_like_cpp_probe() {
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
     let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
     assert!(rust.apply_linear_animation(0, 0.5, 0.5));
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    let rust_reports = [
+        (
+            rust.advance_state_machine_instance(&mut state_machine, 0.0),
+            state_machine.clone(),
+        ),
+        (
+            rust.advance_state_machine_instance(&mut state_machine, 0.0),
+            state_machine.clone(),
+        ),
+    ];
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+    {
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn state_machine_component_uint_condition_reads_animated_uint_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_component_uint_animated_cpp.riv";
+    let bytes = synthetic_state_machine_animated_component_uint_condition(8361);
+    let args = [
+        "--runtime-apply-animation".to_owned(),
+        "0".to_owned(),
+        "0.5".to_owned(),
+        "0.25".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    assert!(rust.apply_linear_animation(0, 0.5, 0.25));
     let mut state_machine = rust
         .state_machine_instance(0)
         .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));

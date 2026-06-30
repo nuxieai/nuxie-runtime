@@ -138,6 +138,10 @@ slice.
   without resolved custom interpolators, including imported range bounds,
   flags, and `interpolationType`, covered by a C++ probe through an existing
   blend-state consumer.
+- `DataConverterRangeMapper` resolved-interpolator graph-owned converter
+  execution slice: forward conversion for default-context number sources
+  feeding number targets with a resolved key-frame interpolator descriptor,
+  covered by a C++ probe through an existing blend-state consumer.
 - First `DataConverterOperationValue` graph-owned converter execution slice:
   forward conversion for default-context number sources feeding number targets,
   including imported `operationType` and `operationValue`, covered by a C++
@@ -260,10 +264,11 @@ slice.
   string-to-number, symbol-list-index-to-number, number-to-string, and
   boolean-to-string, string-to-string, trigger-to-string,
   symbol-list-index-to-string, color-to-string, string-trim, and
-  string-remove-zeros, string-pad, rounder, range-mapper-without-interpolator,
-  operation-value number/symbol-list-index, system-operation-value direct
-  number, operation-view-model default-number, string converter group,
-  number-to-string converter group, and number-to-number converter group paths,
+  string-remove-zeros, string-pad, rounder, range-mapper with/without resolved
+  interpolator, operation-value number/symbol-list-index,
+  system-operation-value direct number, operation-view-model default-number,
+  string converter group, number-to-string converter group, and
+  number-to-number converter group paths,
   data-binding update queues, relative paths, parent paths, and nested paths.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener

@@ -2969,6 +2969,7 @@ enum RuntimeDataBindGraphConverter {
         max_output: f32,
         flags: u64,
         interpolation_type: u64,
+        interpolator: Option<RuntimeTransitionInterpolator>,
     },
     StringTrim {
         trim_type: u64,
@@ -4414,6 +4415,7 @@ fn runtime_data_bind_graph_convert_value(
                 max_output,
                 flags,
                 interpolation_type,
+                interpolator,
             },
             RuntimeDataBindGraphValue::Number(value),
         ) => Some(RuntimeDataBindGraphValue::Number(
@@ -4425,6 +4427,7 @@ fn runtime_data_bind_graph_convert_value(
                 *max_output,
                 *flags,
                 *interpolation_type,
+                *interpolator,
             ),
         )),
         (RuntimeDataBindGraphConverter::RangeMapper { .. }, _) => {
@@ -4529,6 +4532,7 @@ fn runtime_data_bind_graph_convert_range_mapper(
     max_output: f32,
     flags: u64,
     interpolation_type: u64,
+    interpolator: Option<RuntimeTransitionInterpolator>,
 ) -> f32 {
     if min_output == max_output {
         return min_output;
@@ -4554,7 +4558,13 @@ fn runtime_data_bind_graph_convert_range_mapper(
     if flags & REVERSE != 0 {
         percent = 1.0 - percent;
     }
-    if interpolation_type == 0 {
+    if let Some(interpolator) = interpolator {
+        if percent > 0.0 && percent < 1.0 {
+            percent = interpolator.transform(percent);
+        } else if interpolation_type == 0 {
+            percent = if percent <= 0.0 { 0.0 } else { 1.0 };
+        }
+    } else if interpolation_type == 0 {
         percent = if percent <= 0.0 { 0.0 } else { 1.0 };
     }
 
@@ -5288,7 +5298,7 @@ fn perform_scheduled_listener_actions(
     changed_input
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 enum RuntimeTransitionInterpolator {
     CubicEase {
         x1: f32,
@@ -11451,21 +11461,7 @@ fn runtime_data_bind_graph_converter_for_object(
             decimals: converter.uint_property("decimals").unwrap_or(0),
         },
         "DataConverterRangeMapper" => {
-            if file
-                .resolved_interpolator_for_data_converter_object(converter)
-                .is_some()
-            {
-                RuntimeDataBindGraphConverter::Unsupported
-            } else {
-                RuntimeDataBindGraphConverter::RangeMapper {
-                    min_input: converter.double_property("minInput").unwrap_or(1.0),
-                    max_input: converter.double_property("maxInput").unwrap_or(1.0),
-                    min_output: converter.double_property("minOutput").unwrap_or(1.0),
-                    max_output: converter.double_property("maxOutput").unwrap_or(1.0),
-                    flags: converter.uint_property("flags").unwrap_or(0),
-                    interpolation_type: converter.uint_property("interpolationType").unwrap_or(1),
-                }
-            }
+            runtime_data_bind_graph_range_mapper_converter(file, converter)
         }
         "DataConverterStringTrim" => RuntimeDataBindGraphConverter::StringTrim {
             trim_type: converter.uint_property("trimType").unwrap_or(1),
@@ -11484,6 +11480,29 @@ fn runtime_data_bind_graph_converter_for_object(
 
     visiting.remove(&converter.id);
     Some(graph_converter)
+}
+
+fn runtime_data_bind_graph_range_mapper_converter(
+    file: &RuntimeFile,
+    converter: &RuntimeObject,
+) -> RuntimeDataBindGraphConverter {
+    let interpolator = match file.resolved_interpolator_for_data_converter_object(converter) {
+        Some(interpolator) => match RuntimeTransitionInterpolator::from_object(interpolator) {
+            Some(interpolator) => Some(interpolator),
+            None => return RuntimeDataBindGraphConverter::Unsupported,
+        },
+        None => None,
+    };
+
+    RuntimeDataBindGraphConverter::RangeMapper {
+        min_input: converter.double_property("minInput").unwrap_or(1.0),
+        max_input: converter.double_property("maxInput").unwrap_or(1.0),
+        min_output: converter.double_property("minOutput").unwrap_or(1.0),
+        max_output: converter.double_property("maxOutput").unwrap_or(1.0),
+        flags: converter.uint_property("flags").unwrap_or(0),
+        interpolation_type: converter.uint_property("interpolationType").unwrap_or(1),
+        interpolator,
+    }
 }
 
 fn runtime_data_bind_graph_default_operation_view_model_value(

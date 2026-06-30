@@ -828,6 +828,21 @@ resolved converter interpolators, remaining converter families, converter
 groups, update-queue parity, relative/parent/nested lookup, listener-owned data
 binding, and nested artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: `DataConverterRangeMapper` runtime execution now also
+admits resolved converter interpolators for default-context number sources
+feeding `BindablePropertyNumber.propertyValue` targets. The graph stores the
+resolved `CubicEaseInterpolator`/`ElasticInterpolator` descriptor from
+`DataConverterRangeMapper.interpolatorId` and applies the C++ percent transform
+inside the existing range-map path. C++ probe coverage verifies a resolved
+`CubicEaseInterpolator` through a `BlendState1DViewModel` consumer. The
+contract is
+`docs/prototypes/data-binding-graph-range-mapper-interpolator-converter-runtime-contract.md`.
+Stable public source handles, list/view-model bindables, reverse conversion,
+stateful converter interpolation, formula, number-to-list, list-to-length, and
+scripted converters, converter groups requiring stateful scheduling,
+relative/parent/nested lookup, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
+
 Current #12 update: the first `DataConverterOperationValue` runtime execution
 slice now admits default-context number sources feeding
 `BindablePropertyNumber.propertyValue` targets. The graph stores imported

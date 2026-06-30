@@ -229,6 +229,11 @@ slice.
   main-`ToTarget | TwoWay` string targets. Explicit data-context advancement
   preserves a manual string target edit, then normal state-machine advancement
   overwrites it from the unchanged number source through C++ number formatting.
+- Boolean-to-string main-to-target dirty slice: direct `DataConverterToString`
+  boolean-to-string binds now follow the same C++ state-machine target-dirty
+  behavior for main-`ToTarget | TwoWay` string targets, overwriting a preserved
+  manual string edit from the unchanged boolean source on the next normal
+  advance.
 - First `DataConverterToString` graph-owned converter execution slice:
   forward conversion for default-context number sources feeding string targets,
   covered by a C++ probe through an existing string transition-condition

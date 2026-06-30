@@ -9,8 +9,10 @@ C++ uses the data bind's main direction to choose converter direction. For a
 main-`ToSource` range-mapper bind, target-to-source writes call
 `DataConverterRangeMapper::convert`, not `reverseConvert`. The reverse
 primitive still mirrors C++ `calculateReverseRange()` by swapping the input and
-output ranges, but the full public `updateDataBinds(true)` scheduler path that
-would reach it for main-`ToTarget | TwoWay` binds remains out of scope.
+output ranges. Main-`ToTarget | TwoWay` state-machine target dirty behavior is
+covered by
+`docs/prototypes/data-binding-graph-number-main-to-target-two-way-target-to-source-runtime-contract.md`;
+the full public `updateDataBinds(true)` scheduler path remains out of scope.
 
 ## In Scope
 
@@ -31,11 +33,10 @@ would reach it for main-`ToTarget | TwoWay` binds remains out of scope.
 
 ## Out Of Scope
 
-- Public `DataBindContainer::updateDataBinds(true)` scheduler parity.
+- Public `DataBindContainer::updateDataBinds(true)` scheduler parity outside
+  the state-machine bindable-property action path.
 - Exact `advancedDataContext()` source-to-target scheduling for neighboring
   ordinary `ToTarget` observer binds.
-- Main-`ToTarget | TwoWay` range-mapper target mutations through the public
-  state-machine action path.
 - Range-mapper groups in target-to-source runtime scheduling.
 - Non-number range-mapper sources or targets.
 - Formula, number-to-list, generated-list, scripted, and stateful converter

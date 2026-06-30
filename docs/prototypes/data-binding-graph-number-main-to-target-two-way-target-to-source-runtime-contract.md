@@ -26,6 +26,8 @@ source-derived value back to the target through `convert`.
 - `DataConverterGroup` source-to-target conversion through ordered
   `DataConverterOperationValue` children after a bindable target mutation
   dirties the bind.
+- Direct `DataConverterRangeMapper` source-to-target conversion after a
+  bindable target mutation dirties the bind.
 - Explicit `advancedDataContext()` preserving the manual target edit before
   the next normal state-machine advance overwrites it.
 - Exact C++ probe reporting for the mutating number bind's source and target
@@ -37,10 +39,12 @@ source-derived value back to the target through `convert`.
   direction contract.
 - Immediate target-to-source reverse conversion for main-`ToTarget` two-way
   binds; the C++ probe path does not do this.
+- Public `DataBindContainer::updateDataBinds(true)` scheduler parity outside
+  the state-machine bindable-property action path.
 - Full C++ dirty-list scheduling for neighboring ordinary `ToTarget` binds.
 - Non-number target-to-source converter families.
-- System-operation converters, range mapper, interpolator, formula, string,
-  number-to-list, list, or scripted converters.
+- System-operation converters, interpolator, formula, string, number-to-list,
+  list, or scripted converters.
 - Imported and owned view-model contexts.
 - Pending add/remove behavior, observer-list parity, re-entry protection,
   relative/parent/nested lookup, listener-owned data binding, nested artboards,
@@ -55,5 +59,8 @@ source-derived value back to the target through `convert`.
 - A `TwoWay` `DataConverterGroup<OperationValue>` bind applies
   source-to-target in forward group order at both normal state-machine advance
   points around a manual target edit.
+- A `TwoWay` `DataConverterRangeMapper` bind applies source-to-target through
+  `convert` at both normal state-machine advance points around a manual target
+  edit.
 - The mutating bind's exact source and target values match the C++ probe after
   each explicit runtime action.

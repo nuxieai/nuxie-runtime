@@ -1424,13 +1424,14 @@ application. The reverse primitive mirrors C++ `calculateReverseRange()` by
 swapping input/output ranges while preserving range-mapper flags. The contract
 is
 `docs/prototypes/data-binding-graph-range-mapper-target-to-source-runtime-contract.md`.
-Public `DataBindContainer::updateDataBinds(true)` scheduling for
-main-`ToTarget | TwoWay` range-mapper target edits, range-mapper groups in
-target-to-source scheduling, remaining converter families, list source/target
-propagation, imported/owned contexts, broader dirty/update queues, pending
-add/remove behavior, re-entry protection, relative/parent/nested lookup,
-listener-owned data binding, and nested artboard propagation remain follow-up
-`#12` slices.
+Main-`ToTarget | TwoWay` range-mapper edits through the state-machine
+bindable-property action path are now covered by the shared number dirty
+contract below. Public `DataBindContainer::updateDataBinds(true)` scheduling
+outside that path, range-mapper groups in target-to-source scheduling,
+remaining converter families, list source/target propagation, imported/owned
+contexts, broader dirty/update queues, pending add/remove behavior, re-entry
+protection, relative/parent/nested lookup, listener-owned data binding, and
+nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: graph-owned number target-to-source binding now pins C++
 main-direction converter dispatch with exact source/target probe reporting. A
@@ -1447,14 +1448,16 @@ and
 `docs/prototypes/data-binding-graph-operation-value-group-target-to-source-runtime-contract.md`.
 
 Current #12 update: main-`ToTarget | TwoWay` number bindings with
-`DataConverterOperationValue` and `DataConverterGroup<OperationValue>` now pin
-C++'s target-dirty behavior. A manual bindable target edit is preserved through
-explicit `advancedDataContext()`, does not run `reverseConvert`, and is
-overwritten from the unchanged source through forward `convert` on the next
-normal state-machine advance. The contract is
+`DataConverterOperationValue`, `DataConverterGroup<OperationValue>`, and direct
+`DataConverterRangeMapper` now pin C++'s target-dirty behavior. A manual
+bindable target edit is preserved through explicit `advancedDataContext()`,
+does not run `reverseConvert`, and is overwritten from the unchanged source
+through forward `convert` on the next normal state-machine advance. The
+contract is
 `docs/prototypes/data-binding-graph-number-main-to-target-two-way-target-to-source-runtime-contract.md`.
-Exact broader dirty-list scheduler parity for neighboring ordinary `ToTarget`
-bindable targets, symbol-list-index sources, other converter families, list
+Exact public `updateDataBinds(true)` dirty-list scheduler parity and broader
+dirty-list scheduler parity for neighboring ordinary `ToTarget` bindable
+targets, symbol-list-index sources, other converter families, list
 source/target propagation, imported/owned contexts, pending add/remove
 behavior, re-entry protection, relative/parent/nested lookup, listener-owned
 data binding, and nested artboard propagation remain follow-up `#12` slices.

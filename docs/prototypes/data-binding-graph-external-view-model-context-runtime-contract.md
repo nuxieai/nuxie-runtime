@@ -51,5 +51,6 @@ Default-context source mutation APIs remain unchanged.
 - Unresolved or type-incompatible sources are represented as unbound graph
   sources instead of writing stale values during apply.
 - C++ probe-backed state-machine tests verify non-default imported
-  `ViewModelInstanceNumber` and `ViewModelInstanceBoolean` sources through
-  existing `BlendState1DViewModel` and transition-condition consumers.
+  `ViewModelInstanceNumber`, `ViewModelInstanceBoolean`, and
+  `ViewModelInstanceString` sources through existing `BlendState1DViewModel`
+  and transition-condition consumers.

@@ -25,6 +25,8 @@ the graph writes the bindable target.
 - Target-to-source behavior, covered for the first reachable state-machine
   path by
   `docs/prototypes/data-binding-graph-rounder-target-to-source-runtime-contract.md`.
+- Main-`ToTarget | TwoWay` target-dirty behavior, covered by
+  `docs/prototypes/data-binding-graph-rounder-main-to-target-two-way-target-dirty-runtime-contract.md`.
 - Public-queue reverse conversion.
 - Non-number inputs beyond C++ default-output fallback.
 - External and owned contexts for this converter.

@@ -28,6 +28,9 @@ source-derived value back to the target through `convert`.
   dirties the bind.
 - Direct `DataConverterRangeMapper` source-to-target conversion after a
   bindable target mutation dirties the bind.
+- Direct `DataConverterRounder` source-to-target conversion after a bindable
+  target mutation dirties the bind is covered by
+  `docs/prototypes/data-binding-graph-rounder-main-to-target-two-way-target-dirty-runtime-contract.md`.
 - Direct deterministic `DataConverterFormula` source-to-target conversion after
   a bindable target mutation dirties the bind is covered by
   `docs/prototypes/data-binding-graph-formula-main-to-target-two-way-target-dirty-runtime-contract.md`.
@@ -52,9 +55,10 @@ source-derived value back to the target through `convert`.
   the state-machine bindable-property action path.
 - Full C++ dirty-list scheduling for neighboring ordinary `ToTarget` binds.
 - Non-number target-to-source converter families.
-- System-operation and operation-view-model converter cases beyond the direct
-  number paths, interpolator, formula cases beyond the direct deterministic
-  number path, string, number-to-list, list, or scripted converters.
+- System-operation, operation-view-model, and rounder converter cases beyond
+  the direct number paths, interpolator, formula cases beyond the direct
+  deterministic number path, string, number-to-list, list, or scripted
+  converters.
 - Imported and owned view-model contexts.
 - Pending add/remove behavior, observer-list parity, re-entry protection,
   relative/parent/nested lookup, listener-owned data binding, nested artboards,
@@ -70,6 +74,9 @@ source-derived value back to the target through `convert`.
   source-to-target in forward group order at both normal state-machine advance
   points around a manual target edit.
 - A `TwoWay` `DataConverterRangeMapper` bind applies source-to-target through
+  `convert` at both normal state-machine advance points around a manual target
+  edit.
+- A `TwoWay` `DataConverterRounder` bind applies source-to-target through
   `convert` at both normal state-machine advance points around a manual target
   edit.
 - The mutating bind's exact source and target values match the C++ probe after

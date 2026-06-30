@@ -141,6 +141,11 @@ slice.
   main-`ToSource | TwoWay` number target-to-source writes. The edited target
   value flows through C++ main-direction rounder `convert` before writing the
   default-context number source.
+- Rounder main-to-target dirty slice: direct `DataConverterRounder` now follows
+  C++ state-machine target-dirty behavior for main-`ToTarget | TwoWay` number
+  binds. Explicit data-context advancement preserves a manual bindable target
+  edit, then normal state-machine advancement overwrites it from the unchanged
+  source through forward rounder conversion.
 - First `DataConverterRangeMapper` graph-owned converter execution slice:
   forward conversion for default-context number sources feeding number targets
   without resolved custom interpolators, including imported range bounds,

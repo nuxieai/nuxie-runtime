@@ -27,7 +27,8 @@ call `reverseConvert`. The representative fixture in this contract is a
 
 - Public `DataBindContainer::updateDataBinds(true)` scheduler parity and
   public-queue `reverseConvert` behavior.
-- Main-`ToTarget | TwoWay` rounder target-dirty behavior.
+- Main-`ToTarget | TwoWay` rounder target-dirty behavior, covered by
+  `docs/prototypes/data-binding-graph-rounder-main-to-target-two-way-target-dirty-runtime-contract.md`.
 - `DataConverterGroup::reverseConvert` ordering.
 - Formula, operation, range, system, interpolator, number-to-list, list, and
   scripted converters.

@@ -837,10 +837,24 @@ The contract is
 `docs/prototypes/data-binding-graph-rounder-target-to-source-runtime-contract.md`.
 Stable public source handles, list/view-model bindables, public-queue reverse
 conversion, converter groups, main-`ToTarget | TwoWay` dirty behavior for
-converter families not yet covered by dedicated dirty contracts, formula
-functions/randoms, interpolator, number-to-list, scripted converters, broader
-dirty/update queues, relative/parent/nested lookup, listener-owned data
-binding, and nested artboard propagation remain follow-up `#12` slices.
+remaining converter families, formula functions/randoms, interpolator,
+number-to-list, scripted converters, broader dirty/update queues,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
+
+Current #12 update: direct `DataConverterRounder` now also covers the
+main-`ToTarget | TwoWay` state-machine target-dirty path for default-context
+number binds. A manual edit to the `BindablePropertyNumber.propertyValue`
+target is preserved through explicit data-context advancement, then the next
+normal state-machine advance overwrites the target from the unchanged source
+through C++ rounder forward conversion. The contract is
+`docs/prototypes/data-binding-graph-rounder-main-to-target-two-way-target-dirty-runtime-contract.md`.
+Stable public source handles, list/view-model bindables, public-queue reverse
+conversion, converter groups, main-`ToTarget | TwoWay` dirty behavior for
+remaining converter families, formula functions/randoms, interpolator,
+number-to-list, scripted converters, broader dirty/update queues,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
 
 Current #12 update: the first `DataConverterRangeMapper` runtime execution
 slice now admits default-context number sources feeding

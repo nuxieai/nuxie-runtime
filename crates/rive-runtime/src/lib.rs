@@ -2810,6 +2810,13 @@ struct RuntimeBindableAssetDefaultViewModelSource {
 #[derive(Debug, Clone)]
 struct RuntimeBindableArtboard {
     global_id: u32,
+    default_view_model_sources: Vec<RuntimeBindableArtboardDefaultViewModelSource>,
+    value: u64,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RuntimeBindableArtboardDefaultViewModelSource {
+    data_bind_index: usize,
     value: u64,
 }
 
@@ -5315,6 +5322,7 @@ pub struct StateMachineInstance {
     default_view_model_color_bindings_dirty: bool,
     default_view_model_enum_bindings_dirty: bool,
     default_view_model_asset_bindings_dirty: bool,
+    default_view_model_artboard_bindings_dirty: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -5443,6 +5451,7 @@ impl StateMachineInstance {
             default_view_model_color_bindings_dirty: false,
             default_view_model_enum_bindings_dirty: false,
             default_view_model_asset_bindings_dirty: false,
+            default_view_model_artboard_bindings_dirty: false,
         }
     }
 
@@ -5654,6 +5663,7 @@ impl StateMachineInstance {
         self.default_view_model_color_bindings_dirty = true;
         self.default_view_model_enum_bindings_dirty = true;
         self.default_view_model_asset_bindings_dirty = true;
+        self.default_view_model_artboard_bindings_dirty = true;
         self.needs_advance = true;
         true
     }
@@ -5723,6 +5733,7 @@ impl StateMachineInstance {
         self.apply_default_view_model_color_bindings(state_machine);
         self.apply_default_view_model_enum_bindings(state_machine);
         self.apply_default_view_model_asset_bindings(state_machine);
+        self.apply_default_view_model_artboard_bindings(state_machine);
         let mut keep_going = false;
         for (layer_index, (layer_instance, layer)) in self
             .layers
@@ -5963,6 +5974,41 @@ impl StateMachineInstance {
                 .find(|bindable_asset| bindable_asset.global_id == global_id)
             {
                 bindable_asset.set_value(value);
+            }
+        }
+    }
+
+    fn apply_default_view_model_artboard_bindings(&mut self, state_machine: &RuntimeStateMachine) {
+        if !self.data_context_view_model_bound || !self.default_view_model_artboard_bindings_dirty {
+            return;
+        }
+        self.default_view_model_artboard_bindings_dirty = false;
+
+        let mut sources = state_machine
+            .bindable_artboards
+            .iter()
+            .flat_map(|bindable_artboard| {
+                bindable_artboard
+                    .default_view_model_sources
+                    .iter()
+                    .map(|source| {
+                        (
+                            source.data_bind_index,
+                            bindable_artboard.global_id,
+                            source.value,
+                        )
+                    })
+            })
+            .collect::<Vec<_>>();
+        sources.sort_by_key(|(data_bind_index, _, _)| *data_bind_index);
+
+        for (_, global_id, value) in sources {
+            if let Some(bindable_artboard) = self
+                .bindable_artboards
+                .iter_mut()
+                .find(|bindable_artboard| bindable_artboard.global_id == global_id)
+            {
+                bindable_artboard.set_value(value);
             }
         }
     }
@@ -6353,6 +6399,14 @@ impl StateMachineBindableArtboardInstance {
             global_id: bindable_artboard.global_id,
             value: bindable_artboard.value,
         }
+    }
+
+    fn set_value(&mut self, value: u64) -> bool {
+        if self.value == value {
+            return false;
+        }
+        self.value = value;
+        true
     }
 }
 
@@ -9034,7 +9088,7 @@ fn runtime_bindable_artboards(
     state_machine: &rive_binary::RuntimeStateMachine<'_>,
 ) -> Vec<RuntimeBindableArtboard> {
     let mut values = BTreeMap::<u32, RuntimeBindableArtboard>::new();
-    for data_bind in &state_machine.data_binds {
+    for (data_bind_index, data_bind) in state_machine.data_binds.iter().enumerate() {
         let Some(target) = file.data_bind_target_for_object(data_bind) else {
             continue;
         };
@@ -9045,13 +9099,44 @@ fn runtime_bindable_artboards(
             .entry(target.id)
             .or_insert_with(|| RuntimeBindableArtboard {
                 global_id: target.id,
+                default_view_model_sources: Vec::new(),
                 value: target
                     .uint_property("propertyValue")
                     .unwrap_or(u64::from(u32::MAX)),
             });
+        if let Some(source) =
+            runtime_bindable_artboard_default_view_model_source(file, data_bind_index, data_bind)
+        {
+            values.entry(target.id).and_modify(|bindable_artboard| {
+                bindable_artboard.default_view_model_sources.push(source)
+            });
+        }
     }
 
     values.into_values().collect()
+}
+
+fn runtime_bindable_artboard_default_view_model_source(
+    file: &RuntimeFile,
+    data_bind_index: usize,
+    data_bind: &RuntimeObject,
+) -> Option<RuntimeBindableArtboardDefaultViewModelSource> {
+    let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
+    if property_key_for_name("BindablePropertyArtboard", "propertyValue") != Some(property_key) {
+        return None;
+    }
+    let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
+    let default_instance = file.view_model_default_instance(0)?;
+    let source =
+        file.data_context_view_model_property_for_instance(default_instance.object, &path)?;
+    if source.type_name != "ViewModelInstanceArtboard" {
+        return None;
+    }
+    let value = source.uint_property("propertyValue")?;
+    Some(RuntimeBindableArtboardDefaultViewModelSource {
+        data_bind_index,
+        value,
+    })
 }
 
 fn runtime_bindable_triggers(

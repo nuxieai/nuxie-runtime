@@ -267,6 +267,11 @@ slice.
   on explicit data-context advance. A C++ probe uses two binds to the same
   source so a mutated first bind writes the source before a second bind drives
   an existing transition-condition consumer.
+- Color graph-owned target-to-source slice: direct default-context color
+  sources feeding color targets now honor `ToSource | TwoWay` target mutation
+  on explicit data-context advance. A C++ probe uses two binds to the same
+  source so a mutated first bind writes the source before a second bind drives
+  an existing transition-condition consumer.
 - First graph-owned view-model bindable slice: forward propagation for
   default-context `ViewModelInstanceViewModel.propertyValue` sources feeding
   `BindablePropertyViewModel.propertyValue` targets, covered by a C++ probe
@@ -327,7 +332,7 @@ slice.
   operation-value-to-interpolator number smoothing, deterministic formula
   number/symbol-list-index-to-number conversion plus graph-represented
   non-number fallbacks,
-  first direct number/boolean/string target-to-source propagation,
+  first direct number/boolean/string/color target-to-source propagation,
   data-binding update queues, remaining target-to-source value kinds and
   reverse converters, relative paths, parent paths, and nested paths.
 - Nested artboard and nested animation/state-machine remapping.

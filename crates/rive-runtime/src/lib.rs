@@ -4016,6 +4016,12 @@ impl RuntimeDataBindGraphSourceNode {
             ) => Some(RuntimeDataBindGraphValue::String(
                 rive_binary::data_converter_to_string_string_value(value),
             )),
+            (
+                Some(RuntimeDataBindGraphConverter::ToString { .. }),
+                RuntimeDataBindGraphValue::Trigger(value),
+            ) => Some(RuntimeDataBindGraphValue::String(
+                rive_binary::data_converter_to_string_trigger_value(*value),
+            )),
             (Some(RuntimeDataBindGraphConverter::ToString { .. }), _) => None,
             (Some(RuntimeDataBindGraphConverter::Unsupported), _) => None,
         }
@@ -10319,6 +10325,8 @@ fn runtime_bindable_string_default_view_model_source(
             RuntimeDataBindGraphValue::Boolean(value)
         } else if let Some(value) = file.view_model_instance_string_value_bytes_for_object(source) {
             RuntimeDataBindGraphValue::String(value.to_vec())
+        } else if let Some(value) = file.view_model_instance_trigger_count_for_object(source) {
+            RuntimeDataBindGraphValue::Trigger(value)
         } else {
             return None;
         }

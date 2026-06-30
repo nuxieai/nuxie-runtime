@@ -2878,14 +2878,32 @@ struct RuntimeDataBindGraph {
     data_context_present: bool,
     default_view_model_context_bound: bool,
     default_view_model_bindings_dirty: bool,
+    sources: Vec<RuntimeDataBindGraphSourceNode>,
+    targets: Vec<RuntimeDataBindGraphTargetNode>,
     default_view_model_bindings: Vec<RuntimeDataBindGraphDefaultBinding>,
 }
 
 #[derive(Debug, Clone)]
 struct RuntimeDataBindGraphDefaultBinding {
     data_bind_index: usize,
-    target: RuntimeDataBindGraphTarget,
+    source: RuntimeDataBindGraphSourceHandle,
+    target: RuntimeDataBindGraphTargetHandle,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RuntimeDataBindGraphSourceHandle(usize);
+
+#[derive(Debug, Clone, Copy)]
+struct RuntimeDataBindGraphTargetHandle(usize);
+
+#[derive(Debug, Clone)]
+struct RuntimeDataBindGraphSourceNode {
     value: RuntimeDataBindGraphValue,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeDataBindGraphTargetNode {
+    target: RuntimeDataBindGraphTarget,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -2925,95 +2943,121 @@ struct RuntimeDataBindGraphTargetsMut<'a> {
 
 impl RuntimeDataBindGraph {
     fn new(state_machine: &RuntimeStateMachine) -> Self {
+        let mut sources = Vec::new();
+        let mut targets = Vec::new();
         let mut default_view_model_bindings = Vec::new();
 
         for bindable in &state_machine.bindable_numbers {
-            default_view_model_bindings.extend(bindable.default_view_model_sources.iter().map(
-                |source| RuntimeDataBindGraphDefaultBinding {
-                    data_bind_index: source.data_bind_index,
-                    target: RuntimeDataBindGraphTarget::Number {
+            for source in &bindable.default_view_model_sources {
+                Self::push_default_view_model_binding(
+                    &mut sources,
+                    &mut targets,
+                    &mut default_view_model_bindings,
+                    source.data_bind_index,
+                    RuntimeDataBindGraphTarget::Number {
                         global_id: bindable.global_id,
                     },
-                    value: RuntimeDataBindGraphValue::Number(source.value),
-                },
-            ));
+                    RuntimeDataBindGraphValue::Number(source.value),
+                );
+            }
         }
         for bindable in &state_machine.bindable_booleans {
-            default_view_model_bindings.extend(bindable.default_view_model_sources.iter().map(
-                |source| RuntimeDataBindGraphDefaultBinding {
-                    data_bind_index: source.data_bind_index,
-                    target: RuntimeDataBindGraphTarget::Boolean {
+            for source in &bindable.default_view_model_sources {
+                Self::push_default_view_model_binding(
+                    &mut sources,
+                    &mut targets,
+                    &mut default_view_model_bindings,
+                    source.data_bind_index,
+                    RuntimeDataBindGraphTarget::Boolean {
                         global_id: bindable.global_id,
                     },
-                    value: RuntimeDataBindGraphValue::Boolean(source.value),
-                },
-            ));
+                    RuntimeDataBindGraphValue::Boolean(source.value),
+                );
+            }
         }
         for bindable in &state_machine.bindable_strings {
-            default_view_model_bindings.extend(bindable.default_view_model_sources.iter().map(
-                |source| RuntimeDataBindGraphDefaultBinding {
-                    data_bind_index: source.data_bind_index,
-                    target: RuntimeDataBindGraphTarget::String {
+            for source in &bindable.default_view_model_sources {
+                Self::push_default_view_model_binding(
+                    &mut sources,
+                    &mut targets,
+                    &mut default_view_model_bindings,
+                    source.data_bind_index,
+                    RuntimeDataBindGraphTarget::String {
                         global_id: bindable.global_id,
                     },
-                    value: RuntimeDataBindGraphValue::String(source.value.clone()),
-                },
-            ));
+                    RuntimeDataBindGraphValue::String(source.value.clone()),
+                );
+            }
         }
         for bindable in &state_machine.bindable_colors {
-            default_view_model_bindings.extend(bindable.default_view_model_sources.iter().map(
-                |source| RuntimeDataBindGraphDefaultBinding {
-                    data_bind_index: source.data_bind_index,
-                    target: RuntimeDataBindGraphTarget::Color {
+            for source in &bindable.default_view_model_sources {
+                Self::push_default_view_model_binding(
+                    &mut sources,
+                    &mut targets,
+                    &mut default_view_model_bindings,
+                    source.data_bind_index,
+                    RuntimeDataBindGraphTarget::Color {
                         global_id: bindable.global_id,
                     },
-                    value: RuntimeDataBindGraphValue::Color(source.value),
-                },
-            ));
+                    RuntimeDataBindGraphValue::Color(source.value),
+                );
+            }
         }
         for bindable in &state_machine.bindable_enums {
-            default_view_model_bindings.extend(bindable.default_view_model_sources.iter().map(
-                |source| RuntimeDataBindGraphDefaultBinding {
-                    data_bind_index: source.data_bind_index,
-                    target: RuntimeDataBindGraphTarget::Enum {
+            for source in &bindable.default_view_model_sources {
+                Self::push_default_view_model_binding(
+                    &mut sources,
+                    &mut targets,
+                    &mut default_view_model_bindings,
+                    source.data_bind_index,
+                    RuntimeDataBindGraphTarget::Enum {
                         global_id: bindable.global_id,
                     },
-                    value: RuntimeDataBindGraphValue::Enum(source.value),
-                },
-            ));
+                    RuntimeDataBindGraphValue::Enum(source.value),
+                );
+            }
         }
         for bindable in &state_machine.bindable_assets {
-            default_view_model_bindings.extend(bindable.default_view_model_sources.iter().map(
-                |source| RuntimeDataBindGraphDefaultBinding {
-                    data_bind_index: source.data_bind_index,
-                    target: RuntimeDataBindGraphTarget::Asset {
+            for source in &bindable.default_view_model_sources {
+                Self::push_default_view_model_binding(
+                    &mut sources,
+                    &mut targets,
+                    &mut default_view_model_bindings,
+                    source.data_bind_index,
+                    RuntimeDataBindGraphTarget::Asset {
                         global_id: bindable.global_id,
                     },
-                    value: RuntimeDataBindGraphValue::Asset(source.value),
-                },
-            ));
+                    RuntimeDataBindGraphValue::Asset(source.value),
+                );
+            }
         }
         for bindable in &state_machine.bindable_artboards {
-            default_view_model_bindings.extend(bindable.default_view_model_sources.iter().map(
-                |source| RuntimeDataBindGraphDefaultBinding {
-                    data_bind_index: source.data_bind_index,
-                    target: RuntimeDataBindGraphTarget::Artboard {
+            for source in &bindable.default_view_model_sources {
+                Self::push_default_view_model_binding(
+                    &mut sources,
+                    &mut targets,
+                    &mut default_view_model_bindings,
+                    source.data_bind_index,
+                    RuntimeDataBindGraphTarget::Artboard {
                         global_id: bindable.global_id,
                     },
-                    value: RuntimeDataBindGraphValue::Artboard(source.value),
-                },
-            ));
+                    RuntimeDataBindGraphValue::Artboard(source.value),
+                );
+            }
         }
         for bindable in &state_machine.bindable_triggers {
-            default_view_model_bindings.extend(bindable.default_view_model_sources.iter().map(
-                |source| RuntimeDataBindGraphDefaultBinding {
-                    data_bind_index: source.data_bind_index,
-                    target: RuntimeDataBindGraphTarget::Trigger {
+            for source in &bindable.default_view_model_sources {
+                Self::push_default_view_model_binding(
+                    &mut sources,
+                    &mut targets,
+                    &mut default_view_model_bindings,
+                    source.data_bind_index,
+                    RuntimeDataBindGraphTarget::Trigger {
                         global_id: bindable.global_id,
                     },
-                    value: RuntimeDataBindGraphValue::Trigger(source.value),
-                },
-            ));
+                    RuntimeDataBindGraphValue::Trigger(source.value),
+                );
+            }
         }
 
         default_view_model_bindings.sort_by_key(|binding| binding.data_bind_index);
@@ -3022,8 +3066,29 @@ impl RuntimeDataBindGraph {
             data_context_present: false,
             default_view_model_context_bound: false,
             default_view_model_bindings_dirty: false,
+            sources,
+            targets,
             default_view_model_bindings,
         }
+    }
+
+    fn push_default_view_model_binding(
+        sources: &mut Vec<RuntimeDataBindGraphSourceNode>,
+        targets: &mut Vec<RuntimeDataBindGraphTargetNode>,
+        bindings: &mut Vec<RuntimeDataBindGraphDefaultBinding>,
+        data_bind_index: usize,
+        target: RuntimeDataBindGraphTarget,
+        value: RuntimeDataBindGraphValue,
+    ) {
+        let source = RuntimeDataBindGraphSourceHandle(sources.len());
+        sources.push(RuntimeDataBindGraphSourceNode { value });
+        let target_handle = RuntimeDataBindGraphTargetHandle(targets.len());
+        targets.push(RuntimeDataBindGraphTargetNode { target });
+        bindings.push(RuntimeDataBindGraphDefaultBinding {
+            data_bind_index,
+            source,
+            target: target_handle,
+        });
     }
 
     fn data_context_present(&self) -> bool {
@@ -3064,14 +3129,24 @@ impl RuntimeDataBindGraph {
         self.default_view_model_bindings_dirty = false;
 
         for binding in &self.default_view_model_bindings {
-            targets.apply_default_view_model_binding(binding);
+            let Some(source) = self.sources.get(binding.source.0) else {
+                continue;
+            };
+            let Some(target) = self.targets.get(binding.target.0) else {
+                continue;
+            };
+            targets.apply_default_view_model_binding(&target.target, &source.value);
         }
     }
 }
 
 impl RuntimeDataBindGraphTargetsMut<'_> {
-    fn apply_default_view_model_binding(&mut self, binding: &RuntimeDataBindGraphDefaultBinding) {
-        match (&binding.target, &binding.value) {
+    fn apply_default_view_model_binding(
+        &mut self,
+        target: &RuntimeDataBindGraphTarget,
+        value: &RuntimeDataBindGraphValue,
+    ) {
+        match (target, value) {
             (
                 RuntimeDataBindGraphTarget::Number { global_id },
                 RuntimeDataBindGraphValue::Number(value),

@@ -382,6 +382,15 @@ External contexts, public source mutation APIs, converters, reverse
 propagation, relative/parent/nested path lookup, listener-owned data binding,
 and nested artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: default source-to-target bindings are now graph edges over
+explicit source and target node tables. `RuntimeDataBindGraphDefaultBinding`
+stores source and target handles, source nodes carry the resolved values, and
+target nodes carry cloned bindable target identities. The node-table contract is
+`docs/prototypes/data-binding-graph-node-table-runtime-contract.md`. This is a
+behavior-preserving foundation slice; the next live data-binding slice should
+mutate graph source nodes or bind external context source nodes rather than
+adding another direct state-machine target write path.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

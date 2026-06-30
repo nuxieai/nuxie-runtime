@@ -34,7 +34,8 @@ slice.
   `ViewModelInstanceString`, `ViewModelInstanceColor`,
   `ViewModelInstanceEnum`, `ViewModelInstanceAssetImage`,
   `ViewModelInstanceArtboard`, and `ViewModelInstanceTrigger` sources routed
-  through `RuntimeDataBindGraph` and covered by current probes.
+  through `RuntimeDataBindGraph` source/target edges and covered by current
+  probes.
 
 ## Remaining Runtime Slices
 

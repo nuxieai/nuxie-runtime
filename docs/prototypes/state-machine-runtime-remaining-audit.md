@@ -171,6 +171,10 @@ slice.
   through a group whose first effective child is `DataConverterToString`,
   covered by a C++ probe through an existing string transition-condition
   consumer.
+- First graph-owned view-model bindable slice: forward propagation for
+  default-context `ViewModelInstanceViewModel.propertyValue` sources feeding
+  `BindablePropertyViewModel.propertyValue` targets, covered by a C++ probe
+  through an existing view-model pointer transition-condition consumer.
 
 ## Remaining Runtime Slices
 
@@ -186,7 +190,8 @@ slice.
   number/boolean/string/color/enum/asset/artboard/trigger contexts listed
   above, add source mutation APIs beyond the default
   number/boolean/string/color/enum/asset/artboard/trigger source nodes,
-  list/symbol/view-model bindables, converters beyond the admitted boolean
+  list/symbol bindables and public view-model pointer mutation, converters
+  beyond the admitted boolean
   negate, trigger, boolean-to-number, enum-to-number, color-to-number, and
   string-to-number, symbol-list-index-to-number, number-to-string, and
   boolean-to-string, string-to-string, trigger-to-string,

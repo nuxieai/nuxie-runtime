@@ -919,6 +919,21 @@ group shapes, reverse propagation, update-queue parity, relative/parent/nested
 lookup, listener-owned data binding, and nested artboard propagation remain
 follow-up `#12` slices.
 
+Current #12 update: `BindablePropertyViewModel.propertyValue` now has its first
+graph-owned source binding slice. Default-context
+`ViewModelInstanceViewModel.propertyValue` sources resolve through the
+binary-layer C++ view-model reference model, carry imported view-model instance
+identity as a runtime graph value, and write that identity into
+state-machine bindable view-model targets before transition evaluation. C++
+probe coverage verifies the bound pointer through a
+`TransitionViewModelCondition` pointer comparison against a null bindable. The
+contract is
+`docs/prototypes/data-binding-graph-viewmodel-bind-source-runtime-contract.md`.
+Stable public source handles, list bindables, public view-model pointer
+mutation, reverse propagation, update-queue parity, relative/parent/nested
+lookup, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

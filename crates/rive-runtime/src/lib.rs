@@ -2855,12 +2855,20 @@ struct RuntimeBindableTriggerDefaultViewModelSource {
 struct RuntimeBindableViewModel {
     global_id: u32,
     source: RuntimeBindableViewModelSource,
+    default_view_model_sources: Vec<RuntimeBindableViewModelDefaultViewModelSource>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RuntimeBindableViewModelSource {
     Null,
     RootDataContext,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeBindableViewModelDefaultViewModelSource {
+    data_bind_index: usize,
+    path: Vec<u32>,
+    value: RuntimeViewModelPointer,
 }
 
 #[derive(Debug, Clone)]
@@ -2964,6 +2972,7 @@ enum RuntimeDataBindGraphTarget {
     Asset { global_id: u32 },
     Artboard { global_id: u32 },
     Trigger { global_id: u32 },
+    ViewModel { global_id: u32 },
 }
 
 #[derive(Debug, Clone)]
@@ -2977,6 +2986,7 @@ enum RuntimeDataBindGraphValue {
     Asset(u64),
     Artboard(u64),
     Trigger(u64),
+    ViewModel(RuntimeViewModelPointer),
 }
 
 impl RuntimeDataBindGraphValue {
@@ -3014,6 +3024,7 @@ impl RuntimeDataBindGraphValue {
             Self::Trigger(_) => context
                 .trigger_value_by_property_index(usize::try_from(path[1]).ok()?)
                 .map(Self::Trigger),
+            Self::ViewModel(_) => None,
         }
     }
 
@@ -3056,6 +3067,13 @@ impl RuntimeDataBindGraphValue {
             Self::Trigger(_) => file
                 .view_model_instance_trigger_count_for_object(source)
                 .map(Self::Trigger),
+            Self::ViewModel(_) => file
+                .data_context_view_model_instance_for_instance(view_model_instance, path)
+                .map(|reference| {
+                    Self::ViewModel(RuntimeViewModelPointer::Imported {
+                        object_id: reference.object.id,
+                    })
+                }),
         }
     }
 }
@@ -3069,6 +3087,7 @@ struct RuntimeDataBindGraphTargetsMut<'a> {
     assets: &'a mut [StateMachineBindableAssetInstance],
     artboards: &'a mut [StateMachineBindableArtboardInstance],
     triggers: &'a mut [StateMachineBindableTriggerInstance],
+    view_models: &'a mut [StateMachineBindableViewModelInstance],
 }
 
 #[derive(Debug, Clone)]
@@ -3505,6 +3524,22 @@ impl RuntimeDataBindGraph {
                         global_id: bindable.global_id,
                     },
                     RuntimeDataBindGraphValue::Trigger(source.value),
+                );
+            }
+        }
+        for bindable in &state_machine.bindable_view_models {
+            for source in &bindable.default_view_model_sources {
+                Self::push_default_view_model_binding(
+                    &mut sources,
+                    &mut targets,
+                    &mut default_view_model_bindings,
+                    source.data_bind_index,
+                    &source.path,
+                    None,
+                    RuntimeDataBindGraphTarget::ViewModel {
+                        global_id: bindable.global_id,
+                    },
+                    RuntimeDataBindGraphValue::ViewModel(source.value),
                 );
             }
         }
@@ -4201,6 +4236,18 @@ impl RuntimeDataBindGraphTargetsMut<'_> {
             ) => {
                 if let Some(target) = self
                     .triggers
+                    .iter_mut()
+                    .find(|target| target.global_id == *global_id)
+                {
+                    target.set_value(*value);
+                }
+            }
+            (
+                RuntimeDataBindGraphTarget::ViewModel { global_id },
+                RuntimeDataBindGraphValue::ViewModel(value),
+            ) => {
+                if let Some(target) = self
+                    .view_models
                     .iter_mut()
                     .find(|target| target.global_id == *global_id)
                 {
@@ -7318,6 +7365,7 @@ impl StateMachineInstance {
                 assets: &mut self.bindable_assets,
                 artboards: &mut self.bindable_artboards,
                 triggers: &mut self.bindable_triggers,
+                view_models: &mut self.bindable_view_models,
             });
     }
 
@@ -7859,6 +7907,7 @@ fn bindable_trigger_source_global_id(
 struct StateMachineBindableViewModelInstance {
     global_id: u32,
     source: RuntimeBindableViewModelSource,
+    value: RuntimeViewModelPointer,
 }
 
 impl StateMachineBindableViewModelInstance {
@@ -7866,6 +7915,7 @@ impl StateMachineBindableViewModelInstance {
         Self {
             global_id: bindable_view_model.global_id,
             source: bindable_view_model.source,
+            value: RuntimeViewModelPointer::Null,
         }
     }
 
@@ -7874,9 +7924,13 @@ impl StateMachineBindableViewModelInstance {
             RuntimeBindableViewModelSource::RootDataContext if data_context_present => {
                 RuntimeViewModelPointer::DataContextRoot
             }
-            RuntimeBindableViewModelSource::RootDataContext
-            | RuntimeBindableViewModelSource::Null => RuntimeViewModelPointer::Null,
+            RuntimeBindableViewModelSource::RootDataContext => RuntimeViewModelPointer::Null,
+            RuntimeBindableViewModelSource::Null => self.value,
         }
+    }
+
+    fn set_value(&mut self, value: RuntimeViewModelPointer) {
+        self.value = value;
     }
 }
 
@@ -7884,6 +7938,7 @@ impl StateMachineBindableViewModelInstance {
 enum RuntimeViewModelPointer {
     Null,
     DataContextRoot,
+    Imported { object_id: u32 },
 }
 
 fn bindable_view_model_value(
@@ -10696,7 +10751,7 @@ fn runtime_bindable_view_models(
     state_machine: &rive_binary::RuntimeStateMachine<'_>,
 ) -> Vec<RuntimeBindableViewModel> {
     let mut values = BTreeMap::<u32, RuntimeBindableViewModel>::new();
-    for data_bind in &state_machine.data_binds {
+    for (data_bind_index, data_bind) in state_machine.data_binds.iter().enumerate() {
         let Some(target) = file.data_bind_target_for_object(data_bind) else {
             continue;
         };
@@ -10710,10 +10765,40 @@ fn runtime_bindable_view_models(
             .or_insert_with(|| RuntimeBindableViewModel {
                 global_id: target.id,
                 source,
+                default_view_model_sources: Vec::new(),
             });
+        if let Some(source) =
+            runtime_bindable_view_model_default_view_model_source(file, data_bind_index, data_bind)
+        {
+            values.entry(target.id).and_modify(|bindable_view_model| {
+                bindable_view_model.default_view_model_sources.push(source)
+            });
+        }
     }
 
     values.into_values().collect()
+}
+
+fn runtime_bindable_view_model_default_view_model_source(
+    file: &RuntimeFile,
+    data_bind_index: usize,
+    data_bind: &RuntimeObject,
+) -> Option<RuntimeBindableViewModelDefaultViewModelSource> {
+    let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
+    if property_key_for_name("BindablePropertyViewModel", "propertyValue") != Some(property_key) {
+        return None;
+    }
+    let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
+    let default_instance = file.view_model_default_instance(0)?;
+    let reference =
+        file.data_context_view_model_instance_for_instance(default_instance.object, &path)?;
+    Some(RuntimeBindableViewModelDefaultViewModelSource {
+        data_bind_index,
+        path: path.to_vec(),
+        value: RuntimeViewModelPointer::Imported {
+            object_id: reference.object.id,
+        },
+    })
 }
 
 fn runtime_bindable_view_model_source(

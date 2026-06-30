@@ -27,6 +27,12 @@ slice.
 - Component, component-pair, artboard-component, component-view-model scalar,
   trigger/artboard, and intentionally unsupported pointer/artboard directions
   covered by current probes.
+- Default-context source-to-target `propertyValue` binds for
+  `ViewModelInstanceNumber`, `ViewModelInstanceBoolean`,
+  `ViewModelInstanceString`, `ViewModelInstanceColor`,
+  `ViewModelInstanceEnum`, `ViewModelInstanceAssetImage`,
+  `ViewModelInstanceArtboard`, and `ViewModelInstanceTrigger` sources covered
+  by current probes.
 
 ## Remaining Runtime Slices
 
@@ -35,14 +41,11 @@ slice.
   callback targets other than `Event.trigger`.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
-- Live view-model APIs and data-binding propagation beyond the first default
-  `ViewModelInstanceNumber`, `ViewModelInstanceBoolean`,
-  `ViewModelInstanceString`, `ViewModelInstanceColor`, and
-  `ViewModelInstanceEnum`, `ViewModelInstanceAssetImage`, and
-  `ViewModelInstanceArtboard` source-to-target property-value binds: binding
-  external contexts, source mutation APIs, remaining non-number bindables,
-  converters, data-binding update queues, relative paths, parent paths, and
-  nested paths for fire triggers and conditions.
+- Live view-model APIs and data-binding propagation beyond the finite default
+  source-to-target `propertyValue` bind set listed above: binding external
+  contexts, source mutation APIs, list/symbol/view-model bindables, converters,
+  data-binding update queues, relative paths, parent paths, and nested paths
+  for fire triggers and conditions.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener
   actions.

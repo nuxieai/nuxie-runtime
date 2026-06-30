@@ -281,6 +281,7 @@ Additional current contract: `docs/prototypes/state-machine-default-viewmodel-co
 Additional current contract: `docs/prototypes/state-machine-default-viewmodel-enum-binding-runtime-contract.md`
 Additional current contract: `docs/prototypes/state-machine-default-viewmodel-asset-binding-runtime-contract.md`
 Additional current contract: `docs/prototypes/state-machine-default-viewmodel-artboard-binding-runtime-contract.md`
+Additional current contract: `docs/prototypes/state-machine-default-viewmodel-trigger-binding-runtime-contract.md`
 Current remaining-work audit: `docs/prototypes/state-machine-runtime-remaining-audit.md`
 
 ### Question
@@ -338,6 +339,8 @@ Current #11 update: default-context source-to-target binding now covers cloned `
 Current #11 update: default-context source-to-target binding now covers cloned `BindablePropertyAsset.propertyValue` as observed by asset transition comparands. Rust copies the raw default `ViewModelInstanceAssetImage.propertyValue` resolved through `DataBindContext.sourcePathIds` before transition evaluation and verifies an asset `TransitionViewModelCondition` against C++. External context binding, source mutation APIs, artboard source binds, render-image/imageValue side effects, `Image.setAsset` target binding, converters, generalized update queues, relative/parent/nested paths, listener-owned data binding, and nested artboard propagation remain later slices.
 
 Current #11 update: default-context source-to-target binding now covers cloned `BindablePropertyArtboard.propertyValue` as observed by component/view-model artboard transition comparands. Rust copies the raw default `ViewModelInstanceArtboard.propertyValue` resolved through `DataBindContext.sourcePathIds` before transition evaluation and verifies the supported artboard comparand shape against C++. External context binding, source mutation APIs, literal artboard comparators, `ArtboardReferencer` target remapping, nested artboard propagation, bound view-model propagation, converters, generalized update queues, relative/parent/nested paths, and listener-owned data binding remain later slices.
+
+Current #11 update: default-context source-to-target binding now covers cloned `BindablePropertyTrigger.propertyValue` as observed by component/view-model trigger transition comparands. Rust copies the raw default `ViewModelInstanceTrigger.propertyValue` resolved through `DataBindContext.sourcePathIds` before transition evaluation while preserving the existing source identity used by trigger/self conditions and used-layer suppression. External context binding, source mutation APIs, trigger callback targets, listener-owned trigger dispatch, converters, generalized update queues, relative/parent/nested paths, callback-driven data binding, and nested artboard propagation remain later slices.
 
 ## #12: Data Binding Graph
 

@@ -2825,12 +2825,19 @@ struct RuntimeBindableTrigger {
     global_id: u32,
     value: u64,
     source: RuntimeBindableTriggerSource,
+    default_view_model_sources: Vec<RuntimeBindableTriggerDefaultViewModelSource>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RuntimeBindableTriggerSource {
     None,
     DefaultViewModelTrigger { trigger_global_id: u32 },
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RuntimeBindableTriggerDefaultViewModelSource {
+    data_bind_index: usize,
+    value: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -5323,6 +5330,7 @@ pub struct StateMachineInstance {
     default_view_model_enum_bindings_dirty: bool,
     default_view_model_asset_bindings_dirty: bool,
     default_view_model_artboard_bindings_dirty: bool,
+    default_view_model_trigger_bindings_dirty: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -5452,6 +5460,7 @@ impl StateMachineInstance {
             default_view_model_enum_bindings_dirty: false,
             default_view_model_asset_bindings_dirty: false,
             default_view_model_artboard_bindings_dirty: false,
+            default_view_model_trigger_bindings_dirty: false,
         }
     }
 
@@ -5664,6 +5673,7 @@ impl StateMachineInstance {
         self.default_view_model_enum_bindings_dirty = true;
         self.default_view_model_asset_bindings_dirty = true;
         self.default_view_model_artboard_bindings_dirty = true;
+        self.default_view_model_trigger_bindings_dirty = true;
         self.needs_advance = true;
         true
     }
@@ -5734,6 +5744,7 @@ impl StateMachineInstance {
         self.apply_default_view_model_enum_bindings(state_machine);
         self.apply_default_view_model_asset_bindings(state_machine);
         self.apply_default_view_model_artboard_bindings(state_machine);
+        self.apply_default_view_model_trigger_bindings(state_machine);
         let mut keep_going = false;
         for (layer_index, (layer_instance, layer)) in self
             .layers
@@ -6009,6 +6020,41 @@ impl StateMachineInstance {
                 .find(|bindable_artboard| bindable_artboard.global_id == global_id)
             {
                 bindable_artboard.set_value(value);
+            }
+        }
+    }
+
+    fn apply_default_view_model_trigger_bindings(&mut self, state_machine: &RuntimeStateMachine) {
+        if !self.data_context_view_model_bound || !self.default_view_model_trigger_bindings_dirty {
+            return;
+        }
+        self.default_view_model_trigger_bindings_dirty = false;
+
+        let mut sources = state_machine
+            .bindable_triggers
+            .iter()
+            .flat_map(|bindable_trigger| {
+                bindable_trigger
+                    .default_view_model_sources
+                    .iter()
+                    .map(|source| {
+                        (
+                            source.data_bind_index,
+                            bindable_trigger.global_id,
+                            source.value,
+                        )
+                    })
+            })
+            .collect::<Vec<_>>();
+        sources.sort_by_key(|(data_bind_index, _, _)| *data_bind_index);
+
+        for (_, global_id, value) in sources {
+            if let Some(bindable_trigger) = self
+                .bindable_triggers
+                .iter_mut()
+                .find(|bindable_trigger| bindable_trigger.global_id == global_id)
+            {
+                bindable_trigger.set_value(value);
             }
         }
     }
@@ -6434,6 +6480,14 @@ impl StateMachineBindableTriggerInstance {
             value: bindable_trigger.value,
             source: bindable_trigger.source,
         }
+    }
+
+    fn set_value(&mut self, value: u64) -> bool {
+        if self.value == value {
+            return false;
+        }
+        self.value = value;
+        true
     }
 }
 
@@ -9144,7 +9198,7 @@ fn runtime_bindable_triggers(
     state_machine: &rive_binary::RuntimeStateMachine<'_>,
 ) -> Vec<RuntimeBindableTrigger> {
     let mut values = BTreeMap::<u32, RuntimeBindableTrigger>::new();
-    for data_bind in &state_machine.data_binds {
+    for (data_bind_index, data_bind) in state_machine.data_binds.iter().enumerate() {
         let Some(target) = file.data_bind_target_for_object(data_bind) else {
             continue;
         };
@@ -9163,10 +9217,40 @@ fn runtime_bindable_triggers(
                 global_id: target.id,
                 value,
                 source,
+                default_view_model_sources: Vec::new(),
             });
+        if let Some(default_source) =
+            runtime_bindable_trigger_default_view_model_source(file, data_bind_index, data_bind)
+        {
+            values.entry(target.id).and_modify(|bindable_trigger| {
+                bindable_trigger
+                    .default_view_model_sources
+                    .push(default_source)
+            });
+        }
     }
 
     values.into_values().collect()
+}
+
+fn runtime_bindable_trigger_default_view_model_source(
+    file: &RuntimeFile,
+    data_bind_index: usize,
+    data_bind: &RuntimeObject,
+) -> Option<RuntimeBindableTriggerDefaultViewModelSource> {
+    let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
+    if property_key_for_name("BindablePropertyTrigger", "propertyValue") != Some(property_key) {
+        return None;
+    }
+    let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
+    let default_instance = file.view_model_default_instance(0)?;
+    let source =
+        file.data_context_view_model_property_for_instance(default_instance.object, &path)?;
+    let value = file.view_model_instance_trigger_count_for_object(source)?;
+    Some(RuntimeBindableTriggerDefaultViewModelSource {
+        data_bind_index,
+        value,
+    })
 }
 
 fn runtime_bindable_trigger_source(

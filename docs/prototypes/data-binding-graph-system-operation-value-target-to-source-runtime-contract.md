@@ -33,7 +33,8 @@ method. For a main-`ToSource | TwoWay` bind, C++ target-to-source dispatch calls
 ## Out Of Scope
 
 - `ToSource`-only binds without `TwoWay`.
-- Main-`ToTarget | TwoWay` system-converter dirty behavior.
+- Main-`ToTarget | TwoWay` system-converter dirty behavior, covered by
+  `docs/prototypes/data-binding-graph-system-operation-value-main-to-target-two-way-target-dirty-runtime-contract.md`.
 - Public `DataBindContainer::updateDataBinds(true)` scheduler parity and
   public-queue `reverseConvert` behavior.
 - Symbol-list-index inputs to system converters.

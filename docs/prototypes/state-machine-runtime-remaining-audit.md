@@ -171,6 +171,12 @@ slice.
   `convert` method delegates to operation-value reverse arithmetic before the
   source write, after which the same bindable target refreshes from the changed
   source during explicit data-context advancement.
+- System operation-value main-to-target dirty slice: direct
+  `DataConverterSystemNormalizer` and `DataConverterSystemDegsToRads` now
+  follow C++ state-machine target-dirty behavior for main-`ToTarget | TwoWay`
+  number binds. Explicit data-context advancement preserves a manual bindable
+  target edit, then normal state-machine advancement overwrites it from the
+  unchanged source through system-converter forward operation-value arithmetic.
 - First `DataConverterToString` graph-owned converter execution slice:
   forward conversion for default-context number sources feeding string targets,
   covered by a C++ probe through an existing string transition-condition

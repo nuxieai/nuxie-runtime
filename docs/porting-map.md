@@ -928,12 +928,27 @@ then refreshed from the changed source during explicit data-context
 advancement. The contract is
 `docs/prototypes/data-binding-graph-system-operation-value-target-to-source-runtime-contract.md`.
 Stable public source handles, list/view-model bindables, `ToSource`-only
-update-queue behavior, main-`ToTarget | TwoWay` system-converter dirty
-behavior, operation-view-model target-to-source, formula functions/randoms,
-interpolator, number-to-list, scripted converters, converter groups involving
-system converters, broader dirty/update queues, relative/parent/nested lookup,
-listener-owned data binding, and nested artboard propagation remain follow-up
-`#12` slices.
+update-queue behavior, operation-view-model target-to-source, formula
+functions/randoms, interpolator, number-to-list, scripted converters, converter
+groups involving system converters, broader dirty/update queues,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
+
+Current #12 update: direct `DataConverterSystemNormalizer` and
+`DataConverterSystemDegsToRads` now also cover the main-`ToTarget | TwoWay`
+state-machine target-dirty path for default-context number binds. A manual
+edit to a system-converter `BindablePropertyNumber.propertyValue` target is
+preserved through explicit data-context advancement, then the next normal
+state-machine advance overwrites the target from the unchanged source through
+C++ system-converter forward operation-value arithmetic. The contract is
+`docs/prototypes/data-binding-graph-system-operation-value-main-to-target-two-way-target-dirty-runtime-contract.md`.
+Stable public source handles, list/view-model bindables, `ToSource`-only
+update-queue behavior, operation-view-model target-to-source,
+main-`ToTarget | TwoWay` dirty behavior for other converter families, formula
+functions/randoms, interpolator, number-to-list, scripted converters, converter
+groups involving system converters, broader dirty/update queues,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
 
 Current #12 update: the first `DataConverterToString` runtime slice now
 supports default-context number sources feeding

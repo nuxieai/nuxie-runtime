@@ -856,6 +856,23 @@ scripted converters, converter groups involving operation converters,
 update-queue parity, relative/parent/nested lookup, listener-owned data
 binding, and nested artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: the first `DataConverterOperationViewModel` runtime
+execution slice now admits default-context number sources feeding
+`BindablePropertyNumber.propertyValue` targets when the converter's
+`sourcePathIds` resolve to a second imported default view-model number. The
+graph stores the resolved secondary operand on the converter descriptor and
+uses the same forward arithmetic path as `DataConverterOperationValue`. C++
+probe coverage verifies this through a `BlendState1DViewModel` consumer. The
+contract is
+`docs/prototypes/data-binding-graph-operation-viewmodel-converter-runtime-contract.md`.
+Stable public source handles, list/view-model bindables, reverse conversion,
+live dependency propagation when the secondary operation source changes,
+imported/owned context recomputation for the secondary operand, dedicated
+grouped operation-view-model probe coverage, formula, interpolator,
+number-to-list, and scripted converters, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
+
 Current #12 update: direct `DataConverterSystemNormalizer` and
 `DataConverterSystemDegsToRads` runtime execution now admits default-context
 number sources feeding `BindablePropertyNumber.propertyValue` targets when C++

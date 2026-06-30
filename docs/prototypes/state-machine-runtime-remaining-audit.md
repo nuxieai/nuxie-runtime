@@ -146,6 +146,10 @@ slice.
   forward conversion for default-context symbol-list-index sources feeding
   number targets, covered by a C++ probe through an existing blend-state
   consumer.
+- First `DataConverterOperationViewModel` graph-owned converter execution
+  slice: forward conversion for default-context number sources feeding number
+  targets, using a second imported default view-model number as the operation
+  operand and covered by a C++ probe through an existing blend-state consumer.
 - First system operation-value converter slice: direct
   `DataConverterSystemNormalizer` and `DataConverterSystemDegsToRads`
   conversion for default-context number sources feeding number targets when
@@ -258,9 +262,9 @@ slice.
   symbol-list-index-to-string, color-to-string, string-trim, and
   string-remove-zeros, string-pad, rounder, range-mapper-without-interpolator,
   operation-value number/symbol-list-index, system-operation-value direct
-  number, string converter group, number-to-string converter group, and
-  number-to-number converter group paths, data-binding update queues, relative
-  paths, parent paths, and nested paths.
+  number, operation-view-model default-number, string converter group,
+  number-to-string converter group, and number-to-number converter group paths,
+  data-binding update queues, relative paths, parent paths, and nested paths.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener
   actions.

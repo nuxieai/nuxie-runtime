@@ -41,10 +41,15 @@
 #include "rive/shapes/paint/linear_gradient.hpp"
 #include "rive/shapes/paint/target_effect.hpp"
 #undef private
+#define protected public
+#include "rive/layout_component.hpp"
+#undef protected
 #define private public
 #include "rive/artboard_component_list.hpp"
 #undef private
+#define protected public
 #include "rive/artboard.hpp"
+#undef protected
 #include "rive/container_component.hpp"
 #include "rive/animation/blend_animation.hpp"
 #include "rive/animation/blend_state.hpp"
@@ -249,6 +254,12 @@ struct RuntimeCollapseMutation
     bool collapsed;
 };
 
+struct RuntimeArtboardSizeMutation
+{
+    float width;
+    float height;
+};
+
 struct RuntimeAnimationApplication
 {
     size_t animationIndex;
@@ -355,6 +366,7 @@ struct ProbeOptions
     bool instanceArtboards = false;
     std::vector<RuntimeDoubleMutation> runtimeDoubleMutations;
     std::vector<RuntimeCollapseMutation> runtimeCollapseMutations;
+    std::vector<RuntimeArtboardSizeMutation> runtimeArtboardSizeMutations;
     std::vector<RuntimeAnimationApplication> runtimeAnimationApplications;
     std::vector<RuntimeAnimationAdvance> runtimeAnimationAdvances;
     std::vector<RuntimeStateMachineAction> runtimeStateMachineActions;
@@ -681,6 +693,21 @@ void apply_runtime_collapse_mutations(const std::vector<rive::Core*>& objects,
             continue;
         }
         object->as<rive::Component>()->collapse(mutation.collapsed);
+    }
+}
+
+void apply_runtime_artboard_size_mutations(rive::Artboard* artboard,
+                                           const ProbeOptions& options)
+{
+    if (artboard == nullptr)
+    {
+        return;
+    }
+    for (const auto& mutation : options.runtimeArtboardSizeMutations)
+    {
+        artboard->width(mutation.width);
+        artboard->height(mutation.height);
+        artboard->m_layout = rive::Layout(0.0f, 0.0f, mutation.width, mutation.height);
     }
 }
 
@@ -5661,6 +5688,7 @@ void write_artboard(std::ostream& out,
 
     apply_runtime_double_mutations(objects, options);
     apply_runtime_collapse_mutations(objects, options);
+    apply_runtime_artboard_size_mutations(artboard, options);
     apply_runtime_animation_applications(instanceArtboard, options);
     auto runtimeAnimationAdvanceReports =
         apply_runtime_animation_advances(instanceArtboard, options);
@@ -7231,6 +7259,21 @@ int main(int argc, const char* argv[])
             continue;
         }
 
+        if (is_arg(argv[i], "--runtime-set-artboard-size"))
+        {
+            if (i + 2 >= argc)
+            {
+                std::cerr
+                    << "--runtime-set-artboard-size requires width height\n";
+                return 2;
+            }
+            RuntimeArtboardSizeMutation mutation;
+            mutation.width = std::strtof(argv[++i], nullptr);
+            mutation.height = std::strtof(argv[++i], nullptr);
+            options.runtimeArtboardSizeMutations.push_back(mutation);
+            continue;
+        }
+
         if (is_arg(argv[i], "--runtime-apply-animation"))
         {
             if (i + 3 >= argc)
@@ -7594,7 +7637,7 @@ int main(int argc, const char* argv[])
 
     if (filename == nullptr)
     {
-        std::cerr << "usage: rive_cpp_probe [--converter-samples] [--number-to-list-samples] [--property-values] [--file-property-values] [--no-advance] [--runtime-update] [--instance-artboards] [--runtime-set-double localId propertyKey value] [--runtime-collapse-component localId value] [--runtime-apply-animation animationIndex seconds mix] [--runtime-advance-animation animationIndex seconds mix] [--runtime-advance-state-machine stateMachineIndex seconds] [--runtime-advance-state-machine-data-context stateMachineIndex] [--runtime-set-state-machine-bool stateMachineIndex inputIndex value] [--runtime-set-state-machine-number stateMachineIndex inputIndex value] [--runtime-set-state-machine-bindable-number stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-bool stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-integer stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-color stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-string stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-enum stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-asset stateMachineIndex dataBindIndex value] [--runtime-bind-empty-state-machine-context stateMachineIndex] [--runtime-bind-default-view-model-state-machine-context stateMachineIndex] [--runtime-fire-state-machine-trigger stateMachineIndex inputIndex] [--complete-view-model-properties] [--data-context-lookups] --file "
+        std::cerr << "usage: rive_cpp_probe [--converter-samples] [--number-to-list-samples] [--property-values] [--file-property-values] [--no-advance] [--runtime-update] [--instance-artboards] [--runtime-set-double localId propertyKey value] [--runtime-collapse-component localId value] [--runtime-set-artboard-size width height] [--runtime-apply-animation animationIndex seconds mix] [--runtime-advance-animation animationIndex seconds mix] [--runtime-advance-state-machine stateMachineIndex seconds] [--runtime-advance-state-machine-data-context stateMachineIndex] [--runtime-set-state-machine-bool stateMachineIndex inputIndex value] [--runtime-set-state-machine-number stateMachineIndex inputIndex value] [--runtime-set-state-machine-bindable-number stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-bool stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-integer stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-color stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-string stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-enum stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-asset stateMachineIndex dataBindIndex value] [--runtime-bind-empty-state-machine-context stateMachineIndex] [--runtime-bind-default-view-model-state-machine-context stateMachineIndex] [--runtime-fire-state-machine-trigger stateMachineIndex inputIndex] [--complete-view-model-properties] [--data-context-lookups] --file "
                      "path/to/file.riv\n";
         return 2;
     }

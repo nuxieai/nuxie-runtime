@@ -15,6 +15,8 @@ use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 
 #[derive(Debug, Clone)]
 pub struct ArtboardInstance {
+    width: f32,
+    height: f32,
     slots: Vec<InstanceSlot>,
     components: Vec<RuntimeComponent>,
     component_by_local: BTreeMap<usize, usize>,
@@ -28,6 +30,8 @@ pub struct ArtboardInstance {
 
 impl ArtboardInstance {
     pub fn from_graph(file: &RuntimeFile, graph: &ArtboardGraph) -> Result<Self> {
+        let dimensions =
+            RuntimeArtboardDimensions::from_object(file.object(graph.global_id as usize));
         let mut slots = Vec::new();
         for local_object in &graph.local_objects {
             let object = file.object(local_object.global_id as usize);
@@ -81,6 +85,8 @@ impl ArtboardInstance {
         let state_machines = build_state_machines(file, graph, &linear_animations);
 
         Ok(Self {
+            width: dimensions.width,
+            height: dimensions.height,
             slots,
             components,
             component_by_local,
@@ -415,6 +421,25 @@ impl ArtboardInstance {
 
     pub fn state_machines(&self) -> &[RuntimeStateMachine] {
         &self.state_machines
+    }
+
+    pub fn set_artboard_dimensions(&mut self, width: f32, height: f32) -> bool {
+        if self.width == width && self.height == height {
+            return false;
+        }
+        self.width = width;
+        self.height = height;
+        self.did_change = true;
+        true
+    }
+
+    fn artboard_property_value(&self, property_type: u64) -> f32 {
+        match property_type {
+            0 => self.width,
+            1 => self.height,
+            2 => self.width / self.height,
+            _ => 0.0,
+        }
     }
 
     pub fn apply_linear_animation(&mut self, index: usize, seconds: f32, mix: f32) -> bool {
@@ -3468,12 +3493,12 @@ enum RuntimeTransitionCondition {
         op: TransitionConditionOp,
     },
     ArtboardComponentNumber {
-        value: f32,
+        property_type: u64,
         op: TransitionConditionOp,
         component: RuntimeComponentNumberValue,
     },
     ArtboardNumber {
-        value: f32,
+        property_type: u64,
         op: TransitionConditionOp,
         threshold: f32,
     },
@@ -3484,7 +3509,6 @@ impl RuntimeTransitionCondition {
         file: &RuntimeFile,
         graph: &ArtboardGraph,
         object: &RuntimeObject,
-        artboard_dimensions: RuntimeArtboardDimensions,
     ) -> Option<Self> {
         match object.type_name {
             "TransitionBoolCondition" => {
@@ -3518,8 +3542,7 @@ impl RuntimeTransitionCondition {
                     && right.type_name == "TransitionValueNumberComparator"
                 {
                     return Some(Self::ArtboardNumber {
-                        value: artboard_dimensions
-                            .property_value(left.uint_property("propertyType").unwrap_or(0)),
+                        property_type: left.uint_property("propertyType").unwrap_or(0),
                         op: TransitionConditionOp::from_value(
                             object.uint_property("opValue").unwrap_or(0),
                         ),
@@ -3529,14 +3552,7 @@ impl RuntimeTransitionCondition {
                 if left.type_name == "TransitionPropertyArtboardComparator"
                     && right.type_name == "TransitionPropertyComponentComparator"
                 {
-                    return Self::from_artboard_component(
-                        file,
-                        graph,
-                        object,
-                        left,
-                        right,
-                        artboard_dimensions,
-                    );
+                    return Self::from_artboard_component(file, graph, object, left, right);
                 }
                 if left.type_name == "TransitionPropertyComponentComparator"
                     && right.type_name == "TransitionPropertyComponentComparator"
@@ -3826,7 +3842,6 @@ impl RuntimeTransitionCondition {
         condition: &RuntimeObject,
         left: &RuntimeObject,
         right: &RuntimeObject,
-        artboard_dimensions: RuntimeArtboardDimensions,
     ) -> Option<Self> {
         let local_id = usize::try_from(right.uint_property("objectId")?).ok()?;
         let property_key = u16::try_from(right.uint_property("propertyKey")?).ok()?;
@@ -3838,8 +3853,7 @@ impl RuntimeTransitionCondition {
         let source_object = component_source_object(file, graph, local_id);
         let supports_property = component_supports_property(source_object, property_key);
         Some(Self::ArtboardComponentNumber {
-            value: artboard_dimensions
-                .property_value(left.uint_property("propertyType").unwrap_or(0)),
+            property_type: left.uint_property("propertyType").unwrap_or(0),
             op: TransitionConditionOp::from_value(condition.uint_property("opValue").unwrap_or(0)),
             component: RuntimeComponentNumberValue::from_parts(
                 local_id,
@@ -4431,15 +4445,18 @@ impl RuntimeTransitionCondition {
                 op.compare_u64_equal_only(*component_value, view_model_value)
             }
             Self::ArtboardComponentNumber {
-                value,
+                property_type,
                 op,
                 component,
-            } => op.compare(*value, component.value(artboard)),
+            } => op.compare(
+                artboard.artboard_property_value(*property_type),
+                component.value(artboard),
+            ),
             Self::ArtboardNumber {
-                value,
+                property_type,
                 op,
                 threshold,
-            } => op.compare(*value, *threshold),
+            } => op.compare(artboard.artboard_property_value(*property_type), *threshold),
         }
     }
 
@@ -4826,15 +4843,6 @@ impl RuntimeArtboardDimensions {
             .and_then(|object| object.double_property("height"))
             .unwrap_or(0.0);
         Self { width, height }
-    }
-
-    fn property_value(self, property_type: u64) -> f32 {
-        match property_type {
-            0 => self.width,
-            1 => self.height,
-            2 => self.width / self.height,
-            _ => 0.0,
-        }
     }
 }
 
@@ -7302,8 +7310,6 @@ fn build_state_machines(
     let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
         return Vec::new();
     };
-    let artboard_dimensions =
-        RuntimeArtboardDimensions::from_object(file.object(graph.global_id as usize));
     let animation_index_by_global = linear_animations
         .iter()
         .enumerate()
@@ -7428,10 +7434,7 @@ fn build_state_machines(
                                                     .iter()
                                                     .filter_map(|condition| {
                                                         RuntimeTransitionCondition::from_object(
-                                                            file,
-                                                            graph,
-                                                            condition,
-                                                            artboard_dimensions,
+                                                            file, graph, condition,
                                                         )
                                                     })
                                                     .collect(),
@@ -8221,6 +8224,8 @@ mod tests {
             .collect::<BTreeMap<_, _>>();
 
         ArtboardInstance {
+            width: 0.0,
+            height: 0.0,
             slots: components
                 .iter()
                 .enumerate()

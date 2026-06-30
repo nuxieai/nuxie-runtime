@@ -7103,25 +7103,48 @@ fn state_machine_artboard_comparand_conditions_match_cpp_probe() {
         return;
     };
 
-    for (label, bytes) in [
-        (
-            "synthetic/runtime_state_machine_artboard_width_condition_cpp.riv",
-            synthetic_state_machine_artboard_number_condition(8274, 0, 150.0),
-        ),
-        (
-            "synthetic/runtime_state_machine_artboard_height_condition_cpp.riv",
-            synthetic_state_machine_artboard_number_condition(8275, 1, 75.0),
-        ),
-        (
-            "synthetic/runtime_state_machine_artboard_ratio_condition_cpp.riv",
-            synthetic_state_machine_artboard_number_condition(8276, 2, 1.5),
-        ),
-        (
-            "synthetic/runtime_state_machine_artboard_false_condition_cpp.riv",
-            synthetic_state_machine_artboard_number_condition(8277, 0, 250.0),
-        ),
+    struct Case<'a> {
+        label: &'a str,
+        bytes: Vec<u8>,
+        artboard_size: Option<(f32, f32)>,
+    }
+
+    for case in [
+        Case {
+            label: "synthetic/runtime_state_machine_artboard_width_condition_cpp.riv",
+            bytes: synthetic_state_machine_artboard_number_condition(8274, 0, 150.0),
+            artboard_size: None,
+        },
+        Case {
+            label: "synthetic/runtime_state_machine_artboard_height_condition_cpp.riv",
+            bytes: synthetic_state_machine_artboard_number_condition(8275, 1, 75.0),
+            artboard_size: None,
+        },
+        Case {
+            label: "synthetic/runtime_state_machine_artboard_ratio_condition_cpp.riv",
+            bytes: synthetic_state_machine_artboard_number_condition(8276, 2, 1.5),
+            artboard_size: None,
+        },
+        Case {
+            label: "synthetic/runtime_state_machine_artboard_false_condition_cpp.riv",
+            bytes: synthetic_state_machine_artboard_number_condition(8277, 0, 250.0),
+            artboard_size: None,
+        },
+        Case {
+            label: "synthetic/runtime_state_machine_artboard_mutated_width_condition_cpp.riv",
+            bytes: synthetic_state_machine_artboard_number_condition(8356, 0, 250.0),
+            artboard_size: Some((300.0, 100.0)),
+        },
     ] {
-        let args = [
+        let mut args = Vec::new();
+        if let Some((width, height)) = case.artboard_size {
+            args.extend([
+                "--runtime-set-artboard-size".to_owned(),
+                width.to_string(),
+                height.to_string(),
+            ]);
+        }
+        args.extend([
             "--runtime-advance-state-machine".to_owned(),
             "0".to_owned(),
             "0".to_owned(),
@@ -7131,13 +7154,20 @@ fn state_machine_artboard_comparand_conditions_match_cpp_probe() {
             "--runtime-advance-state-machine".to_owned(),
             "0".to_owned(),
             "1".to_owned(),
-        ];
+        ]);
 
-        let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
-        let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+        let cpp = read_cpp_probe_bytes_with_args(&probe, case.label, &case.bytes, &args);
+        let (_, mut rust) = read_rust_instance_from_bytes(&case.bytes, case.label);
         let mut state_machine = rust
             .state_machine_instance(0)
-            .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+            .unwrap_or_else(|| panic!("missing Rust state-machine instance for {}", case.label));
+        if let Some((width, height)) = case.artboard_size {
+            assert!(
+                rust.set_artboard_dimensions(width, height),
+                "{} failed to mutate Rust artboard dimensions",
+                case.label
+            );
+        }
 
         let mut rust_reports = Vec::new();
         rust_reports.push((
@@ -7157,20 +7187,26 @@ fn state_machine_artboard_comparand_conditions_match_cpp_probe() {
         let cpp_artboard = cpp
             .artboards
             .first()
-            .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+            .unwrap_or_else(|| panic!("missing C++ artboard for {}", case.label));
         assert_eq!(
             cpp_artboard.runtime_state_machine_advances.len(),
             rust_reports.len(),
-            "{label} state-machine report count mismatch"
+            "{} state-machine report count mismatch",
+            case.label
         );
         for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
             .runtime_state_machine_advances
             .iter()
             .zip(&rust_reports)
         {
-            compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+            compare_state_machine_advance(
+                cpp_state_machine,
+                rust_state_machine,
+                *advanced,
+                case.label,
+            );
         }
-        compare_cpp_runtime_update(&cpp, &rust, &report, label);
+        compare_cpp_runtime_update(&cpp, &rust, &report, case.label);
     }
 }
 

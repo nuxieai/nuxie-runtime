@@ -141,6 +141,10 @@ slice.
   forward conversion for default-context symbol-list-index sources feeding
   string targets, covered by a C++ probe through an existing string
   transition-condition consumer.
+- Sixth `DataConverterToString` graph-owned converter execution slice:
+  forward conversion for default-context color sources feeding string targets,
+  including imported `colorFormat` descriptor bytes, covered by a C++ probe
+  through an existing string transition-condition consumer.
 
 ## Remaining Runtime Slices
 
@@ -159,9 +163,9 @@ slice.
   list/symbol/view-model bindables, converters beyond the admitted boolean
   negate, trigger, boolean-to-number, enum-to-number, color-to-number, and
   string-to-number, symbol-list-index-to-number, number-to-string, and
-  boolean-to-string, string-to-string, trigger-to-string, and
-  symbol-list-index-to-string paths, data-binding update queues, relative
-  paths, parent paths, and nested paths.
+  boolean-to-string, string-to-string, trigger-to-string,
+  symbol-list-index-to-string, and color-to-string paths, data-binding update
+  queues, relative paths, parent paths, and nested paths.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener
   actions.

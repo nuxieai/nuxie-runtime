@@ -2926,12 +2926,16 @@ struct RuntimeDataBindGraphSourceNode {
     value: RuntimeDataBindGraphValue,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum RuntimeDataBindGraphConverter {
     BooleanNegate,
     TriggerIncrement,
     ToNumber,
-    ToString { flags: u64, decimals: u64 },
+    ToString {
+        flags: u64,
+        decimals: u64,
+        color_format: Vec<u8>,
+    },
     Unsupported,
 }
 
@@ -3374,7 +3378,7 @@ impl RuntimeDataBindGraph {
                     &mut default_view_model_bindings,
                     source.data_bind_index,
                     &source.path,
-                    source.converter,
+                    source.converter.clone(),
                     RuntimeDataBindGraphTarget::Number {
                         global_id: bindable.global_id,
                     },
@@ -3390,7 +3394,7 @@ impl RuntimeDataBindGraph {
                     &mut default_view_model_bindings,
                     source.data_bind_index,
                     &source.path,
-                    source.converter,
+                    source.converter.clone(),
                     RuntimeDataBindGraphTarget::Boolean {
                         global_id: bindable.global_id,
                     },
@@ -3406,7 +3410,7 @@ impl RuntimeDataBindGraph {
                     &mut default_view_model_bindings,
                     source.data_bind_index,
                     &source.path,
-                    source.converter,
+                    source.converter.clone(),
                     RuntimeDataBindGraphTarget::String {
                         global_id: bindable.global_id,
                     },
@@ -3486,7 +3490,7 @@ impl RuntimeDataBindGraph {
                     &mut default_view_model_bindings,
                     source.data_bind_index,
                     &source.path,
-                    source.converter,
+                    source.converter.clone(),
                     RuntimeDataBindGraphTarget::Trigger {
                         global_id: bindable.global_id,
                     },
@@ -3953,7 +3957,7 @@ impl RuntimeDataBindGraph {
 
 impl RuntimeDataBindGraphSourceNode {
     fn converted_value(&self) -> Option<RuntimeDataBindGraphValue> {
-        match (self.converter, &self.value) {
+        match (self.converter.as_ref(), &self.value) {
             (None, value) => Some(value.clone()),
             (
                 Some(RuntimeDataBindGraphConverter::BooleanNegate),
@@ -3999,10 +4003,12 @@ impl RuntimeDataBindGraphSourceNode {
             )),
             (Some(RuntimeDataBindGraphConverter::ToNumber), _) => None,
             (
-                Some(RuntimeDataBindGraphConverter::ToString { flags, decimals }),
+                Some(RuntimeDataBindGraphConverter::ToString {
+                    flags, decimals, ..
+                }),
                 RuntimeDataBindGraphValue::Number(value),
             ) => Some(RuntimeDataBindGraphValue::String(
-                rive_binary::data_converter_to_string_number_value(*value, flags, decimals),
+                rive_binary::data_converter_to_string_number_value(*value, *flags, *decimals),
             )),
             (
                 Some(RuntimeDataBindGraphConverter::ToString { .. }),
@@ -4027,6 +4033,12 @@ impl RuntimeDataBindGraphSourceNode {
                 RuntimeDataBindGraphValue::SymbolListIndex(value),
             ) => Some(RuntimeDataBindGraphValue::String(
                 rive_binary::data_converter_to_string_symbol_list_index_value(*value),
+            )),
+            (
+                Some(RuntimeDataBindGraphConverter::ToString { color_format, .. }),
+                RuntimeDataBindGraphValue::Color(value),
+            ) => Some(RuntimeDataBindGraphValue::String(
+                rive_binary::data_converter_to_string_color_value(*value, color_format),
             )),
             (Some(RuntimeDataBindGraphConverter::ToString { .. }), _) => None,
             (Some(RuntimeDataBindGraphConverter::Unsupported), _) => None,
@@ -10337,6 +10349,8 @@ fn runtime_bindable_string_default_view_model_source(
             file.view_model_instance_symbol_list_index_value_for_object(source)
         {
             RuntimeDataBindGraphValue::SymbolListIndex(value)
+        } else if let Some(value) = file.view_model_instance_color_value_for_object(source) {
+            RuntimeDataBindGraphValue::Color(value)
         } else {
             return None;
         }
@@ -10729,6 +10743,10 @@ fn runtime_data_bind_graph_converter(
         "DataConverterToString" => RuntimeDataBindGraphConverter::ToString {
             flags: converter.uint_property("flags").unwrap_or(0),
             decimals: converter.uint_property("decimals").unwrap_or(0),
+            color_format: converter
+                .string_property_bytes("colorFormat")
+                .unwrap_or_default()
+                .to_vec(),
         },
         _ => RuntimeDataBindGraphConverter::Unsupported,
     })

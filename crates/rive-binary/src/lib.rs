@@ -9683,6 +9683,14 @@ pub fn data_converter_to_string_symbol_list_index_value(value: u64) -> Vec<u8> {
     value.to_string().into_bytes()
 }
 
+pub fn data_converter_to_string_color_value(value: u32, color_format: &[u8]) -> Vec<u8> {
+    if color_format.is_empty() {
+        ((value as i32).to_string()).into_bytes()
+    } else {
+        cpp_format_color_to_string(value, color_format)
+    }
+}
+
 fn cpp_format_number_to_string(value: f32, flags: u64, decimals: u64) -> Vec<u8> {
     const ROUND: u64 = 1 << 0;
     const TRAILING_ZEROS: u64 = 1 << 1;

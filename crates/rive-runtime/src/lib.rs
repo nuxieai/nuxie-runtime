@@ -2885,6 +2885,7 @@ struct RuntimeBindableBoolean {
 struct RuntimeBindableBooleanDefaultViewModelSource {
     data_bind_index: usize,
     path: Vec<u32>,
+    flags: u64,
     converter: Option<RuntimeDataBindGraphConverter>,
     value: bool,
 }
@@ -3629,7 +3630,7 @@ impl RuntimeDataBindGraph {
                     &mut default_view_model_bindings,
                     source.data_bind_index,
                     &source.path,
-                    0,
+                    source.flags,
                     source.converter.clone(),
                     RuntimeDataBindGraphTarget::Boolean {
                         global_id: bindable.global_id,
@@ -4246,6 +4247,33 @@ impl RuntimeDataBindGraph {
         true
     }
 
+    fn mark_boolean_target_dirty_for_data_bind(&mut self, data_bind_index: usize) -> bool {
+        if !self.default_view_model_source_context_bound() {
+            return false;
+        }
+        let Some(binding) = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+        else {
+            return false;
+        };
+        let Some(target) = self.targets.get(binding.target.0) else {
+            return false;
+        };
+        if !matches!(target.target, RuntimeDataBindGraphTarget::Boolean { .. }) {
+            return false;
+        }
+        let Some(source) = self.sources.get_mut(binding.source.0) else {
+            return false;
+        };
+        if !source.applies_target_to_source() {
+            return false;
+        }
+        source.target_to_source_dirty = true;
+        true
+    }
+
     fn default_view_model_trigger_target_global_id_for_data_bind(
         &self,
         data_bind_index: usize,
@@ -4376,6 +4404,62 @@ impl RuntimeDataBindGraph {
         changed
     }
 
+    fn apply_default_view_model_boolean_targets_to_sources(
+        &mut self,
+        booleans: &[StateMachineBindableBooleanInstance],
+    ) -> bool {
+        if !self.default_view_model_source_context_bound() {
+            return false;
+        }
+        let mut changed = false;
+
+        for binding in self.default_view_model_bindings.clone() {
+            let Some(target) = self.targets.get(binding.target.0) else {
+                continue;
+            };
+            let RuntimeDataBindGraphTarget::Boolean { global_id } = target.target else {
+                continue;
+            };
+            let Some(source) = self.sources.get_mut(binding.source.0) else {
+                continue;
+            };
+            if !source.target_to_source_dirty {
+                continue;
+            }
+            source.target_to_source_dirty = false;
+            if !source.bound || !source.supports_direct_boolean_target_to_source() {
+                continue;
+            }
+            let Some(value) = booleans
+                .iter()
+                .find(|boolean| boolean.global_id == global_id)
+                .map(|boolean| boolean.value)
+            else {
+                continue;
+            };
+            let RuntimeDataBindGraphValue::Boolean(source_value) = &mut source.value else {
+                continue;
+            };
+            if *source_value != value {
+                *source_value = value;
+                changed = true;
+            }
+            let RuntimeDataBindGraphValue::Boolean(default_value) = &mut source.default_value
+            else {
+                continue;
+            };
+            if *default_value != value {
+                *default_value = value;
+                changed = true;
+            }
+        }
+
+        if changed {
+            self.mark_default_view_model_bindings_dirty();
+        }
+        changed
+    }
+
     fn apply_default_view_model_bindings(
         &mut self,
         mut targets: RuntimeDataBindGraphTargetsMut<'_>,
@@ -4431,6 +4515,12 @@ impl RuntimeDataBindGraphSourceNode {
         self.applies_target_to_source()
             && self.converter.is_none()
             && matches!(self.value, RuntimeDataBindGraphValue::Number(_))
+    }
+
+    fn supports_direct_boolean_target_to_source(&self) -> bool {
+        self.applies_target_to_source()
+            && self.converter.is_none()
+            && matches!(self.value, RuntimeDataBindGraphValue::Boolean(_))
     }
 
     fn reset_converter_state(&mut self) {
@@ -8103,6 +8193,8 @@ impl StateMachineInstance {
         if !bindable_boolean.set_value(value) {
             return false;
         }
+        self.data_bind_graph
+            .mark_boolean_target_dirty_for_data_bind(data_bind_index);
         self.needs_advance = true;
         true
     }
@@ -8445,6 +8537,8 @@ impl StateMachineInstance {
         if self.data_bind_graph.default_view_model_context_bound() {
             self.data_bind_graph
                 .apply_default_view_model_number_targets_to_sources(&self.bindable_numbers);
+            self.data_bind_graph
+                .apply_default_view_model_boolean_targets_to_sources(&self.bindable_booleans);
             self.apply_default_view_model_bindings(true, RuntimeDataBindGraphApplyPhase::Immediate);
             for trigger in &mut self.view_model_triggers {
                 trigger.reset();
@@ -12147,6 +12241,7 @@ fn runtime_bindable_boolean_default_view_model_source(
     Some(RuntimeBindableBooleanDefaultViewModelSource {
         data_bind_index,
         path: path.to_vec(),
+        flags: data_bind.uint_property("flags").unwrap_or(0),
         converter: runtime_data_bind_graph_converter(file, data_bind),
         value,
     })

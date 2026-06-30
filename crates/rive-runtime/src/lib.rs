@@ -2978,6 +2978,9 @@ impl RuntimeDataBindGraphValue {
             Self::Asset(_) => context
                 .asset_value_by_property_index(usize::try_from(path[1]).ok()?)
                 .map(Self::Asset),
+            Self::Artboard(_) => context
+                .artboard_value_by_property_index(usize::try_from(path[1]).ok()?)
+                .map(Self::Artboard),
             _ => None,
         }
     }
@@ -3042,6 +3045,7 @@ pub struct RuntimeOwnedViewModelInstance {
     colors: Vec<RuntimeOwnedViewModelColor>,
     enums: Vec<RuntimeOwnedViewModelEnum>,
     assets: Vec<RuntimeOwnedViewModelAsset>,
+    artboards: Vec<RuntimeOwnedViewModelArtboard>,
 }
 
 #[derive(Debug, Clone)]
@@ -3080,6 +3084,12 @@ struct RuntimeOwnedViewModelAsset {
     value: u64,
 }
 
+#[derive(Debug, Clone)]
+struct RuntimeOwnedViewModelArtboard {
+    property_index: usize,
+    value: u64,
+}
+
 impl RuntimeOwnedViewModelInstance {
     pub fn new(file: &RuntimeFile, view_model_index: usize) -> Option<Self> {
         let view_model = file.view_model(view_model_index)?;
@@ -3089,6 +3099,7 @@ impl RuntimeOwnedViewModelInstance {
         let mut colors = Vec::new();
         let mut enums = Vec::new();
         let mut assets = Vec::new();
+        let mut artboards = Vec::new();
         for (property_index, property) in view_model.properties.into_iter().enumerate() {
             match property.type_name {
                 "ViewModelPropertyNumber" => numbers.push(RuntimeOwnedViewModelNumber {
@@ -3119,6 +3130,10 @@ impl RuntimeOwnedViewModelInstance {
                         value: 0,
                     })
                 }
+                "ViewModelPropertyArtboard" => artboards.push(RuntimeOwnedViewModelArtboard {
+                    property_index,
+                    value: 0,
+                }),
                 _ => {}
             }
         }
@@ -3130,6 +3145,7 @@ impl RuntimeOwnedViewModelInstance {
             colors,
             enums,
             assets,
+            artboards,
         })
     }
 
@@ -3223,6 +3239,21 @@ impl RuntimeOwnedViewModelInstance {
         true
     }
 
+    pub fn set_artboard_by_property_index(&mut self, property_index: usize, value: u64) -> bool {
+        let Some(artboard) = self
+            .artboards
+            .iter_mut()
+            .find(|artboard| artboard.property_index == property_index)
+        else {
+            return false;
+        };
+        if artboard.value == value {
+            return false;
+        }
+        artboard.value = value;
+        true
+    }
+
     fn number_value_by_property_index(&self, property_index: usize) -> Option<f32> {
         self.numbers
             .iter()
@@ -3263,6 +3294,13 @@ impl RuntimeOwnedViewModelInstance {
             .iter()
             .find(|asset| asset.property_index == property_index)
             .map(|asset| asset.value)
+    }
+
+    fn artboard_value_by_property_index(&self, property_index: usize) -> Option<u64> {
+        self.artboards
+            .iter()
+            .find(|artboard| artboard.property_index == property_index)
+            .map(|artboard| artboard.value)
     }
 }
 

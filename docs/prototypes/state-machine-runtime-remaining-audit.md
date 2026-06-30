@@ -43,11 +43,13 @@ slice.
   targets other than `Event.trigger`.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
-- Live view-model APIs and data-binding propagation beyond the finite default
-  source-to-target `propertyValue` bind set listed above: binding external
-  contexts, source mutation APIs, list/symbol/view-model bindables, converters,
-  data-binding update queues, relative paths, parent paths, and nested paths
-  for fire triggers and conditions.
+- Live view-model APIs and data-binding propagation governed by
+  `docs/prototypes/data-binding-graph-runtime-contract.md`: first migrate the
+  finite default source-to-target `propertyValue` bind set listed above behind a
+  `RuntimeDataBindGraph`, then add binding external contexts, source mutation
+  APIs, list/symbol/view-model bindables, converters, data-binding update
+  queues, relative paths, parent paths, and nested paths for fire triggers and
+  conditions.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener
   actions.
@@ -57,6 +59,8 @@ slice.
 ## Next-Slice Rule
 
 Prefer the next slice that removes a blocker for `#12` or narrows an already
-admitted runtime path. Avoid starting hit testing, live data binding, nested
-artboards, or rendering unless the slice contract names the smallest observable
-C++ behavior and keeps unrelated runtime systems out of scope.
+admitted runtime path. Live data-binding work should now enter through
+`docs/prototypes/data-binding-graph-runtime-contract.md`; avoid starting hit
+testing, nested artboards, or rendering unless the slice contract names the
+smallest observable C++ behavior and keeps unrelated runtime systems out of
+scope.

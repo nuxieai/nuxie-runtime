@@ -356,7 +356,20 @@ How should Rust model data binding as a graph over the object graph?
 
 ### Answer
 
-Open. Data binding should likely be its own scheduler/module, not fields scattered through components. It must support source-to-target and target-to-source updates, observer push vs polling fallback, dirty queues, converters, context values, pending add/remove during processing, and re-entry protection.
+In progress. The scope boundary is defined in
+`docs/prototypes/data-binding-graph-runtime-contract.md`: live data-binding
+behavior belongs behind a runtime data-binding graph, not in additional
+per-bindable shims on `StateMachineInstance` and not in `rive-binary`. The graph
+must own concrete context binding, source lookup, target writes,
+source-to-target and target-to-source propagation, dirty queues, converter
+execution, observer/polling behavior, pending add/remove handling, re-entry
+protection, external view-model contexts, and later relative/parent/nested path
+resolution. The first implementation slice should introduce
+`RuntimeDataBindGraph` and migrate the already-proven finite default-context
+`propertyValue` binds behind it while preserving the current C++ probe results;
+external contexts, public source mutation APIs, converters, reverse propagation,
+relative paths, parent paths, nested paths, listener-owned data binding, and
+nested artboard propagation remain follow-up slices.
 
 ## #13: Nested Artboards And Hosts
 

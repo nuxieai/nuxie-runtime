@@ -823,9 +823,24 @@ before writing the number target. C++ probe coverage verifies the rounded value
 through a `BlendState1DViewModel` consumer. The contract is
 `docs/prototypes/data-binding-graph-rounder-converter-runtime-contract.md`.
 Stable public source handles, list/view-model bindables, remaining converter
-families, converter groups, reverse propagation, update-queue parity,
+families, converter groups, target-to-source propagation, update-queue parity,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
+
+Current #12 update: direct `DataConverterRounder` now also covers the
+main-`ToSource | TwoWay` target-to-source path for default-context number
+binds. A manual edit to a `BindablePropertyNumber.propertyValue` target is
+passed through C++ main-direction rounder `convert` before writing the
+`ViewModelInstanceNumber.propertyValue` source; a second direct number bind
+observes the rounded source value after normal source-to-target application.
+The contract is
+`docs/prototypes/data-binding-graph-rounder-target-to-source-runtime-contract.md`.
+Stable public source handles, list/view-model bindables, public-queue reverse
+conversion, converter groups, main-`ToTarget | TwoWay` dirty behavior for
+converter families not yet covered by dedicated dirty contracts, formula
+functions/randoms, interpolator, number-to-list, scripted converters, broader
+dirty/update queues, relative/parent/nested lookup, listener-owned data
+binding, and nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: the first `DataConverterRangeMapper` runtime execution
 slice now admits default-context number sources feeding

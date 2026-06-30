@@ -22,7 +22,10 @@ the graph writes the bindable target.
 
 ## Out Of Scope
 
-- Reverse conversion.
+- Target-to-source behavior, covered for the first reachable state-machine
+  path by
+  `docs/prototypes/data-binding-graph-rounder-target-to-source-runtime-contract.md`.
+- Public-queue reverse conversion.
 - Non-number inputs beyond C++ default-output fallback.
 - External and owned contexts for this converter.
 - Converter group compositions involving rounder.

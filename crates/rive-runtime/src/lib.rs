@@ -4598,6 +4598,7 @@ impl RuntimeDataBindGraph {
                             source.converter.as_ref(),
                             Some(
                                 RuntimeDataBindGraphConverter::Formula { .. }
+                                    | RuntimeDataBindGraphConverter::Rounder { .. }
                                     | RuntimeDataBindGraphConverter::SystemOperationValue { .. }
                             )
                         )

@@ -137,6 +137,10 @@ slice.
   conversion for default-context number sources feeding number targets,
   including imported `decimals`, covered by a C++ probe through an existing
   blend-state consumer.
+- Rounder target-to-source slice: direct `DataConverterRounder` now covers
+  main-`ToSource | TwoWay` number target-to-source writes. The edited target
+  value flows through C++ main-direction rounder `convert` before writing the
+  default-context number source.
 - First `DataConverterRangeMapper` graph-owned converter execution slice:
   forward conversion for default-context number sources feeding number targets
   without resolved custom interpolators, including imported range bounds,

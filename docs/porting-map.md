@@ -1120,6 +1120,19 @@ groups, public-queue reverse conversion, broader dirty/update queues,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
 
+Current #12 update: direct `DataConverterToString` trigger-to-string binds now
+also cover the main-`ToTarget | TwoWay` state-machine target-dirty path for
+default-context string targets. A manual `BindablePropertyString.propertyValue`
+edit survives explicit data-context advancement, then the next normal
+state-machine advance reapplies the unchanged trigger count through C++
+trigger-to-string conversion, including when elapsed time is zero. The contract
+is
+`docs/prototypes/data-binding-graph-to-string-trigger-main-to-target-two-way-target-dirty-runtime-contract.md`.
+Remaining `DataConverterToString` input kinds, string converter families and
+groups, public-queue reverse conversion, broader dirty/update queues,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
+
 Current #12 update: the first `DataConverterToString` runtime slice now
 supports default-context number sources feeding
 `BindablePropertyString.propertyValue` targets. String source nodes can carry a

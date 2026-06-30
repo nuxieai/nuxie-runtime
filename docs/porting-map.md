@@ -429,10 +429,24 @@ resolving `DataBindContext.sourcePathIds` against the default view-model
 instance and mutating the resolved `ViewModelInstanceString.propertyValue`. The
 contract is
 `docs/prototypes/data-binding-graph-default-string-source-mutation-runtime-contract.md`.
-Color/enum/asset/artboard/trigger sources, external contexts, public source
-handles, converters, reverse propagation, update-queue parity,
-relative/parent/nested lookup, listener-owned data binding, and nested artboard
-propagation remain follow-up `#12` slices.
+Enum/asset/artboard/trigger sources, external contexts, public source handles,
+converters, reverse propagation, update-queue parity, relative/parent/nested
+lookup, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
+
+Current #12 update: graph-owned source mutation now also covers default
+`ViewModelInstanceColor` sources. Rust exposes
+`StateMachineInstance::set_default_view_model_color_source_for_data_bind`,
+which mutates the selected `RuntimeDataBindGraph` color source node and dirties
+the default edge when the default context is bound. The C++ probe mirrors this
+with `--runtime-set-default-view-model-source-color`, resolving
+`DataBindContext.sourcePathIds` against the default view-model instance and
+mutating the resolved `ViewModelInstanceColor.propertyValue`. The contract is
+`docs/prototypes/data-binding-graph-default-color-source-mutation-runtime-contract.md`.
+Enum/asset/artboard/trigger sources, external contexts, public source handles,
+converters, reverse propagation, update-queue parity, relative/parent/nested
+lookup, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
 
 ## #13: Nested Artboards And Hosts
 

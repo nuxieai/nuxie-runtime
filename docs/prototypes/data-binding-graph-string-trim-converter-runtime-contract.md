@@ -20,6 +20,9 @@ existing graph-owned source-to-target apply point.
 - Direct `DataConverterStringTrim` converters with imported `trimType`.
 - Forward source-to-target conversion covered by a C++ probe through an
   existing string transition-condition consumer.
+- Main-`ToTarget | TwoWay` target-dirty behavior for the direct string-trim
+  path is covered by
+  `docs/prototypes/data-binding-graph-string-trim-main-to-target-two-way-target-dirty-runtime-contract.md`.
 
 ## Out Of Scope
 
@@ -29,7 +32,7 @@ existing graph-owned source-to-target apply point.
 - Non-string sources feeding `DataConverterStringTrim`.
 - Owned or external view-model string-trim contexts.
 - Reverse target-to-source propagation.
-- Dirty/update queue parity beyond the existing graph-owned apply point.
+- Dirty/update queue parity beyond the linked state-machine target-dirty path.
 - Relative, parent, and nested source path lookup.
 - Nested artboard propagation.
 

@@ -35,9 +35,11 @@ slice.
   callback targets other than `Event.trigger`.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
-- Live view-model APIs and data-binding propagation: binding external contexts,
-  override propagation from real contexts, data-binding update queues, relative
-  paths, parent paths, and nested paths for fire triggers and conditions.
+- Live view-model APIs and data-binding propagation beyond the first default
+  `ViewModelInstanceNumber` source-to-target bind: binding external contexts,
+  source mutation APIs, non-number bindables, converters, data-binding update
+  queues, relative paths, parent paths, and nested paths for fire triggers and
+  conditions.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener
   actions.

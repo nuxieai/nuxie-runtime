@@ -2954,6 +2954,7 @@ struct RuntimeDataBindGraphSourceNode {
     bound: bool,
     target_to_source_dirty: bool,
     source_to_target_dirty_after_immediate: bool,
+    source_to_target_dirty_after_target_to_source: bool,
     converter: Option<RuntimeDataBindGraphConverter>,
     converter_state: RuntimeDataBindGraphConverterState,
     default_value: RuntimeDataBindGraphValue,
@@ -3831,6 +3832,7 @@ impl RuntimeDataBindGraph {
             bound: true,
             target_to_source_dirty: false,
             source_to_target_dirty_after_immediate: false,
+            source_to_target_dirty_after_target_to_source: false,
             converter,
             converter_state,
             default_value: value.clone(),
@@ -4577,9 +4579,10 @@ impl RuntimeDataBindGraph {
                 let RuntimeDataBindGraphValue::Number(source_value) = &mut source.value else {
                     continue;
                 };
+                let mut source_changed = false;
                 if *source_value != value {
                     *source_value = value;
-                    changed = true;
+                    source_changed = true;
                 }
                 let RuntimeDataBindGraphValue::Number(default_value) = &mut source.default_value
                 else {
@@ -4587,6 +4590,17 @@ impl RuntimeDataBindGraph {
                 };
                 if *default_value != value {
                     *default_value = value;
+                    source_changed = true;
+                }
+                if source_changed {
+                    if source.is_main_to_source()
+                        && matches!(
+                            source.converter.as_ref(),
+                            Some(RuntimeDataBindGraphConverter::Formula { .. })
+                        )
+                    {
+                        source.source_to_target_dirty_after_target_to_source = true;
+                    }
                     changed = true;
                 }
             }
@@ -5131,6 +5145,7 @@ impl RuntimeDataBindGraph {
             }
             if matches!(phase, RuntimeDataBindGraphApplyPhase::Immediate)
                 && source.is_main_to_source()
+                && !source.source_to_target_dirty_after_target_to_source
             {
                 continue;
             }
@@ -5158,6 +5173,7 @@ impl RuntimeDataBindGraph {
             };
             targets.apply_default_view_model_binding(&target.target, &value);
             source.source_to_target_dirty_after_immediate = false;
+            source.source_to_target_dirty_after_target_to_source = false;
         }
         self.default_view_model_bindings_dirty = skipped_dirty_binding;
     }

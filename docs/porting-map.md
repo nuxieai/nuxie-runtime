@@ -1184,6 +1184,23 @@ broader `DataBindContainer` dirty queues, relative/parent/nested lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 
+Current #12 update: deterministic `DataConverterFormula` now has its first
+target-to-source runtime path. A main-`ToSource | TwoWay` number bind mutates a
+`BindablePropertyNumber.propertyValue` target, applies the formula's imported
+output queue through C++ main-direction `convert`, writes the
+`ViewModelInstanceNumber.propertyValue` source, refreshes the formula-bound
+target from that changed source during explicit data-context advancement, and a
+second direct number bind observes the source value after normal
+source-to-target application. The contract is
+`docs/prototypes/data-binding-graph-formula-target-to-source-runtime-contract.md`.
+Formula functions/randoms, formula parent-source binding and dirt propagation,
+asset/artboard/view-model/list formula sources, formula groups,
+main-`ToTarget | TwoWay` formula reverse scheduling, public
+`DataBindContainer::updateDataBinds(true)` scheduling,
+number-to-list/generated-list/scripted scheduling, broader dirty queues,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
+
 Current #12 update: the first graph-owned target-to-source runtime path now
 covers direct default-context number binds. Mutating a
 `BindablePropertyNumber.propertyValue` target for a `ToSource | TwoWay`

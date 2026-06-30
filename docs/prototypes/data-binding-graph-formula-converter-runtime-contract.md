@@ -34,7 +34,10 @@ adding randoms, functions, reverse propagation, or formula-owned source binding.
 - `FormulaTokenFunction`, random formula values, and `randomModeValue`.
 - Symbol-list-index and non-number formula inputs.
 - Formula parent-source binding, source dependents, and add-dirt behavior.
-- Reverse conversion and target-to-source propagation.
+- Target-to-source formula propagation beyond the first direct deterministic
+  number case covered by
+  `docs/prototypes/data-binding-graph-formula-target-to-source-runtime-contract.md`.
+- Main-`ToTarget | TwoWay` formula reverse scheduling.
 - Formula converter groups beyond any composition already admitted by the
   generic graph group executor.
 - Number-to-list, generated-list, scripted, and live context-aware converters.

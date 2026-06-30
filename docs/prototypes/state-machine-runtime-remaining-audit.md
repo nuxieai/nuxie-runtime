@@ -333,6 +333,13 @@ slice.
   `RangeMapper -> OperationValue` in C++ forward group order before writing
   the source, with a second direct bind observing the grouped source value
   after normal state-machine advancement.
+- Formula target-to-source slice: the first deterministic direct
+  `DataConverterFormula` target-to-source path now covers a
+  main-`ToSource | TwoWay` number bind. The formula's imported output queue
+  runs through C++ main-direction `convert` before writing the source, then the
+  same formula-bound target refreshes from that changed source during explicit
+  data-context advancement, with a second direct bind observing the
+  formula-written source value after normal state-machine advancement.
 - First exact number target-to-source direction slice: default-context number
   sources now follow C++ main-direction converter dispatch for the mutating
   bind, with exact C++ probe reports for direct, `OperationValue`, and

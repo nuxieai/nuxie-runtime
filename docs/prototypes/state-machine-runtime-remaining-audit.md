@@ -36,6 +36,9 @@ slice.
   `ViewModelInstanceArtboard`, and `ViewModelInstanceTrigger` sources routed
   through `RuntimeDataBindGraph` source/target edges and covered by current
   probes.
+- Graph-owned default `ViewModelInstanceNumber` source-node mutation by
+  state-machine data-bind index, covered by a C++ probe through an existing
+  `BlendState1DViewModel` consumer.
 
 ## Remaining Runtime Slices
 
@@ -47,9 +50,10 @@ slice.
 - Live view-model APIs and data-binding propagation governed by
   `docs/prototypes/data-binding-graph-runtime-contract.md`: beyond the finite
   graph-routed default source-to-target `propertyValue` bind set listed above,
-  add binding external contexts, source mutation APIs, list/symbol/view-model
-  bindables, converters, data-binding update queues, relative paths, parent
-  paths, and nested paths for fire triggers and conditions.
+  add binding external contexts, source mutation APIs beyond the default number
+  source node, list/symbol/view-model bindables, converters, data-binding
+  update queues, relative paths, parent paths, and nested paths for fire
+  triggers and conditions.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener
   actions.

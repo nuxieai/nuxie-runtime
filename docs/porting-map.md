@@ -391,6 +391,20 @@ behavior-preserving foundation slice; the next live data-binding slice should
 mutate graph source nodes or bind external context source nodes rather than
 adding another direct state-machine target write path.
 
+Current #12 update: the first graph-owned source mutation path is in place for
+default `ViewModelInstanceNumber` sources. Rust exposes
+`StateMachineInstance::set_default_view_model_number_source_for_data_bind`,
+which mutates the selected `RuntimeDataBindGraph` source node and dirties the
+default edge when the default context is bound. The C++ probe mirrors this with
+`--runtime-set-default-view-model-source-number`, resolving
+`DataBindContext.sourcePathIds` against the default view-model instance and
+mutating the resolved `ViewModelInstanceNumber.propertyValue`. The contract is
+`docs/prototypes/data-binding-graph-default-number-source-mutation-runtime-contract.md`.
+Non-number sources, external contexts, public source handles, converters,
+reverse propagation, update-queue parity, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

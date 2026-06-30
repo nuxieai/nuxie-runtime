@@ -3919,6 +3919,38 @@ impl RuntimeDataBindGraph {
         true
     }
 
+    fn set_default_view_model_symbol_list_index_source_for_data_bind(
+        &mut self,
+        data_bind_index: usize,
+        value: u64,
+    ) -> bool {
+        let default_context_bound = self.default_view_model_source_context_bound();
+        let Some(source) = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .map(|binding| binding.source)
+        else {
+            return false;
+        };
+        let Some(source) = self.sources.get_mut(source.0) else {
+            return false;
+        };
+        let RuntimeDataBindGraphValue::SymbolListIndex(current) = &mut source.default_value else {
+            return false;
+        };
+        if *current == value {
+            return false;
+        }
+        *current = value;
+        if default_context_bound {
+            source.value = RuntimeDataBindGraphValue::SymbolListIndex(value);
+            source.bound = true;
+            self.mark_default_view_model_bindings_dirty();
+        }
+        true
+    }
+
     fn set_default_view_model_asset_source_for_data_bind(
         &mut self,
         data_bind_index: usize,
@@ -7231,6 +7263,21 @@ impl StateMachineInstance {
         if !self
             .data_bind_graph
             .set_default_view_model_enum_source_for_data_bind(data_bind_index, value)
+        {
+            return false;
+        }
+        self.needs_advance = true;
+        true
+    }
+
+    pub fn set_default_view_model_symbol_list_index_source_for_data_bind(
+        &mut self,
+        data_bind_index: usize,
+        value: u64,
+    ) -> bool {
+        if !self
+            .data_bind_graph
+            .set_default_view_model_symbol_list_index_source_for_data_bind(data_bind_index, value)
         {
             return false;
         }

@@ -510,6 +510,23 @@ public source handles, converters, reverse propagation, update-queue parity,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
 
+Current #12 update: graph-owned source mutation now also covers default
+`ViewModelInstanceSymbolListIndex` sources. Rust exposes
+`StateMachineInstance::set_default_view_model_symbol_list_index_source_for_data_bind`,
+which mutates the selected `RuntimeDataBindGraph` symbol-list-index source node
+as a raw uint property value and dirties the default edge when the default
+context is bound. The C++ probe mirrors this with
+`--runtime-set-default-view-model-source-symbol-list-index`, resolving
+`DataBindContext.sourcePathIds` against the default view-model instance and
+mutating the resolved `ViewModelInstanceSymbolListIndex.propertyValue`. The
+contract is
+`docs/prototypes/data-binding-graph-default-symbol-list-index-source-mutation-runtime-contract.md`.
+The finite graph-owned default source-node mutation set now covers
+number/boolean/string/color/enum/asset/artboard/trigger/symbol-list-index/view-model.
+External contexts, public source handles, reverse propagation, update-queue
+parity, relative/parent/nested lookup, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
+
 Current #12 update: the data-binding graph now stores source path metadata and
 can bind an imported file-backed `ViewModelInstance` as the active
 state-machine data context. Rust exposes

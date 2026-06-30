@@ -324,6 +324,7 @@ enum class RuntimeStateMachineActionKind
     SetDefaultViewModelSourceString,
     SetDefaultViewModelSourceColor,
     SetDefaultViewModelSourceEnum,
+    SetDefaultViewModelSourceSymbolListIndex,
     SetDefaultViewModelSourceAsset,
     SetDefaultViewModelSourceArtboard,
     SetDefaultViewModelSourceTrigger,
@@ -1337,6 +1338,39 @@ apply_runtime_state_machine_advances(rive::File* file,
                     source->is<rive::ViewModelInstanceEnum>())
                 {
                     source->as<rive::ViewModelInstanceEnum>()
+                        ->propertyValue(action.uintValue);
+                }
+            }
+            continue;
+        }
+        if (action.kind ==
+            RuntimeStateMachineActionKind::
+                SetDefaultViewModelSourceSymbolListIndex)
+        {
+            auto sourceStateMachine = stateMachine->stateMachine();
+            auto dataBind =
+                sourceStateMachine == nullptr
+                    ? nullptr
+                    : sourceStateMachine->dataBind(action.dataBindIndex);
+            auto viewModel =
+                file != nullptr && file->viewModelCount() > 0
+                    ? file->viewModel(0)
+                    : nullptr;
+            auto viewModelInstance =
+                viewModel != nullptr && viewModel->instanceCount() > 0
+                    ? viewModel->instance(0)
+                    : nullptr;
+            if (dataBind != nullptr &&
+                dataBind->is<rive::DataBindContext>() &&
+                viewModelInstance != nullptr)
+            {
+                rive::DataContext context(rive::ref_rcp(viewModelInstance));
+                auto source = context.getViewModelProperty(
+                    dataBind->as<rive::DataBindContext>()->sourcePathIds());
+                if (source != nullptr &&
+                    source->is<rive::ViewModelInstanceSymbolListIndex>())
+                {
+                    source->as<rive::ViewModelInstanceSymbolListIndex>()
                         ->propertyValue(action.uintValue);
                 }
             }
@@ -8372,6 +8406,31 @@ int main(int argc, const char* argv[])
             continue;
         }
 
+        if (is_arg(argv[i],
+                   "--runtime-set-default-view-model-source-symbol-list-index"))
+        {
+            if (i + 3 >= argc)
+            {
+                std::cerr << "--runtime-set-default-view-model-source-symbol-list-index requires stateMachineIndex dataBindIndex value\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::
+                SetDefaultViewModelSourceSymbolListIndex;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            action.uintValue = static_cast<uint32_t>(
+                std::strtoull(argv[++i], nullptr, 10));
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
         if (is_arg(argv[i], "--runtime-set-default-view-model-source-asset"))
         {
             if (i + 3 >= argc)
@@ -8867,6 +8926,7 @@ int main(int argc, const char* argv[])
                      "path/to/file.riv\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-viewmodel-state-machine-context stateMachineIndex viewModelIndex propertyIndex value\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-viewmodel-default-state-machine-context stateMachineIndex viewModelIndex propertyIndex\n";
+        std::cerr << "additional runtime flag: --runtime-set-default-view-model-source-symbol-list-index stateMachineIndex dataBindIndex value\n";
         return 2;
     }
 

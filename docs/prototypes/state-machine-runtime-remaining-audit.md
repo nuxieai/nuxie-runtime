@@ -60,6 +60,9 @@ slice.
 - Graph-owned default `ViewModelInstanceTrigger` source-node mutation by
   state-machine data-bind index, covered by a C++ probe through an existing
   transition-condition consumer.
+- Graph-owned default `ViewModelInstanceSymbolListIndex` source-node mutation
+  by state-machine data-bind index, covered by a C++ probe through an existing
+  symbol-list-index-to-string converter transition-condition consumer.
 - File-backed imported `ViewModelInstance` context binding through
   `RuntimeDataBindGraph` source path re-resolution, covered by a C++ probe
   through existing `BlendState1DViewModel`, boolean transition-condition, and
@@ -214,7 +217,7 @@ slice.
   `propertyValue` bind sets and owned
   number/boolean/string/color/enum/asset/artboard/trigger/view-model contexts listed
   above, add source mutation APIs beyond the default
-  number/boolean/string/color/enum/asset/artboard/trigger source nodes,
+  number/boolean/string/color/enum/asset/artboard/trigger/symbol-list-index/view-model source nodes,
   list/symbol bindables and non-default view-model pointer mutation, converters
   beyond the admitted boolean
   negate, trigger, boolean-to-number, enum-to-number, color-to-number, and

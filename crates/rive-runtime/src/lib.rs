@@ -3322,6 +3322,50 @@ impl RuntimeDataBindGraph {
         true
     }
 
+    fn set_default_view_model_trigger_source_for_data_bind(
+        &mut self,
+        data_bind_index: usize,
+        value: u64,
+    ) -> bool {
+        let Some(source) = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .map(|binding| binding.source)
+        else {
+            return false;
+        };
+        let Some(source) = self.sources.get_mut(source.0) else {
+            return false;
+        };
+        let RuntimeDataBindGraphValue::Trigger(current) = &mut source.value else {
+            return false;
+        };
+        if *current == value {
+            return false;
+        }
+        *current = value;
+        if self.default_view_model_context_bound {
+            self.default_view_model_bindings_dirty = true;
+        }
+        true
+    }
+
+    fn default_view_model_trigger_target_global_id_for_data_bind(
+        &self,
+        data_bind_index: usize,
+    ) -> Option<u32> {
+        let target = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .and_then(|binding| self.targets.get(binding.target.0))?;
+        let RuntimeDataBindGraphTarget::Trigger { global_id } = target.target else {
+            return None;
+        };
+        Some(global_id)
+    }
+
     fn apply_default_view_model_bindings(
         &mut self,
         mut targets: RuntimeDataBindGraphTargetsMut<'_>,
@@ -6315,6 +6359,43 @@ impl StateMachineInstance {
         true
     }
 
+    pub fn set_default_view_model_trigger_source_for_data_bind(
+        &mut self,
+        data_bind_index: usize,
+        value: u64,
+    ) -> bool {
+        let bindable_global_id = self
+            .data_bind_graph
+            .default_view_model_trigger_target_global_id_for_data_bind(data_bind_index);
+        if !self
+            .data_bind_graph
+            .set_default_view_model_trigger_source_for_data_bind(data_bind_index, value)
+        {
+            return false;
+        }
+        if let Some(trigger_global_id) = bindable_global_id.and_then(|bindable_global_id| {
+            self.bindable_triggers
+                .iter()
+                .find(|trigger| trigger.global_id == bindable_global_id)
+                .and_then(|trigger| match trigger.source {
+                    RuntimeBindableTriggerSource::DefaultViewModelTrigger { trigger_global_id } => {
+                        Some(trigger_global_id)
+                    }
+                    RuntimeBindableTriggerSource::None => None,
+                })
+        }) {
+            if let Some(trigger) = self
+                .view_model_triggers
+                .iter_mut()
+                .find(|trigger| trigger.global_id == trigger_global_id)
+            {
+                trigger.set_value(value);
+            }
+        }
+        self.needs_advance = true;
+        true
+    }
+
     pub fn bind_empty_data_context(&mut self) -> bool {
         if !self.data_bind_graph.bind_empty_data_context() {
             return false;
@@ -7009,6 +7090,15 @@ impl StateMachineViewModelTriggerInstance {
     fn increment(&mut self) {
         self.value = self.value.saturating_add(1);
         self.changed = true;
+    }
+
+    fn set_value(&mut self, value: u64) -> bool {
+        if self.value == value {
+            return false;
+        }
+        self.value = value;
+        self.changed = true;
+        true
     }
 
     fn reset(&mut self) {

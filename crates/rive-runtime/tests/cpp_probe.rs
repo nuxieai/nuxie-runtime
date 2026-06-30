@@ -186,6 +186,19 @@ fn push_keyframe_double(bytes: &mut Vec<u8>, frame: u64, value: f32, interpolati
     });
 }
 
+fn push_keyframe_color(bytes: &mut Vec<u8>, frame: u64, value: u32, interpolation_type: u64) {
+    push_object_with_properties(bytes, "KeyFrameColor", |bytes| {
+        push_uint_property(bytes, "KeyFrameColor", "frame", frame);
+        push_uint_property(
+            bytes,
+            "KeyFrameColor",
+            "interpolationType",
+            interpolation_type,
+        );
+        push_color_property(bytes, "KeyFrameColor", "value", value);
+    });
+}
+
 #[derive(Debug, Clone, Copy)]
 struct LinearAnimationFixtureOptions {
     duration: u64,
@@ -274,6 +287,138 @@ fn synthetic_linear_animation_with_options(
         });
         push_keyframe_double(bytes, first_frame, first_value, first_interpolation_type);
         push_keyframe_double(bytes, second_frame, second_value, 0);
+    })
+}
+
+fn synthetic_solid_color_linear_animation(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "Shape", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+            push_f32_property(bytes, "Node", "opacity", 0.5);
+        });
+        push_object_with_properties(bytes, "Fill", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 1);
+        });
+        push_object_with_properties(bytes, "SolidColor", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 2);
+            push_color_property(bytes, "SolidColor", "colorValue", 0xff00_0000);
+        });
+        push_object_with_properties(bytes, "PointsPath", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 1);
+            push_bool_property(bytes, "PointsCommonPath", "isClosed", true);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 4);
+            push_f32_property(bytes, "Vertex", "x", 0.0);
+            push_f32_property(bytes, "Vertex", "y", 0.0);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 4);
+            push_f32_property(bytes, "Vertex", "x", 10.0);
+            push_f32_property(bytes, "Vertex", "y", 0.0);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 4);
+            push_f32_property(bytes, "Vertex", "x", 10.0);
+            push_f32_property(bytes, "Vertex", "y", 10.0);
+        });
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "fps", 10);
+            push_uint_property(bytes, "LinearAnimation", "duration", 20);
+        });
+        push_object_with_properties(bytes, "KeyedObject", |bytes| {
+            push_uint_property(bytes, "KeyedObject", "objectId", 3);
+        });
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("SolidColor", "colorValue")),
+            );
+        });
+        push_keyframe_color(bytes, 0, 0xff00_0000, 1);
+        push_keyframe_color(bytes, 10, 0xff00_00ff, 0);
+    })
+}
+
+fn synthetic_state_machine_animated_component_color_condition(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "Shape", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "Fill", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 1);
+        });
+        push_object_with_properties(bytes, "SolidColor", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 2);
+            push_color_property(bytes, "SolidColor", "colorValue", 0xff00_0000);
+        });
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "fps", 10);
+            push_uint_property(bytes, "LinearAnimation", "duration", 20);
+        });
+        push_object_with_properties(bytes, "KeyedObject", |bytes| {
+            push_uint_property(bytes, "KeyedObject", "objectId", 3);
+        });
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("SolidColor", "colorValue")),
+            );
+        });
+        push_keyframe_color(bytes, 0, 0xff00_0000, 1);
+        push_keyframe_color(bytes, 10, 0xff00_00ff, 0);
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "fps", 10);
+            push_uint_property(bytes, "LinearAnimation", "duration", 20);
+        });
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+        });
+        push_object_with_properties(bytes, "TransitionViewModelCondition", |_| {});
+        push_object_with_properties(bytes, "TransitionPropertyComponentComparator", |bytes| {
+            push_uint_property(
+                bytes,
+                "TransitionPropertyComponentComparator",
+                "objectId",
+                3,
+            );
+            push_uint_property(
+                bytes,
+                "TransitionPropertyComponentComparator",
+                "propertyKey",
+                u64::from(property_key_for_name("SolidColor", "colorValue")),
+            );
+        });
+        push_object_with_properties(bytes, "TransitionValueColorComparator", |bytes| {
+            push_color_property(
+                bytes,
+                "TransitionValueColorComparator",
+                "value",
+                0xff00_0040,
+            );
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
     })
 }
 
@@ -4212,6 +4357,58 @@ fn linear_animation_apply_interpolates_keyframe_double_transform() {
 }
 
 #[test]
+fn linear_animation_apply_interpolates_keyframe_color_solid_color_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_linear_animation_color_interpolation_cpp.riv";
+    let bytes = synthetic_solid_color_linear_animation(8357);
+    let args = [
+        "--runtime-apply-animation".to_owned(),
+        "0".to_owned(),
+        "0.5".to_owned(),
+        "0.5".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, graph, mut rust) = read_rust_graph_instance_from_bytes(&bytes, label);
+    assert!(rust.apply_linear_animation(0, 0.5, 0.5));
+    rust.update_components();
+
+    let artboard = graph
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing Rust artboard for {label}"));
+    let rust_states = rust
+        .draw_commands(artboard)
+        .into_iter()
+        .flat_map(|command| command.shape_paints)
+        .map(|paint| paint.paint_state)
+        .collect::<Vec<_>>();
+    let cpp_states = cpp.artboards[0]
+        .draw_command_stream
+        .iter()
+        .flat_map(|command| command.shape_paint_commands.iter())
+        .map(|paint| paint.paint_state())
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        cpp_states,
+        vec![Some(RuntimeShapePaintState::SolidColor {
+            color: 0xff00_0040,
+            render_color: 0x8000_0040,
+        })],
+        "C++ should interpolate then mix SolidColor.colorValue using colorLerp semantics"
+    );
+    assert_eq!(
+        rust_states, cpp_states,
+        "Rust color keyframe application should match C++ draw paint state"
+    );
+}
+
+#[test]
 fn linear_animation_apply_holds_when_interpolation_type_is_zero() {
     let label = "synthetic/runtime_linear_animation_hold.riv";
     let bytes = synthetic_linear_animation(8202, 0, 4.0, 10, 12.0, 0, false);
@@ -7306,6 +7503,66 @@ fn state_machine_component_literal_conditions_match_cpp_probe() {
         }
         compare_cpp_runtime_update(&cpp, &rust, &report, label);
     }
+}
+
+#[test]
+fn state_machine_component_color_condition_reads_animated_color_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_component_color_animated_cpp.riv";
+    let bytes = synthetic_state_machine_animated_component_color_condition(8358);
+    let args = [
+        "--runtime-apply-animation".to_owned(),
+        "0".to_owned(),
+        "0.5".to_owned(),
+        "0.5".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    assert!(rust.apply_linear_animation(0, 0.5, 0.5));
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    let rust_reports = [
+        (
+            rust.advance_state_machine_instance(&mut state_machine, 0.0),
+            state_machine.clone(),
+        ),
+        (
+            rust.advance_state_machine_instance(&mut state_machine, 0.0),
+            state_machine.clone(),
+        ),
+    ];
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+    {
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
 }
 
 #[test]

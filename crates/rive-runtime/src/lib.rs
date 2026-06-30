@@ -20,6 +20,7 @@ pub struct ArtboardInstance {
     slots: Vec<InstanceSlot>,
     components: Vec<RuntimeComponent>,
     component_by_local: BTreeMap<usize, usize>,
+    color_properties: BTreeMap<(usize, u16), u32>,
     update_order: Vec<usize>,
     linear_animations: Vec<RuntimeLinearAnimation>,
     state_machines: Vec<RuntimeStateMachine>,
@@ -90,6 +91,7 @@ impl ArtboardInstance {
             slots,
             components,
             component_by_local,
+            color_properties: BTreeMap::new(),
             update_order,
             linear_animations,
             state_machines,
@@ -314,6 +316,7 @@ impl ArtboardInstance {
                 let path_commands =
                     self.runtime_shape_paint_path_commands(shape_local, paint, graph);
                 runtime_shape_paint_command(
+                    self,
                     paint,
                     container.blend_mode_value,
                     needs_save_operation,
@@ -440,6 +443,22 @@ impl ArtboardInstance {
             2 => self.width / self.height,
             _ => 0.0,
         }
+    }
+
+    fn color_property(&self, local_id: usize, property_key: u16) -> Option<u32> {
+        self.color_properties
+            .get(&(local_id, property_key))
+            .copied()
+    }
+
+    fn set_color_property(&mut self, local_id: usize, property_key: u16, value: u32) -> bool {
+        if self.color_property(local_id, property_key) == Some(value) {
+            return false;
+        }
+        self.color_properties
+            .insert((local_id, property_key), value);
+        self.did_change = true;
+        true
     }
 
     pub fn apply_linear_animation(&mut self, index: usize, seconds: f32, mix: f32) -> bool {
@@ -811,6 +830,7 @@ pub enum RuntimePathCommand {
 }
 
 fn runtime_shape_paint_command(
+    artboard: &ArtboardInstance,
     paint: &ShapePaintNode,
     container_blend_mode_value: u32,
     needs_save_operation: bool,
@@ -832,7 +852,7 @@ fn runtime_shape_paint_command(
             paint.blend_mode_value,
             container_blend_mode_value,
         ),
-        paint_state: runtime_shape_paint_state(paint.paint_state.clone(), render_opacity),
+        paint_state: runtime_shape_paint_state(artboard, paint, render_opacity),
         feather_state: runtime_feather_state(paint.feather.as_ref(), &path_commands, shape_world),
         path_commands,
         effect_path_commands,
@@ -868,14 +888,24 @@ fn runtime_shape_paint_path_kind(kind: ShapePaintPathKind) -> Option<RuntimeShap
 }
 
 fn runtime_shape_paint_state(
-    state: Option<ShapePaintStateNode>,
+    artboard: &ArtboardInstance,
+    paint: &ShapePaintNode,
     render_opacity: f32,
 ) -> Option<RuntimeShapePaintState> {
-    match state? {
-        ShapePaintStateNode::SolidColor { color } => Some(RuntimeShapePaintState::SolidColor {
-            color,
-            render_color: color_modulate_opacity(color, render_opacity),
-        }),
+    match paint.paint_state.clone()? {
+        ShapePaintStateNode::SolidColor { color } => {
+            let color = paint
+                .mutator_local
+                .zip(solid_color_value_property_key())
+                .and_then(|(local_id, property_key)| {
+                    artboard.color_property(local_id, property_key)
+                })
+                .unwrap_or(color);
+            Some(RuntimeShapePaintState::SolidColor {
+                color,
+                render_color: color_modulate_opacity(color, render_opacity),
+            })
+        }
         ShapePaintStateNode::LinearGradient {
             start_x,
             start_y,
@@ -1391,6 +1421,15 @@ fn color_modulate_opacity(color: u32, opacity: f32) -> u32 {
     let alpha = ((color >> 24) & 0xff) as f32 / 255.0;
     let alpha = opacity_to_alpha(alpha * opacity);
     (color & 0x00ff_ffff) | (u32::from(alpha) << 24)
+}
+
+fn color_lerp(from: u32, to: u32, mix: f32) -> u32 {
+    let channel = |shift: u32| {
+        let from = ((from >> shift) & 0xff) as f32;
+        let to = ((to >> shift) & 0xff) as f32;
+        ((from * (1.0 - mix) + to * mix).clamp(0.0, 255.0)).round() as u32
+    };
+    (channel(24) << 24) | (channel(16) << 16) | (channel(8) << 8) | channel(0)
 }
 
 fn opacity_to_alpha(opacity: f32) -> u8 {
@@ -2158,19 +2197,38 @@ impl RuntimeLinearAnimation {
         let mut changed = false;
         for keyed_object in &self.keyed_objects {
             for keyed_property in &keyed_object.keyed_properties {
-                let Some(property) = keyed_property.transform_property else {
-                    continue;
-                };
-                let Some(current) =
-                    instance.transform_property(keyed_object.target_local_id, property)
-                else {
-                    continue;
-                };
-                let Some(value) = keyed_property.value_at(seconds, self.fps, current, mix) else {
-                    continue;
-                };
-                changed |=
-                    instance.set_transform_property(keyed_object.target_local_id, property, value);
+                if let Some(property) = keyed_property.transform_property {
+                    let Some(current) =
+                        instance.transform_property(keyed_object.target_local_id, property)
+                    else {
+                        continue;
+                    };
+                    let Some(value) =
+                        keyed_property.double_value_at(seconds, self.fps, current, mix)
+                    else {
+                        continue;
+                    };
+                    changed |= instance.set_transform_property(
+                        keyed_object.target_local_id,
+                        property,
+                        value,
+                    );
+                }
+                if keyed_property.color_property {
+                    let current = instance
+                        .color_property(keyed_object.target_local_id, keyed_property.property_key)
+                        .unwrap_or(keyed_property.color_source_value);
+                    let Some(value) =
+                        keyed_property.color_value_at(seconds, self.fps, current, mix)
+                    else {
+                        continue;
+                    };
+                    changed |= instance.set_color_property(
+                        keyed_object.target_local_id,
+                        keyed_property.property_key,
+                        value,
+                    );
+                }
             }
         }
         changed
@@ -3427,13 +3485,13 @@ enum RuntimeTransitionCondition {
         op: TransitionConditionOp,
     },
     ComponentColor {
-        source_value: u32,
+        component: RuntimeComponentColorValue,
         op: TransitionConditionOp,
         value: u32,
     },
     ComponentColorPair {
-        left: u32,
-        right: u32,
+        left: RuntimeComponentColorValue,
+        right: RuntimeComponentColorValue,
         op: TransitionConditionOp,
     },
     ComponentUint {
@@ -3468,7 +3526,7 @@ enum RuntimeTransitionCondition {
         op: TransitionConditionOp,
     },
     ComponentViewModelColor {
-        component_value: u32,
+        component: RuntimeComponentColorValue,
         bindable_global_id: u32,
         op: TransitionConditionOp,
     },
@@ -3779,9 +3837,10 @@ impl RuntimeTransitionCondition {
             }
             (RuntimeComponentComparandKind::Color, RuntimeComponentComparandKind::Color) => {
                 Some(Self::ComponentViewModelColor {
-                    component_value: runtime_component_color_value(
-                        source_object,
+                    component: RuntimeComponentColorValue::from_parts(
+                        local_id,
                         property_key,
+                        source_object,
                         supports_property,
                     ),
                     bindable_global_id: bindable.id,
@@ -3940,12 +3999,12 @@ impl RuntimeTransitionCondition {
             }
             (RuntimeComponentComparandKind::Color, "TransitionValueColorComparator") => {
                 Some(Self::ComponentColor {
-                    source_value: source_object
-                        .filter(|_| supports_property)
-                        .and_then(|object| {
-                            runtime_object_color_property_by_key(object, property_key)
-                        })
-                        .unwrap_or(0),
+                    component: RuntimeComponentColorValue::from_parts(
+                        local_id,
+                        property_key,
+                        source_object,
+                        supports_property,
+                    ),
                     op,
                     value: right.color_property("value").unwrap_or(0),
                 })
@@ -4091,14 +4150,16 @@ impl RuntimeTransitionCondition {
             }
             (RuntimeComponentComparandKind::Color, RuntimeComponentComparandKind::Color) => {
                 Some(Self::ComponentColorPair {
-                    left: runtime_component_color_value(
-                        left_source,
+                    left: RuntimeComponentColorValue::from_parts(
+                        left_local_id,
                         left_property_key,
+                        left_source,
                         left_supports,
                     ),
-                    right: runtime_component_color_value(
-                        right_source,
+                    right: RuntimeComponentColorValue::from_parts(
+                        right_local_id,
                         right_property_key,
+                        right_source,
                         right_supports,
                     ),
                     op,
@@ -4318,12 +4379,12 @@ impl RuntimeTransitionCondition {
                 op.compare_bytes_equal_only(left, right)
             }
             Self::ComponentColor {
-                source_value,
+                component,
                 op,
                 value,
-            } => op.compare_u32_equal_only(*source_value, *value),
+            } => op.compare_u32_equal_only(component.value(artboard), *value),
             Self::ComponentColorPair { left, right, op } => {
-                op.compare_u32_equal_only(*left, *right)
+                op.compare_u32_equal_only(left.value(artboard), right.value(artboard))
             }
             Self::ComponentUint {
                 source_value,
@@ -4385,7 +4446,7 @@ impl RuntimeTransitionCondition {
                 op.compare_bytes_equal_only(component_value, view_model_value)
             }
             Self::ComponentViewModelColor {
-                component_value,
+                component,
                 bindable_global_id,
                 op,
             } => {
@@ -4394,7 +4455,7 @@ impl RuntimeTransitionCondition {
                 }
                 let view_model_value =
                     bindable_color_value(bindable_colors, *bindable_global_id).unwrap_or(0);
-                op.compare_u32_equal_only(*component_value, view_model_value)
+                op.compare_u32_equal_only(component.value(artboard), view_model_value)
             }
             Self::ComponentViewModelEnum {
                 component_value,
@@ -4623,6 +4684,37 @@ impl RuntimeComponentNumberValue {
 }
 
 #[derive(Debug, Clone, Copy)]
+struct RuntimeComponentColorValue {
+    local_id: usize,
+    property_key: Option<u16>,
+    source_value: u32,
+}
+
+impl RuntimeComponentColorValue {
+    fn from_parts(
+        local_id: usize,
+        property_key: u16,
+        source_object: Option<&RuntimeObject>,
+        supports_property: bool,
+    ) -> Self {
+        Self {
+            local_id,
+            property_key: supports_property.then_some(property_key),
+            source_value: source_object
+                .filter(|_| supports_property)
+                .and_then(|object| runtime_object_color_property_by_key(object, property_key))
+                .unwrap_or(0),
+        }
+    }
+
+    fn value(self, artboard: &ArtboardInstance) -> u32 {
+        self.property_key
+            .and_then(|property_key| artboard.color_property(self.local_id, property_key))
+            .unwrap_or(self.source_value)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
 enum RuntimeViewModelNumberValue {
     Number { bindable_global_id: u32 },
     Integer { bindable_global_id: u32 },
@@ -4749,17 +4841,6 @@ fn runtime_component_string_value(
         .filter(|_| supports_property)
         .and_then(|object| runtime_object_string_property_by_key(object, property_key))
         .unwrap_or_default()
-}
-
-fn runtime_component_color_value(
-    source_object: Option<&RuntimeObject>,
-    property_key: u16,
-    supports_property: bool,
-) -> u32 {
-    source_object
-        .filter(|_| supports_property)
-        .and_then(|object| runtime_object_color_property_by_key(object, property_key))
-        .unwrap_or(0)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -7053,11 +7134,14 @@ pub struct RuntimeKeyedProperty {
     pub global_id: u32,
     pub property_key: u16,
     pub transform_property: Option<TransformProperty>,
+    pub color_property: bool,
+    pub color_source_value: u32,
     pub key_frames: Vec<RuntimeKeyFrameDouble>,
+    pub color_key_frames: Vec<RuntimeKeyFrameColor>,
 }
 
 impl RuntimeKeyedProperty {
-    fn value_at(&self, seconds: f32, fps: u64, current: f32, mix: f32) -> Option<f32> {
+    fn double_value_at(&self, seconds: f32, fps: u64, current: f32, mix: f32) -> Option<f32> {
         if self.key_frames.is_empty() {
             return None;
         }
@@ -7091,30 +7175,76 @@ impl RuntimeKeyedProperty {
         Some(mix_value(current, value, mix))
     }
 
-    fn closest_frame_index(&self, seconds: f32, fps: u64) -> usize {
-        let last = self.key_frames.len() - 1;
-        if seconds > self.key_frames[last].seconds(fps) {
-            return self.key_frames.len();
+    fn color_value_at(&self, seconds: f32, fps: u64, current: u32, mix: f32) -> Option<u32> {
+        if self.color_key_frames.is_empty() {
+            return None;
         }
 
-        let mut start = 0;
-        let mut end = last;
-        while start <= end {
-            let mid = (start + end) >> 1;
-            let closest = self.key_frames[mid].seconds(fps);
-            if closest < seconds {
-                start = mid + 1;
-            } else if closest > seconds {
-                if mid == 0 {
-                    break;
-                }
-                end = mid - 1;
+        let idx = closest_key_frame_index(&self.color_key_frames, seconds, fps);
+        let value = if idx == 0 {
+            self.color_key_frames[0].value
+        } else if idx < self.color_key_frames.len() {
+            let from = &self.color_key_frames[idx - 1];
+            let to = &self.color_key_frames[idx];
+            if seconds == to.seconds(fps) {
+                to.value
+            } else if from.interpolation_type == 0 {
+                from.value
+            } else if from.interpolator_id.is_some() {
+                return None;
             } else {
-                return mid;
+                let from_seconds = from.seconds(fps);
+                let to_seconds = to.seconds(fps);
+                let frame_mix = if to_seconds == from_seconds {
+                    1.0
+                } else {
+                    (seconds - from_seconds) / (to_seconds - from_seconds)
+                };
+                color_lerp(from.value, to.value, frame_mix)
             }
-        }
-        start
+        } else {
+            self.color_key_frames.last()?.value
+        };
+
+        Some(color_lerp(current, value, mix))
     }
+
+    fn closest_frame_index(&self, seconds: f32, fps: u64) -> usize {
+        closest_key_frame_index(&self.key_frames, seconds, fps)
+    }
+}
+
+trait RuntimeKeyFrameTiming {
+    fn seconds(&self, fps: u64) -> f32;
+}
+
+fn closest_key_frame_index<T: RuntimeKeyFrameTiming>(
+    key_frames: &[T],
+    seconds: f32,
+    fps: u64,
+) -> usize {
+    let last = key_frames.len() - 1;
+    if seconds > key_frames[last].seconds(fps) {
+        return key_frames.len();
+    }
+
+    let mut start = 0;
+    let mut end = last;
+    while start <= end {
+        let mid = (start + end) >> 1;
+        let closest = key_frames[mid].seconds(fps);
+        if closest < seconds {
+            start = mid + 1;
+        } else if closest > seconds {
+            if mid == 0 {
+                break;
+            }
+            end = mid - 1;
+        } else {
+            return mid;
+        }
+    }
+    start
 }
 
 #[derive(Debug, Clone)]
@@ -7132,6 +7262,36 @@ impl RuntimeKeyFrameDouble {
             return 0.0;
         }
         self.frame as f32 / fps as f32
+    }
+}
+
+impl RuntimeKeyFrameTiming for RuntimeKeyFrameDouble {
+    fn seconds(&self, fps: u64) -> f32 {
+        self.seconds(fps)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RuntimeKeyFrameColor {
+    pub global_id: u32,
+    pub frame: u64,
+    pub interpolation_type: u64,
+    pub interpolator_id: Option<u64>,
+    pub value: u32,
+}
+
+impl RuntimeKeyFrameColor {
+    fn seconds(&self, fps: u64) -> f32 {
+        if fps == 0 {
+            return 0.0;
+        }
+        self.frame as f32 / fps as f32
+    }
+}
+
+impl RuntimeKeyFrameTiming for RuntimeKeyFrameColor {
+    fn seconds(&self, fps: u64) -> f32 {
+        self.seconds(fps)
     }
 }
 
@@ -7270,7 +7430,12 @@ fn build_linear_animations(
                     global_id: global_id as u32,
                     property_key,
                     transform_property: transform_property_for_key(property_key),
+                    color_property: core_registry_field_kind_by_property_key(property_key)
+                        == Some(CoreRegistryFieldKind::Color),
+                    color_source_value: runtime_object_color_property_by_key(target, property_key)
+                        .unwrap_or(0),
                     key_frames: Vec::new(),
+                    color_key_frames: Vec::new(),
                 });
             current_keyed_property = Some((
                 keyed_object_index,
@@ -7295,6 +7460,22 @@ fn build_linear_animations(
                     interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
                     interpolator_id: normalized_interpolator_id(object),
                     value: object.double_property("value").unwrap_or(0.0),
+                });
+        }
+
+        if object.type_name == "KeyFrameColor" {
+            let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
+                continue;
+            };
+            animations[animation_index].keyed_objects[keyed_object_index].keyed_properties
+                [keyed_property_index]
+                .color_key_frames
+                .push(RuntimeKeyFrameColor {
+                    global_id: global_id as u32,
+                    frame: object.uint_property("frame").unwrap_or(0),
+                    interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
+                    interpolator_id: normalized_interpolator_id(object),
+                    value: object.color_property("value").unwrap_or(0),
                 });
         }
     }
@@ -7889,6 +8070,10 @@ fn transform_property_for_key(property_key: u16) -> Option<TransformProperty> {
     })
 }
 
+fn solid_color_value_property_key() -> Option<u16> {
+    property_key_for_name("SolidColor", "colorValue")
+}
+
 fn property_key_for_name(type_name: &str, property_name: &str) -> Option<u16> {
     let definition = definition_by_name(type_name)?;
     if let Some(property) = definition
@@ -8239,6 +8424,7 @@ mod tests {
                 .collect(),
             components,
             component_by_local,
+            color_properties: BTreeMap::new(),
             update_order,
             linear_animations: Vec::new(),
             state_machines: Vec::new(),

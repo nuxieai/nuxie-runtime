@@ -1402,6 +1402,45 @@ fn synthetic_state_machine_callback_keyframe_event(file_id: u64) -> Vec<u8> {
     })
 }
 
+fn synthetic_state_machine_callback_keyframe_loop_edge(file_id: u64, loop_value: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "Event", |bytes| {
+            push_string_property(bytes, "Event", "name", "timeline-loop-callback");
+        });
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "fps", 10);
+            push_uint_property(bytes, "LinearAnimation", "duration", 10);
+            push_uint_property(bytes, "LinearAnimation", "loopValue", loop_value);
+        });
+        push_object_with_properties(bytes, "KeyedObject", |bytes| {
+            push_uint_property(bytes, "KeyedObject", "objectId", 1);
+        });
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("Event", "trigger")),
+            );
+        });
+        push_keyframe_callback(bytes, 2);
+        push_keyframe_callback(bytes, 8);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
 fn push_state_machine_fire_event(bytes: &mut Vec<u8>, event_local_id: u64, occurs_value: u64) {
     push_object_with_properties(bytes, "StateMachineFireEvent", |bytes| {
         push_uint_property(bytes, "StateMachineFireEvent", "eventId", event_local_id);
@@ -6315,6 +6354,74 @@ fn state_machine_callback_keyframe_events_match_cpp_probe() {
         compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
     }
     compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+fn compare_state_machine_callback_keyframe_loop_edge(label: &str, bytes: Vec<u8>) {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "1.2".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    let rust_reports = [
+        (
+            rust.advance_state_machine_instance(&mut state_machine, 0.0),
+            state_machine.clone(),
+        ),
+        (
+            rust.advance_state_machine_instance(&mut state_machine, 1.2),
+            state_machine.clone(),
+        ),
+    ];
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+    {
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn state_machine_callback_keyframe_loop_edge_events_match_cpp_probe() {
+    compare_state_machine_callback_keyframe_loop_edge(
+        "synthetic/runtime_state_machine_callback_keyframe_loop_edge_cpp.riv",
+        synthetic_state_machine_callback_keyframe_loop_edge(8365, 1),
+    );
+}
+
+#[test]
+fn state_machine_callback_keyframe_ping_pong_edge_events_match_cpp_probe() {
+    compare_state_machine_callback_keyframe_loop_edge(
+        "synthetic/runtime_state_machine_callback_keyframe_ping_pong_edge_cpp.riv",
+        synthetic_state_machine_callback_keyframe_loop_edge(8366, 2),
+    );
 }
 
 #[test]

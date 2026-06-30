@@ -272,6 +272,7 @@ Additional current contract: `docs/prototypes/linear-animation-uint-keyframe-run
 Additional current contract: `docs/prototypes/linear-animation-string-keyframe-runtime-contract.md`
 Additional current contract: `docs/prototypes/linear-animation-id-keyframe-runtime-contract.md`
 Additional current contract: `docs/prototypes/linear-animation-callback-keyframe-runtime-contract.md`
+Additional current contract: `docs/prototypes/linear-animation-callback-keyframe-loop-edge-runtime-contract.md`
 
 ### Question
 
@@ -309,7 +310,9 @@ Current #11 update: `KeyFrameString` linear-animation application now covers run
 
 Current #11 update: `KeyFrameId` linear-animation application now routes through the runtime uint overlay with C++ `setUint` direct-assignment semantics using `CustomPropertyEnum.propertyValue` as the C++ probe-backed ID-typed surface. Interpolation holds the current keyframe value and sub-1.0 animation mix does not blend IDs. Component enum/trigger/asset/artboard/integer comparands and uint-backed number comparands read the current runtime ID value. `KeyFrameCallback`, relationship relinking for animated parent/asset/text-style ID fields, text/style rebuilds, data-binding propagation, renderer updates, callback events, and generalized ID-driven runtime behavior remain later slices.
 
-Current #11 update: the first `KeyFrameCallback` runtime slice now imports callback keyframes and reports crossed `Event.trigger` frames into the existing state-machine reported-event vector with C++ `secondsTo - frameSeconds` delay semantics. C++ probe coverage exercises an `AnimationState` crossing an event callback frame and compares event local ID, core type, name, and delay. Plain `LinearAnimationInstance` listener dispatch, listener-owned routing, hit testing, pointer/keyboard/gamepad input dispatch, audio playback, open-url side effects, nested-artboard event propagation, custom-property trigger callbacks, nested trigger callbacks, view-model trigger callbacks, broader loop/ping-pong callback edge cases, and callback-driven data-binding behavior remain later slices.
+Current #11 update: the first `KeyFrameCallback` runtime slice now imports callback keyframes and reports crossed `Event.trigger` frames into the existing state-machine reported-event vector with C++ `secondsTo - frameSeconds` delay semantics. C++ probe coverage exercises an `AnimationState` crossing an event callback frame and compares event local ID, core type, name, and delay. Plain `LinearAnimationInstance` listener dispatch, listener-owned routing, hit testing, pointer/keyboard/gamepad input dispatch, audio playback, open-url side effects, nested-artboard event propagation, custom-property trigger callbacks, nested trigger callbacks, view-model trigger callbacks, reverse/work-area/multi-bounce callback edge cases, and callback-driven data-binding behavior remain later slices.
+
+Current #11 update: `KeyFrameCallback` event reporting now has dedicated loop-edge coverage for state-machine animations. C++ probes cover a forward `Loop` wrap and a `PingPong` end-frame bounce, including event local ID, core type, name, `secondsDelay`, current animation time, and `didLoop`. Reverse-playback loop edges, work-area loop edges, multi-bounce ping-pong advances, public listener dispatch, audio/open-url side effects, trigger callback targets, nested-artboard event propagation, and callback-driven data-binding behavior remain later slices.
 
 ## #12: Data Binding Graph
 

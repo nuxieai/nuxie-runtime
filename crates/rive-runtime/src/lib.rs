@@ -2946,6 +2946,9 @@ enum RuntimeDataBindGraphConverter {
         decimals: u64,
         color_format: Vec<u8>,
     },
+    Rounder {
+        decimals: u64,
+    },
     StringTrim {
         trim_type: u64,
     },
@@ -4289,6 +4292,18 @@ fn runtime_data_bind_graph_convert_value(
             rive_binary::data_converter_to_string_color_value(*value, color_format),
         )),
         (RuntimeDataBindGraphConverter::ToString { .. }, _) => None,
+        (
+            RuntimeDataBindGraphConverter::Rounder { decimals },
+            RuntimeDataBindGraphValue::Number(value),
+        ) => {
+            let rounder = 10.0_f32.powf(*decimals as f32);
+            Some(RuntimeDataBindGraphValue::Number(
+                (*value * rounder).round() / rounder,
+            ))
+        }
+        (RuntimeDataBindGraphConverter::Rounder { .. }, _) => {
+            Some(RuntimeDataBindGraphValue::Number(0.0))
+        }
         (
             RuntimeDataBindGraphConverter::StringTrim { trim_type },
             RuntimeDataBindGraphValue::String(value),
@@ -11157,6 +11172,9 @@ fn runtime_data_bind_graph_converter_for_object(
                 .string_property_bytes("colorFormat")
                 .unwrap_or_default()
                 .to_vec(),
+        },
+        "DataConverterRounder" => RuntimeDataBindGraphConverter::Rounder {
+            decimals: converter.uint_property("decimals").unwrap_or(0),
         },
         "DataConverterStringTrim" => RuntimeDataBindGraphConverter::StringTrim {
             trim_type: converter.uint_property("trimType").unwrap_or(1),

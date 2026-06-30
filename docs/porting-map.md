@@ -803,6 +803,18 @@ beyond the admitted boolean negation, trigger increment, and currently covered
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
 
+Current #12 update: `DataConverterRounder` runtime execution now admits
+default-context number sources feeding `BindablePropertyNumber.propertyValue`
+targets. The graph stores imported `decimals` on the converter descriptor and
+applies C++'s `round(value * pow(10, decimals)) / pow(10, decimals)` behavior
+before writing the number target. C++ probe coverage verifies the rounded value
+through a `BlendState1DViewModel` consumer. The contract is
+`docs/prototypes/data-binding-graph-rounder-converter-runtime-contract.md`.
+Stable public source handles, list/view-model bindables, remaining converter
+families, converter groups, reverse propagation, update-queue parity,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
+
 Current #12 update: the first `DataConverterToString` runtime slice now
 supports default-context number sources feeding
 `BindablePropertyString.propertyValue` targets. String source nodes can carry a

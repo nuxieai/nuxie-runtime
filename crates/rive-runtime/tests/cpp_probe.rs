@@ -1853,6 +1853,68 @@ fn synthetic_state_machine_component_pair_condition(
     })
 }
 
+fn synthetic_state_machine_artboard_component_condition(
+    file_id: u64,
+    artboard_property_type: u64,
+    component_object_id: u64,
+    component_property_key: u16,
+    op_value: u64,
+) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            push_f32_property(bytes, "Artboard", "width", 200.0);
+            push_f32_property(bytes, "Artboard", "height", 100.0);
+        });
+        push_transform_node(bytes, 0, 150.0, 3.0, 1.0, 1.0, 1.0);
+        push_transform_node(bytes, 0, 7.0, 11.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 2, 7.0, 17.0);
+        push_animation_for_single_node(bytes, 2, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+        });
+        push_object_with_properties(bytes, "TransitionViewModelCondition", |bytes| {
+            push_uint_property(bytes, "TransitionViewModelCondition", "opValue", op_value);
+        });
+        push_object_with_properties(bytes, "TransitionPropertyArtboardComparator", |bytes| {
+            push_uint_property(
+                bytes,
+                "TransitionPropertyArtboardComparator",
+                "propertyType",
+                artboard_property_type,
+            );
+        });
+        push_object_with_properties(bytes, "TransitionPropertyComponentComparator", |bytes| {
+            push_uint_property(
+                bytes,
+                "TransitionPropertyComponentComparator",
+                "objectId",
+                component_object_id,
+            );
+            push_uint_property(
+                bytes,
+                "TransitionPropertyComponentComparator",
+                "propertyKey",
+                u64::from(component_property_key),
+            );
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
 fn synthetic_state_machine_direct_blend_state_transition(file_id: u64) -> Vec<u8> {
     const ENABLE_EXIT_TIME: u64 = 1 << 2;
 
@@ -6986,6 +7048,110 @@ fn state_machine_component_pair_conditions_match_cpp_probe() {
                 node_name_key,
                 0,
             ),
+            None,
+        ),
+    ] {
+        let mut args = Vec::new();
+        if let Some(value) = mutated_x {
+            args.extend([
+                "--runtime-set-double".to_owned(),
+                "1".to_owned(),
+                node_x_key.to_string(),
+                value.to_string(),
+            ]);
+        }
+        args.extend([
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+        ]);
+
+        let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+        let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+        if let Some(value) = mutated_x {
+            assert!(
+                rust.set_transform_property(1, TransformProperty::X, value),
+                "{label} failed to mutate component x"
+            );
+        }
+        let mut state_machine = rust
+            .state_machine_instance(0)
+            .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+        let mut rust_reports = Vec::new();
+        rust_reports.push((
+            rust.advance_state_machine_instance(&mut state_machine, 0.0),
+            state_machine.clone(),
+        ));
+        rust_reports.push((
+            rust.advance_state_machine_instance(&mut state_machine, 0.0),
+            state_machine.clone(),
+        ));
+        let report = rust.update_components();
+
+        let cpp_artboard = cpp
+            .artboards
+            .first()
+            .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+        assert_eq!(
+            cpp_artboard.runtime_state_machine_advances.len(),
+            rust_reports.len(),
+            "{label} state-machine report count mismatch"
+        );
+        for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+            .runtime_state_machine_advances
+            .iter()
+            .zip(&rust_reports)
+        {
+            compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+        }
+        compare_cpp_runtime_update(&cpp, &rust, &report, label);
+    }
+}
+
+#[test]
+fn state_machine_artboard_component_conditions_match_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let node_x_key = property_key_for_name("Node", "x");
+    let node_parent_id_key = property_key_for_name("Node", "parentId");
+    let artboard_width_key = property_key_for_name("Artboard", "width");
+
+    for (label, bytes, mutated_x) in [
+        (
+            "synthetic/runtime_state_machine_artboard_component_static_true_cpp.riv",
+            synthetic_state_machine_artboard_component_condition(8328, 0, 1, node_x_key, 5),
+            None,
+        ),
+        (
+            "synthetic/runtime_state_machine_artboard_component_static_false_cpp.riv",
+            synthetic_state_machine_artboard_component_condition(8329, 0, 1, node_x_key, 4),
+            None,
+        ),
+        (
+            "synthetic/runtime_state_machine_artboard_component_mutated_false_cpp.riv",
+            synthetic_state_machine_artboard_component_condition(8330, 0, 1, node_x_key, 5),
+            Some(250.0),
+        ),
+        (
+            "synthetic/runtime_state_machine_artboard_component_missing_default_cpp.riv",
+            synthetic_state_machine_artboard_component_condition(8331, 1, 99, node_x_key, 5),
+            None,
+        ),
+        (
+            "synthetic/runtime_state_machine_artboard_component_unsupported_default_cpp.riv",
+            synthetic_state_machine_artboard_component_condition(8332, 0, 1, artboard_width_key, 5),
+            None,
+        ),
+        (
+            "synthetic/runtime_state_machine_artboard_component_uint_number_cpp.riv",
+            synthetic_state_machine_artboard_component_condition(8333, 0, 1, node_parent_id_key, 5),
             None,
         ),
     ] {

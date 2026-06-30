@@ -3411,6 +3411,11 @@ enum RuntimeTransitionCondition {
         right: u64,
         op: TransitionConditionOp,
     },
+    ArtboardComponentNumber {
+        value: f32,
+        op: TransitionConditionOp,
+        component: RuntimeComponentNumberValue,
+    },
     ArtboardNumber {
         value: f32,
         op: TransitionConditionOp,
@@ -3464,6 +3469,18 @@ impl RuntimeTransitionCondition {
                         ),
                         threshold: right.double_property("value").unwrap_or(0.0),
                     });
+                }
+                if left.type_name == "TransitionPropertyArtboardComparator"
+                    && right.type_name == "TransitionPropertyComponentComparator"
+                {
+                    return Self::from_artboard_component(
+                        file,
+                        graph,
+                        object,
+                        left,
+                        right,
+                        artboard_dimensions,
+                    );
                 }
                 if left.type_name == "TransitionPropertyComponentComparator"
                     && right.type_name == "TransitionPropertyComponentComparator"
@@ -3597,6 +3614,37 @@ impl RuntimeTransitionCondition {
             }
             _ => None,
         }
+    }
+
+    fn from_artboard_component(
+        file: &RuntimeFile,
+        graph: &ArtboardGraph,
+        condition: &RuntimeObject,
+        left: &RuntimeObject,
+        right: &RuntimeObject,
+        artboard_dimensions: RuntimeArtboardDimensions,
+    ) -> Option<Self> {
+        let local_id = usize::try_from(right.uint_property("objectId")?).ok()?;
+        let property_key = u16::try_from(right.uint_property("propertyKey")?).ok()?;
+        let kind = RuntimeComponentComparandKind::from_property_key(property_key)?;
+        if !kind.is_number() {
+            return None;
+        }
+
+        let source_object = component_source_object(file, graph, local_id);
+        let supports_property = component_supports_property(source_object, property_key);
+        Some(Self::ArtboardComponentNumber {
+            value: artboard_dimensions
+                .property_value(left.uint_property("propertyType").unwrap_or(0)),
+            op: TransitionConditionOp::from_value(condition.uint_property("opValue").unwrap_or(0)),
+            component: RuntimeComponentNumberValue::from_parts(
+                local_id,
+                property_key,
+                kind,
+                source_object,
+                supports_property,
+            )?,
+        })
     }
 
     fn from_component_literal(
@@ -4064,6 +4112,11 @@ impl RuntimeTransitionCondition {
                 value,
             } => op.compare_u64_equal_only(*source_value, *value),
             Self::ComponentUintPair { left, right, op } => op.compare_u64_equal_only(*left, *right),
+            Self::ArtboardComponentNumber {
+                value,
+                op,
+                component,
+            } => op.compare(*value, component.value(artboard)),
             Self::ArtboardNumber {
                 value,
                 op,

@@ -1184,6 +1184,22 @@ broader `DataBindContainer` dirty queues, relative/parent/nested lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 
+Current #12 update: the first graph-owned target-to-source runtime path now
+covers direct default-context number binds. Mutating a
+`BindablePropertyNumber.propertyValue` target for a `ToSource | TwoWay`
+`DataBindContext` marks that graph binding dirty; explicit
+`advance_data_context` writes the target value back into the bound
+`ViewModelInstanceNumber.propertyValue` source before normal source-to-target
+application. C++ probe coverage uses two binds to the same source so the second
+bind's existing `BlendState1DViewModel` consumer observes the target-to-source
+write without adding new probe report fields. The contract is
+`docs/prototypes/data-binding-graph-number-target-to-source-runtime-contract.md`.
+Target-to-source for other value kinds, pure `ToSource` without `TwoWay`,
+reverse converter execution, imported/owned contexts, pending dirty queues,
+pending add/remove behavior, re-entry protection, relative/parent/nested
+lookup, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
+
 Current #12 update: `BindablePropertyViewModel.propertyValue` now has its first
 graph-owned source binding slice. Default-context
 `ViewModelInstanceViewModel.propertyValue` sources resolve through the

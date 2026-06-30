@@ -335,6 +335,12 @@ slice.
   through a group whose first effective child is `DataConverterToString`,
   covered by a C++ probe through an existing string transition-condition
   consumer.
+- Number-to-string converter-group main-to-target dirty slice: the admitted
+  `DataConverterToString -> DataConverterStringPad` group now follows C++
+  state-machine target-dirty behavior for main-`ToTarget | TwoWay` string
+  targets, preserving the manual target edit through explicit data-context
+  advancement and then overwriting it from the unchanged number source through
+  ordered group conversion on the next normal advance.
 - First number-to-number `DataConverterGroup` graph-owned converter execution
   slice: forward composition for default-context number sources feeding number
   targets through an `OperationValue -> Rounder` group, covered by a C++ probe

@@ -10,6 +10,10 @@ result may flow through already-supported direct string converters.
 This slice proves source admission through a group without treating converter
 groups as a general graph execution engine.
 
+Main-`ToTarget | TwoWay` target-dirty behavior for this cross-type
+number-to-string group path is covered separately by
+`docs/prototypes/data-binding-graph-to-string-converter-group-main-to-target-two-way-target-dirty-runtime-contract.md`.
+
 ## In Scope
 
 - State-machine-owned `DataBindContext` objects whose target property is
@@ -37,7 +41,7 @@ groups as a general graph execution engine.
 - Stateful converter advancement and converter reset/dirty scheduling.
 - Owned or external view-model converter-group contexts.
 - Reverse target-to-source propagation.
-- Dirty/update queue parity beyond the existing graph-owned apply point.
+- Dirty/update queue parity beyond the linked state-machine target-dirty path.
 - Relative, parent, and nested source path lookup.
 - Nested artboard propagation.
 

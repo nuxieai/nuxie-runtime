@@ -202,6 +202,10 @@ slice.
   through a group whose first effective child is `DataConverterToString`,
   covered by a C++ probe through an existing string transition-condition
   consumer.
+- First number-to-number `DataConverterGroup` graph-owned converter execution
+  slice: forward composition for default-context number sources feeding number
+  targets through an `OperationValue -> Rounder` group, covered by a C++ probe
+  through an existing blend-state consumer.
 - First graph-owned view-model bindable slice: forward propagation for
   default-context `ViewModelInstanceViewModel.propertyValue` sources feeding
   `BindablePropertyViewModel.propertyValue` targets, covered by a C++ probe
@@ -254,8 +258,9 @@ slice.
   symbol-list-index-to-string, color-to-string, string-trim, and
   string-remove-zeros, string-pad, rounder, range-mapper-without-interpolator,
   operation-value number/symbol-list-index, system-operation-value direct
-  number, string converter group, and number-to-string converter group paths,
-  data-binding update queues, relative paths, parent paths, and nested paths.
+  number, string converter group, number-to-string converter group, and
+  number-to-number converter group paths, data-binding update queues, relative
+  paths, parent paths, and nested paths.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener
   actions.

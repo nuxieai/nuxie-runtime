@@ -1036,6 +1036,19 @@ group shapes, reverse propagation, update-queue parity, relative/parent/nested
 lookup, listener-owned data binding, and nested artboard propagation remain
 follow-up `#12` slices.
 
+Current #12 update: the first number-to-number `DataConverterGroup` runtime
+execution slice now admits default-context number sources feeding
+`BindablePropertyNumber.propertyValue` targets when the resolved group is made
+from already-supported number-output converters. C++ probe coverage verifies an
+`OperationValue -> Rounder` group through a `BlendState1DViewModel` consumer.
+The contract is
+`docs/prototypes/data-binding-graph-number-converter-group-runtime-contract.md`.
+Stable public source handles, list/view-model bindables, reverse conversion,
+group children requiring live context binding, stateful interpolators, formula
+randoms, generated lists, or target-to-source queues, relative/parent/nested
+lookup, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
+
 Current #12 update: `BindablePropertyViewModel.propertyValue` now has its first
 graph-owned source binding slice. Default-context
 `ViewModelInstanceViewModel.propertyValue` sources resolve through the

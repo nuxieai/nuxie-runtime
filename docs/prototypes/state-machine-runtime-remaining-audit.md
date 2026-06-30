@@ -454,6 +454,11 @@ slice.
   bindable target edit is preserved through explicit `advancedDataContext()`
   and then overwritten from the unchanged source through forward
   `convert` on the next normal state-machine advance.
+- Range-mapper public-update reverse target-to-source slice: direct
+  `DataConverterRangeMapper` now joins the public `updateDataBinds(true)`
+  target-to-source contract for main-`ToTarget | TwoWay` number binds. The
+  public update reverse-converts the edited target into the source, then
+  reapplies source-to-target during the same update.
 - Range-mapper group target-to-source slice: the first direct
   `DataConverterGroup` containing a `DataConverterRangeMapper` now covers a
   main-`ToSource | TwoWay` number bind. The group runs

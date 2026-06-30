@@ -1824,23 +1824,25 @@ behavior, re-entry protection, relative/parent/nested lookup, listener-owned
 data binding, and nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: the first public `updateDataBinds(true)`
-target-to-source paths are now probe-backed for direct
-number, direct `DataConverterOperationValue`, and grouped
-`DataConverterGroup<OperationValue>` main-`ToTarget | TwoWay` number binds.
+target-to-source paths are now probe-backed for main-`ToTarget | TwoWay`
+number binds with no converter, direct `DataConverterOperationValue`, grouped
+`DataConverterGroup<OperationValue>`, and direct `DataConverterRangeMapper`.
 The C++ probe exposes `--runtime-update-state-machine-data-binds`, Rust
 mirrors it through
 `StateMachineInstance::update_data_binds_apply_target_to_source`, and the
-tests verify that edited bindable targets are reverse-converted into the
-default view-model source before source-to-target reapplication leaves the
-target at the edited value. The contracts are
+tests verify that edited bindable targets are written or reverse-converted
+into the default view-model source before source-to-target reapplication
+leaves the target at the edited value. The contracts are
 `docs/prototypes/data-binding-graph-number-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-operation-value-public-update-target-to-source-runtime-contract.md`,
+`docs/prototypes/data-binding-graph-operation-value-group-public-update-target-to-source-runtime-contract.md`,
 and
-`docs/prototypes/data-binding-graph-operation-value-group-public-update-target-to-source-runtime-contract.md`.
-Public-update coverage for other converter families, mixed/stateful groups,
-full dirty-list scheduler parity, imported/owned contexts, pending add/remove
-behavior, re-entry protection, relative/parent/nested lookup, listener-owned
-data binding, and nested artboard propagation remain follow-up `#12` slices.
+`docs/prototypes/data-binding-graph-range-mapper-public-update-target-to-source-runtime-contract.md`.
+Public-update coverage for range-mapper groups, other converter families,
+mixed/stateful groups, full dirty-list scheduler parity, imported/owned
+contexts, pending add/remove behavior, re-entry protection,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
 
 Current #12 update: owned runtime view-model contexts now cover the first
 live view-model pointer replacement path. `RuntimeOwnedViewModelInstance`

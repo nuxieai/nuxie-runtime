@@ -12,7 +12,9 @@ primitive still mirrors C++ `calculateReverseRange()` by swapping the input and
 output ranges. Main-`ToTarget | TwoWay` state-machine target dirty behavior is
 covered by
 `docs/prototypes/data-binding-graph-number-main-to-target-two-way-target-to-source-runtime-contract.md`;
-the full public `updateDataBinds(true)` scheduler path remains out of scope.
+the direct public `updateDataBinds(true)` reverse-conversion variant is
+covered by
+`docs/prototypes/data-binding-graph-range-mapper-public-update-target-to-source-runtime-contract.md`.
 
 ## In Scope
 
@@ -33,8 +35,8 @@ the full public `updateDataBinds(true)` scheduler path remains out of scope.
 
 ## Out Of Scope
 
-- Public `DataBindContainer::updateDataBinds(true)` scheduler parity outside
-  the state-machine bindable-property action path.
+- Broader public `DataBindContainer::updateDataBinds(true)` scheduler parity
+  outside the direct range-mapper dirty bind.
 - Exact `advancedDataContext()` source-to-target scheduling for neighboring
   ordinary `ToTarget` observer binds.
 - Range-mapper groups beyond the first direct

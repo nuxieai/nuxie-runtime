@@ -522,10 +522,11 @@ probe mirrors this with
 `StateMachineInstance::bindViewModelInstance(...)` on the selected imported
 instance. C++ probe-backed consumers cover non-default
 `ViewModelInstanceNumber`, `ViewModelInstanceBoolean`, and
-`ViewModelInstanceString`, and `ViewModelInstanceColor` sources through
+`ViewModelInstanceString`, `ViewModelInstanceColor`, and
+`ViewModelInstanceEnum` sources through
 `BlendState1DViewModel` and transition-condition paths. The contract is
 `docs/prototypes/data-binding-graph-external-view-model-context-runtime-contract.md`.
-External enum/asset/artboard/trigger source-context probes, arbitrary
+External asset/artboard/trigger source-context probes, arbitrary
 user-created runtime view-model instances, public source handles, converters,
 reverse propagation, update-queue parity, relative/parent/nested lookup,
 listener-owned data binding, external trigger reset/report identity, and nested

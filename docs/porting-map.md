@@ -771,6 +771,20 @@ groups, reverse propagation, update-queue parity, relative/parent/nested
 lookup, listener-owned data binding, and nested artboard propagation remain
 follow-up `#12` slices.
 
+Current #12 update: `DataConverterToString` runtime execution now also admits
+default-context boolean sources feeding `BindablePropertyString.propertyValue`
+targets. The graph carries boolean source values on string-target bindings when
+the data bind resolves to `DataConverterToString`, then applies the C++
+`true -> "1"` and `false -> "0"` conversion before target writes. C++ probe
+coverage verifies the converted string through a `TransitionViewModelCondition`.
+The contract is
+`docs/prototypes/data-binding-graph-to-string-boolean-converter-runtime-contract.md`.
+Stable public source handles, list/view-model bindables, remaining
+`DataConverterToString` input kinds and string converter families, converter
+groups, reverse propagation, update-queue parity, relative/parent/nested
+lookup, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

@@ -9667,6 +9667,10 @@ pub fn data_converter_to_string_number_value(value: f32, flags: u64, decimals: u
     cpp_format_number_to_string(value, flags, decimals)
 }
 
+pub fn data_converter_to_string_boolean_value(value: bool) -> Vec<u8> {
+    if value { b"1".to_vec() } else { b"0".to_vec() }
+}
+
 fn cpp_format_number_to_string(value: f32, flags: u64, decimals: u64) -> Vec<u8> {
     const ROUND: u64 = 1 << 0;
     const TRAILING_ZEROS: u64 = 1 << 1;

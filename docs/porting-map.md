@@ -278,6 +278,7 @@ Additional current contract: `docs/prototypes/state-machine-default-viewmodel-nu
 Additional current contract: `docs/prototypes/state-machine-default-viewmodel-boolean-binding-runtime-contract.md`
 Additional current contract: `docs/prototypes/state-machine-default-viewmodel-string-binding-runtime-contract.md`
 Additional current contract: `docs/prototypes/state-machine-default-viewmodel-color-binding-runtime-contract.md`
+Additional current contract: `docs/prototypes/state-machine-default-viewmodel-enum-binding-runtime-contract.md`
 Current remaining-work audit: `docs/prototypes/state-machine-runtime-remaining-audit.md`
 
 ### Question
@@ -329,6 +330,8 @@ Current #11 update: default-context source-to-target binding now covers cloned `
 Current #11 update: default-context source-to-target binding now covers cloned `BindablePropertyString.propertyValue`. Rust preserves `ViewModelInstanceString` bytes resolved through `DataBindContext.sourcePathIds`, applies them before transition evaluation, and verifies a string `TransitionViewModelCondition` against C++. External context binding, source mutation APIs, color/enum/asset/artboard source binds, converters, generalized update queues, relative/parent/nested paths, listener-owned data binding, and nested artboard propagation remain later slices.
 
 Current #11 update: default-context source-to-target binding now covers cloned `BindablePropertyColor.propertyValue`. Rust applies a default `ViewModelInstanceColor` resolved through `DataBindContext.sourcePathIds` before transition evaluation and verifies a color `TransitionViewModelCondition` against C++. External context binding, source mutation APIs, enum/asset/artboard source binds, converters, generalized update queues, relative/parent/nested paths, listener-owned data binding, and nested artboard propagation remain later slices.
+
+Current #11 update: default-context source-to-target binding now covers cloned `BindablePropertyEnum.propertyValue`. Rust copies the raw default `ViewModelInstanceEnum.propertyValue` resolved through `DataBindContext.sourcePathIds` before transition evaluation, matching C++ `DataBindContextValueEnum` rather than clamping through runtime enum helpers, and verifies an enum `TransitionViewModelCondition` against C++. External context binding, source mutation APIs, asset/artboard source binds, converters, generalized update queues, relative/parent/nested paths, listener-owned data binding, `Solo` name mapping, and nested artboard propagation remain later slices.
 
 ## #12: Data Binding Graph
 

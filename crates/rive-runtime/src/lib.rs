@@ -2783,6 +2783,13 @@ struct RuntimeBindableStringDefaultViewModelSource {
 struct RuntimeBindableEnum {
     global_id: u32,
     data_bind_indices: Vec<usize>,
+    default_view_model_sources: Vec<RuntimeBindableEnumDefaultViewModelSource>,
+    value: u64,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RuntimeBindableEnumDefaultViewModelSource {
+    data_bind_index: usize,
     value: u64,
 }
 
@@ -5299,6 +5306,7 @@ pub struct StateMachineInstance {
     default_view_model_boolean_bindings_dirty: bool,
     default_view_model_string_bindings_dirty: bool,
     default_view_model_color_bindings_dirty: bool,
+    default_view_model_enum_bindings_dirty: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -5425,6 +5433,7 @@ impl StateMachineInstance {
             default_view_model_boolean_bindings_dirty: false,
             default_view_model_string_bindings_dirty: false,
             default_view_model_color_bindings_dirty: false,
+            default_view_model_enum_bindings_dirty: false,
         }
     }
 
@@ -5634,6 +5643,7 @@ impl StateMachineInstance {
         self.default_view_model_boolean_bindings_dirty = true;
         self.default_view_model_string_bindings_dirty = true;
         self.default_view_model_color_bindings_dirty = true;
+        self.default_view_model_enum_bindings_dirty = true;
         self.needs_advance = true;
         true
     }
@@ -5701,6 +5711,7 @@ impl StateMachineInstance {
         self.apply_default_view_model_boolean_bindings(state_machine);
         self.apply_default_view_model_string_bindings(state_machine);
         self.apply_default_view_model_color_bindings(state_machine);
+        self.apply_default_view_model_enum_bindings(state_machine);
         let mut keep_going = false;
         for (layer_index, (layer_instance, layer)) in self
             .layers
@@ -5871,6 +5882,41 @@ impl StateMachineInstance {
                 .find(|bindable_color| bindable_color.global_id == global_id)
             {
                 bindable_color.set_value(value);
+            }
+        }
+    }
+
+    fn apply_default_view_model_enum_bindings(&mut self, state_machine: &RuntimeStateMachine) {
+        if !self.data_context_view_model_bound || !self.default_view_model_enum_bindings_dirty {
+            return;
+        }
+        self.default_view_model_enum_bindings_dirty = false;
+
+        let mut sources = state_machine
+            .bindable_enums
+            .iter()
+            .flat_map(|bindable_enum| {
+                bindable_enum
+                    .default_view_model_sources
+                    .iter()
+                    .map(|source| {
+                        (
+                            source.data_bind_index,
+                            bindable_enum.global_id,
+                            source.value,
+                        )
+                    })
+            })
+            .collect::<Vec<_>>();
+        sources.sort_by_key(|(data_bind_index, _, _)| *data_bind_index);
+
+        for (_, global_id, value) in sources {
+            if let Some(bindable_enum) = self
+                .bindable_enums
+                .iter_mut()
+                .find(|bindable_enum| bindable_enum.global_id == global_id)
+            {
+                bindable_enum.set_value(value);
             }
         }
     }
@@ -8839,13 +8885,44 @@ fn runtime_bindable_enums(
             .or_insert_with(|| RuntimeBindableEnum {
                 global_id: target.id,
                 data_bind_indices: vec![data_bind_index],
+                default_view_model_sources: Vec::new(),
                 value: target
                     .uint_property("propertyValue")
                     .unwrap_or(u64::from(u32::MAX)),
             });
+        if let Some(source) =
+            runtime_bindable_enum_default_view_model_source(file, data_bind_index, data_bind)
+        {
+            values
+                .entry(target.id)
+                .and_modify(|bindable_enum| bindable_enum.default_view_model_sources.push(source));
+        }
     }
 
     values.into_values().collect()
+}
+
+fn runtime_bindable_enum_default_view_model_source(
+    file: &RuntimeFile,
+    data_bind_index: usize,
+    data_bind: &RuntimeObject,
+) -> Option<RuntimeBindableEnumDefaultViewModelSource> {
+    let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
+    if property_key_for_name("BindablePropertyEnum", "propertyValue") != Some(property_key) {
+        return None;
+    }
+    let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
+    let default_instance = file.view_model_default_instance(0)?;
+    let source =
+        file.data_context_view_model_property_for_instance(default_instance.object, &path)?;
+    if source.type_name != "ViewModelInstanceEnum" {
+        return None;
+    }
+    let value = source.uint_property("propertyValue")?;
+    Some(RuntimeBindableEnumDefaultViewModelSource {
+        data_bind_index,
+        value,
+    })
 }
 
 fn runtime_bindable_assets(

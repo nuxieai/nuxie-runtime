@@ -1386,6 +1386,20 @@ queues, pending add/remove behavior, re-entry protection,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
 
+Current #12 update: pure `ToSource` without `TwoWay` is now probe-backed for
+the already admitted direct target-to-source paths. The graph's shared flag
+helpers already matched C++ by treating pure `ToSource` as
+target-to-source-capable but not source-to-target-capable; a representative
+default-context number fixture now proves that a pure `ToSource`
+`BindablePropertyNumber.propertyValue` target mutation writes back to the
+source and is then observed by a second `ToTarget` bind to the same source
+path. The contract is
+`docs/prototypes/data-binding-graph-pure-to-source-target-runtime-contract.md`.
+Target-to-source for list value kinds, reverse converter execution,
+imported/owned contexts, broader dirty/update queues, pending add/remove
+behavior, re-entry protection, relative/parent/nested lookup, listener-owned
+data binding, and nested artboard propagation remain follow-up `#12` slices.
+
 Current #12 update: owned runtime view-model contexts now cover the first
 live view-model pointer replacement path. `RuntimeOwnedViewModelInstance`
 records root `ViewModelPropertyViewModel` properties plus the imported instance

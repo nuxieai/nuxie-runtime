@@ -308,6 +308,10 @@ slice.
   probe reports source and target pointer instance indexes directly because
   post-relink transition comparator evaluation can dereference a missing
   to-target data bind for a to-source view-model fixture.
+- Pure `ToSource` flag slice: the admitted direct target-to-source runtime path
+  now has representative probe coverage without the `TwoWay` flag. A
+  default-context number fixture proves pure `ToSource` target mutation writes
+  back to the source while a second `ToTarget` bind observes the updated value.
 - First graph-owned view-model bindable slice: forward propagation for
   default-context `ViewModelInstanceViewModel.propertyValue` sources feeding
   `BindablePropertyViewModel.propertyValue` targets, covered by a C++ probe

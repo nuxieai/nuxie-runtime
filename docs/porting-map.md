@@ -811,6 +811,20 @@ groups, reverse propagation, update-queue parity, relative/parent/nested
 lookup, listener-owned data binding, and nested artboard propagation remain
 follow-up `#12` slices.
 
+Current #12 update: `DataConverterToString` runtime execution now also admits
+default-context symbol-list-index sources feeding
+`BindablePropertyString.propertyValue` targets. The graph carries raw
+`ViewModelInstanceSymbolListIndex.propertyValue` source values on string-target
+bindings when the data bind resolves to `DataConverterToString`, then converts
+the index to decimal text before target writes. C++ probe coverage verifies the
+converted string through a `TransitionViewModelCondition`. The contract is
+`docs/prototypes/data-binding-graph-to-string-symbol-list-index-converter-runtime-contract.md`.
+Stable public source handles, list/view-model bindables, remaining
+`DataConverterToString` input kinds and string converter families, converter
+groups, reverse propagation, update-queue parity, relative/parent/nested
+lookup, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

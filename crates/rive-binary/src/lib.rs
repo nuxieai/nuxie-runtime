@@ -9679,6 +9679,10 @@ pub fn data_converter_to_string_trigger_value(value: u64) -> Vec<u8> {
     value.to_string().into_bytes()
 }
 
+pub fn data_converter_to_string_symbol_list_index_value(value: u64) -> Vec<u8> {
+    value.to_string().into_bytes()
+}
+
 fn cpp_format_number_to_string(value: f32, flags: u64, decimals: u64) -> Vec<u8> {
     const ROUND: u64 = 1 << 0;
     const TRAILING_ZEROS: u64 = 1 << 1;

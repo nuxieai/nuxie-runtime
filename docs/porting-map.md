@@ -790,6 +790,21 @@ string-to-number, reverse propagation, update-queue parity,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
 
+Current #12 update: the string-source `DataConverterToNumber` path now also
+covers the main-`ToTarget | TwoWay` state-machine target-dirty behavior for
+default-context number targets. A manual edit to the
+`BindablePropertyNumber.propertyValue` target is preserved through explicit
+data-context advancement, then the next normal state-machine advance overwrites
+the target from the unchanged string source through C++ `std::atof`-style
+forward conversion. The contract is
+`docs/prototypes/data-binding-graph-to-number-string-main-to-target-two-way-target-dirty-runtime-contract.md`.
+Stable public source handles, list/symbol/view-model bindables, other
+`DataConverterToNumber` dirty paths, public-queue reverse conversion,
+converter groups, formula functions/randoms, interpolator, number-to-list,
+scripted converters, broader dirty/update queues, relative/parent/nested
+lookup, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
+
 Current #12 update: `DataConverterToNumber` runtime execution now also admits
 default-context symbol-list-index sources feeding
 `BindablePropertyNumber.propertyValue` targets. The graph keeps the raw

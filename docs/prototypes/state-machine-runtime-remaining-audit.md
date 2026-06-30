@@ -125,6 +125,12 @@ slice.
   sources feeding number targets, covered by a C++ probe through an existing
   blend-state consumer and the binary crate's C++ `std::atof`-style parser
   model.
+- String-to-number main-to-target dirty slice: direct `DataConverterToNumber`
+  now follows C++ state-machine target-dirty behavior for main-`ToTarget |
+  TwoWay` string-to-number binds. Explicit data-context advancement preserves a
+  manual bindable number target edit, then normal state-machine advancement
+  overwrites it from the unchanged string source through forward
+  `std::atof`-style conversion.
 - Fifth cross-type graph-owned converter execution slice:
   `DataConverterToNumber` forward conversion for default-context
   symbol-list-index sources feeding number targets, covered by a C++ probe

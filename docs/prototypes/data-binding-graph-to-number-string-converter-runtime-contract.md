@@ -25,6 +25,9 @@ into general converter lifecycle or data-binding scheduler behavior.
   evaluation, using the same graph target application path as prior number,
   boolean-to-number, enum-to-number, and color-to-number slices.
 - C++ probe coverage through an observable `BlendState1DViewModel` consumer.
+- Main-`ToTarget | TwoWay` target-dirty behavior for this string-to-number
+  path is covered by
+  `docs/prototypes/data-binding-graph-to-number-string-main-to-target-two-way-target-dirty-runtime-contract.md`.
 
 ## Out Of Scope
 
@@ -33,6 +36,8 @@ into general converter lifecycle or data-binding scheduler behavior.
 - Converter groups, formulas, operation converters, interpolators, and
   stateful converter advancement.
 - Reverse target-to-source propagation.
+- Main-`ToTarget | TwoWay` target-dirty behavior for other
+  `DataConverterToNumber` source kinds.
 - Dirty/update queue parity beyond the existing graph-owned apply point.
 - Relative, parent, and nested source path lookup.
 - External or listener-owned data-binding contexts.

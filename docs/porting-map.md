@@ -756,6 +756,21 @@ beyond the admitted boolean negation, trigger increment, and currently covered
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
 
+Current #12 update: the first `DataConverterToString` runtime slice now
+supports default-context number sources feeding
+`BindablePropertyString.propertyValue` targets. String source nodes can carry a
+number graph value when the data bind resolves to `DataConverterToString`, and
+the converter descriptor stores imported `flags`/`decimals` so the graph can
+apply the same C++ number formatting model already pinned in `rive-binary`
+before string target writes. C++ probe coverage verifies the converted string
+through a `TransitionViewModelCondition`. The contract is
+`docs/prototypes/data-binding-graph-to-string-number-converter-runtime-contract.md`.
+Stable public source handles, list/view-model bindables, remaining
+`DataConverterToString` input kinds and string converter families, converter
+groups, reverse propagation, update-queue parity, relative/parent/nested
+lookup, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

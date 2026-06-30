@@ -2780,7 +2780,8 @@ struct RuntimeBindableString {
 struct RuntimeBindableStringDefaultViewModelSource {
     data_bind_index: usize,
     path: Vec<u32>,
-    value: Vec<u8>,
+    converter: Option<RuntimeDataBindGraphConverter>,
+    value: RuntimeDataBindGraphValue,
 }
 
 #[derive(Debug, Clone)]
@@ -2930,6 +2931,7 @@ enum RuntimeDataBindGraphConverter {
     BooleanNegate,
     TriggerIncrement,
     ToNumber,
+    ToString { flags: u64, decimals: u64 },
     Unsupported,
 }
 
@@ -3404,11 +3406,11 @@ impl RuntimeDataBindGraph {
                     &mut default_view_model_bindings,
                     source.data_bind_index,
                     &source.path,
-                    None,
+                    source.converter,
                     RuntimeDataBindGraphTarget::String {
                         global_id: bindable.global_id,
                     },
-                    RuntimeDataBindGraphValue::String(source.value.clone()),
+                    source.value.clone(),
                 );
             }
         }
@@ -3996,6 +3998,13 @@ impl RuntimeDataBindGraphSourceNode {
                 rive_binary::data_converter_to_number_string_value(value),
             )),
             (Some(RuntimeDataBindGraphConverter::ToNumber), _) => None,
+            (
+                Some(RuntimeDataBindGraphConverter::ToString { flags, decimals }),
+                RuntimeDataBindGraphValue::Number(value),
+            ) => Some(RuntimeDataBindGraphValue::String(
+                rive_binary::data_converter_to_string_number_value(*value, flags, decimals),
+            )),
+            (Some(RuntimeDataBindGraphConverter::ToString { .. }), _) => None,
             (Some(RuntimeDataBindGraphConverter::Unsupported), _) => None,
         }
     }
@@ -10287,12 +10296,22 @@ fn runtime_bindable_string_default_view_model_source(
     let default_instance = file.view_model_default_instance(0)?;
     let source =
         file.data_context_view_model_property_for_instance(default_instance.object, &path)?;
-    let value = file
-        .view_model_instance_string_value_bytes_for_object(source)?
-        .to_vec();
+    let converter = runtime_data_bind_graph_converter(file, data_bind);
+    let value = if matches!(
+        converter,
+        Some(RuntimeDataBindGraphConverter::ToString { .. })
+    ) {
+        RuntimeDataBindGraphValue::Number(file.view_model_instance_number_value_for_object(source)?)
+    } else {
+        RuntimeDataBindGraphValue::String(
+            file.view_model_instance_string_value_bytes_for_object(source)?
+                .to_vec(),
+        )
+    };
     Some(RuntimeBindableStringDefaultViewModelSource {
         data_bind_index,
         path: path.to_vec(),
+        converter,
         value,
     })
 }
@@ -10669,6 +10688,10 @@ fn runtime_data_bind_graph_converter(
         "DataConverterBooleanNegate" => RuntimeDataBindGraphConverter::BooleanNegate,
         "DataConverterTrigger" => RuntimeDataBindGraphConverter::TriggerIncrement,
         "DataConverterToNumber" => RuntimeDataBindGraphConverter::ToNumber,
+        "DataConverterToString" => RuntimeDataBindGraphConverter::ToString {
+            flags: converter.uint_property("flags").unwrap_or(0),
+            decimals: converter.uint_property("decimals").unwrap_or(0),
+        },
         _ => RuntimeDataBindGraphConverter::Unsupported,
     })
 }

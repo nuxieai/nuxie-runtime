@@ -29,7 +29,9 @@ evaluation.
   number case covered by
   `docs/prototypes/data-binding-graph-operation-viewmodel-target-to-source-runtime-contract.md`.
 - Public-queue reverse conversion.
-- Live dependency/dirt propagation when the secondary operation source changes.
+- Secondary source mutation dependency dirtiness beyond the direct
+  default-context number case covered by
+  `docs/prototypes/data-binding-graph-operation-viewmodel-secondary-source-mutation-runtime-contract.md`.
 - Recomputing the secondary operand for imported or owned context rebinding.
 - Missing, non-number, relative-path, parent-path, or nested secondary
   operation sources.

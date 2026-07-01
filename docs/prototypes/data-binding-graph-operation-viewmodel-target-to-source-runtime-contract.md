@@ -35,7 +35,9 @@ The main-`ToTarget | TwoWay` public update path, where C++ dispatches
   `docs/prototypes/data-binding-graph-operation-viewmodel-main-to-target-two-way-target-dirty-runtime-contract.md`.
 - Broader public `DataBindContainer::updateDataBinds(true)` scheduler parity
   beyond the direct operation-view-model dirty bind.
-- Live dependency/dirt propagation when the secondary operation source changes.
+- Secondary source mutation dependency dirtiness beyond the direct
+  default-context number case covered by
+  `docs/prototypes/data-binding-graph-operation-viewmodel-secondary-source-mutation-runtime-contract.md`.
 - Recomputing the secondary operand for imported or owned context rebinding.
 - Missing, non-number, relative-path, parent-path, or nested secondary
   operation sources.

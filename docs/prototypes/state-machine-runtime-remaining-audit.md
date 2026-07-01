@@ -421,6 +421,13 @@ slice.
   for main-`ToTarget | TwoWay` number binds. The public update reverse-converts
   the edited target with the imported secondary operand, writes the primary
   source, then reapplies source-to-target in the same update.
+- Operation-view-model secondary-source mutation slice: direct
+  `DataConverterOperationViewModel` now refreshes its secondary operand and
+  dirties the dependent primary source when the secondary default view-model
+  number is mutated through the state-machine default source API. This mirrors
+  C++ `bindFromContext()` registering the owning data bind as a dependent of
+  the resolved `ViewModelInstanceNumber`. The contract is
+  `docs/prototypes/data-binding-graph-operation-viewmodel-secondary-source-mutation-runtime-contract.md`.
 - Operation-view-model group public-update target-to-source slice:
   `DataConverterGroup<OperationValue, OperationViewModel>` now covers public
   `updateDataBinds(true)` for main-`ToTarget | TwoWay` number binds. The

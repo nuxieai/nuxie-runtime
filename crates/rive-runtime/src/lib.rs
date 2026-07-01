@@ -3492,6 +3492,7 @@ enum RuntimeDataBindGraphConverter {
     OperationViewModel {
         operation_type: u64,
         operation_value: f32,
+        source_path: Option<Vec<u32>>,
     },
     SystemOperationValue {
         operation_type: u64,
@@ -7390,10 +7391,37 @@ impl RuntimeDataBindGraph {
         if !changed {
             return false;
         }
-        if default_context_bound {
+        let refreshed_dependents =
+            self.refresh_operation_view_model_number_dependents_for_path(path, value);
+        if default_context_bound || refreshed_dependents {
             self.mark_default_view_model_bindings_dirty();
         }
         true
+    }
+
+    fn refresh_operation_view_model_number_dependents_for_path(
+        &mut self,
+        path: &[u32],
+        value: f32,
+    ) -> bool {
+        let mut changed = false;
+        for source in &mut self.sources {
+            let Some(RuntimeDataBindGraphConverter::OperationViewModel {
+                operation_value,
+                source_path: Some(source_path),
+                ..
+            }) = source.converter.as_mut()
+            else {
+                continue;
+            };
+            if source_path.as_slice() != path || *operation_value == value {
+                continue;
+            }
+            *operation_value = value;
+            source.source_to_target_dirty_after_target_to_source = true;
+            changed = true;
+        }
+        changed
     }
 
     fn set_default_view_model_boolean_source_for_path(
@@ -11510,6 +11538,7 @@ fn runtime_data_bind_graph_convert_value(
             RuntimeDataBindGraphConverter::OperationViewModel {
                 operation_type,
                 operation_value,
+                ..
             },
             RuntimeDataBindGraphValue::Number(value),
         ) => Some(RuntimeDataBindGraphValue::Number(
@@ -11523,6 +11552,7 @@ fn runtime_data_bind_graph_convert_value(
             RuntimeDataBindGraphConverter::OperationViewModel {
                 operation_type,
                 operation_value,
+                ..
             },
             RuntimeDataBindGraphValue::SymbolListIndex(value),
         ) => Some(RuntimeDataBindGraphValue::Number(
@@ -11715,6 +11745,7 @@ fn runtime_data_bind_graph_reverse_convert_value(
             RuntimeDataBindGraphConverter::OperationViewModel {
                 operation_type,
                 operation_value,
+                ..
             },
             RuntimeDataBindGraphValue::Number(value),
         ) => Some(RuntimeDataBindGraphValue::Number(
@@ -20214,12 +20245,15 @@ fn runtime_data_bind_graph_converter_for_object(
             operation_type: converter.uint_property("operationType").unwrap_or(0),
             operation_value: converter.double_property("operationValue").unwrap_or(1.0),
         },
-        "DataConverterOperationViewModel" => RuntimeDataBindGraphConverter::OperationViewModel {
-            operation_type: converter.uint_property("operationType").unwrap_or(0),
-            operation_value: runtime_data_bind_graph_default_operation_view_model_value(
-                file, converter,
-            ),
-        },
+        "DataConverterOperationViewModel" => {
+            let operand =
+                runtime_data_bind_graph_default_operation_view_model_operand(file, converter);
+            RuntimeDataBindGraphConverter::OperationViewModel {
+                operation_type: converter.uint_property("operationType").unwrap_or(0),
+                operation_value: operand.as_ref().map(|operand| operand.value).unwrap_or(0.0),
+                source_path: operand.map(|operand| operand.path),
+            }
+        }
         "DataConverterSystemDegsToRads" | "DataConverterSystemNormalizer" => {
             runtime_data_bind_graph_system_operation_value_converter(converter, data_bind_flags)
         }
@@ -20317,27 +20351,35 @@ fn runtime_data_bind_graph_range_mapper_converter(
     }
 }
 
-fn runtime_data_bind_graph_default_operation_view_model_value(
+struct RuntimeDataBindGraphOperationViewModelOperand {
+    path: Vec<u32>,
+    value: f32,
+}
+
+fn runtime_data_bind_graph_default_operation_view_model_operand(
     file: &RuntimeFile,
     converter: &RuntimeObject,
-) -> f32 {
+) -> Option<RuntimeDataBindGraphOperationViewModelOperand> {
     let Some(path) = converter.id_list_property("sourcePathIds") else {
-        return 0.0;
+        return None;
     };
     let Some(default_instance) = file.view_model_default_instance(0) else {
-        return 0.0;
+        return Some(RuntimeDataBindGraphOperationViewModelOperand { path, value: 0.0 });
     };
     let Some(value) =
         file.data_context_view_model_property_for_instance(default_instance.object, &path)
     else {
-        return 0.0;
+        return Some(RuntimeDataBindGraphOperationViewModelOperand { path, value: 0.0 });
     };
     if file.view_model_instance_value_data_type_for_object(value)
         != Some(rive_binary::RuntimeDataType::Number)
     {
-        return 0.0;
+        return Some(RuntimeDataBindGraphOperationViewModelOperand { path, value: 0.0 });
     }
-    value.double_property("propertyValue").unwrap_or(0.0)
+    Some(RuntimeDataBindGraphOperationViewModelOperand {
+        path,
+        value: value.double_property("propertyValue").unwrap_or(0.0),
+    })
 }
 
 fn runtime_default_view_model_triggers(file: &RuntimeFile) -> Vec<RuntimeViewModelTrigger> {

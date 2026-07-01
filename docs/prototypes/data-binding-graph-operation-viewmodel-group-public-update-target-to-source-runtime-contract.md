@@ -31,7 +31,8 @@ back to the target during the same public update.
 ## Out Of Scope
 
 - Other grouped operation-view-model compositions.
-- Live dependency/dirt propagation when the secondary operation source changes.
+- Grouped live dependency/dirt propagation when the secondary operation source
+  changes.
 - Missing, non-number, relative-path, parent-path, or nested secondary
   operation sources.
 - Imported and owned runtime contexts.

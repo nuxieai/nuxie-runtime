@@ -2277,9 +2277,22 @@ BooleanNegate reverse conversion before source-to-target reapplication. The
 contract is
 `docs/prototypes/data-binding-graph-boolean-public-update-target-to-source-runtime-contract.md`.
 Boolean converter groups, imported/owned contexts, broader dirty-list
-scheduler parity, pending add/remove behavior, re-entry protection,
-relative/parent/nested lookup, listener-owned data binding, and nested artboard
-propagation remain follow-up `#12` slices.
+scheduler parity beyond the admitted same-path direct boolean observer slice,
+pending add/remove behavior, re-entry protection, relative/parent/nested
+lookup, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
+
+Current #12 update: boolean public-update same-path observer scheduling now
+has its first non-number parity slice. A dirty main-`ToTarget | TwoWay`
+boolean bind writes the shared boolean source during public
+`updateDataBinds(true)`, while a neighboring ordinary direct `ToTarget`
+boolean bind to the same source path reports the new source but preserves its
+previous target until the next normal state-machine advance. The contract is
+`docs/prototypes/data-binding-graph-boolean-public-update-observer-preservation-runtime-contract.md`.
+Cross-type observers, BooleanNegate observers, multiple observers,
+imported/owned contexts, full dirty-list scheduler parity, pending add/remove
+behavior, re-entry protection, relative/parent/nested lookup, listener-owned
+data binding, and nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: grouped system operation-value public
 `updateDataBinds(true)` target-to-source behavior now preserves the owning

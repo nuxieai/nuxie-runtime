@@ -31,7 +31,9 @@ coverage.
 
 - Boolean converter groups.
 - Boolean public-update behavior for imported or owned contexts.
-- Broader dirty-list scheduler parity, neighboring observer ordering,
+- Broader dirty-list scheduler parity beyond the first same-path direct
+  boolean observer slice covered by
+  `docs/prototypes/data-binding-graph-boolean-public-update-observer-preservation-runtime-contract.md`,
   pending add/remove behavior, and re-entry protection.
 - Relative-path, parent-path, nested-path, listener-owned data binding, nested
   artboards, and render/layout behavior.

@@ -199,6 +199,12 @@ slice.
   the first multi-child all-trigger group for both public
   `updateDataBinds(true)` main-`ToTarget | TwoWay` and explicit
   `advanceDataContext()` main-`ToSource | TwoWay` trigger binds.
+- Boolean public-update observer preservation slice:
+  same-path direct boolean observers now have the first non-number dirty-list
+  scheduling probe. The dirty main-`ToTarget | TwoWay` boolean bind updates
+  the source during public update, while a neighboring ordinary `ToTarget`
+  bind reports the new source and preserves its target until the next normal
+  state-machine advance.
 - First cross-type graph-owned converter execution slice:
   `DataConverterToNumber` forward conversion for default-context boolean
   sources feeding number targets, covered by a C++ probe through an existing
@@ -831,6 +837,11 @@ slice.
   `updateDataBinds(true)` target-to-source behavior for default-context
   boolean binds. The C++ probe reports boolean binding source/target rows, and
   Rust mirrors direct writes plus symmetric BooleanNegate reverse conversion.
+- Boolean public-update observer preservation slice:
+  a neighboring ordinary direct `ToTarget` boolean bind now follows the C++
+  same-path observer ordering already admitted for numbers: source row updates
+  during public update, observer target stays at its previous value until the
+  next normal state-machine advance.
 - First graph-owned view-model bindable slice: forward propagation for
   default-context `ViewModelInstanceViewModel.propertyValue` sources feeding
   `BindablePropertyViewModel.propertyValue` targets, covered by a C++ probe
@@ -1379,6 +1390,7 @@ slice.
   non-number fallbacks and the first operation-value-to-formula public-update
   group, concrete operation pass-through, non-scripting scripted converter
   pass-through, direct boolean/BooleanNegate public-update target-to-source,
+  boolean public-update observer preservation,
   direct trigger public-update target-to-source, direct trigger converter
   explicit target-to-source, trigger source reset reapply,
   trigger converter-group public-update, trigger converter-group explicit

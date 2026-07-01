@@ -11,6 +11,9 @@ For this main-`ToSource` formula bind, the target value is passed through
 not exercise public dirty-list scheduling or the full formula-owned dependency
 system, but it does model the immediate same-bind formula refresh C++ performs
 after the target-to-source write changes the source.
+The main-`ToTarget | TwoWay` public update path, where C++
+`DataConverterFormula::reverseConvert` delegates to `convert`, is covered by
+`docs/prototypes/data-binding-graph-formula-public-update-target-to-source-runtime-contract.md`.
 
 ## In Scope
 
@@ -33,8 +36,8 @@ after the target-to-source write changes the source.
 
 - Main-`ToTarget | TwoWay` formula target-dirty behavior, covered by
   `docs/prototypes/data-binding-graph-formula-main-to-target-two-way-target-dirty-runtime-contract.md`.
-- Public-queue `DataConverterFormula::reverseConvert` scheduling.
-- Public `DataBindContainer::updateDataBinds(true)` scheduler parity.
+- Broader public `DataBindContainer::updateDataBinds(true)` scheduler parity
+  beyond the direct deterministic formula dirty bind.
 - Exact `advancedDataContext()` source-to-target scheduling for neighboring
   ordinary `ToTarget` observer binds.
 - `FormulaTokenFunction`, random formula values, and `randomModeValue`.

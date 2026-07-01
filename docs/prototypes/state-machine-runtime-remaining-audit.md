@@ -494,6 +494,11 @@ slice.
   preserves a manual bindable target edit, then normal state-machine
   advancement overwrites it from the unchanged source through formula
   `convert`.
+- Formula public-update target-to-source slice: direct deterministic
+  `DataConverterFormula` now covers public `updateDataBinds(true)` for
+  main-`ToTarget | TwoWay` number binds. The public update dispatches C++
+  `reverseConvert`, which delegates to formula `convert`, writes the source,
+  then reapplies source-to-target in the same update.
 - First exact number target-to-source direction slice: default-context number
   sources now follow C++ main-direction converter dispatch for the mutating
   bind, with exact C++ probe reports for direct, `OperationValue`, and

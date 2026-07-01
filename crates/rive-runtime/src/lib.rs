@@ -6137,6 +6137,13 @@ fn runtime_data_bind_graph_reverse_convert_value(
             )
         })),
         (RuntimeDataBindGraphConverter::SystemOperationValue { .. }, _) => None,
+        (
+            RuntimeDataBindGraphConverter::Formula { tokens },
+            RuntimeDataBindGraphValue::Number(value),
+        ) => Some(RuntimeDataBindGraphValue::Number(
+            runtime_data_bind_graph_convert_formula(*value, tokens),
+        )),
+        (RuntimeDataBindGraphConverter::Formula { .. }, _) => None,
         (RuntimeDataBindGraphConverter::Group(converters), value) => {
             let mut value = value.clone();
             for converter in converters.iter().rev() {

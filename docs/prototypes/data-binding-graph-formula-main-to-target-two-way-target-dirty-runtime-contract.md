@@ -34,11 +34,13 @@ reapplies source-to-target conversion with `DataConverterFormula::convert`.
 - Main-`ToSource | TwoWay` formula conversion, covered by
   `docs/prototypes/data-binding-graph-formula-target-to-source-runtime-contract.md`.
 - Public `DataBindContainer::updateDataBinds(true)` scheduler parity outside
-  the state-machine bindable-property action path.
+  the state-machine bindable-property action path; the direct deterministic
+  formula public-update variant is covered by
+  `docs/prototypes/data-binding-graph-formula-public-update-target-to-source-runtime-contract.md`.
 - Exact dirty-list scheduler parity for neighboring ordinary `ToTarget`
   bindable targets.
-- `DataConverterFormula::reverseConvert` through public data-bind update
-  queues.
+- Broader `DataConverterFormula::reverseConvert` behavior through public
+  data-bind update queues.
 - `FormulaTokenFunction`, random formula values, and `randomModeValue`.
 - Formula parent-source binding, source dependents, and general add-dirt
   behavior.

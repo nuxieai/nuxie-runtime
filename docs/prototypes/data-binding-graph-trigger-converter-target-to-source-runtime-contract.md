@@ -27,7 +27,10 @@ public `updateDataBinds(true)` trigger converter path.
 
 - Public `updateDataBinds(true)` trigger behavior, which is covered by
   `docs/prototypes/data-binding-graph-trigger-public-update-target-to-source-runtime-contract.md`.
-- Trigger converter groups.
+- Trigger converter groups beyond the first
+  `DataConverterGroup<DataConverterTrigger>` explicit data-context slice
+  covered by
+  `docs/prototypes/data-binding-graph-trigger-converter-group-target-to-source-runtime-contract.md`.
 - Trigger source reset reapplication after later state-machine advancement,
   covered separately by
   `docs/prototypes/data-binding-graph-trigger-source-reset-reapply-runtime-contract.md`.

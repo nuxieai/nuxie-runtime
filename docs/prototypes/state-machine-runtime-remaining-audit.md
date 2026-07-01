@@ -188,6 +188,12 @@ slice.
   group shape, `DataConverterGroup<DataConverterTrigger>`, using C++ group
   reverse/forward order around the inherited trigger reverse pass-through and
   forward increment.
+- Trigger converter-group explicit target-to-source slice:
+  main-`ToSource | TwoWay` trigger binds now cover explicit
+  `advanceDataContext()` for the first trigger group shape,
+  `DataConverterGroup<DataConverterTrigger>`, using C++ group forward order in
+  the main-to-source direction so the trigger converter increments the edited
+  target before writing the default trigger source.
 - First cross-type graph-owned converter execution slice:
   `DataConverterToNumber` forward conversion for default-context boolean
   sources feeding number targets, covered by a C++ probe through an existing
@@ -802,6 +808,12 @@ slice.
   trigger binds. The C++ probe reports trigger binding source/target rows, and
   Rust mirrors group reverse order for target-to-source pass-through plus group
   forward order for source-to-target increment.
+- Trigger converter-group explicit target-to-source slice:
+  `DataConverterGroup<DataConverterTrigger>` now also covers explicit
+  `advanceDataContext()` target-to-source behavior for default-context trigger
+  binds. The C++ probe reports trigger binding source/target rows, and Rust
+  mirrors group forward order in the main-to-source direction before writing
+  the default trigger source.
 - Boolean public-update target-to-source slice:
   direct boolean and `DataConverterBooleanNegate` now cover public
   `updateDataBinds(true)` target-to-source behavior for default-context
@@ -1357,7 +1369,8 @@ slice.
   pass-through, direct boolean/BooleanNegate public-update target-to-source,
   direct trigger public-update target-to-source, direct trigger converter
   explicit target-to-source, trigger source reset reapply,
-  trigger converter-group public-update,
+  trigger converter-group public-update, trigger converter-group explicit
+  target-to-source,
   first direct number/boolean/string/color/enum/asset/artboard/symbol-list-index/trigger/view-model
   target-to-source propagation,
   first artboard list-consumer immediate bind report,

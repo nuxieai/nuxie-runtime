@@ -2246,8 +2246,8 @@ preserve-then-next-advance ordering. The contracts are
 and
 `docs/prototypes/data-binding-graph-interpolator-public-update-target-to-source-runtime-contract.md`.
 Public-update coverage for remaining converter families, broader
-mixed/stateful groups, full dirty-list scheduler parity beyond the first
-same-path ordinary `ToTarget` observer ordering case, imported/owned contexts,
+mixed/stateful groups, full dirty-list scheduler parity beyond the admitted
+same-path ordinary `ToTarget` observer ordering cases, imported/owned contexts,
 pending add/remove behavior, re-entry protection, relative/parent/nested
 lookup, listener-owned data binding, and nested artboard propagation remain
 follow-up `#12` slices.
@@ -2293,6 +2293,19 @@ Cross-type observers, BooleanNegate observers, multiple observers,
 imported/owned contexts, full dirty-list scheduler parity, pending add/remove
 behavior, re-entry protection, relative/parent/nested lookup, listener-owned
 data binding, and nested artboard propagation remain follow-up `#12` slices.
+
+Current #12 update: string public-update same-path observer scheduling now
+covers direct byte-backed string values. A dirty main-`ToTarget | TwoWay`
+string bind writes the shared string source during public
+`updateDataBinds(true)`, while a neighboring ordinary direct `ToTarget` string
+bind to the same source path reports the new source but preserves its previous
+target until the next normal state-machine advance. The contract is
+`docs/prototypes/data-binding-graph-string-public-update-observer-preservation-runtime-contract.md`.
+Cross-type observers, `DataConverterToString` and string-family converter
+observers, multiple observers, imported/owned contexts, full dirty-list
+scheduler parity, pending add/remove behavior, re-entry protection,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
 
 Current #12 update: grouped system operation-value public
 `updateDataBinds(true)` target-to-source behavior now preserves the owning

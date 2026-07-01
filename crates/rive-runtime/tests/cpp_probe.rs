@@ -5896,6 +5896,66 @@ fn synthetic_state_machine_default_viewmodel_string_condition_with_state_machine
     })
 }
 
+fn synthetic_state_machine_default_viewmodel_string_public_update_observer_condition(
+    file_id: u64,
+) -> Vec<u8> {
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyString", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyString", "name", "label");
+        });
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceString", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceString", "viewModelPropertyId", 0);
+            push_string_property(bytes, "ViewModelInstanceString", "propertyValue", "ready");
+        });
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+        });
+        push_bindable_string_data_bind_context_with_converter_and_flags(
+            bytes,
+            "idle",
+            &[0, 0],
+            None,
+            DATA_BIND_TWO_WAY,
+        );
+        push_bindable_string_data_bind_context(bytes, "idle", &[0, 0]);
+        push_object_with_properties(bytes, "TransitionViewModelCondition", |bytes| {
+            push_uint_property(bytes, "TransitionViewModelCondition", "opValue", 0);
+        });
+        push_object_with_properties(bytes, "TransitionPropertyViewModelComparator", |_| {});
+        push_object_with_properties(bytes, "TransitionValueStringComparator", |bytes| {
+            push_string_property(bytes, "TransitionValueStringComparator", "value", "ready");
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
 fn synthetic_state_machine_default_viewmodel_string_target_to_source_condition(
     file_id: u64,
 ) -> Vec<u8> {
@@ -23176,6 +23236,19 @@ fn string_converter_group_public_update_target_to_source_matches_cpp_probe() {
 }
 
 #[test]
+fn string_public_update_observer_preserves_target_matches_cpp_probe() {
+    let label = "synthetic/runtime_state_machine_default_viewmodel_string_public_update_observer_preserves_target_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_string_public_update_observer_condition(8652);
+    assert_string_public_update_target_to_source_bindings_with_edit_matches_cpp_probe(
+        label,
+        bytes,
+        b"manual",
+        &[0, 1],
+    );
+}
+
+#[test]
 fn string_converter_group_main_to_source_two_way_target_to_source_matches_cpp_probe() {
     const DATA_BIND_TO_SOURCE: u64 = 1 << 0;
     const DATA_BIND_TWO_WAY: u64 = 1 << 1;
@@ -23329,6 +23402,20 @@ fn assert_string_public_update_target_to_source_with_edit_matches_cpp_probe(
     bytes: Vec<u8>,
     edit: &[u8],
 ) {
+    assert_string_public_update_target_to_source_bindings_with_edit_matches_cpp_probe(
+        label,
+        bytes,
+        edit,
+        &[0],
+    );
+}
+
+fn assert_string_public_update_target_to_source_bindings_with_edit_matches_cpp_probe(
+    label: &str,
+    bytes: Vec<u8>,
+    edit: &[u8],
+    data_bind_indices: &[usize],
+) {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
         return;
@@ -23411,7 +23498,14 @@ fn assert_string_public_update_target_to_source_with_edit_matches_cpp_probe(
             *advanced,
             &step_label,
         );
-        compare_state_machine_string_binding(cpp_state_machine, rust_state_machine, 0, &step_label);
+        for data_bind_index in data_bind_indices {
+            compare_state_machine_string_binding(
+                cpp_state_machine,
+                rust_state_machine,
+                *data_bind_index,
+                &step_label,
+            );
+        }
     }
     compare_cpp_runtime_update(&cpp, &rust, &report, label);
 }

@@ -3192,6 +3192,17 @@ impl RuntimeDefaultViewModelListSourceHandle {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeDefaultViewModelViewModelSourceHandle {
+    path: Vec<u32>,
+}
+
+impl RuntimeDefaultViewModelViewModelSourceHandle {
+    pub fn path(&self) -> &[u32] {
+        &self.path
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeImportedViewModelNumberSourceHandle {
     view_model_index: usize,
     instance_index: usize,
@@ -17313,6 +17324,31 @@ impl StateMachineInstance {
         if !self
             .data_bind_graph
             .relink_default_view_model_view_model_source_for_path(&path, instance_index)
+        {
+            return false;
+        }
+        self.needs_advance = true;
+        true
+    }
+
+    pub fn default_view_model_view_model_source_handle_by_property_name(
+        &self,
+        file: &RuntimeFile,
+        property_name: &str,
+    ) -> Option<RuntimeDefaultViewModelViewModelSourceHandle> {
+        let path =
+            runtime_default_view_model_view_model_property_path_for_name(file, property_name)?;
+        Some(RuntimeDefaultViewModelViewModelSourceHandle { path })
+    }
+
+    pub fn relink_default_view_model_view_model_source_by_source_handle(
+        &mut self,
+        handle: &RuntimeDefaultViewModelViewModelSourceHandle,
+        instance_index: usize,
+    ) -> bool {
+        if !self
+            .data_bind_graph
+            .relink_default_view_model_view_model_source_for_path(&handle.path, instance_index)
         {
             return false;
         }

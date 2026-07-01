@@ -278,6 +278,17 @@ slice.
   for the file-backed default instance and the existing view-model pointer
   source/target consumer. The contract is
   `docs/prototypes/data-binding-graph-default-viewmodel-name-relink-runtime-contract.md`.
+- Default view-model pointer source handle slice:
+  `StateMachineInstance` can now resolve root view-model pointer property names
+  on file view model `0` into
+  `RuntimeDefaultViewModelViewModelSourceHandle` and relink graph-owned
+  default view-model source nodes by imported referenced instance index through
+  that handle. Slash-path lookup remains unresolved, and the default root
+  source-handle family is now covered for number/boolean/string/color/enum/
+  symbol-list-index/asset/artboard/trigger/list/view-model sources. The C++
+  probe compares the handle relink against the default view-model by-name
+  relink command. The contract is
+  `docs/prototypes/data-binding-graph-default-viewmodel-source-handle-runtime-contract.md`.
 - Graph-owned default `ViewModelInstanceBoolean` source-node mutation by
   state-machine data-bind index, covered by a C++ probe through an existing
   transition-condition consumer.

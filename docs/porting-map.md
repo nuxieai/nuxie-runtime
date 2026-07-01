@@ -730,6 +730,23 @@ relative, or parent lookup, public source handles, reverse propagation, broader
 update queues, listener-owned data binding, and nested artboard propagation
 remain follow-up `#12` slices.
 
+Current #12 update: default root view-model sources now complete the default
+root source-handle family. `StateMachineInstance` can resolve a root
+view-model pointer property name into
+`RuntimeDefaultViewModelViewModelSourceHandle`, and
+`relink_default_view_model_view_model_source_by_source_handle` writes through
+the existing graph-owned source-path relink path by imported referenced
+instance index. Slash-path handle lookup remains unresolved. The C++ probe
+compares the handle relink against the default view-model by-name relink
+command and verifies the existing data-context advance, state-machine advance,
+source pointer, target pointer, and component update reports. The contract is
+`docs/prototypes/data-binding-graph-default-viewmodel-source-handle-runtime-contract.md`.
+The default root source-handle family is closed for
+number/boolean/string/color/enum/symbol-list-index/asset/artboard/trigger/list/
+view-model sources; nested/relative/parent lookup, reverse propagation,
+broader update queues, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
+
 Current #12 update: default-context nested number source binding now has its
 first absolute-path runtime slice. A `DataBindContext.sourcePathIds` path of
 shape `[Root, child, amount]` walks the root

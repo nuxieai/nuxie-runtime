@@ -4376,6 +4376,42 @@ impl RuntimeDataBindGraph {
         )
     }
 
+    fn relink_default_view_model_view_model_source_for_data_bind(
+        &mut self,
+        data_bind_index: usize,
+        instance_index: usize,
+    ) -> bool {
+        let default_context_bound = self.default_view_model_source_context_bound();
+        let Some(source) = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .map(|binding| binding.source)
+        else {
+            return false;
+        };
+        let Some(source) = self.sources.get_mut(source.0) else {
+            return false;
+        };
+        let Some(object_id) = source.view_model_instance_ids.get(instance_index).copied() else {
+            return false;
+        };
+        let RuntimeDataBindGraphValue::ViewModel(current) = &mut source.default_value else {
+            return false;
+        };
+        let value = RuntimeViewModelPointer::Imported { object_id };
+        if *current == value {
+            return false;
+        }
+        *current = value;
+        if default_context_bound {
+            source.value = RuntimeDataBindGraphValue::ViewModel(value);
+            source.bound = true;
+            self.mark_default_view_model_bindings_dirty();
+        }
+        true
+    }
+
     fn mark_target_dirty_for_data_bind(
         &mut self,
         data_bind_index: usize,
@@ -10053,6 +10089,24 @@ impl StateMachineInstance {
         if !self
             .data_bind_graph
             .set_default_view_model_view_model_source_for_data_bind(data_bind_index, instance_index)
+        {
+            return false;
+        }
+        self.needs_advance = true;
+        true
+    }
+
+    pub fn relink_default_view_model_view_model_source_for_data_bind(
+        &mut self,
+        data_bind_index: usize,
+        instance_index: usize,
+    ) -> bool {
+        if !self
+            .data_bind_graph
+            .relink_default_view_model_view_model_source_for_data_bind(
+                data_bind_index,
+                instance_index,
+            )
         {
             return false;
         }

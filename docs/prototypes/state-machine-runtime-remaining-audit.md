@@ -675,6 +675,14 @@ slice.
   instance index, covered by a C++ probe proving the generated setter does not
   relink the cached imported pointer observed by an existing view-model pointer
   transition-condition consumer.
+- First default view-model pointer relink slice: default-context
+  `ViewModelInstanceViewModel` sources can be relinked by referenced imported
+  instance index through the live cached-reference replacement path. The
+  C++ probe covers the matching
+  cached-reference replacement path through an existing view-model pointer
+  transition-condition consumer, including source and target pointer updates
+  on explicit data-context advance. The contract is
+  `docs/prototypes/data-binding-graph-default-viewmodel-relink-runtime-contract.md`.
 - First owned view-model pointer relink slice: root
   `ViewModelPropertyViewModel` properties in `RuntimeOwnedViewModelInstance`
   can be set by referenced imported instance index, then resolved into
@@ -696,8 +704,8 @@ slice.
 - Scene callback dispatch side effects: listener notification, audio playback,
   open-url side effects, nested-artboard event propagation, and callback
   targets other than `Event.trigger`.
-- Live view-model pointer relink APIs beyond the first owned root-property
-  path: default and imported replacement paths, and nested owned paths that
+- Live view-model pointer relink APIs beyond the first default and owned
+  root-property paths: imported replacement paths, and nested owned paths that
   update or expose cached `referenceViewModelInstance` pointers rather than
   only raw generated `propertyValue` indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,

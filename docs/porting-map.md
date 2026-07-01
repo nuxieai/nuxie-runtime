@@ -2118,6 +2118,19 @@ target-to-source list behavior, broader update queues, relative/parent/nested
 lookup, listener-owned data binding, and nested artboard propagation remain
 follow-up `#12` slices.
 
+Current #12 update: default-context view-model pointer sources now have a live
+relink API separate from the raw generated setter path.
+`StateMachineInstance::relink_default_view_model_view_model_source_for_data_bind`
+updates the graph source to a referenced imported child instance, matching the
+C++ probe's cached-reference replacement path. Explicit data-context advance
+then pushes that relinked pointer into
+`BindablePropertyViewModel.propertyValue`. The contract is
+`docs/prototypes/data-binding-graph-default-viewmodel-relink-runtime-contract.md`.
+Imported-context view-model relinking, nested owned view-model pointer paths,
+property-name/object-handle APIs, reverse propagation, broader update queues,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

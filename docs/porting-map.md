@@ -2244,6 +2244,23 @@ propagation, broader update queues, relative/parent/nested lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 
+Current #12 update: imported view-model contexts now have the first
+property-name path relink API for view-model pointer sources. Rust resolves a
+slash-separated `ViewModelPropertyViewModel.name` path against the currently
+bound imported view-model context, records the relink through the existing
+state-machine-local imported overlay, and replays it when the same imported
+context is rebound. The C++ probe uses `completeViewModelProperties` before
+calling `ViewModelInstanceRuntime::replaceViewModel`, matching the public
+runtime name-path API's dependency on completed value-to-property links. The
+contract is
+`docs/prototypes/data-binding-graph-imported-viewmodel-name-path-runtime-contract.md`.
+Sharing imported-instance mutations across independent state-machine instances,
+remaining property-name APIs beyond imported view-model pointer sources and
+owned generated pointer paths, stable public object handles, reverse
+propagation, broader update queues, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
+
 Current #12 update: state-machine `BindablePropertyList.propertyValue`
 targets now have a probe-backed target-to-source boundary. Rust exposes
 `StateMachineInstance::set_bindable_list_for_data_bind`, tracks list target

@@ -340,6 +340,7 @@ enum class RuntimeStateMachineActionKind
     SetDefaultViewModelSourceViewModel,
     RelinkDefaultViewModelSourceViewModel,
     RelinkViewModelInstanceSourceViewModel,
+    RelinkViewModelInstanceSourceViewModelByNamePath,
     BindEmptyContext,
     BindDefaultViewModelContext,
     BindViewModelInstanceContext,
@@ -1052,6 +1053,56 @@ bool find_view_model_instance_location(rive::File* file,
         }
     }
     return false;
+}
+
+rive::ViewModelPropertyViewModel* find_view_model_property_view_model_by_name_path(
+    rive::File* file,
+    rive::ViewModel* viewModel,
+    const std::string& propertyPath)
+{
+    if (file == nullptr || viewModel == nullptr || propertyPath.empty())
+    {
+        return nullptr;
+    }
+
+    size_t segmentStart = 0;
+    while (segmentStart < propertyPath.size())
+    {
+        auto segmentEnd = propertyPath.find('/', segmentStart);
+        auto segmentSize = segmentEnd == std::string::npos
+                               ? std::string::npos
+                               : segmentEnd - segmentStart;
+        if (segmentSize == 0)
+        {
+            return nullptr;
+        }
+        auto property = viewModel->property(
+            propertyPath.substr(segmentStart, segmentSize));
+        auto viewModelProperty =
+            property != nullptr &&
+                    property->is<rive::ViewModelPropertyViewModel>()
+                ? property->as<rive::ViewModelPropertyViewModel>()
+                : nullptr;
+        if (viewModelProperty == nullptr)
+        {
+            return nullptr;
+        }
+        if (segmentEnd == std::string::npos)
+        {
+            return viewModelProperty;
+        }
+        if (viewModelProperty->viewModelReferenceId() >= file->viewModelCount())
+        {
+            return nullptr;
+        }
+        viewModel = file->viewModel(viewModelProperty->viewModelReferenceId());
+        if (viewModel == nullptr)
+        {
+            return nullptr;
+        }
+        segmentStart = segmentEnd + 1;
+    }
+    return nullptr;
 }
 
 std::vector<RuntimeStateMachineViewModelBindingReport>
@@ -2168,6 +2219,45 @@ apply_runtime_state_machine_advances(rive::File* file,
                     viewModelInstance->replaceViewModelByProperty(
                         viewModelSource, rive::ref_rcp(referencedInstance));
                 }
+            }
+            continue;
+        }
+        if (action.kind == RuntimeStateMachineActionKind::
+                               RelinkViewModelInstanceSourceViewModelByNamePath)
+        {
+            auto viewModel =
+                file != nullptr && action.viewModelIndex < file->viewModelCount()
+                    ? file->viewModel(action.viewModelIndex)
+                    : nullptr;
+            auto viewModelInstance =
+                viewModel != nullptr &&
+                        action.viewModelInstanceIndex <
+                            viewModel->instanceCount()
+                    ? viewModel->instance(action.viewModelInstanceIndex)
+                    : nullptr;
+            auto sourceProperty =
+                find_view_model_property_view_model_by_name_path(
+                    file, viewModel, action.stringValue);
+            auto referencedViewModel =
+                file != nullptr && sourceProperty != nullptr &&
+                        sourceProperty->viewModelReferenceId() <
+                            file->viewModelCount()
+                    ? file->viewModel(sourceProperty->viewModelReferenceId())
+                    : nullptr;
+            auto referencedInstance =
+                referencedViewModel != nullptr &&
+                        action.uintValue < referencedViewModel->instanceCount()
+                    ? referencedViewModel->instance(action.uintValue)
+                    : nullptr;
+            if (viewModelInstance != nullptr && referencedInstance != nullptr)
+            {
+                auto referencedRuntime =
+                    rive::make_rcp<rive::ViewModelInstanceRuntime>(
+                        rive::ref_rcp(referencedInstance));
+                rive::ViewModelInstanceRuntime runtime(
+                    rive::ref_rcp(viewModelInstance));
+                runtime.replaceViewModel(action.stringValue,
+                                         referencedRuntime.get());
             }
             continue;
         }
@@ -9881,6 +9971,35 @@ int main(int argc, const char* argv[])
             continue;
         }
 
+        if (is_arg(argv[i],
+                   "--runtime-relink-view-model-instance-source-viewmodel-by-name-path"))
+        {
+            if (i + 5 >= argc)
+            {
+                std::cerr << "--runtime-relink-view-model-instance-source-viewmodel-by-name-path requires stateMachineIndex viewModelIndex instanceIndex propertyPath value\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::
+                RelinkViewModelInstanceSourceViewModelByNamePath;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.viewModelIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.viewModelInstanceIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.stringValue = argv[++i];
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            action.uintValue = static_cast<uint32_t>(
+                std::strtoull(argv[++i], nullptr, 10));
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
         if (is_arg(argv[i], "--runtime-bind-empty-state-machine-context"))
         {
             if (i + 1 >= argc)
@@ -10434,6 +10553,7 @@ int main(int argc, const char* argv[])
         std::cerr << "additional runtime flag: --runtime-bind-default-view-model-artboard-context\n";
         std::cerr << "additional runtime flag: --runtime-relink-default-view-model-source-viewmodel stateMachineIndex dataBindIndex value\n";
         std::cerr << "additional runtime flag: --runtime-relink-view-model-instance-source-viewmodel stateMachineIndex viewModelIndex instanceIndex dataBindIndex value\n";
+        std::cerr << "additional runtime flag: --runtime-relink-view-model-instance-source-viewmodel-by-name-path stateMachineIndex viewModelIndex instanceIndex propertyPath value\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-nested-viewmodel-state-machine-context stateMachineIndex viewModelIndex rootPropertyIndex nestedPropertyIndex value\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-deep-viewmodel-state-machine-context stateMachineIndex viewModelIndex rootPropertyIndex middlePropertyIndex leafPropertyIndex value\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-imported-intermediate-viewmodel-state-machine-context stateMachineIndex viewModelIndex rootPropertyIndex childInstanceIndex nestedPropertyIndex value\n";

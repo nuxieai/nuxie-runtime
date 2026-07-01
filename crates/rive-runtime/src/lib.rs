@@ -3468,6 +3468,52 @@ fn runtime_owned_view_model_path_key(path: &[usize]) -> u64 {
     key
 }
 
+fn runtime_view_model_view_model_property_path_for_names(
+    file: &RuntimeFile,
+    view_model_index: usize,
+    property_path: &[&str],
+) -> Option<Vec<u32>> {
+    if property_path.is_empty() {
+        return None;
+    }
+
+    let mut current_view_model_index = view_model_index;
+    let mut path = vec![u32::try_from(view_model_index).ok()?];
+    for (segment_index, property_name) in property_path.iter().enumerate() {
+        if property_name.is_empty() {
+            return None;
+        }
+        let is_last = segment_index + 1 == property_path.len();
+        let view_model = file.view_model(current_view_model_index)?;
+        let (property_index, property) =
+            view_model
+                .properties
+                .into_iter()
+                .enumerate()
+                .find(|(_, property)| {
+                    property.type_name == "ViewModelPropertyViewModel"
+                        && property.string_property("name") == Some(*property_name)
+                })?;
+        path.push(u32::try_from(property_index).ok()?);
+
+        if !is_last {
+            current_view_model_index = property.uint_property("viewModelReferenceId").and_then(
+                |view_model_reference_id| usize::try_from(view_model_reference_id).ok(),
+            )?;
+        }
+    }
+    Some(path)
+}
+
+fn runtime_view_model_view_model_property_path_for_name_path(
+    file: &RuntimeFile,
+    view_model_index: usize,
+    property_path: &str,
+) -> Option<Vec<u32>> {
+    let property_path = property_path.split('/').collect::<Vec<_>>();
+    runtime_view_model_view_model_property_path_for_names(file, view_model_index, &property_path)
+}
+
 fn runtime_owned_view_model_view_model_children(
     file: &RuntimeFile,
     view_model_index: usize,
@@ -4863,6 +4909,79 @@ impl RuntimeDataBindGraph {
         let path = source.path.clone();
         source.value = RuntimeDataBindGraphValue::ViewModel(value);
         source.bound = true;
+        self.imported_view_model_overrides.insert(
+            RuntimeImportedViewModelOverrideKey {
+                view_model_index: context.view_model_index,
+                instance_index: context.instance_index,
+                path,
+            },
+            value,
+        );
+        self.mark_default_view_model_bindings_dirty();
+        true
+    }
+
+    fn relink_view_model_instance_view_model_source_by_property_name_path(
+        &mut self,
+        file: &RuntimeFile,
+        property_path: &str,
+        referenced_instance_index: usize,
+    ) -> bool {
+        if self.context_kind != RuntimeDataBindGraphContextKind::ImportedViewModel {
+            return false;
+        }
+        let Some(context) = self.imported_view_model_context else {
+            return false;
+        };
+        let Some(path) = runtime_view_model_view_model_property_path_for_name_path(
+            file,
+            context.view_model_index,
+            property_path,
+        ) else {
+            return false;
+        };
+        let Some(object_id) = self
+            .sources
+            .iter()
+            .find(|source| {
+                source.path == path
+                    && matches!(
+                        &source.default_value,
+                        RuntimeDataBindGraphValue::ViewModel(_)
+                    )
+            })
+            .and_then(|source| {
+                source
+                    .view_model_instance_ids
+                    .get(referenced_instance_index)
+                    .copied()
+            })
+        else {
+            return false;
+        };
+
+        let value = RuntimeViewModelPointer::Imported { object_id };
+        let mut changed = false;
+        for source in &mut self.sources {
+            if source.path != path
+                || !matches!(
+                    &source.default_value,
+                    RuntimeDataBindGraphValue::ViewModel(_)
+                )
+            {
+                continue;
+            }
+            if !source.bound
+                || !matches!(&source.value, RuntimeDataBindGraphValue::ViewModel(current) if *current == value)
+            {
+                changed = true;
+            }
+            source.value = RuntimeDataBindGraphValue::ViewModel(value);
+            source.bound = true;
+        }
+        if !changed {
+            return false;
+        }
         self.imported_view_model_overrides.insert(
             RuntimeImportedViewModelOverrideKey {
                 view_model_index: context.view_model_index,
@@ -10734,6 +10853,26 @@ impl StateMachineInstance {
             .data_bind_graph
             .relink_view_model_instance_view_model_source_for_data_bind(
                 data_bind_index,
+                instance_index,
+            )
+        {
+            return false;
+        }
+        self.needs_advance = true;
+        true
+    }
+
+    pub fn relink_view_model_instance_view_model_source_by_property_name_path(
+        &mut self,
+        file: &RuntimeFile,
+        property_path: &str,
+        instance_index: usize,
+    ) -> bool {
+        if !self
+            .data_bind_graph
+            .relink_view_model_instance_view_model_source_by_property_name_path(
+                file,
+                property_path,
                 instance_index,
             )
         {

@@ -26,8 +26,8 @@ same traversal for a path such as `[Root, child, amount]`.
 ## Out Of Scope
 
 - Nested source mutation APIs.
-- Nested boolean, string, color, enum, symbol-list-index, asset, artboard,
-  trigger, list, and view-model value kinds.
+- Nested source kinds beyond the boolean sibling covered by
+  `docs/prototypes/data-binding-graph-default-viewmodel-nested-boolean-runtime-contract.md`.
 - Name-based, relative, and parent paths.
 - Imported and owned runtime contexts beyond existing dedicated slices.
 - Reverse propagation, broader update queues, listener-owned data binding,

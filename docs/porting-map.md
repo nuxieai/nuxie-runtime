@@ -596,11 +596,25 @@ shape `[Root, child, amount]` walks the root
 target. C++ probe coverage verifies the non-zero child default through the
 existing `BlendState1DViewModel` report surface. The contract is
 `docs/prototypes/data-binding-graph-default-viewmodel-nested-number-runtime-contract.md`.
-Nested mutation APIs, nested boolean, string, color, enum, symbol-list-index,
-asset, artboard, trigger, list, and view-model value kinds, name-based relative
-paths, parent paths, public source handles, reverse propagation, broader
-update queues, listener-owned data binding, and nested artboard propagation
-remain follow-up `#12` slices.
+Nested mutation APIs, nested boolean and other value kinds, name-based relative
+paths, parent paths, public source handles, reverse propagation, broader update
+queues, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
+
+Current #12 update: default-context nested boolean source binding now follows
+the nested number shape. A `DataBindContext.sourcePathIds` path of shape
+`[Root, child, enabled]` walks the root
+`ViewModelInstanceViewModel.propertyValue` reference to the imported child
+`ViewModelInstance`, then reads the child's
+`ViewModelInstanceBoolean.propertyValue` before writing the bindable boolean
+target. C++ probe coverage verifies the true child default through boolean
+binding reports and the existing transition-condition consumer. The contract is
+`docs/prototypes/data-binding-graph-default-viewmodel-nested-boolean-runtime-contract.md`.
+Nested mutation APIs, nested string, color, enum, symbol-list-index, asset,
+artboard, trigger, list, and view-model value kinds, name-based relative paths,
+parent paths, public source handles, reverse propagation, broader update
+queues, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
 
 Current #12 update: graph-owned source mutation now also covers default
 `ViewModelInstanceBoolean` sources. Rust exposes
@@ -3667,8 +3681,8 @@ The contract is
 `docs/prototypes/data-binding-graph-artboard-name-based-source-path-unsupported-runtime-contract.md`.
 Admitted live relative/name lookup with file pointers, converter name paths,
 relative paths, parent paths, nested source kinds beyond the default-context
-number slice, listener-owned data binding, and nested artboard propagation
-remain follow-up `#12` slices.
+number and boolean slices, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
 
 ## #13: Nested Artboards And Hosts
 

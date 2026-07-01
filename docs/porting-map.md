@@ -2228,6 +2228,22 @@ object-handle APIs, reverse propagation, broader update queues,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
 
+Current #12 update: imported view-model contexts now preserve the first
+persistent view-model pointer relink across rebinding the same imported
+context. Rust records a state-machine-local overlay keyed by imported
+view-model index, imported instance index, and source path when
+`relink_view_model_instance_view_model_source_for_data_bind` updates a
+`ViewModelInstanceViewModel` source; a later
+`bind_view_model_instance_context` of the same imported instance replays that
+overlay, matching C++ `ViewModelInstance::replaceViewModelByProperty`
+behavior. The contract is
+`docs/prototypes/data-binding-graph-imported-viewmodel-persistent-relink-runtime-contract.md`.
+Sharing imported-instance mutations across independent state-machine instances,
+remaining property-name APIs, stable public object handles, reverse
+propagation, broader update queues, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
+
 Current #12 update: state-machine `BindablePropertyList.propertyValue`
 targets now have a probe-backed target-to-source boundary. Rust exposes
 `StateMachineInstance::set_bindable_list_for_data_bind`, tracks list target

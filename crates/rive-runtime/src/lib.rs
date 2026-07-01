@@ -3033,6 +3033,9 @@ struct RuntimeDataBindGraph {
     sources: Vec<RuntimeDataBindGraphSourceNode>,
     targets: Vec<RuntimeDataBindGraphTargetNode>,
     default_view_model_bindings: Vec<RuntimeDataBindGraphDefaultBinding>,
+    imported_view_model_context: Option<RuntimeImportedViewModelContextKey>,
+    imported_view_model_overrides:
+        BTreeMap<RuntimeImportedViewModelOverrideKey, RuntimeViewModelPointer>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -3042,6 +3045,19 @@ enum RuntimeDataBindGraphContextKind {
     DefaultViewModel,
     ImportedViewModel,
     OwnedViewModel,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RuntimeImportedViewModelContextKey {
+    view_model_index: usize,
+    instance_index: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct RuntimeImportedViewModelOverrideKey {
+    view_model_index: usize,
+    instance_index: usize,
+    path: Vec<u32>,
 }
 
 #[derive(Debug, Clone)]
@@ -4294,6 +4310,8 @@ impl RuntimeDataBindGraph {
             sources,
             targets,
             default_view_model_bindings,
+            imported_view_model_context: None,
+            imported_view_model_overrides: BTreeMap::new(),
         }
     }
 
@@ -4360,6 +4378,7 @@ impl RuntimeDataBindGraph {
         }
         self.reset_converter_states();
         self.context_kind = RuntimeDataBindGraphContextKind::Empty;
+        self.imported_view_model_context = None;
         self.default_view_model_bindings_dirty = false;
         true
     }
@@ -4374,6 +4393,7 @@ impl RuntimeDataBindGraph {
             source.reset_converter_state();
         }
         self.context_kind = RuntimeDataBindGraphContextKind::DefaultViewModel;
+        self.imported_view_model_context = None;
         self.mark_default_view_model_bindings_dirty();
         true
     }
@@ -4397,6 +4417,19 @@ impl RuntimeDataBindGraph {
                     .value
                     .resolve_from_view_model_instance(file, instance.object, &source.path)
             {
+                let value = if matches!(value, RuntimeDataBindGraphValue::ViewModel(_)) {
+                    self.imported_view_model_overrides
+                        .get(&RuntimeImportedViewModelOverrideKey {
+                            view_model_index,
+                            instance_index,
+                            path: source.path.clone(),
+                        })
+                        .copied()
+                        .map(RuntimeDataBindGraphValue::ViewModel)
+                        .unwrap_or(value)
+                } else {
+                    value
+                };
                 source.value = value;
                 source.bound = true;
             } else {
@@ -4405,6 +4438,10 @@ impl RuntimeDataBindGraph {
             source.reset_converter_state();
         }
         self.context_kind = RuntimeDataBindGraphContextKind::ImportedViewModel;
+        self.imported_view_model_context = Some(RuntimeImportedViewModelContextKey {
+            view_model_index,
+            instance_index,
+        });
         self.mark_default_view_model_bindings_dirty();
         true
     }
@@ -4423,6 +4460,7 @@ impl RuntimeDataBindGraph {
             source.reset_converter_state();
         }
         self.context_kind = RuntimeDataBindGraphContextKind::OwnedViewModel;
+        self.imported_view_model_context = None;
         self.mark_default_view_model_bindings_dirty();
         true
     }
@@ -4785,11 +4823,14 @@ impl RuntimeDataBindGraph {
     fn relink_view_model_instance_view_model_source_for_data_bind(
         &mut self,
         data_bind_index: usize,
-        instance_index: usize,
+        referenced_instance_index: usize,
     ) -> bool {
         if self.context_kind != RuntimeDataBindGraphContextKind::ImportedViewModel {
             return false;
         }
+        let Some(context) = self.imported_view_model_context else {
+            return false;
+        };
         let Some(source) = self
             .default_view_model_bindings
             .iter()
@@ -4801,7 +4842,11 @@ impl RuntimeDataBindGraph {
         let Some(source) = self.sources.get_mut(source.0) else {
             return false;
         };
-        let Some(object_id) = source.view_model_instance_ids.get(instance_index).copied() else {
+        let Some(object_id) = source
+            .view_model_instance_ids
+            .get(referenced_instance_index)
+            .copied()
+        else {
             return false;
         };
         if !matches!(
@@ -4815,8 +4860,17 @@ impl RuntimeDataBindGraph {
         {
             return false;
         }
+        let path = source.path.clone();
         source.value = RuntimeDataBindGraphValue::ViewModel(value);
         source.bound = true;
+        self.imported_view_model_overrides.insert(
+            RuntimeImportedViewModelOverrideKey {
+                view_model_index: context.view_model_index,
+                instance_index: context.instance_index,
+                path,
+            },
+            value,
+        );
         self.mark_default_view_model_bindings_dirty();
         true
     }

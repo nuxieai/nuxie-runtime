@@ -39,6 +39,11 @@ slice.
 - Graph-owned default `ViewModelInstanceNumber` source-node mutation by
   state-machine data-bind index, covered by a C++ probe through an existing
   `BlendState1DViewModel` consumer.
+- Default root number property-name mutation, covered by a C++ probe through
+  `ViewModelInstanceRuntime::propertyNumber("amount")->value(...)` with raw
+  `propertyValue("amount")` fallback for the file-backed default instance, and
+  the same `BlendState1DViewModel` consumer. The contract is
+  `docs/prototypes/data-binding-graph-default-number-name-runtime-contract.md`.
 - Graph-owned default `ViewModelInstanceBoolean` source-node mutation by
   state-machine data-bind index, covered by a C++ probe through an existing
   transition-condition consumer.

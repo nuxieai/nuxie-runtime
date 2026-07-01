@@ -405,6 +405,21 @@ reverse propagation, update-queue parity, relative/parent/nested lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 
+Current #12 update: default root number sources now have the first
+property-name mutation API. Rust exposes
+`StateMachineInstance::set_default_view_model_number_source_by_property_name`,
+which resolves a root `ViewModelPropertyNumber.name` on file view model `0`
+and mutates every matching graph source node. The C++ probe adds
+`--runtime-set-default-view-model-source-number-by-name`, drives
+`ViewModelInstanceRuntime::propertyNumber("amount")->value(...)` with a raw
+`propertyValue("amount")` fallback for the file-backed default instance, and
+compares the existing `BlendState1DViewModel` report surface. The contract is
+`docs/prototypes/data-binding-graph-default-number-name-runtime-contract.md`.
+Default boolean/string/color/enum/symbol-list-index/asset/artboard/trigger/list/view-model
+name APIs, nested/relative/parent lookup, public source handles, reverse
+propagation, broader update queues, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
+
 Current #12 update: graph-owned source mutation now also covers default
 `ViewModelInstanceBoolean` sources. Rust exposes
 `StateMachineInstance::set_default_view_model_boolean_source_for_data_bind`,

@@ -329,6 +329,7 @@ enum class RuntimeStateMachineActionKind
     SetBindableBoolean,
     SetBindableViewModel,
     SetDefaultViewModelSourceNumber,
+    SetDefaultViewModelSourceNumberByName,
     SetDefaultViewModelSourceBoolean,
     SetDefaultViewModelSourceString,
     SetDefaultViewModelSourceColor,
@@ -2267,6 +2268,58 @@ apply_runtime_state_machine_advances(rive::File* file,
                 {
                     source->as<rive::ViewModelInstanceNumber>()
                         ->propertyValue(action.numberValue);
+                }
+            }
+            continue;
+        }
+        if (action.kind == RuntimeStateMachineActionKind::
+                               SetDefaultViewModelSourceNumberByName)
+        {
+            auto viewModel =
+                file != nullptr && file->viewModelCount() > 0
+                    ? file->viewModel(0)
+                    : nullptr;
+            auto viewModelInstance =
+                viewModel != nullptr && viewModel->instanceCount() > 0
+                    ? viewModel->instance(0)
+                    : nullptr;
+            if (viewModelInstance != nullptr)
+            {
+                rive::ViewModelInstanceRuntime runtime(
+                    rive::ref_rcp(viewModelInstance));
+                auto source = runtime.propertyNumber(action.stringValue);
+                if (source != nullptr)
+                {
+                    source->value(action.numberValue);
+                }
+                else
+                {
+                    auto rawSource = viewModelInstance->propertyValue(
+                        action.stringValue);
+                    if (rawSource == nullptr)
+                    {
+                        auto properties = viewModel->properties();
+                        for (size_t propertyIndex = 0;
+                             propertyIndex < properties.size();
+                             propertyIndex++)
+                        {
+                            auto property = properties[propertyIndex];
+                            if (property == nullptr ||
+                                property->name() != action.stringValue)
+                            {
+                                continue;
+                            }
+                            rawSource = viewModelInstance->propertyValue(
+                                static_cast<uint32_t>(propertyIndex));
+                            break;
+                        }
+                    }
+                    if (rawSource != nullptr &&
+                        rawSource->is<rive::ViewModelInstanceNumber>())
+                    {
+                        rawSource->as<rive::ViewModelInstanceNumber>()
+                            ->propertyValue(action.numberValue);
+                    }
                 }
             }
             continue;
@@ -11376,6 +11429,29 @@ int main(int argc, const char* argv[])
                 static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
             action.seconds = 0.0f;
             action.boolValue = false;
+            action.numberValue = std::strtof(argv[++i], nullptr);
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
+        if (is_arg(argv[i],
+                   "--runtime-set-default-view-model-source-number-by-name"))
+        {
+            if (i + 3 >= argc)
+            {
+                std::cerr << "--runtime-set-default-view-model-source-number-by-name requires stateMachineIndex propertyName value\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::
+                SetDefaultViewModelSourceNumberByName;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.stringValue = argv[++i];
             action.numberValue = std::strtof(argv[++i], nullptr);
             options.runtimeStateMachineActions.push_back(action);
             continue;

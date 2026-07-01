@@ -912,6 +912,15 @@ slice.
   state machines bound to the same imported `ViewModelInstance` and now emits
   color binding reports. The contract is
   `docs/prototypes/data-binding-graph-imported-viewmodel-color-shared-mutation-runtime-contract.md`.
+- Imported color property-name slice:
+  `RuntimeImportedViewModelInstanceContext::set_color_by_property_name` now
+  resolves a root `ViewModelPropertyColor.name` against one file-backed
+  imported view-model instance and records the existing color source override
+  by resolved path. The C++ probe calls
+  `ViewModelInstanceRuntime::propertyColor(name)` and proves two authored
+  state machines bound through the same imported context observe the mutation.
+  The contract is
+  `docs/prototypes/data-binding-graph-imported-viewmodel-color-name-runtime-contract.md`.
 - Shared imported enum source mutation slice:
   `RuntimeImportedViewModelInstanceContext` now also owns enum source
   overrides for one file-backed imported view-model instance. Mutating a
@@ -1108,8 +1117,9 @@ slice.
   source, symbol-list-index source, asset source, artboard source, trigger
   source, and list source contexts,
   property-name APIs beyond imported view-model pointer and root
-  number/boolean/string sources, owned generated view-model pointer paths, and
-  stable public handles that update or expose cached `propertyValue` indexes.
+  number/boolean/string/color sources, owned generated view-model pointer
+  paths, and stable public handles that update or expose cached
+  `propertyValue` indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
 - Live view-model APIs and data-binding propagation governed by

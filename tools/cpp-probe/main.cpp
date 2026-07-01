@@ -346,6 +346,7 @@ enum class RuntimeStateMachineActionKind
     SetViewModelInstanceSourceString,
     SetViewModelInstanceSourceStringByName,
     SetViewModelInstanceSourceColor,
+    SetViewModelInstanceSourceColorByName,
     SetViewModelInstanceSourceEnum,
     SetViewModelInstanceSourceSymbolListIndex,
     SetViewModelInstanceSourceAsset,
@@ -2471,6 +2472,31 @@ apply_runtime_state_machine_advances(rive::File* file,
                 {
                     source->as<rive::ViewModelInstanceColor>()
                         ->propertyValue(static_cast<int>(action.uintValue));
+                }
+            }
+            continue;
+        }
+        if (action.kind == RuntimeStateMachineActionKind::
+                               SetViewModelInstanceSourceColorByName)
+        {
+            auto viewModel =
+                file != nullptr && action.viewModelIndex < file->viewModelCount()
+                    ? file->viewModel(action.viewModelIndex)
+                    : nullptr;
+            auto viewModelInstance =
+                viewModel != nullptr &&
+                        action.viewModelInstanceIndex <
+                            viewModel->instanceCount()
+                    ? viewModel->instance(action.viewModelInstanceIndex)
+                    : nullptr;
+            if (viewModelInstance != nullptr)
+            {
+                rive::ViewModelInstanceRuntime runtime(
+                    rive::ref_rcp(viewModelInstance));
+                auto source = runtime.propertyColor(action.stringValue);
+                if (source != nullptr)
+                {
+                    source->value(static_cast<int>(action.uintValue));
                 }
             }
             continue;
@@ -11518,6 +11544,35 @@ int main(int argc, const char* argv[])
             continue;
         }
 
+        if (is_arg(argv[i],
+                   "--runtime-set-view-model-instance-source-color-by-name"))
+        {
+            if (i + 5 >= argc)
+            {
+                std::cerr << "--runtime-set-view-model-instance-source-color-by-name requires stateMachineIndex viewModelIndex instanceIndex propertyName value\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::
+                SetViewModelInstanceSourceColorByName;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.viewModelIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.viewModelInstanceIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            action.stringValue = argv[++i];
+            action.uintValue =
+                static_cast<uint32_t>(std::strtoull(argv[++i], nullptr, 10));
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
         if (is_arg(argv[i], "--runtime-set-view-model-instance-source-enum"))
         {
             if (i + 5 >= argc)
@@ -12626,6 +12681,7 @@ int main(int argc, const char* argv[])
         std::cerr << "additional runtime flag: --runtime-set-view-model-instance-source-string stateMachineIndex viewModelIndex instanceIndex dataBindIndex value\n";
         std::cerr << "additional runtime flag: --runtime-set-view-model-instance-source-string-by-name stateMachineIndex viewModelIndex instanceIndex propertyName value\n";
         std::cerr << "additional runtime flag: --runtime-set-view-model-instance-source-color stateMachineIndex viewModelIndex instanceIndex dataBindIndex value\n";
+        std::cerr << "additional runtime flag: --runtime-set-view-model-instance-source-color-by-name stateMachineIndex viewModelIndex instanceIndex propertyName value\n";
         std::cerr << "additional runtime flag: --runtime-set-view-model-instance-source-enum stateMachineIndex viewModelIndex instanceIndex dataBindIndex value\n";
         std::cerr << "additional runtime flag: --runtime-set-view-model-instance-source-symbol-list-index stateMachineIndex viewModelIndex instanceIndex dataBindIndex value\n";
         std::cerr << "additional runtime flag: --runtime-set-view-model-instance-source-asset stateMachineIndex viewModelIndex instanceIndex dataBindIndex value\n";

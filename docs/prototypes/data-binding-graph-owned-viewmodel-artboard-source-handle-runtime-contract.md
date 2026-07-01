@@ -1,8 +1,7 @@
 # Owned ViewModel Artboard Source Handle Runtime Contract
 
-Purpose: extend the owned runtime view-model source-handle family from asset
-sources to artboard sources without admitting nested owned handles, nested
-artboard instancing, or the remaining owned handle kinds.
+Purpose: document the root owned artboard source handle without changing root
+lookup semantics or admitting the full owned nested handle family.
 
 This slice resolves a root `ViewModelPropertyArtboard.name` on a
 `RuntimeOwnedViewModelInstance` into a
@@ -26,8 +25,11 @@ Out of scope:
 
 - Number, boolean, string, color, enum, symbol-list-index, and asset behavior
   beyond the existing committed APIs, plus trigger, list, or view-model owned
-  source handles.
-- Nested, relative, parent, or slash-separated property paths.
+  source-handle behavior beyond the existing committed APIs.
+- Changing root-name lookup semantics to accept slash-separated property
+  paths. Nested artboard paths are covered separately by
+  `docs/prototypes/data-binding-graph-owned-viewmodel-nested-artboard-source-handle-runtime-contract.md`.
+- Relative or parent property paths.
 - Imported or default view-model contexts.
 - Persistent owned-context mutation after binding, nested artboard instancing,
   reverse target-to-source propagation, broader update queues, listener-owned
@@ -36,4 +38,4 @@ Out of scope:
 Completion condition: resolving and mutating a root owned artboard source by
 handle produces the same state-machine advance and component update reports as
 the existing C++ owned-artboard binding path, no-op repeat writes report
-unchanged, and slash-path handle lookup remains unresolved.
+unchanged, and root-name lookup stays separate from slash-path lookup.

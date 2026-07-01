@@ -5082,12 +5082,16 @@ impl RuntimeOwnedViewModelAssetSourceHandle {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeOwnedViewModelArtboardSourceHandle {
-    property_index: usize,
+    property_path: Vec<usize>,
 }
 
 impl RuntimeOwnedViewModelArtboardSourceHandle {
     pub fn property_index(&self) -> usize {
-        self.property_index
+        self.property_path[self.property_path.len() - 1]
+    }
+
+    pub fn path(&self) -> &[usize] {
+        &self.property_path
     }
 }
 
@@ -5674,6 +5678,10 @@ impl RuntimeOwnedViewModelViewModel {
         let Some(property_index) = self.property_index_by_name(property_name) else {
             return false;
         };
+        self.set_artboard_by_property_index(property_index, value)
+    }
+
+    fn set_artboard_by_property_index(&mut self, property_index: usize, value: u64) -> bool {
         let Some(artboard) = self
             .artboards
             .iter_mut()
@@ -8779,7 +8787,21 @@ impl RuntimeOwnedViewModelInstance {
         self.artboards
             .iter()
             .any(|artboard| artboard.property_index == property_index)
-            .then_some(RuntimeOwnedViewModelArtboardSourceHandle { property_index })
+            .then_some(RuntimeOwnedViewModelArtboardSourceHandle {
+                property_path: vec![property_index],
+            })
+    }
+
+    pub fn artboard_source_handle_by_property_name_path(
+        &self,
+        property_path: &str,
+    ) -> Option<RuntimeOwnedViewModelArtboardSourceHandle> {
+        let property_path = property_path.split('/').collect::<Vec<_>>();
+        if property_path.is_empty() || property_path.iter().any(|segment| segment.is_empty()) {
+            return None;
+        }
+        let property_path = self.artboard_property_path_by_names(&property_path)?;
+        Some(RuntimeOwnedViewModelArtboardSourceHandle { property_path })
     }
 
     pub fn set_artboard_by_source_handle(
@@ -8787,7 +8809,7 @@ impl RuntimeOwnedViewModelInstance {
         handle: &RuntimeOwnedViewModelArtboardSourceHandle,
         value: u64,
     ) -> bool {
-        self.set_artboard_by_property_index(handle.property_index, value)
+        self.set_artboard_by_property_path(&handle.property_path, value)
     }
 
     pub fn set_artboard_by_property_name_path(&mut self, property_path: &str, value: u64) -> bool {
@@ -8815,6 +8837,57 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         }
         view_model.set_artboard_by_property_name(artboard_name, value)
+    }
+
+    fn set_artboard_by_property_path(&mut self, property_path: &[usize], value: u64) -> bool {
+        if property_path.len() == 1 {
+            return self.set_artboard_by_property_index(property_path[0], value);
+        }
+        let Some((artboard_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        if !matches!(
+            view_model.value,
+            RuntimeViewModelPointer::OwnedGenerated { .. }
+        ) {
+            return false;
+        }
+        view_model.set_artboard_by_property_index(*artboard_index, value)
+    }
+
+    fn artboard_property_path_by_names(&self, property_path: &[&str]) -> Option<Vec<usize>> {
+        if property_path.len() == 1 {
+            let property_index = self.property_index_by_name(property_path[0])?;
+            return self
+                .artboards
+                .iter()
+                .any(|artboard| artboard.property_index == property_index)
+                .then_some(vec![property_index]);
+        }
+
+        let (artboard_name, view_model_names) = property_path.split_last()?;
+        let (view_model_path, view_model) =
+            self.view_model_property_path_by_names(view_model_names)?;
+        if !matches!(
+            view_model.value,
+            RuntimeViewModelPointer::OwnedGenerated { .. }
+        ) {
+            return None;
+        }
+        let property_index = view_model.property_index_by_name(artboard_name)?;
+        if !view_model
+            .artboards
+            .iter()
+            .any(|artboard| artboard.property_index == property_index)
+        {
+            return None;
+        }
+        let mut property_path = view_model_path;
+        property_path.push(property_index);
+        Some(property_path)
     }
 
     pub fn set_trigger_by_property_index(&mut self, property_index: usize, value: u64) -> bool {

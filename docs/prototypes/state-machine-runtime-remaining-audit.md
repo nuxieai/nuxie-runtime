@@ -2067,10 +2067,11 @@ slice.
 - Owned artboard source handle slice:
   `RuntimeOwnedViewModelInstance` can now resolve a root artboard property name
   into `RuntimeOwnedViewModelArtboardSourceHandle` and mutate owned raw
-  artboard id storage through that handle before binding. Slash-path lookup
-  remains unresolved. Nested/relative/parent lookup remains a follow-up slice.
-  The C++ probe compares the handle write against the existing owned-artboard
-  runtime context command. The contract is
+  artboard id storage through that handle before binding. Root-name handle
+  lookup remains separate from slash-path lookup. Nested artboard paths are
+  covered separately; other nested/relative/parent lookup remains a follow-up
+  slice. The C++ probe compares the handle write against the existing
+  owned-artboard runtime context command. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-artboard-source-handle-runtime-contract.md`.
 - Owned trigger source handle slice:
   `RuntimeOwnedViewModelInstance` can now resolve a root trigger property name
@@ -2246,6 +2247,15 @@ slice.
   resolves `child` with `propertyViewModel` before mutating the child's
   `ViewModelInstanceArtboard` through `propertyValue`. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-nested-artboard-name-path-runtime-contract.md`.
+- Owned generated nested artboard source-handle slice:
+  generated owned view-model children can now expose a stable public artboard
+  source handle. `RuntimeOwnedViewModelInstance` can resolve `child/scene`
+  into `RuntimeOwnedViewModelArtboardSourceHandle` through
+  `artboard_source_handle_by_property_name_path`, and
+  `set_artboard_by_source_handle` mutates the same generated-child artboard
+  storage before binding. The C++ probe compares against the existing owned
+  artboard name-path command. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-nested-artboard-source-handle-runtime-contract.md`.
 - Owned generated nested trigger name-path slice:
   generated owned view-model children can store direct trigger values, and
   `RuntimeOwnedViewModelInstance::set_trigger_by_property_name_path` can
@@ -2308,7 +2318,7 @@ slice.
   paths, and stable public handles beyond the admitted default nested-number/
   boolean/string/color/enum/symbol-list-index/asset/artboard/trigger/list/view-model
   handles plus default/imported/owned root source handles and owned
-  nested-number/boolean/string/color/enum/symbol-list-index/asset handles,
+  nested-number/boolean/string/color/enum/symbol-list-index/asset/artboard handles,
   especially remaining nested/relative/parent handles that update or expose
   cached source indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,

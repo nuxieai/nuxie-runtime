@@ -656,9 +656,10 @@ listener-owned data binding, and nested artboard propagation remain follow-up
 Current #12 update: graph-owned source mutation now also covers default
 `ViewModelInstanceArtboard` sources. Rust exposes
 `StateMachineInstance::set_default_view_model_artboard_source_for_data_bind`,
-which mutates the selected `RuntimeDataBindGraph` artboard source node as a raw
-uint property value and dirties the default edge when the default context is
-bound. The C++ probe mirrors this with
+which resolves the selected `RuntimeDataBindGraph` artboard source path,
+mutates matching same-path artboard source nodes as raw uint property values,
+and dirties the default edges when the default context is bound. The C++ probe
+mirrors this with
 `--runtime-set-default-view-model-source-artboard`, resolving
 `DataBindContext.sourcePathIds` against the default view-model instance and
 mutating the resolved `ViewModelInstanceArtboard.propertyValue`. The contract
@@ -2472,7 +2473,7 @@ updated source and applies the updated target on the next state-machine
 advance. The contract is
 `docs/prototypes/data-binding-graph-default-enum-source-mutation-runtime-contract.md`.
 Same-path data-bind-index source mutation for remaining
-non-number/non-boolean/non-string/non-color/non-enum/non-symbol-list-index/non-asset
+non-number/non-boolean/non-string/non-color/non-enum/non-symbol-list-index/non-asset/non-artboard
 families, imported and owned contexts, enum key/name APIs, full dirty-list
 scheduler parity, pending add/remove behavior, re-entry protection,
 relative/parent/nested lookup, listener-owned data binding, `Solo` name
@@ -2487,7 +2488,7 @@ reports the updated symbol-list-index source and applies the updated target on
 the next state-machine advance. The contract is
 `docs/prototypes/data-binding-graph-default-symbol-list-index-source-mutation-runtime-contract.md`.
 Same-path data-bind-index source mutation for remaining
-non-number/non-boolean/non-string/non-color/non-enum/non-symbol-list-index/non-asset
+non-number/non-boolean/non-string/non-color/non-enum/non-symbol-list-index/non-asset/non-artboard
 families, imported and owned contexts, property-name APIs for remaining families,
 full dirty-list scheduler parity, pending add/remove behavior, re-entry
 protection, relative/parent/nested lookup, listener-owned data binding, and
@@ -2502,12 +2503,28 @@ reports the updated source and applies the updated target on the next
 state-machine advance. The contract is
 `docs/prototypes/data-binding-graph-default-asset-source-mutation-runtime-contract.md`.
 Same-path data-bind-index source mutation for remaining
-non-number/non-boolean/non-string/non-color/non-enum/non-symbol-list-index/non-asset
+non-number/non-boolean/non-string/non-color/non-enum/non-symbol-list-index/non-asset/non-artboard
 families, imported and owned contexts, file-asset/render-image side effects,
 property-name APIs for remaining families, full dirty-list scheduler parity,
 pending add/remove behavior, re-entry protection, relative/parent/nested
 lookup, listener-owned data binding, and nested artboard propagation remain
 follow-up `#12` slices.
+
+Current #12 update: default-context artboard source mutation by state-machine
+data-bind index now updates same-path graph source nodes instead of only the
+selected cloned edge. A C++ probe mutates a shared
+`ViewModelInstanceArtboard.propertyValue` raw artboard id through the first
+data bind and proves a neighboring ordinary direct `ToTarget` artboard bind
+reports the updated source and applies the updated target on the next
+state-machine advance. The contract is
+`docs/prototypes/data-binding-graph-default-artboard-source-mutation-runtime-contract.md`.
+Same-path data-bind-index source mutation for remaining
+non-number/non-boolean/non-string/non-color/non-enum/non-symbol-list-index/non-asset/non-artboard
+families, imported and owned contexts, artboard referencer/remapping side
+effects, property-name APIs for remaining families, full dirty-list scheduler
+parity, pending add/remove behavior, re-entry protection,
+relative/parent/nested lookup, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: grouped system operation-value public
 `updateDataBinds(true)` target-to-source behavior now preserves the owning

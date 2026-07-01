@@ -2528,6 +2528,15 @@ context. The C++ probe adds
 state machine through existing `BindablePropertyList` source-size and target
 reports. The contract is
 `docs/prototypes/data-binding-graph-imported-viewmodel-list-shared-mutation-runtime-contract.md`.
+
+Current #12 update: default view-model list sources now have the same direct
+source mutation seam as the default scalar source family. Mutating a default
+`ViewModelInstanceList` source by state-machine data-bind index updates the
+graph's observable list item count, and the C++ probe adds
+`--runtime-set-default-view-model-source-list` to compare existing
+`BindablePropertyList` source-size and target reports after data-context
+advancement. The contract is
+`docs/prototypes/data-binding-graph-default-viewmodel-list-source-mutation-runtime-contract.md`.
 Imported-instance mutation beyond shared view-model pointer, number, boolean,
 string, color, enum, symbol-list-index, asset, artboard, trigger, and list
 contexts,

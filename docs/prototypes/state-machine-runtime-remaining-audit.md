@@ -943,6 +943,14 @@ slice.
   machine through existing `BindablePropertyList` source-size and target
   reports. The contract is
   `docs/prototypes/data-binding-graph-imported-viewmodel-list-shared-mutation-runtime-contract.md`.
+- Default list source mutation slice:
+  default root view-model contexts can now mutate a direct
+  `ViewModelInstanceList` source item count by state-machine data-bind index.
+  The graph updates the same list source fact used by the existing
+  `BindablePropertyList` report surface, and the C++ probe covers
+  `--runtime-set-default-view-model-source-list` followed by data-context and
+  state-machine advancement. The contract is
+  `docs/prototypes/data-binding-graph-default-viewmodel-list-source-mutation-runtime-contract.md`.
 - First owned scalar property-name slice:
   `RuntimeOwnedViewModelInstance` records root `ViewModelProperty.name` values
   and can mutate a root number property through

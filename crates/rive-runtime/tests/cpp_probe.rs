@@ -17097,6 +17097,27 @@ fn state_machine_default_viewmodel_number_formula_function_public_update_target_
 }
 
 #[test]
+fn state_machine_default_viewmodel_number_formula_function_main_to_target_two_way_target_dirty_matches_cpp_probe()
+ {
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_number_formula_function_main_to_target_two_way_target_dirty_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_number_formula_function_blend_state_with_flags(
+            8660,
+            1.5,
+            6,
+            &[
+                FormulaFunctionArgument::Input,
+                FormulaFunctionArgument::Value(2.0),
+            ],
+            DATA_BIND_TWO_WAY,
+            false,
+        );
+    assert_number_main_to_target_two_way_target_dirty_matches_cpp_probe(label, bytes);
+}
+
+#[test]
 fn state_machine_default_viewmodel_symbol_list_index_formula_converter_matches_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");

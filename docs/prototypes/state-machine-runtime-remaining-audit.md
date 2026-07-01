@@ -1006,8 +1006,10 @@ slice.
   using the C++ formula argument counts exposed by `rive-binary`. Direct
   explicit target-to-source and public update target-to-source scheduling now
   run the same function-token formula conversion before source writes and
-  same-bind source-to-target reapplication. Random function tokens remain
-  outside the graph until a random-source state contract exists.
+  same-bind source-to-target reapplication, and direct main-`ToTarget | TwoWay`
+  target-dirty scheduling preserves then reapplies manual target edits like
+  C++. Random function tokens remain outside the graph until a random-source
+  state contract exists.
 - First graph-owned target-to-source slice: direct default-context number
   sources feeding number targets now honor `ToSource | TwoWay` target mutation
   on explicit data-context advance. A C++ probe uses two binds to the same

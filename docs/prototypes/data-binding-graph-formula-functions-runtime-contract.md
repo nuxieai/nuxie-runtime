@@ -4,7 +4,7 @@
 
 Admit deterministic `FormulaTokenFunction` execution for graph-owned
 `DataConverterFormula` number bindings, then prove those same function tokens
-through the direct number target-to-source scheduling paths.
+through the direct number scheduling paths.
 
 This slice extends the existing imported formula output-queue path from
 input/value/operation tokens to C++ function tokens whose result is fully
@@ -31,6 +31,10 @@ while resolving `DataConverterFormula`.
 - Direct main-`ToTarget | TwoWay` public `updateDataBinds(true)`, using C++
   `DataConverterFormula::reverseConvert` delegation to the same function-token
   formula evaluator before same-update source-to-target reapplication.
+- Direct main-`ToTarget | TwoWay` target-dirty behavior, preserving a manual
+  target edit through explicit data-context advancement before the next normal
+  state-machine advance reapplies the unchanged source through the
+  function-token formula.
 - C++ probe coverage through an existing `BlendState1DViewModel` consumer and
   number binding reports.
 
@@ -41,8 +45,8 @@ while resolving `DataConverterFormula`.
 - Formula parent-source binding, source dependents, and add-dirt behavior.
 - Formula converter groups beyond already admitted deterministic
   input/value/operation group shapes.
-- Main-`ToTarget | TwoWay` target-dirty scheduling for function-token
-  formulas.
+- Formula function scheduling for symbol-list-index and non-number formula
+  sources beyond the already admitted direct number-source path.
 - Number-to-list, generated-list, scripted, and live context-aware converters.
 - External and owned contexts for this converter/source combination.
 - Relative-path, parent-path, nested-path, listener-owned, and update-queue
@@ -56,5 +60,7 @@ while resolving `DataConverterFormula`.
 - Unknown non-random function types write `0.0` like C++.
 - Direct target-to-source and public update paths run function-token formula
   conversion before writing and reapplying the source, matching C++ reports.
+- Direct main-`ToTarget | TwoWay` target-dirty behavior preserves and then
+  reapplies the same function-token formula values as C++.
 - Random function tokens remain unsupported by the graph until a random-source
   state contract exists.

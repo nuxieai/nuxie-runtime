@@ -431,7 +431,23 @@ and mutates every matching graph source node. The C++ probe adds
 compares the existing boolean transition-condition report surface. The contract
 is
 `docs/prototypes/data-binding-graph-default-boolean-name-runtime-contract.md`.
-Default string/color/enum/symbol-list-index/asset/artboard/trigger/list/view-model
+Default color/enum/symbol-list-index/asset/artboard/trigger/list/view-model
+name APIs, nested/relative/parent lookup, public source handles, reverse
+propagation, broader update queues, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
+
+Current #12 update: default root string sources now match the root number and
+boolean property-name mutation shape. Rust exposes
+`StateMachineInstance::set_default_view_model_string_source_by_property_name`,
+which resolves a root `ViewModelPropertyString.name` on file view model `0`
+and mutates every matching graph source node. The C++ probe adds
+`--runtime-set-default-view-model-source-string-by-name`, drives
+`ViewModelInstanceRuntime::propertyString("label")->value(...)` with a raw
+`propertyValue("label")` fallback for the file-backed default instance, and
+compares the existing string transition-condition report surface. The contract
+is
+`docs/prototypes/data-binding-graph-default-string-name-runtime-contract.md`.
+Default color/enum/symbol-list-index/asset/artboard/trigger/list/view-model
 name APIs, nested/relative/parent lookup, public source handles, reverse
 propagation, broader update queues, listener-owned data binding, and nested
 artboard propagation remain follow-up `#12` slices.

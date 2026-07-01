@@ -49,6 +49,11 @@ slice.
   `propertyValue("enabled")` fallback for the file-backed default instance,
   and the existing boolean transition-condition consumer. The contract is
   `docs/prototypes/data-binding-graph-default-boolean-name-runtime-contract.md`.
+- Default root string property-name mutation, covered by a C++ probe through
+  `ViewModelInstanceRuntime::propertyString("label")->value(...)` with raw
+  `propertyValue("label")` fallback for the file-backed default instance, and
+  the existing string transition-condition consumer. The contract is
+  `docs/prototypes/data-binding-graph-default-string-name-runtime-contract.md`.
 - Graph-owned default `ViewModelInstanceBoolean` source-node mutation by
   state-machine data-bind index, covered by a C++ probe through an existing
   transition-condition consumer.

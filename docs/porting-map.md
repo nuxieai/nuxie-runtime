@@ -1606,6 +1606,19 @@ state-machine target-dirty behavior for stateful groups, broader dirty queues,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
 
+Current #12 update: the admitted stateful `DataConverterGroup` path now also
+covers main-`ToTarget | TwoWay` state-machine target-dirty behavior for warmed
+number targets. A manual bindable number edit is preserved through explicit
+data-context advancement, then the next normal state-machine advance reapplies
+the unchanged source through forward
+`DataConverterOperationValue -> DataConverterInterpolator` group order using
+the existing group child state tree. The contract is
+`docs/prototypes/data-binding-graph-interpolator-converter-group-main-to-target-two-way-target-dirty-runtime-contract.md`.
+Fresh/unwarmed stateful-group target edits, main-`ToSource | TwoWay` behavior
+for stateful groups, broader dirty queues, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
+
 Current #12 update: the first deterministic `DataConverterFormula` runtime
 execution slice now admits default-context number sources feeding
 `BindablePropertyNumber.propertyValue` targets. Runtime formula descriptors are

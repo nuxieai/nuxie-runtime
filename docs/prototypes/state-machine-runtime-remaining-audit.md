@@ -472,6 +472,13 @@ slice.
   interpolator child's stateful reverse/convert path before operation-value
   reverse conversion, then the same public update reapplies forward group
   conversion with the same child state tree.
+- Stateful interpolator converter-group main-to-target dirty slice: the
+  admitted `DataConverterOperationValue -> DataConverterInterpolator` group
+  now follows C++ state-machine target-dirty behavior for warmed main-`ToTarget
+  | TwoWay` number targets. Explicit data-context advancement preserves a
+  manual bindable target edit, then normal state-machine advancement reapplies
+  the unchanged source through forward group conversion with the same child
+  state tree.
 - First deterministic `DataConverterFormula` graph-owned converter execution
   slice: default-context number sources feeding number targets can now evaluate
   imported formula output queues made from input, value, and operation tokens,

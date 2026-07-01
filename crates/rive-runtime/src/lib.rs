@@ -3137,6 +3137,38 @@ impl RuntimeImportedViewModelInstanceContext {
         self.number_overrides.insert(path, value);
         true
     }
+
+    pub fn set_boolean_by_property_name(
+        &mut self,
+        file: &RuntimeFile,
+        property_name: &str,
+        value: bool,
+    ) -> bool {
+        let Some(path) = runtime_imported_view_model_boolean_property_path_for_name(
+            file,
+            self.view_model_index,
+            property_name,
+        ) else {
+            return false;
+        };
+        let Some(view_model) = file.view_model(self.view_model_index) else {
+            return false;
+        };
+        let Some(instance) = view_model.instances.into_iter().nth(self.instance_index) else {
+            return false;
+        };
+        let current = self.boolean_overrides.get(&path).copied().or_else(|| {
+            let source =
+                file.data_context_view_model_property_for_instance(instance.object, &path)?;
+            file.view_model_instance_boolean_value_for_object(source)
+        });
+        if current == Some(value) {
+            return false;
+        }
+
+        self.boolean_overrides.insert(path, value);
+        true
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -4130,6 +4162,33 @@ fn runtime_imported_view_model_number_property_path_for_name(
     view_model_index: usize,
     property_name: &str,
 ) -> Option<Vec<u32>> {
+    runtime_imported_view_model_property_path_for_name(
+        file,
+        view_model_index,
+        property_name,
+        "ViewModelPropertyNumber",
+    )
+}
+
+fn runtime_imported_view_model_boolean_property_path_for_name(
+    file: &RuntimeFile,
+    view_model_index: usize,
+    property_name: &str,
+) -> Option<Vec<u32>> {
+    runtime_imported_view_model_property_path_for_name(
+        file,
+        view_model_index,
+        property_name,
+        "ViewModelPropertyBoolean",
+    )
+}
+
+fn runtime_imported_view_model_property_path_for_name(
+    file: &RuntimeFile,
+    view_model_index: usize,
+    property_name: &str,
+    property_type_name: &str,
+) -> Option<Vec<u32>> {
     if property_name.is_empty() {
         return None;
     }
@@ -4139,7 +4198,7 @@ fn runtime_imported_view_model_number_property_path_for_name(
         .into_iter()
         .enumerate()
         .find_map(|(property_index, property)| {
-            if property.type_name != "ViewModelPropertyNumber" {
+            if property.type_name != property_type_name {
                 return None;
             }
             if property.string_property("name")? != property_name {

@@ -2454,6 +2454,18 @@ context. The C++ probe adds
 machines through state-machine advance reports. The contract is
 `docs/prototypes/data-binding-graph-imported-viewmodel-boolean-shared-mutation-runtime-contract.md`.
 
+Current #12 update: imported view-model boolean sources now have the root
+property-name mutation API. `RuntimeImportedViewModelInstanceContext::
+set_boolean_by_property_name` resolves a root
+`ViewModelPropertyBoolean.name` against the file-backed imported view model,
+records the existing boolean override by resolved source path, and lets two
+state machines bound through the same context observe the mutation. The C++
+probe adds `--runtime-set-view-model-instance-source-bool-by-name`, calls
+`ViewModelInstanceRuntime::propertyBoolean(name)`, and compares both state
+machines through the existing state-machine advance report surface. The
+contract is
+`docs/prototypes/data-binding-graph-imported-viewmodel-boolean-name-runtime-contract.md`.
+
 Current #12 update: imported view-model string sources now match the shared
 scalar mutation pattern. `RuntimeImportedViewModelInstanceContext` records
 string source overrides by resolved data-bind source path; mutating a
@@ -2552,7 +2564,7 @@ Imported-instance mutation beyond shared view-model pointer, number, boolean,
 string, color, enum, symbol-list-index, asset, artboard, trigger, and list
 contexts,
 remaining property-name APIs beyond imported view-model pointer and root
-number sources and owned generated pointer paths, stable public object
+number/boolean sources and owned generated pointer paths, stable public object
 handles, reverse propagation, broader update queues, relative/parent/nested
 lookup, listener-owned data binding, and nested artboard propagation remain
 follow-up `#12` slices.

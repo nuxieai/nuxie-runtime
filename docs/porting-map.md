@@ -4326,6 +4326,19 @@ Owned source handles for trigger/list/view-model sources, nested/relative/
 parent lookup, reverse propagation, broader update queues, listener-owned data
 binding, and nested artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: owned runtime trigger sources now have a stable public
+source handle. `RuntimeOwnedViewModelInstance` can resolve a root trigger
+property name into `RuntimeOwnedViewModelTriggerSourceHandle`, and
+`set_trigger_by_source_handle` writes through the existing owned raw trigger
+count storage before binding the owned context to a state machine. Slash-path
+handle lookup remains unresolved. The C++ probe compares the handle mutation
+against the existing owned-trigger runtime context command and verifies the
+existing state-machine advance and component update reports. The contract is
+`docs/prototypes/data-binding-graph-owned-viewmodel-trigger-source-handle-runtime-contract.md`.
+Owned source handles for list/view-model sources, nested/relative/parent
+lookup, reverse propagation, broader update queues, listener-owned data
+binding, and nested artboard propagation remain follow-up `#12` slices.
+
 Current #12 update: owned runtime view-model root scalar property-name mutation
 now covers every scalar kind already backed by owned property-index storage:
 number, boolean, string, color, enum, symbol-list-index, asset, artboard, and

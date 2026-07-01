@@ -6,7 +6,8 @@ Add the first live relink path for default-context
 `ViewModelInstanceViewModel` sources. This is distinct from the raw generated
 `propertyValue` setter: relinking updates the cached
 `referenceViewModelInstance` pointer and enqueues the source-to-target bind for
-`BindablePropertyViewModel.propertyValue`.
+`BindablePropertyViewModel.propertyValue`. This contract also covers same-path
+observer propagation for ordinary direct `ToTarget` view-model binds.
 
 ## In Scope
 
@@ -17,12 +18,15 @@ Add the first live relink path for default-context
 - Root-only `DataBindContext.sourcePathIds` that resolve to
   `ViewModelInstanceViewModel` sources.
 - Public Rust relink by data-bind index and referenced instance index.
+- Updating every bound default-context view-model source node that shares the
+  selected data-bind source path.
 - C++ probe mutation through
   `--runtime-relink-default-view-model-source-viewmodel`, which calls the
   cached-reference replacement path on the default root instance.
 - C++ probe coverage through the existing view-model pointer transition
   condition and view-model binding reports, proving the source and bindable
-  target pointers both observe the replacement.
+  target pointers both observe the replacement after normal state-machine
+  advancement.
 
 ## Out Of Scope
 
@@ -34,6 +38,8 @@ Add the first live relink path for default-context
   replacing generated owned child identities.
 - List bindables and list item propagation.
 - Reverse target-to-source propagation.
+- Two-way relink target timing on the intermediate explicit data-context
+  report.
 - Broader dirty/update queue parity, pending add/remove handling, re-entry
   protection, relative paths, parent paths, nested paths, and listener-owned
   data binding.
@@ -41,10 +47,10 @@ Add the first live relink path for default-context
 ## Completion Checks
 
 - Relinking a default `ViewModelInstanceViewModel` source to referenced
-  instance index `1` changes the graph source pointer observed by Rust.
-- The same relink updates the `BindablePropertyViewModel.propertyValue` target
-  on explicit data-context advance.
+  instance index `1` changes same-path graph source pointers observed by Rust.
+- The same relink updates same-path `BindablePropertyViewModel.propertyValue`
+  targets by the next normal state-machine advance.
 - The C++ probe reports the same source and target instance indexes for the
-  relinked data bind.
+  relinked data bind and a same-path observer bind.
 - The raw generated setter test continues to prove that `propertyValue` index
   writes do not relink the cached pointer.

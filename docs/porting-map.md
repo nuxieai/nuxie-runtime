@@ -2552,7 +2552,23 @@ source size and applies the updated target after data-context advancement. The
 contract is
 `docs/prototypes/data-binding-graph-default-viewmodel-list-source-mutation-runtime-contract.md`.
 Same-path data-bind-index source mutation for remaining
-view-model pointer/relink semantics, imported and owned contexts,
+view-model pointer/relink semantics, imported and owned contexts, list-item
+identity/layout side effects, property-name APIs for remaining families, full
+dirty-list scheduler parity, pending add/remove behavior, re-entry protection,
+relative/parent/nested lookup, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
+
+Current #12 update: default-context view-model pointer relink by
+state-machine data-bind index now updates same-path graph source nodes instead
+of only the selected cloned edge. A C++ probe relinks a shared
+`ViewModelInstanceViewModel` cached reference through the first data bind and
+proves a neighboring ordinary direct `ToTarget` view-model bind reports the
+updated source and target instance indexes after normal state-machine
+advancement. The contract is
+`docs/prototypes/data-binding-graph-default-viewmodel-relink-runtime-contract.md`.
+The default data-bind-index same-path source mutation/relink observer family
+now covers number, boolean, string, color, enum, symbol-list-index, asset,
+artboard, trigger, list, and view-model relink. Imported and owned contexts,
 list-item identity/layout side effects, property-name APIs for remaining
 families, full dirty-list scheduler parity, pending add/remove behavior,
 re-entry protection, relative/parent/nested lookup, listener-owned data
@@ -2747,10 +2763,10 @@ follow-up `#12` slices.
 Current #12 update: default-context view-model pointer sources now have a live
 relink API separate from the raw generated setter path.
 `StateMachineInstance::relink_default_view_model_view_model_source_for_data_bind`
-updates the graph source to a referenced imported child instance, matching the
-C++ probe's cached-reference replacement path. Explicit data-context advance
-then pushes that relinked pointer into
-`BindablePropertyViewModel.propertyValue`. The contract is
+updates same-path graph sources to a referenced imported child instance,
+matching the C++ probe's cached-reference replacement path. Normal
+state-machine advancement then pushes that relinked pointer into same-path
+`BindablePropertyViewModel.propertyValue` targets. The contract is
 `docs/prototypes/data-binding-graph-default-viewmodel-relink-runtime-contract.md`.
 Imported-context view-model relinking, nested owned view-model pointer paths,
 remaining property-name APIs, public object-handle APIs, reverse propagation,

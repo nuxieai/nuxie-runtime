@@ -80,6 +80,10 @@ slice.
   data-bind-index mutation path resolves the selected source path and updates
   all same-path default-context list source nodes, covered by a C++ probe with
   a neighboring ordinary direct `ToTarget` bindable-list bind.
+- Default view-model pointer relink same-path observer propagation: the
+  data-bind-index relink path resolves the selected source path and updates
+  all same-path default-context view-model pointer source nodes, covered by a
+  C++ probe with a neighboring ordinary direct `ToTarget` view-model bind.
 - Default root number property-name mutation, covered by a C++ probe through
   `ViewModelInstanceRuntime::propertyNumber("amount")->value(...)` with raw
   `propertyValue("amount")` fallback for the file-backed default instance, and
@@ -1036,11 +1040,12 @@ slice.
   transition-condition consumer.
 - First default view-model pointer relink slice: default-context
   `ViewModelInstanceViewModel` sources can be relinked by referenced imported
-  instance index through the live cached-reference replacement path. The
-  C++ probe covers the matching
-  cached-reference replacement path through an existing view-model pointer
-  transition-condition consumer, including source and target pointer updates
-  on explicit data-context advance. The contract is
+  instance index through the live cached-reference replacement path. The graph
+  now updates same-path view-model pointer sources, and the C++ probe covers
+  the matching cached-reference replacement path through an existing
+  view-model pointer transition-condition consumer plus a neighboring ordinary
+  direct `ToTarget` observer after normal state-machine advancement. The
+  contract is
   `docs/prototypes/data-binding-graph-default-viewmodel-relink-runtime-contract.md`.
 - First imported view-model pointer relink slice: imported-context
   `ViewModelInstanceViewModel` sources can be relinked by referenced imported
@@ -1583,6 +1588,7 @@ slice.
   default artboard source-mutation same-path observer propagation,
   default trigger source-mutation same-path observer propagation,
   default list source-mutation same-path observer propagation,
+  default view-model pointer relink same-path observer propagation,
   boolean public-update observer preservation, string public-update observer
   preservation, color public-update observer preservation, enum public-update
   observer preservation, asset public-update observer preservation, artboard

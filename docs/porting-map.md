@@ -439,9 +439,9 @@ remains separate from slash-path lookup. The C++ probe compares the handle
 mutation against the default number by-name command and verifies the existing
 state-machine advance and component update reports. The contract is
 `docs/prototypes/data-binding-graph-default-number-source-handle-runtime-contract.md`.
-Default source handles for list/view-model sources, nested/relative/parent
-lookup, reverse propagation, broader update queues, listener-owned data
-binding, and nested artboard propagation remain follow-up `#12` slices.
+Default source handles for view-model sources, nested/relative/parent lookup,
+reverse propagation, broader update queues, listener-owned data binding, and
+nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: default nested number sources now have the first nested
 stable public source handle. `StateMachineInstance` can resolve a generated
@@ -815,12 +815,24 @@ Current #12 update: default root list sources now have a stable public source
 handle. `StateMachineInstance` can resolve a root list view-model property
 name into `RuntimeDefaultViewModelListSourceHandle`, and
 `set_default_view_model_list_source_item_count_by_source_handle` writes through
-the existing graph-owned source-path mutation path by item count. Slash-path
-handle lookup remains unresolved. The C++ probe compares the handle mutation
-against the default list by-name command and verifies the existing
-data-context advance, state-machine advance, and list binding reports. The
-contract is
+the existing graph-owned source-path mutation path by item count. Root-name
+handle lookup remains separate from slash-path lookup. The C++ probe compares
+the handle mutation against the default list by-name command and verifies the
+existing data-context advance, state-machine advance, and list binding
+reports. The contract is
 `docs/prototypes/data-binding-graph-default-list-source-handle-runtime-contract.md`.
+
+Current #12 update: default nested list sources now have a stable public
+source handle. `StateMachineInstance` can resolve a generated child path such
+as `child/items` into `RuntimeDefaultViewModelListSourceHandle` through
+`default_view_model_list_source_handle_by_property_name_path`, and
+`set_default_view_model_list_source_item_count_by_source_handle` writes through
+the existing graph-owned source-path mutation path by item count. The C++ probe
+compares the handle mutation against the authored `DataBindContext.sourcePathIds`
+mutation path for the matching default-context data bind and verifies the
+existing data-context advance, state-machine advance, and list binding reports.
+The contract is
+`docs/prototypes/data-binding-graph-default-nested-list-source-handle-runtime-contract.md`.
 Default source handles for view-model sources, nested/relative/parent lookup,
 reverse propagation, broader update queues, listener-owned data binding, and
 nested artboard propagation remain follow-up `#12` slices.

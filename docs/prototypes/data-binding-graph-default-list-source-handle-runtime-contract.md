@@ -25,7 +25,10 @@ Out of scope:
 - Number, boolean, string, color, enum, symbol-list-index, asset, artboard,
   trigger, or view-model source-handle behavior beyond the existing committed
   APIs.
-- Nested, relative, parent, or slash-separated property paths.
+- Changing root-name lookup semantics to accept slash-separated property
+  paths. Nested list paths are covered separately by
+  `docs/prototypes/data-binding-graph-default-nested-list-source-handle-runtime-contract.md`.
+- Relative or parent property paths.
 - Imported or owned view-model contexts.
 - List item identity, item view-model references, item-level traversal,
   generated item instancing beyond count parity, layout, virtualization, or
@@ -36,4 +39,4 @@ Out of scope:
 Completion condition: resolving and mutating a default root list source by
 handle produces the same data-context advance, state-machine advance, and list
 binding reports as C++ by-name mutation, no-op repeat writes report unchanged,
-and slash-path handle lookup remains unresolved.
+and root-name lookup stays separate from slash-path lookup.

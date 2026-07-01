@@ -59,6 +59,11 @@ slice.
   data-bind-index mutation path resolves the selected source path and updates
   all same-path default-context enum source nodes, covered by a C++ probe with
   a neighboring ordinary direct `ToTarget` enum bind.
+- Default symbol-list-index source mutation same-path observer propagation:
+  the data-bind-index mutation path resolves the selected source path and
+  updates all same-path default-context symbol-list-index source nodes,
+  covered by a C++ probe with a neighboring ordinary direct `ToTarget`
+  integer bind.
 - Default root number property-name mutation, covered by a C++ probe through
   `ViewModelInstanceRuntime::propertyNumber("amount")->value(...)` with raw
   `propertyValue("amount")` fallback for the file-backed default instance, and
@@ -828,6 +833,12 @@ slice.
   cloned edge, so a neighboring ordinary direct `ToTarget` enum bind reports
   the updated raw enum index and applies the updated target on the next
   state-machine advance.
+- Symbol-list-index source-mutation same-path observer slice:
+  default-context symbol-list-index source mutation by state-machine data-bind
+  index now mutates every same-path symbol-list-index source node rather than
+  only the selected cloned edge, so a neighboring ordinary direct `ToTarget`
+  integer bind reports the updated source and applies the updated target on
+  the next state-machine advance.
 - Range-mapper group target-to-source slice: the first direct
   `DataConverterGroup` containing a `DataConverterRangeMapper` now covers a
   main-`ToSource | TwoWay` number bind. The group runs
@@ -1532,6 +1543,7 @@ slice.
   default string source-mutation same-path observer propagation,
   default color source-mutation same-path observer propagation,
   default enum source-mutation same-path observer propagation,
+  default symbol-list-index source-mutation same-path observer propagation,
   boolean public-update observer preservation, string public-update observer
   preservation, color public-update observer preservation, enum public-update
   observer preservation, asset public-update observer preservation, artboard

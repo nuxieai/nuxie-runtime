@@ -2471,11 +2471,26 @@ updated source and applies the updated target on the next state-machine
 advance. The contract is
 `docs/prototypes/data-binding-graph-default-enum-source-mutation-runtime-contract.md`.
 Same-path data-bind-index source mutation for remaining
-non-number/non-boolean/non-string/non-color/non-enum families, imported and
-owned contexts, enum key/name APIs, full dirty-list scheduler parity, pending
-add/remove behavior, re-entry protection, relative/parent/nested lookup,
-listener-owned data binding, `Solo` name mapping, and nested artboard
-propagation remain follow-up `#12` slices.
+non-number/non-boolean/non-string/non-color/non-enum/non-symbol-list-index
+families, imported and owned contexts, enum key/name APIs, full dirty-list
+scheduler parity, pending add/remove behavior, re-entry protection,
+relative/parent/nested lookup, listener-owned data binding, `Solo` name
+mapping, and nested artboard propagation remain follow-up `#12` slices.
+
+Current #12 update: default-context symbol-list-index source mutation by
+state-machine data-bind index now updates same-path graph source nodes instead
+of only the selected cloned edge. A C++ probe mutates a shared
+`ViewModelInstanceSymbolListIndex.propertyValue` raw index through the first
+data bind and proves a neighboring ordinary direct `ToTarget` integer bind
+reports the updated symbol-list-index source and applies the updated target on
+the next state-machine advance. The contract is
+`docs/prototypes/data-binding-graph-default-symbol-list-index-source-mutation-runtime-contract.md`.
+Same-path data-bind-index source mutation for remaining
+non-number/non-boolean/non-string/non-color/non-enum/non-symbol-list-index
+families, imported and owned contexts, property-name APIs for remaining families,
+full dirty-list scheduler parity, pending add/remove behavior, re-entry
+protection, relative/parent/nested lookup, listener-owned data binding, and
+nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: grouped system operation-value public
 `updateDataBinds(true)` target-to-source behavior now preserves the owning

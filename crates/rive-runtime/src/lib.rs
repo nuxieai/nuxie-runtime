@@ -3169,6 +3169,47 @@ impl RuntimeImportedViewModelInstanceContext {
         self.boolean_overrides.insert(path, value);
         true
     }
+
+    pub fn set_string_by_property_name(
+        &mut self,
+        file: &RuntimeFile,
+        property_name: &str,
+        value: &[u8],
+    ) -> bool {
+        let Some(path) = runtime_imported_view_model_string_property_path_for_name(
+            file,
+            self.view_model_index,
+            property_name,
+        ) else {
+            return false;
+        };
+        let Some(view_model) = file.view_model(self.view_model_index) else {
+            return false;
+        };
+        let Some(instance) = view_model.instances.into_iter().nth(self.instance_index) else {
+            return false;
+        };
+        let current_matches = if let Some(current) = self.string_overrides.get(&path) {
+            current.as_slice() == value
+        } else {
+            let Some(source) =
+                file.data_context_view_model_property_for_instance(instance.object, &path)
+            else {
+                return false;
+            };
+            let Some(current) = file.view_model_instance_string_value_bytes_for_object(source)
+            else {
+                return false;
+            };
+            current == value
+        };
+        if current_matches {
+            return false;
+        }
+
+        self.string_overrides.insert(path, value.to_vec());
+        true
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -4180,6 +4221,19 @@ fn runtime_imported_view_model_boolean_property_path_for_name(
         view_model_index,
         property_name,
         "ViewModelPropertyBoolean",
+    )
+}
+
+fn runtime_imported_view_model_string_property_path_for_name(
+    file: &RuntimeFile,
+    view_model_index: usize,
+    property_name: &str,
+) -> Option<Vec<u32>> {
+    runtime_imported_view_model_property_path_for_name(
+        file,
+        view_model_index,
+        property_name,
+        "ViewModelPropertyString",
     )
 }
 

@@ -2477,6 +2477,17 @@ machines through the established string binding report surface. The contract
 is
 `docs/prototypes/data-binding-graph-imported-viewmodel-string-shared-mutation-runtime-contract.md`.
 
+Current #12 update: imported view-model string sources now have the root
+property-name mutation API. `RuntimeImportedViewModelInstanceContext::
+set_string_by_property_name` resolves a root `ViewModelPropertyString.name`
+against the file-backed imported view model, records the existing string
+override by resolved source path, and lets two state machines bound through
+the same context observe the mutation. The C++ probe adds
+`--runtime-set-view-model-instance-source-string-by-name`, calls
+`ViewModelInstanceRuntime::propertyString(name)`, and compares both state
+machines through the existing string binding report surface. The contract is
+`docs/prototypes/data-binding-graph-imported-viewmodel-string-name-runtime-contract.md`.
+
 Current #12 update: imported view-model color sources now match the shared
 scalar mutation pattern. `RuntimeImportedViewModelInstanceContext` records
 color source overrides by resolved data-bind source path; mutating a
@@ -2564,10 +2575,10 @@ Imported-instance mutation beyond shared view-model pointer, number, boolean,
 string, color, enum, symbol-list-index, asset, artboard, trigger, and list
 contexts,
 remaining property-name APIs beyond imported view-model pointer and root
-number/boolean sources and owned generated pointer paths, stable public object
-handles, reverse propagation, broader update queues, relative/parent/nested
-lookup, listener-owned data binding, and nested artboard propagation remain
-follow-up `#12` slices.
+number/boolean/string sources and owned generated pointer paths, stable public
+object handles, reverse propagation, broader update queues,
+relative/parent/nested lookup, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: owned runtime view-model contexts now have the first scalar
 property-name mutation API. `RuntimeOwnedViewModelInstance` records root

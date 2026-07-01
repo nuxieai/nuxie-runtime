@@ -2542,6 +2542,20 @@ symbol-list-index binding reports for `BindablePropertyInteger` targets, and
 compares both state machines through that report surface. The contract is
 `docs/prototypes/data-binding-graph-imported-viewmodel-symbol-list-index-shared-mutation-runtime-contract.md`.
 
+Current #12 update: imported view-model symbol-list-index sources now have the
+root property-name mutation API. `RuntimeImportedViewModelInstanceContext::
+set_symbol_list_index_by_property_name` resolves a root
+`ViewModelPropertySymbolListIndex.name` against the file-backed imported view
+model, records the existing symbol-list-index override by resolved source path,
+and lets two state machines bound through the same context observe the
+mutation. The C++ probe adds
+`--runtime-set-view-model-instance-source-symbol-list-index-by-name`, resolves
+`ViewModel::property(name)` to a root property index, reads
+`ViewModelInstance::propertyValue(index)` as a `ViewModelInstanceSymbolListIndex`,
+and compares both state machines through the existing symbol-list-index
+binding report surface. The contract is
+`docs/prototypes/data-binding-graph-imported-viewmodel-symbol-list-index-name-runtime-contract.md`.
+
 Current #12 update: imported view-model asset sources now match the shared
 scalar mutation pattern. `RuntimeImportedViewModelInstanceContext` records
 asset source overrides by resolved data-bind source path; mutating a
@@ -2598,7 +2612,7 @@ Imported-instance mutation beyond shared view-model pointer, number, boolean,
 string, color, enum, symbol-list-index, asset, artboard, trigger, and list
 contexts,
 remaining property-name APIs beyond imported view-model pointer and root
-number/boolean/string/color/enum sources and owned generated pointer paths,
+number/boolean/string/color/enum/symbol-list-index sources and owned generated pointer paths,
 stable public object handles, reverse propagation, broader update queues,
 relative/parent/nested lookup, listener-owned data binding, and nested
 artboard propagation remain follow-up `#12` slices.

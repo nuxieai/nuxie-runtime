@@ -350,6 +350,7 @@ enum class RuntimeStateMachineActionKind
     SetViewModelInstanceSourceEnum,
     SetViewModelInstanceSourceEnumByName,
     SetViewModelInstanceSourceSymbolListIndex,
+    SetViewModelInstanceSourceSymbolListIndexByName,
     SetViewModelInstanceSourceAsset,
     SetViewModelInstanceSourceArtboard,
     SetViewModelInstanceSourceTrigger,
@@ -2591,6 +2592,43 @@ apply_runtime_state_machine_advances(rive::File* file,
                 {
                     source->as<rive::ViewModelInstanceSymbolListIndex>()
                         ->propertyValue(action.uintValue);
+                }
+            }
+            continue;
+        }
+        if (action.kind == RuntimeStateMachineActionKind::
+                               SetViewModelInstanceSourceSymbolListIndexByName)
+        {
+            auto viewModel =
+                file != nullptr && action.viewModelIndex < file->viewModelCount()
+                    ? file->viewModel(action.viewModelIndex)
+                    : nullptr;
+            auto viewModelInstance =
+                viewModel != nullptr &&
+                        action.viewModelInstanceIndex <
+                            viewModel->instanceCount()
+                    ? viewModel->instance(action.viewModelInstanceIndex)
+                    : nullptr;
+            if (viewModelInstance != nullptr)
+            {
+                auto properties = viewModel->properties();
+                for (size_t propertyIndex = 0; propertyIndex < properties.size();
+                     propertyIndex++)
+                {
+                    auto property = properties[propertyIndex];
+                    if (property == nullptr || property->name() != action.stringValue)
+                    {
+                        continue;
+                    }
+                    auto source = viewModelInstance->propertyValue(
+                        static_cast<uint32_t>(propertyIndex));
+                    if (source != nullptr &&
+                        source->is<rive::ViewModelInstanceSymbolListIndex>())
+                    {
+                        source->as<rive::ViewModelInstanceSymbolListIndex>()
+                            ->propertyValue(action.uintValue);
+                    }
+                    break;
                 }
             }
             continue;
@@ -11679,6 +11717,36 @@ int main(int argc, const char* argv[])
             action.seconds = 0.0f;
             action.boolValue = false;
             action.numberValue = 0.0f;
+            action.uintValue =
+                static_cast<uint32_t>(std::strtoull(argv[++i], nullptr, 10));
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
+        if (is_arg(
+                argv[i],
+                "--runtime-set-view-model-instance-source-symbol-list-index-by-name"))
+        {
+            if (i + 5 >= argc)
+            {
+                std::cerr << "--runtime-set-view-model-instance-source-symbol-list-index-by-name requires stateMachineIndex viewModelIndex instanceIndex propertyName value\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::
+                SetViewModelInstanceSourceSymbolListIndexByName;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.viewModelIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.viewModelInstanceIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            action.stringValue = argv[++i];
             action.uintValue =
                 static_cast<uint32_t>(std::strtoull(argv[++i], nullptr, 10));
             options.runtimeStateMachineActions.push_back(action);

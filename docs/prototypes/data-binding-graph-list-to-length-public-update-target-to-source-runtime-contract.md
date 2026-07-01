@@ -37,7 +37,8 @@ reapplies source-to-target conversion from the unchanged imported list length.
 - List mutation APIs and update-queue propagation from list edits.
 - `DataConverterNumberToList` and generated runtime list items.
 - Main-`ToSource | TwoWay` target-to-source behavior for
-  `DataConverterListToLength`.
+  `DataConverterListToLength`, covered by
+  `docs/prototypes/data-binding-graph-list-to-length-main-to-source-target-to-source-runtime-contract.md`.
 - Writing numeric target values back into list sources.
 - Converter groups containing `DataConverterListToLength`.
 - Full dirty-list scheduler parity for neighboring ordinary `ToTarget`

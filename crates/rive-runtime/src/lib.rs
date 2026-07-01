@@ -4617,6 +4617,16 @@ impl RuntimeDataBindGraph {
             let Some(value) = source.number_target_to_source_value(value) else {
                 continue;
             };
+            if !include_deferred_main_to_target
+                && source.is_main_to_source()
+                && matches!(
+                    source.converter.as_ref(),
+                    Some(RuntimeDataBindGraphConverter::ListToLength)
+                )
+            {
+                applied_target_to_source = true;
+                source.source_to_target_dirty_after_target_to_source = true;
+            }
             if include_deferred_main_to_target {
                 applied_target_to_source = true;
                 source.source_to_target_dirty_after_target_to_source = true;
@@ -5455,6 +5465,12 @@ impl RuntimeDataBindGraphSourceNode {
     fn converted_value(&mut self) -> Option<RuntimeDataBindGraphValue> {
         match self.converter.as_ref() {
             None => Some(self.value.clone()),
+            Some(converter @ RuntimeDataBindGraphConverter::ListToLength)
+                if self.is_main_to_source() =>
+            {
+                self.converter_state
+                    .reverse_convert_value(converter, &self.value)
+            }
             Some(converter) => self.converter_state.convert_value(converter, &self.value),
         }
     }
@@ -6175,6 +6191,9 @@ fn runtime_data_bind_graph_reverse_convert_value(
         (RuntimeDataBindGraphConverter::ToNumber, _) => None,
         (RuntimeDataBindGraphConverter::ListToLength, RuntimeDataBindGraphValue::Number(value)) => {
             Some(RuntimeDataBindGraphValue::Number(*value))
+        }
+        (RuntimeDataBindGraphConverter::ListToLength, RuntimeDataBindGraphValue::ListLength(_)) => {
+            Some(RuntimeDataBindGraphValue::Number(0.0))
         }
         (RuntimeDataBindGraphConverter::ListToLength, _) => None,
         (

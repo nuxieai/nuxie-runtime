@@ -167,6 +167,11 @@ slice.
   base-reverse/type-mismatch behavior for main-`ToTarget | TwoWay`
   list-to-number binds. The imported list-length source remains unchanged and
   the public update reapplies that unchanged length to the number target.
+- List-to-length main-to-source target-to-source slice: direct
+  `DataConverterListToLength` now follows C++ explicit data-context behavior
+  for main-`ToSource | TwoWay` list-to-number binds. The target edit does not
+  write the list source, and the same dirty pass refreshes the target through
+  base reverse conversion to the default number value `0`.
 - `DataConverterRounder` graph-owned converter execution slice: forward
   conversion for default-context number sources feeding number targets,
   including imported `decimals`, covered by a C++ probe through an existing

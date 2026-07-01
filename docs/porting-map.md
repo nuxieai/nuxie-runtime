@@ -842,9 +842,9 @@ length through a `BlendState1DViewModel` consumer. The contract is
 `docs/prototypes/data-binding-graph-list-to-length-converter-runtime-contract.md`.
 Stable public source handles, list targets, list mutation APIs,
 `DataConverterNumberToList`, generated runtime list items, reverse conversion
-beyond the linked public-update base-reverse/no-write path, broader
-update-queue parity, relative/parent/nested lookup, listener-owned data
-binding, and nested artboard propagation remain follow-up `#12` slices.
+beyond the linked public-update and main-`ToSource` base-reverse paths,
+broader update-queue parity, relative/parent/nested lookup, listener-owned
+data binding, and nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: direct `DataConverterListToLength` now also covers
 main-`ToTarget | TwoWay` state-machine target-dirty behavior for
@@ -854,10 +854,10 @@ data-context advancement, then the next normal state-machine advance overwrites
 the target from the unchanged imported list source length. The contract is
 `docs/prototypes/data-binding-graph-list-to-length-main-to-target-two-way-target-dirty-runtime-contract.md`.
 Stable public source handles, list targets, list mutation APIs,
-`DataConverterNumberToList`, generated runtime list items, main-`ToSource |
-TwoWay` behavior for list-to-length, broader update-queue parity beyond the
-linked public-update path, relative/parent/nested lookup, listener-owned data
-binding, and nested artboard propagation remain follow-up `#12` slices.
+`DataConverterNumberToList`, generated runtime list items, broader
+update-queue parity beyond the linked public-update path,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
 
 Current #12 update: direct `DataConverterListToLength` now also covers public
 `updateDataBinds(true)` target-to-source behavior for default-context
@@ -867,10 +867,21 @@ the list source, then immediately reapplies the unchanged imported list length
 to the number target. The contract is
 `docs/prototypes/data-binding-graph-list-to-length-public-update-target-to-source-runtime-contract.md`.
 Stable public source handles, list targets, list mutation APIs,
-`DataConverterNumberToList`, generated runtime list items, main-`ToSource |
-TwoWay` behavior for list-to-length, converter groups, broader dirty/update
-queues, relative/parent/nested lookup, listener-owned data binding, and nested
-artboard propagation remain follow-up `#12` slices.
+`DataConverterNumberToList`, generated runtime list items, converter groups,
+broader dirty/update queues, relative/parent/nested lookup, listener-owned data
+binding, and nested artboard propagation remain follow-up `#12` slices.
+
+Current #12 update: direct `DataConverterListToLength` now also covers
+main-`ToSource | TwoWay` target-to-source behavior for default-context number
+targets. C++ does not write the edited number target into the list source, then
+the same explicit data-context pass refreshes the target through base
+`reverseConvert`, which yields the default number value `0` for this
+list-to-number target. The contract is
+`docs/prototypes/data-binding-graph-list-to-length-main-to-source-target-to-source-runtime-contract.md`.
+Stable public source handles, list targets, list mutation APIs,
+`DataConverterNumberToList`, generated runtime list items, converter groups,
+broader dirty/update queues, relative/parent/nested lookup, listener-owned data
+binding, and nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: `DataConverterRounder` runtime execution now admits
 default-context number sources feeding `BindablePropertyNumber.propertyValue`

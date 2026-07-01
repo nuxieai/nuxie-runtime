@@ -23,6 +23,9 @@ imported list size needed by the converter.
 - Public `updateDataBinds(true)` target-to-source base-reverse/no-write
   behavior is covered by
   `docs/prototypes/data-binding-graph-list-to-length-public-update-target-to-source-runtime-contract.md`.
+- Main-`ToSource | TwoWay` target-to-source no-write plus reverse/default
+  number refresh behavior is covered by
+  `docs/prototypes/data-binding-graph-list-to-length-main-to-source-target-to-source-runtime-contract.md`.
 - C++ probe coverage through an existing `BlendState1DViewModel` consumer.
 
 ## Out Of Scope
@@ -30,8 +33,8 @@ imported list size needed by the converter.
 - List targets and `BindablePropertyList` behavior.
 - List mutation APIs and update-queue propagation.
 - `DataConverterNumberToList` and generated runtime list items.
-- Reverse conversion beyond the linked public-update base-reverse/no-write
-  path.
+- Reverse conversion beyond the linked public-update and main-`ToSource`
+  base-reverse paths.
 - Dirty/update queue parity beyond the linked state-machine target-dirty and
   public-update paths.
 - Owned runtime view-model list contexts.

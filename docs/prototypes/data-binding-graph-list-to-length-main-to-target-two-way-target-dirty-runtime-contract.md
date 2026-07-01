@@ -25,6 +25,8 @@ reapplies source-to-target conversion through `DataConverterListToLength`.
   next normal state-machine advance overwrites it.
 - Public `updateDataBinds(true)` target-to-source behavior is covered by
   `docs/prototypes/data-binding-graph-list-to-length-public-update-target-to-source-runtime-contract.md`.
+- Main-`ToSource | TwoWay` target-to-source behavior is covered by
+  `docs/prototypes/data-binding-graph-list-to-length-main-to-source-target-to-source-runtime-contract.md`.
 - Exact C++ probe reporting for the mutating number bind's target value after
   each explicit runtime action.
 
@@ -33,8 +35,6 @@ reapplies source-to-target conversion through `DataConverterListToLength`.
 - List targets and `BindablePropertyList` behavior.
 - List mutation APIs and update-queue propagation.
 - `DataConverterNumberToList` and generated runtime list items.
-- Main-`ToSource | TwoWay` target-to-source behavior for
-  `DataConverterListToLength`.
 - Immediate target-to-source reverse conversion for main-`ToTarget | TwoWay`
   binds.
 - Public `DataBindContainer::updateDataBinds(true)` scheduler parity beyond the

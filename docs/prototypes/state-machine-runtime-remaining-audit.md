@@ -142,6 +142,12 @@ slice.
   source is not written because the reverse value type does not match; the
   public update still drains the bind and reapplies the unchanged boolean
   source to the number target.
+- Remaining ToNumber public-update target-to-source slice: direct
+  `DataConverterToNumber` now covers the same public `updateDataBinds(true)`
+  base-reverse/type-mismatch behavior for enum, color, string, and
+  symbol-list-index sources feeding main-`ToTarget | TwoWay` number targets.
+  The source remains unchanged and the public update reapplies
+  `DataConverterToNumber::convert` from that unchanged source.
 - Fifth cross-type graph-owned converter execution slice:
   `DataConverterToNumber` forward conversion for default-context
   symbol-list-index sources feeding number targets, covered by a C++ probe

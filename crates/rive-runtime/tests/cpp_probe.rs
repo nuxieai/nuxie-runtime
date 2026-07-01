@@ -12095,22 +12095,12 @@ fn to_number_boolean_main_to_target_two_way_target_dirty_matches_cpp_probe() {
     assert_number_main_to_target_two_way_target_dirty_matches_cpp_probe(label, bytes);
 }
 
-#[test]
-fn to_number_boolean_public_update_target_to_source_matches_cpp_probe() {
-    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
-
+fn assert_to_number_public_update_target_to_source_matches_cpp_probe(label: &str, bytes: Vec<u8>) {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
         return;
     };
 
-    let label =
-        "synthetic/runtime_state_machine_default_viewmodel_boolean_to_number_public_update_cpp.riv";
-    let bytes =
-        synthetic_state_machine_default_viewmodel_boolean_to_number_converter_blend_state_with_flags(
-            8535,
-            DATA_BIND_TWO_WAY,
-        );
     let args = [
         "--runtime-bind-default-view-model-state-machine-context".to_owned(),
         "0".to_owned(),
@@ -12190,6 +12180,75 @@ fn to_number_boolean_public_update_target_to_source_matches_cpp_probe() {
         compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, &step_label);
     }
     compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn to_number_boolean_public_update_target_to_source_matches_cpp_probe() {
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    let label =
+        "synthetic/runtime_state_machine_default_viewmodel_boolean_to_number_public_update_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_boolean_to_number_converter_blend_state_with_flags(
+            8535,
+            DATA_BIND_TWO_WAY,
+        );
+    assert_to_number_public_update_target_to_source_matches_cpp_probe(label, bytes);
+}
+
+#[test]
+fn to_number_enum_public_update_target_to_source_matches_cpp_probe() {
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    let label =
+        "synthetic/runtime_state_machine_default_viewmodel_enum_to_number_public_update_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_enum_to_number_converter_blend_state_with_flags(
+            8536,
+            DATA_BIND_TWO_WAY,
+        );
+    assert_to_number_public_update_target_to_source_matches_cpp_probe(label, bytes);
+}
+
+#[test]
+fn to_number_color_public_update_target_to_source_matches_cpp_probe() {
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    let label =
+        "synthetic/runtime_state_machine_default_viewmodel_color_to_number_public_update_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_color_to_number_converter_blend_state_with_flags(
+            8537,
+            DATA_BIND_TWO_WAY,
+        );
+    assert_to_number_public_update_target_to_source_matches_cpp_probe(label, bytes);
+}
+
+#[test]
+fn to_number_string_public_update_target_to_source_matches_cpp_probe() {
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    let label =
+        "synthetic/runtime_state_machine_default_viewmodel_string_to_number_public_update_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_string_to_number_converter_blend_state_with_flags(
+            8538,
+            DATA_BIND_TWO_WAY,
+        );
+    assert_to_number_public_update_target_to_source_matches_cpp_probe(label, bytes);
+}
+
+#[test]
+fn to_number_symbol_list_index_public_update_target_to_source_matches_cpp_probe() {
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_symbol_list_index_to_number_public_update_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_symbol_list_index_to_number_converter_blend_state_with_flags(
+            8539,
+            DATA_BIND_TWO_WAY,
+        );
+    assert_to_number_public_update_target_to_source_matches_cpp_probe(label, bytes);
 }
 
 #[test]

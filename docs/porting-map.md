@@ -814,9 +814,9 @@ overwrites the target from the unchanged source through forward
 `DataConverterToNumber::convert`. The contract is
 `docs/prototypes/data-binding-graph-to-number-scalar-main-to-target-two-way-target-dirty-runtime-contract.md`.
 Stable public source handles, list/view-model bindables, public-queue reverse
-conversion beyond the linked boolean public-update slice, converter groups,
-formula functions/randoms, interpolator, number-to-list, scripted converters,
-broader dirty/update queues,
+conversion beyond the linked `DataConverterToNumber` public-update slices,
+converter groups, formula functions/randoms, interpolator, number-to-list,
+scripted converters, broader dirty/update queues,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
 
@@ -1830,9 +1830,9 @@ number binds with no converter, direct `DataConverterOperationValue`, grouped
 `DataConverterGroup<OperationValue>`, direct `DataConverterRangeMapper`, and
 direct `DataConverterGroup<RangeMapper, OperationValue>`, direct
 `DataConverterRounder`, direct system operation-value converters, direct
-`DataConverterOperationViewModel`, direct boolean-source
-`DataConverterToNumber`, plus direct deterministic `DataConverterFormula` and
-warmed direct `DataConverterInterpolator`.
+`DataConverterOperationViewModel`, direct cross-type `DataConverterToNumber`,
+plus direct deterministic `DataConverterFormula` and warmed direct
+`DataConverterInterpolator`.
 The C++ probe exposes `--runtime-update-state-machine-data-binds`, Rust
 mirrors it through
 `StateMachineInstance::update_data_binds_apply_target_to_source`, and the
@@ -1850,6 +1850,7 @@ preserve-then-next-advance ordering. The contracts are
 `docs/prototypes/data-binding-graph-system-operation-value-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-operation-viewmodel-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-to-number-boolean-public-update-target-to-source-runtime-contract.md`,
+`docs/prototypes/data-binding-graph-to-number-remaining-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-formula-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-public-update-observer-preservation-runtime-contract.md`,
 and

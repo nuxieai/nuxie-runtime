@@ -34,8 +34,11 @@ source-to-target, so the number target returns to `1.0` for the unchanged
 
 ## Out Of Scope
 
-- Public-update `DataConverterToNumber` behavior for enum, color, string,
-  symbol-list-index, number, list, or view-model source kinds.
+- Public-update `DataConverterToNumber` behavior for enum, color, string, and
+  symbol-list-index source kinds, which is covered by
+  `docs/prototypes/data-binding-graph-to-number-remaining-public-update-target-to-source-runtime-contract.md`.
+- Public-update `DataConverterToNumber` behavior for number, list, or
+  view-model source kinds.
 - Main-`ToSource | TwoWay` target-to-source behavior for `DataConverterToNumber`.
 - Converter groups containing `DataConverterToNumber`.
 - Full dirty-list scheduler parity for neighboring ordinary `ToTarget`

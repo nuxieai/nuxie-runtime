@@ -5302,6 +5302,40 @@ impl RuntimeDataBindGraphSourceNode {
             {
                 Some(RuntimeDataBindGraphValue::Boolean(*value))
             }
+            (RuntimeDataBindGraphValue::String(value), RuntimeDataBindGraphValue::Number(_))
+                if matches!(
+                    self.converter.as_ref(),
+                    Some(RuntimeDataBindGraphConverter::ToNumber)
+                ) =>
+            {
+                Some(RuntimeDataBindGraphValue::String(value.clone()))
+            }
+            (RuntimeDataBindGraphValue::Color(value), RuntimeDataBindGraphValue::Number(_))
+                if matches!(
+                    self.converter.as_ref(),
+                    Some(RuntimeDataBindGraphConverter::ToNumber)
+                ) =>
+            {
+                Some(RuntimeDataBindGraphValue::Color(*value))
+            }
+            (RuntimeDataBindGraphValue::Enum(value), RuntimeDataBindGraphValue::Number(_))
+                if matches!(
+                    self.converter.as_ref(),
+                    Some(RuntimeDataBindGraphConverter::ToNumber)
+                ) =>
+            {
+                Some(RuntimeDataBindGraphValue::Enum(*value))
+            }
+            (
+                RuntimeDataBindGraphValue::SymbolListIndex(value),
+                RuntimeDataBindGraphValue::Number(_),
+            ) if matches!(
+                self.converter.as_ref(),
+                Some(RuntimeDataBindGraphConverter::ToNumber)
+            ) =>
+            {
+                Some(RuntimeDataBindGraphValue::SymbolListIndex(*value))
+            }
             (RuntimeDataBindGraphValue::Boolean(_), RuntimeDataBindGraphValue::Boolean(value)) => {
                 Some(RuntimeDataBindGraphValue::Boolean(value))
             }

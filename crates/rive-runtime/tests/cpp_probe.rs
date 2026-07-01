@@ -29877,6 +29877,214 @@ fn state_machine_imported_viewmodel_nested_string_source_name_path_mutation_is_s
 }
 
 #[test]
+fn state_machine_imported_viewmodel_string_source_handle_mutation_is_shared_across_state_machines_matches_cpp_probe()
+ {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_imported_viewmodel_string_source_handle_mutation_shared_cpp.riv";
+    let bytes = synthetic_state_machine_imported_viewmodel_string_shared_mutation(8707);
+    let value = "handled";
+    let args = [
+        "--complete-view-model-properties".to_owned(),
+        "--runtime-set-view-model-instance-source-string-by-name".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "label".to_owned(),
+        value.to_owned(),
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "1".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "1".to_owned(),
+        "0".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine_a = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing first Rust state-machine instance for {label}"));
+    let mut state_machine_b = rust
+        .state_machine_instance(1)
+        .unwrap_or_else(|| panic!("missing second Rust state-machine instance for {label}"));
+    let mut imported_context = RuntimeImportedViewModelInstanceContext::new(&runtime, 0, 0)
+        .unwrap_or_else(|| panic!("missing imported view-model context for {label}"));
+    let handle = imported_context
+        .string_source_handle_by_property_name(&runtime, "label")
+        .unwrap_or_else(|| panic!("missing imported string source handle for {label}"));
+    let mut alternate_context = RuntimeImportedViewModelInstanceContext::new(&runtime, 0, 1)
+        .unwrap_or_else(|| panic!("missing alternate imported view-model context for {label}"));
+
+    assert_eq!(handle.view_model_index(), 0, "{label} handle view model");
+    assert_eq!(handle.instance_index(), 0, "{label} handle instance");
+    assert_eq!(handle.path(), &[0_u32, 0], "{label} handle path");
+    assert!(
+        !alternate_context.set_string_by_source_handle(&runtime, &handle, value.as_bytes()),
+        "{label} allowed imported string source handle on another instance"
+    );
+    assert!(
+        imported_context.set_string_by_source_handle(&runtime, &handle, value.as_bytes()),
+        "{label} failed to mutate imported string source by source handle"
+    );
+    assert!(
+        !imported_context.set_string_by_source_handle(&runtime, &handle, value.as_bytes()),
+        "{label} reported no-op imported string source handle mutation as changed"
+    );
+    assert!(
+        state_machine_a.bind_imported_view_model_context(&runtime, &imported_context),
+        "{label} failed to bind first imported view-model context"
+    );
+    let state_machine_a_advanced = rust.advance_state_machine_instance(&mut state_machine_a, 0.0);
+    assert!(
+        state_machine_b.bind_imported_view_model_context(&runtime, &imported_context),
+        "{label} failed to bind second imported view-model context"
+    );
+    let state_machine_b_advanced = rust.advance_state_machine_instance(&mut state_machine_b, 0.0);
+
+    let rust_reports = [
+        (0, state_machine_a_advanced, &state_machine_a),
+        (1, state_machine_b_advanced, &state_machine_b),
+    ];
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (state_machine_index, advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(rust_reports)
+    {
+        assert_eq!(
+            cpp_state_machine.state_machine_index, state_machine_index,
+            "{label} state-machine report index mismatch"
+        );
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, advanced, label);
+        compare_state_machine_string_binding(cpp_state_machine, rust_state_machine, 0, label);
+        assert_eq!(
+            rust_state_machine.default_view_model_string_source_value_for_data_bind(0),
+            Some(value.as_bytes()),
+            "{label} imported string source mismatch"
+        );
+    }
+}
+
+#[test]
+fn state_machine_imported_viewmodel_nested_string_source_handle_mutation_is_shared_across_state_machines_matches_cpp_probe()
+ {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_imported_viewmodel_nested_string_source_handle_mutation_shared_cpp.riv";
+    let bytes = synthetic_state_machine_imported_nested_viewmodel_string_shared_mutation(8708);
+    let value = "handled";
+    let args = [
+        "--complete-view-model-properties".to_owned(),
+        "--runtime-set-view-model-instance-source-string-by-name".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "child/label".to_owned(),
+        value.to_owned(),
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "1".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "1".to_owned(),
+        "0".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine_a = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing first Rust state-machine instance for {label}"));
+    let mut state_machine_b = rust
+        .state_machine_instance(1)
+        .unwrap_or_else(|| panic!("missing second Rust state-machine instance for {label}"));
+    let mut imported_context = RuntimeImportedViewModelInstanceContext::new(&runtime, 0, 0)
+        .unwrap_or_else(|| panic!("missing imported view-model context for {label}"));
+    let handle = imported_context
+        .string_source_handle_by_property_name_path(&runtime, "child/label")
+        .unwrap_or_else(|| panic!("missing imported nested string source handle for {label}"));
+
+    assert_eq!(handle.view_model_index(), 0, "{label} handle view model");
+    assert_eq!(handle.instance_index(), 0, "{label} handle instance");
+    assert_eq!(handle.path(), &[0_u32, 0, 0], "{label} handle path");
+    assert!(
+        imported_context.set_string_by_source_handle(&runtime, &handle, value.as_bytes()),
+        "{label} failed to mutate imported nested string source by source handle"
+    );
+    assert!(
+        state_machine_a.bind_imported_view_model_context(&runtime, &imported_context),
+        "{label} failed to bind first imported view-model context"
+    );
+    let state_machine_a_advanced = rust.advance_state_machine_instance(&mut state_machine_a, 0.0);
+    assert!(
+        state_machine_b.bind_imported_view_model_context(&runtime, &imported_context),
+        "{label} failed to bind second imported view-model context"
+    );
+    let state_machine_b_advanced = rust.advance_state_machine_instance(&mut state_machine_b, 0.0);
+
+    let rust_reports = [
+        (0, state_machine_a_advanced, &state_machine_a),
+        (1, state_machine_b_advanced, &state_machine_b),
+    ];
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (state_machine_index, advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(rust_reports)
+    {
+        assert_eq!(
+            cpp_state_machine.state_machine_index, state_machine_index,
+            "{label} state-machine report index mismatch"
+        );
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, advanced, label);
+        compare_state_machine_string_binding(cpp_state_machine, rust_state_machine, 0, label);
+        assert_eq!(
+            rust_state_machine.default_view_model_string_source_value_for_data_bind(0),
+            Some(value.as_bytes()),
+            "{label} imported nested string source mismatch"
+        );
+    }
+}
+
+#[test]
 fn state_machine_owned_viewmodel_string_bind_source_matches_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");

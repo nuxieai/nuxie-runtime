@@ -68,6 +68,14 @@ slice.
   `ViewModelInstanceEnum.propertyValue`, covered by C++ enum binding reports
   and the existing transition-condition consumer. The contract is
   `docs/prototypes/data-binding-graph-default-viewmodel-nested-enum-runtime-contract.md`.
+- Default-context nested symbol-list-index source binding: an absolute
+  `DataBindContext.sourcePathIds` path such as `[Root, child, symbol]` walks
+  the same imported child reference and reads the child's
+  `ViewModelInstanceSymbolListIndex.propertyValue` before the existing
+  `DataConverterToString` path writes the string bindable, covered by the
+  existing transition-condition and component-update report surfaces. The
+  contract is
+  `docs/prototypes/data-binding-graph-default-viewmodel-nested-symbol-list-index-runtime-contract.md`.
 - Graph-owned default `ViewModelInstanceNumber` source-node mutation by
   state-machine data-bind index, covered by a C++ probe through an existing
   `BlendState1DViewModel` consumer.
@@ -1706,7 +1714,8 @@ slice.
   live relative/name lookup with file pointers, remaining converter name paths
   beyond the direct and grouped `DataConverterOperationViewModel` unsupported
   boundaries, relative paths, parent paths, and nested source kinds beyond the
-  default-context number, boolean, string, color, and enum slices.
+  default-context number, boolean, string, color, enum, and symbol-list-index
+  slices.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener
   actions.

@@ -2390,7 +2390,7 @@ and preserves then overwrites manual target edits like C++. The contract is
 `docs/prototypes/data-binding-graph-formula-functions-runtime-contract.md`.
 Formula randoms, formula parent-source binding and dirt propagation,
 asset/artboard/view-model/list formula sources, formula converter groups
-beyond the admitted input/value/operation public-update group,
+beyond the admitted operation-value-to-formula public-update groups,
 number-to-list/generated-list/scripted scheduling, broader
 `DataBindContainer` dirty queues,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
@@ -3150,13 +3150,15 @@ containing `DataConverterOperationValue` followed by
 `DataConverterFormula`; public update reverse-converts the edited target
 through C++ reverse group order, runs formula `reverseConvert` through
 deterministic formula `convert`, writes the default number source, and
-reapplies source-to-target in the same update. The contract is
+reapplies source-to-target in the same update. This now covers both the
+input/value/operation formula group and the deterministic `FormulaTokenFunction`
+formula group. The contract is
 `docs/prototypes/data-binding-graph-formula-group-public-update-target-to-source-runtime-contract.md`.
-Other formula group compositions, formula functions/randoms, remaining
-mixed/stateful groups, full dirty-list scheduler parity, imported/owned
-contexts, pending add/remove behavior, re-entry protection,
-relative/parent/nested lookup, listener-owned data binding, and nested
-artboard propagation remain follow-up `#12` slices.
+Other formula group compositions, formula randoms, remaining mixed/stateful
+groups, full dirty-list scheduler parity, imported/owned contexts, pending
+add/remove behavior, re-entry protection, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
 
 Current #12 update: non-scripting `ScriptedDataConverter` now participates in
 the runtime data-bind graph as inherited C++ base converter pass-through. A

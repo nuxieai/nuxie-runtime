@@ -25,7 +25,8 @@ number source, then reapplies source-to-target through the same group.
   deterministic `DataConverterFormula`.
 - Formula output-queue tokens already modeled by the direct formula runtime
   contracts: `FormulaTokenInput`, `FormulaTokenValue`, and
-  `FormulaTokenOperation`.
+  `FormulaTokenOperation`, plus deterministic `FormulaTokenFunction` shapes
+  admitted by the direct formula-functions contract.
 - Public-update reverse group order, applying formula reverse conversion before
   operation-value reverse conversion.
 - Immediate source-to-target reapplication of the grouped converter after the
@@ -35,7 +36,7 @@ number source, then reapplies source-to-target through the same group.
 
 ## Out Of Scope
 
-- `FormulaTokenFunction`, random formula values, and `randomModeValue`.
+- Random formula values and `randomModeValue`.
 - Formula parent-source binding, source dependents, and general add-dirt
   behavior.
 - Other formula group compositions, including formula-first groups and groups
@@ -61,3 +62,5 @@ number source, then reapplies source-to-target through the same group.
   probe after each explicit runtime action.
 - Existing direct formula public-update, formula target-to-source, and
   operation-value group public-update tests still pass.
+- The deterministic function-token formula group follows the same C++ reverse
+  and forward child order as the input/value/operation formula group.

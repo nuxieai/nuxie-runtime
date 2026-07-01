@@ -3544,6 +3544,72 @@ fn synthetic_state_machine_default_viewmodel_number_formula_group_blend_state_wi
     })
 }
 
+fn synthetic_state_machine_default_viewmodel_number_formula_function_group_blend_state_with_flags(
+    file_id: u64,
+    data_bind_flags: u64,
+) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyNumber", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyNumber", "name", "amount");
+        });
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceNumber", "viewModelPropertyId", 0);
+            push_f32_property(bytes, "ViewModelInstanceNumber", "propertyValue", 0.75);
+        });
+        push_object_with_properties(bytes, "DataConverterOperationValue", |bytes| {
+            push_uint_property(bytes, "DataConverterOperationValue", "operationType", 2);
+            push_f32_property(bytes, "DataConverterOperationValue", "operationValue", 2.0);
+        });
+        push_object_with_properties(bytes, "DataConverterFormula", |_| {});
+        push_object_with_properties(bytes, "FormulaTokenFunction", |bytes| {
+            push_uint_property(bytes, "FormulaTokenFunction", "functionType", 6);
+        });
+        push_object_with_properties(bytes, "FormulaTokenInput", |_| {});
+        push_object_with_properties(bytes, "FormulaTokenArgumentSeparator", |_| {});
+        push_object_with_properties(bytes, "FormulaTokenValue", |bytes| {
+            push_f32_property(bytes, "FormulaTokenValue", "operationValue", 2.0);
+        });
+        push_object_with_properties(bytes, "FormulaTokenParenthesisClose", |_| {});
+        push_object_with_properties(bytes, "DataConverterGroup", |_| {});
+        push_object_with_properties(bytes, "DataConverterGroupItem", |bytes| {
+            push_uint_property(bytes, "DataConverterGroupItem", "converterId", 0);
+        });
+        push_object_with_properties(bytes, "DataConverterGroupItem", |bytes| {
+            push_uint_property(bytes, "DataConverterGroupItem", "converterId", 1);
+        });
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_bindable_number_data_bind_context_with_converter_and_flags(
+            bytes,
+            0.0,
+            &[0, 0],
+            Some(2),
+            data_bind_flags,
+        );
+        push_object_with_properties(bytes, "BlendState1DViewModel", |_| {});
+        push_blend_animation_1d(bytes, 0, 0.0);
+        push_blend_animation_1d(bytes, 1, 1.0);
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
 #[derive(Clone, Copy)]
 enum FormulaFunctionArgument {
     Input,
@@ -16795,6 +16861,20 @@ fn state_machine_default_viewmodel_number_formula_group_public_update_target_to_
     let bytes =
         synthetic_state_machine_default_viewmodel_number_formula_group_blend_state_with_flags(
             8638,
+            DATA_BIND_TWO_WAY,
+        );
+    assert_number_public_update_target_to_source_matches_cpp_probe(label, bytes);
+}
+
+#[test]
+fn state_machine_default_viewmodel_number_formula_function_group_public_update_target_to_source_matches_cpp_probe()
+ {
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_number_formula_function_group_public_update_target_to_source_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_number_formula_function_group_blend_state_with_flags(
+            8662,
             DATA_BIND_TWO_WAY,
         );
     assert_number_public_update_target_to_source_matches_cpp_probe(label, bytes);

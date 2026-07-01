@@ -2395,8 +2395,8 @@ slice.
   data-converter-interpolator number smoothing plus grouped
   operation-value-to-interpolator number smoothing, deterministic formula
   number/symbol-list-index-to-number conversion plus graph-represented
-  non-number fallbacks, deterministic direct formula functions, and the first
-  operation-value-to-formula public-update group, concrete operation
+  non-number fallbacks, deterministic direct formula functions, and the
+  operation-value-to-formula public-update groups, concrete operation
   pass-through, non-scripting scripted converter pass-through, broader
   dirty-list target scheduling, data-binding update queues, full artboard
   component-list item instancing, map-rule-driven child

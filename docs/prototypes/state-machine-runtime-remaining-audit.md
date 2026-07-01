@@ -2049,9 +2049,11 @@ slice.
   `RuntimeOwnedViewModelInstance` can now resolve a root symbol-list-index
   property name into `RuntimeOwnedViewModelSymbolListIndexSourceHandle` and
   mutate owned symbol-list-index storage through that handle before binding.
-  Slash-path lookup remains unresolved. Nested/relative/parent lookup remains a
-  follow-up slice. The C++ probe compares the handle write against the existing
-  owned-symbol-list-index runtime context command. The contract is
+  Root-name handle lookup remains separate from slash-path lookup. Nested
+  symbol-list-index paths are covered separately; other nested/relative/parent
+  lookup remains a follow-up slice. The C++ probe compares the handle write
+  against the existing owned-symbol-list-index runtime context command. The
+  contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-symbol-list-index-source-handle-runtime-contract.md`.
 - Owned asset source handle slice:
   `RuntimeOwnedViewModelInstance` can now resolve a root asset property name
@@ -2209,6 +2211,15 @@ slice.
   child's `ViewModelInstanceSymbolListIndex` through `propertyValue`. The
   contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-nested-symbol-list-index-name-path-runtime-contract.md`.
+- Owned generated nested symbol-list-index source-handle slice:
+  generated owned view-model children can now expose a stable public
+  symbol-list-index source handle. `RuntimeOwnedViewModelInstance` can resolve
+  `child/symbol` into `RuntimeOwnedViewModelSymbolListIndexSourceHandle`
+  through `symbol_list_index_source_handle_by_property_name_path`, and
+  `set_symbol_list_index_by_source_handle` mutates the same generated-child
+  symbol-list-index storage before binding. The C++ probe compares against the
+  existing owned symbol-list-index name-path command. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-nested-symbol-list-index-source-handle-runtime-contract.md`.
 - Owned generated nested asset name-path slice:
   generated owned view-model children can store direct asset IDs, and
   `RuntimeOwnedViewModelInstance::set_asset_by_property_name_path` can mutate
@@ -2287,8 +2298,9 @@ slice.
   paths, and stable public handles beyond the admitted default nested-number/
   boolean/string/color/enum/symbol-list-index/asset/artboard/trigger/list/view-model
   handles plus default/imported/owned root source handles and owned
-  nested-number/boolean/string/color/enum handles, especially remaining
-  nested/relative/parent handles that update or expose cached source indexes.
+  nested-number/boolean/string/color/enum/symbol-list-index handles,
+  especially remaining nested/relative/parent handles that update or expose
+  cached source indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
 - Live view-model APIs and data-binding propagation governed by

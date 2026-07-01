@@ -1,8 +1,8 @@
 # Owned ViewModel Symbol-List-Index Source Handle Runtime Contract
 
-Purpose: extend the owned runtime view-model source-handle family from enum
-sources to symbol-list-index sources without admitting nested owned handles or
-the remaining owned handle kinds.
+Purpose: document the root owned symbol-list-index source handle without
+changing root lookup semantics or admitting the full owned nested handle
+family.
 
 This slice resolves a root `ViewModelPropertySymbolListIndex.name` on a
 `RuntimeOwnedViewModelInstance` into a
@@ -27,8 +27,11 @@ Out of scope:
 
 - Number, boolean, string, color, and enum behavior beyond the existing
   committed APIs, plus asset, artboard, trigger, list, or view-model owned
-  source handles.
-- Nested, relative, parent, or slash-separated property paths.
+  source-handle behavior beyond the existing committed APIs.
+- Changing root-name lookup semantics to accept slash-separated property
+  paths. Nested symbol-list-index paths are covered separately by
+  `docs/prototypes/data-binding-graph-owned-viewmodel-nested-symbol-list-index-source-handle-runtime-contract.md`.
+- Relative or parent property paths.
 - Imported or default view-model contexts.
 - Persistent owned-context mutation after binding, reverse target-to-source
   propagation, broader update queues, listener-owned data binding, and nested
@@ -37,4 +40,5 @@ Out of scope:
 Completion condition: resolving and mutating a root owned symbol-list-index
 source by handle produces the same state-machine advance and component update
 reports as the existing C++ owned-symbol-list-index binding path, no-op repeat
-writes report unchanged, and slash-path handle lookup remains unresolved.
+writes report unchanged, and root-name lookup stays separate from slash-path
+lookup.

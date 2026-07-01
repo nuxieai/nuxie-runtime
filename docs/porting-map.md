@@ -4669,9 +4669,20 @@ path with `ViewModelInstanceRuntime::propertyViewModel("child")` and mutates
 the child's `ViewModelInstanceSymbolListIndex` through `propertyValue`.
 The contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-nested-symbol-list-index-name-path-runtime-contract.md`.
-Other nested scalar kinds, imported-intermediate nested scalar paths,
-imported-instance mutation sharing, stable public object handles, reverse
-propagation, broader update queues, relative/parent/nested lookup,
+
+Current #12 update: owned generated nested symbol-list-index paths now have a
+stable public nested source handle. `RuntimeOwnedViewModelInstance` can resolve
+`child/symbol` into `RuntimeOwnedViewModelSymbolListIndexSourceHandle` through
+`symbol_list_index_source_handle_by_property_name_path`, and
+`set_symbol_list_index_by_source_handle` writes through the same
+generated-child symbol-list-index storage before binding. The C++ probe
+compares the handle mutation against the existing owned symbol-list-index
+name-path command. The contract is
+`docs/prototypes/data-binding-graph-owned-viewmodel-nested-symbol-list-index-source-handle-runtime-contract.md`.
+Other nested scalar source handles beyond
+number/boolean/string/color/enum/symbol-list-index, imported-intermediate
+nested scalar paths, imported-instance mutation sharing, stable public object
+handles, reverse propagation, broader update queues, relative/parent lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 

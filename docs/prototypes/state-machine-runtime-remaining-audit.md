@@ -2149,9 +2149,9 @@ slice.
   source, and list source contexts,
   property-name APIs beyond imported view-model pointer and root
   number/boolean/string/color/enum/symbol-list-index/asset/artboard/trigger/list sources, owned generated view-model pointer
-  paths, and stable public handles beyond the first imported number, boolean,
-  string, color, enum, symbol-list-index, asset, artboard, trigger, list, and
-  view-model source handles that update or expose cached source indexes.
+  paths, and stable public handles beyond the admitted default/imported/owned
+  root source handles, especially nested/relative/parent handles that update
+  or expose cached source indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
 - Live view-model APIs and data-binding propagation governed by
@@ -2178,28 +2178,7 @@ slice.
   number/symbol-list-index-to-number conversion plus graph-represented
   non-number fallbacks and the first operation-value-to-formula public-update
   group, concrete operation pass-through, non-scripting scripted converter
-  pass-through, direct boolean/BooleanNegate public-update target-to-source,
-  default number source-mutation same-path observer propagation,
-  default boolean source-mutation same-path observer propagation,
-  default string source-mutation same-path observer propagation,
-  default color source-mutation same-path observer propagation,
-  default enum source-mutation same-path observer propagation,
-  default symbol-list-index source-mutation same-path observer propagation,
-  default asset source-mutation same-path observer propagation,
-  default artboard source-mutation same-path observer propagation,
-  default trigger source-mutation same-path observer propagation,
-  default list source-mutation same-path observer propagation,
-  default view-model pointer relink same-path observer propagation,
-  boolean public-update observer preservation, string public-update observer
-  preservation, color public-update observer preservation, enum public-update
-  observer preservation, asset public-update observer preservation, artboard
-  public-update observer preservation, symbol-list-index public-update observer
-  preservation, trigger public-update observer preservation,
-  view-model public-update observer application,
-  direct trigger public-update target-to-source, direct trigger converter
-  explicit target-to-source, trigger source reset reapply,
-  trigger converter-group public-update, trigger converter-group explicit
-  target-to-source, trigger converter multi-group,
+  pass-through,
   first direct number/boolean/string/color/enum/asset/artboard/symbol-list-index/trigger/view-model
   target-to-source propagation,
   first artboard list-consumer immediate bind, direct-update, and post-bind

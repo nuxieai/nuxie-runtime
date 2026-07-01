@@ -3597,6 +3597,21 @@ stable public object handles, reverse propagation, broader update queues,
 relative/parent/nested lookup, listener-owned data binding, and nested
 artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: imported view-model asset sources now have the nested
+property-name path boundary pinned. C++ probe
+`--runtime-set-view-model-instance-source-asset-by-name` uses root
+`ViewModelInstance::propertyValue(name)` asset-image lookup, which mutates
+`image` but does not resolve slash paths such as `child/image`, even after
+completing view-model properties. Rust mirrors that by making
+`RuntimeImportedViewModelInstanceContext::set_asset_by_property_name_path`
+return `false` for nested slash paths and by keeping the original source value.
+The contract is
+`docs/prototypes/data-binding-graph-imported-viewmodel-nested-asset-name-path-unsupported-runtime-contract.md`.
+Nested property-name paths for artboard/trigger/list/view-model sources,
+stable public object handles, reverse propagation, broader update queues,
+relative/parent/nested lookup, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
+
 Current #12 update: imported view-model boolean sources now match the shared
 scalar mutation pattern. `RuntimeImportedViewModelInstanceContext` records
 boolean source overrides by resolved data-bind source path; mutating a

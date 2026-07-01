@@ -913,6 +913,16 @@ slice.
   state machines bound to the same imported `ViewModelInstance` and now emits
   asset binding reports for `BindablePropertyAsset` targets. The contract is
   `docs/prototypes/data-binding-graph-imported-viewmodel-asset-shared-mutation-runtime-contract.md`.
+- Shared imported artboard source mutation slice:
+  `RuntimeImportedViewModelInstanceContext` now also owns artboard source
+  overrides for one file-backed imported view-model instance. Mutating a
+  `ViewModelInstanceArtboard.propertyValue` source through one state machine
+  updates that context, and binding a second state machine through the same
+  context sees the artboard source mutation. The C++ probe covers two authored
+  state machines bound to the same imported `ViewModelInstance` and now emits
+  artboard binding reports for `BindablePropertyArtboard` targets. The
+  contract is
+  `docs/prototypes/data-binding-graph-imported-viewmodel-artboard-shared-mutation-runtime-contract.md`.
 - First owned scalar property-name slice:
   `RuntimeOwnedViewModelInstance` records root `ViewModelProperty.name` values
   and can mutate a root number property through
@@ -1040,7 +1050,7 @@ slice.
   owned root-property, generated-only owned, and imported-intermediate owned
   read paths: imported-instance mutation beyond shared view-model pointer
   relink, number source, boolean source, string source, color source, enum
-  source, symbol-list-index source, and asset source contexts,
+  source, symbol-list-index source, asset source, and artboard source contexts,
   property-name APIs beyond imported view-model pointer sources, owned
   generated view-model pointer paths, and stable public handles that update or
   expose cached `propertyValue` indexes.

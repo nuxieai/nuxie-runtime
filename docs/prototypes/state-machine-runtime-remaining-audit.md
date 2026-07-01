@@ -1919,83 +1919,92 @@ slice.
   `RuntimeOwnedViewModelInstance` can now resolve a root number property name
   into `RuntimeOwnedViewModelNumberSourceHandle` and mutate owned number
   storage through that handle before binding. Slash-path lookup remains
-  unresolved, and owned source handles for view-model sources remain follow-up
-  slices. The C++ probe compares the handle write against the existing
-  owned-number runtime context command. The contract is
+  unresolved. Nested/relative/parent lookup remains a follow-up slice. The C++
+  probe compares the handle write against the existing owned-number runtime
+  context command. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-number-source-handle-runtime-contract.md`.
 - Owned boolean source handle slice:
   `RuntimeOwnedViewModelInstance` can now resolve a root boolean property name
   into `RuntimeOwnedViewModelBooleanSourceHandle` and mutate owned boolean
   storage through that handle before binding. Slash-path lookup remains
-  unresolved, and owned source handles for view-model sources remain follow-up
-  slices. The C++ probe compares the handle write against the existing
-  owned-boolean runtime context command. The contract is
+  unresolved. Nested/relative/parent lookup remains a follow-up slice. The C++
+  probe compares the handle write against the existing owned-boolean runtime
+  context command. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-boolean-source-handle-runtime-contract.md`.
 - Owned string source handle slice:
   `RuntimeOwnedViewModelInstance` can now resolve a root string property name
   into `RuntimeOwnedViewModelStringSourceHandle` and mutate owned raw string
   storage through that handle before binding. Slash-path lookup remains
-  unresolved, and owned source handles for view-model sources remain follow-up
-  slices. The C++ probe compares the handle write against the existing
-  owned-string runtime context command. The contract is
+  unresolved. Nested/relative/parent lookup remains a follow-up slice. The C++
+  probe compares the handle write against the existing owned-string runtime
+  context command. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-string-source-handle-runtime-contract.md`.
 - Owned color source handle slice:
   `RuntimeOwnedViewModelInstance` can now resolve a root color property name
   into `RuntimeOwnedViewModelColorSourceHandle` and mutate owned color storage
-  through that handle before binding. Slash-path lookup remains unresolved, and
-  owned source handles for view-model sources remain follow-up slices. The C++
-  probe compares the handle write against the existing owned-color runtime
-  context command. The contract is
+  through that handle before binding. Slash-path lookup remains unresolved.
+  Nested/relative/parent lookup remains a follow-up slice. The C++ probe
+  compares the handle write against the existing owned-color runtime context
+  command. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-color-source-handle-runtime-contract.md`.
 - Owned enum source handle slice:
   `RuntimeOwnedViewModelInstance` can now resolve a root enum property name
   into `RuntimeOwnedViewModelEnumSourceHandle` and mutate owned enum
   value-index storage through that handle before binding. Slash-path lookup
-  remains unresolved, and owned source handles for view-model sources remain
-  follow-up slices. The C++ probe compares the handle write against the
-  existing owned-enum runtime context command. The contract is
+  remains unresolved. Nested/relative/parent lookup remains a follow-up slice.
+  The C++ probe compares the handle write against the existing owned-enum
+  runtime context command. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-enum-source-handle-runtime-contract.md`.
 - Owned symbol-list-index source handle slice:
   `RuntimeOwnedViewModelInstance` can now resolve a root symbol-list-index
   property name into `RuntimeOwnedViewModelSymbolListIndexSourceHandle` and
   mutate owned symbol-list-index storage through that handle before binding.
-  Slash-path lookup remains unresolved, and owned source handles for view-model
-  sources remain follow-up slices. The C++ probe compares the handle write
-  against the existing owned-symbol-list-index runtime context command. The
-  contract is
+  Slash-path lookup remains unresolved. Nested/relative/parent lookup remains a
+  follow-up slice. The C++ probe compares the handle write against the existing
+  owned-symbol-list-index runtime context command. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-symbol-list-index-source-handle-runtime-contract.md`.
 - Owned asset source handle slice:
   `RuntimeOwnedViewModelInstance` can now resolve a root asset property name
   into `RuntimeOwnedViewModelAssetSourceHandle` and mutate owned raw asset id
   storage through that handle before binding. Slash-path lookup remains
-  unresolved, and owned source handles for view-model sources remain follow-up
-  slices. The C++ probe compares the handle write against the existing
-  owned-asset runtime context command. The contract is
+  unresolved. Nested/relative/parent lookup remains a follow-up slice. The C++
+  probe compares the handle write against the existing owned-asset runtime
+  context command. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-asset-source-handle-runtime-contract.md`.
 - Owned artboard source handle slice:
   `RuntimeOwnedViewModelInstance` can now resolve a root artboard property name
   into `RuntimeOwnedViewModelArtboardSourceHandle` and mutate owned raw
   artboard id storage through that handle before binding. Slash-path lookup
-  remains unresolved, and owned source handles for view-model sources remain
-  follow-up slices. The C++ probe compares the handle write against the
-  existing owned-artboard runtime context command. The contract is
+  remains unresolved. Nested/relative/parent lookup remains a follow-up slice.
+  The C++ probe compares the handle write against the existing owned-artboard
+  runtime context command. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-artboard-source-handle-runtime-contract.md`.
 - Owned trigger source handle slice:
   `RuntimeOwnedViewModelInstance` can now resolve a root trigger property name
   into `RuntimeOwnedViewModelTriggerSourceHandle` and mutate owned raw trigger
   count storage through that handle before binding. Slash-path lookup remains
-  unresolved, and owned source handles for view-model sources remain follow-up
-  slices. The C++ probe compares the handle write against the
-  existing owned-trigger runtime context command. The contract is
+  unresolved. Nested/relative/parent lookup remains a follow-up slice. The C++
+  probe compares the handle write against the existing owned-trigger runtime
+  context command. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-trigger-source-handle-runtime-contract.md`.
 - Owned list source handle slice:
   `RuntimeOwnedViewModelInstance` can now resolve a root list property name
   into `RuntimeOwnedViewModelListSourceHandle` and mutate owned list item-count
   storage through that handle before binding. Slash-path lookup remains
-  unresolved, and owned source handles for view-model sources remain follow-up
-  slices. The C++ probe compares the handle write against the existing
-  owned-list runtime context command. The contract is
+  unresolved. Nested/relative/parent lookup remains a follow-up slice. The C++
+  probe compares the handle write against the existing owned-list runtime
+  context command. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-list-source-handle-runtime-contract.md`.
+- Owned view-model pointer source handle slice:
+  `RuntimeOwnedViewModelInstance` can now resolve a root view-model pointer
+  property name into `RuntimeOwnedViewModelViewModelSourceHandle` and relink
+  owned view-model pointer storage through that handle before binding.
+  Slash-path lookup remains unresolved, and the owned runtime root
+  source-handle family is now covered for number, boolean, string, color,
+  enum, symbol-list-index, asset, artboard, trigger, list, and view-model
+  pointer sources. The C++ probe compares the handle relink against the
+  existing owned view-model pointer runtime context command. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-viewmodel-source-handle-runtime-contract.md`.
 - Owned root scalar property-name completion slice:
   `RuntimeOwnedViewModelInstance` can now mutate all root scalar kinds already
   backed by property-index storage by property name: number, boolean, string,

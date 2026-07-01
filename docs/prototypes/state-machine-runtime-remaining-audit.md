@@ -933,6 +933,16 @@ slice.
   imported `ViewModelInstance` and compares the observing state machine through
   its ordinary advance report. The contract is
   `docs/prototypes/data-binding-graph-imported-viewmodel-trigger-shared-mutation-runtime-contract.md`.
+- Shared imported list source mutation slice:
+  `RuntimeImportedViewModelInstanceContext` now also owns list source
+  item-count overrides for one file-backed imported view-model instance.
+  Mutating a `ViewModelInstanceList` source through one state machine updates
+  that context, and binding a second state machine through the same context
+  sees the list size. The C++ probe covers two authored state machines bound
+  to the same imported `ViewModelInstance` and compares the observing state
+  machine through existing `BindablePropertyList` source-size and target
+  reports. The contract is
+  `docs/prototypes/data-binding-graph-imported-viewmodel-list-shared-mutation-runtime-contract.md`.
 - First owned scalar property-name slice:
   `RuntimeOwnedViewModelInstance` records root `ViewModelProperty.name` values
   and can mutate a root number property through
@@ -1060,8 +1070,8 @@ slice.
   owned root-property, generated-only owned, and imported-intermediate owned
   read paths: imported-instance mutation beyond shared view-model pointer
   relink, number source, boolean source, string source, color source, enum
-  source, symbol-list-index source, asset source, artboard source, and trigger
-  source contexts,
+  source, symbol-list-index source, asset source, artboard source, trigger
+  source, and list source contexts,
   property-name APIs beyond imported view-model pointer sources, owned
   generated view-model pointer paths, and stable public handles that update or
   expose cached `propertyValue` indexes.
@@ -1071,9 +1081,9 @@ slice.
   `docs/prototypes/data-binding-graph-runtime-contract.md`: beyond the finite
   graph-routed default and imported-file-backed external source-to-target
   `propertyValue` bind sets and owned
-  number/boolean/string/color/enum/symbol-list-index/asset/artboard/trigger/view-model
+  number/boolean/string/color/enum/symbol-list-index/asset/artboard/trigger/list/view-model
   contexts listed above, add source mutation APIs beyond the default
-  number/boolean/string/color/enum/asset/artboard/trigger/symbol-list-index/view-model source nodes,
+  number/boolean/string/color/enum/asset/artboard/trigger/list/symbol-list-index/view-model source nodes,
   list/symbol bindables and non-default view-model pointer mutation, converters
   beyond the admitted boolean
   negate, trigger, boolean-to-number, enum-to-number, color-to-number, and

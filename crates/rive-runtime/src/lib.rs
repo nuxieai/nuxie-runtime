@@ -3073,6 +3073,7 @@ pub struct RuntimeImportedViewModelInstanceContext {
     asset_overrides: BTreeMap<Vec<u32>, u64>,
     artboard_overrides: BTreeMap<Vec<u32>, u64>,
     trigger_overrides: BTreeMap<Vec<u32>, u64>,
+    list_overrides: BTreeMap<Vec<u32>, usize>,
     view_model_overrides: BTreeMap<Vec<u32>, RuntimeViewModelPointer>,
 }
 
@@ -3092,6 +3093,7 @@ impl RuntimeImportedViewModelInstanceContext {
             asset_overrides: BTreeMap::new(),
             artboard_overrides: BTreeMap::new(),
             trigger_overrides: BTreeMap::new(),
+            list_overrides: BTreeMap::new(),
             view_model_overrides: BTreeMap::new(),
         })
     }
@@ -6615,6 +6617,7 @@ impl RuntimeDataBindGraph {
             asset_overrides: BTreeMap::new(),
             artboard_overrides: BTreeMap::new(),
             trigger_overrides: BTreeMap::new(),
+            list_overrides: BTreeMap::new(),
             view_model_overrides: BTreeMap::new(),
         };
         self.bind_imported_view_model_context(file, &context)
@@ -6694,6 +6697,12 @@ impl RuntimeDataBindGraph {
                         .get(&source.path)
                         .copied()
                         .map(RuntimeDataBindGraphValue::Trigger)
+                        .unwrap_or(value),
+                    RuntimeDataBindGraphValue::List { .. } => context
+                        .list_overrides
+                        .get(&source.path)
+                        .copied()
+                        .map(|item_count| RuntimeDataBindGraphValue::List { item_count })
                         .unwrap_or(value),
                     RuntimeDataBindGraphValue::ViewModel(_) => context
                         .view_model_overrides
@@ -7633,6 +7642,57 @@ impl RuntimeDataBindGraph {
         source.value = RuntimeDataBindGraphValue::Trigger(value);
         source.bound = true;
         context.trigger_overrides.insert(path, value);
+        self.mark_default_view_model_bindings_dirty();
+        true
+    }
+
+    fn set_imported_view_model_context_list_source_item_count_for_data_bind(
+        &mut self,
+        context: &mut RuntimeImportedViewModelInstanceContext,
+        data_bind_index: usize,
+        item_count: usize,
+    ) -> bool {
+        if self.context_kind != RuntimeDataBindGraphContextKind::ImportedViewModel {
+            return false;
+        }
+        if self.imported_view_model_context
+            != Some(RuntimeImportedViewModelContextKey {
+                view_model_index: context.view_model_index,
+                instance_index: context.instance_index,
+            })
+        {
+            return false;
+        }
+        let Some(source) = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .map(|binding| binding.source)
+        else {
+            return false;
+        };
+        let Some(source) = self.sources.get_mut(source.0) else {
+            return false;
+        };
+        if !matches!(
+            &source.default_value,
+            RuntimeDataBindGraphValue::List { .. }
+        ) {
+            return false;
+        }
+        let source_changed = !matches!(
+            &source.value,
+            RuntimeDataBindGraphValue::List { item_count: current } if *current == item_count
+        );
+        let path = source.path.clone();
+        let context_changed = context.list_overrides.get(&path) != Some(&item_count);
+        if !source_changed && !context_changed {
+            return false;
+        }
+
+        source.value = RuntimeDataBindGraphValue::List { item_count };
+        source.bound = true;
+        context.list_overrides.insert(path, item_count);
         self.mark_default_view_model_bindings_dirty();
         true
     }
@@ -14038,6 +14098,26 @@ impl StateMachineInstance {
             .find(|trigger| trigger.global_id == trigger_global_id)
         {
             trigger.set_value(value);
+        }
+        self.needs_advance = true;
+        true
+    }
+
+    pub fn set_imported_view_model_context_list_source_item_count_for_data_bind(
+        &mut self,
+        context: &mut RuntimeImportedViewModelInstanceContext,
+        data_bind_index: usize,
+        item_count: usize,
+    ) -> bool {
+        if !self
+            .data_bind_graph
+            .set_imported_view_model_context_list_source_item_count_for_data_bind(
+                context,
+                data_bind_index,
+                item_count,
+            )
+        {
+            return false;
         }
         self.needs_advance = true;
         true

@@ -797,6 +797,16 @@ slice.
   transition condition that remains unsatisfied after the imported source
   updates the bindable away from the authored target value. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-trigger-runtime-contract.md`.
+- Owned view-model imported-intermediate list source slice:
+  replacing a generated root child with an imported child by instance index
+  lets `RuntimeOwnedViewModelInstance` resolve `[child, items]` through the
+  imported child's existing `ViewModelInstanceList` item count. Rust records
+  imported list snapshots per referenced view-model instance for read-only
+  graph binding, and the state-machine graph keeps a schema-valid list source
+  placeholder when the default file instance cannot resolve the authored path.
+  The C++ probe observes this through bindable-list source-size reports. The
+  contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-list-runtime-contract.md`.
 - Owned view-model deep imported-intermediate source slice: replacing a
   generated root child with an imported child by instance index lets
   `RuntimeOwnedViewModelInstance` resolve `[child, middle, leaf]` through the
@@ -958,9 +968,8 @@ slice.
   owned root-property, generated-only owned, and imported-intermediate owned
   read paths: imported-instance mutation beyond state-machine-local view-model
   pointer relink overlays, property-name APIs beyond imported view-model
-  pointer sources, owned generated view-model pointer paths,
-  list imported-intermediate source reads, and stable public handles that
-  update or expose cached `propertyValue` indexes.
+  pointer sources, owned generated view-model pointer paths, and stable public
+  handles that update or expose cached `propertyValue` indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
 - Live view-model APIs and data-binding propagation governed by

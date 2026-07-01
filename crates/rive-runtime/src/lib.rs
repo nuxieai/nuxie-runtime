@@ -3532,6 +3532,7 @@ struct RuntimeOwnedViewModelViewModel {
     symbol_list_indices: Vec<RuntimeOwnedViewModelSymbolListIndex>,
     imported_symbol_list_indices: BTreeMap<u32, Vec<RuntimeOwnedViewModelSymbolListIndex>>,
     lists: Vec<RuntimeOwnedViewModelList>,
+    imported_lists: BTreeMap<u32, Vec<RuntimeOwnedViewModelList>>,
     assets: Vec<RuntimeOwnedViewModelAsset>,
     imported_assets: BTreeMap<u32, Vec<RuntimeOwnedViewModelAsset>>,
     artboards: Vec<RuntimeOwnedViewModelArtboard>,
@@ -3723,6 +3724,24 @@ impl RuntimeOwnedViewModelViewModel {
             .iter()
             .find(|list| list.property_index == property_index)
             .map(|list| list.item_count)
+    }
+
+    fn active_list_item_count_by_property_index(&self, property_index: usize) -> Option<usize> {
+        match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => {
+                self.list_item_count_by_property_index(property_index)
+            }
+            RuntimeViewModelPointer::Imported { object_id } => self
+                .imported_lists
+                .get(&object_id)
+                .and_then(|lists| {
+                    lists
+                        .iter()
+                        .find(|list| list.property_index == property_index)
+                })
+                .map(|list| list.item_count),
+            _ => None,
+        }
     }
 
     fn asset_value_by_property_index(&self, property_index: usize) -> Option<u64> {
@@ -4541,6 +4560,64 @@ fn runtime_owned_view_model_lists(
         .unwrap_or_default()
 }
 
+fn runtime_owned_view_model_lists_for_instance(
+    file: &RuntimeFile,
+    view_model_index: usize,
+    view_model_instance: &RuntimeObject,
+) -> Vec<RuntimeOwnedViewModelList> {
+    file.view_model(view_model_index)
+        .map(|view_model| {
+            view_model
+                .properties
+                .into_iter()
+                .enumerate()
+                .filter_map(|(property_index, property)| {
+                    if property.type_name != "ViewModelPropertyList" {
+                        return None;
+                    }
+                    let path = [
+                        u32::try_from(view_model_index).ok()?,
+                        u32::try_from(property_index).ok()?,
+                    ];
+                    let source = file.data_context_view_model_property_for_instance(
+                        view_model_instance,
+                        &path,
+                    )?;
+                    let item_count = file.view_model_instance_list_size_for_object(source)?;
+                    Some(RuntimeOwnedViewModelList {
+                        property_index,
+                        item_count,
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn runtime_owned_view_model_imported_lists(
+    file: &RuntimeFile,
+    view_model_index: usize,
+) -> BTreeMap<u32, Vec<RuntimeOwnedViewModelList>> {
+    file.view_model(view_model_index)
+        .map(|view_model| {
+            view_model
+                .instances
+                .into_iter()
+                .map(|instance| {
+                    (
+                        instance.object.id,
+                        runtime_owned_view_model_lists_for_instance(
+                            file,
+                            view_model_index,
+                            instance.object,
+                        ),
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 fn runtime_owned_view_model_assets(
     file: &RuntimeFile,
     view_model_index: usize,
@@ -5054,6 +5131,11 @@ fn runtime_owned_view_model_property_children(
                 lists: referenced_view_model_index
                     .map(|view_model_index| runtime_owned_view_model_lists(file, view_model_index))
                     .unwrap_or_default(),
+                imported_lists: referenced_view_model_index
+                    .map(|view_model_index| {
+                        runtime_owned_view_model_imported_lists(file, view_model_index)
+                    })
+                    .unwrap_or_default(),
                 assets: referenced_view_model_index
                     .map(|view_model_index| runtime_owned_view_model_assets(file, view_model_index))
                     .unwrap_or_default(),
@@ -5278,6 +5360,11 @@ impl RuntimeOwnedViewModelInstance {
                         lists: referenced_view_model_index
                             .map(|view_model_index| {
                                 runtime_owned_view_model_lists(file, view_model_index)
+                            })
+                            .unwrap_or_default(),
+                        imported_lists: referenced_view_model_index
+                            .map(|view_model_index| {
+                                runtime_owned_view_model_imported_lists(file, view_model_index)
                             })
                             .unwrap_or_default(),
                         assets: referenced_view_model_index
@@ -6112,13 +6199,7 @@ impl RuntimeOwnedViewModelInstance {
         }
         let (property_index, view_model_path) = property_path.split_last()?;
         let view_model = self.view_model_by_property_path(view_model_path)?;
-        if !matches!(
-            view_model.value,
-            RuntimeViewModelPointer::OwnedGenerated { .. }
-        ) {
-            return None;
-        }
-        view_model.list_item_count_by_property_index(*property_index)
+        view_model.active_list_item_count_by_property_index(*property_index)
     }
 
     fn asset_value_by_property_index(&self, property_index: usize) -> Option<u64> {
@@ -16697,17 +16778,23 @@ fn runtime_bindable_list_default_view_model_source(
     }
     let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
     let default_instance = file.view_model_default_instance(0)?;
-    let source =
-        file.data_context_view_model_property_for_instance(default_instance.object, &path)?;
+    let source = file.data_context_view_model_property_for_instance(default_instance.object, &path);
     let converter = runtime_data_bind_graph_converter(file, data_bind);
     let value = match converter.as_ref() {
         Some(RuntimeDataBindGraphConverter::NumberToList { .. }) => {
             RuntimeDataBindGraphValue::Number(
-                file.view_model_instance_number_value_for_object(source)?,
+                file.view_model_instance_number_value_for_object(source?)?,
             )
         }
         None => RuntimeDataBindGraphValue::List {
-            item_count: file.view_model_instance_list_size_for_object(source)?,
+            item_count: match source {
+                Some(source) => file.view_model_instance_list_size_for_object(source)?,
+                None => {
+                    runtime_view_model_property_at_path(file, &path)
+                        .filter(|property| property.type_name == "ViewModelPropertyList")?;
+                    0
+                }
+            },
         },
         _ => return None,
     };
@@ -16718,6 +16805,30 @@ fn runtime_bindable_list_default_view_model_source(
         converter,
         value,
     })
+}
+
+fn runtime_view_model_property_at_path<'a>(
+    file: &'a RuntimeFile,
+    path: &[u32],
+) -> Option<&'a RuntimeObject> {
+    let mut view_model = file.view_model(usize::try_from(*path.first()?).ok()?)?;
+    let mut properties = &path[1..];
+    while let Some((&property_id, rest)) = properties.split_first() {
+        let property = view_model
+            .properties
+            .get(usize::try_from(property_id).ok()?)
+            .copied()?;
+        if rest.is_empty() {
+            return Some(property);
+        }
+        if property.type_name != "ViewModelPropertyViewModel" {
+            return None;
+        }
+        view_model = file
+            .view_model(usize::try_from(property.uint_property("viewModelReferenceId")?).ok()?)?;
+        properties = rest;
+    }
+    None
 }
 
 fn runtime_bindable_triggers(

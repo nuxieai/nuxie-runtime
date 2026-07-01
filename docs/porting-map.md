@@ -2328,11 +2328,22 @@ authored target value. Rust records imported trigger-count snapshots per
 referenced view-model instance and uses them only for read-only graph source
 resolution. The contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-trigger-runtime-contract.md`.
-List imported-intermediate source reads, persistent imported instance
-mutation, remaining property-name APIs, public object-handle APIs, reverse
-propagation, broader update queues, relative/parent/nested lookup,
-listener-owned data binding, and nested artboard propagation remain follow-up
-`#12` slices.
+
+Current #12 update: owned view-model contexts now traverse one imported
+replacement intermediate for direct list sources. Replacing a generated root
+child with an imported child by instance index makes a source path such as
+`[root, child, items]` read the imported child's existing
+`ViewModelInstanceList` item count, matching C++ state-machine data-context
+binding as observed through bindable-list reports. Rust records imported list
+item-count snapshots per referenced view-model instance and creates a
+schema-valid list source placeholder when the default file instance cannot
+resolve the path, so the later owned-context bind can hydrate the source. The
+contract is
+`docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-list-runtime-contract.md`.
+Persistent imported instance mutation, remaining property-name APIs, public
+object-handle APIs, reverse propagation, broader update queues,
+relative/parent/nested lookup, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: owned view-model contexts now traverse deeper imported
 replacement intermediates for read-only view-model pointer sources. Replacing

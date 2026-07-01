@@ -477,7 +477,22 @@ mutates every matching graph source node. The C++ probe adds
 `propertyValue("choice")` fallback for the file-backed default instance, and
 compares the existing enum transition-condition report surface. The contract is
 `docs/prototypes/data-binding-graph-default-enum-name-runtime-contract.md`.
-Default symbol-list-index/asset/artboard/trigger/list/view-model
+Default asset/artboard/trigger/list/view-model
+name APIs, nested/relative/parent lookup, public source handles, reverse
+propagation, broader update queues, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
+
+Current #12 update: default root symbol-list-index sources now match the root
+scalar property-name mutation shape. Rust exposes
+`StateMachineInstance::set_default_view_model_symbol_list_index_source_by_property_name`,
+which resolves a root `ViewModelPropertySymbolListIndex.name` on file view
+model `0` and mutates every matching graph source node. The C++ probe adds
+`--runtime-set-default-view-model-source-symbol-list-index-by-name`, resolves
+the default file-backed source through `ViewModelInstance::propertyValue` name
+or property-index lookup, and compares the existing symbol-list-index-to-string
+transition-condition report surface. The contract is
+`docs/prototypes/data-binding-graph-default-symbol-list-index-name-runtime-contract.md`.
+Default asset/artboard/trigger/list/view-model
 name APIs, nested/relative/parent lookup, public source handles, reverse
 propagation, broader update queues, listener-owned data binding, and nested
 artboard propagation remain follow-up `#12` slices.

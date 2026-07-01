@@ -3652,10 +3652,22 @@ synthetic imported-context fixture. Rust mirrors the safe boundary by making
 set_list_item_count_by_property_name_path` return `false` for nested slash
 paths and by keeping the original source item count. The contract is
 `docs/prototypes/data-binding-graph-imported-viewmodel-nested-list-name-path-unsupported-runtime-contract.md`.
-Nested property-name paths for view-model sources, stable public object
-handles, reverse propagation, broader update queues, relative/parent/nested
-lookup, listener-owned data binding, and nested artboard propagation remain
-follow-up `#12` slices.
+
+Current #12 update: imported view-model pointer sources now have the nested
+property-name path relink API. `RuntimeImportedViewModelInstanceContext::
+set_view_model_by_property_name_path` resolves `child/grandchild` through
+nested `ViewModelPropertyViewModel` names to a view-model pointer leaf,
+records the selected referenced instance as the existing imported pointer
+override, and lets two state machines bound through the same imported context
+observe the relink. The C++ probe uses
+`--runtime-relink-view-model-instance-source-viewmodel-by-name-path` with the
+slash path after completing view-model properties, matching
+`ViewModelInstanceRuntime::replaceViewModel("child/grandchild", value)`. The
+contract is
+`docs/prototypes/data-binding-graph-imported-viewmodel-nested-viewmodel-name-path-runtime-contract.md`.
+Stable public object handles, reverse propagation, broader update queues,
+relative/parent/nested lookup, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: imported view-model boolean sources now match the shared
 scalar mutation pattern. `RuntimeImportedViewModelInstanceContext` records

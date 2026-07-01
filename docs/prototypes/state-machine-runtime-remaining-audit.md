@@ -1510,6 +1510,16 @@ slice.
   synthetic imported-context fixture. The C++ baseline still proves the bound
   state machine observes the original nested list source. The contract is
   `docs/prototypes/data-binding-graph-imported-viewmodel-nested-list-name-path-unsupported-runtime-contract.md`.
+- Imported nested view-model pointer property-name path slice:
+  `RuntimeImportedViewModelInstanceContext::set_view_model_by_property_name_path`
+  resolves a slash-separated path such as `child/grandchild` through nested
+  `ViewModelPropertyViewModel` names, records the selected referenced imported
+  instance as the existing view-model pointer override, and lets two authored
+  state machines bound through the same imported context observe the relink.
+  The C++ probe calls
+  `ViewModelInstanceRuntime::replaceViewModel("child/grandchild", value)` after
+  completing view-model properties. The contract is
+  `docs/prototypes/data-binding-graph-imported-viewmodel-nested-viewmodel-name-path-runtime-contract.md`.
 - Shared imported boolean source mutation slice:
   `RuntimeImportedViewModelInstanceContext` now also owns boolean source
   overrides for one file-backed imported view-model instance. Mutating a

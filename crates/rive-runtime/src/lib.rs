@@ -3695,6 +3695,77 @@ impl RuntimeImportedViewModelInstanceContext {
         self.list_overrides.insert(path, item_count);
         true
     }
+
+    pub fn set_view_model_by_property_name(
+        &mut self,
+        file: &RuntimeFile,
+        property_name: &str,
+        instance_index: usize,
+    ) -> bool {
+        let Some(path) = runtime_imported_view_model_view_model_property_path_for_name(
+            file,
+            self.view_model_index,
+            property_name,
+        ) else {
+            return false;
+        };
+        self.set_view_model_by_resolved_property_path(file, path, instance_index)
+    }
+
+    pub fn set_view_model_by_property_name_path(
+        &mut self,
+        file: &RuntimeFile,
+        property_path: &str,
+        instance_index: usize,
+    ) -> bool {
+        let Some(path) = runtime_imported_view_model_view_model_property_path_for_name_path(
+            file,
+            self.view_model_index,
+            property_path,
+        ) else {
+            return false;
+        };
+        self.set_view_model_by_resolved_property_path(file, path, instance_index)
+    }
+
+    fn set_view_model_by_resolved_property_path(
+        &mut self,
+        file: &RuntimeFile,
+        path: Vec<u32>,
+        instance_index: usize,
+    ) -> bool {
+        let Some(view_model) = file.view_model(self.view_model_index) else {
+            return false;
+        };
+        let Some(instance) = view_model.instances.into_iter().nth(self.instance_index) else {
+            return false;
+        };
+        let Some(referenced_view_model_index) =
+            runtime_view_model_reference_index_for_property_path(file, &path)
+        else {
+            return false;
+        };
+        let Some(object_id) = file
+            .view_model(referenced_view_model_index)
+            .and_then(|view_model| view_model.instances.into_iter().nth(instance_index))
+            .map(|instance| instance.object.id)
+        else {
+            return false;
+        };
+        let value = RuntimeViewModelPointer::Imported { object_id };
+        let current = self.view_model_overrides.get(&path).copied().or_else(|| {
+            file.data_context_view_model_instance_for_instance(instance.object, &path)
+                .map(|reference| RuntimeViewModelPointer::Imported {
+                    object_id: reference.object.id,
+                })
+        });
+        if current == Some(value) {
+            return false;
+        }
+
+        self.view_model_overrides.insert(path, value);
+        true
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -4971,6 +5042,32 @@ fn runtime_default_view_model_list_property_path_for_name(
     runtime_imported_view_model_list_property_path_for_name(file, 0, property_name)
 }
 
+fn runtime_imported_view_model_view_model_property_path_for_name(
+    file: &RuntimeFile,
+    view_model_index: usize,
+    property_name: &str,
+) -> Option<Vec<u32>> {
+    runtime_imported_view_model_property_path_for_name(
+        file,
+        view_model_index,
+        property_name,
+        "ViewModelPropertyViewModel",
+    )
+}
+
+fn runtime_imported_view_model_view_model_property_path_for_name_path(
+    file: &RuntimeFile,
+    view_model_index: usize,
+    property_path: &str,
+) -> Option<Vec<u32>> {
+    runtime_imported_view_model_property_path_for_name_path(
+        file,
+        view_model_index,
+        property_path,
+        &["ViewModelPropertyViewModel"],
+    )
+}
+
 fn runtime_imported_view_model_property_path_for_name(
     file: &RuntimeFile,
     view_model_index: usize,
@@ -5044,6 +5141,36 @@ fn runtime_imported_view_model_property_path_for_name_path(
         }
         current_view_model_index =
             usize::try_from(property.uint_property("viewModelReferenceId")?).ok()?;
+    }
+
+    None
+}
+
+fn runtime_view_model_reference_index_for_property_path(
+    file: &RuntimeFile,
+    property_path: &[u32],
+) -> Option<usize> {
+    let mut current_view_model_index = usize::try_from(*property_path.first()?).ok()?;
+    let property_indices = property_path.get(1..)?;
+    if property_indices.is_empty() {
+        return None;
+    }
+
+    for (segment_index, property_index) in property_indices.iter().enumerate() {
+        let view_model = file.view_model(current_view_model_index)?;
+        let property = view_model
+            .properties
+            .into_iter()
+            .nth(usize::try_from(*property_index).ok()?)?;
+        if property.type_name != "ViewModelPropertyViewModel" {
+            return None;
+        }
+        let referenced_view_model_index =
+            usize::try_from(property.uint_property("viewModelReferenceId")?).ok()?;
+        if segment_index + 1 == property_indices.len() {
+            return Some(referenced_view_model_index);
+        }
+        current_view_model_index = referenced_view_model_index;
     }
 
     None

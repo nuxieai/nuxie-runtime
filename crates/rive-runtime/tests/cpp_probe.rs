@@ -31492,6 +31492,103 @@ fn state_machine_default_viewmodel_color_source_name_mutation_matches_cpp_probe(
 }
 
 #[test]
+fn state_machine_default_viewmodel_color_source_handle_mutation_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label =
+        "synthetic/runtime_state_machine_default_viewmodel_color_source_handle_mutation_cpp.riv";
+    let bytes = synthetic_state_machine_default_viewmodel_color_condition(8744);
+    let property_name = "tint";
+    let value = 0x6f11_4455_u32;
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-default-view-model-source-color-by-name".to_owned(),
+        "0".to_owned(),
+        property_name.to_owned(),
+        value.to_string(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    let mut rust_reports = Vec::new();
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    assert!(
+        state_machine.bind_default_view_model_context(),
+        "{label} failed to bind default view-model context"
+    );
+    let handle = state_machine
+        .default_view_model_color_source_handle_by_property_name(&runtime, property_name)
+        .unwrap_or_else(|| panic!("missing default view-model color source handle for {label}"));
+    assert_eq!(handle.path(), &[0_u32, 0], "{label} handle path");
+    assert!(
+        state_machine
+            .default_view_model_color_source_handle_by_property_name(&runtime, "child/tint")
+            .is_none(),
+        "{label} unexpectedly resolved nested default color source handle"
+    );
+    assert!(
+        state_machine.set_default_view_model_color_source_by_source_handle(&handle, value),
+        "{label} failed to mutate default view-model color source by source handle"
+    );
+    assert!(
+        !state_machine.set_default_view_model_color_source_by_source_handle(&handle, value),
+        "{label} reported no-op default color source handle mutation as changed"
+    );
+    assert_eq!(
+        state_machine.default_view_model_color_source_value_for_data_bind(0),
+        Some(value),
+        "{label} Rust default color source value mismatch"
+    );
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 1.0),
+        state_machine.clone(),
+    ));
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+    {
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
 fn state_machine_imported_viewmodel_color_source_mutation_is_shared_across_state_machines_matches_cpp_probe()
  {
     let Some(probe) = probe_path() else {

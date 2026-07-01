@@ -4605,6 +4605,13 @@ fn runtime_imported_view_model_trigger_property_path_for_name(
     )
 }
 
+fn runtime_default_view_model_trigger_property_path_for_name(
+    file: &RuntimeFile,
+    property_name: &str,
+) -> Option<Vec<u32>> {
+    runtime_imported_view_model_trigger_property_path_for_name(file, 0, property_name)
+}
+
 fn runtime_imported_view_model_list_property_path_for_name(
     file: &RuntimeFile,
     view_model_index: usize,
@@ -7842,6 +7849,32 @@ impl RuntimeDataBindGraph {
         true
     }
 
+    fn set_default_view_model_trigger_source_for_path(&mut self, path: &[u32], value: u64) -> bool {
+        let default_context_bound = self.default_view_model_source_context_bound();
+        let mut changed = false;
+        for source in self.sources.iter_mut().filter(|source| source.path == path) {
+            let RuntimeDataBindGraphValue::Trigger(current) = &mut source.default_value else {
+                continue;
+            };
+            if *current == value {
+                continue;
+            }
+            *current = value;
+            if default_context_bound {
+                source.value = RuntimeDataBindGraphValue::Trigger(value);
+                source.bound = true;
+            }
+            changed = true;
+        }
+        if !changed {
+            return false;
+        }
+        if default_context_bound {
+            self.mark_default_view_model_bindings_dirty();
+        }
+        true
+    }
+
     fn set_default_view_model_list_source_item_count_for_data_bind(
         &mut self,
         data_bind_index: usize,
@@ -9002,6 +9035,28 @@ impl RuntimeDataBindGraph {
             return None;
         };
         Some(global_id)
+    }
+
+    fn default_view_model_trigger_target_global_ids_for_source_path(
+        &self,
+        path: &[u32],
+    ) -> Vec<u32> {
+        self.default_view_model_bindings
+            .iter()
+            .filter_map(|binding| {
+                let source = self.sources.get(binding.source.0)?;
+                if source.path != path
+                    || !matches!(source.default_value, RuntimeDataBindGraphValue::Trigger(_))
+                {
+                    return None;
+                }
+                let target = self.targets.get(binding.target.0)?;
+                let RuntimeDataBindGraphTarget::Trigger { global_id } = target.target else {
+                    return None;
+                };
+                Some(global_id)
+            })
+            .collect()
     }
 
     fn reset_bound_trigger_sources(&mut self) -> bool {
@@ -14781,6 +14836,43 @@ impl StateMachineInstance {
         true
     }
 
+    fn set_default_view_model_trigger_target_mirror(
+        &mut self,
+        bindable_global_id: u32,
+        value: u64,
+    ) {
+        let Some(trigger_global_id) = self
+            .bindable_triggers
+            .iter()
+            .find(|trigger| trigger.global_id == bindable_global_id)
+            .and_then(|trigger| match trigger.source {
+                RuntimeBindableTriggerSource::DefaultViewModelTrigger { trigger_global_id } => {
+                    Some(trigger_global_id)
+                }
+                RuntimeBindableTriggerSource::None => None,
+            })
+        else {
+            return;
+        };
+        if let Some(trigger) = self
+            .default_view_model_triggers
+            .iter_mut()
+            .find(|trigger| trigger.global_id == trigger_global_id)
+        {
+            trigger.set_value(value);
+        }
+        if self
+            .data_bind_graph
+            .default_view_model_source_context_bound()
+            && let Some(trigger) = self
+                .view_model_triggers
+                .iter_mut()
+                .find(|trigger| trigger.global_id == trigger_global_id)
+        {
+            trigger.set_value(value);
+        }
+    }
+
     pub fn set_default_view_model_trigger_source_for_data_bind(
         &mut self,
         data_bind_index: usize,
@@ -14795,34 +14887,35 @@ impl StateMachineInstance {
         {
             return false;
         }
-        if let Some(trigger_global_id) = bindable_global_id.and_then(|bindable_global_id| {
-            self.bindable_triggers
-                .iter()
-                .find(|trigger| trigger.global_id == bindable_global_id)
-                .and_then(|trigger| match trigger.source {
-                    RuntimeBindableTriggerSource::DefaultViewModelTrigger { trigger_global_id } => {
-                        Some(trigger_global_id)
-                    }
-                    RuntimeBindableTriggerSource::None => None,
-                })
-        }) {
-            if let Some(trigger) = self
-                .default_view_model_triggers
-                .iter_mut()
-                .find(|trigger| trigger.global_id == trigger_global_id)
-            {
-                trigger.set_value(value);
-            }
-            if self
-                .data_bind_graph
-                .default_view_model_source_context_bound()
-                && let Some(trigger) = self
-                    .view_model_triggers
-                    .iter_mut()
-                    .find(|trigger| trigger.global_id == trigger_global_id)
-            {
-                trigger.set_value(value);
-            }
+        if let Some(bindable_global_id) = bindable_global_id {
+            self.set_default_view_model_trigger_target_mirror(bindable_global_id, value);
+        }
+        self.needs_advance = true;
+        true
+    }
+
+    pub fn set_default_view_model_trigger_source_by_property_name(
+        &mut self,
+        file: &RuntimeFile,
+        property_name: &str,
+        value: u64,
+    ) -> bool {
+        let Some(path) =
+            runtime_default_view_model_trigger_property_path_for_name(file, property_name)
+        else {
+            return false;
+        };
+        let bindable_global_ids = self
+            .data_bind_graph
+            .default_view_model_trigger_target_global_ids_for_source_path(&path);
+        if !self
+            .data_bind_graph
+            .set_default_view_model_trigger_source_for_path(&path, value)
+        {
+            return false;
+        }
+        for bindable_global_id in bindable_global_ids {
+            self.set_default_view_model_trigger_target_mirror(bindable_global_id, value);
         }
         self.needs_advance = true;
         true

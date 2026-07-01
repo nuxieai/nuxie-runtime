@@ -523,10 +523,27 @@ the default file-backed source through `ViewModelInstance::propertyValue` name
 or property-index lookup, and compares the existing artboard
 transition-condition report surface. The contract is
 `docs/prototypes/data-binding-graph-default-artboard-name-runtime-contract.md`.
-Default trigger/list/view-model name APIs, nested/relative/parent lookup,
+Default list/view-model name APIs, nested/relative/parent lookup,
 public source handles, reverse propagation, broader update queues,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
+
+Current #12 update: default root trigger sources now match the root artboard
+property-name mutation shape, with the existing trigger target mirror behavior
+preserved. Rust exposes
+`StateMachineInstance::set_default_view_model_trigger_source_by_property_name`,
+which resolves a root `ViewModelPropertyTrigger.name` on file view model `0`,
+mutates every matching graph source node as a raw trigger count, and updates
+matching default trigger mirrors when the source feeds a trigger bindable
+target. The C++ probe adds
+`--runtime-set-default-view-model-source-trigger-by-name`, resolves the default
+file-backed source through `ViewModelInstance::propertyValue` name or
+property-index lookup, and compares the existing trigger transition-condition
+report surface. The contract is
+`docs/prototypes/data-binding-graph-default-trigger-name-runtime-contract.md`.
+Default list/view-model name APIs, nested/relative/parent lookup, public source
+handles, reverse propagation, broader update queues, listener-owned data
+binding, and nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: graph-owned source mutation now also covers default
 `ViewModelInstanceBoolean` sources. Rust exposes

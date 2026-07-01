@@ -345,6 +345,7 @@ enum class RuntimeStateMachineActionKind
     SetDefaultViewModelSourceArtboard,
     SetDefaultViewModelSourceArtboardByName,
     SetDefaultViewModelSourceTrigger,
+    SetDefaultViewModelSourceTriggerByName,
     SetDefaultViewModelSourceList,
     SetDefaultViewModelSourceViewModel,
     SetViewModelInstanceSourceNumber,
@@ -3623,6 +3624,47 @@ apply_runtime_state_machine_advances(rive::File* file,
                 rive::DataContext context(rive::ref_rcp(viewModelInstance));
                 auto source = context.getViewModelProperty(
                     dataBind->as<rive::DataBindContext>()->sourcePathIds());
+                if (source != nullptr &&
+                    source->is<rive::ViewModelInstanceTrigger>())
+                {
+                    source->as<rive::ViewModelInstanceTrigger>()
+                        ->propertyValue(action.uintValue);
+                }
+            }
+            continue;
+        }
+        if (action.kind ==
+            RuntimeStateMachineActionKind::SetDefaultViewModelSourceTriggerByName)
+        {
+            auto viewModel =
+                file != nullptr && file->viewModelCount() > 0
+                    ? file->viewModel(0)
+                    : nullptr;
+            auto viewModelInstance =
+                viewModel != nullptr && viewModel->instanceCount() > 0
+                    ? viewModel->instance(0)
+                    : nullptr;
+            if (viewModelInstance != nullptr)
+            {
+                auto source = viewModelInstance->propertyValue(action.stringValue);
+                if (source == nullptr)
+                {
+                    auto properties = viewModel->properties();
+                    for (size_t propertyIndex = 0;
+                         propertyIndex < properties.size();
+                         propertyIndex++)
+                    {
+                        auto property = properties[propertyIndex];
+                        if (property == nullptr ||
+                            property->name() != action.stringValue)
+                        {
+                            continue;
+                        }
+                        source = viewModelInstance->propertyValue(
+                            static_cast<uint32_t>(propertyIndex));
+                        break;
+                    }
+                }
                 if (source != nullptr &&
                     source->is<rive::ViewModelInstanceTrigger>())
                 {
@@ -12155,6 +12197,31 @@ int main(int argc, const char* argv[])
             action.numberValue = 0.0f;
             action.uintValue = static_cast<uint32_t>(
                 std::strtoull(argv[++i], nullptr, 10));
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
+        if (is_arg(argv[i],
+                   "--runtime-set-default-view-model-source-trigger-by-name"))
+        {
+            if (i + 3 >= argc)
+            {
+                std::cerr << "--runtime-set-default-view-model-source-trigger-by-name requires stateMachineIndex propertyName value\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::
+                SetDefaultViewModelSourceTriggerByName;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            action.stringValue = argv[++i];
+            action.uintValue =
+                static_cast<uint32_t>(std::strtoull(argv[++i], nullptr, 10));
             options.runtimeStateMachineActions.push_back(action);
             continue;
         }

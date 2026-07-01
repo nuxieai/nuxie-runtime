@@ -730,6 +730,13 @@ slice.
   the owned root does not relink this admitted path, so Rust rejects nested
   mutation after the intermediate is imported. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-runtime-contract.md`.
+- Owned view-model imported-intermediate number source slice:
+  replacing a generated root child with an imported child by instance index
+  lets `RuntimeOwnedViewModelInstance` resolve `[child, amount]` through the
+  imported child's existing `ViewModelInstanceNumber.propertyValue`. Rust
+  records imported number snapshots per referenced view-model instance for
+  read-only graph binding. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-number-runtime-contract.md`.
 - Owned view-model deep imported-intermediate source slice: replacing a
   generated root child with an imported child by instance index lets
   `RuntimeOwnedViewModelInstance` resolve `[child, middle, leaf]` through the
@@ -891,9 +898,8 @@ slice.
   owned root-property, generated-only owned, and imported-intermediate owned
   read paths: imported-instance mutation beyond state-machine-local view-model
   pointer relink overlays, property-name APIs beyond imported view-model
-  pointer sources, owned generated view-model pointer paths, owned root scalar
-  properties, and owned generated nested
-  number/boolean/string/color/enum/symbol-list-index/asset/artboard/trigger paths, and
+  pointer sources, owned generated view-model pointer paths,
+  imported-intermediate scalar kinds beyond number, and
   stable public handles that update or expose cached
   `propertyValue` indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,

@@ -183,6 +183,11 @@ slice.
   `advanceDataContext()` now reapplies reset value `0` to direct and direct
   `DataConverterTrigger` bindable targets on the following state-machine
   advance.
+- Trigger converter-group public-update slice: main-`ToTarget | TwoWay`
+  trigger binds now cover public `updateDataBinds(true)` for the first trigger
+  group shape, `DataConverterGroup<DataConverterTrigger>`, using C++ group
+  reverse/forward order around the inherited trigger reverse pass-through and
+  forward increment.
 - First cross-type graph-owned converter execution slice:
   `DataConverterToNumber` forward conversion for default-context boolean
   sources feeding number targets, covered by a C++ probe through an existing
@@ -791,6 +796,12 @@ slice.
   reset reapply state when a later explicit target edit is consumed first, and
   mirrors C++'s non-main converter direction for direct `DataConverterTrigger`
   main-`ToSource | TwoWay` source-to-target application.
+- Trigger converter-group public-update slice:
+  `DataConverterGroup<DataConverterTrigger>` now covers public
+  `updateDataBinds(true)` target-to-source behavior for default-context
+  trigger binds. The C++ probe reports trigger binding source/target rows, and
+  Rust mirrors group reverse order for target-to-source pass-through plus group
+  forward order for source-to-target increment.
 - Boolean public-update target-to-source slice:
   direct boolean and `DataConverterBooleanNegate` now cover public
   `updateDataBinds(true)` target-to-source behavior for default-context
@@ -1346,6 +1357,7 @@ slice.
   pass-through, direct boolean/BooleanNegate public-update target-to-source,
   direct trigger public-update target-to-source, direct trigger converter
   explicit target-to-source, trigger source reset reapply,
+  trigger converter-group public-update,
   first direct number/boolean/string/color/enum/asset/artboard/symbol-list-index/trigger/view-model
   target-to-source propagation,
   first artboard list-consumer immediate bind report,

@@ -2377,6 +2377,20 @@ imported/owned contexts, broader update queues, relative/parent/nested lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 
+Current #12 update: trigger converter-group public `updateDataBinds(true)`
+target-to-source behavior now has its first parity slice. A main-`ToTarget |
+TwoWay` trigger bind with `DataConverterGroup<DataConverterTrigger>` uses C++
+group reverse order to pass the edited target value through inherited
+`DataConverterTrigger::reverseConvert`, writes the default trigger source, then
+reapplies source-to-target through group forward order so
+`DataConverterTrigger::convert` increments the bindable target. The contract is
+`docs/prototypes/data-binding-graph-trigger-converter-group-public-update-target-to-source-runtime-contract.md`.
+Explicit `advancedDataContext()` behavior for trigger converter groups,
+multi-child and mixed trigger groups, listener dispatch, trigger side effects,
+imported/owned contexts, broader update queues, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
+
 Current #12 update: owned runtime view-model contexts now cover the first
 live view-model pointer replacement path. `RuntimeOwnedViewModelInstance`
 records root `ViewModelPropertyViewModel` properties plus the imported instance

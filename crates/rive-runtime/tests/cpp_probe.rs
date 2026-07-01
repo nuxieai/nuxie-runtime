@@ -8676,6 +8676,90 @@ fn synthetic_state_machine_default_viewmodel_trigger_converter_condition_with_fl
     })
 }
 
+fn synthetic_state_machine_default_viewmodel_trigger_converter_group_condition_with_flags(
+    file_id: u64,
+    data_bind_flags: u64,
+) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyTrigger", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyTrigger", "name", "fire");
+        });
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceTrigger", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceTrigger", "viewModelPropertyId", 0);
+            push_uint_property(bytes, "ViewModelInstanceTrigger", "propertyValue", 0);
+        });
+        push_object_with_properties(bytes, "DataConverterTrigger", |_| {});
+        push_object_with_properties(bytes, "DataConverterGroup", |_| {});
+        push_object_with_properties(bytes, "DataConverterGroupItem", |bytes| {
+            push_uint_property(bytes, "DataConverterGroupItem", "converterId", 0);
+        });
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "Node", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+            push_f32_property(bytes, "Node", "x", 4.0);
+            push_f32_property(bytes, "Node", "y", 3.0);
+            push_f32_property(bytes, "Node", "scaleX", 1.0);
+            push_f32_property(bytes, "Node", "scaleY", 1.0);
+            push_f32_property(bytes, "Node", "opacity", 1.0);
+        });
+        push_animation_for_single_node(bytes, 1, 4.0, 14.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+        });
+        push_bindable_trigger_value_data_bind_context_with_converter_and_flags(
+            bytes,
+            5,
+            &[0, 0],
+            Some(1),
+            data_bind_flags,
+        );
+        push_object_with_properties(bytes, "TransitionViewModelCondition", |bytes| {
+            push_uint_property(bytes, "TransitionViewModelCondition", "opValue", 1);
+        });
+        push_object_with_properties(bytes, "TransitionPropertyComponentComparator", |bytes| {
+            push_uint_property(
+                bytes,
+                "TransitionPropertyComponentComparator",
+                "objectId",
+                1,
+            );
+            push_uint_property(
+                bytes,
+                "TransitionPropertyComponentComparator",
+                "propertyKey",
+                u64::from(property_key_for_name(
+                    "CustomPropertyTrigger",
+                    "propertyValue",
+                )),
+            );
+        });
+        push_object_with_properties(bytes, "TransitionPropertyViewModelComparator", |_| {});
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
 #[derive(Clone, Copy)]
 enum SyntheticViewModelTriggerComparatorKind {
     ValueTrigger,
@@ -28652,6 +28736,19 @@ fn trigger_converter_public_update_target_to_source_matches_cpp_probe() {
         8642,
         DATA_BIND_TWO_WAY,
     );
+    assert_trigger_public_update_target_to_source_matches_cpp_probe(label, bytes);
+}
+
+#[test]
+fn trigger_converter_group_public_update_target_to_source_matches_cpp_probe() {
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_trigger_converter_group_public_update_target_to_source_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_trigger_converter_group_condition_with_flags(
+            8647,
+            DATA_BIND_TWO_WAY,
+        );
     assert_trigger_public_update_target_to_source_matches_cpp_probe(label, bytes);
 }
 

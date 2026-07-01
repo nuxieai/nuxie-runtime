@@ -36,9 +36,12 @@ trigger target-to-source behavior and trigger reset behavior stay unchanged.
   `docs/prototypes/data-binding-graph-trigger-converter-target-to-source-runtime-contract.md`.
 - Trigger reset timing beyond preserving existing state-machine advance
   behavior.
-- Trigger converter groups, imported/owned contexts, relative/parent/nested
-  lookup, pending add/remove behavior, re-entry protection, listener-owned data
-  binding, and nested artboard propagation.
+- Trigger converter groups beyond the first
+  `DataConverterGroup<DataConverterTrigger>` public-update slice covered by
+  `docs/prototypes/data-binding-graph-trigger-converter-group-public-update-target-to-source-runtime-contract.md`.
+- Imported/owned contexts, relative/parent/nested lookup, pending add/remove
+  behavior, re-entry protection, listener-owned data binding, and nested
+  artboard propagation.
 
 ## Completion Checks
 

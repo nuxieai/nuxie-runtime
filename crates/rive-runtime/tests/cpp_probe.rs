@@ -2946,6 +2946,62 @@ fn synthetic_artboard_default_viewmodel_list_to_component_list(file_id: u64) -> 
     })
 }
 
+fn synthetic_artboard_default_viewmodel_name_based_list_to_component_list(file_id: u64) -> Vec<u8> {
+    const DATA_BIND_NAME_BASED: u64 = 1 << 4;
+
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyList", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyList", "name", "items");
+        });
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Item");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyString", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyString", "name", "label");
+        });
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_manifest_name_path_asset(bytes, 78, 6, b"items");
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceList", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceList", "viewModelPropertyId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "item");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 1);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceString", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceString", "viewModelPropertyId", 0);
+            push_string_property(bytes, "ViewModelInstanceString", "propertyValue", "first");
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceListItem", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceListItem", "viewModelId", 1);
+            push_uint_property(bytes, "ViewModelInstanceListItem", "viewModelInstanceId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceListItem", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceListItem", "viewModelId", 1);
+            push_uint_property(bytes, "ViewModelInstanceListItem", "viewModelInstanceId", 0);
+        });
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            push_uint_property(bytes, "Artboard", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ArtboardComponentList", |bytes| {
+            push_uint_property(bytes, "ArtboardComponentList", "parentId", 0);
+        });
+        push_artboard_component_list_data_bind_context_with_flags(
+            bytes,
+            &[78],
+            None,
+            DATA_BIND_NAME_BASED,
+        );
+    })
+}
+
 fn synthetic_artboard_default_viewmodel_number_to_list_component_list(file_id: u64) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "ViewModel", |bytes| {
@@ -3084,12 +3140,24 @@ fn push_artboard_component_list_data_bind_context(
     path: &[u32],
     converter_id: Option<u64>,
 ) {
+    push_artboard_component_list_data_bind_context_with_flags(bytes, path, converter_id, 0);
+}
+
+fn push_artboard_component_list_data_bind_context_with_flags(
+    bytes: &mut Vec<u8>,
+    path: &[u32],
+    converter_id: Option<u64>,
+    flags: u64,
+) {
     let mut source_path_ids = Vec::new();
     for path_id in path {
         push_var_uint(&mut source_path_ids, u64::from(*path_id));
     }
     push_object_with_properties(bytes, "DataBindContext", |bytes| {
         push_bytes_property(bytes, "DataBindContext", "sourcePathIds", &source_path_ids);
+        if flags != 0 {
+            push_uint_property(bytes, "DataBindContext", "flags", flags);
+        }
         if let Some(converter_id) = converter_id {
             push_uint_property(bytes, "DataBindContext", "converterId", converter_id);
         }
@@ -18008,6 +18076,32 @@ fn artboard_default_viewmodel_list_to_component_list_matches_cpp_probe() {
     assert!(
         rust.bind_default_view_model_artboard_list_context(&runtime),
         "{label} failed to apply default artboard list context"
+    );
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    compare_artboard_list_binding(cpp_artboard, &rust, 0, label);
+}
+
+#[test]
+fn artboard_default_viewmodel_name_based_list_to_component_list_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label =
+        "synthetic/runtime_artboard_default_viewmodel_name_based_list_to_component_list_cpp.riv";
+    let bytes = synthetic_artboard_default_viewmodel_name_based_list_to_component_list(8572);
+    let args = ["--runtime-bind-default-view-model-artboard-context".to_owned()];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    assert!(
+        !rust.bind_default_view_model_artboard_list_context(&runtime),
+        "{label} should leave name-based artboard list source unresolved"
     );
 
     let cpp_artboard = cpp

@@ -742,6 +742,12 @@ slice.
   runtime binding for this shape. Rust keeps the source unbound while reporting
   the cloned bindable number target's initial value. The contract is
   `docs/prototypes/data-binding-graph-name-based-state-machine-source-path-unsupported-runtime-contract.md`.
+- Artboard component-list `NameBased` data-bind source-path unsupported
+  boundary: binding the default artboard view-model context against a manifest
+  path for `items` keeps the component-list target row and empty target-list
+  fact, but C++ does not resolve the source list for this runtime shape. Rust
+  preserves the same unresolved source facts. The contract is
+  `docs/prototypes/data-binding-graph-artboard-name-based-source-path-unsupported-runtime-contract.md`.
 
 ## Remaining Runtime Slices
 
@@ -784,8 +790,8 @@ slice.
   first artboard list-consumer immediate bind report,
   data-binding update queues, artboard component-list item instancing,
   map-rule selection, list layout/virtualization, remaining generated-list
-  reverse converters, file-backed name-based data binds, relative paths, parent
-  paths, and nested paths.
+  reverse converters, admitted live relative/name lookup with file pointers,
+  converter name paths, relative paths, parent paths, and nested paths.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener
   actions.

@@ -2213,8 +2213,17 @@ manifest during runtime binding even when the manifest contains the matching
 name path. Rust keeps the source unresolved for this shape while still
 reporting the cloned bindable number target's initial value. The contract is
 `docs/prototypes/data-binding-graph-name-based-state-machine-source-path-unsupported-runtime-contract.md`.
-File-backed name-based binds, relative/parent/nested lookup, listener-owned
-data binding, and nested artboard propagation remain follow-up `#12` slices.
+
+Current #12 update: artboard-owned `NameBased` source paths targeting
+`ArtboardComponentList` now have an explicit runtime unsupported boundary.
+The C++ probe binds the default artboard view-model context against a manifest
+path for `items` and reports the component-list target row plus an empty target
+list size, but no resolved source list. Rust keeps the same target row and
+unresolved source facts. The contract is
+`docs/prototypes/data-binding-graph-artboard-name-based-source-path-unsupported-runtime-contract.md`.
+Admitted live relative/name lookup with file pointers, converter name paths,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
 
 ## #13: Nested Artboards And Hosts
 

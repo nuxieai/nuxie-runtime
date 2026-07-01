@@ -13823,21 +13823,36 @@ fn build_artboard_list_bindings(
                 return None;
             }
             let target_local_id = data_bind.target_local_id?;
+            let path_is_name_based = file
+                .data_bind_is_name_based_for_object(data_bind.object)
+                .unwrap_or(false);
             let path = file.data_bind_context_source_path_ids_for_object(data_bind.object)?;
-            let source =
-                file.data_context_view_model_property_for_instance(default_instance.object, &path)?;
             let converter = runtime_data_bind_graph_converter(file, data_bind.object);
-            let default_value = match converter.as_ref() {
-                Some(RuntimeDataBindGraphConverter::NumberToList { .. }) => {
-                    RuntimeDataBindGraphValue::Number(
-                        file.view_model_instance_number_value_for_object(source)?,
-                    )
-                }
-                None => RuntimeDataBindGraphValue::List {
-                    item_count: file.view_model_instance_list_size_for_object(source)?,
-                },
-                _ => return None,
-            };
+            let source =
+                file.data_context_view_model_property_for_instance(default_instance.object, &path);
+            let source_is_unresolved_name_based = path_is_name_based && source.is_none();
+            let default_value = source
+                .and_then(|source| match converter.as_ref() {
+                    Some(RuntimeDataBindGraphConverter::NumberToList { .. }) => file
+                        .view_model_instance_number_value_for_object(source)
+                        .map(RuntimeDataBindGraphValue::Number),
+                    None => file
+                        .view_model_instance_list_size_for_object(source)
+                        .map(|item_count| RuntimeDataBindGraphValue::List { item_count }),
+                    _ => None,
+                })
+                .or_else(|| {
+                    if !path_is_name_based {
+                        return None;
+                    }
+                    match converter.as_ref() {
+                        Some(RuntimeDataBindGraphConverter::NumberToList { .. }) => {
+                            Some(RuntimeDataBindGraphValue::Number(0.0))
+                        }
+                        None => Some(RuntimeDataBindGraphValue::List { item_count: 0 }),
+                        _ => None,
+                    }
+                })?;
 
             Some(RuntimeArtboardListBindingInstance {
                 data_bind_index,
@@ -13847,7 +13862,7 @@ fn build_artboard_list_bindings(
                 default_value,
                 source_list_size: None,
                 source_number_value: None,
-                target_list_size: None,
+                target_list_size: source_is_unresolved_name_based.then_some(0),
                 should_reset_instances: false,
             })
         })

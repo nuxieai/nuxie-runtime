@@ -2390,6 +2390,21 @@ add/remove behavior, re-entry protection, relative/parent/nested lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 
+Current #12 update: direct view-model pointer public
+`updateDataBinds(true)` target-to-source and same-path observer scheduling now
+have a parity slice. A dirty main-`ToTarget | TwoWay`
+`BindablePropertyViewModel.propertyValue` bind writes the shared
+`ViewModelInstanceViewModel.propertyValue` source during public update and
+reapplies its own target immediately. Unlike the scalar direct value lanes, a
+neighboring ordinary direct `ToTarget` view-model bind to the same source path
+also updates its target during the same public update. The contract is
+`docs/prototypes/data-binding-graph-viewmodel-public-update-observer-application-runtime-contract.md`.
+Imported/owned/nested view-model contexts, relink APIs, pointer comparator
+transition behavior, multiple observers, cross-type observers, full dirty-list
+scheduler parity, pending add/remove behavior, re-entry protection,
+relative/parent/nested lookup, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
+
 Current #12 update: grouped system operation-value public
 `updateDataBinds(true)` target-to-source behavior now preserves the owning
 data-bind direction inside `DataConverterGroup` children. Rust threads the

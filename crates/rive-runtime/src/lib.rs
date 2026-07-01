@@ -10568,6 +10568,84 @@ impl RuntimeDataBindGraph {
         changed
     }
 
+    fn apply_default_view_model_view_model_public_update_targets_to_sources(
+        &mut self,
+        view_models: &[StateMachineBindableViewModelInstance],
+    ) -> bool {
+        if !self.default_view_model_source_context_bound() {
+            return false;
+        }
+
+        let mut updates = Vec::<(Vec<u32>, RuntimeViewModelPointer)>::new();
+        let mut applied_target_to_source = false;
+
+        for binding in self.default_view_model_bindings.clone() {
+            let Some(target) = self.targets.get(binding.target.0) else {
+                continue;
+            };
+            let RuntimeDataBindGraphTarget::ViewModel { global_id } = target.target else {
+                continue;
+            };
+            let Some(source) = self.sources.get_mut(binding.source.0) else {
+                continue;
+            };
+            let target_to_source_dirty =
+                source.target_to_source_dirty || source.source_to_target_dirty_after_immediate;
+            if !target_to_source_dirty {
+                continue;
+            }
+            source.target_to_source_dirty = false;
+            source.source_to_target_dirty_after_immediate = false;
+            if !source.bound || !source.supports_direct_view_model_target_to_source() {
+                continue;
+            }
+            let Some(value) = view_models
+                .iter()
+                .find(|view_model| view_model.global_id == global_id)
+                .map(|view_model| view_model.value)
+            else {
+                continue;
+            };
+            applied_target_to_source = true;
+            source.source_to_target_dirty_after_target_to_source = true;
+            updates.push((source.path.clone(), value));
+        }
+
+        let mut changed = false;
+        for (path, value) in updates {
+            for source in &mut self.sources {
+                if !source.bound || source.path != path {
+                    continue;
+                }
+                let RuntimeDataBindGraphValue::ViewModel(source_value) = &mut source.value else {
+                    continue;
+                };
+                let mut source_changed = false;
+                if *source_value != value {
+                    *source_value = value;
+                    source_changed = true;
+                }
+                let RuntimeDataBindGraphValue::ViewModel(default_value) = &mut source.default_value
+                else {
+                    continue;
+                };
+                if *default_value != value {
+                    *default_value = value;
+                    source_changed = true;
+                }
+                if source_changed {
+                    source.source_to_target_dirty_after_target_to_source = true;
+                    changed = true;
+                }
+            }
+        }
+
+        if changed || applied_target_to_source {
+            self.mark_default_view_model_bindings_dirty();
+        }
+        applied_target_to_source
+    }
+
     fn apply_default_view_model_bindings(
         &mut self,
         mut targets: RuntimeDataBindGraphTargetsMut<'_>,
@@ -16203,6 +16281,10 @@ impl StateMachineInstance {
             self.data_bind_graph
                 .apply_default_view_model_trigger_public_update_targets_to_sources(
                     &self.bindable_triggers,
+                );
+            self.data_bind_graph
+                .apply_default_view_model_view_model_public_update_targets_to_sources(
+                    &self.bindable_view_models,
                 );
             self.apply_default_view_model_bindings(
                 true,

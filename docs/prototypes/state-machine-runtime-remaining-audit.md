@@ -734,6 +734,13 @@ slice.
   probe reports source and target pointer instance indexes directly because
   post-relink transition comparator evaluation can dereference a missing
   to-target data bind for a to-source view-model fixture.
+- View-model public-update observer application slice: direct default-context
+  `ViewModelInstanceViewModel.propertyValue` sources feeding
+  `BindablePropertyViewModel.propertyValue` targets now honor
+  `ToTarget | TwoWay` target mutation on public `updateDataBinds(true)`.
+  C++ applies same-path ordinary `ToTarget` view-model observer targets during
+  the same public update, so Rust marks changed same-path pointer sources for
+  immediate source-to-target application.
 - Pure `ToSource` flag slice: the admitted direct target-to-source runtime path
   now has representative probe coverage without the `TwoWay` flag. A
   default-context number fixture proves pure `ToSource` target mutation writes
@@ -917,6 +924,11 @@ slice.
   direct trigger public update now uses the same C++ observer ordering as the
   other direct value public-update lanes for a neighboring ordinary direct
   `ToTarget` trigger bind.
+- View-model public-update observer application slice:
+  direct view-model public update now writes the default view-model pointer
+  source from a main-`ToTarget | TwoWay` target edit and follows C++'s
+  pointer-specific behavior where a neighboring ordinary direct `ToTarget`
+  view-model observer updates its target during the same public update.
 - First graph-owned view-model bindable slice: forward propagation for
   default-context `ViewModelInstanceViewModel.propertyValue` sources feeding
   `BindablePropertyViewModel.propertyValue` targets, covered by a C++ probe
@@ -1470,6 +1482,7 @@ slice.
   observer preservation, asset public-update observer preservation, artboard
   public-update observer preservation, symbol-list-index public-update observer
   preservation, trigger public-update observer preservation,
+  view-model public-update observer application,
   direct trigger public-update target-to-source, direct trigger converter
   explicit target-to-source, trigger source reset reapply,
   trigger converter-group public-update, trigger converter-group explicit

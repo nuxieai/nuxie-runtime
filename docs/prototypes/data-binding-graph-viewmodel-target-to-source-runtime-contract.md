@@ -33,6 +33,9 @@ application.
 ## Out Of Scope
 
 - Pure `ToSource` without `TwoWay`.
+- Public `updateDataBinds(true)` view-model pointer target-to-source behavior,
+  covered by
+  `docs/prototypes/data-binding-graph-viewmodel-public-update-observer-application-runtime-contract.md`.
 - Reverse converter execution and converter groups in the target-to-source
   direction.
 - Imported external contexts and owned runtime contexts for this reverse path.

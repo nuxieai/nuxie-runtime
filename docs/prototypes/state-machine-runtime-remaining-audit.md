@@ -447,6 +447,12 @@ slice.
   TwoWay` number targets. Reverse group order writes the edited target through
   `Rounder -> OperationValue`, then the same public update reapplies forward
   `OperationValue -> Rounder` conversion from the updated number source.
+- Number-to-number converter-group main-to-source target-to-source slice: the
+  admitted `DataConverterOperationValue -> DataConverterRounder` group now
+  follows C++ explicit data-context behavior for main-`ToSource | TwoWay`
+  number targets. Forward group order writes the edited target through
+  `OperationValue -> Rounder`, then the same dirty pass refreshes the target
+  through reverse `Rounder -> OperationValue` group order.
 - First stateful `DataConverterInterpolator` graph-owned converter execution
   slice: direct default-context number sources feeding number targets now own
   per-source interpolator state, warm C++'s two-advance startup gate, defer

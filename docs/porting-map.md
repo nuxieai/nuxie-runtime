@@ -1549,6 +1549,19 @@ converter groups, broader dirty/update queues, relative/parent/nested lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 
+Current #12 update: the admitted number-to-number `DataConverterGroup` path
+now also covers main-`ToSource | TwoWay` target-to-source behavior for
+default-context number targets. Explicit data-context advancement writes the
+edited number target to the default number source through forward
+`DataConverterOperationValue -> DataConverterRounder` group order, then
+refreshes the target in the same dirty pass through reverse
+`DataConverterRounder -> DataConverterOperationValue` group order. The
+contract is
+`docs/prototypes/data-binding-graph-number-converter-group-main-to-source-target-to-source-runtime-contract.md`.
+Broader number converter groups, broader dirty/update queues,
+relative/parent/nested lookup, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
+
 Current #12 update: the first stateful runtime data-converter slice now admits
 direct `DataConverterInterpolator` bindings for default-context number sources
 feeding `BindablePropertyNumber.propertyValue` targets. `RuntimeDataBindGraph`

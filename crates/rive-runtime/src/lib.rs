@@ -4681,6 +4681,7 @@ impl RuntimeDataBindGraph {
                             source.converter.as_ref(),
                             Some(
                                 RuntimeDataBindGraphConverter::Formula { .. }
+                                    | RuntimeDataBindGraphConverter::Group(_)
                                     | RuntimeDataBindGraphConverter::Rounder { .. }
                                     | RuntimeDataBindGraphConverter::SystemOperationValue { .. }
                             )
@@ -5657,9 +5658,7 @@ impl RuntimeDataBindGraphSourceNode {
                 .converter_state
                 .reverse_convert_value(converter, &self.value),
             Some(converter @ RuntimeDataBindGraphConverter::Group(_))
-                if self.is_main_to_source()
-                    && (runtime_data_bind_graph_converter_preserves_string_source_on_main_to_source_target_apply(converter)
-                        || runtime_data_bind_graph_converter_starts_with_to_string(Some(converter))) =>
+                if self.is_main_to_source() =>
             {
                 self.converter_state
                     .reverse_convert_value(converter, &self.value)

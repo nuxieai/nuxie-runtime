@@ -771,6 +771,14 @@ slice.
   `ViewModelInstanceRuntime::propertyNumber(name)->value(...)` path before
   binding an owned context to a state machine. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-number-name-runtime-contract.md`.
+- Owned root scalar property-name completion slice:
+  `RuntimeOwnedViewModelInstance` can now mutate all root scalar kinds already
+  backed by property-index storage by property name: number, boolean, string,
+  color, enum, symbol-list-index, asset, artboard, and trigger. The owned
+  scalar C++ parity probes continue to drive C++ through
+  `ViewModelProperty.name` and now drive Rust through the matching
+  `set_*_by_property_name` APIs. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-root-scalar-name-runtime-contract.md`.
 - First `BindablePropertyList.propertyValue` target-to-source slice:
   state-machine list targets can be mutated by data-bind index, and explicit
   `advancedDataContext()` plus public `updateDataBinds(true)` consume the
@@ -798,10 +806,9 @@ slice.
 - Live view-model pointer relink APIs beyond the first default, imported,
   owned root-property, generated-only owned, and imported-intermediate owned
   read paths: imported-instance mutation beyond state-machine-local view-model
-  pointer relink overlays, remaining property-name APIs beyond imported
-  view-model pointer sources, owned generated view-model pointer paths, and
-  owned root number properties, and stable public handles that update or expose
-  cached `referenceViewModelInstance` pointers rather than only raw generated
+  pointer relink overlays, property-name APIs beyond imported view-model
+  pointer sources, owned generated view-model pointer paths, and owned root
+  scalar properties, and stable public handles that update or expose cached
   `propertyValue` indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.

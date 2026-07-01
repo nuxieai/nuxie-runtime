@@ -3873,6 +3873,13 @@ impl RuntimeOwnedViewModelInstance {
         true
     }
 
+    pub fn set_boolean_by_property_name(&mut self, property_name: &str, value: bool) -> bool {
+        let Some(property_index) = self.property_index_by_name(property_name) else {
+            return false;
+        };
+        self.set_boolean_by_property_index(property_index, value)
+    }
+
     pub fn set_string_by_property_index(&mut self, property_index: usize, value: &[u8]) -> bool {
         let Some(string) = self
             .strings
@@ -3886,6 +3893,13 @@ impl RuntimeOwnedViewModelInstance {
         }
         string.value = value.to_vec();
         true
+    }
+
+    pub fn set_string_by_property_name(&mut self, property_name: &str, value: &[u8]) -> bool {
+        let Some(property_index) = self.property_index_by_name(property_name) else {
+            return false;
+        };
+        self.set_string_by_property_index(property_index, value)
     }
 
     pub fn set_color_by_property_index(&mut self, property_index: usize, value: u32) -> bool {
@@ -3903,6 +3917,13 @@ impl RuntimeOwnedViewModelInstance {
         true
     }
 
+    pub fn set_color_by_property_name(&mut self, property_name: &str, value: u32) -> bool {
+        let Some(property_index) = self.property_index_by_name(property_name) else {
+            return false;
+        };
+        self.set_color_by_property_index(property_index, value)
+    }
+
     pub fn set_enum_by_property_index(&mut self, property_index: usize, value: u64) -> bool {
         let Some(enum_value) = self
             .enums
@@ -3916,6 +3937,13 @@ impl RuntimeOwnedViewModelInstance {
         }
         enum_value.value = value;
         true
+    }
+
+    pub fn set_enum_by_property_name(&mut self, property_name: &str, value: u64) -> bool {
+        let Some(property_index) = self.property_index_by_name(property_name) else {
+            return false;
+        };
+        self.set_enum_by_property_index(property_index, value)
     }
 
     pub fn set_symbol_list_index_by_property_index(
@@ -3937,6 +3965,17 @@ impl RuntimeOwnedViewModelInstance {
         true
     }
 
+    pub fn set_symbol_list_index_by_property_name(
+        &mut self,
+        property_name: &str,
+        value: u64,
+    ) -> bool {
+        let Some(property_index) = self.property_index_by_name(property_name) else {
+            return false;
+        };
+        self.set_symbol_list_index_by_property_index(property_index, value)
+    }
+
     pub fn set_asset_by_property_index(&mut self, property_index: usize, value: u64) -> bool {
         let Some(asset) = self
             .assets
@@ -3950,6 +3989,13 @@ impl RuntimeOwnedViewModelInstance {
         }
         asset.value = value;
         true
+    }
+
+    pub fn set_asset_by_property_name(&mut self, property_name: &str, value: u64) -> bool {
+        let Some(property_index) = self.property_index_by_name(property_name) else {
+            return false;
+        };
+        self.set_asset_by_property_index(property_index, value)
     }
 
     pub fn set_artboard_by_property_index(&mut self, property_index: usize, value: u64) -> bool {
@@ -3967,6 +4013,13 @@ impl RuntimeOwnedViewModelInstance {
         true
     }
 
+    pub fn set_artboard_by_property_name(&mut self, property_name: &str, value: u64) -> bool {
+        let Some(property_index) = self.property_index_by_name(property_name) else {
+            return false;
+        };
+        self.set_artboard_by_property_index(property_index, value)
+    }
+
     pub fn set_trigger_by_property_index(&mut self, property_index: usize, value: u64) -> bool {
         let Some(trigger) = self
             .triggers
@@ -3980,6 +4033,13 @@ impl RuntimeOwnedViewModelInstance {
         }
         trigger.value = value;
         true
+    }
+
+    pub fn set_trigger_by_property_name(&mut self, property_name: &str, value: u64) -> bool {
+        let Some(property_index) = self.property_index_by_name(property_name) else {
+            return false;
+        };
+        self.set_trigger_by_property_index(property_index, value)
     }
 
     pub fn set_view_model_by_property_index(

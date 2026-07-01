@@ -2274,6 +2274,18 @@ propagation, broader update queues, relative/parent/nested lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 
+Current #12 update: owned runtime view-model root scalar property-name mutation
+now covers every scalar kind already backed by owned property-index storage:
+number, boolean, string, color, enum, symbol-list-index, asset, artboard, and
+trigger. The existing owned scalar C++ parity probes still drive C++ through
+`ViewModelProperty.name` and now drive Rust through the matching
+`RuntimeOwnedViewModelInstance::set_*_by_property_name` APIs. The contract is
+`docs/prototypes/data-binding-graph-owned-viewmodel-root-scalar-name-runtime-contract.md`.
+Nested scalar name paths, imported-instance mutation sharing, stable public
+object handles, reverse propagation, broader update queues,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
+
 Current #12 update: state-machine `BindablePropertyList.propertyValue`
 targets now have a probe-backed target-to-source boundary. Rust exposes
 `StateMachineInstance::set_bindable_list_for_data_bind`, tracks list target

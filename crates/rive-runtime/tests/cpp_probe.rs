@@ -20623,7 +20623,7 @@ fn state_machine_owned_viewmodel_symbol_list_index_bind_source_matches_cpp_probe
         state_machine.clone(),
     ));
     assert!(
-        context.set_symbol_list_index_by_property_index(0, value),
+        context.set_symbol_list_index_by_property_name("symbol", value),
         "{label} failed to mutate owned view-model symbol-list-index"
     );
     assert!(
@@ -20913,7 +20913,7 @@ fn state_machine_owned_viewmodel_string_bind_source_matches_cpp_probe() {
         state_machine.clone(),
     ));
     assert!(
-        context.set_string_by_property_index(0, value.as_bytes()),
+        context.set_string_by_property_name("label", value.as_bytes()),
         "{label} failed to mutate owned view-model string"
     );
     assert!(
@@ -21301,7 +21301,7 @@ fn state_machine_owned_viewmodel_color_bind_source_matches_cpp_probe() {
         state_machine.clone(),
     ));
     assert!(
-        context.set_color_by_property_index(0, value),
+        context.set_color_by_property_name("tint", value),
         "{label} failed to mutate owned view-model color"
     );
     assert!(
@@ -21809,7 +21809,7 @@ fn state_machine_owned_viewmodel_enum_bind_source_matches_cpp_probe() {
         state_machine.clone(),
     ));
     assert!(
-        context.set_enum_by_property_index(0, value),
+        context.set_enum_by_property_name("choice", value),
         "{label} failed to mutate owned view-model enum"
     );
     assert!(
@@ -22317,7 +22317,7 @@ fn state_machine_owned_viewmodel_asset_bind_source_matches_cpp_probe() {
         state_machine.clone(),
     ));
     assert!(
-        context.set_asset_by_property_index(0, value),
+        context.set_asset_by_property_name("image", value),
         "{label} failed to mutate owned view-model asset"
     );
     assert!(
@@ -22715,7 +22715,7 @@ fn state_machine_owned_viewmodel_artboard_bind_source_matches_cpp_probe() {
         "{label} failed to force cloned artboard target"
     );
     assert!(
-        context.set_artboard_by_property_index(0, value),
+        context.set_artboard_by_property_name("scene", value),
         "{label} failed to mutate owned view-model artboard"
     );
     assert!(
@@ -23087,7 +23087,7 @@ fn state_machine_owned_viewmodel_trigger_bind_source_matches_cpp_probe() {
         state_machine.clone(),
     ));
     assert!(
-        context.set_trigger_by_property_index(0, value),
+        context.set_trigger_by_property_name("fire", value),
         "{label} failed to mutate owned view-model trigger"
     );
     assert!(
@@ -25557,7 +25557,7 @@ fn state_machine_owned_viewmodel_boolean_bind_source_matches_cpp_probe() {
         state_machine.clone(),
     ));
     assert!(
-        context.set_boolean_by_property_index(0, value),
+        context.set_boolean_by_property_name("enabled", value),
         "{label} failed to mutate owned view-model boolean"
     );
     assert!(

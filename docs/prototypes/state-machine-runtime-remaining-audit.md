@@ -1264,6 +1264,15 @@ slice.
   records imported enum-index snapshots per referenced view-model instance for
   read-only graph binding. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-enum-runtime-contract.md`.
+- Owned view-model imported-intermediate enum name-path mutation unsupported
+  boundary: replacing a generated root child with an imported child by
+  instance index still lets the graph read `[child, choice]`, but attempting
+  `ViewModelInstanceRuntime::propertyEnum("child/choice")->valueIndex(...)`
+  from the owned root leaves the imported child's existing enum selected in
+  C++. Rust keeps
+  `set_enum_by_property_name_path("child/choice", value)` generated-only and
+  returns `false` once `child` is imported. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-enum-name-path-unsupported-runtime-contract.md`.
 - Owned view-model imported-intermediate symbol-list-index source slice:
   replacing a generated root child with an imported child by instance index
   lets `RuntimeOwnedViewModelInstance` resolve `[child, symbol]` through the

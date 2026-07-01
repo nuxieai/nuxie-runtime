@@ -37,6 +37,13 @@ slice.
   `ViewModelInstanceArtboard`, and `ViewModelInstanceTrigger` sources routed
   through `RuntimeDataBindGraph` source/target edges and covered by current
   probes.
+- Default-context nested number source binding: an absolute
+  `DataBindContext.sourcePathIds` path such as `[Root, child, amount]` walks a
+  root `ViewModelInstanceViewModel.propertyValue` reference to an imported
+  child instance and reads the child's
+  `ViewModelInstanceNumber.propertyValue`, covered by a C++ probe through the
+  existing `BlendState1DViewModel` consumer. The contract is
+  `docs/prototypes/data-binding-graph-default-viewmodel-nested-number-runtime-contract.md`.
 - Graph-owned default `ViewModelInstanceNumber` source-node mutation by
   state-machine data-bind index, covered by a C++ probe through an existing
   `BlendState1DViewModel` consumer.
@@ -1674,7 +1681,8 @@ slice.
   layout/virtualization, remaining generated-list reverse converters, admitted
   live relative/name lookup with file pointers, remaining converter name paths
   beyond the direct and grouped `DataConverterOperationViewModel` unsupported
-  boundaries, relative paths, parent paths, and nested paths.
+  boundaries, relative paths, parent paths, and nested source kinds beyond the
+  default-context number slice.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener
   actions.

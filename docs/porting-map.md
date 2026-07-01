@@ -2198,11 +2198,26 @@ data-context binding. Rust records imported number snapshots per referenced
 view-model instance and uses them only for read-only graph source resolution.
 The contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-number-runtime-contract.md`.
-Other imported-intermediate scalar kinds, persistent imported instance
-mutation, remaining property-name APIs, public object-handle APIs, reverse
-propagation, broader update queues, relative/parent/nested lookup,
-listener-owned data binding, and nested artboard propagation remain follow-up
-`#12` slices.
+At that slice boundary, boolean and other imported-intermediate scalar kinds,
+persistent imported instance mutation, remaining property-name APIs, public
+object-handle APIs, reverse propagation, broader update queues,
+relative/parent/nested lookup, listener-owned data binding, and nested
+artboard propagation remained follow-up `#12` slices.
+
+Current #12 update: owned view-model contexts now traverse one imported
+replacement intermediate for direct boolean sources. Replacing a generated
+root child with an imported child by instance index makes a source path such
+as `[root, child, enabled]` read the imported child's existing
+`ViewModelInstanceBoolean.propertyValue`, matching C++ state-machine
+data-context binding as observed through a boolean transition condition. Rust
+records imported boolean snapshots per referenced view-model instance and uses
+them only for read-only graph source resolution. The contract is
+`docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-boolean-runtime-contract.md`.
+Other imported-intermediate scalar kinds beyond number and boolean,
+persistent imported instance mutation, remaining property-name APIs, public
+object-handle APIs, reverse propagation, broader update queues,
+relative/parent/nested lookup, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: owned view-model contexts now traverse deeper imported
 replacement intermediates for read-only view-model pointer sources. Replacing

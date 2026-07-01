@@ -3522,6 +3522,7 @@ struct RuntimeOwnedViewModelViewModel {
     numbers: Vec<RuntimeOwnedViewModelNumber>,
     imported_numbers: BTreeMap<u32, Vec<RuntimeOwnedViewModelNumber>>,
     booleans: Vec<RuntimeOwnedViewModelBoolean>,
+    imported_booleans: BTreeMap<u32, Vec<RuntimeOwnedViewModelBoolean>>,
     strings: Vec<RuntimeOwnedViewModelString>,
     colors: Vec<RuntimeOwnedViewModelColor>,
     enums: Vec<RuntimeOwnedViewModelEnum>,
@@ -3587,6 +3588,24 @@ impl RuntimeOwnedViewModelViewModel {
             .iter()
             .find(|boolean| boolean.property_index == property_index)
             .map(|boolean| boolean.value)
+    }
+
+    fn active_boolean_value_by_property_index(&self, property_index: usize) -> Option<bool> {
+        match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => {
+                self.boolean_value_by_property_index(property_index)
+            }
+            RuntimeViewModelPointer::Imported { object_id } => self
+                .imported_booleans
+                .get(&object_id)
+                .and_then(|booleans| {
+                    booleans
+                        .iter()
+                        .find(|boolean| boolean.property_index == property_index)
+                })
+                .map(|boolean| boolean.value),
+            _ => None,
+        }
     }
 
     fn string_value_by_property_index(&self, property_index: usize) -> Option<&[u8]> {
@@ -3969,6 +3988,64 @@ fn runtime_owned_view_model_booleans(
                             property_index,
                             value: false,
                         },
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn runtime_owned_view_model_booleans_for_instance(
+    file: &RuntimeFile,
+    view_model_index: usize,
+    view_model_instance: &RuntimeObject,
+) -> Vec<RuntimeOwnedViewModelBoolean> {
+    file.view_model(view_model_index)
+        .map(|view_model| {
+            view_model
+                .properties
+                .into_iter()
+                .enumerate()
+                .filter_map(|(property_index, property)| {
+                    if property.type_name != "ViewModelPropertyBoolean" {
+                        return None;
+                    }
+                    let path = [
+                        u32::try_from(view_model_index).ok()?,
+                        u32::try_from(property_index).ok()?,
+                    ];
+                    let source = file.data_context_view_model_property_for_instance(
+                        view_model_instance,
+                        &path,
+                    )?;
+                    let value = file.view_model_instance_boolean_value_for_object(source)?;
+                    Some(RuntimeOwnedViewModelBoolean {
+                        property_index,
+                        value,
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn runtime_owned_view_model_imported_booleans(
+    file: &RuntimeFile,
+    view_model_index: usize,
+) -> BTreeMap<u32, Vec<RuntimeOwnedViewModelBoolean>> {
+    file.view_model(view_model_index)
+        .map(|view_model| {
+            view_model
+                .instances
+                .into_iter()
+                .map(|instance| {
+                    (
+                        instance.object.id,
+                        runtime_owned_view_model_booleans_for_instance(
+                            file,
+                            view_model_index,
+                            instance.object,
+                        ),
                     )
                 })
                 .collect()
@@ -4384,6 +4461,11 @@ fn runtime_owned_view_model_property_children(
                         runtime_owned_view_model_booleans(file, view_model_index)
                     })
                     .unwrap_or_default(),
+                imported_booleans: referenced_view_model_index
+                    .map(|view_model_index| {
+                        runtime_owned_view_model_imported_booleans(file, view_model_index)
+                    })
+                    .unwrap_or_default(),
                 strings: referenced_view_model_index
                     .map(|view_model_index| {
                         runtime_owned_view_model_strings(file, view_model_index)
@@ -4556,6 +4638,11 @@ impl RuntimeOwnedViewModelInstance {
                         booleans: referenced_view_model_index
                             .map(|view_model_index| {
                                 runtime_owned_view_model_booleans(file, view_model_index)
+                            })
+                            .unwrap_or_default(),
+                        imported_booleans: referenced_view_model_index
+                            .map(|view_model_index| {
+                                runtime_owned_view_model_imported_booleans(file, view_model_index)
                             })
                             .unwrap_or_default(),
                         strings: referenced_view_model_index
@@ -5323,13 +5410,7 @@ impl RuntimeOwnedViewModelInstance {
         }
         let (property_index, view_model_path) = property_path.split_last()?;
         let view_model = self.view_model_by_property_path(view_model_path)?;
-        if !matches!(
-            view_model.value,
-            RuntimeViewModelPointer::OwnedGenerated { .. }
-        ) {
-            return None;
-        }
-        view_model.boolean_value_by_property_index(*property_index)
+        view_model.active_boolean_value_by_property_index(*property_index)
     }
 
     fn string_value_by_property_index(&self, property_index: usize) -> Option<&[u8]> {

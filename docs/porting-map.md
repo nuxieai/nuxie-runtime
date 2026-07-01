@@ -3740,10 +3740,26 @@ view-model properties. Rust mirrors that by making
 return `false` for nested slash paths and by keeping the original source
 value. The contract is
 `docs/prototypes/data-binding-graph-imported-viewmodel-nested-trigger-name-path-unsupported-runtime-contract.md`.
+
+Current #12 update: imported view-model trigger sources now have a root-only
+stable public source handle. `RuntimeImportedViewModelInstanceContext` can
+resolve a root `ViewModelPropertyTrigger.name` into
+`RuntimeImportedViewModelTriggerSourceHandle`, and
+`set_trigger_by_source_handle` writes through the existing resolved source-path
+override only when the handle belongs to the same imported view-model instance
+context. Slash-path handle lookup remains unresolved, matching the nested
+trigger boundary above. The C++ probe compares the handle mutation against the
+root trigger by-name path and verifies the later-bound state machine advances
+with the same admitted post-bind behavior. Trigger binding/source-count report
+parity, listener notification, and event dispatch remain out of scope. The
+contract is
+`docs/prototypes/data-binding-graph-imported-viewmodel-trigger-source-handle-runtime-contract.md`.
 Nested property-name paths for list/view-model sources, stable public object
-handles, reverse propagation, broader update queues, relative/parent/nested
-lookup, listener-owned data binding, and nested artboard propagation remain
-follow-up `#12` slices.
+handles beyond the first imported number, boolean, string, color, enum,
+symbol-list-index, asset, artboard, and trigger source handles, reverse
+propagation, broader update queues, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
 
 Current #12 update: imported view-model list sources now have the nested
 property-name path boundary pinned. The C++ probe path

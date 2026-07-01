@@ -1575,6 +1575,17 @@ slice.
   properties. The C++ probe proves the bound state machine keeps the original
   trigger source. The contract is
   `docs/prototypes/data-binding-graph-imported-viewmodel-nested-trigger-name-path-unsupported-runtime-contract.md`.
+- Imported trigger source handle slice:
+  `RuntimeImportedViewModelInstanceContext` can now resolve a root trigger
+  source into `RuntimeImportedViewModelTriggerSourceHandle` and mutate through
+  that handle only when it belongs to the same imported view-model instance
+  context. Slash-path handle lookup remains unresolved, matching the nested
+  trigger boundary. The C++ probe compares the handle write against the root
+  trigger by-name mutation path and proves a later-bound state machine follows
+  the same admitted post-bind behavior. Trigger binding/source-count report
+  parity, listener notification, and event dispatch remain out of scope. The
+  contract is
+  `docs/prototypes/data-binding-graph-imported-viewmodel-trigger-source-handle-runtime-contract.md`.
 - Imported nested list property-name path boundary:
   `RuntimeImportedViewModelInstanceContext::
   set_list_item_count_by_property_name_path` returns `false` for a
@@ -1922,8 +1933,8 @@ slice.
   property-name APIs beyond imported view-model pointer and root
   number/boolean/string/color/enum/symbol-list-index/asset/artboard/trigger/list sources, owned generated view-model pointer
   paths, and stable public handles beyond the first imported number, boolean,
-  string, color, enum, symbol-list-index, asset, and artboard source handles
-  that update or expose cached `propertyValue` indexes.
+  string, color, enum, symbol-list-index, asset, artboard, and trigger source
+  handles that update or expose cached `propertyValue` indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
 - Live view-model APIs and data-binding propagation governed by

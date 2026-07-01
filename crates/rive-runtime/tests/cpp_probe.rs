@@ -31475,6 +31475,102 @@ fn state_machine_default_viewmodel_string_source_handle_mutation_matches_cpp_pro
 }
 
 #[test]
+fn state_machine_default_viewmodel_nested_string_source_handle_mutation_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label =
+        "synthetic/runtime_state_machine_default_viewmodel_nested_string_source_handle_cpp.riv";
+    let bytes = synthetic_state_machine_default_nested_viewmodel_string_condition(8775);
+    let property_path = "child/label";
+    let value = "handled";
+    let args = [
+        "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-default-view-model-source-string".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        value.to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    assert!(
+        state_machine.bind_default_view_model_context(),
+        "{label} failed to bind default view-model context"
+    );
+    let handle = state_machine
+        .default_view_model_string_source_handle_by_property_name_path(&runtime, property_path)
+        .unwrap_or_else(|| {
+            panic!("missing nested default view-model string source handle for {label}")
+        });
+    assert_eq!(handle.path(), &[0_u32, 0, 0], "{label} handle path");
+    assert!(
+        state_machine
+            .default_view_model_string_source_handle_by_property_name_path(&runtime, "child")
+            .is_none(),
+        "{label} unexpectedly resolved view-model pointer as nested string source handle"
+    );
+    assert!(
+        state_machine
+            .set_default_view_model_string_source_by_source_handle(&handle, value.as_bytes()),
+        "{label} failed to mutate nested default string source by source handle"
+    );
+    assert!(
+        !state_machine
+            .set_default_view_model_string_source_by_source_handle(&handle, value.as_bytes()),
+        "{label} reported no-op nested default string source handle mutation as changed"
+    );
+    assert_eq!(
+        state_machine.default_view_model_string_source_value_for_data_bind(0),
+        Some(value.as_bytes()),
+        "{label} Rust nested default string source value mismatch"
+    );
+    let rust_reports = [
+        (
+            rust.advance_state_machine_instance(&mut state_machine, 0.0),
+            state_machine.clone(),
+        ),
+        (
+            rust.advance_state_machine_instance(&mut state_machine, 1.0),
+            state_machine.clone(),
+        ),
+    ];
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+    {
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+        compare_state_machine_string_binding(cpp_state_machine, rust_state_machine, 0, label);
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
 fn state_machine_default_viewmodel_color_bind_source_matches_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");

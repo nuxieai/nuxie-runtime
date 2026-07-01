@@ -345,6 +345,7 @@ enum class RuntimeStateMachineActionKind
     BindDefaultViewModelContext,
     BindViewModelInstanceContext,
     BindOwnedViewModelNumberContext,
+    BindOwnedViewModelNumberNamePathContext,
     BindOwnedViewModelBooleanContext,
     BindOwnedViewModelStringContext,
     BindOwnedViewModelColorContext,
@@ -2324,6 +2325,29 @@ apply_runtime_state_machine_advances(rive::File* file,
             {
                 rive::ViewModelInstanceRuntime runtime(viewModelInstance);
                 auto number = runtime.propertyNumber(property->name());
+                if (number != nullptr)
+                {
+                    number->value(action.numberValue);
+                }
+                stateMachine->bindViewModelInstance(viewModelInstance);
+            }
+            continue;
+        }
+        if (action.kind == RuntimeStateMachineActionKind::
+                               BindOwnedViewModelNumberNamePathContext)
+        {
+            auto viewModel =
+                file != nullptr && action.viewModelIndex < file->viewModelCount()
+                    ? file->viewModel(action.viewModelIndex)
+                    : nullptr;
+            auto viewModelInstance =
+                file != nullptr && viewModel != nullptr
+                    ? file->createViewModelInstance(viewModel)
+                    : nullptr;
+            if (viewModelInstance != nullptr)
+            {
+                rive::ViewModelInstanceRuntime runtime(viewModelInstance);
+                auto number = runtime.propertyNumber(action.stringValue);
                 if (number != nullptr)
                 {
                     number->value(action.numberValue);
@@ -10095,6 +10119,34 @@ int main(int argc, const char* argv[])
             continue;
         }
 
+        if (is_arg(
+                argv[i],
+                "--runtime-bind-owned-view-model-number-name-path-state-machine-context"))
+        {
+            if (i + 4 >= argc)
+            {
+                std::cerr << "--runtime-bind-owned-view-model-number-name-path-state-machine-context requires stateMachineIndex viewModelIndex propertyPath value\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::
+                BindOwnedViewModelNumberNamePathContext;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.viewModelIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.dataBindIndex = 0;
+            action.viewModelInstanceIndex = 0;
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.stringValue = argv[++i];
+            action.numberValue =
+                static_cast<float>(std::strtod(argv[++i], nullptr));
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
         if (is_arg(argv[i],
                    "--runtime-bind-owned-view-model-bool-state-machine-context"))
         {
@@ -10549,6 +10601,7 @@ int main(int argc, const char* argv[])
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-viewmodel-state-machine-context stateMachineIndex viewModelIndex propertyIndex value\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-viewmodel-default-state-machine-context stateMachineIndex viewModelIndex propertyIndex\n";
         std::cerr << "additional runtime flag: --runtime-set-default-view-model-source-symbol-list-index stateMachineIndex dataBindIndex value\n";
+        std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-number-name-path-state-machine-context stateMachineIndex viewModelIndex propertyPath value\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-symbol-list-index-state-machine-context stateMachineIndex viewModelIndex propertyIndex value\n";
         std::cerr << "additional runtime flag: --runtime-bind-default-view-model-artboard-context\n";
         std::cerr << "additional runtime flag: --runtime-relink-default-view-model-source-viewmodel stateMachineIndex dataBindIndex value\n";

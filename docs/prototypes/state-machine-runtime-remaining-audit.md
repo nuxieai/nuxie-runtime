@@ -779,6 +779,14 @@ slice.
   `ViewModelProperty.name` and now drive Rust through the matching
   `set_*_by_property_name` APIs. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-root-scalar-name-runtime-contract.md`.
+- First owned generated nested scalar name-path slice:
+  generated owned view-model children can store direct number values, and
+  `RuntimeOwnedViewModelInstance::set_number_by_property_name_path` can mutate
+  paths such as `child/amount` before binding. The graph resolves matching
+  nested number source paths for owned contexts, and the C++ probe calls
+  `ViewModelInstanceRuntime::propertyNumber("child/amount")->value(...)`. The
+  contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-nested-number-name-path-runtime-contract.md`.
 - First `BindablePropertyList.propertyValue` target-to-source slice:
   state-machine list targets can be mutated by data-bind index, and explicit
   `advancedDataContext()` plus public `updateDataBinds(true)` consume the
@@ -807,9 +815,9 @@ slice.
   owned root-property, generated-only owned, and imported-intermediate owned
   read paths: imported-instance mutation beyond state-machine-local view-model
   pointer relink overlays, property-name APIs beyond imported view-model
-  pointer sources, owned generated view-model pointer paths, and owned root
-  scalar properties, and stable public handles that update or expose cached
-  `propertyValue` indexes.
+  pointer sources, owned generated view-model pointer paths, owned root scalar
+  properties, and owned generated nested number paths, and stable public
+  handles that update or expose cached `propertyValue` indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
 - Live view-model APIs and data-binding propagation governed by

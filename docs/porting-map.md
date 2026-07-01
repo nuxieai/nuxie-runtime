@@ -3327,6 +3327,22 @@ public object-handle APIs, reverse propagation, broader update queues,
 relative/parent/nested lookup, listener-owned data binding, and nested
 artboard propagation remained follow-up `#12` slices.
 
+Current #12 update: owned view-model contexts now explicitly pin direct
+artboard name-path mutation through an imported replacement intermediate as
+unsupported. The C++ probe replaces generated `child` with an imported child,
+resolves the owner with `ViewModelInstanceRuntime::propertyViewModel("child")`,
+attempts to write the child's `ViewModelInstanceArtboard.propertyValue`, then
+binds the owned context; C++ leaves the imported child's existing artboard
+source selected. Rust matches by returning `false` for
+`set_artboard_by_property_name_path("child/scene", value)` once `child` is
+imported and by preserving the read-only imported artboard snapshot. The
+contract is
+`docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-artboard-name-path-unsupported-runtime-contract.md`.
+Other imported-intermediate value mutation APIs, remaining property-name APIs,
+public object-handle APIs, reverse propagation, broader update queues,
+relative/parent/nested lookup, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
+
 Current #12 update: owned view-model contexts now traverse one imported
 replacement intermediate for direct trigger sources. Replacing a generated
 root child with an imported child by instance index makes a source path such

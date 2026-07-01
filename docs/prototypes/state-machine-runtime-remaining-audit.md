@@ -1315,6 +1315,16 @@ slice.
   transition condition that remains unsatisfied after the imported source
   updates the bindable away from the forced target value. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-artboard-runtime-contract.md`.
+- Owned view-model imported-intermediate artboard name-path mutation
+  unsupported boundary: replacing a generated root child with an imported
+  child by instance index still lets the graph read `[child, scene]`, but
+  attempting to resolve the owner with
+  `ViewModelInstanceRuntime::propertyViewModel("child")` and write
+  `ViewModelInstanceArtboard.propertyValue` leaves the imported child's
+  existing artboard selected in C++. Rust keeps
+  `set_artboard_by_property_name_path("child/scene", value)` generated-only
+  and returns `false` once `child` is imported. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-artboard-name-path-unsupported-runtime-contract.md`.
 - Owned view-model imported-intermediate trigger source slice:
   replacing a generated root child with an imported child by instance index
   lets `RuntimeOwnedViewModelInstance` resolve `[child, fire]` through the

@@ -19491,13 +19491,20 @@ fn runtime_data_bind_graph_converter(
     data_bind: &RuntimeObject,
 ) -> Option<RuntimeDataBindGraphConverter> {
     let converter = file.resolved_data_converter_for_data_bind_object(data_bind)?;
+    let flags = data_bind.uint_property("flags").unwrap_or(0);
+    runtime_data_bind_graph_converter_for_object(file, converter, &mut BTreeSet::new(), true, flags)
+}
+
+fn runtime_data_bind_graph_system_operation_value_converter(
+    converter: &RuntimeObject,
+    flags: u64,
+) -> RuntimeDataBindGraphConverter {
     if matches!(
         converter.type_name,
         "DataConverterSystemDegsToRads" | "DataConverterSystemNormalizer"
     ) {
-        let flags = data_bind.uint_property("flags").unwrap_or(0);
         let to_target = flags & 0b10 != 0 || flags & 0b1 == 0;
-        return Some(if to_target {
+        if to_target {
             RuntimeDataBindGraphConverter::SystemOperationValue {
                 operation_type: converter.uint_property("operationType").unwrap_or(0),
                 operation_value: converter.double_property("operationValue").unwrap_or(1.0),
@@ -19505,9 +19512,10 @@ fn runtime_data_bind_graph_converter(
             }
         } else {
             RuntimeDataBindGraphConverter::Unsupported
-        });
+        }
+    } else {
+        RuntimeDataBindGraphConverter::Unsupported
     }
-    runtime_data_bind_graph_converter_for_object(file, converter, &mut BTreeSet::new(), true)
 }
 
 fn runtime_data_bind_graph_converter_for_object(
@@ -19515,6 +19523,7 @@ fn runtime_data_bind_graph_converter_for_object(
     converter: &RuntimeObject,
     visiting: &mut BTreeSet<u32>,
     allow_stateful_interpolator: bool,
+    data_bind_flags: u64,
 ) -> Option<RuntimeDataBindGraphConverter> {
     if !visiting.insert(converter.id) {
         return Some(RuntimeDataBindGraphConverter::Unsupported);
@@ -19528,7 +19537,11 @@ fn runtime_data_bind_graph_converter_for_object(
                     item.converter
                         .and_then(|converter| {
                             runtime_data_bind_graph_converter_for_object(
-                                file, converter, visiting, true,
+                                file,
+                                converter,
+                                visiting,
+                                true,
+                                data_bind_flags,
                             )
                         })
                         .unwrap_or(RuntimeDataBindGraphConverter::Unsupported)
@@ -19562,6 +19575,9 @@ fn runtime_data_bind_graph_converter_for_object(
                 file, converter,
             ),
         },
+        "DataConverterSystemDegsToRads" | "DataConverterSystemNormalizer" => {
+            runtime_data_bind_graph_system_operation_value_converter(converter, data_bind_flags)
+        }
         "DataConverterRounder" => RuntimeDataBindGraphConverter::Rounder {
             decimals: converter.uint_property("decimals").unwrap_or(0),
         },

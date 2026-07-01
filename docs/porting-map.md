@@ -2259,6 +2259,20 @@ add/remove behavior, re-entry protection, relative/parent/nested lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 
+Current #12 update: grouped system operation-value public
+`updateDataBinds(true)` target-to-source behavior now preserves the owning
+data-bind direction inside `DataConverterGroup` children. Rust threads the
+data-bind flags into grouped `DataConverterSystemNormalizer` and
+`DataConverterSystemDegsToRads` construction, then compares a
+`DataConverterGroup<OperationValue, System*>` public update against C++ for
+both concrete system converters. The contract is
+`docs/prototypes/data-binding-graph-system-operation-value-group-public-update-target-to-source-runtime-contract.md`.
+Other system converter group compositions, symbol-list-index inputs, remaining
+mixed/stateful groups, full dirty-list scheduler parity, imported/owned
+contexts, pending add/remove behavior, re-entry protection,
+relative/parent/nested lookup, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
+
 Current #12 update: owned runtime view-model contexts now cover the first
 live view-model pointer replacement path. `RuntimeOwnedViewModelInstance`
 records root `ViewModelPropertyViewModel` properties plus the imported instance

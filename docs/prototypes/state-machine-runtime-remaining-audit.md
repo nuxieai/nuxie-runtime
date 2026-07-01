@@ -324,6 +324,14 @@ slice.
   binds. The public update dispatches C++ `reverseConvert`, which selects
   operation-value forward arithmetic from the authored `ToTarget` direction,
   writes the source, then reapplies source-to-target in the same update.
+- System operation-value group public-update target-to-source slice:
+  `DataConverterGroup<OperationValue, System*>` now covers public
+  `updateDataBinds(true)` for main-`ToTarget | TwoWay` number binds. The graph
+  threads the owning data-bind flags into grouped
+  `DataConverterSystemNormalizer` and `DataConverterSystemDegsToRads`
+  construction, matching C++ direction-sensitive child conversion before the
+  source write and immediate source-to-target reapplication. The contract is
+  `docs/prototypes/data-binding-graph-system-operation-value-group-public-update-target-to-source-runtime-contract.md`.
 - Direct interpolator main-to-target dirty slice: warmed direct
   `DataConverterInterpolator` state now follows C++ state-machine target-dirty
   behavior for main-`ToTarget | TwoWay` number binds. Explicit data-context

@@ -1334,6 +1334,16 @@ slice.
   transition condition that remains unsatisfied after the imported source
   updates the bindable away from the authored target value. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-trigger-runtime-contract.md`.
+- Owned view-model imported-intermediate trigger name-path mutation
+  unsupported boundary: replacing a generated root child with an imported
+  child by instance index still lets the graph read `[child, fire]`, but
+  attempting to resolve the owner with
+  `ViewModelInstanceRuntime::propertyViewModel("child")` and write
+  `ViewModelInstanceTrigger.propertyValue` leaves the imported child's
+  existing trigger count selected in C++. Rust keeps
+  `set_trigger_by_property_name_path("child/fire", value)` generated-only and
+  returns `false` once `child` is imported. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-trigger-name-path-unsupported-runtime-contract.md`.
 - Owned view-model imported-intermediate list source slice:
   replacing a generated root child with an imported child by instance index
   lets `RuntimeOwnedViewModelInstance` resolve `[child, items]` through the

@@ -400,6 +400,12 @@ slice.
   targets, preserving the manual target edit through explicit data-context
   advancement and then overwriting it from the unchanged string source through
   ordered group conversion on the next normal advance.
+- String converter-group public-update target-to-source slice: the admitted
+  `DataConverterStringTrim -> DataConverterStringPad` group now follows C++
+  public `updateDataBinds(true)` behavior for main-`ToTarget | TwoWay` string
+  targets. Reverse group order writes the edited target to the string source
+  through base reverse identity, then the same update reapplies forward
+  trim-then-pad conversion to the target.
 - First cross-type `DataConverterGroup` graph-owned converter execution slice:
   forward composition for default-context number sources feeding string targets
   through a group whose first effective child is `DataConverterToString`,

@@ -17563,6 +17563,21 @@ fn string_converter_group_main_to_target_two_way_target_dirty_matches_cpp_probe(
 }
 
 #[test]
+fn string_converter_group_public_update_target_to_source_matches_cpp_probe() {
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_string_converter_group_public_update_target_to_source_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_string_converter_group_condition_with_flags(
+            8562,
+            DATA_BIND_TWO_WAY,
+        );
+    assert_string_public_update_target_to_source_with_edit_matches_cpp_probe(
+        label, bytes, b"  go  ",
+    );
+}
+
+#[test]
 fn number_to_string_converter_group_main_to_target_two_way_target_dirty_matches_cpp_probe() {
     const DATA_BIND_TWO_WAY: u64 = 1 << 1;
 

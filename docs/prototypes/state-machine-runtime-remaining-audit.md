@@ -2331,6 +2331,15 @@ slice.
   target-list facts. Rust preserves the same unresolved source facts across all
   three entrypoints. The contract is
   `docs/prototypes/data-binding-graph-artboard-name-based-source-path-unsupported-runtime-contract.md`.
+- File-backed `DataContext` lookup report slice:
+  `runtime_data_context_lookup_reports` now records C++-order absolute
+  `DataContext::getViewModelProperty`/`getViewModelInstance` facts and
+  manifest-relative
+  `getRelativeViewModelProperty`/`getRelativeViewModelInstance` facts for
+  imported view models, instances, and explicit values. The C++ probe compares
+  the read-only report against `--data-context-lookups` for a nested
+  view-model fixture. The contract is
+  `docs/prototypes/data-context-file-backed-lookup-runtime-contract.md`.
 
 ## Remaining Runtime Slices
 
@@ -2381,8 +2390,9 @@ slice.
   pass-through, broader dirty-list target scheduling, data-binding update
   queues, full artboard component-list item instancing, map-rule-driven child
   creation, list layout/virtualization, remaining generated-list reverse
-  converters, admitted live relative/name lookup with file pointers, remaining
-  converter name paths beyond the direct and grouped
+  converters, live relative/name data-bind wiring beyond the read-only
+  file-backed lookup report, remaining converter name paths beyond the direct
+  and grouped
   `DataConverterOperationViewModel` unsupported boundaries, relative paths,
   parent paths, and nested source kinds beyond the default-context number,
   boolean, string, color, enum, symbol-list-index, asset, artboard, trigger,

@@ -4838,11 +4838,19 @@ preserve the same unresolved source and empty target-list facts. Rust keeps
 the same target row and unresolved source facts across all three entrypoints.
 The contract is
 `docs/prototypes/data-binding-graph-artboard-name-based-source-path-unsupported-runtime-contract.md`.
-Admitted live relative/name lookup with file pointers, converter name paths,
-relative paths, parent paths, nested source kinds beyond the default-context
-number, boolean, string, color, enum, symbol-list-index, asset, artboard,
-trigger, list, and view-model slices, listener-owned data binding, and nested
-artboard propagation remain follow-up `#12` slices.
+
+Current #12 update: file-backed `DataContext` absolute and manifest-relative
+lookup facts now have a read-only runtime report. `runtime_data_context_lookup_reports`
+enumerates imported view models, instances, and explicit instance values in
+C++ order, resolves absolute `viewModelId`/`viewModelPropertyId` paths and
+manifest-name relative paths through the existing `rive-binary` lookup helpers,
+and reports resolved value/instance references with C++ probe parity for a
+nested view-model fixture. The contract is
+`docs/prototypes/data-context-file-backed-lookup-runtime-contract.md`.
+Live data-bind wiring for those relative/name paths, converter name paths,
+parent fallback, runtime mutation/relink through these reports,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
 
 ## #13: Nested Artboards And Hosts
 

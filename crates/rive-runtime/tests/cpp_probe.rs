@@ -1,11 +1,12 @@
 use rive_binary::{RuntimeFile, read_runtime_file};
 use rive_graph::GraphFile;
 use rive_runtime::{
-    ArtboardInstance, ComponentDirt, Mat2D, RuntimeComponent, RuntimeDrawCommandKind,
-    RuntimeFeatherState, RuntimeGradientStop, RuntimeImportedViewModelInstanceContext,
-    RuntimeOwnedViewModelInstance, RuntimePathCommand, RuntimeShapePaintKind,
-    RuntimeShapePaintPathKind, RuntimeShapePaintState, StateMachineInputKind, StateMachineInstance,
-    TransformProperty,
+    ArtboardInstance, ComponentDirt, Mat2D, RuntimeComponent, RuntimeDataContextLookupKind,
+    RuntimeDataContextLookupReport, RuntimeDrawCommandKind, RuntimeFeatherState,
+    RuntimeGradientStop, RuntimeImportedViewModelInstanceContext, RuntimeOwnedViewModelInstance,
+    RuntimePathCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind, RuntimeShapePaintState,
+    StateMachineInputKind, StateMachineInstance, TransformProperty,
+    runtime_data_context_lookup_reports,
 };
 use rive_schema::definition_by_name;
 use serde::Deserialize;
@@ -5283,17 +5284,25 @@ fn push_bindable_number_data_bind_context_with_converter_and_flags(
 }
 
 fn push_manifest_name_path_asset(bytes: &mut Vec<u8>, path_id: u32, name_id: u32, name: &[u8]) {
+    push_manifest_name_path_asset_entries(bytes, &[(path_id, name_id, name)]);
+}
+
+fn push_manifest_name_path_asset_entries(bytes: &mut Vec<u8>, entries: &[(u32, u32, &[u8])]) {
     let mut manifest_names = Vec::new();
-    push_var_uint(&mut manifest_names, 1);
-    push_var_uint(&mut manifest_names, u64::from(name_id));
-    push_var_uint(&mut manifest_names, name.len() as u64);
-    manifest_names.extend_from_slice(name);
+    push_var_uint(&mut manifest_names, entries.len() as u64);
+    for (_, name_id, name) in entries {
+        push_var_uint(&mut manifest_names, u64::from(*name_id));
+        push_var_uint(&mut manifest_names, name.len() as u64);
+        manifest_names.extend_from_slice(name);
+    }
 
     let mut manifest_paths = Vec::new();
-    push_var_uint(&mut manifest_paths, 1);
-    push_var_uint(&mut manifest_paths, u64::from(path_id));
-    push_var_uint(&mut manifest_paths, 1);
-    push_var_uint(&mut manifest_paths, u64::from(name_id));
+    push_var_uint(&mut manifest_paths, entries.len() as u64);
+    for (path_id, name_id, _) in entries {
+        push_var_uint(&mut manifest_paths, u64::from(*path_id));
+        push_var_uint(&mut manifest_paths, 1);
+        push_var_uint(&mut manifest_paths, u64::from(*name_id));
+    }
 
     let mut manifest_bytes = Vec::new();
     push_var_uint(&mut manifest_bytes, 0);
@@ -5307,6 +5316,52 @@ fn push_manifest_name_path_asset(bytes: &mut Vec<u8>, path_id: u32, name_id: u32
     push_object_with_properties(bytes, "FileAssetContents", |bytes| {
         push_bytes_property(bytes, "FileAssetContents", "bytes", &manifest_bytes);
     });
+}
+
+fn synthetic_data_context_nested_viewmodel_lookup(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyViewModel", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyViewModel", "name", "child");
+            push_uint_property(
+                bytes,
+                "ViewModelPropertyViewModel",
+                "viewModelReferenceId",
+                1,
+            );
+        });
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Child");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyNumber", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyNumber", "name", "amount");
+        });
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_manifest_name_path_asset_entries(bytes, &[(77, 7, b"child"), (78, 8, b"amount")]);
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "child-instance");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 1);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceNumber", "viewModelPropertyId", 0);
+            push_f32_property(bytes, "ViewModelInstanceNumber", "propertyValue", 42.0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root-instance");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceViewModel", |bytes| {
+            push_uint_property(
+                bytes,
+                "ViewModelInstanceViewModel",
+                "viewModelPropertyId",
+                0,
+            );
+            push_uint_property(bytes, "ViewModelInstanceViewModel", "propertyValue", 0);
+        });
+    })
 }
 
 fn synthetic_state_machine_default_viewmodel_boolean_to_number_converter_blend_state(
@@ -11263,6 +11318,35 @@ fn read_rust_graph_instance_from_bytes(
     });
 
     (runtime, graph, instance)
+}
+
+#[test]
+fn data_context_file_backed_lookup_reports_match_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "data-context-nested-viewmodel-lookup";
+    let bytes = synthetic_data_context_nested_viewmodel_lookup(89601);
+    let args = vec!["--data-context-lookups".to_owned()];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let rust = read_runtime_file(&bytes).unwrap_or_else(|err| {
+        panic!("failed to import {label}: {err:#}");
+    });
+
+    let cpp_reports = cpp
+        .data_context_lookups
+        .iter()
+        .filter(|lookup| data_context_lookup_kind_in_scope(&lookup.kind))
+        .map(comparable_data_context_lookup_from_cpp)
+        .collect::<Vec<_>>();
+    let rust_reports = runtime_data_context_lookup_reports(&rust)
+        .iter()
+        .map(comparable_data_context_lookup_from_runtime)
+        .collect::<Vec<_>>();
+
+    assert_eq!(cpp_reports, rust_reports, "{label} lookup report mismatch");
 }
 
 #[test]
@@ -48210,6 +48294,126 @@ fn compare_optional_f32(
 #[derive(Debug, Deserialize)]
 struct CppProbeFile {
     artboards: Vec<CppArtboard>,
+    #[serde(default, rename = "dataContextLookups")]
+    data_context_lookups: Vec<CppDataContextLookup>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct CppDataContextLookup {
+    kind: String,
+    #[serde(rename = "currentViewModelIndex")]
+    current_view_model_index: usize,
+    #[serde(rename = "currentInstanceIndex")]
+    current_instance_index: usize,
+    #[serde(rename = "parentViewModelIndex")]
+    parent_view_model_index: Option<usize>,
+    #[serde(rename = "parentInstanceIndex")]
+    parent_instance_index: Option<usize>,
+    path: Vec<u32>,
+    value: Option<CppDataContextValueRef>,
+    instance: Option<CppDataContextInstanceRef>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+struct CppDataContextValueRef {
+    #[serde(rename = "viewModelIndex")]
+    view_model_index: usize,
+    #[serde(rename = "instanceIndex")]
+    instance_index: usize,
+    #[serde(rename = "valueIndex")]
+    value_index: usize,
+    #[serde(rename = "coreType")]
+    core_type: u32,
+    #[serde(rename = "viewModelPropertyId")]
+    view_model_property_id: u32,
+    name: String,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+struct CppDataContextInstanceRef {
+    #[serde(rename = "viewModelIndex")]
+    view_model_index: usize,
+    #[serde(rename = "instanceIndex")]
+    instance_index: usize,
+    #[serde(rename = "coreType")]
+    core_type: u32,
+    name: String,
+    #[serde(rename = "viewModelId")]
+    view_model_id: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ComparableDataContextLookup {
+    kind: String,
+    current_view_model_index: usize,
+    current_instance_index: usize,
+    parent_view_model_index: Option<usize>,
+    parent_instance_index: Option<usize>,
+    path: Vec<u32>,
+    value: Option<CppDataContextValueRef>,
+    instance: Option<CppDataContextInstanceRef>,
+}
+
+fn comparable_data_context_lookup_from_cpp(
+    lookup: &CppDataContextLookup,
+) -> ComparableDataContextLookup {
+    ComparableDataContextLookup {
+        kind: lookup.kind.clone(),
+        current_view_model_index: lookup.current_view_model_index,
+        current_instance_index: lookup.current_instance_index,
+        parent_view_model_index: lookup.parent_view_model_index,
+        parent_instance_index: lookup.parent_instance_index,
+        path: lookup.path.clone(),
+        value: lookup.value.clone(),
+        instance: lookup.instance.clone(),
+    }
+}
+
+fn comparable_data_context_lookup_from_runtime(
+    lookup: &RuntimeDataContextLookupReport,
+) -> ComparableDataContextLookup {
+    ComparableDataContextLookup {
+        kind: runtime_data_context_lookup_kind_name(lookup.kind).to_owned(),
+        current_view_model_index: lookup.current_view_model_index,
+        current_instance_index: lookup.current_instance_index,
+        parent_view_model_index: lookup.parent_view_model_index,
+        parent_instance_index: lookup.parent_instance_index,
+        path: lookup.path.clone(),
+        value: lookup.value.as_ref().map(|value| CppDataContextValueRef {
+            view_model_index: value.view_model_index,
+            instance_index: value.instance_index,
+            value_index: value.value_index,
+            core_type: value.core_type,
+            view_model_property_id: value.view_model_property_id,
+            name: value.name.clone(),
+        }),
+        instance: lookup
+            .instance
+            .as_ref()
+            .map(|instance| CppDataContextInstanceRef {
+                view_model_index: instance.view_model_index,
+                instance_index: instance.instance_index,
+                core_type: instance.core_type,
+                name: instance.name.clone(),
+                view_model_id: instance.view_model_id,
+            }),
+    }
+}
+
+fn runtime_data_context_lookup_kind_name(kind: RuntimeDataContextLookupKind) -> &'static str {
+    match kind {
+        RuntimeDataContextLookupKind::AbsoluteInstance => "absoluteInstance",
+        RuntimeDataContextLookupKind::AbsoluteProperty => "absoluteProperty",
+        RuntimeDataContextLookupKind::RelativeProperty => "relativeProperty",
+        RuntimeDataContextLookupKind::RelativeInstance => "relativeInstance",
+    }
+}
+
+fn data_context_lookup_kind_in_scope(kind: &str) -> bool {
+    matches!(
+        kind,
+        "absoluteInstance" | "absoluteProperty" | "relativeProperty" | "relativeInstance"
+    )
 }
 
 #[derive(Debug, Deserialize)]

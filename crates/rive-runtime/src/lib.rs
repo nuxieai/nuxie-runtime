@@ -1,5 +1,8 @@
 use anyhow::{Context, Result};
-use rive_binary::{RuntimeFile, RuntimeImportStatus, RuntimeObject};
+use rive_binary::{
+    RuntimeFile, RuntimeImportStatus, RuntimeObject, RuntimeViewModel, RuntimeViewModelInstance,
+    RuntimeViewModelInstanceReference,
+};
 use rive_graph::{
     ArtboardGraph, ClippingShapeNode, ComponentNode, DrawableOrderKind, FeatherNode,
     GradientStopNode, ParametricPathNode, PathComposerNode, PathComposerPathNode, PathGeometryNode,
@@ -23752,6 +23755,345 @@ pub struct UpdateComponentsReport {
     pub steps: usize,
     pub updated_locals: Vec<usize>,
     pub max_steps_reached: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeDataContextLookupReport {
+    pub kind: RuntimeDataContextLookupKind,
+    pub current_view_model_index: usize,
+    pub current_instance_index: usize,
+    pub parent_view_model_index: Option<usize>,
+    pub parent_instance_index: Option<usize>,
+    pub path: Vec<u32>,
+    pub value: Option<RuntimeDataContextValueRef>,
+    pub instance: Option<RuntimeDataContextInstanceRef>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeDataContextLookupKind {
+    AbsoluteInstance,
+    AbsoluteProperty,
+    RelativeProperty,
+    RelativeInstance,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeDataContextValueRef {
+    pub view_model_index: usize,
+    pub instance_index: usize,
+    pub value_index: usize,
+    pub core_type: u32,
+    pub view_model_property_id: u32,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeDataContextInstanceRef {
+    pub view_model_index: usize,
+    pub instance_index: usize,
+    pub core_type: u32,
+    pub name: String,
+    pub view_model_id: u32,
+}
+
+pub fn runtime_data_context_lookup_reports(
+    file: &RuntimeFile,
+) -> Vec<RuntimeDataContextLookupReport> {
+    let view_models = file.view_models();
+    let manifest_name_ids = runtime_data_context_manifest_name_ids(file);
+    let mut reports = Vec::new();
+
+    for (view_model_index, view_model) in view_models.iter().enumerate() {
+        for (instance_index, instance) in view_model.instances.iter().enumerate() {
+            let root = instance.object;
+            let absolute_path = vec![runtime_object_u32_property(root, "viewModelId")];
+            collect_runtime_data_context_absolute_lookups(
+                file,
+                &view_models,
+                &mut reports,
+                root,
+                view_model_index,
+                instance_index,
+                instance,
+                absolute_path,
+                0,
+            );
+            collect_runtime_data_context_relative_lookups(
+                file,
+                &view_models,
+                &manifest_name_ids,
+                &mut reports,
+                root,
+                view_model_index,
+                instance_index,
+                instance,
+                Vec::new(),
+                0,
+            );
+        }
+    }
+
+    reports
+}
+
+fn collect_runtime_data_context_absolute_lookups<'a>(
+    file: &'a RuntimeFile,
+    view_models: &[RuntimeViewModel<'a>],
+    reports: &mut Vec<RuntimeDataContextLookupReport>,
+    root: &'a RuntimeObject,
+    root_view_model_index: usize,
+    root_instance_index: usize,
+    instance: &RuntimeViewModelInstance<'a>,
+    path: Vec<u32>,
+    depth: usize,
+) {
+    if depth > 8 {
+        return;
+    }
+
+    reports.push(RuntimeDataContextLookupReport {
+        kind: RuntimeDataContextLookupKind::AbsoluteInstance,
+        current_view_model_index: root_view_model_index,
+        current_instance_index: root_instance_index,
+        parent_view_model_index: None,
+        parent_instance_index: None,
+        path: path.clone(),
+        value: None,
+        instance: file
+            .data_context_view_model_instance_for_instance(root, &path)
+            .and_then(|reference| runtime_data_context_instance_ref(view_models, reference)),
+    });
+
+    for value in &instance.values {
+        let mut value_path = path.clone();
+        value_path.push(runtime_object_u32_property(
+            value.object,
+            "viewModelPropertyId",
+        ));
+        reports.push(RuntimeDataContextLookupReport {
+            kind: RuntimeDataContextLookupKind::AbsoluteProperty,
+            current_view_model_index: root_view_model_index,
+            current_instance_index: root_instance_index,
+            parent_view_model_index: None,
+            parent_instance_index: None,
+            path: value_path.clone(),
+            value: file
+                .data_context_view_model_property_for_instance(root, &value_path)
+                .and_then(|value| runtime_data_context_value_ref(file, view_models, value)),
+            instance: None,
+        });
+
+        if value.object.type_name != "ViewModelInstanceViewModel" {
+            continue;
+        }
+        let Some(reference) = file.referenced_view_model_instance_for_value_object(value.object)
+        else {
+            continue;
+        };
+        reports.push(RuntimeDataContextLookupReport {
+            kind: RuntimeDataContextLookupKind::AbsoluteInstance,
+            current_view_model_index: root_view_model_index,
+            current_instance_index: root_instance_index,
+            parent_view_model_index: None,
+            parent_instance_index: None,
+            path: value_path.clone(),
+            value: None,
+            instance: file
+                .data_context_view_model_instance_for_instance(root, &value_path)
+                .and_then(|reference| runtime_data_context_instance_ref(view_models, reference)),
+        });
+
+        if let Some(referenced_instance) = runtime_view_model_instance_from_reference(
+            view_models,
+            reference.view_model_index,
+            reference.instance_index,
+        ) {
+            collect_runtime_data_context_absolute_lookups(
+                file,
+                view_models,
+                reports,
+                root,
+                root_view_model_index,
+                root_instance_index,
+                referenced_instance,
+                value_path,
+                depth + 1,
+            );
+        }
+    }
+}
+
+fn collect_runtime_data_context_relative_lookups<'a>(
+    file: &'a RuntimeFile,
+    view_models: &[RuntimeViewModel<'a>],
+    manifest_name_ids: &[(Vec<u8>, u32)],
+    reports: &mut Vec<RuntimeDataContextLookupReport>,
+    root: &'a RuntimeObject,
+    root_view_model_index: usize,
+    root_instance_index: usize,
+    instance: &RuntimeViewModelInstance<'a>,
+    path: Vec<u32>,
+    depth: usize,
+) {
+    if depth > 8 || manifest_name_ids.is_empty() {
+        return;
+    }
+
+    for value in &instance.values {
+        let Some(name) = file.view_model_instance_value_name_for_object(value.object) else {
+            continue;
+        };
+        let Some(name_id) = runtime_data_context_name_id(manifest_name_ids, name.as_bytes()) else {
+            continue;
+        };
+
+        let mut value_path = path.clone();
+        value_path.push(name_id);
+        reports.push(RuntimeDataContextLookupReport {
+            kind: RuntimeDataContextLookupKind::RelativeProperty,
+            current_view_model_index: root_view_model_index,
+            current_instance_index: root_instance_index,
+            parent_view_model_index: None,
+            parent_instance_index: None,
+            path: value_path.clone(),
+            value: file
+                .data_context_relative_view_model_property_for_instance(root, &value_path)
+                .and_then(|value| runtime_data_context_value_ref(file, view_models, value)),
+            instance: None,
+        });
+
+        if value.object.type_name != "ViewModelInstanceViewModel" {
+            continue;
+        }
+        let Some(reference) = file.referenced_view_model_instance_for_value_object(value.object)
+        else {
+            continue;
+        };
+        reports.push(RuntimeDataContextLookupReport {
+            kind: RuntimeDataContextLookupKind::RelativeInstance,
+            current_view_model_index: root_view_model_index,
+            current_instance_index: root_instance_index,
+            parent_view_model_index: None,
+            parent_instance_index: None,
+            path: value_path.clone(),
+            value: None,
+            instance: file
+                .data_context_relative_view_model_instance_for_instance(root, &value_path)
+                .and_then(|reference| runtime_data_context_instance_ref(view_models, reference)),
+        });
+
+        if let Some(referenced_instance) = runtime_view_model_instance_from_reference(
+            view_models,
+            reference.view_model_index,
+            reference.instance_index,
+        ) {
+            collect_runtime_data_context_relative_lookups(
+                file,
+                view_models,
+                manifest_name_ids,
+                reports,
+                root,
+                root_view_model_index,
+                root_instance_index,
+                referenced_instance,
+                value_path,
+                depth + 1,
+            );
+        }
+    }
+}
+
+fn runtime_data_context_manifest_name_ids(file: &RuntimeFile) -> Vec<(Vec<u8>, u32)> {
+    file.manifest()
+        .map(|manifest| {
+            manifest
+                .names
+                .iter()
+                .filter_map(|(id, name)| {
+                    u32::try_from(*id)
+                        .ok()
+                        .map(|id| (name.as_bytes().to_vec(), id))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn runtime_data_context_name_id(names: &[(Vec<u8>, u32)], name: &[u8]) -> Option<u32> {
+    names
+        .iter()
+        .find_map(|(candidate, id)| (candidate.as_slice() == name).then_some(*id))
+}
+
+fn runtime_view_model_instance_from_reference<'models, 'file>(
+    view_models: &'models [RuntimeViewModel<'file>],
+    view_model_index: usize,
+    instance_index: usize,
+) -> Option<&'models RuntimeViewModelInstance<'file>> {
+    view_models
+        .get(view_model_index)?
+        .instances
+        .get(instance_index)
+}
+
+fn runtime_data_context_value_ref(
+    file: &RuntimeFile,
+    view_models: &[RuntimeViewModel<'_>],
+    value: &RuntimeObject,
+) -> Option<RuntimeDataContextValueRef> {
+    for (view_model_index, view_model) in view_models.iter().enumerate() {
+        for (instance_index, instance) in view_model.instances.iter().enumerate() {
+            for (value_index, candidate) in instance.values.iter().enumerate() {
+                if candidate.object.id != value.id {
+                    continue;
+                }
+                return Some(RuntimeDataContextValueRef {
+                    view_model_index,
+                    instance_index,
+                    value_index,
+                    core_type: u32::from(value.type_key),
+                    view_model_property_id: runtime_object_u32_property(
+                        value,
+                        "viewModelPropertyId",
+                    ),
+                    name: file
+                        .view_model_instance_value_name_for_object(value)
+                        .unwrap_or_default()
+                        .to_owned(),
+                });
+            }
+        }
+    }
+
+    None
+}
+
+fn runtime_data_context_instance_ref(
+    view_models: &[RuntimeViewModel<'_>],
+    reference: RuntimeViewModelInstanceReference<'_>,
+) -> Option<RuntimeDataContextInstanceRef> {
+    let instance = view_models
+        .get(reference.view_model_index)?
+        .instances
+        .get(reference.instance_index)?;
+    Some(RuntimeDataContextInstanceRef {
+        view_model_index: reference.view_model_index,
+        instance_index: reference.instance_index,
+        core_type: u32::from(instance.object.type_key),
+        name: instance
+            .object
+            .string_property("name")
+            .unwrap_or_default()
+            .to_owned(),
+        view_model_id: runtime_object_u32_property(instance.object, "viewModelId"),
+    })
+}
+
+fn runtime_object_u32_property(object: &RuntimeObject, property: &str) -> u32 {
+    object
+        .uint_property(property)
+        .and_then(|value| u32::try_from(value).ok())
+        .unwrap_or_default()
 }
 
 impl RuntimeComponent {

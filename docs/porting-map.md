@@ -1836,7 +1836,9 @@ mirrors it through
 `StateMachineInstance::update_data_binds_apply_target_to_source`, and the
 tests verify that edited bindable targets are written or reverse-converted
 into the default view-model source before source-to-target reapplication
-leaves the target at the edited value. The contracts are
+leaves the target at the edited value. The first same-path ordinary
+`ToTarget` observer scheduling slice now also pins C++'s public-update
+preserve-then-next-advance ordering. The contracts are
 `docs/prototypes/data-binding-graph-number-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-operation-value-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-operation-value-group-public-update-target-to-source-runtime-contract.md`,
@@ -1846,12 +1848,13 @@ leaves the target at the edited value. The contracts are
 `docs/prototypes/data-binding-graph-system-operation-value-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-operation-viewmodel-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-formula-public-update-target-to-source-runtime-contract.md`,
+`docs/prototypes/data-binding-graph-public-update-observer-preservation-runtime-contract.md`,
 and
 `docs/prototypes/data-binding-graph-interpolator-public-update-target-to-source-runtime-contract.md`.
 Public-update coverage for other converter families, broader mixed/stateful
-groups, full dirty-list scheduler parity including neighboring ordinary
-`ToTarget` bind refresh, imported/owned contexts, pending add/remove behavior,
-re-entry protection,
+groups, full dirty-list scheduler parity beyond the first same-path ordinary
+`ToTarget` observer ordering case, imported/owned contexts, pending add/remove
+behavior, re-entry protection,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
 

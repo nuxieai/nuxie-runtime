@@ -3043,6 +3043,7 @@ enum RuntimeDataBindGraphApplyPhase {
     BeforeStatefulAdvance,
     AfterStatefulAdvance { elapsed_positive: bool },
     Immediate,
+    PublicUpdate,
 }
 
 #[derive(Debug, Clone)]
@@ -4584,6 +4585,7 @@ impl RuntimeDataBindGraph {
             return false;
         }
         let mut updates = Vec::<(Vec<u32>, f32)>::new();
+        let mut applied_target_to_source = false;
 
         for binding in self.default_view_model_bindings.clone() {
             let Some(target) = self.targets.get(binding.target.0) else {
@@ -4615,6 +4617,10 @@ impl RuntimeDataBindGraph {
             let Some(value) = source.number_target_to_source_value(value) else {
                 continue;
             };
+            if include_deferred_main_to_target {
+                applied_target_to_source = true;
+                source.source_to_target_dirty_after_target_to_source = true;
+            }
             updates.push((source.path.clone(), value));
         }
 
@@ -4658,10 +4664,10 @@ impl RuntimeDataBindGraph {
             }
         }
 
-        if changed {
+        if changed || applied_target_to_source {
             self.mark_default_view_model_bindings_dirty();
         }
-        changed
+        changed || applied_target_to_source
     }
 
     fn apply_default_view_model_symbol_list_index_targets_to_sources(
@@ -5201,6 +5207,12 @@ impl RuntimeDataBindGraph {
             {
                 continue;
             }
+            if matches!(phase, RuntimeDataBindGraphApplyPhase::PublicUpdate)
+                && !source.source_to_target_dirty_after_target_to_source
+            {
+                skipped_dirty_binding = true;
+                continue;
+            }
             if matches!(phase, RuntimeDataBindGraphApplyPhase::Immediate)
                 && source.source_to_target_dirty_after_immediate
             {
@@ -5362,7 +5374,8 @@ impl RuntimeDataBindGraphSourceNode {
             RuntimeDataBindGraphApplyPhase::AfterStatefulAdvance { elapsed_positive } => {
                 !elapsed_positive
             }
-            RuntimeDataBindGraphApplyPhase::Immediate => false,
+            RuntimeDataBindGraphApplyPhase::Immediate
+            | RuntimeDataBindGraphApplyPhase::PublicUpdate => false,
         }
     }
 
@@ -9669,7 +9682,10 @@ impl StateMachineInstance {
                 .apply_default_view_model_number_public_update_targets_to_sources(
                     &self.bindable_numbers,
                 );
-            self.apply_default_view_model_bindings(true, RuntimeDataBindGraphApplyPhase::Immediate);
+            self.apply_default_view_model_bindings(
+                true,
+                RuntimeDataBindGraphApplyPhase::PublicUpdate,
+            );
         }
         true
     }

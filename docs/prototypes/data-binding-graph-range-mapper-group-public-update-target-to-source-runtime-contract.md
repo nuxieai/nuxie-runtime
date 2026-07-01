@@ -32,7 +32,10 @@ source-to-target conversion during the same update.
 
 ## Out Of Scope
 
-- Neighboring ordinary `ToTarget` bind refresh during the same public update.
+- Neighboring ordinary `ToTarget` bind scheduling beyond the mutating-bind
+  slice; the first same-path observer preservation/follow-up-advance behavior
+  is covered by
+  `docs/prototypes/data-binding-graph-public-update-observer-preservation-runtime-contract.md`.
 - Full C++ dirty-list scheduling, observer-list parity, persisting-list
   ordering, pending add/remove behavior, and re-entry protection.
 - Stateful `DataConverterInterpolator` children or mixed stateless/stateful

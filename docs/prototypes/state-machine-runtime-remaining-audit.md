@@ -485,8 +485,14 @@ slice.
   `updateDataBinds(true)` target-to-source contract for main-`ToTarget |
   TwoWay` number binds. The public update applies C++ reverse group order for
   the mutating bind, writes the source, then reapplies grouped
-  source-to-target during the same update. Neighboring ordinary `ToTarget`
-  bind refresh remains a separate dirty-list scheduler slice.
+  source-to-target during the same update. Broader neighboring ordinary
+  `ToTarget` dirty-list scheduling remains a separate slice.
+- Public-update same-path observer preservation slice: the first neighboring
+  ordinary `ToTarget` number observer now matches C++ ordering for public
+  `updateDataBinds(true)`. The mutating grouped bind writes the source and
+  reapplies itself during the public update, while the observer reports the
+  new source value, preserves its previous target value for that action, and
+  applies the new source on the next normal state-machine advance.
 - Range-mapper group target-to-source slice: the first direct
   `DataConverterGroup` containing a `DataConverterRangeMapper` now covers a
   main-`ToSource | TwoWay` number bind. The group runs

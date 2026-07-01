@@ -485,6 +485,13 @@ slice.
   manual bindable target edit, then normal state-machine advancement reapplies
   the unchanged source through forward group conversion with the same child
   state tree.
+- Stateful interpolator converter-group main-to-source target-to-source slice:
+  the admitted `DataConverterOperationValue -> DataConverterInterpolator`
+  group now follows C++ explicit data-context behavior for warmed
+  main-`ToSource | TwoWay` number targets. Forward group conversion runs before
+  the source write, then the same pass refreshes the target through reverse
+  group conversion with the same child state tree even when the source value is
+  unchanged.
 - First deterministic `DataConverterFormula` graph-owned converter execution
   slice: default-context number sources feeding number targets can now evaluate
   imported formula output queues made from input, value, and operation tokens,

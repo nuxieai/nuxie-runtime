@@ -1632,6 +1632,19 @@ for stateful groups, broader dirty queues, relative/parent/nested lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 
+Current #12 update: the admitted stateful `DataConverterGroup` path now also
+covers main-`ToSource | TwoWay` target-to-source behavior for warmed number
+targets. Explicit data-context advancement runs the edited target through
+forward `DataConverterOperationValue -> DataConverterInterpolator` group order,
+then refreshes the visible target during the same pass through reverse group
+order with the same child state tree, even when the grouped source value is
+unchanged. The contract is
+`docs/prototypes/data-binding-graph-interpolator-converter-group-main-to-source-target-to-source-runtime-contract.md`.
+Fresh/unwarmed stateful-group target edits, broader stateful group shapes,
+color interpolation targets, broader dirty queues, relative/parent/nested
+lookup, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
+
 Current #12 update: the first deterministic `DataConverterFormula` runtime
 execution slice now admits default-context number sources feeding
 `BindablePropertyNumber.propertyValue` targets. Runtime formula descriptors are

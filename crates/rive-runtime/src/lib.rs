@@ -4622,7 +4622,8 @@ impl RuntimeDataBindGraph {
                 && matches!(
                     source.converter.as_ref(),
                     Some(
-                        RuntimeDataBindGraphConverter::Interpolator { .. }
+                        RuntimeDataBindGraphConverter::Group(_)
+                            | RuntimeDataBindGraphConverter::Interpolator { .. }
                             | RuntimeDataBindGraphConverter::ListToLength
                     )
                 )

@@ -5052,6 +5052,17 @@ impl RuntimeOwnedViewModelAssetSourceHandle {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeOwnedViewModelArtboardSourceHandle {
+    property_index: usize,
+}
+
+impl RuntimeOwnedViewModelArtboardSourceHandle {
+    pub fn property_index(&self) -> usize {
+        self.property_index
+    }
+}
+
 #[derive(Debug, Clone)]
 struct RuntimeOwnedViewModelNumber {
     property_index: usize,
@@ -8051,6 +8062,25 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         };
         self.set_artboard_by_property_index(property_index, value)
+    }
+
+    pub fn artboard_source_handle_by_property_name(
+        &self,
+        property_name: &str,
+    ) -> Option<RuntimeOwnedViewModelArtboardSourceHandle> {
+        let property_index = self.property_index_by_name(property_name)?;
+        self.artboards
+            .iter()
+            .any(|artboard| artboard.property_index == property_index)
+            .then_some(RuntimeOwnedViewModelArtboardSourceHandle { property_index })
+    }
+
+    pub fn set_artboard_by_source_handle(
+        &mut self,
+        handle: &RuntimeOwnedViewModelArtboardSourceHandle,
+        value: u64,
+    ) -> bool {
+        self.set_artboard_by_property_index(handle.property_index, value)
     }
 
     pub fn set_artboard_by_property_name_path(&mut self, property_path: &str, value: u64) -> bool {

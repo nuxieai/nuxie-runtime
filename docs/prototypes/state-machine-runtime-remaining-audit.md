@@ -1218,6 +1218,15 @@ slice.
   records imported boolean snapshots per referenced view-model instance for
   read-only graph binding. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-boolean-runtime-contract.md`.
+- Owned view-model imported-intermediate boolean name-path mutation unsupported
+  boundary: replacing a generated root child with an imported child by
+  instance index still lets the graph read `[child, enabled]`, but attempting
+  `ViewModelInstanceRuntime::propertyBoolean("child/enabled")->value(...)`
+  from the owned root leaves the imported child's existing boolean selected in
+  C++. Rust keeps
+  `set_boolean_by_property_name_path("child/enabled", value)` generated-only
+  and returns `false` once `child` is imported. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-boolean-name-path-unsupported-runtime-contract.md`.
 - Owned view-model imported-intermediate string source slice:
   replacing a generated root child with an imported child by instance index
   lets `RuntimeOwnedViewModelInstance` resolve `[child, label]` through the

@@ -3550,6 +3550,27 @@ impl RuntimeImportedViewModelInstanceContext {
         ) else {
             return false;
         };
+        self.set_artboard_by_resolved_property_path(file, path, value)
+    }
+
+    pub fn set_artboard_by_property_name_path(
+        &mut self,
+        file: &RuntimeFile,
+        property_path: &str,
+        value: u64,
+    ) -> bool {
+        if property_path.contains('/') {
+            return false;
+        }
+        self.set_artboard_by_property_name(file, property_path, value)
+    }
+
+    fn set_artboard_by_resolved_property_path(
+        &mut self,
+        file: &RuntimeFile,
+        path: Vec<u32>,
+        value: u64,
+    ) -> bool {
         let Some(view_model) = file.view_model(self.view_model_index) else {
             return false;
         };

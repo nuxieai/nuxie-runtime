@@ -1486,6 +1486,14 @@ slice.
   properties. The C++ probe proves two authored state machines bound through
   the same imported context keep the original asset source. The contract is
   `docs/prototypes/data-binding-graph-imported-viewmodel-nested-asset-name-path-unsupported-runtime-contract.md`.
+- Imported nested artboard property-name path boundary:
+  `RuntimeImportedViewModelInstanceContext::set_artboard_by_property_name_path`
+  returns `false` for a slash-separated path such as `child/scene`, matching
+  the C++ probe's root `ViewModelInstance::propertyValue(name)` artboard
+  lookup, which does not resolve slash paths even after completing view-model
+  properties. The C++ probe proves two authored state machines bound through
+  the same imported context keep the original artboard source. The contract is
+  `docs/prototypes/data-binding-graph-imported-viewmodel-nested-artboard-name-path-unsupported-runtime-contract.md`.
 - Shared imported boolean source mutation slice:
   `RuntimeImportedViewModelInstanceContext` now also owns boolean source
   overrides for one file-backed imported view-model instance. Mutating a

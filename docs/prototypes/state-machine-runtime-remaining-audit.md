@@ -1249,6 +1249,14 @@ slice.
   records imported color snapshots per referenced view-model instance for
   read-only graph binding. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-color-runtime-contract.md`.
+- Owned view-model imported-intermediate color name-path mutation unsupported
+  boundary: replacing a generated root child with an imported child by
+  instance index still lets the graph read `[child, tint]`, but attempting
+  `ViewModelInstanceRuntime::propertyColor("child/tint")->value(...)` from the
+  owned root leaves the imported child's existing color selected in C++. Rust
+  keeps `set_color_by_property_name_path("child/tint", value)` generated-only
+  and returns `false` once `child` is imported. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-color-name-path-unsupported-runtime-contract.md`.
 - Owned view-model imported-intermediate enum source slice:
   replacing a generated root child with an imported child by instance index
   lets `RuntimeOwnedViewModelInstance` resolve `[child, choice]` through the

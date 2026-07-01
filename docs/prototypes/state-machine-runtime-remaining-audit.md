@@ -1000,6 +1000,12 @@ slice.
   value `0.0`. A C++ probe matrix uses non-zero imported bindable target
   defaults to prove each fallback write is observable through an existing
   blend-state consumer.
+- Deterministic `DataConverterFormula` function-token slice:
+  default-context number sources feeding number targets now execute
+  `FormulaTokenFunction` output-queue tokens for deterministic function types,
+  using the C++ formula argument counts exposed by `rive-binary`. Random
+  function tokens remain outside the graph until a random-source state contract
+  exists.
 - First graph-owned target-to-source slice: direct default-context number
   sources feeding number targets now honor `ToSource | TwoWay` target mutation
   on explicit data-context advance. A C++ probe uses two binds to the same
@@ -2385,10 +2391,11 @@ slice.
   data-converter-interpolator number smoothing plus grouped
   operation-value-to-interpolator number smoothing, deterministic formula
   number/symbol-list-index-to-number conversion plus graph-represented
-  non-number fallbacks and the first operation-value-to-formula public-update
-  group, concrete operation pass-through, non-scripting scripted converter
-  pass-through, broader dirty-list target scheduling, data-binding update
-  queues, full artboard component-list item instancing, map-rule-driven child
+  non-number fallbacks, deterministic direct formula functions, and the first
+  operation-value-to-formula public-update group, concrete operation
+  pass-through, non-scripting scripted converter pass-through, broader
+  dirty-list target scheduling, data-binding update queues, full artboard
+  component-list item instancing, map-rule-driven child
   creation, list layout/virtualization, remaining generated-list reverse
   converters, live relative/name data-bind wiring beyond the read-only
   file-backed lookup report, remaining converter name paths beyond the direct

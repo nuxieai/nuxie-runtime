@@ -4676,7 +4676,13 @@ enum RuntimeDataBindGraphConverter {
 enum RuntimeDataBindGraphFormulaToken {
     Input,
     Value(f32),
-    Operation { operation_type: u64 },
+    Operation {
+        operation_type: u64,
+    },
+    Function {
+        function_type: u64,
+        arguments_count: usize,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -14441,6 +14447,17 @@ fn runtime_data_bind_graph_convert_formula(
                     ));
                 }
             }
+            RuntimeDataBindGraphFormulaToken::Function {
+                function_type,
+                arguments_count,
+            } => {
+                let value = runtime_data_bind_graph_apply_formula_function(
+                    &mut stack,
+                    *function_type,
+                    *arguments_count,
+                );
+                stack.push(value);
+            }
         }
     }
     if stack.len() == 1 {
@@ -14460,6 +14477,127 @@ fn runtime_data_bind_graph_apply_formula_operation(
         2 => left * right,
         3 => left / right,
         4 => runtime_data_bind_graph_positive_mod(left, right),
+        _ => 0.0,
+    }
+}
+
+fn runtime_data_bind_graph_apply_formula_function(
+    stack: &mut Vec<f32>,
+    function_type: u64,
+    total_arguments: usize,
+) -> f32 {
+    let mut function_arguments = Vec::new();
+    for _ in 0..total_arguments {
+        if let Some(function_argument) = stack.pop() {
+            function_arguments.push(function_argument);
+        }
+    }
+
+    match function_type {
+        0 => {
+            if function_arguments.is_empty() {
+                0.0
+            } else {
+                let mut min_value = function_arguments[0];
+                for value in function_arguments.iter().skip(1) {
+                    if *value < min_value {
+                        min_value = *value;
+                    }
+                }
+                min_value
+            }
+        }
+        1 => {
+            if function_arguments.is_empty() {
+                0.0
+            } else {
+                let mut max_value = function_arguments[0];
+                for value in function_arguments.iter().skip(1) {
+                    if *value > max_value {
+                        max_value = *value;
+                    }
+                }
+                max_value
+            }
+        }
+        2 => function_arguments
+            .last()
+            .copied()
+            .map(f32::round)
+            .unwrap_or(0.0),
+        3 => function_arguments
+            .last()
+            .copied()
+            .map(f32::ceil)
+            .unwrap_or(0.0),
+        4 => function_arguments
+            .last()
+            .copied()
+            .map(f32::floor)
+            .unwrap_or(0.0),
+        5 => function_arguments
+            .last()
+            .copied()
+            .map(f32::sqrt)
+            .unwrap_or(0.0),
+        6 => {
+            if function_arguments.len() > 1 {
+                let exponent = function_arguments[function_arguments.len() - 2];
+                let x = function_arguments[function_arguments.len() - 1];
+                x.powf(exponent)
+            } else {
+                0.0
+            }
+        }
+        7 => function_arguments
+            .last()
+            .copied()
+            .map(f32::exp)
+            .unwrap_or(0.0),
+        8 => function_arguments
+            .last()
+            .copied()
+            .map(f32::ln)
+            .unwrap_or(0.0),
+        9 => function_arguments
+            .last()
+            .copied()
+            .map(f32::cos)
+            .unwrap_or(0.0),
+        10 => function_arguments
+            .last()
+            .copied()
+            .map(f32::sin)
+            .unwrap_or(0.0),
+        11 => function_arguments
+            .last()
+            .copied()
+            .map(f32::tan)
+            .unwrap_or(0.0),
+        12 => function_arguments
+            .last()
+            .copied()
+            .map(f32::acos)
+            .unwrap_or(0.0),
+        13 => function_arguments
+            .last()
+            .copied()
+            .map(f32::asin)
+            .unwrap_or(0.0),
+        14 => function_arguments
+            .last()
+            .copied()
+            .map(f32::atan)
+            .unwrap_or(0.0),
+        15 => {
+            if function_arguments.len() > 1 {
+                let argument1 = function_arguments[function_arguments.len() - 1];
+                let argument2 = function_arguments[function_arguments.len() - 2];
+                argument1.atan2(argument2)
+            } else {
+                0.0
+            }
+        }
         _ => 0.0,
     }
 }
@@ -23274,15 +23412,28 @@ fn runtime_data_bind_graph_formula_converter(
     converter: &RuntimeObject,
 ) -> RuntimeDataBindGraphConverter {
     let mut tokens = Vec::new();
-    for token in file.data_converter_formula_tokens_for_object(converter) {
-        match token.type_name {
+    for token in file.data_converter_formula_output_tokens_for_object(converter) {
+        match token.object.type_name {
             "FormulaTokenInput" => tokens.push(RuntimeDataBindGraphFormulaToken::Input),
             "FormulaTokenValue" => tokens.push(RuntimeDataBindGraphFormulaToken::Value(
-                token.double_property("operationValue").unwrap_or(1.0),
+                token
+                    .object
+                    .double_property("operationValue")
+                    .unwrap_or(1.0),
             )),
             "FormulaTokenOperation" => {
                 tokens.push(RuntimeDataBindGraphFormulaToken::Operation {
-                    operation_type: token.uint_property("operationType").unwrap_or(0),
+                    operation_type: token.object.uint_property("operationType").unwrap_or(0),
+                });
+            }
+            "FormulaTokenFunction" => {
+                let function_type = token.object.uint_property("functionType").unwrap_or(0);
+                if function_type == 16 {
+                    return RuntimeDataBindGraphConverter::Unsupported;
+                }
+                tokens.push(RuntimeDataBindGraphFormulaToken::Function {
+                    function_type,
+                    arguments_count: token.arguments_count,
                 });
             }
             _ => return RuntimeDataBindGraphConverter::Unsupported,

@@ -2088,6 +2088,13 @@ impl RuntimeFile {
         self.cpp_data_converter_formula_tokens(data_converter_index)
     }
 
+    pub fn data_converter_formula_output_tokens(
+        &self,
+        data_converter_index: usize,
+    ) -> Vec<RuntimeFormulaOutputToken<'_>> {
+        self.cpp_data_converter_formula_output_tokens(data_converter_index)
+    }
+
     pub fn data_converter_formula_tokens_for_object(
         &self,
         data_converter: &RuntimeObject,
@@ -2101,6 +2108,21 @@ impl RuntimeFile {
         };
 
         self.cpp_data_converter_formula_tokens(index)
+    }
+
+    pub fn data_converter_formula_output_tokens_for_object(
+        &self,
+        data_converter: &RuntimeObject,
+    ) -> Vec<RuntimeFormulaOutputToken<'_>> {
+        let Some(index) = self
+            .data_converters()
+            .into_iter()
+            .position(|candidate| candidate.id == data_converter.id)
+        else {
+            return Vec::new();
+        };
+
+        self.cpp_data_converter_formula_output_tokens(index)
     }
 
     pub fn resolved_view_model_for_number_to_list_converter(
@@ -7740,9 +7762,9 @@ pub struct RuntimeDataConverterGroupItem<'a> {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct RuntimeFormulaOutputToken<'a> {
-    object: &'a RuntimeObject,
-    arguments_count: usize,
+pub struct RuntimeFormulaOutputToken<'a> {
+    pub object: &'a RuntimeObject,
+    pub arguments_count: usize,
 }
 
 impl<'a> RuntimeFormulaOutputToken<'a> {

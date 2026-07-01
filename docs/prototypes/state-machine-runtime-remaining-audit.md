@@ -2021,10 +2021,11 @@ slice.
 - Owned string source handle slice:
   `RuntimeOwnedViewModelInstance` can now resolve a root string property name
   into `RuntimeOwnedViewModelStringSourceHandle` and mutate owned raw string
-  storage through that handle before binding. Slash-path lookup remains
-  unresolved. Nested/relative/parent lookup remains a follow-up slice. The C++
-  probe compares the handle write against the existing owned-string runtime
-  context command. The contract is
+  storage through that handle before binding. Root-name handle lookup remains
+  separate from slash-path lookup. Nested string paths are covered separately;
+  other nested/relative/parent lookup remains a follow-up slice. The C++ probe
+  compares the handle write against the existing owned-string runtime context
+  command. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-string-source-handle-runtime-contract.md`.
 - Owned color source handle slice:
   `RuntimeOwnedViewModelInstance` can now resolve a root color property name
@@ -2153,6 +2154,15 @@ slice.
   `ViewModelInstanceRuntime::propertyString("child/label")->value(...)`. The
   contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-nested-string-name-path-runtime-contract.md`.
+- Owned generated nested string source-handle slice:
+  generated owned view-model children can now expose a stable public string
+  source handle. `RuntimeOwnedViewModelInstance` can resolve `child/label`
+  into `RuntimeOwnedViewModelStringSourceHandle` through
+  `string_source_handle_by_property_name_path`, and
+  `set_string_by_source_handle` mutates the same generated-child raw string
+  storage before binding. The C++ probe compares against the existing owned
+  string name-path command. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-nested-string-source-handle-runtime-contract.md`.
 - Owned generated nested color name-path slice:
   generated owned view-model children can store direct color values, and
   `RuntimeOwnedViewModelInstance::set_color_by_property_name_path` can mutate
@@ -2257,8 +2267,8 @@ slice.
   paths, and stable public handles beyond the admitted default nested-number/
   boolean/string/color/enum/symbol-list-index/asset/artboard/trigger/list/view-model
   handles plus default/imported/owned root source handles and owned
-  nested-number/boolean handles, especially remaining nested/relative/parent
-  handles that update or expose cached source indexes.
+  nested-number/boolean/string handles, especially remaining
+  nested/relative/parent handles that update or expose cached source indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
 - Live view-model APIs and data-binding propagation governed by

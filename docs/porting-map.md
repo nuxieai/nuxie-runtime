@@ -4574,11 +4574,11 @@ storage before binding. The C++ probe compares the handle mutation against
 verifies the existing state-machine advance and component update reports. The
 contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-nested-boolean-source-handle-runtime-contract.md`.
-Other nested scalar source handles beyond number/boolean,
-imported-intermediate nested scalar paths, imported-instance mutation sharing,
-stable public object handles, reverse propagation, broader update queues,
-relative/parent lookup, listener-owned data binding, and nested artboard
-propagation remain follow-up `#12` slices.
+Other nested scalar source handles beyond number/boolean, imported-intermediate
+nested scalar paths, imported-instance mutation sharing, stable public object
+handles, reverse propagation, broader update queues, relative/parent lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
 
 Current #12 update: owned generated nested string paths now match the
 number/boolean nested pattern. Rust stores direct string values on generated
@@ -4589,11 +4589,22 @@ context. The C++ probe uses
 `ViewModelInstanceRuntime::propertyString("child/label")->value(...)`. The
 contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-nested-string-name-path-runtime-contract.md`.
-Other nested scalar kinds, imported-intermediate nested scalar paths,
-imported-instance mutation sharing, stable public object handles, reverse
-propagation, broader update queues, relative/parent/nested lookup,
-listener-owned data binding, and nested artboard propagation remain follow-up
-`#12` slices.
+
+Current #12 update: owned generated nested string paths now have a stable
+public nested source handle. `RuntimeOwnedViewModelInstance` can resolve
+`child/label` into `RuntimeOwnedViewModelStringSourceHandle` through
+`string_source_handle_by_property_name_path`, and
+`set_string_by_source_handle` writes through the same generated-child raw
+string storage before binding. The C++ probe compares the handle mutation
+against `ViewModelInstanceRuntime::propertyString("child/label")->value(...)`
+and verifies the existing state-machine advance and component update reports.
+The contract is
+`docs/prototypes/data-binding-graph-owned-viewmodel-nested-string-source-handle-runtime-contract.md`.
+Other nested scalar source handles beyond number/boolean/string,
+imported-intermediate nested scalar paths, imported-instance mutation sharing,
+stable public object handles, reverse propagation, broader update queues,
+relative/parent lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
 
 Current #12 update: owned generated nested color paths now match the
 number/boolean/string nested pattern. Rust stores direct color values on

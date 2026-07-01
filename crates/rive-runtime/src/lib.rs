@@ -3408,6 +3408,38 @@ impl RuntimeImportedViewModelInstanceContext {
         self.trigger_overrides.insert(path, value);
         true
     }
+
+    pub fn set_list_item_count_by_property_name(
+        &mut self,
+        file: &RuntimeFile,
+        property_name: &str,
+        item_count: usize,
+    ) -> bool {
+        let Some(path) = runtime_imported_view_model_list_property_path_for_name(
+            file,
+            self.view_model_index,
+            property_name,
+        ) else {
+            return false;
+        };
+        let Some(view_model) = file.view_model(self.view_model_index) else {
+            return false;
+        };
+        let Some(instance) = view_model.instances.into_iter().nth(self.instance_index) else {
+            return false;
+        };
+        let current = self.list_overrides.get(&path).copied().or_else(|| {
+            let source =
+                file.data_context_view_model_property_for_instance(instance.object, &path)?;
+            file.view_model_instance_list_size_for_object(source)
+        });
+        if current == Some(item_count) {
+            return false;
+        }
+
+        self.list_overrides.insert(path, item_count);
+        true
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -4514,6 +4546,19 @@ fn runtime_imported_view_model_trigger_property_path_for_name(
         view_model_index,
         property_name,
         "ViewModelPropertyTrigger",
+    )
+}
+
+fn runtime_imported_view_model_list_property_path_for_name(
+    file: &RuntimeFile,
+    view_model_index: usize,
+    property_name: &str,
+) -> Option<Vec<u32>> {
+    runtime_imported_view_model_property_path_for_name(
+        file,
+        view_model_index,
+        property_name,
+        "ViewModelPropertyList",
     )
 }
 

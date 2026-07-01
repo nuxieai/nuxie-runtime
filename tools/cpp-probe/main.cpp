@@ -358,6 +358,7 @@ enum class RuntimeStateMachineActionKind
     SetViewModelInstanceSourceTrigger,
     SetViewModelInstanceSourceTriggerByName,
     SetViewModelInstanceSourceList,
+    SetViewModelInstanceSourceListByName,
     RelinkDefaultViewModelSourceViewModel,
     RelinkViewModelInstanceSourceViewModel,
     RelinkViewModelInstanceSourceViewModelByNamePath,
@@ -2907,6 +2908,75 @@ apply_runtime_state_machine_advances(rive::File* file,
                          ++itemIndex)
                     {
                         runtime.addInstance(itemRuntime.get());
+                    }
+                }
+            }
+            continue;
+        }
+        if (action.kind ==
+            RuntimeStateMachineActionKind::SetViewModelInstanceSourceListByName)
+        {
+            auto viewModel =
+                file != nullptr && action.viewModelIndex < file->viewModelCount()
+                    ? file->viewModel(action.viewModelIndex)
+                    : nullptr;
+            auto viewModelInstance =
+                viewModel != nullptr &&
+                        action.viewModelInstanceIndex <
+                            viewModel->instanceCount()
+                    ? viewModel->instance(action.viewModelInstanceIndex)
+                    : nullptr;
+            if (viewModelInstance != nullptr)
+            {
+                auto setListCount =
+                    [&](rive::ViewModelInstanceListRuntime* list)
+                {
+                    list->removeAllInstances();
+                    auto itemInstance = rive::make_rcp<rive::ViewModelInstance>();
+                    auto itemRuntime =
+                        rive::make_rcp<rive::ViewModelInstanceRuntime>(
+                            itemInstance);
+                    for (uint32_t itemIndex = 0; itemIndex < action.uintValue;
+                         ++itemIndex)
+                    {
+                        list->addInstance(itemRuntime.get());
+                    }
+                };
+                rive::ViewModelInstanceRuntime runtime(
+                    rive::ref_rcp(viewModelInstance));
+                auto list = runtime.propertyList(action.stringValue);
+                if (list != nullptr)
+                {
+                    setListCount(list);
+                }
+                else
+                {
+                    auto source = viewModelInstance->propertyValue(
+                        action.stringValue);
+                    if (source == nullptr)
+                    {
+                        auto properties = viewModel->properties();
+                        for (size_t propertyIndex = 0;
+                             propertyIndex < properties.size();
+                             propertyIndex++)
+                        {
+                            auto property = properties[propertyIndex];
+                            if (property == nullptr ||
+                                property->name() != action.stringValue)
+                            {
+                                continue;
+                            }
+                            source = viewModelInstance->propertyValue(
+                                static_cast<uint32_t>(propertyIndex));
+                            break;
+                        }
+                    }
+                    if (source != nullptr &&
+                        source->is<rive::ViewModelInstanceList>())
+                    {
+                        rive::ViewModelInstanceListRuntime listRuntime(
+                            source->as<rive::ViewModelInstanceList>());
+                        setListCount(&listRuntime);
                     }
                 }
             }
@@ -12079,6 +12149,35 @@ int main(int argc, const char* argv[])
             action.seconds = 0.0f;
             action.boolValue = false;
             action.numberValue = 0.0f;
+            action.uintValue =
+                static_cast<uint32_t>(std::strtoull(argv[++i], nullptr, 10));
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
+        if (is_arg(argv[i],
+                   "--runtime-set-view-model-instance-source-list-by-name"))
+        {
+            if (i + 5 >= argc)
+            {
+                std::cerr << "--runtime-set-view-model-instance-source-list-by-name requires stateMachineIndex viewModelIndex instanceIndex propertyName value\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind =
+                RuntimeStateMachineActionKind::SetViewModelInstanceSourceListByName;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.viewModelIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.viewModelInstanceIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            action.stringValue = argv[++i];
             action.uintValue =
                 static_cast<uint32_t>(std::strtoull(argv[++i], nullptr, 10));
             options.runtimeStateMachineActions.push_back(action);

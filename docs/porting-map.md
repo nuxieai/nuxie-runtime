@@ -2635,6 +2635,19 @@ state machine through existing `BindablePropertyList` source-size and target
 reports. The contract is
 `docs/prototypes/data-binding-graph-imported-viewmodel-list-shared-mutation-runtime-contract.md`.
 
+Current #12 update: imported view-model list sources now have the root
+property-name mutation API. `RuntimeImportedViewModelInstanceContext::
+set_list_item_count_by_property_name` resolves a root `ViewModelPropertyList`
+name against the file-backed imported view model, records the existing list
+item-count override by resolved source path, and lets an observing state
+machine bound through the same context see the list size through existing
+`BindablePropertyList` reports. The C++ probe adds
+`--runtime-set-view-model-instance-source-list-by-name`, resolves the root
+imported list by name, clears and repopulates it with blank items, and compares
+the observing state machine through the existing list report surface. The
+contract is
+`docs/prototypes/data-binding-graph-imported-viewmodel-list-name-runtime-contract.md`.
+
 Current #12 update: default view-model list sources now have the same direct
 source mutation seam as the default scalar source family. Mutating a default
 `ViewModelInstanceList` source by state-machine data-bind index updates the
@@ -2647,7 +2660,7 @@ Imported-instance mutation beyond shared view-model pointer, number, boolean,
 string, color, enum, symbol-list-index, asset, artboard, trigger, and list
 contexts,
 remaining property-name APIs beyond imported view-model pointer and root
-number/boolean/string/color/enum/symbol-list-index/asset/artboard/trigger sources and owned generated pointer paths,
+number/boolean/string/color/enum/symbol-list-index/asset/artboard/trigger/list sources and owned generated pointer paths,
 stable public object handles, reverse propagation, broader update queues,
 relative/parent/nested lookup, listener-owned data binding, and nested
 artboard propagation remain follow-up `#12` slices.

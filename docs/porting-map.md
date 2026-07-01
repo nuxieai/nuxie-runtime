@@ -3754,12 +3754,12 @@ with the same admitted post-bind behavior. Trigger binding/source-count report
 parity, listener notification, and event dispatch remain out of scope. The
 contract is
 `docs/prototypes/data-binding-graph-imported-viewmodel-trigger-source-handle-runtime-contract.md`.
-Nested property-name paths for list/view-model sources, stable public object
+Nested property-name paths for list sources, stable public object
 handles beyond the first imported number, boolean, string, color, enum,
-symbol-list-index, asset, artboard, trigger, and list source handles, reverse
-propagation, broader update queues, relative/parent/nested lookup,
-listener-owned data binding, and nested artboard propagation remain follow-up
-`#12` slices.
+symbol-list-index, asset, artboard, trigger, list, and view-model source
+handles, reverse propagation, broader update queues, relative/parent/nested
+lookup, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
 
 Current #12 update: imported view-model list sources now have the nested
 property-name path boundary pinned. The C++ probe path
@@ -3797,9 +3797,23 @@ slash path after completing view-model properties, matching
 `ViewModelInstanceRuntime::replaceViewModel("child/grandchild", value)`. The
 contract is
 `docs/prototypes/data-binding-graph-imported-viewmodel-nested-viewmodel-name-path-runtime-contract.md`.
-Stable public object handles, reverse propagation, broader update queues,
-relative/parent/nested lookup, listener-owned data binding, and nested
-artboard propagation remain follow-up `#12` slices.
+
+Current #12 update: imported view-model pointer sources now have stable public
+source handles for both root and slash-separated view-model property paths.
+`RuntimeImportedViewModelInstanceContext` can resolve a root
+`ViewModelPropertyViewModel.name` or a nested path such as `child/grandchild`
+into `RuntimeImportedViewModelViewModelSourceHandle`, and
+`set_view_model_by_source_handle` writes through the existing resolved
+source-path view-model pointer override only when the handle belongs to the
+same imported view-model instance context. The C++ probe compares both root
+`current` and nested `child/grandchild` handle relinks against
+`--runtime-relink-view-model-instance-source-viewmodel-by-name-path` and
+verifies the existing view-model binding reports. The contract is
+`docs/prototypes/data-binding-graph-imported-viewmodel-viewmodel-source-handle-runtime-contract.md`.
+Stable public object handles beyond these imported source handles, reverse
+propagation, broader update queues, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
 
 Current #12 update: imported view-model boolean sources now match the shared
 scalar mutation pattern. `RuntimeImportedViewModelInstanceContext` records

@@ -3291,6 +3291,27 @@ impl RuntimeImportedViewModelListSourceHandle {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeImportedViewModelViewModelSourceHandle {
+    view_model_index: usize,
+    instance_index: usize,
+    path: Vec<u32>,
+}
+
+impl RuntimeImportedViewModelViewModelSourceHandle {
+    pub fn view_model_index(&self) -> usize {
+        self.view_model_index
+    }
+
+    pub fn instance_index(&self) -> usize {
+        self.instance_index
+    }
+
+    pub fn path(&self) -> &[u32] {
+        &self.path
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct RuntimeImportedViewModelInstanceContext {
     view_model_index: usize,
@@ -4316,6 +4337,54 @@ impl RuntimeImportedViewModelInstanceContext {
 
         self.list_overrides.insert(path, item_count);
         true
+    }
+
+    pub fn view_model_source_handle_by_property_name(
+        &self,
+        file: &RuntimeFile,
+        property_name: &str,
+    ) -> Option<RuntimeImportedViewModelViewModelSourceHandle> {
+        let path = runtime_imported_view_model_view_model_property_path_for_name(
+            file,
+            self.view_model_index,
+            property_name,
+        )?;
+        Some(RuntimeImportedViewModelViewModelSourceHandle {
+            view_model_index: self.view_model_index,
+            instance_index: self.instance_index,
+            path,
+        })
+    }
+
+    pub fn view_model_source_handle_by_property_name_path(
+        &self,
+        file: &RuntimeFile,
+        property_path: &str,
+    ) -> Option<RuntimeImportedViewModelViewModelSourceHandle> {
+        let path = runtime_imported_view_model_view_model_property_path_for_name_path(
+            file,
+            self.view_model_index,
+            property_path,
+        )?;
+        Some(RuntimeImportedViewModelViewModelSourceHandle {
+            view_model_index: self.view_model_index,
+            instance_index: self.instance_index,
+            path,
+        })
+    }
+
+    pub fn set_view_model_by_source_handle(
+        &mut self,
+        file: &RuntimeFile,
+        handle: &RuntimeImportedViewModelViewModelSourceHandle,
+        instance_index: usize,
+    ) -> bool {
+        if handle.view_model_index != self.view_model_index
+            || handle.instance_index != self.instance_index
+        {
+            return false;
+        }
+        self.set_view_model_by_resolved_property_path(file, handle.path.clone(), instance_index)
     }
 
     pub fn set_view_model_by_property_name(

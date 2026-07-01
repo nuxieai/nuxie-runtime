@@ -1615,6 +1615,19 @@ slice.
   `ViewModelInstanceRuntime::replaceViewModel("child/grandchild", value)` after
   completing view-model properties. The contract is
   `docs/prototypes/data-binding-graph-imported-viewmodel-nested-viewmodel-name-path-runtime-contract.md`.
+- Imported view-model pointer source handle slice:
+  `RuntimeImportedViewModelInstanceContext` can now resolve root and
+  slash-separated view-model pointer source paths into
+  `RuntimeImportedViewModelViewModelSourceHandle` and relink through that
+  handle only when it belongs to the same imported view-model instance
+  context. The C++ probe compares root `current` and nested
+  `child/grandchild` handle relinks against
+  `ViewModelInstanceRuntime::replaceViewModel(path, value)` through the
+  existing view-model binding report surface. This closes the imported
+  source-handle family for number, boolean, string, color, enum,
+  symbol-list-index, asset, artboard, trigger, list, and view-model pointer
+  sources. The contract is
+  `docs/prototypes/data-binding-graph-imported-viewmodel-viewmodel-source-handle-runtime-contract.md`.
 - Shared imported boolean source mutation slice:
   `RuntimeImportedViewModelInstanceContext` now also owns boolean source
   overrides for one file-backed imported view-model instance. Mutating a
@@ -1944,8 +1957,8 @@ slice.
   property-name APIs beyond imported view-model pointer and root
   number/boolean/string/color/enum/symbol-list-index/asset/artboard/trigger/list sources, owned generated view-model pointer
   paths, and stable public handles beyond the first imported number, boolean,
-  string, color, enum, symbol-list-index, asset, artboard, trigger, and list
-  source handles that update or expose cached source indexes.
+  string, color, enum, symbol-list-index, asset, artboard, trigger, list, and
+  view-model source handles that update or expose cached source indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
 - Live view-model APIs and data-binding propagation governed by

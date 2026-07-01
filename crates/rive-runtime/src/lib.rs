@@ -3253,6 +3253,7 @@ impl RuntimeDataBindGraphValue {
                     | Self::Color(_)
                     | Self::Enum(_)
                     | Self::SymbolListIndex(_)
+                    | Self::List { .. }
                     | Self::Asset(_)
                     | Self::Artboard(_)
                     | Self::Trigger(_)
@@ -3316,7 +3317,15 @@ impl RuntimeDataBindGraphValue {
                     .symbol_list_index_value_by_property_path(&property_path)
                     .map(Self::SymbolListIndex)
             }
-            Self::List { .. } => None,
+            Self::List { .. } => {
+                let property_path = path[1..]
+                    .iter()
+                    .map(|property_index| usize::try_from(*property_index).ok())
+                    .collect::<Option<Vec<_>>>()?;
+                context
+                    .list_item_count_by_property_path(&property_path)
+                    .map(|item_count| Self::List { item_count })
+            }
             Self::ListLength(_) => None,
             Self::Asset(_) => {
                 let property_path = path[1..]
@@ -3437,6 +3446,7 @@ pub struct RuntimeOwnedViewModelInstance {
     colors: Vec<RuntimeOwnedViewModelColor>,
     enums: Vec<RuntimeOwnedViewModelEnum>,
     symbol_list_indices: Vec<RuntimeOwnedViewModelSymbolListIndex>,
+    lists: Vec<RuntimeOwnedViewModelList>,
     assets: Vec<RuntimeOwnedViewModelAsset>,
     artboards: Vec<RuntimeOwnedViewModelArtboard>,
     triggers: Vec<RuntimeOwnedViewModelTrigger>,
@@ -3480,6 +3490,12 @@ struct RuntimeOwnedViewModelSymbolListIndex {
 }
 
 #[derive(Debug, Clone)]
+struct RuntimeOwnedViewModelList {
+    property_index: usize,
+    item_count: usize,
+}
+
+#[derive(Debug, Clone)]
 struct RuntimeOwnedViewModelAsset {
     property_index: usize,
     value: u64,
@@ -3509,6 +3525,7 @@ struct RuntimeOwnedViewModelViewModel {
     colors: Vec<RuntimeOwnedViewModelColor>,
     enums: Vec<RuntimeOwnedViewModelEnum>,
     symbol_list_indices: Vec<RuntimeOwnedViewModelSymbolListIndex>,
+    lists: Vec<RuntimeOwnedViewModelList>,
     assets: Vec<RuntimeOwnedViewModelAsset>,
     artboards: Vec<RuntimeOwnedViewModelArtboard>,
     triggers: Vec<RuntimeOwnedViewModelTrigger>,
@@ -3579,6 +3596,13 @@ impl RuntimeOwnedViewModelViewModel {
             .iter()
             .find(|symbol_list_index| symbol_list_index.property_index == property_index)
             .map(|symbol_list_index| symbol_list_index.value)
+    }
+
+    fn list_item_count_by_property_index(&self, property_index: usize) -> Option<usize> {
+        self.lists
+            .iter()
+            .find(|list| list.property_index == property_index)
+            .map(|list| list.item_count)
     }
 
     fn asset_value_by_property_index(&self, property_index: usize) -> Option<u64> {
@@ -3707,6 +3731,28 @@ impl RuntimeOwnedViewModelViewModel {
             return false;
         }
         symbol_list_index.value = value;
+        true
+    }
+
+    fn set_list_item_count_by_property_name(
+        &mut self,
+        property_name: &str,
+        item_count: usize,
+    ) -> bool {
+        let Some(property_index) = self.property_index_by_name(property_name) else {
+            return false;
+        };
+        let Some(list) = self
+            .lists
+            .iter_mut()
+            .find(|list| list.property_index == property_index)
+        else {
+            return false;
+        };
+        if list.item_count == item_count {
+            return false;
+        }
+        list.item_count = item_count;
         true
     }
 
@@ -3941,6 +3987,29 @@ fn runtime_owned_view_model_symbol_list_indices(
                         RuntimeOwnedViewModelSymbolListIndex {
                             property_index,
                             value: 0,
+                        },
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn runtime_owned_view_model_lists(
+    file: &RuntimeFile,
+    view_model_index: usize,
+) -> Vec<RuntimeOwnedViewModelList> {
+    file.view_model(view_model_index)
+        .map(|view_model| {
+            view_model
+                .properties
+                .into_iter()
+                .enumerate()
+                .filter_map(|(property_index, property)| {
+                    (property.type_name == "ViewModelPropertyList").then_some(
+                        RuntimeOwnedViewModelList {
+                            property_index,
+                            item_count: 0,
                         },
                     )
                 })
@@ -4249,6 +4318,9 @@ fn runtime_owned_view_model_property_children(
                         runtime_owned_view_model_symbol_list_indices(file, view_model_index)
                     })
                     .unwrap_or_default(),
+                lists: referenced_view_model_index
+                    .map(|view_model_index| runtime_owned_view_model_lists(file, view_model_index))
+                    .unwrap_or_default(),
                 assets: referenced_view_model_index
                     .map(|view_model_index| runtime_owned_view_model_assets(file, view_model_index))
                     .unwrap_or_default(),
@@ -4280,6 +4352,7 @@ impl RuntimeOwnedViewModelInstance {
         let mut colors = Vec::new();
         let mut enums = Vec::new();
         let mut symbol_list_indices = Vec::new();
+        let mut lists = Vec::new();
         let mut assets = Vec::new();
         let mut artboards = Vec::new();
         let mut triggers = Vec::new();
@@ -4321,6 +4394,10 @@ impl RuntimeOwnedViewModelInstance {
                         value: 0,
                     })
                 }
+                "ViewModelPropertyList" => lists.push(RuntimeOwnedViewModelList {
+                    property_index,
+                    item_count: 0,
+                }),
                 "ViewModelPropertyAsset" | "ViewModelPropertyAssetImage" => {
                     assets.push(RuntimeOwnedViewModelAsset {
                         property_index,
@@ -4417,6 +4494,11 @@ impl RuntimeOwnedViewModelInstance {
                                 )
                             })
                             .unwrap_or_default(),
+                        lists: referenced_view_model_index
+                            .map(|view_model_index| {
+                                runtime_owned_view_model_lists(file, view_model_index)
+                            })
+                            .unwrap_or_default(),
                         assets: referenced_view_model_index
                             .map(|view_model_index| {
                                 runtime_owned_view_model_assets(file, view_model_index)
@@ -4471,6 +4553,7 @@ impl RuntimeOwnedViewModelInstance {
             colors,
             enums,
             symbol_list_indices,
+            lists,
             assets,
             artboards,
             triggers,
@@ -4790,6 +4873,71 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         }
         view_model.set_symbol_list_index_by_property_name(symbol_list_index_name, value)
+    }
+
+    pub fn set_list_item_count_by_property_index(
+        &mut self,
+        property_index: usize,
+        item_count: usize,
+    ) -> bool {
+        let Some(list) = self
+            .lists
+            .iter_mut()
+            .find(|list| list.property_index == property_index)
+        else {
+            return false;
+        };
+        if list.item_count == item_count {
+            return false;
+        }
+        list.item_count = item_count;
+        true
+    }
+
+    pub fn set_list_item_count_by_property_name(
+        &mut self,
+        property_name: &str,
+        item_count: usize,
+    ) -> bool {
+        let Some(property_index) = self.property_index_by_name(property_name) else {
+            return false;
+        };
+        self.set_list_item_count_by_property_index(property_index, item_count)
+    }
+
+    pub fn set_list_item_count_by_property_name_path(
+        &mut self,
+        property_path: &str,
+        item_count: usize,
+    ) -> bool {
+        let property_path = property_path.split('/').collect::<Vec<_>>();
+        if property_path.is_empty() || property_path.iter().any(|segment| segment.is_empty()) {
+            return false;
+        }
+        self.set_list_item_count_by_property_names(&property_path, item_count)
+    }
+
+    pub fn set_list_item_count_by_property_names(
+        &mut self,
+        property_path: &[&str],
+        item_count: usize,
+    ) -> bool {
+        if property_path.len() == 1 {
+            return self.set_list_item_count_by_property_name(property_path[0], item_count);
+        }
+        let Some((list_name, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_names_mut(view_model_path) else {
+            return false;
+        };
+        if !matches!(
+            view_model.value,
+            RuntimeViewModelPointer::OwnedGenerated { .. }
+        ) {
+            return false;
+        }
+        view_model.set_list_item_count_by_property_name(list_name, item_count)
     }
 
     pub fn set_asset_by_property_index(&mut self, property_index: usize, value: u64) -> bool {
@@ -5189,6 +5337,28 @@ impl RuntimeOwnedViewModelInstance {
             return None;
         }
         view_model.symbol_list_index_value_by_property_index(*property_index)
+    }
+
+    fn list_item_count_by_property_index(&self, property_index: usize) -> Option<usize> {
+        self.lists
+            .iter()
+            .find(|list| list.property_index == property_index)
+            .map(|list| list.item_count)
+    }
+
+    fn list_item_count_by_property_path(&self, property_path: &[usize]) -> Option<usize> {
+        if property_path.len() == 1 {
+            return self.list_item_count_by_property_index(property_path[0]);
+        }
+        let (property_index, view_model_path) = property_path.split_last()?;
+        let view_model = self.view_model_by_property_path(view_model_path)?;
+        if !matches!(
+            view_model.value,
+            RuntimeViewModelPointer::OwnedGenerated { .. }
+        ) {
+            return None;
+        }
+        view_model.list_item_count_by_property_index(*property_index)
     }
 
     fn asset_value_by_property_index(&self, property_index: usize) -> Option<u64> {

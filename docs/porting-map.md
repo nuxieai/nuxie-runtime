@@ -2416,11 +2416,27 @@ context. The C++ probe resolves the parent view-model path with
 `ViewModelInstanceRuntime::propertyViewModel("child")` and mutates the child's
 `ViewModelInstanceTrigger` through `propertyValue`. The contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-nested-trigger-name-path-runtime-contract.md`.
-Trigger firing APIs, listener/callback dispatch, nested list and view-model
-value paths, imported-intermediate nested scalar paths, imported-instance
-mutation sharing, stable public object handles, reverse propagation, broader
-update queues, relative/parent/nested lookup, and nested artboard propagation
-remain follow-up `#12` slices.
+Trigger firing APIs, listener/callback dispatch, nested list item identity,
+view-model value paths, imported-intermediate nested scalar paths,
+imported-instance mutation sharing, stable public object handles, reverse
+propagation, broader update queues, relative/parent/nested lookup, and nested
+artboard propagation remain follow-up `#12` slices.
+
+Current #12 update: owned generated nested list paths now cover the direct
+list source fact needed by bindable-list parity. Rust stores only item counts
+on generated owned view-model children, exposes
+`set_list_item_count_by_property_name_path("child/items", count)`, and
+resolves `RuntimeDataBindGraphValue::List` source paths longer than the root
+shape when binding an owned context. The C++ probe resolves
+`ViewModelInstanceRuntime::propertyList("child/items")`, adds blank list item
+instances to set the observed size without creating item identity cycles, then
+compares the same bindable-list report surface. The contract is
+`docs/prototypes/data-binding-graph-owned-viewmodel-nested-list-name-path-runtime-contract.md`.
+List item identity, item-level view-model traversal, view-model value paths,
+imported-intermediate nested scalar paths, imported-instance mutation sharing,
+stable public object handles, reverse propagation, broader update queues,
+relative/parent/nested lookup, and nested artboard propagation remain
+follow-up `#12` slices.
 
 Current #12 update: state-machine `BindablePropertyList.propertyValue`
 targets now have a probe-backed target-to-source boundary. Rust exposes

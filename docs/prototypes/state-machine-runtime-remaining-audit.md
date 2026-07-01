@@ -854,6 +854,15 @@ slice.
   resolves `child` with `propertyViewModel` before mutating the child's
   `ViewModelInstanceTrigger` through `propertyValue`. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-nested-trigger-name-path-runtime-contract.md`.
+- Owned generated nested list name-path item-count slice:
+  generated owned view-model children can store direct list item counts, and
+  `RuntimeOwnedViewModelInstance::set_list_item_count_by_property_name_path`
+  can mutate paths such as `child/items` before binding. The graph resolves
+  matching nested `RuntimeDataBindGraphValue::List` source paths for owned
+  contexts, and the C++ probe resolves `child/items` with `propertyList`,
+  adding blank item instances to set the observed list size without admitting
+  item identity or item-level traversal. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-nested-list-name-path-runtime-contract.md`.
 - First `BindablePropertyList.propertyValue` target-to-source slice:
   state-machine list targets can be mutated by data-bind index, and explicit
   `advancedDataContext()` plus public `updateDataBinds(true)` consume the

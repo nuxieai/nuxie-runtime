@@ -164,6 +164,11 @@ slice.
   `DataConverterTrigger` forward conversion on default-context trigger
   source-to-target bindings, covered by a C++ probe through an existing
   transition-condition consumer.
+- Trigger public-update target-to-source slice: main-`ToTarget | TwoWay`
+  trigger binds now participate in public `updateDataBinds(true)` for direct
+  `DataConverterTrigger`; C++ inherited `reverseConvert` passes the edited
+  target value through to the source, then source-to-target reapplication
+  increments the bindable trigger target through `DataConverterTrigger::convert`.
 - First cross-type graph-owned converter execution slice:
   `DataConverterToNumber` forward conversion for default-context boolean
   sources feeding number targets, covered by a C++ probe through an existing
@@ -754,6 +759,11 @@ slice.
   inherited C++ base converter pass-through for a default-context number bind.
   Normal source-to-target application and public `updateDataBinds(true)`
   target-to-source application both leave the value unchanged, matching C++.
+- Trigger public-update target-to-source slice:
+  `DataConverterTrigger` now covers the public `updateDataBinds(true)`
+  target-to-source path for a default-context trigger bind. The C++ probe now
+  reports trigger binding source/target rows, and Rust mirrors inherited
+  `reverseConvert` pass-through plus same-update source-to-target increment.
 - First graph-owned view-model bindable slice: forward propagation for
   default-context `ViewModelInstanceViewModel.propertyValue` sources feeding
   `BindablePropertyViewModel.propertyValue` targets, covered by a C++ probe
@@ -1301,7 +1311,7 @@ slice.
   number/symbol-list-index-to-number conversion plus graph-represented
   non-number fallbacks and the first operation-value-to-formula public-update
   group, concrete operation pass-through, non-scripting scripted converter
-  pass-through,
+  pass-through, direct trigger public-update target-to-source,
   first direct number/boolean/string/color/enum/asset/artboard/symbol-list-index/trigger/view-model
   target-to-source propagation,
   first artboard list-consumer immediate bind report,

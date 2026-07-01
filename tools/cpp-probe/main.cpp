@@ -508,6 +508,15 @@ struct RuntimeStateMachineArtboardBindingReport
     uint32_t targetValue;
 };
 
+struct RuntimeStateMachineTriggerBindingReport
+{
+    size_t dataBindIndex;
+    bool hasSource;
+    uint32_t sourceValue;
+    bool hasTarget;
+    uint32_t targetValue;
+};
+
 struct RuntimeStateMachineListBindingReport
 {
     size_t dataBindIndex;
@@ -538,6 +547,7 @@ struct RuntimeStateMachineAdvanceReport
         symbolListIndexBindings;
     std::vector<RuntimeStateMachineAssetBindingReport> assetBindings;
     std::vector<RuntimeStateMachineArtboardBindingReport> artboardBindings;
+    std::vector<RuntimeStateMachineTriggerBindingReport> triggerBindings;
     std::vector<RuntimeStateMachineListBindingReport> listBindings;
 };
 
@@ -1803,6 +1813,80 @@ collect_artboard_binding_reports(rive::StateMachineInstance* stateMachine)
             report.hasTarget = true;
             report.targetValue =
                 bindableProperty->as<rive::BindablePropertyArtboard>()
+                    ->propertyValue();
+        }
+
+        reports.push_back(report);
+    }
+    return reports;
+}
+
+std::vector<RuntimeStateMachineTriggerBindingReport>
+collect_trigger_binding_reports(rive::StateMachineInstance* stateMachine)
+{
+    std::vector<RuntimeStateMachineTriggerBindingReport> reports;
+    if (stateMachine == nullptr)
+    {
+        return reports;
+    }
+    auto sourceStateMachine = stateMachine->stateMachine();
+    if (sourceStateMachine == nullptr)
+    {
+        return reports;
+    }
+
+    for (size_t dataBindIndex = 0;
+         dataBindIndex < sourceStateMachine->dataBindCount();
+         ++dataBindIndex)
+    {
+        auto dataBind = sourceStateMachine->dataBind(dataBindIndex);
+        auto target = dataBind == nullptr ? nullptr : dataBind->target();
+        if (target == nullptr || !target->is<rive::BindablePropertyTrigger>())
+        {
+            continue;
+        }
+
+        RuntimeStateMachineTriggerBindingReport report;
+        report.dataBindIndex = dataBindIndex;
+        report.hasSource = false;
+        report.sourceValue = 0;
+        report.hasTarget = false;
+        report.targetValue = 0;
+
+        auto bindableProperty = stateMachine->bindablePropertyInstance(
+            target->as<rive::BindablePropertyTrigger>());
+        auto flags = static_cast<rive::DataBindFlags>(dataBind->flags());
+        bool toSource =
+            (flags & rive::DataBindFlags::ToSource) ==
+            rive::DataBindFlags::ToSource;
+        auto liveDataBind =
+            bindableProperty == nullptr
+                ? nullptr
+                : (toSource ? stateMachine->bindableDataBindToSource(
+                                  bindableProperty)
+                            : stateMachine->bindableDataBindToTarget(
+                                  bindableProperty));
+
+        auto source = liveDataBind == nullptr ? nullptr : liveDataBind->source();
+        if (source == nullptr && dataBind->is<rive::DataBindContext>() &&
+            stateMachine->dataContext() != nullptr)
+        {
+            source = stateMachine->dataContext()->getViewModelProperty(
+                dataBind->as<rive::DataBindContext>()->sourcePathIds());
+        }
+        if (source != nullptr && source->is<rive::ViewModelInstanceTrigger>())
+        {
+            report.hasSource = true;
+            report.sourceValue =
+                source->as<rive::ViewModelInstanceTrigger>()->propertyValue();
+        }
+
+        if (bindableProperty != nullptr &&
+            bindableProperty->is<rive::BindablePropertyTrigger>())
+        {
+            report.hasTarget = true;
+            report.targetValue =
+                bindableProperty->as<rive::BindablePropertyTrigger>()
                     ->propertyValue();
         }
 
@@ -5064,6 +5148,8 @@ apply_runtime_state_machine_advances(rive::File* file,
         report.assetBindings = collect_asset_binding_reports(stateMachine.get());
         report.artboardBindings =
             collect_artboard_binding_reports(stateMachine.get());
+        report.triggerBindings =
+            collect_trigger_binding_reports(stateMachine.get());
         report.listBindings =
             collect_list_binding_reports(stateMachine.get());
         reports.push_back(report);
@@ -5348,6 +5434,35 @@ void write_runtime_state_machine_advance_reports(
                 out << ',';
             }
             const auto& binding = report.artboardBindings[j];
+            out << "{\"dataBindIndex\":" << binding.dataBindIndex;
+            out << ",\"sourceValue\":";
+            if (binding.hasSource)
+            {
+                out << binding.sourceValue;
+            }
+            else
+            {
+                out << "null";
+            }
+            out << ",\"targetValue\":";
+            if (binding.hasTarget)
+            {
+                out << binding.targetValue;
+            }
+            else
+            {
+                out << "null";
+            }
+            out << '}';
+        }
+        out << "],\"triggerBindings\":[";
+        for (size_t j = 0; j < report.triggerBindings.size(); ++j)
+        {
+            if (j != 0)
+            {
+                out << ',';
+            }
+            const auto& binding = report.triggerBindings[j];
             out << "{\"dataBindIndex\":" << binding.dataBindIndex;
             out << ",\"sourceValue\":";
             if (binding.hasSource)

@@ -25,10 +25,12 @@ converter parity gaps stay visible.
 ## Out Of Scope
 
 This slice does not add converter state, converter groups, formulas,
-interpolation/smoothing, reverse conversion, target-to-source propagation,
-trigger firing or listener dispatch semantics, dirty/update queues,
-converter lifecycle hooks, relative/parent paths, nested paths, listener-owned
-data binding, or nested artboard propagation.
+interpolation/smoothing, general target-to-source propagation, trigger firing
+or listener dispatch semantics, dirty/update queues, converter lifecycle hooks,
+relative/parent paths, nested paths, listener-owned data binding, or nested
+artboard propagation. Public `updateDataBinds(true)` reverse pass-through for
+`DataConverterTrigger` is covered separately by
+`docs/prototypes/data-binding-graph-trigger-public-update-target-to-source-runtime-contract.md`.
 
 ## Completion Checks
 

@@ -2213,8 +2213,8 @@ direct `DataConverterGroup<RangeMapper, OperationValue>`, direct
 direct deterministic `DataConverterFormula`, direct
 `DataConverterGroup<OperationValue, Formula>`, warmed direct
 `DataConverterInterpolator`, concrete `DataConverterOperation` pass-through,
-non-scripting `ScriptedDataConverter` pass-through, and direct
-`DataConverterToString` string binds.
+non-scripting `ScriptedDataConverter` pass-through, direct
+`DataConverterTrigger`, and direct `DataConverterToString` string binds.
 The C++ probe exposes `--runtime-update-state-machine-data-binds`, Rust
 mirrors it through
 `StateMachineInstance::update_data_binds_apply_target_to_source`, and the
@@ -2239,6 +2239,7 @@ preserve-then-next-advance ordering. The contracts are
 `docs/prototypes/data-binding-graph-formula-group-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-operation-pass-through-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-scripted-pass-through-runtime-contract.md`,
+`docs/prototypes/data-binding-graph-trigger-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-public-update-observer-preservation-runtime-contract.md`,
 and
 `docs/prototypes/data-binding-graph-interpolator-public-update-target-to-source-runtime-contract.md`.
@@ -2318,6 +2319,19 @@ Arithmetic operation-value/view-model behavior, operation converter groups
 beyond already admitted concrete group slices, full dirty-list scheduler
 parity, imported/owned contexts, pending add/remove behavior, re-entry
 protection, relative/parent/nested lookup, listener-owned data binding, and
+nested artboard propagation remain follow-up `#12` slices.
+
+Current #12 update: trigger public `updateDataBinds(true)` target-to-source
+behavior now has a narrow C++ parity slice. The C++ probe reports exact
+trigger binding source/target values, and Rust compares a main-`ToTarget |
+TwoWay` trigger bind with direct `DataConverterTrigger`: public update applies
+inherited base `reverseConvert` as target-to-source pass-through, mirrors the
+default trigger source, then reapplies `DataConverterTrigger::convert` so the
+bindable target receives the incremented trigger count. The contract is
+`docs/prototypes/data-binding-graph-trigger-public-update-target-to-source-runtime-contract.md`.
+Explicit `advancedDataContext()` trigger behavior, listener dispatch, trigger
+side effects, trigger converter groups, imported/owned contexts, broader
+update queues, relative/parent/nested lookup, listener-owned data binding, and
 nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: owned runtime view-model contexts now cover the first

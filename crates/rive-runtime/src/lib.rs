@@ -9007,6 +9007,21 @@ impl RuntimeDataBindGraph {
         Some(value)
     }
 
+    fn default_view_model_trigger_source_value_for_data_bind(
+        &self,
+        data_bind_index: usize,
+    ) -> Option<u64> {
+        let binding = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)?;
+        let source = self.sources.get(binding.source.0)?;
+        let RuntimeDataBindGraphValue::Trigger(value) = source.value else {
+            return None;
+        };
+        Some(value)
+    }
+
     fn number_target_global_id_for_data_bind(&self, data_bind_index: usize) -> Option<u32> {
         let target = self
             .default_view_model_bindings
@@ -9936,6 +9951,80 @@ impl RuntimeDataBindGraph {
         changed
     }
 
+    fn apply_default_view_model_trigger_public_update_targets_to_sources(
+        &mut self,
+        triggers: &[StateMachineBindableTriggerInstance],
+    ) -> bool {
+        if !self.default_view_model_source_context_bound() {
+            return false;
+        }
+
+        let mut updates = Vec::<(Vec<u32>, RuntimeDataBindGraphValue)>::new();
+        let mut applied_target_to_source = false;
+
+        for binding in self.default_view_model_bindings.clone() {
+            let Some(target) = self.targets.get(binding.target.0) else {
+                continue;
+            };
+            let RuntimeDataBindGraphTarget::Trigger { global_id } = target.target else {
+                continue;
+            };
+            let Some(source) = self.sources.get_mut(binding.source.0) else {
+                continue;
+            };
+            let target_to_source_dirty =
+                source.target_to_source_dirty || source.source_to_target_dirty_after_immediate;
+            if !target_to_source_dirty {
+                continue;
+            }
+            source.target_to_source_dirty = false;
+            source.source_to_target_dirty_after_immediate = false;
+            let Some(value) = triggers
+                .iter()
+                .find(|trigger| trigger.global_id == global_id)
+                .map(|trigger| trigger.value)
+            else {
+                continue;
+            };
+            let Some(value) = source.trigger_target_to_source_value(value) else {
+                continue;
+            };
+            applied_target_to_source = true;
+            source.source_to_target_dirty_after_target_to_source = true;
+            updates.push((source.path.clone(), value));
+        }
+
+        let mut changed = false;
+        for (path, value) in updates {
+            for source in &mut self.sources {
+                if !source.bound || source.path != path {
+                    continue;
+                }
+                let (
+                    RuntimeDataBindGraphValue::Trigger(source_value),
+                    RuntimeDataBindGraphValue::Trigger(default_value),
+                    RuntimeDataBindGraphValue::Trigger(value),
+                ) = (&mut source.value, &mut source.default_value, &value)
+                else {
+                    continue;
+                };
+                if *source_value != *value {
+                    *source_value = *value;
+                    changed = true;
+                }
+                if *default_value != *value {
+                    *default_value = *value;
+                    changed = true;
+                }
+            }
+        }
+
+        if changed || applied_target_to_source {
+            self.mark_default_view_model_bindings_dirty();
+        }
+        applied_target_to_source
+    }
+
     fn apply_default_view_model_view_model_targets_to_sources(
         &mut self,
         view_models: &[StateMachineBindableViewModelInstance],
@@ -10309,6 +10398,27 @@ impl RuntimeDataBindGraphSourceNode {
         self.applies_target_to_source()
             && self.converter.is_none()
             && matches!(self.value, RuntimeDataBindGraphValue::Trigger(_))
+    }
+
+    fn trigger_target_to_source_value(&mut self, value: u64) -> Option<RuntimeDataBindGraphValue> {
+        if !self.bound || !self.applies_target_to_source() {
+            return None;
+        }
+        let converted = match self.converter.as_ref() {
+            None => RuntimeDataBindGraphValue::Trigger(value),
+            Some(converter) if self.is_main_to_source() => self
+                .converter_state
+                .convert_value(converter, &RuntimeDataBindGraphValue::Trigger(value))?,
+            Some(converter) => self
+                .converter_state
+                .reverse_convert_value(converter, &RuntimeDataBindGraphValue::Trigger(value))?,
+        };
+        match (&self.value, converted) {
+            (RuntimeDataBindGraphValue::Trigger(_), RuntimeDataBindGraphValue::Trigger(value)) => {
+                Some(RuntimeDataBindGraphValue::Trigger(value))
+            }
+            _ => None,
+        }
     }
 
     fn supports_direct_view_model_target_to_source(&self) -> bool {
@@ -11132,6 +11242,11 @@ fn runtime_data_bind_graph_reverse_convert_value(
             RuntimeDataBindGraphValue::Boolean(value),
         ) => Some(RuntimeDataBindGraphValue::Boolean(!value)),
         (RuntimeDataBindGraphConverter::BooleanNegate, _) => None,
+        (
+            RuntimeDataBindGraphConverter::TriggerIncrement,
+            RuntimeDataBindGraphValue::Trigger(value),
+        ) => Some(RuntimeDataBindGraphValue::Trigger(*value)),
+        (RuntimeDataBindGraphConverter::TriggerIncrement, _) => None,
         (RuntimeDataBindGraphConverter::ToNumber, RuntimeDataBindGraphValue::Number(value)) => {
             Some(RuntimeDataBindGraphValue::Number(*value))
         }
@@ -14642,6 +14757,28 @@ impl StateMachineInstance {
             .map(|bindable_artboard| bindable_artboard.value)
     }
 
+    pub fn default_view_model_trigger_source_value_for_data_bind(
+        &self,
+        data_bind_index: usize,
+    ) -> Option<u64> {
+        self.data_bind_graph
+            .default_view_model_trigger_source_value_for_data_bind(data_bind_index)
+    }
+
+    pub fn bindable_trigger_value_for_data_bind(&self, data_bind_index: usize) -> Option<u64> {
+        if let Some(value) = self
+            .data_bind_graph
+            .default_view_model_trigger_target_global_id_for_data_bind(data_bind_index)
+            .and_then(|global_id| bindable_trigger_value(&self.bindable_triggers, global_id))
+        {
+            return Some(value);
+        }
+        self.bindable_triggers
+            .iter()
+            .find(|bindable_trigger| bindable_trigger.has_data_bind_index(data_bind_index))
+            .map(|bindable_trigger| bindable_trigger.value)
+    }
+
     pub fn set_default_view_model_number_source_for_data_bind(
         &mut self,
         data_bind_index: usize,
@@ -14965,6 +15102,32 @@ impl StateMachineInstance {
                 .find(|trigger| trigger.global_id == trigger_global_id)
         {
             trigger.set_value(value);
+        }
+    }
+
+    fn sync_default_view_model_trigger_mirrors_from_data_bind_graph(&mut self) {
+        let updates: Vec<(u32, u64)> = self
+            .bindable_triggers
+            .iter()
+            .filter_map(|bindable_trigger| {
+                if !matches!(
+                    bindable_trigger.source,
+                    RuntimeBindableTriggerSource::DefaultViewModelTrigger { .. }
+                ) {
+                    return None;
+                }
+                bindable_trigger
+                    .data_bind_indices
+                    .iter()
+                    .find_map(|data_bind_index| {
+                        self.data_bind_graph
+                            .default_view_model_trigger_source_value_for_data_bind(*data_bind_index)
+                    })
+                    .map(|value| (bindable_trigger.global_id, value))
+            })
+            .collect();
+        for (bindable_global_id, value) in updates {
+            self.set_default_view_model_trigger_target_mirror(bindable_global_id, value);
         }
     }
 
@@ -15514,10 +15677,15 @@ impl StateMachineInstance {
                 );
             self.data_bind_graph
                 .apply_default_view_model_list_public_update_targets_to_sources();
+            self.data_bind_graph
+                .apply_default_view_model_trigger_public_update_targets_to_sources(
+                    &self.bindable_triggers,
+                );
             self.apply_default_view_model_bindings(
                 true,
                 RuntimeDataBindGraphApplyPhase::PublicUpdate,
             );
+            self.sync_default_view_model_trigger_mirrors_from_data_bind_graph();
         }
         true
     }

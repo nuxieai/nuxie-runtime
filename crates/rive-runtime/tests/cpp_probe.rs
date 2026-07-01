@@ -8501,6 +8501,13 @@ fn synthetic_state_machine_default_viewmodel_trigger_condition_with_state_machin
 }
 
 fn synthetic_state_machine_default_viewmodel_trigger_converter_condition(file_id: u64) -> Vec<u8> {
+    synthetic_state_machine_default_viewmodel_trigger_converter_condition_with_flags(file_id, 0)
+}
+
+fn synthetic_state_machine_default_viewmodel_trigger_converter_condition_with_flags(
+    file_id: u64,
+    data_bind_flags: u64,
+) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "ViewModel", |bytes| {
             push_string_property(bytes, "ViewModel", "name", "Root");
@@ -8542,7 +8549,13 @@ fn synthetic_state_machine_default_viewmodel_trigger_converter_condition(file_id
         push_object_with_properties(bytes, "StateTransition", |bytes| {
             push_uint_property(bytes, "StateTransition", "stateToId", 3);
         });
-        push_bindable_trigger_value_data_bind_context_with_converter(bytes, 5, &[0, 0], Some(0));
+        push_bindable_trigger_value_data_bind_context_with_converter_and_flags(
+            bytes,
+            5,
+            &[0, 0],
+            Some(0),
+            data_bind_flags,
+        );
         push_object_with_properties(bytes, "TransitionViewModelCondition", |bytes| {
             push_uint_property(bytes, "TransitionViewModelCondition", "opValue", 1);
         });
@@ -28360,6 +28373,107 @@ fn state_machine_default_viewmodel_trigger_converter_matches_cpp_probe() {
 }
 
 #[test]
+fn trigger_converter_public_update_target_to_source_matches_cpp_probe() {
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_trigger_converter_public_update_target_to_source_cpp.riv";
+    let bytes = synthetic_state_machine_default_viewmodel_trigger_converter_condition_with_flags(
+        8642,
+        DATA_BIND_TWO_WAY,
+    );
+    let forced_value = 9_u64;
+    let args = [
+        "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-state-machine-bindable-integer".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        forced_value.to_string(),
+        "--runtime-update-state-machine-data-binds".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    let mut rust_reports = Vec::new();
+    assert!(
+        state_machine.bind_default_view_model_context(),
+        "{label} failed to bind default view-model context"
+    );
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    assert!(
+        state_machine.set_bindable_trigger_for_data_bind(0, forced_value),
+        "{label} failed to mutate bindable trigger"
+    );
+    assert!(
+        state_machine.update_data_binds_apply_target_to_source(),
+        "{label} failed to update data binds"
+    );
+    rust_reports.push((false, state_machine.clone()));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 1.0),
+        state_machine.clone(),
+    ));
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (step, (cpp_state_machine, (advanced, rust_state_machine))) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+        .enumerate()
+    {
+        let step_label = format!("{label} action {step}");
+        compare_state_machine_advance(
+            cpp_state_machine,
+            rust_state_machine,
+            *advanced,
+            &step_label,
+        );
+        compare_state_machine_trigger_binding(
+            cpp_state_machine,
+            rust_state_machine,
+            0,
+            &step_label,
+        );
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
 fn state_machine_external_viewmodel_trigger_bind_source_matches_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
@@ -34422,6 +34536,29 @@ fn compare_state_machine_artboard_binding(
     );
 }
 
+fn compare_state_machine_trigger_binding(
+    cpp: &CppRuntimeStateMachineAdvance,
+    rust: &StateMachineInstance,
+    data_bind_index: usize,
+    label: &str,
+) {
+    let binding = cpp
+        .trigger_bindings
+        .iter()
+        .find(|binding| binding.data_bind_index == data_bind_index)
+        .unwrap_or_else(|| panic!("missing C++ trigger binding {data_bind_index} for {label}"));
+    assert_eq!(
+        binding.source_value,
+        rust.default_view_model_trigger_source_value_for_data_bind(data_bind_index),
+        "{label} trigger binding {data_bind_index} sourceValue mismatch"
+    );
+    assert_eq!(
+        binding.target_value,
+        rust.bindable_trigger_value_for_data_bind(data_bind_index),
+        "{label} trigger binding {data_bind_index} targetValue mismatch"
+    );
+}
+
 fn compare_state_machine_list_binding(
     cpp: &CppRuntimeStateMachineAdvance,
     rust: &StateMachineInstance,
@@ -34974,6 +35111,8 @@ struct CppRuntimeStateMachineAdvance {
     asset_bindings: Vec<CppRuntimeStateMachineAssetBinding>,
     #[serde(default, rename = "artboardBindings")]
     artboard_bindings: Vec<CppRuntimeStateMachineArtboardBinding>,
+    #[serde(default, rename = "triggerBindings")]
+    trigger_bindings: Vec<CppRuntimeStateMachineTriggerBinding>,
     #[serde(default, rename = "listBindings")]
     list_bindings: Vec<CppRuntimeStateMachineListBinding>,
 }
@@ -35077,6 +35216,16 @@ struct CppRuntimeStateMachineAssetBinding {
 
 #[derive(Debug, Deserialize)]
 struct CppRuntimeStateMachineArtboardBinding {
+    #[serde(rename = "dataBindIndex")]
+    data_bind_index: usize,
+    #[serde(rename = "sourceValue")]
+    source_value: Option<u64>,
+    #[serde(rename = "targetValue")]
+    target_value: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppRuntimeStateMachineTriggerBinding {
     #[serde(rename = "dataBindIndex")]
     data_bind_index: usize,
     #[serde(rename = "sourceValue")]

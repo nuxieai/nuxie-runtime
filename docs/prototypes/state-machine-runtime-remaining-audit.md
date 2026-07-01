@@ -175,6 +175,10 @@ slice.
   `DataConverterTrigger`; C++ inherited `reverseConvert` passes the edited
   target value through to the source, then source-to-target reapplication
   increments the bindable trigger target through `DataConverterTrigger::convert`.
+- Trigger converter explicit target-to-source slice: main-`ToSource | TwoWay`
+  trigger binds now participate in explicit `advanceDataContext()` for direct
+  `DataConverterTrigger`; C++ main-to-source conversion increments the edited
+  bindable target before writing the default trigger source.
 - First cross-type graph-owned converter execution slice:
   `DataConverterToNumber` forward conversion for default-context boolean
   sources feeding number targets, covered by a C++ probe through an existing
@@ -770,6 +774,12 @@ slice.
   target-to-source path for a default-context trigger bind. The C++ probe now
   reports trigger binding source/target rows, and Rust mirrors inherited
   `reverseConvert` pass-through plus same-update source-to-target increment.
+- Trigger converter explicit target-to-source slice:
+  `DataConverterTrigger` now also covers explicit `advanceDataContext()`
+  target-to-source behavior for a main-`ToSource | TwoWay` default-context
+  trigger bind. Rust mirrors C++ main-to-source conversion of the edited
+  bindable target before writing the default trigger source, with trigger
+  binding reports compared after the explicit data-context actions.
 - Boolean public-update target-to-source slice:
   direct boolean and `DataConverterBooleanNegate` now cover public
   `updateDataBinds(true)` target-to-source behavior for default-context
@@ -1323,7 +1333,8 @@ slice.
   non-number fallbacks and the first operation-value-to-formula public-update
   group, concrete operation pass-through, non-scripting scripted converter
   pass-through, direct boolean/BooleanNegate public-update target-to-source,
-  direct trigger public-update target-to-source,
+  direct trigger public-update target-to-source, direct trigger converter
+  explicit target-to-source,
   first direct number/boolean/string/color/enum/asset/artboard/symbol-list-index/trigger/view-model
   target-to-source propagation,
   first artboard list-consumer immediate bind report,

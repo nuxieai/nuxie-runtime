@@ -31,7 +31,9 @@ trigger target-to-source behavior and trigger reset behavior stay unchanged.
 
 - Trigger listener dispatch, fire-trigger actions, audio/open-url/callback side
   effects, and event propagation.
-- Changing explicit `advancedDataContext()` target-to-source behavior.
+- Explicit `advancedDataContext()` target-to-source behavior for direct
+  `DataConverterTrigger`, covered separately by
+  `docs/prototypes/data-binding-graph-trigger-converter-target-to-source-runtime-contract.md`.
 - Trigger reset timing beyond preserving existing state-machine advance
   behavior.
 - Trigger converter groups, imported/owned contexts, relative/parent/nested

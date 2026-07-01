@@ -10018,14 +10018,17 @@ impl RuntimeDataBindGraph {
                 continue;
             }
             source.target_to_source_dirty = false;
-            if !source.bound || !source.supports_direct_trigger_target_to_source() {
-                continue;
-            }
             let Some(value) = triggers
                 .iter()
                 .find(|trigger| trigger.global_id == global_id)
                 .map(|trigger| trigger.value)
             else {
+                continue;
+            };
+            let Some(value) = source.trigger_target_to_source_value(value) else {
+                continue;
+            };
+            let RuntimeDataBindGraphValue::Trigger(value) = value else {
                 continue;
             };
             let RuntimeDataBindGraphValue::Trigger(source_value) = &mut source.value else {
@@ -10492,12 +10495,6 @@ impl RuntimeDataBindGraphSourceNode {
         self.applies_target_to_source()
             && self.converter.is_none()
             && matches!(self.value, RuntimeDataBindGraphValue::Artboard(_))
-    }
-
-    fn supports_direct_trigger_target_to_source(&self) -> bool {
-        self.applies_target_to_source()
-            && self.converter.is_none()
-            && matches!(self.value, RuntimeDataBindGraphValue::Trigger(_))
     }
 
     fn trigger_target_to_source_value(&mut self, value: u64) -> Option<RuntimeDataBindGraphValue> {

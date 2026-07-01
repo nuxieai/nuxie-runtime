@@ -33,6 +33,9 @@ sources.
 - Pure `ToSource` without `TwoWay`.
 - Reverse converter execution and converter groups in the target-to-source
   direction.
+- Direct `DataConverterTrigger` main-to-source conversion is covered
+  separately by
+  `docs/prototypes/data-binding-graph-trigger-converter-target-to-source-runtime-contract.md`.
 - Imported and owned view-model contexts.
 - Trigger listener dispatch, callback/event side effects, and listener-owned
   data binding.

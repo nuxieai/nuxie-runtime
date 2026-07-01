@@ -2344,10 +2344,25 @@ inherited base `reverseConvert` as target-to-source pass-through, mirrors the
 default trigger source, then reapplies `DataConverterTrigger::convert` so the
 bindable target receives the incremented trigger count. The contract is
 `docs/prototypes/data-binding-graph-trigger-public-update-target-to-source-runtime-contract.md`.
-Explicit `advancedDataContext()` trigger behavior, listener dispatch, trigger
-side effects, trigger converter groups, imported/owned contexts, broader
-update queues, relative/parent/nested lookup, listener-owned data binding, and
-nested artboard propagation remain follow-up `#12` slices.
+Bindable trigger reset after later state-machine advancement, listener
+dispatch, trigger side effects, trigger converter groups, imported/owned
+contexts, broader update queues, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
+
+Current #12 update: explicit `advancedDataContext()` trigger converter
+target-to-source behavior now has a narrow default-context parity slice. A
+main-`ToSource | TwoWay` trigger bind with direct `DataConverterTrigger`
+applies C++ main-to-source conversion to the edited bindable target before
+writing the default trigger source, and the C++ probe compares exact
+source/target trigger binding rows after the explicit data-context actions.
+The contract is
+`docs/prototypes/data-binding-graph-trigger-converter-target-to-source-runtime-contract.md`.
+Bindable trigger reset after later state-machine advancement, listener
+dispatch, trigger side effects, trigger converter groups, imported/owned
+contexts, broader update queues, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
 
 Current #12 update: owned runtime view-model contexts now cover the first
 live view-model pointer replacement path. `RuntimeOwnedViewModelInstance`

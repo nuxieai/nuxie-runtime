@@ -23773,8 +23773,11 @@ pub struct RuntimeDataContextLookupReport {
 pub enum RuntimeDataContextLookupKind {
     AbsoluteInstance,
     AbsoluteProperty,
+    PropertyFromPath,
     RelativeProperty,
     RelativeInstance,
+    AbsolutePropertyParentFallback,
+    RelativePropertyParentFallback,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -23818,6 +23821,17 @@ pub fn runtime_data_context_lookup_reports(
                 absolute_path,
                 0,
             );
+            collect_runtime_data_context_property_from_path_lookups(
+                file,
+                &view_models,
+                &mut reports,
+                root,
+                view_model_index,
+                instance_index,
+                instance,
+                Vec::new(),
+                0,
+            );
             collect_runtime_data_context_relative_lookups(
                 file,
                 &view_models,
@@ -23832,6 +23846,12 @@ pub fn runtime_data_context_lookup_reports(
             );
         }
     }
+    collect_runtime_data_context_parent_fallback_lookups(
+        file,
+        &view_models,
+        &manifest_name_ids,
+        &mut reports,
+    );
 
     reports
 }
@@ -23923,6 +23943,67 @@ fn collect_runtime_data_context_absolute_lookups<'a>(
     }
 }
 
+fn collect_runtime_data_context_property_from_path_lookups<'a>(
+    file: &'a RuntimeFile,
+    view_models: &[RuntimeViewModel<'a>],
+    reports: &mut Vec<RuntimeDataContextLookupReport>,
+    root: &'a RuntimeObject,
+    root_view_model_index: usize,
+    root_instance_index: usize,
+    instance: &RuntimeViewModelInstance<'a>,
+    path: Vec<u32>,
+    depth: usize,
+) {
+    if depth > 8 {
+        return;
+    }
+
+    for value in &instance.values {
+        let mut value_path = path.clone();
+        value_path.push(runtime_object_u32_property(
+            value.object,
+            "viewModelPropertyId",
+        ));
+        reports.push(RuntimeDataContextLookupReport {
+            kind: RuntimeDataContextLookupKind::PropertyFromPath,
+            current_view_model_index: root_view_model_index,
+            current_instance_index: root_instance_index,
+            parent_view_model_index: None,
+            parent_instance_index: None,
+            path: value_path.clone(),
+            value: file
+                .view_model_instance_property_from_path_for_object(root, &value_path)
+                .and_then(|value| runtime_data_context_value_ref(file, view_models, value)),
+            instance: None,
+        });
+
+        if value.object.type_name != "ViewModelInstanceViewModel" {
+            continue;
+        }
+        let Some(reference) = file.referenced_view_model_instance_for_value_object(value.object)
+        else {
+            continue;
+        };
+        if let Some(referenced_instance) = runtime_view_model_instance_from_reference(
+            view_models,
+            reference.view_model_index,
+            reference.instance_index,
+        ) {
+            collect_runtime_data_context_property_from_path_lookups(
+                file,
+                view_models,
+                reports,
+                root,
+                root_view_model_index,
+                root_instance_index,
+                referenced_instance,
+                value_path,
+                depth + 1,
+            );
+        }
+    }
+}
+
 fn collect_runtime_data_context_relative_lookups<'a>(
     file: &'a RuntimeFile,
     view_models: &[RuntimeViewModel<'a>],
@@ -23999,6 +24080,77 @@ fn collect_runtime_data_context_relative_lookups<'a>(
                 value_path,
                 depth + 1,
             );
+        }
+    }
+}
+
+fn collect_runtime_data_context_parent_fallback_lookups<'a>(
+    file: &'a RuntimeFile,
+    view_models: &[RuntimeViewModel<'a>],
+    manifest_name_ids: &[(Vec<u8>, u32)],
+    reports: &mut Vec<RuntimeDataContextLookupReport>,
+) {
+    if view_models.len() < 2 {
+        return;
+    }
+
+    for (current_view_model_index, current_view_model) in view_models.iter().enumerate() {
+        let Some(current_instance) = current_view_model.instances.first() else {
+            continue;
+        };
+        for (parent_view_model_index, parent_view_model) in view_models.iter().enumerate() {
+            if parent_view_model_index == current_view_model_index {
+                continue;
+            }
+            let Some(parent_instance) = parent_view_model.instances.first() else {
+                continue;
+            };
+            let Some(parent_value) = parent_instance.values.first() else {
+                continue;
+            };
+
+            let absolute_path = vec![
+                runtime_object_u32_property(parent_instance.object, "viewModelId"),
+                runtime_object_u32_property(parent_value.object, "viewModelPropertyId"),
+            ];
+            reports.push(RuntimeDataContextLookupReport {
+                kind: RuntimeDataContextLookupKind::AbsolutePropertyParentFallback,
+                current_view_model_index,
+                current_instance_index: 0,
+                parent_view_model_index: Some(parent_view_model_index),
+                parent_instance_index: Some(0),
+                path: absolute_path.clone(),
+                value: file
+                    .data_context_view_model_property_for_instance_chain(
+                        &[current_instance.object, parent_instance.object],
+                        &absolute_path,
+                    )
+                    .and_then(|value| runtime_data_context_value_ref(file, view_models, value)),
+                instance: None,
+            });
+
+            if let Some(name_id) = file
+                .view_model_instance_value_name_for_object(parent_value.object)
+                .and_then(|name| runtime_data_context_name_id(manifest_name_ids, name.as_bytes()))
+            {
+                let relative_path = vec![name_id];
+                reports.push(RuntimeDataContextLookupReport {
+                    kind: RuntimeDataContextLookupKind::RelativePropertyParentFallback,
+                    current_view_model_index,
+                    current_instance_index: 0,
+                    parent_view_model_index: Some(parent_view_model_index),
+                    parent_instance_index: Some(0),
+                    path: relative_path.clone(),
+                    value: file
+                        .data_context_relative_view_model_property_for_instance_chain(
+                            &[current_instance.object, parent_instance.object],
+                            &relative_path,
+                        )
+                        .and_then(|value| runtime_data_context_value_ref(file, view_models, value)),
+                    instance: None,
+                });
+            }
+            return;
         }
     }
 }

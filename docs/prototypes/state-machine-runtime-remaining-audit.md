@@ -2332,13 +2332,13 @@ slice.
   three entrypoints. The contract is
   `docs/prototypes/data-binding-graph-artboard-name-based-source-path-unsupported-runtime-contract.md`.
 - File-backed `DataContext` lookup report slice:
-  `runtime_data_context_lookup_reports` now records C++-order absolute
-  `DataContext::getViewModelProperty`/`getViewModelInstance` facts and
-  manifest-relative
-  `getRelativeViewModelProperty`/`getRelativeViewModelInstance` facts for
-  imported view models, instances, and explicit values. The C++ probe compares
-  the read-only report against `--data-context-lookups` for a nested
-  view-model fixture. The contract is
+  `runtime_data_context_lookup_reports` now records the full C++-order
+  `--data-context-lookups` surface for imported view models, instances, and
+  explicit values: absolute `DataContext` property/instance lookups,
+  `ViewModelInstance::propertyFromPath`, manifest-relative property/instance
+  lookups, and the first absolute plus manifest-relative parent fallback
+  property lookup. The C++ probe compares the complete read-only report for a
+  nested view-model fixture. The contract is
   `docs/prototypes/data-context-file-backed-lookup-runtime-contract.md`.
 
 ## Remaining Runtime Slices

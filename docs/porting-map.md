@@ -4839,18 +4839,19 @@ the same target row and unresolved source facts across all three entrypoints.
 The contract is
 `docs/prototypes/data-binding-graph-artboard-name-based-source-path-unsupported-runtime-contract.md`.
 
-Current #12 update: file-backed `DataContext` absolute and manifest-relative
-lookup facts now have a read-only runtime report. `runtime_data_context_lookup_reports`
+Current #12 update: file-backed `DataContext` lookup facts now have a complete
+read-only runtime report. `runtime_data_context_lookup_reports`
 enumerates imported view models, instances, and explicit instance values in
 C++ order, resolves absolute `viewModelId`/`viewModelPropertyId` paths and
 manifest-name relative paths through the existing `rive-binary` lookup helpers,
-and reports resolved value/instance references with C++ probe parity for a
-nested view-model fixture. The contract is
+reports `ViewModelInstance::propertyFromPath`, and emits the C++ probe's first
+absolute and manifest-relative parent fallback property lookups. The report has
+full `--data-context-lookups` C++ probe parity for a nested view-model fixture.
+The contract is
 `docs/prototypes/data-context-file-backed-lookup-runtime-contract.md`.
 Live data-bind wiring for those relative/name paths, converter name paths,
-parent fallback, runtime mutation/relink through these reports,
-listener-owned data binding, and nested artboard propagation remain follow-up
-`#12` slices.
+live parent paths, runtime mutation/relink through these reports, listener-owned
+data binding, and nested artboard propagation remain follow-up `#12` slices.
 
 ## #13: Nested Artboards And Hosts
 

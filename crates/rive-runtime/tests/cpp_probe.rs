@@ -11338,7 +11338,6 @@ fn data_context_file_backed_lookup_reports_match_cpp_probe() {
     let cpp_reports = cpp
         .data_context_lookups
         .iter()
-        .filter(|lookup| data_context_lookup_kind_in_scope(&lookup.kind))
         .map(comparable_data_context_lookup_from_cpp)
         .collect::<Vec<_>>();
     let rust_reports = runtime_data_context_lookup_reports(&rust)
@@ -48404,16 +48403,16 @@ fn runtime_data_context_lookup_kind_name(kind: RuntimeDataContextLookupKind) -> 
     match kind {
         RuntimeDataContextLookupKind::AbsoluteInstance => "absoluteInstance",
         RuntimeDataContextLookupKind::AbsoluteProperty => "absoluteProperty",
+        RuntimeDataContextLookupKind::PropertyFromPath => "propertyFromPath",
         RuntimeDataContextLookupKind::RelativeProperty => "relativeProperty",
         RuntimeDataContextLookupKind::RelativeInstance => "relativeInstance",
+        RuntimeDataContextLookupKind::AbsolutePropertyParentFallback => {
+            "absolutePropertyParentFallback"
+        }
+        RuntimeDataContextLookupKind::RelativePropertyParentFallback => {
+            "relativePropertyParentFallback"
+        }
     }
-}
-
-fn data_context_lookup_kind_in_scope(kind: &str) -> bool {
-    matches!(
-        kind,
-        "absoluteInstance" | "absoluteProperty" | "relativeProperty" | "relativeInstance"
-    )
 }
 
 #[derive(Debug, Deserialize)]

@@ -4977,12 +4977,16 @@ pub struct RuntimeOwnedViewModelInstance {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeOwnedViewModelNumberSourceHandle {
-    property_index: usize,
+    property_path: Vec<usize>,
 }
 
 impl RuntimeOwnedViewModelNumberSourceHandle {
     pub fn property_index(&self) -> usize {
-        self.property_index
+        self.property_path[self.property_path.len() - 1]
+    }
+
+    pub fn path(&self) -> &[usize] {
+        &self.property_path
     }
 }
 
@@ -5466,6 +5470,10 @@ impl RuntimeOwnedViewModelViewModel {
         let Some(property_index) = self.property_index_by_name(property_name) else {
             return false;
         };
+        self.set_number_by_property_index(property_index, value)
+    }
+
+    fn set_number_by_property_index(&mut self, property_index: usize, value: f32) -> bool {
         let Some(number) = self
             .numbers
             .iter_mut()
@@ -7681,7 +7689,21 @@ impl RuntimeOwnedViewModelInstance {
         self.numbers
             .iter()
             .any(|number| number.property_index == property_index)
-            .then_some(RuntimeOwnedViewModelNumberSourceHandle { property_index })
+            .then_some(RuntimeOwnedViewModelNumberSourceHandle {
+                property_path: vec![property_index],
+            })
+    }
+
+    pub fn number_source_handle_by_property_name_path(
+        &self,
+        property_path: &str,
+    ) -> Option<RuntimeOwnedViewModelNumberSourceHandle> {
+        let property_path = property_path.split('/').collect::<Vec<_>>();
+        if property_path.is_empty() || property_path.iter().any(|segment| segment.is_empty()) {
+            return None;
+        }
+        let property_path = self.number_property_path_by_names(&property_path)?;
+        Some(RuntimeOwnedViewModelNumberSourceHandle { property_path })
     }
 
     pub fn set_number_by_source_handle(
@@ -7689,7 +7711,7 @@ impl RuntimeOwnedViewModelInstance {
         handle: &RuntimeOwnedViewModelNumberSourceHandle,
         value: f32,
     ) -> bool {
-        self.set_number_by_property_index(handle.property_index, value)
+        self.set_number_by_property_path(&handle.property_path, value)
     }
 
     pub fn set_number_by_property_name_path(&mut self, property_path: &str, value: f32) -> bool {
@@ -7717,6 +7739,57 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         }
         view_model.set_number_by_property_name(number_name, value)
+    }
+
+    fn set_number_by_property_path(&mut self, property_path: &[usize], value: f32) -> bool {
+        if property_path.len() == 1 {
+            return self.set_number_by_property_index(property_path[0], value);
+        }
+        let Some((number_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        if !matches!(
+            view_model.value,
+            RuntimeViewModelPointer::OwnedGenerated { .. }
+        ) {
+            return false;
+        }
+        view_model.set_number_by_property_index(*number_index, value)
+    }
+
+    fn number_property_path_by_names(&self, property_path: &[&str]) -> Option<Vec<usize>> {
+        if property_path.len() == 1 {
+            let property_index = self.property_index_by_name(property_path[0])?;
+            return self
+                .numbers
+                .iter()
+                .any(|number| number.property_index == property_index)
+                .then_some(vec![property_index]);
+        }
+
+        let (number_name, view_model_names) = property_path.split_last()?;
+        let (view_model_path, view_model) =
+            self.view_model_property_path_by_names(view_model_names)?;
+        if !matches!(
+            view_model.value,
+            RuntimeViewModelPointer::OwnedGenerated { .. }
+        ) {
+            return None;
+        }
+        let property_index = view_model.property_index_by_name(number_name)?;
+        if !view_model
+            .numbers
+            .iter()
+            .any(|number| number.property_index == property_index)
+        {
+            return None;
+        }
+        let mut property_path = view_model_path;
+        property_path.push(property_index);
+        Some(property_path)
     }
 
     pub fn set_boolean_by_property_index(&mut self, property_index: usize, value: bool) -> bool {
@@ -8500,6 +8573,33 @@ impl RuntimeOwnedViewModelInstance {
                 .find(|view_model| view_model.property_name == *property_name)?;
         }
         Some(view_model)
+    }
+
+    fn view_model_property_path_by_names(
+        &self,
+        property_path: &[&str],
+    ) -> Option<(Vec<usize>, &RuntimeOwnedViewModelViewModel)> {
+        let (property_name, rest) = property_path.split_first()?;
+        let mut path = Vec::new();
+        let mut view_model = self
+            .view_models
+            .iter()
+            .find(|view_model| view_model.property_name == *property_name)?;
+        path.push(view_model.property_index);
+        for property_name in rest {
+            if !matches!(
+                view_model.value,
+                RuntimeViewModelPointer::OwnedGenerated { .. }
+            ) {
+                return None;
+            }
+            view_model = view_model
+                .children
+                .iter()
+                .find(|view_model| view_model.property_name == *property_name)?;
+            path.push(view_model.property_index);
+        }
+        Some((path, view_model))
     }
 
     fn number_value_by_property_index(&self, property_index: usize) -> Option<f32> {

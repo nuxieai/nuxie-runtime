@@ -4354,14 +4354,14 @@ public source handle. `RuntimeOwnedViewModelInstance` can resolve a root
 number property name into `RuntimeOwnedViewModelNumberSourceHandle`, and
 `set_number_by_source_handle` writes through the existing owned number
 property-index storage before binding the owned context to a state machine.
-Slash-path handle lookup remains unresolved. The C++ probe compares the handle
-mutation against the existing owned-number runtime context command and
-verifies the existing state-machine advance and component update reports. The
-contract is
+Root-name handle lookup remains separate from slash-path lookup. The C++ probe
+compares the handle mutation against the existing owned-number runtime context
+command and verifies the existing state-machine advance and component update
+reports. The contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-number-source-handle-runtime-contract.md`.
-Nested/relative/parent lookup, reverse propagation, broader update queues,
-listener-owned data binding, and nested artboard propagation remain follow-up
-`#12` slices.
+Nested number paths are covered separately below. Other nested/relative/parent
+lookup, reverse propagation, broader update queues, listener-owned data
+binding, and nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: owned runtime boolean sources now have a stable public
 source handle. `RuntimeOwnedViewModelInstance` can resolve a root boolean
@@ -4537,11 +4537,21 @@ context. The C++ probe uses
 `ViewModelInstanceRuntime::propertyNumber("child/amount")->value(...)`. The
 contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-nested-number-name-path-runtime-contract.md`.
-Other nested scalar kinds, imported-intermediate nested scalar paths,
+
+Current #12 update: owned generated nested number paths now have the first
+stable public nested source handle. `RuntimeOwnedViewModelInstance` can
+resolve `child/amount` into `RuntimeOwnedViewModelNumberSourceHandle` through
+`number_source_handle_by_property_name_path`, and
+`set_number_by_source_handle` writes through the same generated-child number
+storage before binding. The C++ probe compares the handle mutation against
+`ViewModelInstanceRuntime::propertyNumber("child/amount")->value(...)` and
+verifies the existing state-machine advance, number binding, and component
+update reports. The contract is
+`docs/prototypes/data-binding-graph-owned-viewmodel-nested-number-source-handle-runtime-contract.md`.
+Other nested scalar source handles, imported-intermediate nested scalar paths,
 imported-instance mutation sharing, stable public object handles, reverse
-propagation, broader update queues, relative/parent/nested lookup,
-listener-owned data binding, and nested artboard propagation remain follow-up
-`#12` slices.
+propagation, broader update queues, relative/parent lookup, listener-owned data
+binding, and nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: owned generated nested boolean paths now match the nested
 number pattern. Rust stores direct boolean values on generated owned

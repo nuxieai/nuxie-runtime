@@ -3537,6 +3537,7 @@ struct RuntimeOwnedViewModelViewModel {
     artboards: Vec<RuntimeOwnedViewModelArtboard>,
     imported_artboards: BTreeMap<u32, Vec<RuntimeOwnedViewModelArtboard>>,
     triggers: Vec<RuntimeOwnedViewModelTrigger>,
+    imported_triggers: BTreeMap<u32, Vec<RuntimeOwnedViewModelTrigger>>,
     view_model_instance_ids: Vec<u32>,
     children: Vec<RuntimeOwnedViewModelViewModel>,
     imported_children: BTreeMap<u32, Vec<RuntimeOwnedViewModelViewModel>>,
@@ -3779,6 +3780,24 @@ impl RuntimeOwnedViewModelViewModel {
             .iter()
             .find(|trigger| trigger.property_index == property_index)
             .map(|trigger| trigger.value)
+    }
+
+    fn active_trigger_value_by_property_index(&self, property_index: usize) -> Option<u64> {
+        match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => {
+                self.trigger_value_by_property_index(property_index)
+            }
+            RuntimeViewModelPointer::Imported { object_id } => self
+                .imported_triggers
+                .get(&object_id)
+                .and_then(|triggers| {
+                    triggers
+                        .iter()
+                        .find(|trigger| trigger.property_index == property_index)
+                })
+                .map(|trigger| trigger.value),
+            _ => None,
+        }
     }
 
     fn set_number_by_property_name(&mut self, property_name: &str, value: f32) -> bool {
@@ -4712,6 +4731,64 @@ fn runtime_owned_view_model_triggers(
         .unwrap_or_default()
 }
 
+fn runtime_owned_view_model_triggers_for_instance(
+    file: &RuntimeFile,
+    view_model_index: usize,
+    view_model_instance: &RuntimeObject,
+) -> Vec<RuntimeOwnedViewModelTrigger> {
+    file.view_model(view_model_index)
+        .map(|view_model| {
+            view_model
+                .properties
+                .into_iter()
+                .enumerate()
+                .filter_map(|(property_index, property)| {
+                    if property.type_name != "ViewModelPropertyTrigger" {
+                        return None;
+                    }
+                    let path = [
+                        u32::try_from(view_model_index).ok()?,
+                        u32::try_from(property_index).ok()?,
+                    ];
+                    let source = file.data_context_view_model_property_for_instance(
+                        view_model_instance,
+                        &path,
+                    )?;
+                    let value = file.view_model_instance_trigger_count_for_object(source)?;
+                    Some(RuntimeOwnedViewModelTrigger {
+                        property_index,
+                        value,
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn runtime_owned_view_model_imported_triggers(
+    file: &RuntimeFile,
+    view_model_index: usize,
+) -> BTreeMap<u32, Vec<RuntimeOwnedViewModelTrigger>> {
+    file.view_model(view_model_index)
+        .map(|view_model| {
+            view_model
+                .instances
+                .into_iter()
+                .map(|instance| {
+                    (
+                        instance.object.id,
+                        runtime_owned_view_model_triggers_for_instance(
+                            file,
+                            view_model_index,
+                            instance.object,
+                        ),
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 fn runtime_view_model_view_model_property_path_for_names(
     file: &RuntimeFile,
     view_model_index: usize,
@@ -5000,6 +5077,11 @@ fn runtime_owned_view_model_property_children(
                         runtime_owned_view_model_triggers(file, view_model_index)
                     })
                     .unwrap_or_default(),
+                imported_triggers: referenced_view_model_index
+                    .map(|view_model_index| {
+                        runtime_owned_view_model_imported_triggers(file, view_model_index)
+                    })
+                    .unwrap_or_default(),
                 view_model_instance_ids,
                 children,
                 imported_children,
@@ -5221,6 +5303,11 @@ impl RuntimeOwnedViewModelInstance {
                         triggers: referenced_view_model_index
                             .map(|view_model_index| {
                                 runtime_owned_view_model_triggers(file, view_model_index)
+                            })
+                            .unwrap_or_default(),
+                        imported_triggers: referenced_view_model_index
+                            .map(|view_model_index| {
+                                runtime_owned_view_model_imported_triggers(file, view_model_index)
                             })
                             .unwrap_or_default(),
                         view_model_instance_ids,
@@ -6079,13 +6166,7 @@ impl RuntimeOwnedViewModelInstance {
         }
         let (property_index, view_model_path) = property_path.split_last()?;
         let view_model = self.view_model_by_property_path(view_model_path)?;
-        if !matches!(
-            view_model.value,
-            RuntimeViewModelPointer::OwnedGenerated { .. }
-        ) {
-            return None;
-        }
-        view_model.trigger_value_by_property_index(*property_index)
+        view_model.active_trigger_value_by_property_index(*property_index)
     }
 
     fn view_model_value_by_property_path(

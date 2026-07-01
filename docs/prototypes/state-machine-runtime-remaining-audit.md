@@ -1058,6 +1058,16 @@ slice.
   `ViewModelProperty.name` and now drive Rust through the matching
   `set_*_by_property_name` APIs. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-root-scalar-name-runtime-contract.md`.
+- Owned root list property-name slice:
+  `RuntimeOwnedViewModelInstance::set_list_item_count_by_property_name_path`
+  now has explicit root-list parity coverage through the single-segment
+  `"items"` path. Rust mutates the stored root `ViewModelPropertyList` item
+  count before binding an owned context, while the C++ probe uses
+  `ViewModelInstanceRuntime::propertyList("items")` and the existing
+  owned-list name-path flag. The state machine compares the same
+  `BindablePropertyList` source-size reports as the nested list path. The
+  contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-root-list-name-runtime-contract.md`.
 - First owned generated nested scalar name-path slice:
   generated owned view-model children can store direct number values, and
   `RuntimeOwnedViewModelInstance::set_number_by_property_name_path` can mutate

@@ -2690,6 +2690,21 @@ object handles, reverse propagation, broader update queues,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
 
+Current #12 update: owned root view-model list sources now have explicit
+root-name parity coverage. `RuntimeOwnedViewModelInstance::
+set_list_item_count_by_property_name_path("items", count)` uses the existing
+single-segment list name path to mutate a root `ViewModelPropertyList` item
+count before binding; the C++ probe drives
+`ViewModelInstanceRuntime::propertyList("items")` through
+`--runtime-bind-owned-view-model-list-name-path-state-machine-context` and
+compares the existing `BindablePropertyList` source-size reports. The contract
+is
+`docs/prototypes/data-binding-graph-owned-viewmodel-root-list-name-runtime-contract.md`.
+List item identity, generated item instances, stable public handles, reverse
+propagation, broader update queues, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
+
 Current #12 update: owned generated nested number paths now have the first
 nested scalar name-path mutation API. Rust stores direct number values on
 generated owned view-model children, exposes

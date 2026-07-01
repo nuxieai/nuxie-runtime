@@ -3417,6 +3417,7 @@ struct RuntimeOwnedViewModelTrigger {
 #[derive(Debug, Clone)]
 struct RuntimeOwnedViewModelViewModel {
     property_index: usize,
+    property_name: String,
     value: RuntimeViewModelPointer,
     view_model_instance_ids: Vec<u32>,
     children: Vec<RuntimeOwnedViewModelViewModel>,
@@ -3598,6 +3599,10 @@ fn runtime_owned_view_model_property_children(
                 .unwrap_or_default();
             Some(RuntimeOwnedViewModelViewModel {
                 property_index,
+                property_name: property
+                    .string_property("name")
+                    .unwrap_or_default()
+                    .to_owned(),
                 value,
                 view_model_instance_ids,
                 children,
@@ -3706,6 +3711,7 @@ impl RuntimeOwnedViewModelInstance {
                         .unwrap_or_default();
                     view_models.push(RuntimeOwnedViewModelViewModel {
                         property_index,
+                        property_name: property.string_property("name").unwrap_or_default().to_owned(),
                         value,
                         view_model_instance_ids,
                         children,
@@ -3922,6 +3928,41 @@ impl RuntimeOwnedViewModelInstance {
         true
     }
 
+    pub fn set_view_model_by_property_name_path(
+        &mut self,
+        property_path: &str,
+        instance_index: usize,
+    ) -> bool {
+        let property_path = property_path.split('/').collect::<Vec<_>>();
+        if property_path.is_empty() || property_path.iter().any(|segment| segment.is_empty()) {
+            return false;
+        }
+        self.set_view_model_by_property_names(&property_path, instance_index)
+    }
+
+    pub fn set_view_model_by_property_names(
+        &mut self,
+        property_path: &[&str],
+        instance_index: usize,
+    ) -> bool {
+        let Some(view_model) = self.view_model_by_property_names_mut(property_path) else {
+            return false;
+        };
+        let Some(object_id) = view_model
+            .view_model_instance_ids
+            .get(instance_index)
+            .copied()
+        else {
+            return false;
+        };
+        let value = RuntimeViewModelPointer::Imported { object_id };
+        if view_model.value == value {
+            return false;
+        }
+        view_model.value = value;
+        true
+    }
+
     fn view_model_by_property_path(
         &self,
         property_path: &[usize],
@@ -3954,6 +3995,24 @@ impl RuntimeOwnedViewModelInstance {
                 .generated_children_mut()?
                 .iter_mut()
                 .find(|view_model| view_model.property_index == *property_index)?;
+        }
+        Some(view_model)
+    }
+
+    fn view_model_by_property_names_mut(
+        &mut self,
+        property_path: &[&str],
+    ) -> Option<&mut RuntimeOwnedViewModelViewModel> {
+        let (property_name, rest) = property_path.split_first()?;
+        let mut view_model = self
+            .view_models
+            .iter_mut()
+            .find(|view_model| view_model.property_name == *property_name)?;
+        for property_name in rest {
+            view_model = view_model
+                .generated_children_mut()?
+                .iter_mut()
+                .find(|view_model| view_model.property_name == *property_name)?;
         }
         Some(view_model)
     }

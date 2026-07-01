@@ -740,9 +740,16 @@ slice.
 - Owned view-model imported-intermediate mutation unsupported boundary:
   attempting to relink a descendant path below an imported root replacement
   from the owned root leaves the existing imported descendant selected in C++.
-  Rust rejects the same `set_view_model_by_property_path` mutation once the
-  path would cross an imported intermediate. The contract is
+  Rust rejects the same `set_view_model_by_property_name_path` mutation once
+  the path would cross an imported intermediate. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-mutation-unsupported-runtime-contract.md`.
+- Owned generated view-model pointer name-path slice:
+  `RuntimeOwnedViewModelInstance` records generated
+  `ViewModelPropertyViewModel.name` values and can relink paths such as
+  `child/middle/leaf` through
+  `set_view_model_by_property_name_path`, matching the C++ public path shape
+  for generated owned view-model pointer replacement. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-name-path-runtime-contract.md`.
 - First `BindablePropertyList.propertyValue` target-to-source slice:
   state-machine list targets can be mutated by data-bind index, and explicit
   `advancedDataContext()` plus public `updateDataBinds(true)` consume the
@@ -769,9 +776,10 @@ slice.
   targets other than `Event.trigger`.
 - Live view-model pointer relink APIs beyond the first default, imported,
   owned root-property, generated-only owned, and imported-intermediate owned
-  read paths: persistent imported-instance mutation and stable public handles
-  that update or expose cached `referenceViewModelInstance` pointers rather
-  than only raw generated `propertyValue` indexes.
+  read paths: persistent imported-instance mutation, remaining property-name
+  APIs beyond owned generated view-model pointer paths, and stable public
+  handles that update or expose cached `referenceViewModelInstance` pointers
+  rather than only raw generated `propertyValue` indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
 - Live view-model APIs and data-binding propagation governed by

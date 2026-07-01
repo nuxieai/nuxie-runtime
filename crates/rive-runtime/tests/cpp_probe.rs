@@ -24406,7 +24406,7 @@ fn state_machine_owned_viewmodel_deep_imported_intermediate_relink_is_unsupporte
         "{label} failed to relink root owned view-model pointer"
     );
     assert!(
-        !context.set_view_model_by_property_path(&[0, 0, 0], 1),
+        !context.set_view_model_by_property_name_path("child/middle/leaf", 1),
         "{label} should not relink through imported intermediates"
     );
     assert!(
@@ -24521,7 +24521,7 @@ fn state_machine_owned_viewmodel_viewmodel_deep_source_relink_matches_cpp_probe(
         state_machine.clone(),
     ));
     assert!(
-        context.set_view_model_by_property_path(&[0, 0, 0], 1),
+        context.set_view_model_by_property_name_path("child/middle/leaf", 1),
         "{label} failed to relink deep owned view-model pointer"
     );
     assert!(

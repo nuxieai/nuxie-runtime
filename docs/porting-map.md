@@ -2084,9 +2084,9 @@ owned root to the state machine. The contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-context-runtime-contract.md`.
 Stable public source handles, list bindables, default/imported-context
 view-model pointer relink APIs, unmutated generated-owned child identity,
-reverse propagation, broader update-queue parity, relative/parent/nested
-lookup, listener-owned data binding, and nested artboard propagation remain
-follow-up `#12` slices.
+remaining property-name APIs, reverse propagation, broader update-queue
+parity, relative/parent/nested lookup, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: owned runtime view-model contexts now also model C++'s
 generated nested child before any replacement. Valid root
@@ -2127,9 +2127,9 @@ then pushes that relinked pointer into
 `BindablePropertyViewModel.propertyValue`. The contract is
 `docs/prototypes/data-binding-graph-default-viewmodel-relink-runtime-contract.md`.
 Imported-context view-model relinking, nested owned view-model pointer paths,
-property-name/object-handle APIs, reverse propagation, broader update queues,
-relative/parent/nested lookup, listener-owned data binding, and nested artboard
-propagation remain follow-up `#12` slices.
+remaining property-name APIs, public object-handle APIs, reverse propagation,
+broader update queues, relative/parent/nested lookup, listener-owned data
+binding, and nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: imported view-model contexts now have the first live
 view-model pointer relink API.
@@ -2140,9 +2140,10 @@ imported child instance; explicit data-context advance pushes it into
 cached-reference replacement path. The contract is
 `docs/prototypes/data-binding-graph-imported-viewmodel-relink-runtime-contract.md`.
 Persistent `RuntimeFile` mutation across rebinds, nested owned view-model
-pointer paths, property-name/object-handle APIs, reverse propagation, broader
-update queues, relative/parent/nested lookup, listener-owned data binding, and
-nested artboard propagation remain follow-up `#12` slices.
+pointer paths, remaining property-name APIs, public object-handle APIs, reverse
+propagation, broader update queues, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
 
 Current #12 update: owned view-model contexts now support the first nested
 view-model pointer relink path. `RuntimeOwnedViewModelInstance` stores
@@ -2153,10 +2154,10 @@ the owned context. The C++ probe covers the equivalent
 `ViewModelInstanceRuntime::replaceViewModel("child/grandchild", value)` path.
 The contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-nested-relink-runtime-contract.md`.
-Persistent imported instance mutation, public property-name/object-handle APIs,
-reverse propagation, broader update queues, relative/parent/nested lookup,
-listener-owned data binding, and nested artboard propagation remain follow-up
-`#12` slices.
+Persistent imported instance mutation, remaining property-name APIs, public
+object-handle APIs, reverse propagation, broader update queues,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
 
 Current #12 update: owned view-model contexts now recursively record generated
 `ViewModelPropertyViewModel` children for generated-only pointer paths. A deep
@@ -2167,9 +2168,9 @@ target. The C++ probe covers the matching
 `ViewModelInstanceRuntime::replaceViewModel("child/middle/leaf", value)` path.
 The contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-recursive-relink-runtime-contract.md`.
-Public property-name/object-handle APIs, reverse propagation, broader update
-queues, relative/parent/nested lookup, listener-owned data binding, and nested
-artboard propagation remain follow-up `#12` slices.
+Remaining property-name APIs, public object-handle APIs, reverse propagation,
+broader update queues, relative/parent/nested lookup, listener-owned data
+binding, and nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: owned view-model contexts now traverse one imported
 replacement intermediate for view-model pointer sources. Replacing a generated
@@ -2183,10 +2184,10 @@ not update this admitted binding path, so Rust returns `false` for
 `set_view_model_by_property_path(&[child, grandchild], value)` once `child` is
 imported. The contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-runtime-contract.md`.
-Persistent imported instance mutation, public property-name/object-handle APIs,
-reverse propagation, broader update queues, relative/parent/nested lookup,
-listener-owned data binding, and nested artboard propagation remain follow-up
-`#12` slices.
+Persistent imported instance mutation, remaining property-name APIs, public
+object-handle APIs, reverse propagation, broader update queues,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
 
 Current #12 update: owned view-model contexts now traverse deeper imported
 replacement intermediates for read-only view-model pointer sources. Replacing
@@ -2195,10 +2196,10 @@ path such as `[child, middle, leaf]` read through the imported child's existing
 imported middle and the middle's existing imported leaf, matching C++
 state-machine data-context binding. The contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-deep-imported-intermediate-runtime-contract.md`.
-Persistent imported instance mutation, public property-name/object-handle APIs,
-reverse propagation, broader update queues, relative/parent/nested lookup,
-listener-owned data binding, and nested artboard propagation remain follow-up
-`#12` slices.
+Persistent imported instance mutation, remaining property-name APIs, public
+object-handle APIs, reverse propagation, broader update queues,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
 
 Current #12 update: owned view-model contexts now explicitly pin mutation
 through imported replacement intermediates as unsupported. The C++ probe
@@ -2206,13 +2207,26 @@ replaces the generated root child with an imported child, then attempts
 `ViewModelInstanceRuntime::replaceViewModel("child/middle/leaf", value)` from
 the owned root; C++ leaves the existing imported leaf selected, and Rust
 matches by returning `false` for
-`set_view_model_by_property_path(&[child, middle, leaf], value)` once `child`
-is imported. The contract is
+`set_view_model_by_property_name_path("child/middle/leaf", value)` once
+`child` is imported. The contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-mutation-unsupported-runtime-contract.md`.
-Persistent imported instance mutation, public property-name/object-handle APIs,
-reverse propagation, broader update queues, relative/parent/nested lookup,
-listener-owned data binding, and nested artboard propagation remain follow-up
-`#12` slices.
+Persistent imported instance mutation, remaining property-name APIs, public
+object-handle APIs, reverse propagation, broader update queues,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
+
+Current #12 update: owned generated view-model pointer replacement now has a
+property-name path API. `RuntimeOwnedViewModelInstance` records
+`ViewModelPropertyViewModel.name` for generated children and exposes
+`set_view_model_by_property_name_path("child/middle/leaf", index)`, matching
+the C++ `ViewModelInstanceRuntime::replaceViewModel` path shape for this
+owned/generated slice while preserving the unsupported imported-intermediate
+mutation boundary. The contract is
+`docs/prototypes/data-binding-graph-owned-viewmodel-name-path-runtime-contract.md`.
+Persistent imported instance mutation, remaining property-name APIs, public
+object-handle APIs, reverse propagation, broader update queues,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
 
 Current #12 update: state-machine `BindablePropertyList.propertyValue`
 targets now have a probe-backed target-to-source boundary. Rust exposes

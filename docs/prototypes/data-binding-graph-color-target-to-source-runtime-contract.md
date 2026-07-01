@@ -30,6 +30,8 @@ bind observes that updated source on the same explicit data-context advance.
 
 - Target-to-source for enum, asset, artboard, trigger, symbol-list-index,
   view-model, and list bindables.
+- Public `updateDataBinds(true)` color target-to-source behavior, covered by
+  `docs/prototypes/data-binding-graph-color-public-update-observer-preservation-runtime-contract.md`.
 - Pure `ToSource` without `TwoWay`.
 - Reverse converter execution and converter groups in the target-to-source
   direction.

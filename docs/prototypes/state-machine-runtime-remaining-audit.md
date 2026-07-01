@@ -211,6 +211,12 @@ slice.
   updates the source during public update, while a neighboring ordinary
   `ToTarget` bind reports the new source and preserves its target until the
   next normal state-machine advance.
+- Color public-update observer preservation slice:
+  direct color binds now cover public `updateDataBinds(true)`
+  target-to-source and the first same-path observer case. The dirty
+  main-`ToTarget | TwoWay` color bind updates the source and its own target
+  during public update, while a neighboring ordinary `ToTarget` bind reports
+  the new source and preserves its target until the next normal advance.
 - First cross-type graph-owned converter execution slice:
   `DataConverterToNumber` forward conversion for default-context boolean
   sources feeding number targets, covered by a C++ probe through an existing
@@ -852,6 +858,10 @@ slice.
   a neighboring ordinary direct `ToTarget` string bind now follows the same
   C++ public-update observer ordering, preserving its previous target bytes
   during public update while reporting the new source bytes.
+- Color public-update observer preservation slice:
+  direct color public update now writes the default color source from a
+  main-`ToTarget | TwoWay` target edit and uses the same C++ observer ordering
+  as number/boolean/string for a neighboring ordinary direct `ToTarget` bind.
 - First graph-owned view-model bindable slice: forward propagation for
   default-context `ViewModelInstanceViewModel.propertyValue` sources feeding
   `BindablePropertyViewModel.propertyValue` targets, covered by a C++ probe
@@ -1401,7 +1411,7 @@ slice.
   group, concrete operation pass-through, non-scripting scripted converter
   pass-through, direct boolean/BooleanNegate public-update target-to-source,
   boolean public-update observer preservation, string public-update observer
-  preservation,
+  preservation, color public-update observer preservation,
   direct trigger public-update target-to-source, direct trigger converter
   explicit target-to-source, trigger source reset reapply,
   trigger converter-group public-update, trigger converter-group explicit

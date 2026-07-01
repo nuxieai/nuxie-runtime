@@ -699,6 +699,20 @@ public source handles, reverse propagation, broader update queues,
 listener-owned data binding, and nested artboard propagation remained follow-up
 `#12` slices.
 
+Current #12 update: default root list sources now have a stable public source
+handle. `StateMachineInstance` can resolve a root list view-model property
+name into `RuntimeDefaultViewModelListSourceHandle`, and
+`set_default_view_model_list_source_item_count_by_source_handle` writes through
+the existing graph-owned source-path mutation path by item count. Slash-path
+handle lookup remains unresolved. The C++ probe compares the handle mutation
+against the default list by-name command and verifies the existing
+data-context advance, state-machine advance, and list binding reports. The
+contract is
+`docs/prototypes/data-binding-graph-default-list-source-handle-runtime-contract.md`.
+Default source handles for view-model sources, nested/relative/parent lookup,
+reverse propagation, broader update queues, listener-owned data binding, and
+nested artboard propagation remain follow-up `#12` slices.
+
 Current #12 update: default root view-model sources now complete the root
 property-name mutation/relink family. Rust exposes
 `StateMachineInstance::relink_default_view_model_view_model_source_by_property_name`,

@@ -3181,6 +3181,17 @@ impl RuntimeDefaultViewModelTriggerSourceHandle {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeDefaultViewModelListSourceHandle {
+    path: Vec<u32>,
+}
+
+impl RuntimeDefaultViewModelListSourceHandle {
+    pub fn path(&self) -> &[u32] {
+        &self.path
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeImportedViewModelNumberSourceHandle {
     view_model_index: usize,
     instance_index: usize,
@@ -17224,6 +17235,30 @@ impl StateMachineInstance {
         if !self
             .data_bind_graph
             .set_default_view_model_list_source_item_count_for_path(&path, item_count)
+        {
+            return false;
+        }
+        self.needs_advance = true;
+        true
+    }
+
+    pub fn default_view_model_list_source_handle_by_property_name(
+        &self,
+        file: &RuntimeFile,
+        property_name: &str,
+    ) -> Option<RuntimeDefaultViewModelListSourceHandle> {
+        let path = runtime_default_view_model_list_property_path_for_name(file, property_name)?;
+        Some(RuntimeDefaultViewModelListSourceHandle { path })
+    }
+
+    pub fn set_default_view_model_list_source_item_count_by_source_handle(
+        &mut self,
+        handle: &RuntimeDefaultViewModelListSourceHandle,
+        item_count: usize,
+    ) -> bool {
+        if !self
+            .data_bind_graph
+            .set_default_view_model_list_source_item_count_for_path(&handle.path, item_count)
         {
             return false;
         }

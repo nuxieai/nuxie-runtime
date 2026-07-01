@@ -264,6 +264,15 @@ slice.
   file-backed default instance and the existing bindable-list source-size
   consumer. The contract is
   `docs/prototypes/data-binding-graph-default-list-name-runtime-contract.md`.
+- Default list source handle slice:
+  `StateMachineInstance` can now resolve root list view-model property names
+  on file view model `0` into `RuntimeDefaultViewModelListSourceHandle` and
+  mutate graph-owned default list source nodes by item count through that
+  handle. Slash-path lookup remains unresolved, and default handles for
+  view-model sources remain follow-up slices. The C++ probe compares the
+  handle write against the default list by-name mutation command. The contract
+  is
+  `docs/prototypes/data-binding-graph-default-list-source-handle-runtime-contract.md`.
 - Default root view-model property-name relink, covered by a C++ probe through
   `ViewModelInstanceRuntime::replaceViewModel("current", referencedRuntime)`
   for the file-backed default instance and the existing view-model pointer

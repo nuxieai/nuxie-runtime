@@ -1297,6 +1297,15 @@ slice.
   records imported asset-id snapshots per referenced view-model instance for
   read-only graph binding. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-asset-runtime-contract.md`.
+- Owned view-model imported-intermediate asset name-path mutation unsupported
+  boundary: replacing a generated root child with an imported child by
+  instance index still lets the graph read `[child, image]`, but attempting to
+  resolve the owner with `ViewModelInstanceRuntime::propertyViewModel("child")`
+  and write `ViewModelInstanceAssetImage.propertyValue` leaves the imported
+  child's existing asset selected in C++. Rust keeps
+  `set_asset_by_property_name_path("child/image", value)` generated-only and
+  returns `false` once `child` is imported. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-asset-name-path-unsupported-runtime-contract.md`.
 - Owned view-model imported-intermediate artboard source slice:
   replacing a generated root child with an imported child by instance index
   lets `RuntimeOwnedViewModelInstance` resolve `[child, scene]` through the

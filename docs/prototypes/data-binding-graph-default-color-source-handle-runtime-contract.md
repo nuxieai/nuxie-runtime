@@ -25,7 +25,10 @@ Out of scope:
 
 - Enum, symbol-list-index, asset, artboard, trigger, list, or view-model
   default source handles.
-- Nested, relative, parent, or slash-separated property paths.
+- Changing root-name lookup semantics to accept slash-separated property
+  paths. Nested color paths are covered separately by
+  `docs/prototypes/data-binding-graph-default-nested-color-source-handle-runtime-contract.md`.
+- Relative or parent property paths.
 - Imported or owned view-model contexts.
 - Public target handles, reverse target-to-source propagation, converter
   family expansion, broader update queues, listener-owned data binding, and
@@ -33,6 +36,6 @@ Out of scope:
 
 Completion condition: a root default color source handle resolved from `tint`
 mutates the same graph-owned source path as the existing property-name API,
-repeated same-value writes report no change, slash-path lookup stays
-unresolved, and the C++ probe reports the same state-machine advance and
-component update results.
+repeated same-value writes report no change, root-name lookup stays separate
+from slash-path lookup, and the C++ probe reports the same state-machine
+advance and component update results.

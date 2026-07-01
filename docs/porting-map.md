@@ -543,10 +543,10 @@ handle mutation against the authored `DataBindContext.sourcePathIds` mutation
 path for the matching default-context data bind and verifies the existing
 state-machine advance and component update reports. The contract is
 `docs/prototypes/data-binding-graph-default-nested-string-source-handle-runtime-contract.md`.
-Default source handles for color/enum/symbol-list-index/asset/artboard/
-trigger/list/view-model sources, nested/relative/parent lookup, reverse
-propagation, broader update queues, listener-owned data binding, and nested
-artboard propagation remain follow-up `#12` slices.
+Default source handles for enum/symbol-list-index/asset/artboard/trigger/list/
+view-model sources, nested/relative/parent lookup, reverse propagation,
+broader update queues, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
 
 Current #12 update: default root color sources now match the root
 number/boolean/string property-name mutation shape. Rust exposes
@@ -567,11 +567,22 @@ Current #12 update: default root color sources now have a stable public source
 handle. `StateMachineInstance` can resolve a root
 `ViewModelPropertyColor.name` into `RuntimeDefaultViewModelColorSourceHandle`,
 and `set_default_view_model_color_source_by_source_handle` writes through the
-existing graph-owned source-path mutation path. Slash-path handle lookup
-remains unresolved. The C++ probe compares the handle mutation against the
-default color by-name command and verifies the existing state-machine advance
-and component update reports. The contract is
+existing graph-owned source-path mutation path. Root-name handle lookup
+remains separate from slash-path lookup. The C++ probe compares the handle
+mutation against the default color by-name command and verifies the existing
+state-machine advance and component update reports. The contract is
 `docs/prototypes/data-binding-graph-default-color-source-handle-runtime-contract.md`.
+
+Current #12 update: default nested color sources now have a stable public
+source handle. `StateMachineInstance` can resolve a generated child path such
+as `child/tint` into `RuntimeDefaultViewModelColorSourceHandle` through
+`default_view_model_color_source_handle_by_property_name_path`, and
+`set_default_view_model_color_source_by_source_handle` writes through the
+existing graph-owned source-path mutation path. The C++ probe compares the
+handle mutation against the authored `DataBindContext.sourcePathIds` mutation
+path for the matching default-context data bind and verifies the existing
+state-machine advance and component update reports. The contract is
+`docs/prototypes/data-binding-graph-default-nested-color-source-handle-runtime-contract.md`.
 Default source handles for enum/symbol-list-index/asset/artboard/trigger/list/
 view-model sources, nested/relative/parent lookup, reverse propagation, broader
 update queues, listener-owned data binding, and nested artboard propagation

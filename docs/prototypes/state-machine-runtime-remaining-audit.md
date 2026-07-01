@@ -203,11 +203,18 @@ slice.
   `StateMachineInstance` can now resolve root `ViewModelPropertyColor.name`
   values on file view model `0` into
   `RuntimeDefaultViewModelColorSourceHandle` and mutate graph-owned default
-  color source nodes through that handle. Slash-path lookup remains
-  unresolved, and default handles beyond number/boolean/string/color/enum remain follow-up
-  slices. The C++ probe compares the handle write against the default color
-  by-name mutation command. The contract is
+  color source nodes through that handle. Root-name handle lookup remains
+  separate from slash-path lookup. The C++ probe compares the handle write
+  against the default color by-name mutation command. The contract is
   `docs/prototypes/data-binding-graph-default-color-source-handle-runtime-contract.md`.
+- Default nested color source handle slice:
+  `StateMachineInstance` can now resolve a generated child path such as
+  `child/tint` into `RuntimeDefaultViewModelColorSourceHandle` through
+  `default_view_model_color_source_handle_by_property_name_path` and mutate
+  graph-owned default color source nodes through that handle. The C++ probe
+  compares the handle write against the authored `DataBindContext.sourcePathIds`
+  mutation path for the matching default-context data bind. The contract is
+  `docs/prototypes/data-binding-graph-default-nested-color-source-handle-runtime-contract.md`.
 - Default root enum property-name mutation, covered by a C++ probe through
   `ViewModelInstanceRuntime::propertyEnum("choice")->valueIndex(...)` with raw
   `propertyValue("choice")` fallback for the file-backed default instance, and
@@ -2172,7 +2179,7 @@ slice.
   property-name APIs beyond imported view-model pointer and root
   number/boolean/string/color/enum/symbol-list-index/asset/artboard/trigger/list sources, owned generated view-model pointer
   paths, and stable public handles beyond the admitted default nested-number/
-  boolean/string handles plus default/imported/owned root source handles, especially
+  boolean/string/color handles plus default/imported/owned root source handles, especially
   remaining nested/relative/parent handles that update or expose cached source
   indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,

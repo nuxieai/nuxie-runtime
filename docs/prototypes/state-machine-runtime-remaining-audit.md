@@ -229,6 +229,12 @@ slice.
   asset bind updates the source and its own target during public update, while
   a neighboring ordinary `ToTarget` bind reports the new source and preserves
   its target until the next normal advance.
+- Artboard public-update observer preservation slice:
+  direct artboard binds now cover public `updateDataBinds(true)`
+  target-to-source and the first same-path observer case. The dirty
+  main-`ToTarget | TwoWay` artboard bind updates the source and its own target
+  during public update, while a neighboring ordinary `ToTarget` bind reports
+  the new source and preserves its target until the next normal advance.
 - First cross-type graph-owned converter execution slice:
   `DataConverterToNumber` forward conversion for default-context boolean
   sources feeding number targets, covered by a C++ probe through an existing
@@ -884,6 +890,11 @@ slice.
   main-`ToTarget | TwoWay` target edit and uses the same C++ observer ordering
   as number/boolean/string/color/enum for a neighboring ordinary direct
   `ToTarget` bind.
+- Artboard public-update observer preservation slice:
+  direct artboard public update now writes the default artboard source from a
+  main-`ToTarget | TwoWay` target edit and uses the same C++ observer ordering
+  as number/boolean/string/color/enum/asset for a neighboring ordinary direct
+  `ToTarget` bind.
 - First graph-owned view-model bindable slice: forward propagation for
   default-context `ViewModelInstanceViewModel.propertyValue` sources feeding
   `BindablePropertyViewModel.propertyValue` targets, covered by a C++ probe
@@ -1434,7 +1445,8 @@ slice.
   pass-through, direct boolean/BooleanNegate public-update target-to-source,
   boolean public-update observer preservation, string public-update observer
   preservation, color public-update observer preservation, enum public-update
-  observer preservation, asset public-update observer preservation,
+  observer preservation, asset public-update observer preservation, artboard
+  public-update observer preservation,
   direct trigger public-update target-to-source, direct trigger converter
   explicit target-to-source, trigger source reset reapply,
   trigger converter-group public-update, trigger converter-group explicit

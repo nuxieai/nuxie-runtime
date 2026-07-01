@@ -1550,6 +1550,13 @@ slice.
   dirty target as a C++-compatible no-op for direct `ViewModelInstanceList`
   sources and `DataConverterNumberToList` sources. The contract is
   `docs/prototypes/data-binding-graph-bindable-list-target-to-source-runtime-contract.md`.
+- Number-to-list main-to-source target-to-source slice:
+  direct `DataConverterNumberToList` on a main-`ToSource | TwoWay`
+  `BindablePropertyList.propertyValue` bind now has explicit
+  `advancedDataContext()` coverage. C++ preserves the edited target scalar and
+  leaves the numeric source unchanged, without admitting generated list item
+  runtime instances. The contract is
+  `docs/prototypes/data-binding-graph-number-to-list-main-to-source-target-to-source-runtime-contract.md`.
 - State-machine `NameBased` data-bind source-path unsupported boundary:
   cloned state-machine `DataBindContext` records have a null `DataBind::file()`
   pointer in C++, so manifest-backed `sourcePathIds` do not resolve during

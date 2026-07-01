@@ -3560,9 +3560,22 @@ list item runtime instances are admitted. The contract is
 `docs/prototypes/data-binding-graph-bindable-list-target-to-source-runtime-contract.md`.
 Artboard component-list item instancing, generated child identity propagation,
 map-rule selection, list layout/virtualization, generated-list reverse
-converters, broader update queues, relative/parent/nested lookup,
-listener-owned data binding, and nested artboard propagation remain follow-up
-`#12` slices.
+converters that materialize item identity, broader update queues,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
+
+Current #12 update: direct `DataConverterNumberToList` now also has an
+explicit main-`ToSource | TwoWay` target-to-source boundary for
+state-machine `BindablePropertyList.propertyValue` targets. C++ consumes the
+edited bindable-list target during `advancedDataContext()` without writing the
+edited scalar into the numeric source and without admitting generated list item
+runtime instances. The contract is
+`docs/prototypes/data-binding-graph-number-to-list-main-to-source-target-to-source-runtime-contract.md`.
+Artboard component-list item instancing, generated child identity propagation,
+map-rule selection, list layout/virtualization, generated-list reverse
+converters that materialize item identity, broader update queues,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
 
 Current #12 update: state-machine `DataBindContext` name-based source paths now
 have an explicit unsupported parity boundary. C++ clones state-machine data

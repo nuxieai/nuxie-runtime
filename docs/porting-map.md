@@ -1593,6 +1593,19 @@ broader `DataBindContainer` dirty queues, relative/parent/nested lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 
+Current #12 update: the admitted stateful `DataConverterGroup` path now also
+covers public `updateDataBinds(true)` target-to-source behavior for warmed
+main-`ToTarget | TwoWay` number targets. C++ applies reverse group order over
+`DataConverterInterpolator -> DataConverterOperationValue`; the interpolator
+child's `reverseConvert` delegates to its stateful `convert` using the existing
+group child state tree, then the same public update reapplies source-to-target
+through forward group order. The contract is
+`docs/prototypes/data-binding-graph-interpolator-converter-group-public-update-target-to-source-runtime-contract.md`.
+Fresh/unwarmed stateful-group public updates, main-`ToSource | TwoWay` and
+state-machine target-dirty behavior for stateful groups, broader dirty queues,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
+
 Current #12 update: the first deterministic `DataConverterFormula` runtime
 execution slice now admits default-context number sources feeding
 `BindablePropertyNumber.propertyValue` targets. Runtime formula descriptors are

@@ -465,6 +465,13 @@ slice.
   `DataConverterInterpolator` child. Group child state is stored in imported
   group-item order, group advance aggregates child activity, and a C++ probe
   covers retargeting through an existing blend-state consumer.
+- Stateful interpolator converter-group public-update target-to-source slice:
+  the admitted `DataConverterOperationValue -> DataConverterInterpolator`
+  group now follows C++ public `updateDataBinds(true)` behavior for warmed
+  main-`ToTarget | TwoWay` number targets. Reverse group order runs the
+  interpolator child's stateful reverse/convert path before operation-value
+  reverse conversion, then the same public update reapplies forward group
+  conversion with the same child state tree.
 - First deterministic `DataConverterFormula` graph-owned converter execution
   slice: default-context number sources feeding number targets can now evaluate
   imported formula output queues made from input, value, and operation tokens,

@@ -9460,6 +9460,81 @@ impl RuntimeDataBindGraph {
         changed
     }
 
+    fn apply_default_view_model_symbol_list_index_public_update_targets_to_sources(
+        &mut self,
+        integers: &[StateMachineBindableIntegerInstance],
+    ) -> bool {
+        if !self.default_view_model_source_context_bound() {
+            return false;
+        }
+
+        let mut updates = Vec::<(Vec<u32>, u64)>::new();
+        let mut applied_target_to_source = false;
+
+        for binding in self.default_view_model_bindings.clone() {
+            let Some(target) = self.targets.get(binding.target.0) else {
+                continue;
+            };
+            let RuntimeDataBindGraphTarget::Integer { global_id } = target.target else {
+                continue;
+            };
+            let Some(source) = self.sources.get_mut(binding.source.0) else {
+                continue;
+            };
+            let target_to_source_dirty =
+                source.target_to_source_dirty || source.source_to_target_dirty_after_immediate;
+            if !target_to_source_dirty {
+                continue;
+            }
+            source.target_to_source_dirty = false;
+            source.source_to_target_dirty_after_immediate = false;
+            if !source.bound || !source.supports_direct_symbol_list_index_target_to_source() {
+                continue;
+            }
+            let Some(value) = integers
+                .iter()
+                .find(|integer| integer.global_id == global_id)
+                .map(|integer| integer.value)
+            else {
+                continue;
+            };
+            applied_target_to_source = true;
+            source.source_to_target_dirty_after_target_to_source = true;
+            updates.push((source.path.clone(), value));
+        }
+
+        let mut changed = false;
+        for (path, value) in updates {
+            for source in &mut self.sources {
+                if !source.bound || source.path != path {
+                    continue;
+                }
+                let RuntimeDataBindGraphValue::SymbolListIndex(source_value) = &mut source.value
+                else {
+                    continue;
+                };
+                if *source_value != value {
+                    *source_value = value;
+                    changed = true;
+                }
+                let RuntimeDataBindGraphValue::SymbolListIndex(default_value) =
+                    &mut source.default_value
+                else {
+                    continue;
+                };
+                if *default_value != value {
+                    *default_value = value;
+                    changed = true;
+                }
+            }
+        }
+
+        if changed || applied_target_to_source {
+            self.mark_default_view_model_bindings_dirty();
+        }
+        applied_target_to_source
+    }
+
     fn apply_default_view_model_boolean_targets_to_sources(
         &mut self,
         booleans: &[StateMachineBindableBooleanInstance],
@@ -16094,6 +16169,10 @@ impl StateMachineInstance {
             self.data_bind_graph
                 .apply_default_view_model_number_public_update_targets_to_sources(
                     &self.bindable_numbers,
+                );
+            self.data_bind_graph
+                .apply_default_view_model_symbol_list_index_public_update_targets_to_sources(
+                    &self.bindable_integers,
                 );
             self.data_bind_graph
                 .apply_default_view_model_boolean_public_update_targets_to_sources(

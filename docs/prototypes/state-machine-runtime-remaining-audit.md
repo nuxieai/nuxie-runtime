@@ -235,6 +235,13 @@ slice.
   main-`ToTarget | TwoWay` artboard bind updates the source and its own target
   during public update, while a neighboring ordinary `ToTarget` bind reports
   the new source and preserves its target until the next normal advance.
+- Symbol-list-index public-update observer preservation slice:
+  direct integer-backed symbol-list-index binds now cover public
+  `updateDataBinds(true)` target-to-source and the first same-path observer
+  case. The dirty main-`ToTarget | TwoWay` integer bind updates the
+  symbol-list-index source and its own target during public update, while a
+  neighboring ordinary `ToTarget` bind reports the new source and preserves
+  its target until the next normal advance.
 - First cross-type graph-owned converter execution slice:
   `DataConverterToNumber` forward conversion for default-context boolean
   sources feeding number targets, covered by a C++ probe through an existing
@@ -895,6 +902,11 @@ slice.
   main-`ToTarget | TwoWay` target edit and uses the same C++ observer ordering
   as number/boolean/string/color/enum/asset for a neighboring ordinary direct
   `ToTarget` bind.
+- Symbol-list-index public-update observer preservation slice:
+  direct symbol-list-index public update now writes the default
+  symbol-list-index source from a main-`ToTarget | TwoWay` integer target edit
+  and uses the same C++ observer ordering as the other direct value
+  public-update lanes for a neighboring ordinary direct `ToTarget` bind.
 - First graph-owned view-model bindable slice: forward propagation for
   default-context `ViewModelInstanceViewModel.propertyValue` sources feeding
   `BindablePropertyViewModel.propertyValue` targets, covered by a C++ probe
@@ -1446,7 +1458,8 @@ slice.
   boolean public-update observer preservation, string public-update observer
   preservation, color public-update observer preservation, enum public-update
   observer preservation, asset public-update observer preservation, artboard
-  public-update observer preservation,
+  public-update observer preservation, symbol-list-index public-update observer
+  preservation,
   direct trigger public-update target-to-source, direct trigger converter
   explicit target-to-source, trigger source reset reapply,
   trigger converter-group public-update, trigger converter-group explicit

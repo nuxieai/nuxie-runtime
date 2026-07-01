@@ -37,6 +37,9 @@ bind observes the updated source on the same explicit data-context advance.
 - General integer bindable source families beyond direct symbol-list-index
   sources.
 - Target-to-source for trigger, view-model, and list bindables.
+- Public `updateDataBinds(true)` direct symbol-list-index target-to-source
+  behavior, covered by
+  `docs/prototypes/data-binding-graph-symbol-list-index-public-update-observer-preservation-runtime-contract.md`.
 - Pure `ToSource` without `TwoWay`.
 - Reverse converter execution and converter groups in the target-to-source
   direction.

@@ -341,6 +341,7 @@ enum class RuntimeStateMachineActionKind
     SetViewModelInstanceSourceNumber,
     SetViewModelInstanceSourceBoolean,
     SetViewModelInstanceSourceString,
+    SetViewModelInstanceSourceColor,
     RelinkDefaultViewModelSourceViewModel,
     RelinkViewModelInstanceSourceViewModel,
     RelinkViewModelInstanceSourceViewModelByNamePath,
@@ -434,6 +435,15 @@ struct RuntimeStateMachineStringBindingReport
     std::string targetValue;
 };
 
+struct RuntimeStateMachineColorBindingReport
+{
+    size_t dataBindIndex;
+    bool hasSource;
+    uint32_t sourceValue;
+    bool hasTarget;
+    uint32_t targetValue;
+};
+
 struct RuntimeStateMachineListBindingReport
 {
     size_t dataBindIndex;
@@ -458,6 +468,7 @@ struct RuntimeStateMachineAdvanceReport
     std::vector<RuntimeStateMachineViewModelBindingReport> viewModelBindings;
     std::vector<RuntimeStateMachineNumberBindingReport> numberBindings;
     std::vector<RuntimeStateMachineStringBindingReport> stringBindings;
+    std::vector<RuntimeStateMachineColorBindingReport> colorBindings;
     std::vector<RuntimeStateMachineListBindingReport> listBindings;
 };
 
@@ -1354,6 +1365,80 @@ collect_string_binding_reports(rive::StateMachineInstance* stateMachine)
     return reports;
 }
 
+std::vector<RuntimeStateMachineColorBindingReport>
+collect_color_binding_reports(rive::StateMachineInstance* stateMachine)
+{
+    std::vector<RuntimeStateMachineColorBindingReport> reports;
+    if (stateMachine == nullptr)
+    {
+        return reports;
+    }
+    auto sourceStateMachine = stateMachine->stateMachine();
+    if (sourceStateMachine == nullptr)
+    {
+        return reports;
+    }
+
+    for (size_t dataBindIndex = 0;
+         dataBindIndex < sourceStateMachine->dataBindCount();
+         ++dataBindIndex)
+    {
+        auto dataBind = sourceStateMachine->dataBind(dataBindIndex);
+        auto target = dataBind == nullptr ? nullptr : dataBind->target();
+        if (target == nullptr || !target->is<rive::BindablePropertyColor>())
+        {
+            continue;
+        }
+
+        RuntimeStateMachineColorBindingReport report;
+        report.dataBindIndex = dataBindIndex;
+        report.hasSource = false;
+        report.sourceValue = 0;
+        report.hasTarget = false;
+        report.targetValue = 0;
+
+        auto bindableProperty = stateMachine->bindablePropertyInstance(
+            target->as<rive::BindablePropertyColor>());
+        auto flags = static_cast<rive::DataBindFlags>(dataBind->flags());
+        bool toSource =
+            (flags & rive::DataBindFlags::ToSource) ==
+            rive::DataBindFlags::ToSource;
+        auto liveDataBind =
+            bindableProperty == nullptr
+                ? nullptr
+                : (toSource ? stateMachine->bindableDataBindToSource(
+                                  bindableProperty)
+                            : stateMachine->bindableDataBindToTarget(
+                                  bindableProperty));
+
+        auto source = liveDataBind == nullptr ? nullptr : liveDataBind->source();
+        if (source == nullptr && dataBind->is<rive::DataBindContext>() &&
+            stateMachine->dataContext() != nullptr)
+        {
+            source = stateMachine->dataContext()->getViewModelProperty(
+                dataBind->as<rive::DataBindContext>()->sourcePathIds());
+        }
+        if (source != nullptr && source->is<rive::ViewModelInstanceColor>())
+        {
+            report.hasSource = true;
+            report.sourceValue = static_cast<uint32_t>(
+                source->as<rive::ViewModelInstanceColor>()->propertyValue());
+        }
+
+        if (bindableProperty != nullptr &&
+            bindableProperty->is<rive::BindablePropertyColor>())
+        {
+            report.hasTarget = true;
+            report.targetValue = static_cast<uint32_t>(
+                bindableProperty->as<rive::BindablePropertyColor>()
+                    ->propertyValue());
+        }
+
+        reports.push_back(report);
+    }
+    return reports;
+}
+
 std::vector<RuntimeStateMachineListBindingReport>
 collect_list_binding_reports(rive::StateMachineInstance* stateMachine)
 {
@@ -1923,6 +2008,40 @@ apply_runtime_state_machine_advances(rive::File* file,
                 {
                     source->as<rive::ViewModelInstanceString>()
                         ->propertyValue(action.stringValue);
+                }
+            }
+            continue;
+        }
+        if (action.kind ==
+            RuntimeStateMachineActionKind::SetViewModelInstanceSourceColor)
+        {
+            auto sourceStateMachine = stateMachine->stateMachine();
+            auto dataBind =
+                sourceStateMachine == nullptr
+                    ? nullptr
+                    : sourceStateMachine->dataBind(action.dataBindIndex);
+            auto viewModel =
+                file != nullptr && action.viewModelIndex < file->viewModelCount()
+                    ? file->viewModel(action.viewModelIndex)
+                    : nullptr;
+            auto viewModelInstance =
+                viewModel != nullptr &&
+                        action.viewModelInstanceIndex <
+                            viewModel->instanceCount()
+                    ? viewModel->instance(action.viewModelInstanceIndex)
+                    : nullptr;
+            if (dataBind != nullptr &&
+                dataBind->is<rive::DataBindContext>() &&
+                viewModelInstance != nullptr)
+            {
+                rive::DataContext context(rive::ref_rcp(viewModelInstance));
+                auto source = context.getViewModelProperty(
+                    dataBind->as<rive::DataBindContext>()->sourcePathIds());
+                if (source != nullptr &&
+                    source->is<rive::ViewModelInstanceColor>())
+                {
+                    source->as<rive::ViewModelInstanceColor>()
+                        ->propertyValue(static_cast<int>(action.uintValue));
                 }
             }
             continue;
@@ -3416,6 +3535,8 @@ apply_runtime_state_machine_advances(rive::File* file,
             collect_number_binding_reports(stateMachine.get());
         report.stringBindings =
             collect_string_binding_reports(stateMachine.get());
+        report.colorBindings =
+            collect_color_binding_reports(stateMachine.get());
         report.listBindings =
             collect_list_binding_reports(stateMachine.get());
         reports.push_back(report);
@@ -3569,6 +3690,35 @@ void write_runtime_state_machine_advance_reports(
             if (binding.hasTarget)
             {
                 write_json_string(out, binding.targetValue);
+            }
+            else
+            {
+                out << "null";
+            }
+            out << '}';
+        }
+        out << "],\"colorBindings\":[";
+        for (size_t j = 0; j < report.colorBindings.size(); ++j)
+        {
+            if (j != 0)
+            {
+                out << ',';
+            }
+            const auto& binding = report.colorBindings[j];
+            out << "{\"dataBindIndex\":" << binding.dataBindIndex;
+            out << ",\"sourceValue\":";
+            if (binding.hasSource)
+            {
+                out << binding.sourceValue;
+            }
+            else
+            {
+                out << "null";
+            }
+            out << ",\"targetValue\":";
+            if (binding.hasTarget)
+            {
+                out << binding.targetValue;
             }
             else
             {
@@ -10424,6 +10574,34 @@ int main(int argc, const char* argv[])
             continue;
         }
 
+        if (is_arg(argv[i], "--runtime-set-view-model-instance-source-color"))
+        {
+            if (i + 5 >= argc)
+            {
+                std::cerr << "--runtime-set-view-model-instance-source-color requires stateMachineIndex viewModelIndex instanceIndex dataBindIndex value\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind =
+                RuntimeStateMachineActionKind::SetViewModelInstanceSourceColor;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.viewModelIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.viewModelInstanceIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            action.uintValue =
+                static_cast<uint32_t>(std::strtoull(argv[++i], nullptr, 10));
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
         if (is_arg(argv[i],
                    "--runtime-relink-default-view-model-source-viewmodel"))
         {
@@ -11358,6 +11536,7 @@ int main(int argc, const char* argv[])
         std::cerr << "additional runtime flag: --runtime-set-view-model-instance-source-number stateMachineIndex viewModelIndex instanceIndex dataBindIndex value\n";
         std::cerr << "additional runtime flag: --runtime-set-view-model-instance-source-bool stateMachineIndex viewModelIndex instanceIndex dataBindIndex value\n";
         std::cerr << "additional runtime flag: --runtime-set-view-model-instance-source-string stateMachineIndex viewModelIndex instanceIndex dataBindIndex value\n";
+        std::cerr << "additional runtime flag: --runtime-set-view-model-instance-source-color stateMachineIndex viewModelIndex instanceIndex dataBindIndex value\n";
         std::cerr << "additional runtime flag: --runtime-relink-view-model-instance-source-viewmodel stateMachineIndex viewModelIndex instanceIndex dataBindIndex value\n";
         std::cerr << "additional runtime flag: --runtime-relink-view-model-instance-source-viewmodel-by-name-path stateMachineIndex viewModelIndex instanceIndex propertyPath value\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-nested-viewmodel-state-machine-context stateMachineIndex viewModelIndex rootPropertyIndex nestedPropertyIndex value\n";

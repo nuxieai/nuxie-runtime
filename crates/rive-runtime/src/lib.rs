@@ -3067,6 +3067,7 @@ pub struct RuntimeImportedViewModelInstanceContext {
     number_overrides: BTreeMap<Vec<u32>, f32>,
     boolean_overrides: BTreeMap<Vec<u32>, bool>,
     string_overrides: BTreeMap<Vec<u32>, Vec<u8>>,
+    color_overrides: BTreeMap<Vec<u32>, u32>,
     view_model_overrides: BTreeMap<Vec<u32>, RuntimeViewModelPointer>,
 }
 
@@ -3080,6 +3081,7 @@ impl RuntimeImportedViewModelInstanceContext {
             number_overrides: BTreeMap::new(),
             boolean_overrides: BTreeMap::new(),
             string_overrides: BTreeMap::new(),
+            color_overrides: BTreeMap::new(),
             view_model_overrides: BTreeMap::new(),
         })
     }
@@ -6597,6 +6599,7 @@ impl RuntimeDataBindGraph {
             number_overrides: BTreeMap::new(),
             boolean_overrides: BTreeMap::new(),
             string_overrides: BTreeMap::new(),
+            color_overrides: BTreeMap::new(),
             view_model_overrides: BTreeMap::new(),
         };
         self.bind_imported_view_model_context(file, &context)
@@ -6640,6 +6643,12 @@ impl RuntimeDataBindGraph {
                         .get(&source.path)
                         .cloned()
                         .map(RuntimeDataBindGraphValue::String)
+                        .unwrap_or(value),
+                    RuntimeDataBindGraphValue::Color(_) => context
+                        .color_overrides
+                        .get(&source.path)
+                        .copied()
+                        .map(RuntimeDataBindGraphValue::Color)
                         .unwrap_or(value),
                     RuntimeDataBindGraphValue::ViewModel(_) => context
                         .view_model_overrides
@@ -7306,6 +7315,51 @@ impl RuntimeDataBindGraph {
         true
     }
 
+    fn set_imported_view_model_context_color_source_for_data_bind(
+        &mut self,
+        context: &mut RuntimeImportedViewModelInstanceContext,
+        data_bind_index: usize,
+        value: u32,
+    ) -> bool {
+        if self.context_kind != RuntimeDataBindGraphContextKind::ImportedViewModel {
+            return false;
+        }
+        if self.imported_view_model_context
+            != Some(RuntimeImportedViewModelContextKey {
+                view_model_index: context.view_model_index,
+                instance_index: context.instance_index,
+            })
+        {
+            return false;
+        }
+        let Some(source) = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .map(|binding| binding.source)
+        else {
+            return false;
+        };
+        let Some(source) = self.sources.get_mut(source.0) else {
+            return false;
+        };
+        if !matches!(&source.default_value, RuntimeDataBindGraphValue::Color(_)) {
+            return false;
+        }
+        let source_changed = !matches!(&source.value, RuntimeDataBindGraphValue::Color(current) if *current == value);
+        let path = source.path.clone();
+        let context_changed = context.color_overrides.get(&path) != Some(&value);
+        if !source_changed && !context_changed {
+            return false;
+        }
+
+        source.value = RuntimeDataBindGraphValue::Color(value);
+        source.bound = true;
+        context.color_overrides.insert(path, value);
+        self.mark_default_view_model_bindings_dirty();
+        true
+    }
+
     fn relink_view_model_instance_view_model_source_by_property_name_path(
         &mut self,
         file: &RuntimeFile,
@@ -7588,6 +7642,21 @@ impl RuntimeDataBindGraph {
         Some(value.as_slice())
     }
 
+    fn default_view_model_color_source_value_for_data_bind(
+        &self,
+        data_bind_index: usize,
+    ) -> Option<u32> {
+        let binding = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)?;
+        let source = self.sources.get(binding.source.0)?;
+        let RuntimeDataBindGraphValue::Color(value) = source.value else {
+            return None;
+        };
+        Some(value)
+    }
+
     fn number_target_global_id_for_data_bind(&self, data_bind_index: usize) -> Option<u32> {
         let target = self
             .default_view_model_bindings
@@ -7607,6 +7676,18 @@ impl RuntimeDataBindGraph {
             .find(|binding| binding.data_bind_index == data_bind_index)
             .and_then(|binding| self.targets.get(binding.target.0))?;
         let RuntimeDataBindGraphTarget::String { global_id } = target.target else {
+            return None;
+        };
+        Some(global_id)
+    }
+
+    fn color_target_global_id_for_data_bind(&self, data_bind_index: usize) -> Option<u32> {
+        let target = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .and_then(|binding| self.targets.get(binding.target.0))?;
+        let RuntimeDataBindGraphTarget::Color { global_id } = target.target else {
             return None;
         };
         Some(global_id)
@@ -13029,6 +13110,28 @@ impl StateMachineInstance {
             .map(|bindable_string| bindable_string.value.as_slice())
     }
 
+    pub fn default_view_model_color_source_value_for_data_bind(
+        &self,
+        data_bind_index: usize,
+    ) -> Option<u32> {
+        self.data_bind_graph
+            .default_view_model_color_source_value_for_data_bind(data_bind_index)
+    }
+
+    pub fn bindable_color_value_for_data_bind(&self, data_bind_index: usize) -> Option<u32> {
+        if let Some(value) = self
+            .data_bind_graph
+            .color_target_global_id_for_data_bind(data_bind_index)
+            .and_then(|global_id| bindable_color_value(&self.bindable_colors, global_id))
+        {
+            return Some(value);
+        }
+        self.bindable_colors
+            .iter()
+            .find(|bindable_color| bindable_color.has_data_bind_index(data_bind_index))
+            .map(|bindable_color| bindable_color.value)
+    }
+
     pub fn set_default_view_model_number_source_for_data_bind(
         &mut self,
         data_bind_index: usize,
@@ -13316,6 +13419,26 @@ impl StateMachineInstance {
         if !self
             .data_bind_graph
             .set_imported_view_model_context_string_source_for_data_bind(
+                context,
+                data_bind_index,
+                value,
+            )
+        {
+            return false;
+        }
+        self.needs_advance = true;
+        true
+    }
+
+    pub fn set_imported_view_model_context_color_source_for_data_bind(
+        &mut self,
+        context: &mut RuntimeImportedViewModelInstanceContext,
+        data_bind_index: usize,
+        value: u32,
+    ) -> bool {
+        if !self
+            .data_bind_graph
+            .set_imported_view_model_context_color_source_for_data_bind(
                 context,
                 data_bind_index,
                 value,

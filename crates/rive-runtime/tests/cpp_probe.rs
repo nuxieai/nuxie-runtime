@@ -6868,6 +6868,17 @@ fn synthetic_state_machine_default_viewmodel_enum_to_string_converter_condition_
 }
 
 fn synthetic_state_machine_default_viewmodel_color_condition(file_id: u64) -> Vec<u8> {
+    synthetic_state_machine_default_viewmodel_color_condition_with_state_machines(file_id, 1)
+}
+
+fn synthetic_state_machine_imported_viewmodel_color_shared_mutation(file_id: u64) -> Vec<u8> {
+    synthetic_state_machine_default_viewmodel_color_condition_with_state_machines(file_id, 2)
+}
+
+fn synthetic_state_machine_default_viewmodel_color_condition_with_state_machines(
+    file_id: u64,
+    state_machine_count: usize,
+) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "ViewModel", |bytes| {
             push_string_property(bytes, "ViewModel", "name", "Root");
@@ -6906,36 +6917,38 @@ fn synthetic_state_machine_default_viewmodel_color_condition(file_id: u64) -> Ve
         push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
         push_animation_for_single_node(bytes, 1, 2.0, 12.0);
         push_animation_for_single_node(bytes, 1, 20.0, 30.0);
-        push_object_with_properties(bytes, "StateMachine", |_| {});
-        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
-        push_object_with_properties(bytes, "AnyState", |_| {});
-        push_object_with_properties(bytes, "EntryState", |_| {});
-        push_object_with_properties(bytes, "StateTransition", |bytes| {
-            push_uint_property(bytes, "StateTransition", "stateToId", 2);
-        });
-        push_object_with_properties(bytes, "AnimationState", |bytes| {
-            push_uint_property(bytes, "AnimationState", "animationId", 0);
-        });
-        push_object_with_properties(bytes, "StateTransition", |bytes| {
-            push_uint_property(bytes, "StateTransition", "stateToId", 3);
-        });
-        push_bindable_color_data_bind_context(bytes, 0xff00_0000, &[0, 0]);
-        push_object_with_properties(bytes, "TransitionViewModelCondition", |bytes| {
-            push_uint_property(bytes, "TransitionViewModelCondition", "opValue", 0);
-        });
-        push_object_with_properties(bytes, "TransitionPropertyViewModelComparator", |_| {});
-        push_object_with_properties(bytes, "TransitionValueColorComparator", |bytes| {
-            push_color_property(
-                bytes,
-                "TransitionValueColorComparator",
-                "value",
-                0xff00_aa44,
-            );
-        });
-        push_object_with_properties(bytes, "AnimationState", |bytes| {
-            push_uint_property(bytes, "AnimationState", "animationId", 1);
-        });
-        push_object_with_properties(bytes, "ExitState", |_| {});
+        for _ in 0..state_machine_count {
+            push_object_with_properties(bytes, "StateMachine", |_| {});
+            push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+            push_object_with_properties(bytes, "AnyState", |_| {});
+            push_object_with_properties(bytes, "EntryState", |_| {});
+            push_object_with_properties(bytes, "StateTransition", |bytes| {
+                push_uint_property(bytes, "StateTransition", "stateToId", 2);
+            });
+            push_object_with_properties(bytes, "AnimationState", |bytes| {
+                push_uint_property(bytes, "AnimationState", "animationId", 0);
+            });
+            push_object_with_properties(bytes, "StateTransition", |bytes| {
+                push_uint_property(bytes, "StateTransition", "stateToId", 3);
+            });
+            push_bindable_color_data_bind_context(bytes, 0xff00_0000, &[0, 0]);
+            push_object_with_properties(bytes, "TransitionViewModelCondition", |bytes| {
+                push_uint_property(bytes, "TransitionViewModelCondition", "opValue", 0);
+            });
+            push_object_with_properties(bytes, "TransitionPropertyViewModelComparator", |_| {});
+            push_object_with_properties(bytes, "TransitionValueColorComparator", |bytes| {
+                push_color_property(
+                    bytes,
+                    "TransitionValueColorComparator",
+                    "value",
+                    0xff00_aa44,
+                );
+            });
+            push_object_with_properties(bytes, "AnimationState", |bytes| {
+                push_uint_property(bytes, "AnimationState", "animationId", 1);
+            });
+            push_object_with_properties(bytes, "ExitState", |_| {});
+        }
     })
 }
 
@@ -24217,6 +24230,103 @@ fn state_machine_default_viewmodel_color_source_mutation_matches_cpp_probe() {
 }
 
 #[test]
+fn state_machine_imported_viewmodel_color_source_mutation_is_shared_across_state_machines_matches_cpp_probe()
+ {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label =
+        "synthetic/runtime_state_machine_imported_viewmodel_color_source_mutation_shared_cpp.riv";
+    let bytes = synthetic_state_machine_imported_viewmodel_color_shared_mutation(8604);
+    let value = 0x7f11_2233_u32;
+    let args = [
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-view-model-instance-source-color".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        value.to_string(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "1".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "1".to_owned(),
+        "0".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine_a = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing first Rust state-machine instance for {label}"));
+    let mut state_machine_b = rust
+        .state_machine_instance(1)
+        .unwrap_or_else(|| panic!("missing second Rust state-machine instance for {label}"));
+    let mut imported_context = RuntimeImportedViewModelInstanceContext::new(&runtime, 0, 0)
+        .unwrap_or_else(|| panic!("missing imported view-model context for {label}"));
+
+    assert!(
+        state_machine_a.bind_imported_view_model_context(&runtime, &imported_context),
+        "{label} failed to bind first imported view-model context"
+    );
+    assert!(
+        state_machine_a.set_imported_view_model_context_color_source_for_data_bind(
+            &mut imported_context,
+            0,
+            value
+        ),
+        "{label} failed to mutate imported color source"
+    );
+    let state_machine_a_advanced = rust.advance_state_machine_instance(&mut state_machine_a, 0.0);
+    assert!(
+        state_machine_b.bind_imported_view_model_context(&runtime, &imported_context),
+        "{label} failed to bind second imported view-model context"
+    );
+    let state_machine_b_advanced = rust.advance_state_machine_instance(&mut state_machine_b, 0.0);
+
+    let rust_reports = [
+        (0, state_machine_a_advanced, &state_machine_a),
+        (1, state_machine_b_advanced, &state_machine_b),
+    ];
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (state_machine_index, advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(rust_reports)
+    {
+        assert_eq!(
+            cpp_state_machine.state_machine_index, state_machine_index,
+            "{label} state-machine report index mismatch"
+        );
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, advanced, label);
+        compare_state_machine_color_binding(cpp_state_machine, rust_state_machine, 0, label);
+        assert_eq!(
+            rust_state_machine.default_view_model_color_source_value_for_data_bind(0),
+            Some(value),
+            "{label} Rust imported color source mismatch"
+        );
+    }
+}
+
+#[test]
 fn state_machine_viewmodel_enum_conditions_match_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
@@ -30899,6 +31009,29 @@ fn compare_state_machine_string_binding(
     }
 }
 
+fn compare_state_machine_color_binding(
+    cpp: &CppRuntimeStateMachineAdvance,
+    rust: &StateMachineInstance,
+    data_bind_index: usize,
+    label: &str,
+) {
+    let binding = cpp
+        .color_bindings
+        .iter()
+        .find(|binding| binding.data_bind_index == data_bind_index)
+        .unwrap_or_else(|| panic!("missing C++ color binding {data_bind_index} for {label}"));
+    assert_eq!(
+        binding.source_value,
+        rust.default_view_model_color_source_value_for_data_bind(data_bind_index),
+        "{label} color binding {data_bind_index} sourceValue mismatch"
+    );
+    assert_eq!(
+        binding.target_value,
+        rust.bindable_color_value_for_data_bind(data_bind_index),
+        "{label} color binding {data_bind_index} targetValue mismatch"
+    );
+}
+
 fn compare_state_machine_list_binding(
     cpp: &CppRuntimeStateMachineAdvance,
     rust: &StateMachineInstance,
@@ -31441,6 +31574,8 @@ struct CppRuntimeStateMachineAdvance {
     number_bindings: Vec<CppRuntimeStateMachineNumberBinding>,
     #[serde(default, rename = "stringBindings")]
     string_bindings: Vec<CppRuntimeStateMachineStringBinding>,
+    #[serde(default, rename = "colorBindings")]
+    color_bindings: Vec<CppRuntimeStateMachineColorBinding>,
     #[serde(default, rename = "listBindings")]
     list_bindings: Vec<CppRuntimeStateMachineListBinding>,
 }
@@ -31500,6 +31635,16 @@ struct CppRuntimeStateMachineStringBinding {
     source_value: Option<String>,
     #[serde(rename = "targetValue")]
     target_value: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppRuntimeStateMachineColorBinding {
+    #[serde(rename = "dataBindIndex")]
+    data_bind_index: usize,
+    #[serde(rename = "sourceValue")]
+    source_value: Option<u32>,
+    #[serde(rename = "targetValue")]
+    target_value: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]

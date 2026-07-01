@@ -876,6 +876,15 @@ slice.
   state machines bound to the same imported `ViewModelInstance`. The contract
   is
   `docs/prototypes/data-binding-graph-imported-viewmodel-string-shared-mutation-runtime-contract.md`.
+- Shared imported color source mutation slice:
+  `RuntimeImportedViewModelInstanceContext` now also owns color source
+  overrides for one file-backed imported view-model instance. Mutating a
+  `ViewModelInstanceColor.propertyValue` source through one state machine
+  updates that context, and binding a second state machine through the same
+  context sees the color source mutation. The C++ probe covers two authored
+  state machines bound to the same imported `ViewModelInstance` and now emits
+  color binding reports. The contract is
+  `docs/prototypes/data-binding-graph-imported-viewmodel-color-shared-mutation-runtime-contract.md`.
 - First owned scalar property-name slice:
   `RuntimeOwnedViewModelInstance` records root `ViewModelProperty.name` values
   and can mutate a root number property through
@@ -1002,7 +1011,7 @@ slice.
 - Live view-model pointer relink APIs beyond the first default, imported,
   owned root-property, generated-only owned, and imported-intermediate owned
   read paths: imported-instance mutation beyond shared view-model pointer
-  relink, number source, boolean source, and string source contexts,
+  relink, number source, boolean source, string source, and color source contexts,
   property-name APIs beyond imported view-model pointer sources, owned
   generated view-model pointer paths, and stable public handles that update or
   expose cached `propertyValue` indexes.

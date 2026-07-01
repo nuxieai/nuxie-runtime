@@ -1969,6 +1969,14 @@ slice.
   probe compares the handle write against the existing owned-symbol-list-index
   runtime context command. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-symbol-list-index-source-handle-runtime-contract.md`.
+- Owned asset source handle slice:
+  `RuntimeOwnedViewModelInstance` can now resolve a root asset property name
+  into `RuntimeOwnedViewModelAssetSourceHandle` and mutate owned raw asset id
+  storage through that handle before binding. Slash-path lookup remains
+  unresolved, and owned source handles for artboard/trigger/list/view-model
+  sources remain follow-up slices. The C++ probe compares the handle write
+  against the existing owned-asset runtime context command. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-asset-source-handle-runtime-contract.md`.
 - Owned root scalar property-name completion slice:
   `RuntimeOwnedViewModelInstance` can now mutate all root scalar kinds already
   backed by property-index storage by property name: number, boolean, string,

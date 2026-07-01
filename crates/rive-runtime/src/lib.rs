@@ -5041,6 +5041,17 @@ impl RuntimeOwnedViewModelSymbolListIndexSourceHandle {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeOwnedViewModelAssetSourceHandle {
+    property_index: usize,
+}
+
+impl RuntimeOwnedViewModelAssetSourceHandle {
+    pub fn property_index(&self) -> usize {
+        self.property_index
+    }
+}
+
 #[derive(Debug, Clone)]
 struct RuntimeOwnedViewModelNumber {
     property_index: usize,
@@ -7972,6 +7983,25 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         };
         self.set_asset_by_property_index(property_index, value)
+    }
+
+    pub fn asset_source_handle_by_property_name(
+        &self,
+        property_name: &str,
+    ) -> Option<RuntimeOwnedViewModelAssetSourceHandle> {
+        let property_index = self.property_index_by_name(property_name)?;
+        self.assets
+            .iter()
+            .any(|asset| asset.property_index == property_index)
+            .then_some(RuntimeOwnedViewModelAssetSourceHandle { property_index })
+    }
+
+    pub fn set_asset_by_source_handle(
+        &mut self,
+        handle: &RuntimeOwnedViewModelAssetSourceHandle,
+        value: u64,
+    ) -> bool {
+        self.set_asset_by_property_index(handle.property_index, value)
     }
 
     pub fn set_asset_by_property_name_path(&mut self, property_path: &str, value: u64) -> bool {

@@ -4584,7 +4584,7 @@ impl RuntimeDataBindGraph {
         if !self.default_view_model_source_context_bound() {
             return false;
         }
-        let mut updates = Vec::<(Vec<u32>, f32)>::new();
+        let mut updates = Vec::<(Vec<u32>, RuntimeDataBindGraphValue)>::new();
         let mut applied_target_to_source = false;
 
         for binding in self.default_view_model_bindings.clone() {
@@ -4630,22 +4630,41 @@ impl RuntimeDataBindGraph {
                 if !source.bound || source.path != path {
                     continue;
                 }
-                let RuntimeDataBindGraphValue::Number(source_value) = &mut source.value else {
-                    continue;
+                let source_changed = match (&mut source.value, &mut source.default_value, &value) {
+                    (
+                        RuntimeDataBindGraphValue::Number(source_value),
+                        RuntimeDataBindGraphValue::Number(default_value),
+                        RuntimeDataBindGraphValue::Number(value),
+                    ) => {
+                        let mut source_changed = false;
+                        if *source_value != *value {
+                            *source_value = *value;
+                            source_changed = true;
+                        }
+                        if *default_value != *value {
+                            *default_value = *value;
+                            source_changed = true;
+                        }
+                        source_changed
+                    }
+                    (
+                        RuntimeDataBindGraphValue::Boolean(source_value),
+                        RuntimeDataBindGraphValue::Boolean(default_value),
+                        RuntimeDataBindGraphValue::Boolean(value),
+                    ) => {
+                        let mut source_changed = false;
+                        if *source_value != *value {
+                            *source_value = *value;
+                            source_changed = true;
+                        }
+                        if *default_value != *value {
+                            *default_value = *value;
+                            source_changed = true;
+                        }
+                        source_changed
+                    }
+                    _ => false,
                 };
-                let mut source_changed = false;
-                if *source_value != value {
-                    *source_value = value;
-                    source_changed = true;
-                }
-                let RuntimeDataBindGraphValue::Number(default_value) = &mut source.default_value
-                else {
-                    continue;
-                };
-                if *default_value != value {
-                    *default_value = value;
-                    source_changed = true;
-                }
                 if source_changed {
                     if source.is_main_to_source()
                         && matches!(
@@ -5258,14 +5277,11 @@ impl RuntimeDataBindGraphSourceNode {
         self.flags & DATA_BIND_FLAG_DIRECTION_TO_SOURCE != 0
     }
 
-    fn number_target_to_source_value(&mut self, value: f32) -> Option<f32> {
-        if !self.bound
-            || !self.applies_target_to_source()
-            || !matches!(self.value, RuntimeDataBindGraphValue::Number(_))
-        {
+    fn number_target_to_source_value(&mut self, value: f32) -> Option<RuntimeDataBindGraphValue> {
+        if !self.bound || !self.applies_target_to_source() {
             return None;
         }
-        let value = match self.converter.as_ref() {
+        let converted = match self.converter.as_ref() {
             None => RuntimeDataBindGraphValue::Number(value),
             Some(converter) if self.is_main_to_source() => self
                 .converter_state
@@ -5274,10 +5290,23 @@ impl RuntimeDataBindGraphSourceNode {
                 .converter_state
                 .reverse_convert_value(converter, &RuntimeDataBindGraphValue::Number(value))?,
         };
-        let RuntimeDataBindGraphValue::Number(value) = value else {
-            return None;
-        };
-        Some(value)
+        match (&self.value, converted) {
+            (RuntimeDataBindGraphValue::Number(_), RuntimeDataBindGraphValue::Number(value)) => {
+                Some(RuntimeDataBindGraphValue::Number(value))
+            }
+            (RuntimeDataBindGraphValue::Boolean(value), RuntimeDataBindGraphValue::Number(_))
+                if matches!(
+                    self.converter.as_ref(),
+                    Some(RuntimeDataBindGraphConverter::ToNumber)
+                ) =>
+            {
+                Some(RuntimeDataBindGraphValue::Boolean(*value))
+            }
+            (RuntimeDataBindGraphValue::Boolean(_), RuntimeDataBindGraphValue::Boolean(value)) => {
+                Some(RuntimeDataBindGraphValue::Boolean(value))
+            }
+            _ => None,
+        }
     }
 
     fn supports_direct_symbol_list_index_target_to_source(&self) -> bool {
@@ -6096,6 +6125,10 @@ fn runtime_data_bind_graph_reverse_convert_value(
             RuntimeDataBindGraphValue::Boolean(value),
         ) => Some(RuntimeDataBindGraphValue::Boolean(!value)),
         (RuntimeDataBindGraphConverter::BooleanNegate, _) => None,
+        (RuntimeDataBindGraphConverter::ToNumber, RuntimeDataBindGraphValue::Number(value)) => {
+            Some(RuntimeDataBindGraphValue::Number(*value))
+        }
+        (RuntimeDataBindGraphConverter::ToNumber, _) => None,
         (
             RuntimeDataBindGraphConverter::OperationValue {
                 operation_type,

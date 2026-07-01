@@ -26,14 +26,18 @@ the graph yet.
 Main-`ToTarget | TwoWay` state-machine target-dirty behavior for this boolean
 path is covered by
 `docs/prototypes/data-binding-graph-to-number-scalar-main-to-target-two-way-target-dirty-runtime-contract.md`.
+Public `updateDataBinds(true)` target-to-source behavior for this boolean path
+is covered by
+`docs/prototypes/data-binding-graph-to-number-boolean-public-update-target-to-source-runtime-contract.md`.
 
 ## Out Of Scope
 
 This slice does not add string-to-number parsing, enum-to-number conversion,
 color-to-number conversion, symbol-list index conversion, converter groups,
 formulas, interpolation/smoothing, reverse conversion, target-to-source
-propagation, dirty/update queues beyond the linked state-machine target-dirty
-path, converter lifecycle hooks, relative/parent paths, nested paths,
+propagation beyond the linked public-update slice, dirty/update queues beyond
+the linked state-machine target-dirty path, converter lifecycle hooks,
+relative/parent paths, nested paths,
 listener-owned data binding, or nested artboard propagation.
 
 ## Completion Checks

@@ -35,9 +35,10 @@ conversion through `DataConverterToNumber::convert`.
   `docs/prototypes/data-binding-graph-to-number-string-main-to-target-two-way-target-dirty-runtime-contract.md`.
 - Main-`ToSource | TwoWay` target-to-source behavior for `DataConverterToNumber`.
 - Immediate target-to-source reverse conversion for main-`ToTarget | TwoWay`
-  binds.
+  binds beyond the linked boolean public-update slice.
 - Public `DataBindContainer::updateDataBinds(true)` scheduler parity outside
-  the state-machine bindable-property action path.
+  the state-machine bindable-property action path beyond
+  `docs/prototypes/data-binding-graph-to-number-boolean-public-update-target-to-source-runtime-contract.md`.
 - Full dirty-list scheduler parity for neighboring ordinary `ToTarget`
   bindable targets.
 - Converter groups, formulas, operation converters, range mapper, rounder,

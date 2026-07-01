@@ -135,6 +135,13 @@ slice.
   `DataConverterToNumber` now follows the same C++ state-machine target-dirty
   behavior for main-`ToTarget | TwoWay` boolean, enum, color, and
   symbol-list-index sources feeding number targets.
+- Boolean ToNumber public-update target-to-source slice: direct
+  `DataConverterToNumber` now covers public `updateDataBinds(true)` for a
+  main-`ToTarget | TwoWay` number target backed by a boolean source. C++ base
+  `reverseConvert` returns the edited numeric target value, but the boolean
+  source is not written because the reverse value type does not match; the
+  public update still drains the bind and reapplies the unchanged boolean
+  source to the number target.
 - Fifth cross-type graph-owned converter execution slice:
   `DataConverterToNumber` forward conversion for default-context
   symbol-list-index sources feeding number targets, covered by a C++ probe

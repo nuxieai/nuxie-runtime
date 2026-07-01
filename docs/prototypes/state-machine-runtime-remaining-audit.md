@@ -737,6 +737,12 @@ slice.
   leaf. The C++ probe covers the same read-only imported chain through existing
   view-model binding reports. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-deep-imported-intermediate-runtime-contract.md`.
+- Owned view-model imported-intermediate mutation unsupported boundary:
+  attempting to relink a descendant path below an imported root replacement
+  from the owned root leaves the existing imported descendant selected in C++.
+  Rust rejects the same `set_view_model_by_property_path` mutation once the
+  path would cross an imported intermediate. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-mutation-unsupported-runtime-contract.md`.
 - First `BindablePropertyList.propertyValue` target-to-source slice:
   state-machine list targets can be mutated by data-bind index, and explicit
   `advancedDataContext()` plus public `updateDataBinds(true)` consume the
@@ -763,10 +769,9 @@ slice.
   targets other than `Event.trigger`.
 - Live view-model pointer relink APIs beyond the first default, imported,
   owned root-property, generated-only owned, and imported-intermediate owned
-  read paths: imported-intermediate mutation, persistent imported-instance
-  mutation, and stable public handles that update or expose cached
-  `referenceViewModelInstance` pointers rather than only raw generated
-  `propertyValue` indexes.
+  read paths: persistent imported-instance mutation and stable public handles
+  that update or expose cached `referenceViewModelInstance` pointers rather
+  than only raw generated `propertyValue` indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
 - Live view-model APIs and data-binding propagation governed by

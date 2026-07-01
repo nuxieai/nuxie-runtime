@@ -28,8 +28,8 @@ value.
 ## Out Of Scope
 
 - Nested source mutation APIs.
-- Nested enum, symbol-list-index, asset, artboard, trigger, list, and
-  view-model value kinds.
+- Nested source kinds beyond the enum sibling covered by
+  `docs/prototypes/data-binding-graph-default-viewmodel-nested-enum-runtime-contract.md`.
 - Name-based, relative, and parent paths.
 - Imported and owned runtime contexts beyond existing dedicated slices.
 - Reverse propagation, broader update queues, listener-owned data binding,

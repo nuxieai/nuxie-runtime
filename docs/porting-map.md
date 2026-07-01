@@ -638,7 +638,21 @@ shape `[Root, child, tint]` walks the root
 target. C++ probe coverage verifies the child default through color binding
 reports and the existing transition-condition consumer. The contract is
 `docs/prototypes/data-binding-graph-default-viewmodel-nested-color-runtime-contract.md`.
-Nested mutation APIs, nested enum, symbol-list-index, asset, artboard, trigger,
+Nested mutation APIs, nested enum and other value kinds, name-based relative
+paths, parent paths, public source handles, reverse propagation, broader update
+queues, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
+
+Current #12 update: default-context nested enum source binding now follows the
+same absolute child traversal. A `DataBindContext.sourcePathIds` path of shape
+`[Root, child, choice]` walks the root
+`ViewModelInstanceViewModel.propertyValue` reference to the imported child
+`ViewModelInstance`, then reads the child's
+`ViewModelInstanceEnum.propertyValue` before writing the bindable enum target.
+C++ probe coverage verifies the child default through enum binding reports and
+the existing transition-condition consumer. The contract is
+`docs/prototypes/data-binding-graph-default-viewmodel-nested-enum-runtime-contract.md`.
+Nested mutation APIs, nested symbol-list-index, asset, artboard, trigger,
 list, and view-model value kinds, name-based relative paths, parent paths,
 public source handles, reverse propagation, broader update queues,
 listener-owned data binding, and nested artboard propagation remain follow-up
@@ -3709,8 +3723,8 @@ The contract is
 `docs/prototypes/data-binding-graph-artboard-name-based-source-path-unsupported-runtime-contract.md`.
 Admitted live relative/name lookup with file pointers, converter name paths,
 relative paths, parent paths, nested source kinds beyond the default-context
-number, boolean, string, and color slices, listener-owned data binding, and
-nested artboard propagation remain follow-up `#12` slices.
+number, boolean, string, color, and enum slices, listener-owned data binding,
+and nested artboard propagation remain follow-up `#12` slices.
 
 ## #13: Nested Artboards And Hosts
 

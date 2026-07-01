@@ -3735,10 +3735,9 @@ the C++ `ViewModelInstanceRuntime::replaceViewModel` path shape for this
 owned/generated slice while preserving the unsupported imported-intermediate
 mutation boundary. The contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-name-path-runtime-contract.md`.
-Persistent imported instance mutation, remaining property-name APIs, public
-object-handle APIs, reverse propagation, broader update queues,
-relative/parent/nested lookup, listener-owned data binding, and nested artboard
-propagation remain follow-up `#12` slices.
+Persistent imported instance mutation, public object-handle APIs, reverse
+propagation, broader update queues, relative/parent lookup, listener-owned data
+binding, and nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: imported view-model contexts now preserve the first
 persistent view-model pointer relink across rebinding the same imported
@@ -4776,11 +4775,20 @@ can resolve `child/items` into `RuntimeOwnedViewModelListSourceHandle` through
 list item-count storage before binding. The C++ probe compares the handle
 mutation against the existing owned list name-path command. The contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-nested-list-source-handle-runtime-contract.md`.
-List item identity, item-level view-model traversal, view-model value paths,
-imported-intermediate nested scalar paths, imported-instance mutation sharing,
-stable public object handles beyond asset/artboard/trigger/list, reverse
-propagation, broader update queues, relative/parent lookup, and nested artboard
-propagation remain follow-up `#12` slices.
+
+Current #12 update: owned generated nested view-model pointer paths now have a
+stable public nested source handle. `RuntimeOwnedViewModelInstance` can resolve
+`child/middle/leaf` into `RuntimeOwnedViewModelViewModelSourceHandle` through
+`view_model_source_handle_by_property_name_path`, and
+`set_view_model_by_source_handle` relinks the same generated-child pointer
+storage before binding. The C++ probe compares the handle relink against the
+existing owned generated view-model name-path command. The contract is
+`docs/prototypes/data-binding-graph-owned-viewmodel-nested-viewmodel-source-handle-runtime-contract.md`.
+List item identity, item-level view-model traversal, imported-intermediate
+nested scalar paths, imported-instance mutation sharing, stable public object
+handles beyond asset/artboard/trigger/list/view-model, reverse propagation,
+broader update queues, relative/parent lookup, and nested artboard propagation
+remain follow-up `#12` slices.
 
 Current #12 update: state-machine `BindablePropertyList.propertyValue`
 targets now have a probe-backed target-to-source boundary. Rust exposes

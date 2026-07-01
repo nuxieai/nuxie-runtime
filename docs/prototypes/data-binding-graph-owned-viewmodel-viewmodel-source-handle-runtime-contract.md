@@ -1,9 +1,8 @@
 # Owned ViewModel ViewModel Source Handle Runtime Contract
 
-Purpose: complete the owned runtime root source-handle family by adding the
-view-model pointer source handle without admitting nested handle lookup,
-imported-intermediate traversal, generated child handles, or post-bind pointer
-evaluation behavior.
+Purpose: document the root owned view-model pointer source handle without
+changing root lookup semantics or admitting imported-intermediate traversal or
+the full owned nested handle family.
 
 This slice resolves a root `ViewModelPropertyViewModel.name` on a
 `RuntimeOwnedViewModelInstance` into a
@@ -28,9 +27,11 @@ Out of scope:
 
 - Number, boolean, string, color, enum, symbol-list-index, asset, artboard,
   trigger, and list behavior beyond the existing committed APIs.
-- Nested, relative, parent, or slash-separated property paths.
-- Public handles for generated child view-model instances or imported
-  intermediate children.
+- Changing root-name lookup semantics to accept slash-separated property
+  paths. Generated nested view-model pointer paths are covered separately by
+  `docs/prototypes/data-binding-graph-owned-viewmodel-nested-viewmodel-source-handle-runtime-contract.md`.
+- Relative or parent property paths.
+- Public handles for imported intermediate children.
 - Imported or default view-model contexts.
 - Persistent owned-context mutation after binding, reverse target-to-source
   propagation, broader update queues, listener-owned data binding, and nested
@@ -39,4 +40,5 @@ Out of scope:
 Completion condition: resolving and relinking a root owned view-model pointer
 source by handle produces the same state-machine advance and component update
 reports as the existing C++ owned view-model pointer binding path, no-op repeat
-relinks report unchanged, and slash-path handle lookup remains unresolved.
+relinks report unchanged, and root-name lookup stays separate from slash-path
+lookup.

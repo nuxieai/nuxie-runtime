@@ -5127,12 +5127,16 @@ impl RuntimeOwnedViewModelListSourceHandle {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeOwnedViewModelViewModelSourceHandle {
-    property_index: usize,
+    property_path: Vec<usize>,
 }
 
 impl RuntimeOwnedViewModelViewModelSourceHandle {
     pub fn property_index(&self) -> usize {
-        self.property_index
+        self.property_path[self.property_path.len() - 1]
+    }
+
+    pub fn path(&self) -> &[usize] {
+        &self.property_path
     }
 }
 
@@ -9128,7 +9132,21 @@ impl RuntimeOwnedViewModelInstance {
         self.view_models
             .iter()
             .any(|view_model| view_model.property_index == property_index)
-            .then_some(RuntimeOwnedViewModelViewModelSourceHandle { property_index })
+            .then_some(RuntimeOwnedViewModelViewModelSourceHandle {
+                property_path: vec![property_index],
+            })
+    }
+
+    pub fn view_model_source_handle_by_property_name_path(
+        &self,
+        property_path: &str,
+    ) -> Option<RuntimeOwnedViewModelViewModelSourceHandle> {
+        let property_path = property_path.split('/').collect::<Vec<_>>();
+        if property_path.is_empty() || property_path.iter().any(|segment| segment.is_empty()) {
+            return None;
+        }
+        let (property_path, _) = self.view_model_property_path_by_names(&property_path)?;
+        Some(RuntimeOwnedViewModelViewModelSourceHandle { property_path })
     }
 
     pub fn set_view_model_by_source_handle(
@@ -9136,7 +9154,7 @@ impl RuntimeOwnedViewModelInstance {
         handle: &RuntimeOwnedViewModelViewModelSourceHandle,
         instance_index: usize,
     ) -> bool {
-        self.set_view_model_by_property_index(handle.property_index, instance_index)
+        self.set_view_model_by_property_path(&handle.property_path, instance_index)
     }
 
     pub fn set_view_model_by_property_path(

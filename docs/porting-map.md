@@ -667,10 +667,24 @@ child `ViewModelInstance`, then reads the child's
 child default through the existing transition-condition and component-update
 report surfaces. The contract is
 `docs/prototypes/data-binding-graph-default-viewmodel-nested-symbol-list-index-runtime-contract.md`.
-Nested mutation APIs, nested asset, artboard, trigger, list, and view-model
-value kinds, name-based relative paths, parent paths, public source handles,
-reverse propagation, broader update queues, listener-owned data binding, and
-nested artboard propagation remain follow-up `#12` slices.
+Nested mutation APIs, nested asset and other value kinds, name-based relative
+paths, parent paths, public source handles, reverse propagation, broader update
+queues, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
+
+Current #12 update: default-context nested asset source binding now follows
+the same absolute child traversal. A `DataBindContext.sourcePathIds` path of
+shape `[Root, child, image]` walks the root
+`ViewModelInstanceViewModel.propertyValue` reference to the imported child
+`ViewModelInstance`, then reads the child's
+`ViewModelInstanceAssetImage.propertyValue` before writing the bindable asset
+target. C++ probe coverage verifies the child default through asset binding
+reports and the existing transition-condition consumer. The contract is
+`docs/prototypes/data-binding-graph-default-viewmodel-nested-asset-runtime-contract.md`.
+Nested mutation APIs, nested artboard, trigger, list, and view-model value
+kinds, name-based relative paths, parent paths, public source handles, reverse
+propagation, broader update queues, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: graph-owned source mutation now also covers default
 `ViewModelInstanceBoolean` sources. Rust exposes
@@ -3737,7 +3751,7 @@ The contract is
 `docs/prototypes/data-binding-graph-artboard-name-based-source-path-unsupported-runtime-contract.md`.
 Admitted live relative/name lookup with file pointers, converter name paths,
 relative paths, parent paths, nested source kinds beyond the default-context
-number, boolean, string, color, enum, and symbol-list-index slices,
+number, boolean, string, color, enum, symbol-list-index, and asset slices,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 

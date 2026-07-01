@@ -764,6 +764,13 @@ slice.
   `completeViewModelProperties` before calling
   `ViewModelInstanceRuntime::replaceViewModel`. The contract is
   `docs/prototypes/data-binding-graph-imported-viewmodel-name-path-runtime-contract.md`.
+- First owned scalar property-name slice:
+  `RuntimeOwnedViewModelInstance` records root `ViewModelProperty.name` values
+  and can mutate a root number property through
+  `set_number_by_property_name`, matching the C++ public
+  `ViewModelInstanceRuntime::propertyNumber(name)->value(...)` path before
+  binding an owned context to a state machine. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-number-name-runtime-contract.md`.
 - First `BindablePropertyList.propertyValue` target-to-source slice:
   state-machine list targets can be mutated by data-bind index, and explicit
   `advancedDataContext()` plus public `updateDataBinds(true)` consume the
@@ -792,9 +799,9 @@ slice.
   owned root-property, generated-only owned, and imported-intermediate owned
   read paths: imported-instance mutation beyond state-machine-local view-model
   pointer relink overlays, remaining property-name APIs beyond imported
-  view-model pointer sources and owned generated view-model pointer paths, and
-  stable public handles that update or expose cached
-  `referenceViewModelInstance` pointers rather than only raw generated
+  view-model pointer sources, owned generated view-model pointer paths, and
+  owned root number properties, and stable public handles that update or expose
+  cached `referenceViewModelInstance` pointers rather than only raw generated
   `propertyValue` indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.

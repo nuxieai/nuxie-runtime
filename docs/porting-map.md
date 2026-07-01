@@ -2261,6 +2261,19 @@ propagation, broader update queues, relative/parent/nested lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 
+Current #12 update: owned runtime view-model contexts now have the first scalar
+property-name mutation API. `RuntimeOwnedViewModelInstance` records root
+`ViewModelProperty.name` values and exposes
+`set_number_by_property_name("amount", value)`, matching the C++ public
+`ViewModelInstanceRuntime::propertyNumber(name)->value(...)` path used before
+binding an owned context to a state machine. The contract is
+`docs/prototypes/data-binding-graph-owned-viewmodel-number-name-runtime-contract.md`.
+Remaining owned scalar name APIs, nested scalar name paths,
+imported-instance mutation sharing, stable public object handles, reverse
+propagation, broader update queues, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
+
 Current #12 update: state-machine `BindablePropertyList.propertyValue`
 targets now have a probe-backed target-to-source boundary. Rust exposes
 `StateMachineInstance::set_bindable_list_for_data_bind`, tracks list target

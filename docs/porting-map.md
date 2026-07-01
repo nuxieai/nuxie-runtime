@@ -2484,8 +2484,19 @@ the same imported context. The C++ probe adds
 symbol-list-index binding reports for `BindablePropertyInteger` targets, and
 compares both state machines through that report surface. The contract is
 `docs/prototypes/data-binding-graph-imported-viewmodel-symbol-list-index-shared-mutation-runtime-contract.md`.
+
+Current #12 update: imported view-model asset sources now match the shared
+scalar mutation pattern. `RuntimeImportedViewModelInstanceContext` records
+asset source overrides by resolved data-bind source path; mutating a
+`ViewModelInstanceAssetImage.propertyValue` source through one state machine
+is observed when a second authored state machine binds through the same
+imported context. The C++ probe adds
+`--runtime-set-view-model-instance-source-asset` plus asset binding reports for
+`BindablePropertyAsset` targets, and compares both state machines through that
+report surface. The contract is
+`docs/prototypes/data-binding-graph-imported-viewmodel-asset-shared-mutation-runtime-contract.md`.
 Imported-instance mutation beyond shared view-model pointer, number, boolean,
-string, color, enum, and symbol-list-index contexts,
+string, color, enum, symbol-list-index, and asset contexts,
 remaining property-name APIs beyond imported view-model pointer sources and
 owned generated pointer paths, stable public object handles, reverse
 propagation, broader update queues, relative/parent/nested lookup,

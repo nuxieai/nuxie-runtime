@@ -56,6 +56,12 @@ slice.
   `ViewModelInstanceString.propertyValue` bytes, covered by C++ string binding
   reports and the existing transition-condition consumer. The contract is
   `docs/prototypes/data-binding-graph-default-viewmodel-nested-string-runtime-contract.md`.
+- Default-context nested color source binding: an absolute
+  `DataBindContext.sourcePathIds` path such as `[Root, child, tint]` walks the
+  same imported child reference and reads the child's
+  `ViewModelInstanceColor.propertyValue`, covered by C++ color binding reports
+  and the existing transition-condition consumer. The contract is
+  `docs/prototypes/data-binding-graph-default-viewmodel-nested-color-runtime-contract.md`.
 - Graph-owned default `ViewModelInstanceNumber` source-node mutation by
   state-machine data-bind index, covered by a C++ probe through an existing
   `BlendState1DViewModel` consumer.
@@ -1694,7 +1700,7 @@ slice.
   live relative/name lookup with file pointers, remaining converter name paths
   beyond the direct and grouped `DataConverterOperationViewModel` unsupported
   boundaries, relative paths, parent paths, and nested source kinds beyond the
-  default-context number, boolean, and string slices.
+  default-context number, boolean, string, and color slices.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener
   actions.

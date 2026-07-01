@@ -2410,7 +2410,18 @@ calling `ViewModelInstanceRuntime::replaceViewModel`, matching the public
 runtime name-path API's dependency on completed value-to-property links. The
 contract is
 `docs/prototypes/data-binding-graph-imported-viewmodel-name-path-runtime-contract.md`.
-Sharing imported-instance mutations across independent state-machine instances,
+
+Current #12 update: imported view-model pointer relinks now have a narrow
+shared runtime context. Rust exposes `RuntimeImportedViewModelInstanceContext`
+for a file-backed imported view-model instance; relinking a
+`ViewModelInstanceViewModel` source through one state machine records the
+source-path overlay in that context, and a second state machine bound through
+the same context observes the relink. The C++ probe uses two authored state
+machines bound to the same imported `ViewModelInstance`, matching C++'s
+instance mutation behavior without making `RuntimeFile` mutable. The contract
+is
+`docs/prototypes/data-binding-graph-imported-viewmodel-shared-relink-runtime-contract.md`.
+Imported-instance mutation beyond view-model pointer relink contexts,
 remaining property-name APIs beyond imported view-model pointer sources and
 owned generated pointer paths, stable public object handles, reverse
 propagation, broader update queues, relative/parent/nested lookup,

@@ -3061,6 +3061,33 @@ struct RuntimeImportedViewModelOverrideKey {
 }
 
 #[derive(Debug, Clone)]
+pub struct RuntimeImportedViewModelInstanceContext {
+    view_model_index: usize,
+    instance_index: usize,
+    view_model_overrides: BTreeMap<Vec<u32>, RuntimeViewModelPointer>,
+}
+
+impl RuntimeImportedViewModelInstanceContext {
+    pub fn new(file: &RuntimeFile, view_model_index: usize, instance_index: usize) -> Option<Self> {
+        let view_model = file.view_model(view_model_index)?;
+        view_model.instances.into_iter().nth(instance_index)?;
+        Some(Self {
+            view_model_index,
+            instance_index,
+            view_model_overrides: BTreeMap::new(),
+        })
+    }
+
+    pub fn view_model_index(&self) -> usize {
+        self.view_model_index
+    }
+
+    pub fn instance_index(&self) -> usize {
+        self.instance_index
+    }
+}
+
+#[derive(Debug, Clone)]
 struct RuntimeDataBindGraphDefaultBinding {
     data_bind_index: usize,
     source: RuntimeDataBindGraphSourceHandle,
@@ -6558,6 +6585,21 @@ impl RuntimeDataBindGraph {
         view_model_index: usize,
         instance_index: usize,
     ) -> bool {
+        let context = RuntimeImportedViewModelInstanceContext {
+            view_model_index,
+            instance_index,
+            view_model_overrides: BTreeMap::new(),
+        };
+        self.bind_imported_view_model_context(file, &context)
+    }
+
+    fn bind_imported_view_model_context(
+        &mut self,
+        file: &RuntimeFile,
+        context: &RuntimeImportedViewModelInstanceContext,
+    ) -> bool {
+        let view_model_index = context.view_model_index;
+        let instance_index = context.instance_index;
         let Some(view_model) = file.view_model(view_model_index) else {
             return false;
         };
@@ -6572,13 +6614,19 @@ impl RuntimeDataBindGraph {
                     .resolve_from_view_model_instance(file, instance.object, &source.path)
             {
                 let value = if matches!(value, RuntimeDataBindGraphValue::ViewModel(_)) {
-                    self.imported_view_model_overrides
-                        .get(&RuntimeImportedViewModelOverrideKey {
-                            view_model_index,
-                            instance_index,
-                            path: source.path.clone(),
-                        })
+                    context
+                        .view_model_overrides
+                        .get(&source.path)
                         .copied()
+                        .or_else(|| {
+                            self.imported_view_model_overrides
+                                .get(&RuntimeImportedViewModelOverrideKey {
+                                    view_model_index,
+                                    instance_index,
+                                    path: source.path.clone(),
+                                })
+                                .copied()
+                        })
                         .map(RuntimeDataBindGraphValue::ViewModel)
                         .unwrap_or(value)
                 } else {
@@ -7017,6 +7065,70 @@ impl RuntimeDataBindGraph {
         let path = source.path.clone();
         source.value = RuntimeDataBindGraphValue::ViewModel(value);
         source.bound = true;
+        self.imported_view_model_overrides.insert(
+            RuntimeImportedViewModelOverrideKey {
+                view_model_index: context.view_model_index,
+                instance_index: context.instance_index,
+                path,
+            },
+            value,
+        );
+        self.mark_default_view_model_bindings_dirty();
+        true
+    }
+
+    fn relink_imported_view_model_context_view_model_source_for_data_bind(
+        &mut self,
+        context: &mut RuntimeImportedViewModelInstanceContext,
+        data_bind_index: usize,
+        referenced_instance_index: usize,
+    ) -> bool {
+        if self.context_kind != RuntimeDataBindGraphContextKind::ImportedViewModel {
+            return false;
+        }
+        if self.imported_view_model_context
+            != Some(RuntimeImportedViewModelContextKey {
+                view_model_index: context.view_model_index,
+                instance_index: context.instance_index,
+            })
+        {
+            return false;
+        }
+        let Some(source) = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .map(|binding| binding.source)
+        else {
+            return false;
+        };
+        let Some(source) = self.sources.get_mut(source.0) else {
+            return false;
+        };
+        let Some(object_id) = source
+            .view_model_instance_ids
+            .get(referenced_instance_index)
+            .copied()
+        else {
+            return false;
+        };
+        if !matches!(
+            &source.default_value,
+            RuntimeDataBindGraphValue::ViewModel(_)
+        ) {
+            return false;
+        }
+        let value = RuntimeViewModelPointer::Imported { object_id };
+        let source_changed = !matches!(&source.value, RuntimeDataBindGraphValue::ViewModel(current) if *current == value);
+        let path = source.path.clone();
+        let context_changed = context.view_model_overrides.get(&path) != Some(&value);
+        if !source_changed && !context_changed {
+            return false;
+        }
+
+        source.value = RuntimeDataBindGraphValue::ViewModel(value);
+        source.bound = true;
+        context.view_model_overrides.insert(path.clone(), value);
         self.imported_view_model_overrides.insert(
             RuntimeImportedViewModelOverrideKey {
                 view_model_index: context.view_model_index,
@@ -12970,6 +13082,26 @@ impl StateMachineInstance {
         true
     }
 
+    pub fn relink_imported_view_model_context_view_model_source_for_data_bind(
+        &mut self,
+        context: &mut RuntimeImportedViewModelInstanceContext,
+        data_bind_index: usize,
+        instance_index: usize,
+    ) -> bool {
+        if !self
+            .data_bind_graph
+            .relink_imported_view_model_context_view_model_source_for_data_bind(
+                context,
+                data_bind_index,
+                instance_index,
+            )
+        {
+            return false;
+        }
+        self.needs_advance = true;
+        true
+    }
+
     pub fn relink_view_model_instance_view_model_source_by_property_name_path(
         &mut self,
         file: &RuntimeFile,
@@ -13021,6 +13153,26 @@ impl StateMachineInstance {
             return false;
         }
         self.bind_active_imported_view_model_triggers(file, view_model_index, instance_index);
+        self.needs_advance = true;
+        true
+    }
+
+    pub fn bind_imported_view_model_context(
+        &mut self,
+        file: &RuntimeFile,
+        context: &RuntimeImportedViewModelInstanceContext,
+    ) -> bool {
+        if !self
+            .data_bind_graph
+            .bind_imported_view_model_context(file, context)
+        {
+            return false;
+        }
+        self.bind_active_imported_view_model_triggers(
+            file,
+            context.view_model_index,
+            context.instance_index,
+        );
         self.needs_advance = true;
         true
     }

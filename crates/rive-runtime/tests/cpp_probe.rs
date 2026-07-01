@@ -2,9 +2,10 @@ use rive_binary::{RuntimeFile, read_runtime_file};
 use rive_graph::GraphFile;
 use rive_runtime::{
     ArtboardInstance, ComponentDirt, Mat2D, RuntimeComponent, RuntimeDrawCommandKind,
-    RuntimeFeatherState, RuntimeGradientStop, RuntimeOwnedViewModelInstance, RuntimePathCommand,
-    RuntimeShapePaintKind, RuntimeShapePaintPathKind, RuntimeShapePaintState,
-    StateMachineInputKind, StateMachineInstance, TransformProperty,
+    RuntimeFeatherState, RuntimeGradientStop, RuntimeImportedViewModelInstanceContext,
+    RuntimeOwnedViewModelInstance, RuntimePathCommand, RuntimeShapePaintKind,
+    RuntimeShapePaintPathKind, RuntimeShapePaintState, StateMachineInputKind, StateMachineInstance,
+    TransformProperty,
 };
 use rive_schema::definition_by_name;
 use serde::Deserialize;
@@ -7596,6 +7597,21 @@ fn synthetic_state_machine_default_viewmodel_viewmodel_bind_source(file_id: u64)
 }
 
 fn synthetic_state_machine_default_viewmodel_viewmodel_source_mutation(file_id: u64) -> Vec<u8> {
+    synthetic_state_machine_default_viewmodel_viewmodel_source_mutation_with_state_machines(
+        file_id, 1,
+    )
+}
+
+fn synthetic_state_machine_imported_viewmodel_shared_relink(file_id: u64) -> Vec<u8> {
+    synthetic_state_machine_default_viewmodel_viewmodel_source_mutation_with_state_machines(
+        file_id, 2,
+    )
+}
+
+fn synthetic_state_machine_default_viewmodel_viewmodel_source_mutation_with_state_machines(
+    file_id: u64,
+    state_machine_count: usize,
+) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "ViewModel", |bytes| {
             push_string_property(bytes, "ViewModel", "name", "Root");
@@ -7656,28 +7672,30 @@ fn synthetic_state_machine_default_viewmodel_viewmodel_source_mutation(file_id: 
         push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
         push_animation_for_single_node(bytes, 1, 2.0, 12.0);
         push_animation_for_single_node(bytes, 1, 20.0, 30.0);
-        push_object_with_properties(bytes, "StateMachine", |_| {});
-        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
-        push_object_with_properties(bytes, "AnyState", |_| {});
-        push_object_with_properties(bytes, "EntryState", |_| {});
-        push_object_with_properties(bytes, "StateTransition", |bytes| {
-            push_uint_property(bytes, "StateTransition", "stateToId", 2);
-        });
-        push_object_with_properties(bytes, "AnimationState", |bytes| {
-            push_uint_property(bytes, "AnimationState", "animationId", 0);
-        });
-        push_object_with_properties(bytes, "StateTransition", |bytes| {
-            push_uint_property(bytes, "StateTransition", "stateToId", 3);
-        });
-        push_bindable_view_model_data_bind_context(bytes, &[0, 0]);
-        push_object_with_properties(bytes, "TransitionViewModelCondition", |_| {});
-        push_object_with_properties(bytes, "TransitionPropertyViewModelComparator", |_| {});
-        push_bindable_view_model_data_bind_context(bytes, &[0, 1]);
-        push_object_with_properties(bytes, "TransitionPropertyViewModelComparator", |_| {});
-        push_object_with_properties(bytes, "AnimationState", |bytes| {
-            push_uint_property(bytes, "AnimationState", "animationId", 1);
-        });
-        push_object_with_properties(bytes, "ExitState", |_| {});
+        for _ in 0..state_machine_count {
+            push_object_with_properties(bytes, "StateMachine", |_| {});
+            push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+            push_object_with_properties(bytes, "AnyState", |_| {});
+            push_object_with_properties(bytes, "EntryState", |_| {});
+            push_object_with_properties(bytes, "StateTransition", |bytes| {
+                push_uint_property(bytes, "StateTransition", "stateToId", 2);
+            });
+            push_object_with_properties(bytes, "AnimationState", |bytes| {
+                push_uint_property(bytes, "AnimationState", "animationId", 0);
+            });
+            push_object_with_properties(bytes, "StateTransition", |bytes| {
+                push_uint_property(bytes, "StateTransition", "stateToId", 3);
+            });
+            push_bindable_view_model_data_bind_context(bytes, &[0, 0]);
+            push_object_with_properties(bytes, "TransitionViewModelCondition", |_| {});
+            push_object_with_properties(bytes, "TransitionPropertyViewModelComparator", |_| {});
+            push_bindable_view_model_data_bind_context(bytes, &[0, 1]);
+            push_object_with_properties(bytes, "TransitionPropertyViewModelComparator", |_| {});
+            push_object_with_properties(bytes, "AnimationState", |bytes| {
+                push_uint_property(bytes, "AnimationState", "animationId", 1);
+            });
+            push_object_with_properties(bytes, "ExitState", |_| {});
+        }
     })
 }
 
@@ -26534,6 +26552,119 @@ fn state_machine_imported_viewmodel_viewmodel_source_relink_persists_after_rebin
         );
     }
     compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn state_machine_imported_viewmodel_viewmodel_source_relink_is_shared_across_state_machines_matches_cpp_probe()
+ {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label =
+        "synthetic/runtime_state_machine_imported_viewmodel_viewmodel_source_relink_shared_cpp.riv";
+    let bytes = synthetic_state_machine_imported_viewmodel_shared_relink(8598);
+    let args = [
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-relink-view-model-instance-source-viewmodel".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+        "--runtime-advance-state-machine-data-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "1".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine-data-context".to_owned(),
+        "1".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine_a = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing first Rust state-machine instance for {label}"));
+    let mut state_machine_b = rust
+        .state_machine_instance(1)
+        .unwrap_or_else(|| panic!("missing second Rust state-machine instance for {label}"));
+    let mut imported_context = RuntimeImportedViewModelInstanceContext::new(&runtime, 0, 0)
+        .unwrap_or_else(|| panic!("missing imported view-model context for {label}"));
+
+    assert!(
+        state_machine_a.bind_imported_view_model_context(&runtime, &imported_context),
+        "{label} failed to bind first imported view-model context"
+    );
+    assert!(
+        state_machine_a.relink_imported_view_model_context_view_model_source_for_data_bind(
+            &mut imported_context,
+            0,
+            1
+        ),
+        "{label} failed to relink imported view-model pointer source"
+    );
+    assert!(
+        state_machine_a.advance_data_context(),
+        "{label} failed to advance first data context"
+    );
+    assert!(
+        state_machine_b.bind_imported_view_model_context(&runtime, &imported_context),
+        "{label} failed to bind second imported view-model context"
+    );
+    assert!(
+        state_machine_b.advance_data_context(),
+        "{label} failed to advance second data context"
+    );
+
+    let rust_reports = [(0, &state_machine_a), (1, &state_machine_b)];
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (state_machine_index, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(rust_reports)
+    {
+        assert_eq!(
+            cpp_state_machine.state_machine_index, state_machine_index,
+            "{label} state-machine report index mismatch"
+        );
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, false, label);
+        for data_bind_index in [0, 1] {
+            let binding = cpp_state_machine
+                .view_model_bindings
+                .iter()
+                .find(|binding| binding.data_bind_index == data_bind_index)
+                .unwrap_or_else(|| {
+                    panic!("missing C++ view-model binding {data_bind_index} for {label}")
+                });
+            assert_eq!(
+                binding.source_instance_index,
+                Some(1),
+                "{label} C++ source instance mismatch for data bind {data_bind_index}"
+            );
+            assert_eq!(
+                rust_state_machine
+                    .default_view_model_view_model_source_instance_index_for_data_bind(
+                        data_bind_index
+                    ),
+                Some(1),
+                "{label} Rust source instance mismatch for data bind {data_bind_index}"
+            );
+        }
+    }
 }
 
 #[test]

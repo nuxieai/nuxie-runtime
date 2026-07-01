@@ -841,6 +841,14 @@ slice.
   `completeViewModelProperties` before calling
   `ViewModelInstanceRuntime::replaceViewModel`. The contract is
   `docs/prototypes/data-binding-graph-imported-viewmodel-name-path-runtime-contract.md`.
+- Shared imported view-model pointer relink context slice:
+  `RuntimeImportedViewModelInstanceContext` now owns view-model pointer relink
+  overlays for one file-backed imported view-model instance. Relinking a
+  `ViewModelInstanceViewModel` source through one state machine updates that
+  context, and binding a second state machine through the same context sees
+  the relinked source. The C++ probe covers two authored state machines bound
+  to the same imported `ViewModelInstance`. The contract is
+  `docs/prototypes/data-binding-graph-imported-viewmodel-shared-relink-runtime-contract.md`.
 - First owned scalar property-name slice:
   `RuntimeOwnedViewModelInstance` records root `ViewModelProperty.name` values
   and can mutate a root number property through
@@ -966,10 +974,10 @@ slice.
   targets other than `Event.trigger`.
 - Live view-model pointer relink APIs beyond the first default, imported,
   owned root-property, generated-only owned, and imported-intermediate owned
-  read paths: imported-instance mutation beyond state-machine-local view-model
-  pointer relink overlays, property-name APIs beyond imported view-model
-  pointer sources, owned generated view-model pointer paths, and stable public
-  handles that update or expose cached `propertyValue` indexes.
+  read paths: imported-instance mutation beyond shared view-model pointer
+  relink contexts, property-name APIs beyond imported view-model pointer
+  sources, owned generated view-model pointer paths, and stable public handles
+  that update or expose cached `propertyValue` indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
 - Live view-model APIs and data-binding propagation governed by

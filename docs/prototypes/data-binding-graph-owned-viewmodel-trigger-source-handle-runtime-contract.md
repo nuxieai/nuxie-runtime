@@ -1,9 +1,8 @@
 # Owned ViewModel Trigger Source Handle Runtime Contract
 
-Purpose: extend the owned runtime view-model source-handle family from
-artboard sources to trigger sources without admitting trigger dispatch,
-listener-owned events, nested owned handles, or the remaining owned handle
-kinds.
+Purpose: document the root owned trigger source handle without changing root
+lookup semantics or admitting trigger dispatch, listener-owned events, or the
+full owned nested handle family.
 
 This slice resolves a root `ViewModelPropertyTrigger.name` on a
 `RuntimeOwnedViewModelInstance` into a
@@ -27,8 +26,11 @@ Out of scope:
 
 - Number, boolean, string, color, enum, symbol-list-index, asset, and artboard
   behavior beyond the existing committed APIs, plus list or view-model owned
-  source handles.
-- Nested, relative, parent, or slash-separated property paths.
+  source-handle behavior beyond the existing committed APIs.
+- Changing root-name lookup semantics to accept slash-separated property
+  paths. Nested trigger paths are covered separately by
+  `docs/prototypes/data-binding-graph-owned-viewmodel-nested-trigger-source-handle-runtime-contract.md`.
+- Relative or parent property paths.
 - Imported or default view-model contexts.
 - Public trigger fire/dispatch APIs, listener-owned trigger dispatch,
   persistent owned-context mutation after binding, reverse target-to-source
@@ -38,4 +40,4 @@ Out of scope:
 Completion condition: resolving and mutating a root owned trigger source by
 handle produces the same state-machine advance and component update reports as
 the existing C++ owned-trigger binding path, no-op repeat writes report
-unchanged, and slash-path handle lookup remains unresolved.
+unchanged, and root-name lookup stays separate from slash-path lookup.

@@ -4741,11 +4741,21 @@ context. The C++ probe resolves the parent view-model path with
 `ViewModelInstanceRuntime::propertyViewModel("child")` and mutates the child's
 `ViewModelInstanceTrigger` through `propertyValue`. The contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-nested-trigger-name-path-runtime-contract.md`.
+
+Current #12 update: owned generated nested trigger paths now have a stable
+public nested source handle. `RuntimeOwnedViewModelInstance` can resolve
+`child/fire` into `RuntimeOwnedViewModelTriggerSourceHandle` through
+`trigger_source_handle_by_property_name_path`, and
+`set_trigger_by_source_handle` writes through the same generated-child trigger
+storage before binding. The C++ probe compares the handle mutation against the
+existing owned trigger name-path command. The contract is
+`docs/prototypes/data-binding-graph-owned-viewmodel-nested-trigger-source-handle-runtime-contract.md`.
 Trigger firing APIs, listener/callback dispatch, nested list item identity,
 view-model value paths, imported-intermediate nested scalar paths,
-imported-instance mutation sharing, stable public object handles, reverse
-propagation, broader update queues, relative/parent/nested lookup, and nested
-artboard propagation remain follow-up `#12` slices.
+imported-instance mutation sharing, stable public object handles beyond
+asset/artboard/trigger, reverse propagation, broader update queues,
+relative/parent lookup, and nested artboard propagation remain follow-up `#12`
+slices.
 
 Current #12 update: owned generated nested list paths now cover the direct
 list source fact needed by bindable-list parity. Rust stores only item counts

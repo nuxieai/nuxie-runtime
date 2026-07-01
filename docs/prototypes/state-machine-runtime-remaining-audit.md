@@ -2076,10 +2076,11 @@ slice.
 - Owned trigger source handle slice:
   `RuntimeOwnedViewModelInstance` can now resolve a root trigger property name
   into `RuntimeOwnedViewModelTriggerSourceHandle` and mutate owned raw trigger
-  count storage through that handle before binding. Slash-path lookup remains
-  unresolved. Nested/relative/parent lookup remains a follow-up slice. The C++
-  probe compares the handle write against the existing owned-trigger runtime
-  context command. The contract is
+  count storage through that handle before binding. Root-name handle lookup
+  remains separate from slash-path lookup. Nested trigger paths are covered
+  separately; other nested/relative/parent lookup remains a follow-up slice.
+  The C++ probe compares the handle write against the existing owned-trigger
+  runtime context command. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-trigger-source-handle-runtime-contract.md`.
 - Owned list source handle slice:
   `RuntimeOwnedViewModelInstance` can now resolve a root list property name
@@ -2264,6 +2265,15 @@ slice.
   resolves `child` with `propertyViewModel` before mutating the child's
   `ViewModelInstanceTrigger` through `propertyValue`. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-nested-trigger-name-path-runtime-contract.md`.
+- Owned generated nested trigger source-handle slice:
+  generated owned view-model children can now expose a stable public trigger
+  source handle. `RuntimeOwnedViewModelInstance` can resolve `child/fire` into
+  `RuntimeOwnedViewModelTriggerSourceHandle` through
+  `trigger_source_handle_by_property_name_path`, and
+  `set_trigger_by_source_handle` mutates the same generated-child trigger
+  storage before binding. The C++ probe compares against the existing owned
+  trigger name-path command. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-nested-trigger-source-handle-runtime-contract.md`.
 - Owned generated nested list name-path item-count slice:
   generated owned view-model children can store direct list item counts, and
   `RuntimeOwnedViewModelInstance::set_list_item_count_by_property_name_path`
@@ -2318,7 +2328,7 @@ slice.
   paths, and stable public handles beyond the admitted default nested-number/
   boolean/string/color/enum/symbol-list-index/asset/artboard/trigger/list/view-model
   handles plus default/imported/owned root source handles and owned
-  nested-number/boolean/string/color/enum/symbol-list-index/asset/artboard handles,
+  nested-number/boolean/string/color/enum/symbol-list-index/asset/artboard/trigger handles,
   especially remaining nested/relative/parent handles that update or expose
   cached source indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,

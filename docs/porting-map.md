@@ -2210,7 +2210,8 @@ number binds with no converter, direct `DataConverterOperationValue`, grouped
 direct `DataConverterGroup<RangeMapper, OperationValue>`, direct
 `DataConverterRounder`, direct system operation-value converters, direct
 `DataConverterOperationViewModel`, direct cross-type `DataConverterToNumber`,
-direct deterministic `DataConverterFormula`, warmed direct
+direct deterministic `DataConverterFormula`, direct
+`DataConverterGroup<OperationValue, Formula>`, warmed direct
 `DataConverterInterpolator`, and direct `DataConverterToString` string binds.
 The C++ probe exposes `--runtime-update-state-machine-data-binds`, Rust
 mirrors it through
@@ -2233,6 +2234,7 @@ preserve-then-next-advance ordering. The contracts are
 `docs/prototypes/data-binding-graph-to-string-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-string-converter-family-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-formula-public-update-target-to-source-runtime-contract.md`,
+`docs/prototypes/data-binding-graph-formula-group-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-public-update-observer-preservation-runtime-contract.md`,
 and
 `docs/prototypes/data-binding-graph-interpolator-public-update-target-to-source-runtime-contract.md`.
@@ -2268,6 +2270,21 @@ data-bind flags into grouped `DataConverterSystemNormalizer` and
 both concrete system converters. The contract is
 `docs/prototypes/data-binding-graph-system-operation-value-group-public-update-target-to-source-runtime-contract.md`.
 Other system converter group compositions, symbol-list-index inputs, remaining
+mixed/stateful groups, full dirty-list scheduler parity, imported/owned
+contexts, pending add/remove behavior, re-entry protection,
+relative/parent/nested lookup, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
+
+Current #12 update: grouped deterministic formula public
+`updateDataBinds(true)` target-to-source behavior now has a narrow parity
+slice. A main-`ToTarget | TwoWay` number bind uses a `DataConverterGroup`
+containing `DataConverterOperationValue` followed by
+`DataConverterFormula`; public update reverse-converts the edited target
+through C++ reverse group order, runs formula `reverseConvert` through
+deterministic formula `convert`, writes the default number source, and
+reapplies source-to-target in the same update. The contract is
+`docs/prototypes/data-binding-graph-formula-group-public-update-target-to-source-runtime-contract.md`.
+Other formula group compositions, formula functions/randoms, remaining
 mixed/stateful groups, full dirty-list scheduler parity, imported/owned
 contexts, pending add/remove behavior, re-entry protection,
 relative/parent/nested lookup, listener-owned data binding, and nested

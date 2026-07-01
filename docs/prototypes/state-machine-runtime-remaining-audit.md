@@ -711,6 +711,12 @@ slice.
   main-`ToTarget | TwoWay` number binds. The public update dispatches C++
   `reverseConvert`, which delegates to formula `convert`, writes the source,
   then reapplies source-to-target in the same update.
+- Formula group public-update target-to-source slice: the admitted
+  `DataConverterOperationValue -> DataConverterFormula` group now covers
+  public `updateDataBinds(true)` for main-`ToTarget | TwoWay` number binds.
+  The public update follows C++ reverse group order through deterministic
+  formula conversion before writing the source, then reapplies forward group
+  conversion in the same update.
 - First exact number target-to-source direction slice: default-context number
   sources now follow C++ main-direction converter dispatch for the mutating
   bind, with exact C++ probe reports for direct, `OperationValue`, and
@@ -1282,7 +1288,8 @@ slice.
   data-converter-interpolator number smoothing plus grouped
   operation-value-to-interpolator number smoothing, deterministic formula
   number/symbol-list-index-to-number conversion plus graph-represented
-  non-number fallbacks,
+  non-number fallbacks and the first operation-value-to-formula public-update
+  group,
   first direct number/boolean/string/color/enum/asset/artboard/symbol-list-index/trigger/view-model
   target-to-source propagation,
   first artboard list-consumer immediate bind report,

@@ -3244,7 +3244,12 @@ impl RuntimeDataBindGraphValue {
         if path.len() < 2 || usize::try_from(path[0]).ok()? != context.view_model_index {
             return None;
         }
-        if path.len() != 2 && !matches!(self, Self::Number(_) | Self::ViewModel(_)) {
+        if path.len() != 2
+            && !matches!(
+                self,
+                Self::Number(_) | Self::Boolean(_) | Self::ViewModel(_)
+            )
+        {
             return None;
         }
         match self {
@@ -3257,9 +3262,15 @@ impl RuntimeDataBindGraphValue {
                     .number_value_by_property_path(&property_path)
                     .map(Self::Number)
             }
-            Self::Boolean(_) => context
-                .boolean_value_by_property_index(usize::try_from(path[1]).ok()?)
-                .map(Self::Boolean),
+            Self::Boolean(_) => {
+                let property_path = path[1..]
+                    .iter()
+                    .map(|property_index| usize::try_from(*property_index).ok())
+                    .collect::<Option<Vec<_>>>()?;
+                context
+                    .boolean_value_by_property_path(&property_path)
+                    .map(Self::Boolean)
+            }
             Self::String(_) => context
                 .string_value_by_property_index(usize::try_from(path[1]).ok()?)
                 .map(|value| Self::String(value.to_vec())),
@@ -3442,6 +3453,7 @@ struct RuntimeOwnedViewModelViewModel {
     value: RuntimeViewModelPointer,
     property_names: Vec<(String, usize)>,
     numbers: Vec<RuntimeOwnedViewModelNumber>,
+    booleans: Vec<RuntimeOwnedViewModelBoolean>,
     view_model_instance_ids: Vec<u32>,
     children: Vec<RuntimeOwnedViewModelViewModel>,
     imported_children: BTreeMap<u32, Vec<RuntimeOwnedViewModelViewModel>>,
@@ -3476,6 +3488,13 @@ impl RuntimeOwnedViewModelViewModel {
             .map(|number| number.value)
     }
 
+    fn boolean_value_by_property_index(&self, property_index: usize) -> Option<bool> {
+        self.booleans
+            .iter()
+            .find(|boolean| boolean.property_index == property_index)
+            .map(|boolean| boolean.value)
+    }
+
     fn set_number_by_property_name(&mut self, property_name: &str, value: f32) -> bool {
         let Some(property_index) = self.property_index_by_name(property_name) else {
             return false;
@@ -3491,6 +3510,24 @@ impl RuntimeOwnedViewModelViewModel {
             return false;
         }
         number.value = value;
+        true
+    }
+
+    fn set_boolean_by_property_name(&mut self, property_name: &str, value: bool) -> bool {
+        let Some(property_index) = self.property_index_by_name(property_name) else {
+            return false;
+        };
+        let Some(boolean) = self
+            .booleans
+            .iter_mut()
+            .find(|boolean| boolean.property_index == property_index)
+        else {
+            return false;
+        };
+        if boolean.value == value {
+            return false;
+        }
+        boolean.value = value;
         true
     }
 }
@@ -3552,6 +3589,29 @@ fn runtime_owned_view_model_numbers(
                         RuntimeOwnedViewModelNumber {
                             property_index,
                             value: 0.0,
+                        },
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn runtime_owned_view_model_booleans(
+    file: &RuntimeFile,
+    view_model_index: usize,
+) -> Vec<RuntimeOwnedViewModelBoolean> {
+    file.view_model(view_model_index)
+        .map(|view_model| {
+            view_model
+                .properties
+                .into_iter()
+                .enumerate()
+                .filter_map(|(property_index, property)| {
+                    (property.type_name == "ViewModelPropertyBoolean").then_some(
+                        RuntimeOwnedViewModelBoolean {
+                            property_index,
+                            value: false,
                         },
                     )
                 })
@@ -3768,6 +3828,11 @@ fn runtime_owned_view_model_property_children(
                         runtime_owned_view_model_numbers(file, view_model_index)
                     })
                     .unwrap_or_default(),
+                booleans: referenced_view_model_index
+                    .map(|view_model_index| {
+                        runtime_owned_view_model_booleans(file, view_model_index)
+                    })
+                    .unwrap_or_default(),
                 view_model_instance_ids,
                 children,
                 imported_children,
@@ -3895,6 +3960,11 @@ impl RuntimeOwnedViewModelInstance {
                                 runtime_owned_view_model_numbers(file, view_model_index)
                             })
                             .unwrap_or_default(),
+                        booleans: referenced_view_model_index
+                            .map(|view_model_index| {
+                                runtime_owned_view_model_booleans(file, view_model_index)
+                            })
+                            .unwrap_or_default(),
                         view_model_instance_ids,
                         children,
                         imported_children: referenced_view_model_index
@@ -4014,6 +4084,33 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         };
         self.set_boolean_by_property_index(property_index, value)
+    }
+
+    pub fn set_boolean_by_property_name_path(&mut self, property_path: &str, value: bool) -> bool {
+        let property_path = property_path.split('/').collect::<Vec<_>>();
+        if property_path.is_empty() || property_path.iter().any(|segment| segment.is_empty()) {
+            return false;
+        }
+        self.set_boolean_by_property_names(&property_path, value)
+    }
+
+    pub fn set_boolean_by_property_names(&mut self, property_path: &[&str], value: bool) -> bool {
+        if property_path.len() == 1 {
+            return self.set_boolean_by_property_name(property_path[0], value);
+        }
+        let Some((boolean_name, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_names_mut(view_model_path) else {
+            return false;
+        };
+        if !matches!(
+            view_model.value,
+            RuntimeViewModelPointer::OwnedGenerated { .. }
+        ) {
+            return false;
+        }
+        view_model.set_boolean_by_property_name(boolean_name, value)
     }
 
     pub fn set_string_by_property_index(&mut self, property_index: usize, value: &[u8]) -> bool {
@@ -4325,6 +4422,21 @@ impl RuntimeOwnedViewModelInstance {
             .iter()
             .find(|boolean| boolean.property_index == property_index)
             .map(|boolean| boolean.value)
+    }
+
+    fn boolean_value_by_property_path(&self, property_path: &[usize]) -> Option<bool> {
+        if property_path.len() == 1 {
+            return self.boolean_value_by_property_index(property_path[0]);
+        }
+        let (property_index, view_model_path) = property_path.split_last()?;
+        let view_model = self.view_model_by_property_path(view_model_path)?;
+        if !matches!(
+            view_model.value,
+            RuntimeViewModelPointer::OwnedGenerated { .. }
+        ) {
+            return None;
+        }
+        view_model.boolean_value_by_property_index(*property_index)
     }
 
     fn string_value_by_property_index(&self, property_index: usize) -> Option<&[u8]> {

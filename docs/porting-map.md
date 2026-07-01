@@ -2301,6 +2301,21 @@ propagation, broader update queues, relative/parent/nested lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 
+Current #12 update: owned generated nested boolean paths now match the nested
+number pattern. Rust stores direct boolean values on generated owned
+view-model children, exposes
+`set_boolean_by_property_name_path("child/enabled", value)`, and resolves
+boolean data-bind paths longer than the root scalar shape when binding an
+owned context. The C++ probe uses
+`ViewModelInstanceRuntime::propertyBoolean("child/enabled")->value(...)`. The
+contract is
+`docs/prototypes/data-binding-graph-owned-viewmodel-nested-boolean-name-path-runtime-contract.md`.
+Other nested scalar kinds, imported-intermediate nested scalar paths,
+imported-instance mutation sharing, stable public object handles, reverse
+propagation, broader update queues, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
+
 Current #12 update: state-machine `BindablePropertyList.propertyValue`
 targets now have a probe-backed target-to-source boundary. Rust exposes
 `StateMachineInstance::set_bindable_list_for_data_bind`, tracks list target

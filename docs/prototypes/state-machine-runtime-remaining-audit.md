@@ -787,6 +787,15 @@ slice.
   `ViewModelInstanceRuntime::propertyNumber("child/amount")->value(...)`. The
   contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-nested-number-name-path-runtime-contract.md`.
+- Owned generated nested boolean name-path slice:
+  generated owned view-model children can store direct boolean values, and
+  `RuntimeOwnedViewModelInstance::set_boolean_by_property_name_path` can
+  mutate paths such as `child/enabled` before binding. The graph resolves
+  matching nested boolean source paths for owned contexts, and the C++ probe
+  calls
+  `ViewModelInstanceRuntime::propertyBoolean("child/enabled")->value(...)`.
+  The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-nested-boolean-name-path-runtime-contract.md`.
 - First `BindablePropertyList.propertyValue` target-to-source slice:
   state-machine list targets can be mutated by data-bind index, and explicit
   `advancedDataContext()` plus public `updateDataBinds(true)` consume the
@@ -816,8 +825,8 @@ slice.
   read paths: imported-instance mutation beyond state-machine-local view-model
   pointer relink overlays, property-name APIs beyond imported view-model
   pointer sources, owned generated view-model pointer paths, owned root scalar
-  properties, and owned generated nested number paths, and stable public
-  handles that update or expose cached `propertyValue` indexes.
+  properties, and owned generated nested number/boolean paths, and stable
+  public handles that update or expose cached `propertyValue` indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
 - Live view-model APIs and data-binding propagation governed by

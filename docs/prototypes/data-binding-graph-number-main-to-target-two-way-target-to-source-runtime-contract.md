@@ -57,6 +57,9 @@ source-derived value back to the target through `convert`.
   the next normal state-machine advance overwrites it.
 - Exact C++ probe reporting for the mutating number bind's source and target
   values after each explicit runtime action.
+- The first same-path ordinary direct `ToTarget` observer for a dirty direct
+  `DataConverterOperationValue` bind is covered by
+  `docs/prototypes/data-binding-graph-operation-value-main-to-target-observer-runtime-contract.md`.
 
 ## Out Of Scope
 
@@ -68,7 +71,9 @@ source-derived value back to the target through `convert`.
   the state-machine bindable-property action path; the direct no-converter
   public-update variant is covered first by
   `docs/prototypes/data-binding-graph-number-public-update-target-to-source-runtime-contract.md`.
-- Full C++ dirty-list scheduling for neighboring ordinary `ToTarget` binds.
+- Full C++ dirty-list scheduling for arbitrary neighboring ordinary
+  `ToTarget` binds outside the admitted direct `DataConverterOperationValue`
+  same-path observer fixture.
 - Non-number target-to-source converter families.
 - System-operation, operation-view-model, rounder, and `DataConverterToNumber`
   converter cases beyond the direct paths, interpolator cases beyond the
@@ -86,6 +91,9 @@ source-derived value back to the target through `convert`.
   `convert` during state-machine advance, preserves the manual target edit
   through explicit data-context advancement, then overwrites the target from
   the unchanged source on the next normal state-machine advance.
+- A neighboring ordinary direct `ToTarget` number observer for that
+  `DataConverterOperationValue` fixture reports the same source and target
+  values as C++ after each explicit runtime action.
 - A `TwoWay` `DataConverterGroup<OperationValue>` bind applies
   source-to-target in forward group order at both normal state-machine advance
   points around a manual target edit.

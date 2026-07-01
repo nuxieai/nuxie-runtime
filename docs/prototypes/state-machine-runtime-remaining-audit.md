@@ -916,6 +916,12 @@ slice.
   `OperationValue` and `OperationValue` group target edits are now pinned as
   delayed source-to-target dirty updates rather than immediate reverse
   conversion. Broader dirty-list target scheduling remains a follow-up slice.
+- Direct OperationValue main-to-target same-path observer slice: the admitted
+  direct `DataConverterOperationValue` main-`ToTarget | TwoWay` number bind now
+  compares a neighboring ordinary direct `ToTarget` observer on the same source
+  path. Explicit `advanceDataContext()` preserves the mutating target edit and
+  leaves the observer on the unchanged source/target values; the following
+  normal state-machine advances continue matching C++ for both binds.
 - First direct public-update target-to-source slice:
   `StateMachineInstance::updateDataBinds(true)` now covers a converter-free
   number main-`ToTarget | TwoWay` bind. The public update writes the edited

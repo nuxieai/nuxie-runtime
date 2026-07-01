@@ -2208,9 +2208,12 @@ does not run `reverseConvert`, and is overwritten from the unchanged source
 through forward `convert` on the next normal state-machine advance. The
 contract is
 `docs/prototypes/data-binding-graph-number-main-to-target-two-way-target-to-source-runtime-contract.md`.
+The first same-path ordinary direct `ToTarget` observer for a dirty direct
+`DataConverterOperationValue` bind is also probe-backed by
+`docs/prototypes/data-binding-graph-operation-value-main-to-target-observer-runtime-contract.md`.
 Exact public `updateDataBinds(true)` dirty-list scheduler parity and broader
-dirty-list scheduler parity for neighboring ordinary `ToTarget` bindable
-targets, symbol-list-index sources, other converter families, list
+dirty-list scheduler parity for arbitrary neighboring ordinary `ToTarget`
+bindable targets, symbol-list-index sources, other converter families, list
 source/target propagation, imported/owned contexts, pending add/remove
 behavior, re-entry protection, relative/parent/nested lookup, listener-owned
 data binding, and nested artboard propagation remain follow-up `#12` slices.

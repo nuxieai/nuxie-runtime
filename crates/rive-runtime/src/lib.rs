@@ -7406,18 +7406,14 @@ impl RuntimeDataBindGraph {
     ) -> bool {
         let mut changed = false;
         for source in &mut self.sources {
-            let Some(RuntimeDataBindGraphConverter::OperationViewModel {
-                operation_value,
-                source_path: Some(source_path),
-                ..
-            }) = source.converter.as_mut()
-            else {
+            let Some(converter) = source.converter.as_mut() else {
                 continue;
             };
-            if source_path.as_slice() != path || *operation_value == value {
+            if !runtime_data_bind_graph_refresh_operation_view_model_number_converter_for_path(
+                converter, path, value,
+            ) {
                 continue;
             }
-            *operation_value = value;
             source.source_to_target_dirty_after_target_to_source = true;
             changed = true;
         }
@@ -11386,6 +11382,34 @@ fn runtime_data_bind_graph_converter_preserves_string_source_on_main_to_source_t
                 && converters.iter().all(
                     runtime_data_bind_graph_converter_preserves_string_source_on_main_to_source_target_apply,
                 )
+        }
+        _ => false,
+    }
+}
+
+fn runtime_data_bind_graph_refresh_operation_view_model_number_converter_for_path(
+    converter: &mut RuntimeDataBindGraphConverter,
+    path: &[u32],
+    value: f32,
+) -> bool {
+    match converter {
+        RuntimeDataBindGraphConverter::OperationViewModel {
+            operation_value,
+            source_path: Some(source_path),
+            ..
+        } if source_path.as_slice() == path && *operation_value != value => {
+            *operation_value = value;
+            true
+        }
+        RuntimeDataBindGraphConverter::Group(converters) => {
+            let mut changed = false;
+            for converter in converters {
+                changed |=
+                    runtime_data_bind_graph_refresh_operation_view_model_number_converter_for_path(
+                        converter, path, value,
+                    );
+            }
+            changed
         }
         _ => false,
     }

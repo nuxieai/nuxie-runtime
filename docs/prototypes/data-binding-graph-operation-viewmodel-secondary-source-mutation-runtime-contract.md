@@ -26,7 +26,9 @@ with the new operand.
 
 ## Out Of Scope
 
-- Grouped `DataConverterOperationViewModel` dependency dirtiness.
+- Grouped `DataConverterOperationViewModel` dependency dirtiness beyond the
+  `DataConverterGroup<OperationValue, OperationViewModel>` case covered by
+  `docs/prototypes/data-binding-graph-operation-viewmodel-group-secondary-source-mutation-runtime-contract.md`.
 - Imported and owned runtime contexts.
 - Missing, non-number, relative-path, parent-path, nested, or name-resolved
   secondary operation sources.

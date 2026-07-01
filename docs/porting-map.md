@@ -1175,7 +1175,7 @@ probe coverage verifies this through a `BlendState1DViewModel` consumer. The
 contract is
 `docs/prototypes/data-binding-graph-operation-viewmodel-converter-runtime-contract.md`.
 Stable public source handles, list/view-model bindables, reverse conversion,
-grouped secondary-source dependency propagation, imported/owned context
+other grouped secondary-source dependency compositions, imported/owned context
 recomputation for the secondary operand, dedicated grouped
 operation-view-model probe coverage, formula, interpolator, number-to-list,
 and scripted converters, relative/parent/nested lookup, listener-owned data
@@ -1190,8 +1190,8 @@ as a dependent. C++ probe coverage verifies a converter-bound primary number
 bind and an ordinary secondary number bind through the same
 `BlendState1DViewModel` consumer. The contract is
 `docs/prototypes/data-binding-graph-operation-viewmodel-secondary-source-mutation-runtime-contract.md`.
-Stable public source handles, list/view-model bindables, grouped
-secondary-source dependency propagation, imported/owned context recomputation
+Stable public source handles, list/view-model bindables, other grouped
+secondary-source dependency compositions, imported/owned context recomputation
 for the secondary operand, formula, interpolator, number-to-list, scripted
 converters, relative/parent/nested lookup, listener-owned data binding, and
 nested artboard propagation remain follow-up `#12` slices.
@@ -1205,10 +1205,10 @@ view-model number operand before writing the primary
 `ViewModelInstanceNumber.propertyValue` source. The contract is
 `docs/prototypes/data-binding-graph-operation-viewmodel-target-to-source-runtime-contract.md`.
 Stable public source handles, list/view-model bindables, public-queue reverse
-conversion, grouped secondary-source dependency propagation, imported/owned
-context recomputation for the secondary operand, dedicated grouped
-operation-view-model probe coverage, formula functions/randoms, interpolator,
-number-to-list, scripted converters, broader dirty/update queues,
+conversion, other grouped secondary-source dependency compositions,
+imported/owned context recomputation for the secondary operand, dedicated
+grouped operation-view-model probe coverage, formula functions/randoms,
+interpolator, number-to-list, scripted converters, broader dirty/update queues,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
 
@@ -1222,11 +1222,11 @@ the target from the unchanged primary source through forward
 view-model number operand. The contract is
 `docs/prototypes/data-binding-graph-operation-viewmodel-main-to-target-two-way-target-dirty-runtime-contract.md`.
 Stable public source handles, list/view-model bindables, public-queue reverse
-conversion, grouped secondary-source dependency propagation, imported/owned
-context recomputation for the secondary operand, dedicated grouped
-operation-view-model probe coverage, main-`ToTarget | TwoWay` dirty behavior
-for other converter families, formula functions/randoms, interpolator,
-number-to-list, scripted converters, broader dirty/update queues,
+conversion, other grouped secondary-source dependency compositions,
+imported/owned context recomputation for the secondary operand, dedicated
+grouped operation-view-model probe coverage, main-`ToTarget | TwoWay` dirty
+behavior for other converter families, formula functions/randoms,
+interpolator, number-to-list, scripted converters, broader dirty/update queues,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
 
@@ -2263,6 +2263,7 @@ preserve-then-next-advance ordering. The contracts are
 `docs/prototypes/data-binding-graph-system-operation-value-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-operation-viewmodel-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-operation-viewmodel-secondary-source-mutation-runtime-contract.md`,
+`docs/prototypes/data-binding-graph-operation-viewmodel-group-secondary-source-mutation-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-to-number-boolean-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-to-number-remaining-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-to-string-public-update-target-to-source-runtime-contract.md`,
@@ -2292,6 +2293,20 @@ secondary operand from the imported default root view-model instance, writes
 the primary number source, and reapplies source-to-target in the same update.
 The contract is
 `docs/prototypes/data-binding-graph-operation-viewmodel-group-public-update-target-to-source-runtime-contract.md`.
+Other grouped operation-view-model compositions, remaining mixed/stateful
+groups, full dirty-list scheduler parity, imported/owned contexts, pending
+add/remove behavior, re-entry protection, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
+
+Current #12 update: grouped `DataConverterOperationViewModel` secondary-source
+mutation now has a narrow parity slice. A
+`DataConverterGroup<OperationValue, OperationViewModel>` bind refreshes the
+nested operation-view-model operand and dirties the owning source when the
+secondary default view-model number changes through the state-machine default
+source API, matching C++ dependency registration from the group's child
+converter. The contract is
+`docs/prototypes/data-binding-graph-operation-viewmodel-group-secondary-source-mutation-runtime-contract.md`.
 Other grouped operation-view-model compositions, remaining mixed/stateful
 groups, full dirty-list scheduler parity, imported/owned contexts, pending
 add/remove behavior, re-entry protection, relative/parent/nested lookup,

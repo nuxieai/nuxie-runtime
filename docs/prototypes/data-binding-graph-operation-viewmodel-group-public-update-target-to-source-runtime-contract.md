@@ -31,8 +31,9 @@ back to the target during the same public update.
 ## Out Of Scope
 
 - Other grouped operation-view-model compositions.
-- Grouped live dependency/dirt propagation when the secondary operation source
-  changes.
+- Grouped secondary source mutation dependency dirtiness beyond the
+  `DataConverterGroup<OperationValue, OperationViewModel>` case covered by
+  `docs/prototypes/data-binding-graph-operation-viewmodel-group-secondary-source-mutation-runtime-contract.md`.
 - Missing, non-number, relative-path, parent-path, or nested secondary
   operation sources.
 - Imported and owned runtime contexts.

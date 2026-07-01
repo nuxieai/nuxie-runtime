@@ -436,6 +436,12 @@ slice.
   view-model instance, writes the primary source, and reapplies
   source-to-target in the same update. The contract is
   `docs/prototypes/data-binding-graph-operation-viewmodel-group-public-update-target-to-source-runtime-contract.md`.
+- Operation-view-model group secondary-source mutation slice:
+  `DataConverterGroup<OperationValue, OperationViewModel>` now refreshes the
+  nested operation-view-model operand and dirties the owning source when the
+  secondary default view-model number is mutated through the state-machine
+  default source API. The contract is
+  `docs/prototypes/data-binding-graph-operation-viewmodel-group-secondary-source-mutation-runtime-contract.md`.
 - First system operation-value converter slice: direct
   `DataConverterSystemNormalizer` and `DataConverterSystemDegsToRads`
   conversion for default-context number sources feeding number targets when

@@ -894,6 +894,16 @@ slice.
   state machines bound to the same imported `ViewModelInstance` and now emits
   enum binding reports. The contract is
   `docs/prototypes/data-binding-graph-imported-viewmodel-enum-shared-mutation-runtime-contract.md`.
+- Shared imported symbol-list-index source mutation slice:
+  `RuntimeImportedViewModelInstanceContext` now also owns symbol-list-index
+  source overrides for one file-backed imported view-model instance. Mutating a
+  `ViewModelInstanceSymbolListIndex.propertyValue` source through one state
+  machine updates that context, and binding a second state machine through the
+  same context sees the symbol-list-index source mutation. The C++ probe covers
+  two authored state machines bound to the same imported `ViewModelInstance`
+  and now emits symbol-list-index binding reports for
+  `BindablePropertyInteger` targets. The contract is
+  `docs/prototypes/data-binding-graph-imported-viewmodel-symbol-list-index-shared-mutation-runtime-contract.md`.
 - First owned scalar property-name slice:
   `RuntimeOwnedViewModelInstance` records root `ViewModelProperty.name` values
   and can mutate a root number property through
@@ -1020,8 +1030,8 @@ slice.
 - Live view-model pointer relink APIs beyond the first default, imported,
   owned root-property, generated-only owned, and imported-intermediate owned
   read paths: imported-instance mutation beyond shared view-model pointer
-  relink, number source, boolean source, string source, color source, and enum
-  source contexts,
+  relink, number source, boolean source, string source, color source, enum
+  source, and symbol-list-index source contexts,
   property-name APIs beyond imported view-model pointer sources, owned
   generated view-model pointer paths, and stable public handles that update or
   expose cached `propertyValue` indexes.

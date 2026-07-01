@@ -2473,8 +2473,19 @@ context. The C++ probe adds
 `--runtime-set-view-model-instance-source-enum` plus enum binding reports, and
 compares both state machines through that report surface. The contract is
 `docs/prototypes/data-binding-graph-imported-viewmodel-enum-shared-mutation-runtime-contract.md`.
+
+Current #12 update: imported view-model symbol-list-index sources now match
+the shared scalar mutation pattern. `RuntimeImportedViewModelInstanceContext`
+records symbol-list-index source overrides by resolved data-bind source path;
+mutating a `ViewModelInstanceSymbolListIndex.propertyValue` source through one
+state machine is observed when a second authored state machine binds through
+the same imported context. The C++ probe adds
+`--runtime-set-view-model-instance-source-symbol-list-index` plus
+symbol-list-index binding reports for `BindablePropertyInteger` targets, and
+compares both state machines through that report surface. The contract is
+`docs/prototypes/data-binding-graph-imported-viewmodel-symbol-list-index-shared-mutation-runtime-contract.md`.
 Imported-instance mutation beyond shared view-model pointer, number, boolean,
-string, color, and enum contexts,
+string, color, enum, and symbol-list-index contexts,
 remaining property-name APIs beyond imported view-model pointer sources and
 owned generated pointer paths, stable public object handles, reverse
 propagation, broader update queues, relative/parent/nested lookup,

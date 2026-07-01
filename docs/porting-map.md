@@ -2329,6 +2329,21 @@ add/remove behavior, re-entry protection, relative/parent/nested lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 
+Current #12 update: grouped `DataConverterOperationViewModel` converter source
+paths now have the same explicit name-path unsupported boundary as the direct
+converter slice. A `DataConverterGroup<OperationValue, OperationViewModel>`
+child converter receives a manifest path id for `factor`; C++ forwards
+`bindFromContext()` to the child, the child still calls
+`DataContext::getViewModelProperty(sourcePathIds)` directly, and the
+secondary operand remains missing with the operand `0.0` fallback. Rust
+mirrors that behavior through the grouped blend-state probe. The contract is
+`docs/prototypes/data-binding-graph-operation-viewmodel-group-name-path-unsupported-runtime-contract.md`.
+Additional grouped operation-view-model compositions, remaining
+mixed/stateful groups, full dirty-list scheduler parity, imported/owned
+contexts, pending add/remove behavior, re-entry protection,
+relative/parent/nested lookup, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
+
 Current #12 update: boolean public `updateDataBinds(true)` target-to-source
 behavior now covers direct boolean binds and direct `DataConverterBooleanNegate`.
 The C++ probe reports exact boolean binding source/target values, and Rust

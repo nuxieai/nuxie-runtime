@@ -26,7 +26,10 @@ does not bind the secondary operand; the converter falls back to operand
 
 - Adding relative or name-based lookup to
   `DataConverterOperationViewModel::sourcePathIds`.
-- Grouped `DataConverterOperationViewModel` name-path coverage.
+- Additional grouped `DataConverterOperationViewModel` compositions beyond the
+  direct `DataConverterGroup<OperationValue, OperationViewModel>` unsupported
+  boundary covered by
+  `docs/prototypes/data-binding-graph-operation-viewmodel-group-name-path-unsupported-runtime-contract.md`.
 - Parent paths, nested paths, listener-owned data binding, nested artboards,
   and external contexts.
 - Changing binary/import manifest resolution helpers; this is a live converter

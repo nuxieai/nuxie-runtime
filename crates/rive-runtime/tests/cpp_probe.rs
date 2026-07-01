@@ -3605,6 +3605,18 @@ fn synthetic_state_machine_default_viewmodel_number_operation_viewmodel_group_bl
     )
 }
 
+fn synthetic_state_machine_default_viewmodel_number_operation_viewmodel_group_name_path_blend_state(
+    file_id: u64,
+) -> Vec<u8> {
+    synthetic_state_machine_default_viewmodel_number_operation_viewmodel_group_blend_state_with_flags_factor_bind_and_converter_path(
+        file_id,
+        0,
+        false,
+        &[77],
+        true,
+    )
+}
+
 fn synthetic_state_machine_default_viewmodel_number_operation_viewmodel_group_secondary_source_blend_state(
     file_id: u64,
 ) -> Vec<u8> {
@@ -3620,6 +3632,22 @@ fn synthetic_state_machine_default_viewmodel_number_operation_viewmodel_group_bl
     data_bind_flags: u64,
     include_factor_bind: bool,
 ) -> Vec<u8> {
+    synthetic_state_machine_default_viewmodel_number_operation_viewmodel_group_blend_state_with_flags_factor_bind_and_converter_path(
+        file_id,
+        data_bind_flags,
+        include_factor_bind,
+        &[0, 1],
+        false,
+    )
+}
+
+fn synthetic_state_machine_default_viewmodel_number_operation_viewmodel_group_blend_state_with_flags_factor_bind_and_converter_path(
+    file_id: u64,
+    data_bind_flags: u64,
+    include_factor_bind: bool,
+    converter_source_path: &[u32],
+    include_manifest_path: bool,
+) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "ViewModel", |bytes| {
             push_string_property(bytes, "ViewModel", "name", "Root");
@@ -3631,6 +3659,9 @@ fn synthetic_state_machine_default_viewmodel_number_operation_viewmodel_group_bl
             push_string_property(bytes, "ViewModelPropertyNumber", "name", "factor");
         });
         push_object_with_properties(bytes, "Backboard", |_| {});
+        if include_manifest_path {
+            push_manifest_name_path_asset(bytes, 77, 5, b"factor");
+        }
         push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
             push_string_property(bytes, "ViewModelInstance", "name", "root");
             push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
@@ -3649,8 +3680,9 @@ fn synthetic_state_machine_default_viewmodel_number_operation_viewmodel_group_bl
         });
         push_object_with_properties(bytes, "DataConverterOperationViewModel", |bytes| {
             let mut source_path_ids = Vec::new();
-            push_var_uint(&mut source_path_ids, 0);
-            push_var_uint(&mut source_path_ids, 1);
+            for path_id in converter_source_path {
+                push_var_uint(&mut source_path_ids, u64::from(*path_id));
+            }
             push_uint_property(bytes, "DataConverterOperationViewModel", "operationType", 2);
             push_bytes_property(
                 bytes,
@@ -16875,6 +16907,68 @@ fn state_machine_default_viewmodel_number_operation_viewmodel_public_update_targ
     {
         compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
         compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, label);
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn operation_viewmodel_group_converter_name_path_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_number_operation_viewmodel_group_name_path_converter_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_number_operation_viewmodel_group_name_path_blend_state(8581);
+    let args = [
+        "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    assert!(
+        state_machine.bind_default_view_model_context(),
+        "{label} failed to bind default view-model context"
+    );
+    let rust_reports = [
+        (
+            rust.advance_state_machine_instance(&mut state_machine, 0.0),
+            state_machine.clone(),
+        ),
+        (
+            rust.advance_state_machine_instance(&mut state_machine, 1.0),
+            state_machine.clone(),
+        ),
+    ];
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+    {
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
     }
     compare_cpp_runtime_update(&cpp, &rust, &report, label);
 }

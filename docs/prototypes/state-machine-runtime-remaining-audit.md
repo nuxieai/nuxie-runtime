@@ -464,6 +464,14 @@ slice.
   secondary default view-model number is mutated through the state-machine
   default source API. The contract is
   `docs/prototypes/data-binding-graph-operation-viewmodel-group-secondary-source-mutation-runtime-contract.md`.
+- Operation-view-model group converter name-path unsupported boundary:
+  `DataConverterGroup<OperationValue, OperationViewModel>` forwards
+  `bindFromContext()` to the operation-view-model child, which still reads
+  converter `sourcePathIds` directly through `DataContext` and does not use
+  `DataBindContext::resolvePath()` or relative manifest lookup. A manifest
+  path id for the secondary `factor` property leaves the grouped secondary
+  operand missing with the operand `0.0` fallback. The contract is
+  `docs/prototypes/data-binding-graph-operation-viewmodel-group-name-path-unsupported-runtime-contract.md`.
 - First system operation-value converter slice: direct
   `DataConverterSystemNormalizer` and `DataConverterSystemDegsToRads`
   conversion for default-context number sources feeding number targets when
@@ -1665,8 +1673,8 @@ slice.
   component-list item instancing, map-rule-driven child creation, list
   layout/virtualization, remaining generated-list reverse converters, admitted
   live relative/name lookup with file pointers, remaining converter name paths
-  beyond the direct `DataConverterOperationViewModel` unsupported boundary,
-  relative paths, parent paths, and nested paths.
+  beyond the direct and grouped `DataConverterOperationViewModel` unsupported
+  boundaries, relative paths, parent paths, and nested paths.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener
   actions.

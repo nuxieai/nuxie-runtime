@@ -4997,6 +4997,17 @@ impl RuntimeOwnedViewModelBooleanSourceHandle {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeOwnedViewModelStringSourceHandle {
+    property_index: usize,
+}
+
+impl RuntimeOwnedViewModelStringSourceHandle {
+    pub fn property_index(&self) -> usize {
+        self.property_index
+    }
+}
+
 #[derive(Debug, Clone)]
 struct RuntimeOwnedViewModelNumber {
     property_index: usize,
@@ -7575,6 +7586,25 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         };
         self.set_string_by_property_index(property_index, value)
+    }
+
+    pub fn string_source_handle_by_property_name(
+        &self,
+        property_name: &str,
+    ) -> Option<RuntimeOwnedViewModelStringSourceHandle> {
+        let property_index = self.property_index_by_name(property_name)?;
+        self.strings
+            .iter()
+            .any(|string| string.property_index == property_index)
+            .then_some(RuntimeOwnedViewModelStringSourceHandle { property_index })
+    }
+
+    pub fn set_string_by_source_handle(
+        &mut self,
+        handle: &RuntimeOwnedViewModelStringSourceHandle,
+        value: &[u8],
+    ) -> bool {
+        self.set_string_by_property_index(handle.property_index, value)
     }
 
     pub fn set_string_by_property_name_path(&mut self, property_path: &str, value: &[u8]) -> bool {

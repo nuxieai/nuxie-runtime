@@ -1459,6 +1459,15 @@ slice.
   completing view-model properties and proves two authored state machines bound
   through the same imported context observe the mutation. The contract is
   `docs/prototypes/data-binding-graph-imported-viewmodel-nested-color-name-path-runtime-contract.md`.
+- Imported nested enum property-name path slice:
+  `RuntimeImportedViewModelInstanceContext::set_enum_by_property_name_path`
+  resolves a slash-separated path such as `child/choice` through one nested
+  `ViewModelPropertyViewModel` segment to an enum leaf and records the enum
+  value-index override by the existing graph source path. The C++ probe calls
+  `ViewModelInstanceRuntime::propertyEnum("child/choice")` after completing
+  view-model properties and proves two authored state machines bound through
+  the same imported context observe the mutation. The contract is
+  `docs/prototypes/data-binding-graph-imported-viewmodel-nested-enum-name-path-runtime-contract.md`.
 - Shared imported boolean source mutation slice:
   `RuntimeImportedViewModelInstanceContext` now also owns boolean source
   overrides for one file-backed imported view-model instance. Mutating a

@@ -154,7 +154,7 @@ slice.
   values on file view model `0` into
   `RuntimeDefaultViewModelBooleanSourceHandle` and mutate graph-owned default
   boolean source nodes through that handle. Slash-path lookup remains
-  unresolved, and default handles for other source kinds remain follow-up
+  unresolved, and default handles beyond number/boolean/string remain follow-up
   slices. The C++ probe compares the handle write against the default boolean
   by-name mutation command. The contract is
   `docs/prototypes/data-binding-graph-default-boolean-source-handle-runtime-contract.md`.
@@ -163,6 +163,15 @@ slice.
   `propertyValue("label")` fallback for the file-backed default instance, and
   the existing string transition-condition consumer. The contract is
   `docs/prototypes/data-binding-graph-default-string-name-runtime-contract.md`.
+- Default string source handle slice:
+  `StateMachineInstance` can now resolve root `ViewModelPropertyString.name`
+  values on file view model `0` into
+  `RuntimeDefaultViewModelStringSourceHandle` and mutate graph-owned default
+  string source nodes through that handle. Slash-path lookup remains
+  unresolved, and default handles for other source kinds remain follow-up
+  slices. The C++ probe compares the handle write against the default string
+  by-name mutation command. The contract is
+  `docs/prototypes/data-binding-graph-default-string-source-handle-runtime-contract.md`.
 - Default root color property-name mutation, covered by a C++ probe through
   `ViewModelInstanceRuntime::propertyColor("tint")->value(...)` with raw
   `propertyValue("tint")` fallback for the file-backed default instance, and

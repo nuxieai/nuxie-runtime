@@ -439,10 +439,10 @@ remains unresolved. The C++ probe compares the handle mutation against the
 default number by-name command and verifies the existing state-machine advance
 and component update reports. The contract is
 `docs/prototypes/data-binding-graph-default-number-source-handle-runtime-contract.md`.
-Default source handles for string/color/enum/symbol-list-index/asset/artboard/
-trigger/list/view-model sources, nested/relative/parent lookup, reverse
-propagation, broader update queues, listener-owned data binding, and nested
-artboard propagation remain follow-up `#12` slices.
+Default source handles for color/enum/symbol-list-index/asset/artboard/trigger/
+list/view-model sources, nested/relative/parent lookup, reverse propagation,
+broader update queues, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
 
 Current #12 update: default root boolean sources now match the root number
 property-name mutation shape. Rust exposes
@@ -490,6 +490,20 @@ Default enum/symbol-list-index/asset/artboard/trigger/list/view-model
 name APIs, nested/relative/parent lookup, public source handles, reverse
 propagation, broader update queues, listener-owned data binding, and nested
 artboard propagation remain follow-up `#12` slices.
+
+Current #12 update: default root string sources now have a stable public source
+handle. `StateMachineInstance` can resolve a root
+`ViewModelPropertyString.name` into `RuntimeDefaultViewModelStringSourceHandle`,
+and `set_default_view_model_string_source_by_source_handle` writes through the
+existing graph-owned source-path mutation path. Slash-path handle lookup
+remains unresolved. The C++ probe compares the handle mutation against the
+default string by-name command and verifies the existing state-machine advance
+and component update reports. The contract is
+`docs/prototypes/data-binding-graph-default-string-source-handle-runtime-contract.md`.
+Default source handles for color/enum/symbol-list-index/asset/artboard/trigger/
+list/view-model sources, nested/relative/parent lookup, reverse propagation,
+broader update queues, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
 
 Current #12 update: default root color sources now match the root
 number/boolean/string property-name mutation shape. Rust exposes

@@ -2158,6 +2158,22 @@ public property-name/object-handle APIs, reverse propagation, broader update
 queues, relative/parent/nested lookup, listener-owned data binding, and nested
 artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: state-machine `BindablePropertyList.propertyValue`
+targets now have a probe-backed target-to-source boundary. Rust exposes
+`StateMachineInstance::set_bindable_list_for_data_bind`, tracks list target
+dirty state in `RuntimeDataBindGraph`, and consumes explicit
+`advancedDataContext()` plus public `updateDataBinds(true)` as a C++-compatible
+no-op for direct `ViewModelInstanceList` sources and
+`DataConverterNumberToList` sources: the edited target scalar is preserved,
+the source list size or source number report stays unchanged, and no generated
+list item runtime instances are admitted. The contract is
+`docs/prototypes/data-binding-graph-bindable-list-target-to-source-runtime-contract.md`.
+Artboard component-list item instancing, generated child identity propagation,
+map-rule selection, list layout/virtualization, generated-list reverse
+converters, broader update queues, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

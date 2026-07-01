@@ -713,6 +713,12 @@ slice.
   `ViewModelInstanceRuntime::replaceViewModel("child/grandchild", value)`
   path through existing view-model binding reports. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-nested-relink-runtime-contract.md`.
+- First `BindablePropertyList.propertyValue` target-to-source slice:
+  state-machine list targets can be mutated by data-bind index, and explicit
+  `advancedDataContext()` plus public `updateDataBinds(true)` consume the
+  dirty target as a C++-compatible no-op for direct `ViewModelInstanceList`
+  sources and `DataConverterNumberToList` sources. The contract is
+  `docs/prototypes/data-binding-graph-bindable-list-target-to-source-runtime-contract.md`.
 
 ## Remaining Runtime Slices
 
@@ -753,9 +759,8 @@ slice.
   target-to-source propagation,
   first artboard list-consumer immediate bind report,
   data-binding update queues, artboard component-list item instancing,
-  map-rule selection, list layout/virtualization, remaining list
-  target-to-source behavior and reverse converters, relative paths, parent
-  paths, and nested paths.
+  map-rule selection, list layout/virtualization, remaining generated-list
+  reverse converters, relative paths, parent paths, and nested paths.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener
   actions.

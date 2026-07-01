@@ -4717,6 +4717,12 @@ impl RuntimeDataBindGraph {
         })
     }
 
+    fn mark_list_target_dirty_for_data_bind(&mut self, data_bind_index: usize) -> bool {
+        self.mark_target_dirty_for_data_bind(data_bind_index, |target| {
+            matches!(target, RuntimeDataBindGraphTarget::List { .. })
+        })
+    }
+
     fn mark_trigger_target_dirty_for_data_bind(&mut self, data_bind_index: usize) -> bool {
         self.mark_target_dirty_for_data_bind(data_bind_index, |target| {
             matches!(target, RuntimeDataBindGraphTarget::Trigger { .. })
@@ -5564,6 +5570,60 @@ impl RuntimeDataBindGraph {
             self.mark_default_view_model_bindings_dirty();
         }
         changed
+    }
+
+    fn apply_default_view_model_list_targets_to_sources(&mut self) -> bool {
+        self.apply_default_view_model_list_targets_to_sources_with_options(false)
+    }
+
+    fn apply_default_view_model_list_public_update_targets_to_sources(&mut self) -> bool {
+        self.apply_default_view_model_list_targets_to_sources_with_options(true)
+    }
+
+    fn apply_default_view_model_list_targets_to_sources_with_options(
+        &mut self,
+        include_deferred_main_to_target: bool,
+    ) -> bool {
+        if !self.default_view_model_source_context_bound() {
+            return false;
+        }
+
+        let mut consumed_target_to_source = false;
+        let mut needs_source_to_target_noop = false;
+        for binding in self.default_view_model_bindings.clone() {
+            let Some(target) = self.targets.get(binding.target.0) else {
+                continue;
+            };
+            let RuntimeDataBindGraphTarget::List { .. } = target.target else {
+                continue;
+            };
+            let Some(source) = self.sources.get_mut(binding.source.0) else {
+                continue;
+            };
+            let target_to_source_dirty = source.target_to_source_dirty
+                || (include_deferred_main_to_target
+                    && source.source_to_target_dirty_after_immediate);
+            if !target_to_source_dirty {
+                continue;
+            }
+            source.target_to_source_dirty = false;
+            if include_deferred_main_to_target {
+                source.source_to_target_dirty_after_immediate = false;
+            }
+            if !source.bound || !source.applies_target_to_source() {
+                continue;
+            }
+            consumed_target_to_source = true;
+            if source.applies_source_to_target() {
+                source.source_to_target_dirty_after_target_to_source = true;
+                needs_source_to_target_noop = true;
+            }
+        }
+
+        if needs_source_to_target_noop {
+            self.mark_default_view_model_bindings_dirty();
+        }
+        consumed_target_to_source
     }
 
     fn apply_default_view_model_trigger_targets_to_sources(
@@ -10053,6 +10113,27 @@ impl StateMachineInstance {
         true
     }
 
+    pub fn set_bindable_list_for_data_bind(
+        &mut self,
+        data_bind_index: usize,
+        value: usize,
+    ) -> bool {
+        let Some(bindable_list) = self
+            .bindable_lists
+            .iter_mut()
+            .find(|bindable_list| bindable_list.has_data_bind_index(data_bind_index))
+        else {
+            return false;
+        };
+        if !bindable_list.set_value(value) {
+            return false;
+        }
+        self.data_bind_graph
+            .mark_list_target_dirty_for_data_bind(data_bind_index);
+        self.needs_advance = true;
+        true
+    }
+
     pub fn set_bindable_trigger_for_data_bind(
         &mut self,
         data_bind_index: usize,
@@ -10475,6 +10556,8 @@ impl StateMachineInstance {
             self.data_bind_graph
                 .apply_default_view_model_artboard_targets_to_sources(&self.bindable_artboards);
             self.data_bind_graph
+                .apply_default_view_model_list_targets_to_sources();
+            self.data_bind_graph
                 .apply_default_view_model_trigger_targets_to_sources(&self.bindable_triggers);
             self.data_bind_graph
                 .apply_default_view_model_view_model_targets_to_sources(&self.bindable_view_models);
@@ -10506,6 +10589,8 @@ impl StateMachineInstance {
                 .apply_default_view_model_string_public_update_targets_to_sources(
                     &self.bindable_strings,
                 );
+            self.data_bind_graph
+                .apply_default_view_model_list_public_update_targets_to_sources();
             self.apply_default_view_model_bindings(
                 true,
                 RuntimeDataBindGraphApplyPhase::PublicUpdate,
@@ -11133,6 +11218,7 @@ fn bindable_artboard_value(
 #[derive(Debug, Clone)]
 struct StateMachineBindableListInstance {
     global_id: u32,
+    data_bind_indices: Vec<usize>,
     property_value: usize,
 }
 
@@ -11140,8 +11226,21 @@ impl StateMachineBindableListInstance {
     fn new(bindable_list: &RuntimeBindableList) -> Self {
         Self {
             global_id: bindable_list.global_id,
+            data_bind_indices: bindable_list.data_bind_indices.clone(),
             property_value: bindable_list.value,
         }
+    }
+
+    fn has_data_bind_index(&self, data_bind_index: usize) -> bool {
+        self.data_bind_indices.contains(&data_bind_index)
+    }
+
+    fn set_value(&mut self, value: usize) -> bool {
+        if self.property_value == value {
+            return false;
+        }
+        self.property_value = value;
+        true
     }
 }
 

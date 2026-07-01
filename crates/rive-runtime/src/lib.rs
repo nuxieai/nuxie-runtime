@@ -3197,6 +3197,31 @@ impl RuntimeImportedViewModelInstanceContext {
         ) else {
             return false;
         };
+        self.set_boolean_by_resolved_property_path(file, path, value)
+    }
+
+    pub fn set_boolean_by_property_name_path(
+        &mut self,
+        file: &RuntimeFile,
+        property_path: &str,
+        value: bool,
+    ) -> bool {
+        let Some(path) = runtime_imported_view_model_boolean_property_path_for_name_path(
+            file,
+            self.view_model_index,
+            property_path,
+        ) else {
+            return false;
+        };
+        self.set_boolean_by_resolved_property_path(file, path, value)
+    }
+
+    fn set_boolean_by_resolved_property_path(
+        &mut self,
+        file: &RuntimeFile,
+        path: Vec<u32>,
+        value: bool,
+    ) -> bool {
         let Some(view_model) = file.view_model(self.view_model_index) else {
             return false;
         };
@@ -4519,6 +4544,19 @@ fn runtime_imported_view_model_boolean_property_path_for_name(
         view_model_index,
         property_name,
         "ViewModelPropertyBoolean",
+    )
+}
+
+fn runtime_imported_view_model_boolean_property_path_for_name_path(
+    file: &RuntimeFile,
+    view_model_index: usize,
+    property_path: &str,
+) -> Option<Vec<u32>> {
+    runtime_imported_view_model_property_path_for_name_path(
+        file,
+        view_model_index,
+        property_path,
+        &["ViewModelPropertyBoolean"],
     )
 }
 

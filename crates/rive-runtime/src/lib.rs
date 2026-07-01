@@ -10397,9 +10397,10 @@ impl RuntimeDataBindGraph {
                 let RuntimeDataBindGraphValue::ViewModel(source_value) = &mut source.value else {
                     continue;
                 };
+                let mut source_changed = false;
                 if *source_value != value {
                     *source_value = value;
-                    changed = true;
+                    source_changed = true;
                 }
                 let RuntimeDataBindGraphValue::ViewModel(default_value) = &mut source.default_value
                 else {
@@ -10407,6 +10408,10 @@ impl RuntimeDataBindGraph {
                 };
                 if *default_value != value {
                     *default_value = value;
+                    source_changed = true;
+                }
+                if source_changed {
+                    source.source_to_target_dirty_after_target_to_source = true;
                     changed = true;
                 }
             }
@@ -10542,6 +10547,13 @@ impl RuntimeDataBindGraph {
             };
             if matches!(target.target, RuntimeDataBindGraphTarget::ViewModel { .. })
                 && !targets.include_view_models
+            {
+                skipped_dirty_binding = true;
+                continue;
+            }
+            if matches!(target.target, RuntimeDataBindGraphTarget::ViewModel { .. })
+                && matches!(phase, RuntimeDataBindGraphApplyPhase::Immediate)
+                && !source.source_to_target_dirty_after_target_to_source
             {
                 skipped_dirty_binding = true;
                 continue;
@@ -16197,14 +16209,14 @@ impl StateMachineInstance {
         self.changed_state_count = 0;
         self.needs_advance = false;
         self.apply_default_view_model_bindings(
-            false,
+            true,
             RuntimeDataBindGraphApplyPhase::BeforeStatefulAdvance,
         );
         let data_bind_advance = self
             .data_bind_graph
             .advance_stateful_converters(elapsed_seconds);
         self.apply_default_view_model_bindings(
-            false,
+            true,
             RuntimeDataBindGraphApplyPhase::AfterStatefulAdvance {
                 elapsed_positive: elapsed_seconds > 0.0,
             },

@@ -2414,6 +2414,12 @@ reapplies its own target immediately. Unlike the scalar direct value lanes, a
 neighboring ordinary direct `ToTarget` view-model bind to the same source path
 also updates its target during the same public update. The contract is
 `docs/prototypes/data-binding-graph-viewmodel-public-update-observer-application-runtime-contract.md`.
+The state-machine bindable-property action path now has the matching
+main-`ToTarget | TwoWay` observer boundary: explicit `advanceDataContext()`
+preserves the mutating target pointer, leaves the shared source and same-path
+ordinary `ToTarget` observer target unapplied, then normal state-machine
+advancement reapplies source-to-target for both pointer binds. The contract is
+`docs/prototypes/data-binding-graph-viewmodel-main-to-target-observer-runtime-contract.md`.
 Imported/owned/nested view-model contexts, relink APIs, pointer comparator
 transition behavior, multiple observers, cross-type observers, full dirty-list
 scheduler parity, pending add/remove behavior, re-entry protection,

@@ -1035,6 +1035,13 @@ slice.
   source from a main-`ToTarget | TwoWay` target edit and follows C++'s
   pointer-specific behavior where a neighboring ordinary direct `ToTarget`
   view-model observer updates its target during the same public update.
+- View-model main-to-target same-path observer slice:
+  direct view-model pointer target edits through the state-machine
+  bindable-property action path now follow C++'s delayed pointer target
+  application. Explicit `advanceDataContext()` preserves the mutating target
+  edit, keeps the shared source unchanged, and leaves the same-path ordinary
+  `ToTarget` observer target unapplied; the next normal state-machine advance
+  reapplies source-to-target for both pointer binds.
 - First graph-owned view-model bindable slice: forward propagation for
   default-context `ViewModelInstanceViewModel.propertyValue` sources feeding
   `BindablePropertyViewModel.propertyValue` targets, covered by a C++ probe

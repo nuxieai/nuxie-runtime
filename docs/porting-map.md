@@ -728,6 +728,21 @@ parent paths, public source handles, reverse propagation, broader update
 queues, listener-owned data binding, and nested artboard propagation remain
 follow-up `#12` slices.
 
+Current #12 update: default-context nested view-model pointer source binding
+now closes the absolute child traversal value-kind family. A
+`DataBindContext.sourcePathIds` path of shape
+`[Root, child, grandchild]` walks the root
+`ViewModelInstanceViewModel.propertyValue` reference to the imported child
+`ViewModelInstance`, then reads the child's
+`ViewModelInstanceViewModel.propertyValue` before writing the bindable
+view-model target. C++ probe coverage verifies the imported grandchild
+instance index after explicit data-context advancement and state-machine
+advancement. The contract is
+`docs/prototypes/data-binding-graph-default-viewmodel-nested-viewmodel-runtime-contract.md`.
+Nested mutation APIs, name-based relative paths, parent paths, public source
+handles, reverse propagation, broader update queues, listener-owned data
+binding, and nested artboard propagation remain follow-up `#12` slices.
+
 Current #12 update: graph-owned source mutation now also covers default
 `ViewModelInstanceBoolean` sources. Rust exposes
 `StateMachineInstance::set_default_view_model_boolean_source_for_data_bind`,
@@ -3793,9 +3808,9 @@ The contract is
 `docs/prototypes/data-binding-graph-artboard-name-based-source-path-unsupported-runtime-contract.md`.
 Admitted live relative/name lookup with file pointers, converter name paths,
 relative paths, parent paths, nested source kinds beyond the default-context
-number, boolean, string, color, enum, symbol-list-index, asset, artboard, and
-trigger, and list slices, listener-owned data binding, and nested artboard
-propagation remain follow-up `#12` slices.
+number, boolean, string, color, enum, symbol-list-index, asset, artboard,
+trigger, list, and view-model slices, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
 
 ## #13: Nested Artboards And Hosts
 

@@ -28,7 +28,8 @@ list item count observed by data binding.
 ## Out Of Scope
 
 - Nested source mutation APIs.
-- Nested view-model value kind.
+- Nested source kinds beyond the view-model pointer sibling covered by
+  `docs/prototypes/data-binding-graph-default-viewmodel-nested-viewmodel-runtime-contract.md`.
 - Name-based, relative, and parent paths.
 - Imported and owned runtime contexts beyond existing dedicated slices.
 - List item identity, item-level traversal, generated item instances,

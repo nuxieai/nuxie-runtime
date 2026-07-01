@@ -1721,7 +1721,7 @@ slice.
   beyond the direct and grouped `DataConverterOperationViewModel` unsupported
   boundaries, relative paths, parent paths, and nested source kinds beyond the
   default-context number, boolean, string, color, enum, symbol-list-index,
-  asset, artboard, trigger, and list slices.
+  asset, artboard, trigger, list, and view-model slices.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener
   actions.

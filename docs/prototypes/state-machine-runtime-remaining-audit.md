@@ -1486,6 +1486,15 @@ slice.
   completing view-model properties and proves two authored state machines bound
   through the same imported context observe the mutation. The contract is
   `docs/prototypes/data-binding-graph-imported-viewmodel-nested-color-name-path-runtime-contract.md`.
+- Imported color source handle slice:
+  `RuntimeImportedViewModelInstanceContext` can now resolve a root or nested
+  color source into `RuntimeImportedViewModelColorSourceHandle` and mutate
+  through that handle only when it belongs to the same imported view-model
+  instance context. The C++ probe compares the handle write against
+  `ViewModelInstanceRuntime::propertyColor(name)` and proves two authored
+  state machines bound through the same imported context observe the color
+  source value. The contract is
+  `docs/prototypes/data-binding-graph-imported-viewmodel-color-source-handle-runtime-contract.md`.
 - Imported nested enum property-name path slice:
   `RuntimeImportedViewModelInstanceContext::set_enum_by_property_name_path`
   resolves a slash-separated path such as `child/choice` through one nested
@@ -1876,7 +1885,7 @@ slice.
   property-name APIs beyond imported view-model pointer and root
   number/boolean/string/color/enum/symbol-list-index/asset/artboard/trigger/list sources, owned generated view-model pointer
   paths, and stable public handles beyond the first imported number, boolean,
-  and string source handles that update or expose cached `propertyValue`
+  string, and color source handles that update or expose cached `propertyValue`
   indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.

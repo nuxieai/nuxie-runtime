@@ -2174,6 +2174,17 @@ converters, broader update queues, relative/parent/nested lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 
+Current #12 update: state-machine `DataBindContext` name-based source paths now
+have an explicit unsupported parity boundary. C++ clones state-machine data
+binds with a null `DataBind::file()` pointer, so a `NameBased`
+`DataBindContext.sourcePathIds` buffer does not expand through the file
+manifest during runtime binding even when the manifest contains the matching
+name path. Rust keeps the source unresolved for this shape while still
+reporting the cloned bindable number target's initial value. The contract is
+`docs/prototypes/data-binding-graph-name-based-state-machine-source-path-unsupported-runtime-contract.md`.
+File-backed name-based binds, relative/parent/nested lookup, listener-owned
+data binding, and nested artboard propagation remain follow-up `#12` slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

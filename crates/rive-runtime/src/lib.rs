@@ -10215,12 +10215,21 @@ impl StateMachineInstance {
     }
 
     pub fn bindable_number_value_for_data_bind(&self, data_bind_index: usize) -> Option<f32> {
-        let global_id = self
+        if let Some(value) = self
             .data_bind_graph
-            .number_target_global_id_for_data_bind(data_bind_index)?;
+            .number_target_global_id_for_data_bind(data_bind_index)
+            .and_then(|global_id| {
+                self.bindable_numbers
+                    .iter()
+                    .find(|bindable_number| bindable_number.global_id == global_id)
+                    .map(|bindable_number| bindable_number.value)
+            })
+        {
+            return Some(value);
+        }
         self.bindable_numbers
             .iter()
-            .find(|bindable_number| bindable_number.global_id == global_id)
+            .find(|bindable_number| bindable_number.has_data_bind_index(data_bind_index))
             .map(|bindable_number| bindable_number.value)
     }
 

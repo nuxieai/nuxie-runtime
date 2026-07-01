@@ -1863,6 +1863,53 @@ fn synthetic_state_machine_default_viewmodel_number_blend_state(file_id: u64) ->
     })
 }
 
+fn synthetic_state_machine_default_viewmodel_name_based_number_blend_state(
+    file_id: u64,
+) -> Vec<u8> {
+    const DATA_BIND_NAME_BASED: u64 = 1 << 4;
+
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyNumber", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyNumber", "name", "amount");
+        });
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_manifest_name_path_asset(bytes, 77, 5, b"amount");
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceNumber", "viewModelPropertyId", 0);
+            push_f32_property(bytes, "ViewModelInstanceNumber", "propertyValue", 1.25);
+        });
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_bindable_number_data_bind_context_with_converter_and_flags(
+            bytes,
+            0.0,
+            &[77],
+            None,
+            DATA_BIND_NAME_BASED,
+        );
+        push_object_with_properties(bytes, "BlendState1DViewModel", |_| {});
+        push_blend_animation_1d(bytes, 0, 0.0);
+        push_blend_animation_1d(bytes, 1, 1.0);
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
 fn synthetic_state_machine_default_viewmodel_number_operation_value_blend_state(
     file_id: u64,
     source_value: f32,
@@ -3387,6 +3434,33 @@ fn push_bindable_number_data_bind_context_with_converter_and_flags(
         if flags != 0 {
             push_uint_property(bytes, "DataBindContext", "flags", flags);
         }
+    });
+}
+
+fn push_manifest_name_path_asset(bytes: &mut Vec<u8>, path_id: u32, name_id: u32, name: &[u8]) {
+    let mut manifest_names = Vec::new();
+    push_var_uint(&mut manifest_names, 1);
+    push_var_uint(&mut manifest_names, u64::from(name_id));
+    push_var_uint(&mut manifest_names, name.len() as u64);
+    manifest_names.extend_from_slice(name);
+
+    let mut manifest_paths = Vec::new();
+    push_var_uint(&mut manifest_paths, 1);
+    push_var_uint(&mut manifest_paths, u64::from(path_id));
+    push_var_uint(&mut manifest_paths, 1);
+    push_var_uint(&mut manifest_paths, u64::from(name_id));
+
+    let mut manifest_bytes = Vec::new();
+    push_var_uint(&mut manifest_bytes, 0);
+    push_var_uint(&mut manifest_bytes, manifest_names.len() as u64);
+    manifest_bytes.extend_from_slice(&manifest_names);
+    push_var_uint(&mut manifest_bytes, 1);
+    push_var_uint(&mut manifest_bytes, manifest_paths.len() as u64);
+    manifest_bytes.extend_from_slice(&manifest_paths);
+
+    push_object_with_properties(bytes, "ManifestAsset", |_| {});
+    push_object_with_properties(bytes, "FileAssetContents", |bytes| {
+        push_bytes_property(bytes, "FileAssetContents", "bytes", &manifest_bytes);
     });
 }
 
@@ -12097,6 +12171,51 @@ fn state_machine_default_viewmodel_number_bind_source_matches_cpp_probe() {
         compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
     }
     compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn state_machine_name_based_number_bind_source_is_unresolved_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_name_based_number_bind_unresolved_cpp.riv";
+    let bytes = synthetic_state_machine_default_viewmodel_name_based_number_blend_state(8568);
+    let args = [
+        "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine-data-context".to_owned(),
+        "0".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    assert!(
+        state_machine.bind_default_view_model_context(),
+        "{label} failed to bind default view-model context"
+    );
+    assert!(
+        state_machine.advance_data_context(),
+        "{label} failed to advance data context"
+    );
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        1,
+        "{label} state-machine report count mismatch"
+    );
+    let cpp_state_machine = &cpp_artboard.runtime_state_machine_advances[0];
+    compare_state_machine_advance(cpp_state_machine, &state_machine, false, label);
+    compare_state_machine_number_binding(cpp_state_machine, &state_machine, 0, label);
 }
 
 #[test]

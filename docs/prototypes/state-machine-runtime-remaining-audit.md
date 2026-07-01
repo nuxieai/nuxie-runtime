@@ -719,6 +719,12 @@ slice.
   dirty target as a C++-compatible no-op for direct `ViewModelInstanceList`
   sources and `DataConverterNumberToList` sources. The contract is
   `docs/prototypes/data-binding-graph-bindable-list-target-to-source-runtime-contract.md`.
+- State-machine `NameBased` data-bind source-path unsupported boundary:
+  cloned state-machine `DataBindContext` records have a null `DataBind::file()`
+  pointer in C++, so manifest-backed `sourcePathIds` do not resolve during
+  runtime binding for this shape. Rust keeps the source unbound while reporting
+  the cloned bindable number target's initial value. The contract is
+  `docs/prototypes/data-binding-graph-name-based-state-machine-source-path-unsupported-runtime-contract.md`.
 
 ## Remaining Runtime Slices
 
@@ -760,7 +766,8 @@ slice.
   first artboard list-consumer immediate bind report,
   data-binding update queues, artboard component-list item instancing,
   map-rule selection, list layout/virtualization, remaining generated-list
-  reverse converters, relative paths, parent paths, and nested paths.
+  reverse converters, file-backed name-based data binds, relative paths, parent
+  paths, and nested paths.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener
   actions.

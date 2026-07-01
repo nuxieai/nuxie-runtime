@@ -3054,6 +3054,7 @@ struct RuntimeViewModelTrigger {
 struct RuntimeDataBindGraph {
     context_kind: RuntimeDataBindGraphContextKind,
     default_view_model_bindings_dirty: bool,
+    formula_random_source: RuntimeDataBindGraphFormulaRandomSource,
     sources: Vec<RuntimeDataBindGraphSourceNode>,
     targets: Vec<RuntimeDataBindGraphTargetNode>,
     default_view_model_bindings: Vec<RuntimeDataBindGraphDefaultBinding>,
@@ -3082,6 +3083,28 @@ struct RuntimeImportedViewModelOverrideKey {
     view_model_index: usize,
     instance_index: usize,
     path: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct RuntimeDataBindGraphFormulaRandomSource {
+    values: Vec<f32>,
+    next_index: usize,
+}
+
+impl RuntimeDataBindGraphFormulaRandomSource {
+    fn set_values(&mut self, values: &[f32]) {
+        self.values.clear();
+        self.values.extend_from_slice(values);
+        self.next_index = 0;
+    }
+
+    fn next_value(&mut self) -> f32 {
+        let value = self.values.get(self.next_index).copied().unwrap_or(0.0);
+        if self.next_index < self.values.len() {
+            self.next_index += 1;
+        }
+        value
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -4688,6 +4711,7 @@ enum RuntimeDataBindGraphFormulaToken {
 #[derive(Debug, Clone)]
 enum RuntimeDataBindGraphConverterState {
     None,
+    Formula(RuntimeDataBindGraphFormulaState),
     Interpolator(RuntimeDataBindGraphInterpolatorState),
     Group(Vec<RuntimeDataBindGraphConverterState>),
 }
@@ -9676,6 +9700,7 @@ impl RuntimeDataBindGraph {
         Self {
             context_kind: RuntimeDataBindGraphContextKind::None,
             default_view_model_bindings_dirty: false,
+            formula_random_source: RuntimeDataBindGraphFormulaRandomSource::default(),
             sources,
             targets,
             default_view_model_bindings,
@@ -9718,6 +9743,13 @@ impl RuntimeDataBindGraph {
             target: target_handle,
         });
         source
+    }
+
+    fn set_formula_random_values(&mut self, values: &[f32]) {
+        self.formula_random_source.set_values(values);
+        for source in &mut self.sources {
+            source.reset_formula_random_state();
+        }
     }
 
     fn data_context_present(&self) -> bool {
@@ -13112,6 +13144,7 @@ impl RuntimeDataBindGraph {
             return;
         }
         let mut skipped_dirty_binding = false;
+        let mut formula_random_source = std::mem::take(&mut self.formula_random_source);
 
         for binding in self.default_view_model_bindings.clone() {
             let Some(source) = self.sources.get_mut(binding.source.0) else {
@@ -13166,13 +13199,14 @@ impl RuntimeDataBindGraph {
                 skipped_dirty_binding = true;
                 continue;
             }
-            let Some(value) = source.converted_value() else {
+            let Some(value) = source.converted_value(&mut formula_random_source) else {
                 continue;
             };
             targets.apply_default_view_model_binding(&target.target, &value);
             source.source_to_target_dirty_after_immediate = false;
             source.source_to_target_dirty_after_target_to_source = false;
         }
+        self.formula_random_source = formula_random_source;
         self.default_view_model_bindings_dirty = skipped_dirty_binding;
     }
 }
@@ -13445,6 +13479,10 @@ impl RuntimeDataBindGraphSourceNode {
             RuntimeDataBindGraphConverterState::for_converter(self.converter.as_ref());
     }
 
+    fn reset_formula_random_state(&mut self) {
+        self.converter_state.reset_formula_randoms();
+    }
+
     fn advance_stateful_converter(
         &mut self,
         elapsed_seconds: f32,
@@ -13467,32 +13505,51 @@ impl RuntimeDataBindGraphSourceNode {
         }
     }
 
-    fn converted_value(&mut self) -> Option<RuntimeDataBindGraphValue> {
+    fn converted_value(
+        &mut self,
+        formula_random_source: &mut RuntimeDataBindGraphFormulaRandomSource,
+    ) -> Option<RuntimeDataBindGraphValue> {
         match self.converter.as_ref() {
             None => Some(self.value.clone()),
             Some(converter @ RuntimeDataBindGraphConverter::ListToLength)
                 if self.is_main_to_source() =>
             {
                 self.converter_state
-                    .reverse_convert_value(converter, &self.value)
+                    .reverse_convert_value_with_formula_randoms(
+                        converter,
+                        &self.value,
+                        formula_random_source,
+                    )
             }
             Some(converter @ RuntimeDataBindGraphConverter::ToString { .. })
                 if self.is_main_to_source() =>
             {
                 self.converter_state
-                    .reverse_convert_value(converter, &self.value)
+                    .reverse_convert_value_with_formula_randoms(
+                        converter,
+                        &self.value,
+                        formula_random_source,
+                    )
             }
             Some(converter @ RuntimeDataBindGraphConverter::Interpolator { .. })
                 if self.is_main_to_source() =>
             {
                 self.converter_state
-                    .reverse_convert_value(converter, &self.value)
+                    .reverse_convert_value_with_formula_randoms(
+                        converter,
+                        &self.value,
+                        formula_random_source,
+                    )
             }
             Some(converter @ RuntimeDataBindGraphConverter::TriggerIncrement)
                 if self.is_main_to_source() =>
             {
                 self.converter_state
-                    .reverse_convert_value(converter, &self.value)
+                    .reverse_convert_value_with_formula_randoms(
+                        converter,
+                        &self.value,
+                        formula_random_source,
+                    )
             }
             Some(
                 converter @ (RuntimeDataBindGraphConverter::StringTrim { .. }
@@ -13500,14 +13557,26 @@ impl RuntimeDataBindGraphSourceNode {
                 | RuntimeDataBindGraphConverter::StringPad { .. }),
             ) if self.is_main_to_source() => self
                 .converter_state
-                .reverse_convert_value(converter, &self.value),
+                .reverse_convert_value_with_formula_randoms(
+                    converter,
+                    &self.value,
+                    formula_random_source,
+                ),
             Some(converter @ RuntimeDataBindGraphConverter::Group(_))
                 if self.is_main_to_source() =>
             {
                 self.converter_state
-                    .reverse_convert_value(converter, &self.value)
+                    .reverse_convert_value_with_formula_randoms(
+                        converter,
+                        &self.value,
+                        formula_random_source,
+                    )
             }
-            Some(converter) => self.converter_state.convert_value(converter, &self.value),
+            Some(converter) => self.converter_state.convert_value_with_formula_randoms(
+                converter,
+                &self.value,
+                formula_random_source,
+            ),
         }
     }
 }
@@ -13515,6 +13584,9 @@ impl RuntimeDataBindGraphSourceNode {
 impl RuntimeDataBindGraphConverterState {
     fn for_converter(converter: Option<&RuntimeDataBindGraphConverter>) -> Self {
         match converter {
+            Some(RuntimeDataBindGraphConverter::Formula { .. }) => {
+                Self::Formula(RuntimeDataBindGraphFormulaState::default())
+            }
             Some(RuntimeDataBindGraphConverter::Interpolator { .. }) => {
                 Self::Interpolator(RuntimeDataBindGraphInterpolatorState::new())
             }
@@ -13533,7 +13605,25 @@ impl RuntimeDataBindGraphConverterState {
         converter: &RuntimeDataBindGraphConverter,
         value: &RuntimeDataBindGraphValue,
     ) -> Option<RuntimeDataBindGraphValue> {
+        let mut formula_random_source = RuntimeDataBindGraphFormulaRandomSource::default();
+        self.convert_value_with_formula_randoms(converter, value, &mut formula_random_source)
+    }
+
+    fn convert_value_with_formula_randoms(
+        &mut self,
+        converter: &RuntimeDataBindGraphConverter,
+        value: &RuntimeDataBindGraphValue,
+        formula_random_source: &mut RuntimeDataBindGraphFormulaRandomSource,
+    ) -> Option<RuntimeDataBindGraphValue> {
         match (converter, self) {
+            (RuntimeDataBindGraphConverter::Formula { tokens }, Self::Formula(state)) => {
+                runtime_data_bind_graph_convert_formula_value_with_state(
+                    value,
+                    tokens,
+                    state,
+                    formula_random_source,
+                )
+            }
             (
                 RuntimeDataBindGraphConverter::Interpolator {
                     duration,
@@ -13546,7 +13636,11 @@ impl RuntimeDataBindGraphConverterState {
             {
                 let mut value = value.clone();
                 for (converter, state) in converters.iter().zip(states) {
-                    value = state.convert_value(converter, &value)?;
+                    value = state.convert_value_with_formula_randoms(
+                        converter,
+                        &value,
+                        formula_random_source,
+                    )?;
                 }
                 Some(value)
             }
@@ -13559,7 +13653,29 @@ impl RuntimeDataBindGraphConverterState {
         converter: &RuntimeDataBindGraphConverter,
         value: &RuntimeDataBindGraphValue,
     ) -> Option<RuntimeDataBindGraphValue> {
+        let mut formula_random_source = RuntimeDataBindGraphFormulaRandomSource::default();
+        self.reverse_convert_value_with_formula_randoms(
+            converter,
+            value,
+            &mut formula_random_source,
+        )
+    }
+
+    fn reverse_convert_value_with_formula_randoms(
+        &mut self,
+        converter: &RuntimeDataBindGraphConverter,
+        value: &RuntimeDataBindGraphValue,
+        formula_random_source: &mut RuntimeDataBindGraphFormulaRandomSource,
+    ) -> Option<RuntimeDataBindGraphValue> {
         match (converter, self) {
+            (RuntimeDataBindGraphConverter::Formula { tokens }, Self::Formula(state)) => {
+                runtime_data_bind_graph_convert_formula_value_with_state(
+                    value,
+                    tokens,
+                    state,
+                    formula_random_source,
+                )
+            }
             (
                 RuntimeDataBindGraphConverter::Interpolator {
                     duration,
@@ -13572,7 +13688,11 @@ impl RuntimeDataBindGraphConverterState {
             {
                 let mut value = value.clone();
                 for (converter, state) in converters.iter().rev().zip(states.iter_mut().rev()) {
-                    value = state.reverse_convert_value(converter, &value)?;
+                    value = state.reverse_convert_value_with_formula_randoms(
+                        converter,
+                        &value,
+                        formula_random_source,
+                    )?;
                 }
                 Some(value)
             }
@@ -13612,8 +13732,42 @@ impl RuntimeDataBindGraphConverterState {
         match self {
             Self::Interpolator(state) => state.is_initialized(),
             Self::Group(states) => states.iter().any(Self::is_initialized_stateful),
-            Self::None => false,
+            Self::Formula(_) | Self::None => false,
         }
+    }
+
+    fn reset_formula_randoms(&mut self) {
+        match self {
+            Self::Formula(state) => state.clear(),
+            Self::Group(states) => {
+                for state in states {
+                    state.reset_formula_randoms();
+                }
+            }
+            Self::Interpolator(_) | Self::None => {}
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+struct RuntimeDataBindGraphFormulaState {
+    randoms: Vec<f32>,
+}
+
+impl RuntimeDataBindGraphFormulaState {
+    fn random_value(
+        &mut self,
+        index: usize,
+        source: &mut RuntimeDataBindGraphFormulaRandomSource,
+    ) -> f32 {
+        while self.randoms.len() <= index {
+            self.randoms.push(source.next_value());
+        }
+        self.randoms[index]
+    }
+
+    fn clear(&mut self) {
+        self.randoms.clear();
     }
 }
 
@@ -14430,8 +14584,52 @@ fn runtime_data_bind_graph_convert_formula(
     input: f32,
     tokens: &[RuntimeDataBindGraphFormulaToken],
 ) -> f32 {
+    let mut state = RuntimeDataBindGraphFormulaState::default();
+    let mut random_source = RuntimeDataBindGraphFormulaRandomSource::default();
+    runtime_data_bind_graph_convert_formula_with_state(
+        input,
+        tokens,
+        &mut state,
+        &mut random_source,
+    )
+}
+
+fn runtime_data_bind_graph_convert_formula_value_with_state(
+    value: &RuntimeDataBindGraphValue,
+    tokens: &[RuntimeDataBindGraphFormulaToken],
+    state: &mut RuntimeDataBindGraphFormulaState,
+    random_source: &mut RuntimeDataBindGraphFormulaRandomSource,
+) -> Option<RuntimeDataBindGraphValue> {
+    match value {
+        RuntimeDataBindGraphValue::Number(value) => Some(RuntimeDataBindGraphValue::Number(
+            runtime_data_bind_graph_convert_formula_with_state(
+                *value,
+                tokens,
+                state,
+                random_source,
+            ),
+        )),
+        RuntimeDataBindGraphValue::SymbolListIndex(value) => Some(
+            RuntimeDataBindGraphValue::Number(runtime_data_bind_graph_convert_formula_with_state(
+                *value as f32,
+                tokens,
+                state,
+                random_source,
+            )),
+        ),
+        _ => Some(RuntimeDataBindGraphValue::Number(0.0)),
+    }
+}
+
+fn runtime_data_bind_graph_convert_formula_with_state(
+    input: f32,
+    tokens: &[RuntimeDataBindGraphFormulaToken],
+    state: &mut RuntimeDataBindGraphFormulaState,
+    random_source: &mut RuntimeDataBindGraphFormulaRandomSource,
+) -> f32 {
     let mut result = input;
     let mut stack = Vec::new();
+    let mut current_random = 0;
     for token in tokens {
         match token {
             RuntimeDataBindGraphFormulaToken::Input => stack.push(input),
@@ -14451,10 +14649,18 @@ fn runtime_data_bind_graph_convert_formula(
                 function_type,
                 arguments_count,
             } => {
+                let random_value = if *function_type == 16 {
+                    let value = state.random_value(current_random, random_source);
+                    current_random += 1;
+                    Some(value)
+                } else {
+                    None
+                };
                 let value = runtime_data_bind_graph_apply_formula_function(
                     &mut stack,
                     *function_type,
                     *arguments_count,
+                    random_value,
                 );
                 stack.push(value);
             }
@@ -14485,6 +14691,7 @@ fn runtime_data_bind_graph_apply_formula_function(
     stack: &mut Vec<f32>,
     function_type: u64,
     total_arguments: usize,
+    random_value: Option<f32>,
 ) -> f32 {
     let mut function_arguments = Vec::new();
     for _ in 0..total_arguments {
@@ -14597,6 +14804,18 @@ fn runtime_data_bind_graph_apply_formula_function(
             } else {
                 0.0
             }
+        }
+        16 => {
+            let random_value = random_value.unwrap_or(0.0);
+            let mut lower_bound = 0.0;
+            let mut upper_bound = 1.0;
+            if function_arguments.len() == 1 {
+                upper_bound = function_arguments[function_arguments.len() - 1];
+            } else if function_arguments.len() > 1 {
+                lower_bound = function_arguments[function_arguments.len() - 1];
+                upper_bound = function_arguments[function_arguments.len() - 2];
+            }
+            lower_bound + (upper_bound - lower_bound) * random_value
         }
         _ => 0.0,
     }
@@ -19161,6 +19380,10 @@ impl StateMachineInstance {
         true
     }
 
+    pub fn set_data_bind_formula_random_values(&mut self, values: &[f32]) {
+        self.data_bind_graph.set_formula_random_values(values);
+    }
+
     pub fn bind_view_model_instance_context(
         &mut self,
         file: &RuntimeFile,
@@ -23428,7 +23651,9 @@ fn runtime_data_bind_graph_formula_converter(
             }
             "FormulaTokenFunction" => {
                 let function_type = token.object.uint_property("functionType").unwrap_or(0);
-                if function_type == 16 {
+                if function_type == 16
+                    && converter.uint_property("randomModeValue").unwrap_or(0) != 0
+                {
                     return RuntimeDataBindGraphConverter::Unsupported;
                 }
                 tokens.push(RuntimeDataBindGraphFormulaToken::Function {

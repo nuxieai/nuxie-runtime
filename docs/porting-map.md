@@ -3154,11 +3154,25 @@ reapplies source-to-target in the same update. This now covers both the
 input/value/operation formula group and the deterministic `FormulaTokenFunction`
 formula group. The contract is
 `docs/prototypes/data-binding-graph-formula-group-public-update-target-to-source-runtime-contract.md`.
-Other formula group compositions, formula randoms, remaining mixed/stateful
-groups, full dirty-list scheduler parity, imported/owned contexts, pending
-add/remove behavior, re-entry protection, relative/parent/nested lookup,
-listener-owned data binding, and nested artboard propagation remain follow-up
-`#12` slices.
+Other formula group compositions, random formula behavior beyond the direct
+host-supplied slice, remaining mixed/stateful groups, full dirty-list scheduler
+parity, imported/owned contexts, pending add/remove behavior, re-entry
+protection, relative/parent/nested lookup, listener-owned data binding, and
+nested artboard propagation remain follow-up `#12` slices.
+
+Current #12 update: first graph formula random function
+Direct graph-owned `DataConverterFormula` converters now admit the first
+`FunctionType::random` slice for default-context number sources feeding number
+targets. This is intentionally limited to `randomModeValue == 0` and a
+host-supplied graph formula random stream; Rust caches the supplied draw per
+formula converter like C++ default random mode, and the C++ probe derives the
+first draw from the C++ state-machine number-binding report before supplying it
+to Rust. The contract is
+`docs/prototypes/data-binding-graph-formula-random-function-runtime-contract.md`.
+Real Rust random generation, C++ probe random seeding/queueing, non-default
+random modes, cache invalidation, random call counts, target-to-source/public
+update random scheduling, grouped/list random formulas, imported/owned
+contexts, and full dirty-list scheduler parity remain follow-up `#12` slices.
 
 Current #12 update: non-scripting `ScriptedDataConverter` now participates in
 the runtime data-bind graph as inherited C++ base converter pass-through. A

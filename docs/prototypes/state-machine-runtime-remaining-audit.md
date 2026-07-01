@@ -1008,8 +1008,20 @@ slice.
   update target-to-source scheduling now run the same function-token formula
   conversion before source writes and same-bind source-to-target reapplication,
   and direct main-`ToTarget | TwoWay` target-dirty scheduling preserves then
-  reapplies manual target edits like C++. Random function tokens remain outside
-  the graph until a random-source state contract exists.
+  reapplies manual target edits like C++. Random function behavior beyond the
+  host-supplied default-mode slice below remains outside the graph until fuller
+  random-source state contracts exist.
+- First `DataConverterFormula` random function-token slice:
+  default-context number sources feeding number targets now execute a direct
+  `FunctionType::random` output-queue token when `randomModeValue` is the
+  default `0`. Rust exposes a narrow host-supplied graph formula random stream
+  and caches the drawn value per formula converter like C++ default random
+  mode. The C++ probe derives the first draw from the C++ number-binding report
+  and supplies the same value to Rust before advancing. Non-default random
+  modes, real Rust random generation, C++ random seeding/queueing, cache
+  invalidation, call counts, target-to-source/public-update/group/list
+  scheduling, and non-number random formulas remain outside the graph until
+  fuller random-source state contracts exist.
 - First graph-owned target-to-source slice: direct default-context number
   sources feeding number targets now honor `ToSource | TwoWay` target mutation
   on explicit data-context advance. A C++ probe uses two binds to the same

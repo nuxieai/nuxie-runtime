@@ -41,8 +41,10 @@ while resolving `DataConverterFormula`.
 
 ## Out Of Scope
 
-- `FunctionType::random`, random formula values, random cache state, and
-  `randomModeValue`.
+- General `FunctionType::random` behavior beyond the narrow host-supplied
+  default-random slice covered by
+  `data-binding-graph-formula-random-function-runtime-contract.md`, including
+  real random generation, cache invalidation, and non-default `randomModeValue`.
 - Formula parent-source binding, source dependents, and add-dirt behavior.
 - Formula converter groups beyond already admitted deterministic
   input/value/operation group shapes.
@@ -65,5 +67,5 @@ while resolving `DataConverterFormula`.
   conversion before writing and reapplying the source, matching C++ reports.
 - Direct main-`ToTarget | TwoWay` target-dirty behavior preserves and then
   reapplies the same function-token formula values as C++.
-- Random function tokens remain unsupported by the graph until a random-source
-  state contract exists.
+- Random function tokens beyond the host-supplied default-random slice remain
+  unsupported by the graph until fuller random-source state contracts exist.

@@ -2153,10 +2153,10 @@ the owned context. The C++ probe covers the equivalent
 `ViewModelInstanceRuntime::replaceViewModel("child/grandchild", value)` path.
 The contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-nested-relink-runtime-contract.md`.
-Traversal through imported replacement intermediates, public
-property-name/object-handle APIs, reverse propagation, broader update queues,
-relative/parent/nested lookup, listener-owned data binding, and nested artboard
-propagation remain follow-up `#12` slices.
+Deeper imported intermediates, persistent imported instance mutation,
+public property-name/object-handle APIs, reverse propagation, broader update
+queues, relative/parent/nested lookup, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: owned view-model contexts now recursively record generated
 `ViewModelPropertyViewModel` children for generated-only pointer paths. A deep
@@ -2171,6 +2171,23 @@ Traversal through imported replacement intermediates, public
 property-name/object-handle APIs, reverse propagation, broader update queues,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
+
+Current #12 update: owned view-model contexts now traverse one imported
+replacement intermediate for view-model pointer sources. Replacing a generated
+root child with an imported child by instance index makes a source path such as
+`[root, child, grandchild]` read the imported child's existing nested
+`ViewModelInstanceViewModel` reference, matching C++ state-machine data-context
+binding. The companion probe pins that attempting to relink through the
+imported intermediate with
+`ViewModelInstanceRuntime::replaceViewModel("child/grandchild", value)` does
+not update this admitted binding path, so Rust returns `false` for
+`set_view_model_by_property_path(&[child, grandchild], value)` once `child` is
+imported. The contract is
+`docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-runtime-contract.md`.
+Deeper imported intermediates, persistent imported instance mutation,
+public property-name/object-handle APIs, reverse propagation, broader update
+queues, relative/parent/nested lookup, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: state-machine `BindablePropertyList.propertyValue`
 targets now have a probe-backed target-to-source boundary. Rust exposes

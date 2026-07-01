@@ -721,6 +721,15 @@ slice.
   `ViewModelInstanceRuntime::replaceViewModel("child/middle/leaf", value)`
   path through existing view-model binding reports. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-recursive-relink-runtime-contract.md`.
+- Owned view-model imported-intermediate source slice: replacing a generated
+  root child with an imported child by instance index lets
+  `RuntimeOwnedViewModelInstance` resolve `[child, grandchild]` through the
+  imported child's existing nested `ViewModelInstanceViewModel` reference. The
+  C++ probe also pins that attempting
+  `ViewModelInstanceRuntime::replaceViewModel("child/grandchild", value)` from
+  the owned root does not relink this admitted path, so Rust rejects nested
+  mutation after the intermediate is imported. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-runtime-contract.md`.
 - First `BindablePropertyList.propertyValue` target-to-source slice:
   state-machine list targets can be mutated by data-bind index, and explicit
   `advancedDataContext()` plus public `updateDataBinds(true)` consume the
@@ -740,10 +749,11 @@ slice.
   open-url side effects, nested-artboard event propagation, and callback
   targets other than `Event.trigger`.
 - Live view-model pointer relink APIs beyond the first default, imported,
-  owned root-property, and generated-only owned paths: traversal through
-  imported replacement intermediates and stable public handles that update or
-  expose cached `referenceViewModelInstance` pointers rather than only raw
-  generated `propertyValue` indexes.
+  owned root-property, generated-only owned, and one imported-intermediate
+  owned paths: deeper imported intermediates, persistent imported-instance
+  mutation, and stable public handles that update or expose cached
+  `referenceViewModelInstance` pointers rather than only raw generated
+  `propertyValue` indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
 - Live view-model APIs and data-binding propagation governed by

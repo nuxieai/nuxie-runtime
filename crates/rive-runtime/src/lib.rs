@@ -2791,6 +2791,7 @@ pub struct RuntimeStateMachine {
     bindable_enums: Vec<RuntimeBindableEnum>,
     bindable_assets: Vec<RuntimeBindableAsset>,
     bindable_artboards: Vec<RuntimeBindableArtboard>,
+    bindable_lists: Vec<RuntimeBindableList>,
     bindable_triggers: Vec<RuntimeBindableTrigger>,
     bindable_view_models: Vec<RuntimeBindableViewModel>,
     bindable_booleans: Vec<RuntimeBindableBoolean>,
@@ -2934,6 +2935,23 @@ struct RuntimeBindableArtboardDefaultViewModelSource {
     path: Vec<u32>,
     flags: u64,
     value: u64,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeBindableList {
+    global_id: u32,
+    data_bind_indices: Vec<usize>,
+    default_view_model_sources: Vec<RuntimeBindableListDefaultViewModelSource>,
+    value: usize,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeBindableListDefaultViewModelSource {
+    data_bind_index: usize,
+    path: Vec<u32>,
+    flags: u64,
+    converter: Option<RuntimeDataBindGraphConverter>,
+    value: RuntimeDataBindGraphValue,
 }
 
 #[derive(Debug, Clone)]
@@ -3169,6 +3187,7 @@ enum RuntimeDataBindGraphTarget {
     Enum { global_id: u32 },
     Asset { global_id: u32 },
     Artboard { global_id: u32 },
+    List { global_id: u32 },
     Trigger { global_id: u32 },
     ViewModel { global_id: u32 },
 }
@@ -4017,6 +4036,23 @@ impl RuntimeDataBindGraph {
                 );
             }
         }
+        for bindable in &state_machine.bindable_lists {
+            for source in &bindable.default_view_model_sources {
+                Self::push_default_view_model_binding(
+                    &mut sources,
+                    &mut targets,
+                    &mut default_view_model_bindings,
+                    source.data_bind_index,
+                    &source.path,
+                    source.flags,
+                    source.converter.clone(),
+                    RuntimeDataBindGraphTarget::List {
+                        global_id: bindable.global_id,
+                    },
+                    source.value.clone(),
+                );
+            }
+        }
         for bindable in &state_machine.bindable_triggers {
             for source in &bindable.default_view_model_sources {
                 Self::push_default_view_model_binding(
@@ -4763,6 +4799,21 @@ impl RuntimeDataBindGraph {
         Some(value)
     }
 
+    fn default_view_model_list_source_item_count_for_data_bind(
+        &self,
+        data_bind_index: usize,
+    ) -> Option<usize> {
+        let binding = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)?;
+        let source = self.sources.get(binding.source.0)?;
+        let RuntimeDataBindGraphValue::List { item_count } = source.value else {
+            return None;
+        };
+        Some(item_count)
+    }
+
     fn default_view_model_string_source_value_for_data_bind(
         &self,
         data_bind_index: usize,
@@ -4809,6 +4860,18 @@ impl RuntimeDataBindGraph {
             .find(|binding| binding.data_bind_index == data_bind_index)
             .and_then(|binding| self.targets.get(binding.target.0))?;
         let RuntimeDataBindGraphTarget::ViewModel { global_id } = target.target else {
+            return None;
+        };
+        Some(global_id)
+    }
+
+    fn list_target_global_id_for_data_bind(&self, data_bind_index: usize) -> Option<u32> {
+        let target = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .and_then(|binding| self.targets.get(binding.target.0))?;
+        let RuntimeDataBindGraphTarget::List { global_id } = target.target else {
             return None;
         };
         Some(global_id)
@@ -7153,6 +7216,9 @@ impl RuntimeDataBindGraphTargetsMut<'_> {
                 {
                     target.set_value(*value);
                 }
+            }
+            (RuntimeDataBindGraphTarget::List { .. }, RuntimeDataBindGraphValue::List { .. }) => {
+                // C++ only applies list values to DataBindListItemConsumer targets.
             }
             (
                 RuntimeDataBindGraphTarget::Trigger { global_id },
@@ -9623,6 +9689,7 @@ pub struct StateMachineInstance {
     bindable_enums: Vec<StateMachineBindableEnumInstance>,
     bindable_assets: Vec<StateMachineBindableAssetInstance>,
     bindable_artboards: Vec<StateMachineBindableArtboardInstance>,
+    bindable_lists: Vec<StateMachineBindableListInstance>,
     bindable_triggers: Vec<StateMachineBindableTriggerInstance>,
     bindable_view_models: Vec<StateMachineBindableViewModelInstance>,
     bindable_booleans: Vec<StateMachineBindableBooleanInstance>,
@@ -9708,6 +9775,11 @@ impl StateMachineInstance {
             .iter()
             .map(StateMachineBindableArtboardInstance::new)
             .collect::<Vec<_>>();
+        let bindable_lists = state_machine
+            .bindable_lists
+            .iter()
+            .map(StateMachineBindableListInstance::new)
+            .collect::<Vec<_>>();
         let bindable_triggers = state_machine
             .bindable_triggers
             .iter()
@@ -9746,6 +9818,7 @@ impl StateMachineInstance {
             bindable_enums,
             bindable_assets,
             bindable_artboards,
+            bindable_lists,
             bindable_triggers,
             bindable_view_models,
             bindable_booleans,
@@ -10068,6 +10141,27 @@ impl StateMachineInstance {
             .iter()
             .find(|bindable_number| bindable_number.global_id == global_id)
             .map(|bindable_number| bindable_number.value)
+    }
+
+    pub fn default_view_model_list_source_item_count_for_data_bind(
+        &self,
+        data_bind_index: usize,
+    ) -> Option<usize> {
+        self.data_bind_graph
+            .default_view_model_list_source_item_count_for_data_bind(data_bind_index)
+    }
+
+    pub fn bindable_list_property_value_for_data_bind(
+        &self,
+        data_bind_index: usize,
+    ) -> Option<usize> {
+        let global_id = self
+            .data_bind_graph
+            .list_target_global_id_for_data_bind(data_bind_index)?;
+        self.bindable_lists
+            .iter()
+            .find(|bindable_list| bindable_list.global_id == global_id)
+            .map(|bindable_list| bindable_list.property_value)
     }
 
     pub fn default_view_model_string_source_value_for_data_bind(
@@ -11034,6 +11128,21 @@ fn bindable_artboard_value(
         .iter()
         .find(|bindable_artboard| bindable_artboard.global_id == global_id)
         .map(|bindable_artboard| bindable_artboard.value)
+}
+
+#[derive(Debug, Clone)]
+struct StateMachineBindableListInstance {
+    global_id: u32,
+    property_value: usize,
+}
+
+impl StateMachineBindableListInstance {
+    fn new(bindable_list: &RuntimeBindableList) -> Self {
+        Self {
+            global_id: bindable_list.global_id,
+            property_value: bindable_list.value,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -13292,6 +13401,7 @@ fn build_state_machines(
             let bindable_enums = runtime_bindable_enums(file, &state_machine);
             let bindable_assets = runtime_bindable_assets(file, &state_machine);
             let bindable_artboards = runtime_bindable_artboards(file, &state_machine);
+            let bindable_lists = runtime_bindable_lists(file, &state_machine);
             let bindable_triggers = runtime_bindable_triggers(file, &state_machine);
             let bindable_view_models = runtime_bindable_view_models(file, &state_machine);
             let bindable_booleans = runtime_bindable_booleans(file, &state_machine);
@@ -13314,6 +13424,7 @@ fn build_state_machines(
                 bindable_enums,
                 bindable_assets,
                 bindable_artboards,
+                bindable_lists,
                 bindable_triggers,
                 bindable_view_models,
                 bindable_booleans,
@@ -13997,6 +14108,76 @@ fn runtime_bindable_artboard_default_view_model_source(
         data_bind_index,
         path: path.to_vec(),
         flags: data_bind.uint_property("flags").unwrap_or(0),
+        value,
+    })
+}
+
+fn runtime_bindable_lists(
+    file: &RuntimeFile,
+    state_machine: &rive_binary::RuntimeStateMachine<'_>,
+) -> Vec<RuntimeBindableList> {
+    let mut values = BTreeMap::<u32, RuntimeBindableList>::new();
+    for (data_bind_index, data_bind) in state_machine.data_binds.iter().enumerate() {
+        let Some(target) = file.data_bind_target_for_object(data_bind) else {
+            continue;
+        };
+        if target.type_name != "BindablePropertyList" {
+            continue;
+        }
+        values
+            .entry(target.id)
+            .and_modify(|bindable_list| bindable_list.data_bind_indices.push(data_bind_index))
+            .or_insert_with(|| RuntimeBindableList {
+                global_id: target.id,
+                data_bind_indices: vec![data_bind_index],
+                default_view_model_sources: Vec::new(),
+                value: target
+                    .uint_property("propertyValue")
+                    .and_then(|value| usize::try_from(value).ok())
+                    .unwrap_or(usize::try_from(u64::from(u32::MAX)).unwrap_or(usize::MAX)),
+            });
+        if let Some(source) =
+            runtime_bindable_list_default_view_model_source(file, data_bind_index, data_bind)
+        {
+            values
+                .entry(target.id)
+                .and_modify(|bindable_list| bindable_list.default_view_model_sources.push(source));
+        }
+    }
+
+    values.into_values().collect()
+}
+
+fn runtime_bindable_list_default_view_model_source(
+    file: &RuntimeFile,
+    data_bind_index: usize,
+    data_bind: &RuntimeObject,
+) -> Option<RuntimeBindableListDefaultViewModelSource> {
+    let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
+    if property_key_for_name("BindablePropertyList", "propertyValue") != Some(property_key) {
+        return None;
+    }
+    let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
+    let default_instance = file.view_model_default_instance(0)?;
+    let source =
+        file.data_context_view_model_property_for_instance(default_instance.object, &path)?;
+    let converter = runtime_data_bind_graph_converter(file, data_bind);
+    let value = match converter.as_ref() {
+        Some(RuntimeDataBindGraphConverter::NumberToList { .. }) => {
+            RuntimeDataBindGraphValue::Number(
+                file.view_model_instance_number_value_for_object(source)?,
+            )
+        }
+        None => RuntimeDataBindGraphValue::List {
+            item_count: file.view_model_instance_list_size_for_object(source)?,
+        },
+        _ => return None,
+    };
+    Some(RuntimeBindableListDefaultViewModelSource {
+        data_bind_index,
+        path: path.to_vec(),
+        flags: data_bind.uint_property("flags").unwrap_or(0),
+        converter,
         value,
     })
 }

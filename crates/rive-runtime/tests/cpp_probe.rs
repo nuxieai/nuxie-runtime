@@ -2935,6 +2935,89 @@ fn synthetic_artboard_default_viewmodel_number_to_list_component_list(file_id: u
     })
 }
 
+fn synthetic_state_machine_default_viewmodel_list_to_bindable_list(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyList", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyList", "name", "items");
+        });
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceList", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceList", "viewModelPropertyId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceListItem", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceListItem", "viewModelId", 0);
+            push_uint_property(bytes, "ViewModelInstanceListItem", "viewModelInstanceId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceListItem", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceListItem", "viewModelId", 0);
+            push_uint_property(bytes, "ViewModelInstanceListItem", "viewModelInstanceId", 0);
+        });
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_bindable_list_data_bind_context(bytes, &[0, 0], None);
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn synthetic_state_machine_default_viewmodel_number_to_bindable_list(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyNumber", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyNumber", "name", "count");
+        });
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Item");
+        });
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceNumber", "viewModelPropertyId", 0);
+            push_f32_property(bytes, "ViewModelInstanceNumber", "propertyValue", 3.6);
+        });
+        push_object_with_properties(bytes, "DataConverterNumberToList", |bytes| {
+            push_uint_property(bytes, "DataConverterNumberToList", "viewModelId", 1);
+        });
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_bindable_list_data_bind_context(bytes, &[0, 0], Some(0));
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
 fn push_artboard_component_list_data_bind_context(
     bytes: &mut Vec<u8>,
     path: &[u32],
@@ -2945,6 +3028,33 @@ fn push_artboard_component_list_data_bind_context(
         push_var_uint(&mut source_path_ids, u64::from(*path_id));
     }
     push_object_with_properties(bytes, "DataBindContext", |bytes| {
+        push_bytes_property(bytes, "DataBindContext", "sourcePathIds", &source_path_ids);
+        if let Some(converter_id) = converter_id {
+            push_uint_property(bytes, "DataBindContext", "converterId", converter_id);
+        }
+    });
+}
+
+fn push_bindable_list_data_bind_context(
+    bytes: &mut Vec<u8>,
+    path: &[u32],
+    converter_id: Option<u64>,
+) {
+    let mut source_path_ids = Vec::new();
+    for path_id in path {
+        push_var_uint(&mut source_path_ids, u64::from(*path_id));
+    }
+    push_object_with_properties(bytes, "BindablePropertyList", |_| {});
+    push_object_with_properties(bytes, "DataBindContext", |bytes| {
+        push_uint_property(
+            bytes,
+            "DataBindContext",
+            "propertyKey",
+            u64::from(property_key_for_name(
+                "BindablePropertyList",
+                "propertyValue",
+            )),
+        );
         push_bytes_property(bytes, "DataBindContext", "sourcePathIds", &source_path_ids);
         if let Some(converter_id) = converter_id {
             push_uint_property(bytes, "DataBindContext", "converterId", converter_id);
@@ -17681,6 +17791,124 @@ fn artboard_default_viewmodel_number_to_list_component_list_matches_cpp_probe() 
 }
 
 #[test]
+fn state_machine_default_viewmodel_list_to_bindable_list_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_list_to_bindable_list_cpp.riv";
+    let bytes = synthetic_state_machine_default_viewmodel_list_to_bindable_list(8563);
+    let args = [
+        "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine-data-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    assert!(
+        state_machine.bind_default_view_model_context(),
+        "{label} failed to bind default view-model context"
+    );
+    let mut rust_reports = Vec::new();
+    assert!(
+        state_machine.advance_data_context(),
+        "{label} failed to advance data context"
+    );
+    rust_reports.push((false, state_machine.clone()));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+    {
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+        compare_state_machine_list_binding(cpp_state_machine, rust_state_machine, 0, label);
+    }
+}
+
+#[test]
+fn state_machine_default_viewmodel_number_to_bindable_list_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_number_to_bindable_list_cpp.riv";
+    let bytes = synthetic_state_machine_default_viewmodel_number_to_bindable_list(8564);
+    let args = [
+        "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine-data-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    assert!(
+        state_machine.bind_default_view_model_context(),
+        "{label} failed to bind default view-model context"
+    );
+    let mut rust_reports = Vec::new();
+    assert!(
+        state_machine.advance_data_context(),
+        "{label} failed to advance data context"
+    );
+    rust_reports.push((false, state_machine.clone()));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+    {
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+        compare_state_machine_list_binding(cpp_state_machine, rust_state_machine, 0, label);
+    }
+}
+
+#[test]
 fn list_to_length_main_to_target_two_way_target_dirty_matches_cpp_probe() {
     const DATA_BIND_TWO_WAY: u64 = 1 << 1;
 
@@ -26226,6 +26454,43 @@ fn compare_state_machine_string_binding(
     }
 }
 
+fn compare_state_machine_list_binding(
+    cpp: &CppRuntimeStateMachineAdvance,
+    rust: &StateMachineInstance,
+    data_bind_index: usize,
+    label: &str,
+) {
+    let binding = cpp
+        .list_bindings
+        .iter()
+        .find(|binding| binding.data_bind_index == data_bind_index)
+        .unwrap_or_else(|| panic!("missing C++ list binding {data_bind_index} for {label}"));
+    assert_eq!(
+        binding.source_list_size,
+        rust.default_view_model_list_source_item_count_for_data_bind(data_bind_index),
+        "{label} list binding {data_bind_index} sourceListSize mismatch"
+    );
+    match (
+        binding.source_number_value,
+        rust.default_view_model_number_source_value_for_data_bind(data_bind_index),
+    ) {
+        (Some(cpp), Some(rust)) => assert_close(
+            rust,
+            cpp,
+            &format!("{label} list binding {data_bind_index} sourceNumberValue"),
+        ),
+        (None, None) => {}
+        (cpp, rust) => panic!(
+            "{label} list binding {data_bind_index} sourceNumberValue presence mismatch: C++ {cpp:?}, Rust {rust:?}"
+        ),
+    }
+    assert_eq!(
+        binding.target_value,
+        rust.bindable_list_property_value_for_data_bind(data_bind_index),
+        "{label} list binding {data_bind_index} targetValue mismatch"
+    );
+}
+
 fn compare_artboard_list_binding(
     cpp_artboard: &CppArtboard,
     rust: &ArtboardInstance,
@@ -26731,6 +26996,8 @@ struct CppRuntimeStateMachineAdvance {
     number_bindings: Vec<CppRuntimeStateMachineNumberBinding>,
     #[serde(default, rename = "stringBindings")]
     string_bindings: Vec<CppRuntimeStateMachineStringBinding>,
+    #[serde(default, rename = "listBindings")]
+    list_bindings: Vec<CppRuntimeStateMachineListBinding>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -26788,6 +27055,18 @@ struct CppRuntimeStateMachineStringBinding {
     source_value: Option<String>,
     #[serde(rename = "targetValue")]
     target_value: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppRuntimeStateMachineListBinding {
+    #[serde(rename = "dataBindIndex")]
+    data_bind_index: usize,
+    #[serde(rename = "sourceListSize")]
+    source_list_size: Option<usize>,
+    #[serde(rename = "sourceNumberValue")]
+    source_number_value: Option<f32>,
+    #[serde(rename = "targetValue")]
+    target_value: Option<usize>,
 }
 
 #[derive(Debug, Deserialize)]

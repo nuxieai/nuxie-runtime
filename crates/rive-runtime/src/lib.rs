@@ -5074,6 +5074,17 @@ impl RuntimeOwnedViewModelTriggerSourceHandle {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeOwnedViewModelListSourceHandle {
+    property_index: usize,
+}
+
+impl RuntimeOwnedViewModelListSourceHandle {
+    pub fn property_index(&self) -> usize {
+        self.property_index
+    }
+}
+
 #[derive(Debug, Clone)]
 struct RuntimeOwnedViewModelNumber {
     property_index: usize,
@@ -7948,6 +7959,25 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         };
         self.set_list_item_count_by_property_index(property_index, item_count)
+    }
+
+    pub fn list_source_handle_by_property_name(
+        &self,
+        property_name: &str,
+    ) -> Option<RuntimeOwnedViewModelListSourceHandle> {
+        let property_index = self.property_index_by_name(property_name)?;
+        self.lists
+            .iter()
+            .any(|list| list.property_index == property_index)
+            .then_some(RuntimeOwnedViewModelListSourceHandle { property_index })
+    }
+
+    pub fn set_list_item_count_by_source_handle(
+        &mut self,
+        handle: &RuntimeOwnedViewModelListSourceHandle,
+        item_count: usize,
+    ) -> bool {
+        self.set_list_item_count_by_property_index(handle.property_index, item_count)
     }
 
     pub fn set_list_item_count_by_property_name_path(

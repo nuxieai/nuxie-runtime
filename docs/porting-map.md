@@ -4220,8 +4220,7 @@ mutation against the existing owned-number runtime context command and
 verifies the existing state-machine advance and component update reports. The
 contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-number-source-handle-runtime-contract.md`.
-Owned source handles for boolean/string/color/enum/symbol-list-index/asset/
-artboard/trigger/list/view-model sources, nested/relative/parent lookup,
+Owned source handles for view-model sources, nested/relative/parent lookup,
 reverse propagation, broader update queues, listener-owned data binding, and
 nested artboard propagation remain follow-up `#12` slices.
 
@@ -4235,10 +4234,9 @@ mutation against the existing owned-boolean runtime context command and
 verifies the existing state-machine advance and component update reports. The
 contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-boolean-source-handle-runtime-contract.md`.
-Owned source handles for string/color/enum/symbol-list-index/asset/artboard/
-trigger/list/view-model sources, nested/relative/parent lookup, reverse
-propagation, broader update queues, listener-owned data binding, and nested
-artboard propagation remain follow-up `#12` slices.
+Owned source handles for view-model sources, nested/relative/parent lookup,
+reverse propagation, broader update queues, listener-owned data binding, and
+nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: owned runtime string sources now have a stable public
 source handle. `RuntimeOwnedViewModelInstance` can resolve a root string
@@ -4249,10 +4247,9 @@ lookup remains unresolved. The C++ probe compares the handle mutation against
 the existing owned-string runtime context command and verifies the existing
 state-machine advance and component update reports. The contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-string-source-handle-runtime-contract.md`.
-Owned source handles for color/enum/symbol-list-index/asset/artboard/trigger/
-list/view-model sources, nested/relative/parent lookup, reverse propagation,
-broader update queues, listener-owned data binding, and nested artboard
-propagation remain follow-up `#12` slices.
+Owned source handles for view-model sources, nested/relative/parent lookup,
+reverse propagation, broader update queues, listener-owned data binding, and
+nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: owned runtime color sources now have a stable public source
 handle. `RuntimeOwnedViewModelInstance` can resolve a root color property name
@@ -4264,10 +4261,9 @@ mutation against the existing owned-color runtime context command and verifies
 the existing state-machine advance and component update reports. The contract
 is
 `docs/prototypes/data-binding-graph-owned-viewmodel-color-source-handle-runtime-contract.md`.
-Owned source handles for enum/symbol-list-index/asset/artboard/trigger/list/
-view-model sources, nested/relative/parent lookup, reverse propagation,
-broader update queues, listener-owned data binding, and nested artboard
-propagation remain follow-up `#12` slices.
+Owned source handles for view-model sources, nested/relative/parent lookup,
+reverse propagation, broader update queues, listener-owned data binding, and
+nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: owned runtime enum sources now have a stable public source
 handle. `RuntimeOwnedViewModelInstance` can resolve a root enum property name
@@ -4278,10 +4274,9 @@ lookup remains unresolved. The C++ probe compares the handle mutation against
 the existing owned-enum runtime context command and verifies the existing
 state-machine advance and component update reports. The contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-enum-source-handle-runtime-contract.md`.
-Owned source handles for symbol-list-index/asset/artboard/trigger/list/
-view-model sources, nested/relative/parent lookup, reverse propagation,
-broader update queues, listener-owned data binding, and nested artboard
-propagation remain follow-up `#12` slices.
+Owned source handles for view-model sources, nested/relative/parent lookup,
+reverse propagation, broader update queues, listener-owned data binding, and
+nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: owned runtime symbol-list-index sources now have a stable
 public source handle. `RuntimeOwnedViewModelInstance` can resolve a root
@@ -4294,10 +4289,9 @@ mutation against the existing owned-symbol-list-index runtime context command
 and verifies the existing state-machine advance and component update reports.
 The contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-symbol-list-index-source-handle-runtime-contract.md`.
-Owned source handles for asset/artboard/trigger/list/view-model sources,
-nested/relative/parent lookup, reverse propagation, broader update queues,
-listener-owned data binding, and nested artboard propagation remain follow-up
-`#12` slices.
+Owned source handles for view-model sources, nested/relative/parent lookup,
+reverse propagation, broader update queues, listener-owned data binding, and
+nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: owned runtime asset sources now have a stable public source
 handle. `RuntimeOwnedViewModelInstance` can resolve a root asset property name
@@ -4308,10 +4302,9 @@ lookup remains unresolved. The C++ probe compares the handle mutation against
 the existing owned-asset runtime context command and verifies the existing
 state-machine advance and component update reports. The contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-asset-source-handle-runtime-contract.md`.
-Owned source handles for artboard/trigger/list/view-model sources,
-nested/relative/parent lookup, reverse propagation, broader update queues,
-listener-owned data binding, and nested artboard propagation remain follow-up
-`#12` slices.
+Owned source handles for view-model sources, nested/relative/parent lookup,
+reverse propagation, broader update queues, listener-owned data binding, and
+nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: owned runtime artboard sources now have a stable public
 source handle. `RuntimeOwnedViewModelInstance` can resolve a root artboard
@@ -4322,9 +4315,9 @@ handle lookup remains unresolved. The C++ probe compares the handle mutation
 against the existing owned-artboard runtime context command and verifies the
 existing state-machine advance and component update reports. The contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-artboard-source-handle-runtime-contract.md`.
-Owned source handles for trigger/list/view-model sources, nested/relative/
-parent lookup, reverse propagation, broader update queues, listener-owned data
-binding, and nested artboard propagation remain follow-up `#12` slices.
+Owned source handles for view-model sources, nested/relative/parent lookup,
+reverse propagation, broader update queues, listener-owned data binding, and
+nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: owned runtime trigger sources now have a stable public
 source handle. `RuntimeOwnedViewModelInstance` can resolve a root trigger
@@ -4335,9 +4328,22 @@ handle lookup remains unresolved. The C++ probe compares the handle mutation
 against the existing owned-trigger runtime context command and verifies the
 existing state-machine advance and component update reports. The contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-trigger-source-handle-runtime-contract.md`.
-Owned source handles for list/view-model sources, nested/relative/parent
-lookup, reverse propagation, broader update queues, listener-owned data
-binding, and nested artboard propagation remain follow-up `#12` slices.
+Owned source handles for view-model sources, nested/relative/parent lookup,
+reverse propagation, broader update queues, listener-owned data binding, and
+nested artboard propagation remain follow-up `#12` slices.
+
+Current #12 update: owned runtime list sources now have a stable public source
+handle. `RuntimeOwnedViewModelInstance` can resolve a root list property name
+into `RuntimeOwnedViewModelListSourceHandle`, and
+`set_list_item_count_by_source_handle` writes through the existing owned list
+item-count storage before binding the owned context to a state machine.
+Slash-path handle lookup remains unresolved. The C++ probe compares the handle
+mutation against the existing owned-list runtime context command and verifies
+the existing state-machine advance and list binding reports. The contract is
+`docs/prototypes/data-binding-graph-owned-viewmodel-list-source-handle-runtime-contract.md`.
+Owned source handles for view-model sources, nested/relative/parent lookup,
+reverse propagation, broader update queues, listener-owned data binding, and
+nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: owned runtime view-model root scalar property-name mutation
 now covers every scalar kind already backed by owned property-index storage:
@@ -4361,7 +4367,7 @@ count before binding; the C++ probe drives
 compares the existing `BindablePropertyList` source-size reports. The contract
 is
 `docs/prototypes/data-binding-graph-owned-viewmodel-root-list-name-runtime-contract.md`.
-List item identity, generated item instances, stable public handles, reverse
+List item identity, generated item instances, list item handles, reverse
 propagation, broader update queues, relative/parent/nested lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.

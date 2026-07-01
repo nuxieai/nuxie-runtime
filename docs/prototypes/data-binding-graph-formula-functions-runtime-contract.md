@@ -16,7 +16,8 @@ while resolving `DataConverterFormula`.
 
 - Default root view-model context bound with `bind_default_view_model_context`.
 - Root-only `DataBindContext.sourcePathIds` of shape `[0, propertyIndex]`.
-- `ViewModelInstanceNumber.propertyValue` sources feeding
+- `ViewModelInstanceNumber.propertyValue` and
+  `ViewModelInstanceSymbolListIndex.propertyValue` sources feeding
   `BindablePropertyNumber.propertyValue` targets.
 - Direct `DataConverterFormula` converters resolved from
   `DataBind.converterId`.
@@ -45,8 +46,8 @@ while resolving `DataConverterFormula`.
 - Formula parent-source binding, source dependents, and add-dirt behavior.
 - Formula converter groups beyond already admitted deterministic
   input/value/operation group shapes.
-- Formula function scheduling for symbol-list-index and non-number formula
-  sources beyond the already admitted direct number-source path.
+- Formula function scheduling for non-number formula sources beyond the
+  already admitted C++ `0.0` fallback paths.
 - Number-to-list, generated-list, scripted, and live context-aware converters.
 - External and owned contexts for this converter/source combination.
 - Relative-path, parent-path, nested-path, listener-owned, and update-queue
@@ -57,6 +58,8 @@ while resolving `DataConverterFormula`.
 - The runtime graph builds formula descriptors from output tokens that preserve
   C++ function argument counts.
 - Deterministic formula functions write the same number target values as C++.
+- Symbol-list-index formula-function inputs are cast to `f32` before function
+  evaluation, matching C++.
 - Unknown non-random function types write `0.0` like C++.
 - Direct target-to-source and public update paths run function-token formula
   conversion before writing and reapplying the source, matching C++ reports.

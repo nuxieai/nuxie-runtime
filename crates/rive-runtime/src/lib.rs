@@ -3573,8 +3573,11 @@ fn runtime_owned_view_model_property_children(
                 Vec::new()
             };
             let imported_children = referenced_view_model_index
-                .and_then(|view_model_index| file.view_model(view_model_index))
-                .map(|view_model| {
+                .and_then(|referenced_view_model_index| {
+                    file.view_model(referenced_view_model_index)
+                        .map(|view_model| (referenced_view_model_index, view_model))
+                })
+                .map(|(referenced_view_model_index, view_model)| {
                     view_model
                         .instances
                         .into_iter()
@@ -3583,7 +3586,7 @@ fn runtime_owned_view_model_property_children(
                                 instance.object.id,
                                 runtime_owned_view_model_view_model_children_for_instance(
                                     file,
-                                    view_model_index,
+                                    referenced_view_model_index,
                                     instance.object,
                                     &path,
                                     child_ancestors,

@@ -730,6 +730,13 @@ slice.
   the owned root does not relink this admitted path, so Rust rejects nested
   mutation after the intermediate is imported. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-runtime-contract.md`.
+- Owned view-model deep imported-intermediate source slice: replacing a
+  generated root child with an imported child by instance index lets
+  `RuntimeOwnedViewModelInstance` resolve `[child, middle, leaf]` through the
+  imported child's existing imported middle and the middle's existing imported
+  leaf. The C++ probe covers the same read-only imported chain through existing
+  view-model binding reports. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-deep-imported-intermediate-runtime-contract.md`.
 - First `BindablePropertyList.propertyValue` target-to-source slice:
   state-machine list targets can be mutated by data-bind index, and explicit
   `advancedDataContext()` plus public `updateDataBinds(true)` consume the
@@ -755,8 +762,8 @@ slice.
   open-url side effects, nested-artboard event propagation, and callback
   targets other than `Event.trigger`.
 - Live view-model pointer relink APIs beyond the first default, imported,
-  owned root-property, generated-only owned, and one imported-intermediate
-  owned paths: deeper imported intermediates, persistent imported-instance
+  owned root-property, generated-only owned, and imported-intermediate owned
+  read paths: imported-intermediate mutation, persistent imported-instance
   mutation, and stable public handles that update or expose cached
   `referenceViewModelInstance` pointers rather than only raw generated
   `propertyValue` indexes.

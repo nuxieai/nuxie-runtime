@@ -2292,10 +2292,28 @@ data-context binding as observed through an asset transition condition. Rust
 records imported asset-id snapshots per referenced view-model instance and
 uses them only for read-only graph source resolution. The contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-asset-runtime-contract.md`.
+At that slice boundary, artboard and other imported-intermediate source kinds
+beyond number, boolean, string, color, enum, symbol-list-index, and asset,
+persistent imported instance mutation, remaining property-name APIs, public
+object-handle APIs, reverse propagation, broader update queues,
+relative/parent/nested lookup, listener-owned data binding, and nested
+artboard propagation remained follow-up `#12` slices.
+
+Current #12 update: owned view-model contexts now traverse one imported
+replacement intermediate for direct artboard sources. Replacing a generated
+root child with an imported child by instance index makes a source path such
+as `[root, child, scene]` read the imported child's existing
+`ViewModelInstanceArtboard.propertyValue`, matching C++ state-machine
+data-context binding as observed through an artboard transition condition
+that stays unsatisfied after the imported source updates the bindable away
+from the forced target value. Rust records imported artboard-id snapshots per
+referenced view-model instance and uses them only for read-only graph source
+resolution. The contract is
+`docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-artboard-runtime-contract.md`.
 Other imported-intermediate source kinds beyond number, boolean, string,
-color, enum, symbol-list-index, and asset, persistent imported instance
-mutation, remaining property-name APIs, public object-handle APIs, reverse
-propagation, broader update queues, relative/parent/nested lookup,
+color, enum, symbol-list-index, asset, and artboard, persistent imported
+instance mutation, remaining property-name APIs, public object-handle APIs,
+reverse propagation, broader update queues, relative/parent/nested lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 

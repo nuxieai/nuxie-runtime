@@ -25,7 +25,10 @@ In scope:
 Out of scope:
 
 - Artboard, trigger, list, or view-model default source handles.
-- Nested, relative, parent, or slash-separated property paths.
+- Changing root-name lookup semantics to accept slash-separated property
+  paths. Nested asset paths are covered separately by
+  `docs/prototypes/data-binding-graph-default-nested-asset-source-handle-runtime-contract.md`.
+- Relative or parent property paths.
 - Imported or owned view-model contexts.
 - Image loading, decoding, `RenderImage*` replacement, renderer hooks, file
   asset helper metadata mutation, or stable public asset object handles.
@@ -35,6 +38,6 @@ Out of scope:
 
 Completion condition: a root default asset source handle resolved from `image`
 mutates the same graph-owned source path as the existing property-name API,
-repeated same-value writes report no change, slash-path lookup stays
-unresolved, and the C++ probe reports the same state-machine advance and
-component update results.
+repeated same-value writes report no change, root-name lookup stays separate
+from slash-path lookup, and the C++ probe reports the same state-machine
+advance and component update results.

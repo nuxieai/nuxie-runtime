@@ -3065,6 +3065,7 @@ pub struct RuntimeImportedViewModelInstanceContext {
     view_model_index: usize,
     instance_index: usize,
     number_overrides: BTreeMap<Vec<u32>, f32>,
+    boolean_overrides: BTreeMap<Vec<u32>, bool>,
     view_model_overrides: BTreeMap<Vec<u32>, RuntimeViewModelPointer>,
 }
 
@@ -3076,6 +3077,7 @@ impl RuntimeImportedViewModelInstanceContext {
             view_model_index,
             instance_index,
             number_overrides: BTreeMap::new(),
+            boolean_overrides: BTreeMap::new(),
             view_model_overrides: BTreeMap::new(),
         })
     }
@@ -6591,6 +6593,7 @@ impl RuntimeDataBindGraph {
             view_model_index,
             instance_index,
             number_overrides: BTreeMap::new(),
+            boolean_overrides: BTreeMap::new(),
             view_model_overrides: BTreeMap::new(),
         };
         self.bind_imported_view_model_context(file, &context)
@@ -6622,6 +6625,12 @@ impl RuntimeDataBindGraph {
                         .get(&source.path)
                         .copied()
                         .map(RuntimeDataBindGraphValue::Number)
+                        .unwrap_or(value),
+                    RuntimeDataBindGraphValue::Boolean(_) => context
+                        .boolean_overrides
+                        .get(&source.path)
+                        .copied()
+                        .map(RuntimeDataBindGraphValue::Boolean)
                         .unwrap_or(value),
                     RuntimeDataBindGraphValue::ViewModel(_) => context
                         .view_model_overrides
@@ -7190,6 +7199,51 @@ impl RuntimeDataBindGraph {
         source.value = RuntimeDataBindGraphValue::Number(value);
         source.bound = true;
         context.number_overrides.insert(path, value);
+        self.mark_default_view_model_bindings_dirty();
+        true
+    }
+
+    fn set_imported_view_model_context_boolean_source_for_data_bind(
+        &mut self,
+        context: &mut RuntimeImportedViewModelInstanceContext,
+        data_bind_index: usize,
+        value: bool,
+    ) -> bool {
+        if self.context_kind != RuntimeDataBindGraphContextKind::ImportedViewModel {
+            return false;
+        }
+        if self.imported_view_model_context
+            != Some(RuntimeImportedViewModelContextKey {
+                view_model_index: context.view_model_index,
+                instance_index: context.instance_index,
+            })
+        {
+            return false;
+        }
+        let Some(source) = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .map(|binding| binding.source)
+        else {
+            return false;
+        };
+        let Some(source) = self.sources.get_mut(source.0) else {
+            return false;
+        };
+        if !matches!(&source.default_value, RuntimeDataBindGraphValue::Boolean(_)) {
+            return false;
+        }
+        let source_changed = !matches!(&source.value, RuntimeDataBindGraphValue::Boolean(current) if *current == value);
+        let path = source.path.clone();
+        let context_changed = context.boolean_overrides.get(&path) != Some(&value);
+        if !source_changed && !context_changed {
+            return false;
+        }
+
+        source.value = RuntimeDataBindGraphValue::Boolean(value);
+        source.bound = true;
+        context.boolean_overrides.insert(path, value);
         self.mark_default_view_model_bindings_dirty();
         true
     }
@@ -13164,6 +13218,26 @@ impl StateMachineInstance {
         if !self
             .data_bind_graph
             .set_imported_view_model_context_number_source_for_data_bind(
+                context,
+                data_bind_index,
+                value,
+            )
+        {
+            return false;
+        }
+        self.needs_advance = true;
+        true
+    }
+
+    pub fn set_imported_view_model_context_boolean_source_for_data_bind(
+        &mut self,
+        context: &mut RuntimeImportedViewModelInstanceContext,
+        data_bind_index: usize,
+        value: bool,
+    ) -> bool {
+        if !self
+            .data_bind_graph
+            .set_imported_view_model_context_boolean_source_for_data_bind(
                 context,
                 data_bind_index,
                 value,

@@ -339,6 +339,7 @@ enum class RuntimeStateMachineActionKind
     SetDefaultViewModelSourceTrigger,
     SetDefaultViewModelSourceViewModel,
     SetViewModelInstanceSourceNumber,
+    SetViewModelInstanceSourceBoolean,
     RelinkDefaultViewModelSourceViewModel,
     RelinkViewModelInstanceSourceViewModel,
     RelinkViewModelInstanceSourceViewModelByNamePath,
@@ -1853,6 +1854,40 @@ apply_runtime_state_machine_advances(rive::File* file,
                 {
                     source->as<rive::ViewModelInstanceNumber>()
                         ->propertyValue(action.numberValue);
+                }
+            }
+            continue;
+        }
+        if (action.kind ==
+            RuntimeStateMachineActionKind::SetViewModelInstanceSourceBoolean)
+        {
+            auto sourceStateMachine = stateMachine->stateMachine();
+            auto dataBind =
+                sourceStateMachine == nullptr
+                    ? nullptr
+                    : sourceStateMachine->dataBind(action.dataBindIndex);
+            auto viewModel =
+                file != nullptr && action.viewModelIndex < file->viewModelCount()
+                    ? file->viewModel(action.viewModelIndex)
+                    : nullptr;
+            auto viewModelInstance =
+                viewModel != nullptr &&
+                        action.viewModelInstanceIndex <
+                            viewModel->instanceCount()
+                    ? viewModel->instance(action.viewModelInstanceIndex)
+                    : nullptr;
+            if (dataBind != nullptr &&
+                dataBind->is<rive::DataBindContext>() &&
+                viewModelInstance != nullptr)
+            {
+                rive::DataContext context(rive::ref_rcp(viewModelInstance));
+                auto source = context.getViewModelProperty(
+                    dataBind->as<rive::DataBindContext>()->sourcePathIds());
+                if (source != nullptr &&
+                    source->is<rive::ViewModelInstanceBoolean>())
+                {
+                    source->as<rive::ViewModelInstanceBoolean>()
+                        ->propertyValue(action.boolValue);
                 }
             }
             continue;
@@ -10301,6 +10336,32 @@ int main(int argc, const char* argv[])
             continue;
         }
 
+        if (is_arg(argv[i], "--runtime-set-view-model-instance-source-bool"))
+        {
+            if (i + 5 >= argc)
+            {
+                std::cerr << "--runtime-set-view-model-instance-source-bool requires stateMachineIndex viewModelIndex instanceIndex dataBindIndex value\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::
+                SetViewModelInstanceSourceBoolean;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.viewModelIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.viewModelInstanceIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.seconds = 0.0f;
+            action.boolValue = parse_bool_arg(argv[++i]);
+            action.numberValue = 0.0f;
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
         if (is_arg(argv[i],
                    "--runtime-relink-default-view-model-source-viewmodel"))
         {
@@ -11233,6 +11294,7 @@ int main(int argc, const char* argv[])
         std::cerr << "additional runtime flag: --runtime-bind-default-view-model-artboard-context\n";
         std::cerr << "additional runtime flag: --runtime-relink-default-view-model-source-viewmodel stateMachineIndex dataBindIndex value\n";
         std::cerr << "additional runtime flag: --runtime-set-view-model-instance-source-number stateMachineIndex viewModelIndex instanceIndex dataBindIndex value\n";
+        std::cerr << "additional runtime flag: --runtime-set-view-model-instance-source-bool stateMachineIndex viewModelIndex instanceIndex dataBindIndex value\n";
         std::cerr << "additional runtime flag: --runtime-relink-view-model-instance-source-viewmodel stateMachineIndex viewModelIndex instanceIndex dataBindIndex value\n";
         std::cerr << "additional runtime flag: --runtime-relink-view-model-instance-source-viewmodel-by-name-path stateMachineIndex viewModelIndex instanceIndex propertyPath value\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-nested-viewmodel-state-machine-context stateMachineIndex viewModelIndex rootPropertyIndex nestedPropertyIndex value\n";

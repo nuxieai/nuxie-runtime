@@ -5246,7 +5246,7 @@ impl RuntimeDataBindGraphSourceNode {
         self.flags & DATA_BIND_FLAG_DIRECTION_TO_SOURCE != 0
     }
 
-    fn number_target_to_source_value(&self, value: f32) -> Option<f32> {
+    fn number_target_to_source_value(&mut self, value: f32) -> Option<f32> {
         if !self.bound
             || !self.applies_target_to_source()
             || !matches!(self.value, RuntimeDataBindGraphValue::Number(_))
@@ -5255,14 +5255,12 @@ impl RuntimeDataBindGraphSourceNode {
         }
         let value = match self.converter.as_ref() {
             None => RuntimeDataBindGraphValue::Number(value),
-            Some(converter) if self.is_main_to_source() => runtime_data_bind_graph_convert_value(
-                converter,
-                &RuntimeDataBindGraphValue::Number(value),
-            )?,
-            Some(converter) => runtime_data_bind_graph_reverse_convert_value(
-                converter,
-                &RuntimeDataBindGraphValue::Number(value),
-            )?,
+            Some(converter) if self.is_main_to_source() => self
+                .converter_state
+                .convert_value(converter, &RuntimeDataBindGraphValue::Number(value))?,
+            Some(converter) => self
+                .converter_state
+                .reverse_convert_value(converter, &RuntimeDataBindGraphValue::Number(value))?,
         };
         let RuntimeDataBindGraphValue::Number(value) = value else {
             return None;
@@ -5415,6 +5413,32 @@ impl RuntimeDataBindGraphConverterState {
                 Some(value)
             }
             _ => runtime_data_bind_graph_convert_value(converter, value),
+        }
+    }
+
+    fn reverse_convert_value(
+        &mut self,
+        converter: &RuntimeDataBindGraphConverter,
+        value: &RuntimeDataBindGraphValue,
+    ) -> Option<RuntimeDataBindGraphValue> {
+        match (converter, self) {
+            (
+                RuntimeDataBindGraphConverter::Interpolator {
+                    duration,
+                    interpolator,
+                },
+                Self::Interpolator(state),
+            ) => state.convert(*duration, *interpolator, value),
+            (RuntimeDataBindGraphConverter::Group(converters), Self::Group(states))
+                if converters.len() == states.len() =>
+            {
+                let mut value = value.clone();
+                for (converter, state) in converters.iter().rev().zip(states.iter_mut().rev()) {
+                    value = state.reverse_convert_value(converter, &value)?;
+                }
+                Some(value)
+            }
+            _ => runtime_data_bind_graph_reverse_convert_value(converter, value),
         }
     }
 

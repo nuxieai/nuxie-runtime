@@ -235,6 +235,11 @@ slice.
   advancement preserves a manual bindable target edit, then normal
   state-machine advancement reapplies the warmed direct interpolator
   source-to-target converter state even when elapsed time is zero.
+- Direct interpolator public-update target-to-source slice: warmed direct
+  `DataConverterInterpolator` state now covers public `updateDataBinds(true)`
+  for main-`ToTarget | TwoWay` number binds. The public update dispatches C++
+  `reverseConvert`, which delegates to the same stateful `convert` path,
+  writes the source, then reapplies source-to-target in the same update.
 - String binding report seam: the C++ probe now emits exact source/target
   `stringBindings` snapshots beside existing number and view-model binding
   reports, and Rust probe tests can compare default-context string bind values

@@ -35,7 +35,8 @@ source-to-target conversion state even when elapsed time is zero.
 - Main-`ToSource | TwoWay` target-to-source behavior for
   `DataConverterInterpolator`.
 - Immediate target-to-source reverse conversion for main-`ToTarget | TwoWay`
-  binds.
+  binds; the warmed direct public-update variant is covered by
+  `docs/prototypes/data-binding-graph-interpolator-public-update-target-to-source-runtime-contract.md`.
 - Public `DataBindContainer::updateDataBinds(true)` scheduler parity outside
   the state-machine bindable-property action path.
 - Full dirty-list scheduler parity for neighboring ordinary `ToTarget`

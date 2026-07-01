@@ -27,11 +27,15 @@ needs to ask `rive-binary` for object data on every frame.
 - Main-`ToTarget | TwoWay` state-machine target-dirty behavior for the direct
   interpolator path is covered by
   `docs/prototypes/data-binding-graph-interpolator-main-to-target-two-way-target-dirty-runtime-contract.md`.
+- Warmed direct public `updateDataBinds(true)` target-to-source behavior is
+  covered by
+  `docs/prototypes/data-binding-graph-interpolator-public-update-target-to-source-runtime-contract.md`.
 
 ## Out Of Scope
 
 - `DataConverterInterpolator` inside `DataConverterGroup`.
-- Reverse conversion and target-to-source bindings.
+- Broader reverse conversion and target-to-source bindings beyond the linked
+  warmed direct public-update slice.
 - Dirty/update queue parity beyond the linked state-machine target-dirty path.
 - Formula, number-to-list, generated-list, scripted, or context-aware converter
   scheduling.

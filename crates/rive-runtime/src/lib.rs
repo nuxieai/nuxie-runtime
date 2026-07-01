@@ -3528,6 +3528,7 @@ struct RuntimeOwnedViewModelViewModel {
     colors: Vec<RuntimeOwnedViewModelColor>,
     imported_colors: BTreeMap<u32, Vec<RuntimeOwnedViewModelColor>>,
     enums: Vec<RuntimeOwnedViewModelEnum>,
+    imported_enums: BTreeMap<u32, Vec<RuntimeOwnedViewModelEnum>>,
     symbol_list_indices: Vec<RuntimeOwnedViewModelSymbolListIndex>,
     lists: Vec<RuntimeOwnedViewModelList>,
     assets: Vec<RuntimeOwnedViewModelAsset>,
@@ -3665,6 +3666,24 @@ impl RuntimeOwnedViewModelViewModel {
             .iter()
             .find(|enum_value| enum_value.property_index == property_index)
             .map(|enum_value| enum_value.value)
+    }
+
+    fn active_enum_value_by_property_index(&self, property_index: usize) -> Option<u64> {
+        match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => {
+                self.enum_value_by_property_index(property_index)
+            }
+            RuntimeViewModelPointer::Imported { object_id } => self
+                .imported_enums
+                .get(&object_id)
+                .and_then(|enums| {
+                    enums
+                        .iter()
+                        .find(|enum_value| enum_value.property_index == property_index)
+                })
+                .map(|enum_value| enum_value.value),
+            _ => None,
+        }
     }
 
     fn symbol_list_index_value_by_property_index(&self, property_index: usize) -> Option<u64> {
@@ -4280,6 +4299,64 @@ fn runtime_owned_view_model_enums(
         .unwrap_or_default()
 }
 
+fn runtime_owned_view_model_enums_for_instance(
+    file: &RuntimeFile,
+    view_model_index: usize,
+    view_model_instance: &RuntimeObject,
+) -> Vec<RuntimeOwnedViewModelEnum> {
+    file.view_model(view_model_index)
+        .map(|view_model| {
+            view_model
+                .properties
+                .into_iter()
+                .enumerate()
+                .filter_map(|(property_index, property)| {
+                    if property.type_name != "ViewModelPropertyEnumCustom" {
+                        return None;
+                    }
+                    let path = [
+                        u32::try_from(view_model_index).ok()?,
+                        u32::try_from(property_index).ok()?,
+                    ];
+                    let source = file.data_context_view_model_property_for_instance(
+                        view_model_instance,
+                        &path,
+                    )?;
+                    let value = file.view_model_instance_enum_value_index_for_object(source)?;
+                    Some(RuntimeOwnedViewModelEnum {
+                        property_index,
+                        value: u64::try_from(value).ok()?,
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn runtime_owned_view_model_imported_enums(
+    file: &RuntimeFile,
+    view_model_index: usize,
+) -> BTreeMap<u32, Vec<RuntimeOwnedViewModelEnum>> {
+    file.view_model(view_model_index)
+        .map(|view_model| {
+            view_model
+                .instances
+                .into_iter()
+                .map(|instance| {
+                    (
+                        instance.object.id,
+                        runtime_owned_view_model_enums_for_instance(
+                            file,
+                            view_model_index,
+                            instance.object,
+                        ),
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 fn runtime_owned_view_model_symbol_list_indices(
     file: &RuntimeFile,
     view_model_index: usize,
@@ -4641,6 +4718,11 @@ fn runtime_owned_view_model_property_children(
                 enums: referenced_view_model_index
                     .map(|view_model_index| runtime_owned_view_model_enums(file, view_model_index))
                     .unwrap_or_default(),
+                imported_enums: referenced_view_model_index
+                    .map(|view_model_index| {
+                        runtime_owned_view_model_imported_enums(file, view_model_index)
+                    })
+                    .unwrap_or_default(),
                 symbol_list_indices: referenced_view_model_index
                     .map(|view_model_index| {
                         runtime_owned_view_model_symbol_list_indices(file, view_model_index)
@@ -4832,6 +4914,11 @@ impl RuntimeOwnedViewModelInstance {
                         enums: referenced_view_model_index
                             .map(|view_model_index| {
                                 runtime_owned_view_model_enums(file, view_model_index)
+                            })
+                            .unwrap_or_default(),
+                        imported_enums: referenced_view_model_index
+                            .map(|view_model_index| {
+                                runtime_owned_view_model_imported_enums(file, view_model_index)
                             })
                             .unwrap_or_default(),
                         symbol_list_indices: referenced_view_model_index
@@ -5632,13 +5719,7 @@ impl RuntimeOwnedViewModelInstance {
         }
         let (property_index, view_model_path) = property_path.split_last()?;
         let view_model = self.view_model_by_property_path(view_model_path)?;
-        if !matches!(
-            view_model.value,
-            RuntimeViewModelPointer::OwnedGenerated { .. }
-        ) {
-            return None;
-        }
-        view_model.enum_value_by_property_index(*property_index)
+        view_model.active_enum_value_by_property_index(*property_index)
     }
 
     fn symbol_list_index_value_by_property_index(&self, property_index: usize) -> Option<u64> {

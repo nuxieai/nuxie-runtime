@@ -2243,11 +2243,27 @@ data-context binding as observed through a color transition condition. Rust
 records imported color snapshots per referenced view-model instance and uses
 them only for read-only graph source resolution. The contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-color-runtime-contract.md`.
-Other imported-intermediate scalar kinds beyond number, boolean, string, and
-color, persistent imported instance mutation, remaining property-name APIs,
-public object-handle APIs, reverse propagation, broader update queues,
-relative/parent/nested lookup, listener-owned data binding, and nested
-artboard propagation remain follow-up `#12` slices.
+At that slice boundary, enum and other imported-intermediate scalar kinds
+beyond number, boolean, string, and color, persistent imported instance
+mutation, remaining property-name APIs, public object-handle APIs, reverse
+propagation, broader update queues, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remained
+follow-up `#12` slices.
+
+Current #12 update: owned view-model contexts now traverse one imported
+replacement intermediate for direct enum sources. Replacing a generated root
+child with an imported child by instance index makes a source path such as
+`[root, child, choice]` read the imported child's existing
+`ViewModelInstanceEnum.propertyValue` index, matching C++ state-machine
+data-context binding as observed through an enum transition condition. Rust
+records imported enum-index snapshots per referenced view-model instance and
+uses them only for read-only graph source resolution. The contract is
+`docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-enum-runtime-contract.md`.
+Other imported-intermediate scalar kinds beyond number, boolean, string,
+color, and enum, persistent imported instance mutation, remaining
+property-name APIs, public object-handle APIs, reverse propagation, broader
+update queues, relative/parent/nested lookup, listener-owned data binding, and
+nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: owned view-model contexts now traverse deeper imported
 replacement intermediates for read-only view-model pointer sources. Replacing

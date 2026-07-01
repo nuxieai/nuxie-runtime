@@ -744,6 +744,13 @@ slice.
   records imported boolean snapshots per referenced view-model instance for
   read-only graph binding. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-boolean-runtime-contract.md`.
+- Owned view-model imported-intermediate string source slice:
+  replacing a generated root child with an imported child by instance index
+  lets `RuntimeOwnedViewModelInstance` resolve `[child, label]` through the
+  imported child's existing `ViewModelInstanceString.propertyValue`. Rust
+  records imported string snapshots per referenced view-model instance for
+  read-only graph binding. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-string-runtime-contract.md`.
 - Owned view-model deep imported-intermediate source slice: replacing a
   generated root child with an imported child by instance index lets
   `RuntimeOwnedViewModelInstance` resolve `[child, middle, leaf]` through the
@@ -906,7 +913,7 @@ slice.
   read paths: imported-instance mutation beyond state-machine-local view-model
   pointer relink overlays, property-name APIs beyond imported view-model
   pointer sources, owned generated view-model pointer paths,
-  imported-intermediate scalar kinds beyond number and boolean, and
+  imported-intermediate scalar kinds beyond number, boolean, and string, and
   stable public handles that update or expose cached
   `propertyValue` indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,

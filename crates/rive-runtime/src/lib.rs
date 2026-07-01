@@ -3312,6 +3312,38 @@ impl RuntimeImportedViewModelInstanceContext {
         self.symbol_list_index_overrides.insert(path, value);
         true
     }
+
+    pub fn set_asset_by_property_name(
+        &mut self,
+        file: &RuntimeFile,
+        property_name: &str,
+        value: u64,
+    ) -> bool {
+        let Some(path) = runtime_imported_view_model_asset_property_path_for_name(
+            file,
+            self.view_model_index,
+            property_name,
+        ) else {
+            return false;
+        };
+        let Some(view_model) = file.view_model(self.view_model_index) else {
+            return false;
+        };
+        let Some(instance) = view_model.instances.into_iter().nth(self.instance_index) else {
+            return false;
+        };
+        let current = self.asset_overrides.get(&path).copied().or_else(|| {
+            let source =
+                file.data_context_view_model_property_for_instance(instance.object, &path)?;
+            file.view_model_instance_asset_index_for_object(source)
+        });
+        if current == Some(value) {
+            return false;
+        }
+
+        self.asset_overrides.insert(path, value);
+        true
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -4379,6 +4411,19 @@ fn runtime_imported_view_model_symbol_list_index_property_path_for_name(
         view_model_index,
         property_name,
         "ViewModelPropertySymbolListIndex",
+    )
+}
+
+fn runtime_imported_view_model_asset_property_path_for_name(
+    file: &RuntimeFile,
+    view_model_index: usize,
+    property_name: &str,
+) -> Option<Vec<u32>> {
+    runtime_imported_view_model_property_path_for_type_names(
+        file,
+        view_model_index,
+        property_name,
+        &["ViewModelPropertyAsset", "ViewModelPropertyAssetImage"],
     )
 }
 

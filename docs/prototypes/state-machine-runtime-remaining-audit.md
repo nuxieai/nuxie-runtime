@@ -1006,6 +1006,15 @@ slice.
   imported `ViewModelInstance` and compares the observing state machine through
   its ordinary advance report. The contract is
   `docs/prototypes/data-binding-graph-imported-viewmodel-trigger-shared-mutation-runtime-contract.md`.
+- Imported trigger property-name slice:
+  `RuntimeImportedViewModelInstanceContext::set_trigger_by_property_name` now
+  resolves a root `ViewModelPropertyTrigger` name against one file-backed
+  imported view-model instance and records the existing trigger source override
+  by resolved path. The C++ probe resolves the root imported
+  `ViewModelInstanceTrigger` by name and proves an observing authored state
+  machine bound through the same imported context sees the trigger count before
+  ordinary advancement can consume or reset it. The contract is
+  `docs/prototypes/data-binding-graph-imported-viewmodel-trigger-name-runtime-contract.md`.
 - Shared imported list source mutation slice:
   `RuntimeImportedViewModelInstanceContext` now also owns list source
   item-count overrides for one file-backed imported view-model instance.
@@ -1154,7 +1163,7 @@ slice.
   source, symbol-list-index source, asset source, artboard source, trigger
   source, and list source contexts,
   property-name APIs beyond imported view-model pointer and root
-  number/boolean/string/color/enum/symbol-list-index/asset/artboard sources, owned generated view-model pointer
+  number/boolean/string/color/enum/symbol-list-index/asset/artboard/trigger sources, owned generated view-model pointer
   paths, and stable public handles that update or expose cached
   `propertyValue` indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,

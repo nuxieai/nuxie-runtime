@@ -2612,6 +2612,18 @@ consume/reset the trigger count. The C++ probe adds
 state machine through its ordinary advance report. The contract is
 `docs/prototypes/data-binding-graph-imported-viewmodel-trigger-shared-mutation-runtime-contract.md`.
 
+Current #12 update: imported view-model trigger sources now have the root
+property-name mutation API. `RuntimeImportedViewModelInstanceContext::
+set_trigger_by_property_name` resolves a root `ViewModelPropertyTrigger` name
+against the file-backed imported view model, records the existing trigger
+override by resolved source path, and lets an observing state machine bound
+through the same context see the trigger count before ordinary advancement can
+consume/reset it. The C++ probe adds
+`--runtime-set-view-model-instance-source-trigger-by-name`, resolves the root
+imported `ViewModelInstanceTrigger` by name, and compares the observing state
+machine through its ordinary advance report. The contract is
+`docs/prototypes/data-binding-graph-imported-viewmodel-trigger-name-runtime-contract.md`.
+
 Current #12 update: imported view-model list sources now match the shared
 imported item-count mutation pattern. `RuntimeImportedViewModelInstanceContext`
 records list source item-count overrides by resolved data-bind source path;
@@ -2635,7 +2647,7 @@ Imported-instance mutation beyond shared view-model pointer, number, boolean,
 string, color, enum, symbol-list-index, asset, artboard, trigger, and list
 contexts,
 remaining property-name APIs beyond imported view-model pointer and root
-number/boolean/string/color/enum/symbol-list-index/asset/artboard sources and owned generated pointer paths,
+number/boolean/string/color/enum/symbol-list-index/asset/artboard/trigger sources and owned generated pointer paths,
 stable public object handles, reverse propagation, broader update queues,
 relative/parent/nested lookup, listener-owned data binding, and nested
 artboard propagation remain follow-up `#12` slices.

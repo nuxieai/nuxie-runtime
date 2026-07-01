@@ -27510,6 +27510,124 @@ fn state_machine_imported_viewmodel_trigger_source_mutation_is_shared_across_sta
 }
 
 #[test]
+fn state_machine_imported_viewmodel_trigger_source_name_mutation_is_shared_across_state_machines_matches_cpp_probe()
+ {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_imported_viewmodel_trigger_source_name_mutation_shared_cpp.riv";
+    let bytes = synthetic_state_machine_imported_viewmodel_trigger_shared_mutation(8620);
+    let property_name = "fire";
+    let value = 3_u64;
+    let args = [
+        "--runtime-set-view-model-instance-source-trigger-by-name".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        property_name.to_owned(),
+        value.to_string(),
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "1".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "1".to_owned(),
+        "0".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine_a = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing first Rust state-machine instance for {label}"));
+    let mut state_machine_b = rust
+        .state_machine_instance(1)
+        .unwrap_or_else(|| panic!("missing second Rust state-machine instance for {label}"));
+    let mut imported_context = RuntimeImportedViewModelInstanceContext::new(&runtime, 0, 0)
+        .unwrap_or_else(|| panic!("missing imported view-model context for {label}"));
+
+    assert!(
+        imported_context.set_trigger_by_property_name(&runtime, property_name, value),
+        "{label} failed to mutate imported trigger source by property name"
+    );
+    assert!(
+        state_machine_a.bind_imported_view_model_context(&runtime, &imported_context),
+        "{label} failed to bind first imported view-model context"
+    );
+    assert!(
+        state_machine_b.bind_imported_view_model_context(&runtime, &imported_context),
+        "{label} failed to bind second imported view-model context"
+    );
+    let state_machine_b_advanced = rust.advance_state_machine_instance(&mut state_machine_b, 0.0);
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        1,
+        "{label} state-machine report count mismatch"
+    );
+    let cpp_state_machine = cpp_artboard
+        .runtime_state_machine_advances
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ state-machine advance for {label}"));
+    assert_eq!(
+        cpp_state_machine.state_machine_index, 1,
+        "{label} state-machine report index mismatch"
+    );
+    assert_eq!(
+        cpp_state_machine.state_machine_index,
+        state_machine_b.state_machine_index(),
+        "{label} stateMachineIndex mismatch"
+    );
+    assert_eq!(
+        cpp_state_machine.advanced, state_machine_b_advanced,
+        "{label} advance return mismatch"
+    );
+    assert_eq!(
+        cpp_state_machine.current_animation_count,
+        state_machine_b.current_animation_count(),
+        "{label} currentAnimationCount mismatch"
+    );
+    assert_eq!(
+        cpp_state_machine.changed_state_count,
+        state_machine_b.changed_state_count(),
+        "{label} changedStateCount mismatch"
+    );
+    assert_eq!(
+        cpp_state_machine.reported_event_count,
+        state_machine_b.reported_event_count(),
+        "{label} reportedEventCount mismatch"
+    );
+    for (animation_index, cpp_animation) in cpp_state_machine.current_animations.iter().enumerate()
+    {
+        let rust_animation = state_machine_b
+            .current_animation(animation_index)
+            .unwrap_or_else(|| {
+                panic!("missing Rust current animation {animation_index} for {label}")
+            });
+        assert_close(
+            cpp_animation.time,
+            rust_animation.time(),
+            &format!("{label} current animation {animation_index} time"),
+        );
+        assert_eq!(
+            cpp_animation.did_loop,
+            rust_animation.did_loop(),
+            "{label} current animation {animation_index} didLoop mismatch"
+        );
+    }
+}
+
+#[test]
 fn state_machine_imported_viewmodel_list_source_mutation_is_shared_across_state_machines_matches_cpp_probe()
  {
     let Some(probe) = probe_path() else {

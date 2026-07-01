@@ -28,7 +28,8 @@ counter value observed by data binding.
 ## Out Of Scope
 
 - Nested source mutation APIs.
-- Nested list and view-model value kinds.
+- Nested source kinds beyond the list sibling covered by
+  `docs/prototypes/data-binding-graph-default-viewmodel-nested-list-runtime-contract.md`.
 - Name-based, relative, and parent paths.
 - Imported and owned runtime contexts beyond existing dedicated slices.
 - Listener/callback trigger dispatch, trigger reset/reapply variants beyond

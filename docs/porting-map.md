@@ -709,10 +709,24 @@ shape `[Root, child, fire]` walks the root
 target. C++ probe coverage verifies the child default through trigger binding
 reports and the existing transition-condition consumer. The contract is
 `docs/prototypes/data-binding-graph-default-viewmodel-nested-trigger-runtime-contract.md`.
-Nested mutation APIs, nested list and view-model value kinds, name-based
-relative paths, parent paths, public source handles, reverse propagation,
-broader update queues, listener-owned data binding, and nested artboard
-propagation remain follow-up `#12` slices.
+Nested mutation APIs, nested list and other value kinds, name-based relative
+paths, parent paths, public source handles, reverse propagation, broader
+update queues, listener-owned data binding, and nested artboard propagation
+remain follow-up `#12` slices.
+
+Current #12 update: default-context nested list source binding now follows the
+same absolute child traversal. A `DataBindContext.sourcePathIds` path of shape
+`[Root, child, items]` walks the root
+`ViewModelInstanceViewModel.propertyValue` reference to the imported child
+`ViewModelInstance`, then reads the child's `ViewModelInstanceList` item
+children before updating the bindable-list source-size report. C++ probe
+coverage verifies the child default after explicit data-context advancement
+and state-machine advancement. The contract is
+`docs/prototypes/data-binding-graph-default-viewmodel-nested-list-runtime-contract.md`.
+Nested mutation APIs, nested view-model value kind, name-based relative paths,
+parent paths, public source handles, reverse propagation, broader update
+queues, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
 
 Current #12 update: graph-owned source mutation now also covers default
 `ViewModelInstanceBoolean` sources. Rust exposes
@@ -3780,8 +3794,8 @@ The contract is
 Admitted live relative/name lookup with file pointers, converter name paths,
 relative paths, parent paths, nested source kinds beyond the default-context
 number, boolean, string, color, enum, symbol-list-index, asset, artboard, and
-trigger slices, listener-owned data binding, and nested artboard propagation
-remain follow-up `#12` slices.
+trigger, and list slices, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
 
 ## #13: Nested Artboards And Hosts
 

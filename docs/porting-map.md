@@ -1272,6 +1272,20 @@ converters, broader dirty/update queues, relative/parent/nested lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 
+Current #12 update: direct `DataConverterStringTrim`,
+`DataConverterStringRemoveZeros`, and `DataConverterStringPad` now also cover
+main-`ToSource | TwoWay` target-to-source behavior for default-context string
+targets. C++ preserves the edited string target through explicit data-context
+advancement without mutating the string source, then the next normal
+state-machine advance refreshes the target from the unchanged source through
+base `reverseConvert` identity rather than forward trim/remove-zero/pad
+conversion. The contract is
+`docs/prototypes/data-binding-graph-string-converter-family-main-to-source-target-to-source-runtime-contract.md`.
+String converter groups, string-source main-`ToSource | TwoWay` behavior for
+`DataConverterToString`, broader dirty/update queues, relative/parent/nested
+lookup, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
+
 Current #12 update: the first `DataConverterToString` runtime slice now
 supports default-context number sources feeding
 `BindablePropertyString.propertyValue` targets. String source nodes can carry a

@@ -4846,10 +4846,7 @@ impl RuntimeDataBindGraph {
                 continue;
             };
             if source.is_main_to_source()
-                && matches!(
-                    source.converter.as_ref(),
-                    Some(RuntimeDataBindGraphConverter::ToString { .. })
-                )
+                && source.uses_delayed_string_source_to_target_after_main_to_source()
             {
                 source.source_to_target_dirty_after_immediate = true;
                 changed = true;
@@ -5485,6 +5482,12 @@ impl RuntimeDataBindGraphSourceNode {
         if !self.bound || !self.applies_target_to_source() {
             return None;
         }
+        if self.preserves_string_source_on_main_to_source_target_apply() {
+            let RuntimeDataBindGraphValue::String(value) = &self.value else {
+                return None;
+            };
+            return Some(RuntimeDataBindGraphValue::String(value.clone()));
+        }
         let value = RuntimeDataBindGraphValue::String(value.to_vec());
         let converted = match self.converter.as_ref() {
             None => value,
@@ -5551,6 +5554,30 @@ impl RuntimeDataBindGraphSourceNode {
             }
             _ => None,
         }
+    }
+
+    fn uses_delayed_string_source_to_target_after_main_to_source(&self) -> bool {
+        matches!(
+            self.converter.as_ref(),
+            Some(
+                RuntimeDataBindGraphConverter::ToString { .. }
+                    | RuntimeDataBindGraphConverter::StringTrim { .. }
+                    | RuntimeDataBindGraphConverter::StringRemoveZeros
+                    | RuntimeDataBindGraphConverter::StringPad { .. }
+            )
+        )
+    }
+
+    fn preserves_string_source_on_main_to_source_target_apply(&self) -> bool {
+        self.is_main_to_source()
+            && matches!(
+                self.converter.as_ref(),
+                Some(
+                    RuntimeDataBindGraphConverter::StringTrim { .. }
+                        | RuntimeDataBindGraphConverter::StringRemoveZeros
+                        | RuntimeDataBindGraphConverter::StringPad { .. }
+                )
+            )
     }
 
     fn supports_direct_color_target_to_source(&self) -> bool {
@@ -5631,6 +5658,13 @@ impl RuntimeDataBindGraphSourceNode {
                 self.converter_state
                     .reverse_convert_value(converter, &self.value)
             }
+            Some(
+                converter @ (RuntimeDataBindGraphConverter::StringTrim { .. }
+                | RuntimeDataBindGraphConverter::StringRemoveZeros
+                | RuntimeDataBindGraphConverter::StringPad { .. }),
+            ) if self.is_main_to_source() => self
+                .converter_state
+                .reverse_convert_value(converter, &self.value),
             Some(converter) => self.converter_state.convert_value(converter, &self.value),
         }
     }

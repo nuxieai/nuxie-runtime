@@ -4621,7 +4621,10 @@ impl RuntimeDataBindGraph {
                 && source.is_main_to_source()
                 && matches!(
                     source.converter.as_ref(),
-                    Some(RuntimeDataBindGraphConverter::ListToLength)
+                    Some(
+                        RuntimeDataBindGraphConverter::Interpolator { .. }
+                            | RuntimeDataBindGraphConverter::ListToLength
+                    )
                 )
             {
                 applied_target_to_source = true;
@@ -4682,6 +4685,7 @@ impl RuntimeDataBindGraph {
                             Some(
                                 RuntimeDataBindGraphConverter::Formula { .. }
                                     | RuntimeDataBindGraphConverter::Group(_)
+                                    | RuntimeDataBindGraphConverter::Interpolator { .. }
                                     | RuntimeDataBindGraphConverter::Rounder { .. }
                                     | RuntimeDataBindGraphConverter::SystemOperationValue { .. }
                             )
@@ -5645,6 +5649,12 @@ impl RuntimeDataBindGraphSourceNode {
                     .reverse_convert_value(converter, &self.value)
             }
             Some(converter @ RuntimeDataBindGraphConverter::ToString { .. })
+                if self.is_main_to_source() =>
+            {
+                self.converter_state
+                    .reverse_convert_value(converter, &self.value)
+            }
+            Some(converter @ RuntimeDataBindGraphConverter::Interpolator { .. })
                 if self.is_main_to_source() =>
             {
                 self.converter_state

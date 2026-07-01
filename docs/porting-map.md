@@ -1095,6 +1095,19 @@ converters, broader dirty/update queues, relative/parent/nested lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 
+Current #12 update: direct `DataConverterInterpolator` now also covers
+main-`ToSource | TwoWay` target-to-source behavior for warmed default-context
+number binds. Explicit data-context advancement runs the edited number target
+through C++ main-direction interpolator `convert`, then refreshes the visible
+target during the same pass through `reverseConvert`, which delegates to the
+same stateful convert path, even when the converted source value is unchanged.
+The contract is
+`docs/prototypes/data-binding-graph-interpolator-main-to-source-target-to-source-runtime-contract.md`.
+Fresh/unwarmed interpolator target edits, grouped interpolators, color
+interpolation targets, broader dirty/update queues, relative/parent/nested
+lookup, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
+
 Current #12 update: the C++ runtime probe now emits exact `stringBindings`
 source/target snapshots for state-machine `BindablePropertyString` data binds,
 and the Rust probe harness can compare those values directly for

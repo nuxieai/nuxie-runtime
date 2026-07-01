@@ -263,6 +263,12 @@ slice.
   for main-`ToTarget | TwoWay` number binds. The public update dispatches C++
   `reverseConvert`, which delegates to the same stateful `convert` path,
   writes the source, then reapplies source-to-target in the same update.
+- Direct interpolator main-to-source target-to-source slice: warmed direct
+  `DataConverterInterpolator` state now follows C++ explicit data-context
+  behavior for main-`ToSource | TwoWay` number binds. Main-direction
+  interpolator conversion runs before the source write, then the same pass
+  refreshes the target through the interpolator reverse/convert path even when
+  the source value is unchanged.
 - String binding report seam: the C++ probe now emits exact source/target
   `stringBindings` snapshots beside existing number and view-model binding
   reports, and Rust probe tests can compare default-context string bind values

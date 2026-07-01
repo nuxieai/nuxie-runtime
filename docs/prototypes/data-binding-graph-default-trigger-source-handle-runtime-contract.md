@@ -28,7 +28,10 @@ Out of scope:
 - Number, boolean, string, color, enum, symbol-list-index, asset, artboard,
   list, or view-model source-handle behavior beyond the existing committed
   APIs.
-- Nested, relative, parent, or slash-separated property paths.
+- Changing root-name lookup semantics to accept slash-separated property
+  paths. Nested trigger paths are covered separately by
+  `docs/prototypes/data-binding-graph-default-nested-trigger-source-handle-runtime-contract.md`.
+- Relative or parent property paths.
 - Imported or owned view-model contexts.
 - Public trigger fire/dispatch APIs, listener-owned trigger dispatch,
   callback-driven data binding, stable trigger event handles, or event routing.
@@ -38,4 +41,4 @@ Out of scope:
 Completion condition: resolving and mutating a default root trigger source by
 handle produces the same state-machine advance and component update reports as
 C++ by-name mutation, no-op repeat writes report unchanged, target mirrors
-remain in sync, and slash-path handle lookup remains unresolved.
+remain in sync, and root-name lookup stays separate from slash-path lookup.

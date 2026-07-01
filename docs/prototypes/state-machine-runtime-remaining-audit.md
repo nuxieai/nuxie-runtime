@@ -312,11 +312,19 @@ slice.
   names on file view model `0` into
   `RuntimeDefaultViewModelTriggerSourceHandle` and mutate graph-owned default
   trigger source nodes through that handle while preserving trigger target
-  mirror updates. Slash-path lookup remains unresolved, and default handles
-  for list/view-model sources remain follow-up slices. The C++ probe compares
-  the handle write against the default trigger by-name mutation command. The
-  contract is
+  mirror updates. Root-name handle lookup remains separate from slash-path
+  lookup. The C++ probe compares the handle write against the default trigger
+  by-name mutation command. The contract is
   `docs/prototypes/data-binding-graph-default-trigger-source-handle-runtime-contract.md`.
+- Default nested trigger source handle slice:
+  `StateMachineInstance` can now resolve a generated child path such as
+  `child/fire` into `RuntimeDefaultViewModelTriggerSourceHandle` through
+  `default_view_model_trigger_source_handle_by_property_name_path` and mutate
+  graph-owned default trigger source nodes through that handle while preserving
+  matching trigger target mirror updates. The C++ probe compares the handle
+  write against the authored `DataBindContext.sourcePathIds` mutation path for
+  the matching default-context data bind. The contract is
+  `docs/prototypes/data-binding-graph-default-nested-trigger-source-handle-runtime-contract.md`.
 - Default root list property-name item-count mutation, covered by a C++ probe
   through `ViewModelInstanceRuntime::propertyList("items")` with raw
   `ViewModelInstance::propertyValue("items")` / property-index fallback for the
@@ -2209,7 +2217,7 @@ slice.
   property-name APIs beyond imported view-model pointer and root
   number/boolean/string/color/enum/symbol-list-index/asset/artboard/trigger/list sources, owned generated view-model pointer
   paths, and stable public handles beyond the admitted default nested-number/
-  boolean/string/color/enum/symbol-list-index/asset/artboard handles plus default/imported/owned root source handles, especially
+  boolean/string/color/enum/symbol-list-index/asset/artboard/trigger handles plus default/imported/owned root source handles, especially
   remaining nested/relative/parent handles that update or expose cached source
   indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,

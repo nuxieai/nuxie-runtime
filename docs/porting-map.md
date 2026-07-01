@@ -439,8 +439,8 @@ remains separate from slash-path lookup. The C++ probe compares the handle
 mutation against the default number by-name command and verifies the existing
 state-machine advance and component update reports. The contract is
 `docs/prototypes/data-binding-graph-default-number-source-handle-runtime-contract.md`.
-Default source handles for trigger/list/view-model sources, nested/relative/
-parent lookup, reverse propagation, broader update queues, listener-owned data
+Default source handles for list/view-model sources, nested/relative/parent
+lookup, reverse propagation, broader update queues, listener-owned data
 binding, and nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: default nested number sources now have the first nested
@@ -775,11 +775,23 @@ source handle. `StateMachineInstance` can resolve a root trigger view-model
 property name into `RuntimeDefaultViewModelTriggerSourceHandle`, and
 `set_default_view_model_trigger_source_by_source_handle` writes through the
 existing graph-owned source-path mutation path while preserving the default
-trigger target mirror update. Slash-path handle lookup remains unresolved. The
-C++ probe compares the handle mutation against the default trigger by-name
-command and verifies the existing state-machine advance and component update
-reports. The contract is
+trigger target mirror update. Root-name handle lookup remains separate from
+slash-path lookup. The C++ probe compares the handle mutation against the
+default trigger by-name command and verifies the existing state-machine advance
+and component update reports. The contract is
 `docs/prototypes/data-binding-graph-default-trigger-source-handle-runtime-contract.md`.
+
+Current #12 update: default nested trigger sources now have a stable public
+source handle. `StateMachineInstance` can resolve a generated child path such
+as `child/fire` into `RuntimeDefaultViewModelTriggerSourceHandle` through
+`default_view_model_trigger_source_handle_by_property_name_path`, and
+`set_default_view_model_trigger_source_by_source_handle` writes through the
+existing graph-owned source-path mutation path while preserving the matching
+default trigger target mirror update. The C++ probe compares the handle
+mutation against the authored `DataBindContext.sourcePathIds` mutation path
+for the matching default-context data bind and verifies the existing
+state-machine advance and component update reports. The contract is
+`docs/prototypes/data-binding-graph-default-nested-trigger-source-handle-runtime-contract.md`.
 Default source handles for list/view-model sources, nested/relative/parent
 lookup, reverse propagation, broader update queues, listener-owned data
 binding, and nested artboard propagation remain follow-up `#12` slices.

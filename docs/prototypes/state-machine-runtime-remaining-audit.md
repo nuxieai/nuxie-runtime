@@ -90,6 +90,11 @@ slice.
   file-backed default instance and the existing bindable-list source-size
   consumer. The contract is
   `docs/prototypes/data-binding-graph-default-list-name-runtime-contract.md`.
+- Default root view-model property-name relink, covered by a C++ probe through
+  `ViewModelInstanceRuntime::replaceViewModel("current", referencedRuntime)`
+  for the file-backed default instance and the existing view-model pointer
+  source/target consumer. The contract is
+  `docs/prototypes/data-binding-graph-default-viewmodel-name-relink-runtime-contract.md`.
 - Graph-owned default `ViewModelInstanceBoolean` source-node mutation by
   state-machine data-bind index, covered by a C++ probe through an existing
   transition-condition consumer.

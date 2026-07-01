@@ -541,9 +541,10 @@ file-backed source through `ViewModelInstance::propertyValue` name or
 property-index lookup, and compares the existing trigger transition-condition
 report surface. The contract is
 `docs/prototypes/data-binding-graph-default-trigger-name-runtime-contract.md`.
-Default view-model name APIs, nested/relative/parent lookup, public source
-handles, reverse propagation, broader update queues, listener-owned data
-binding, and nested artboard propagation remain follow-up `#12` slices.
+At that point, default list and view-model name APIs,
+nested/relative/parent lookup, public source handles, reverse propagation,
+broader update queues, listener-owned data binding, and nested artboard
+propagation remained follow-up `#12` slices.
 
 Current #12 update: default root list sources now match the root trigger
 property-name mutation shape for item-count parity. Rust exposes
@@ -555,9 +556,27 @@ file-backed list through `ViewModelInstanceRuntime::propertyList` or raw
 `ViewModelInstance::propertyValue` name/property-index lookup, and compares the
 existing bindable-list source-size report surface. The contract is
 `docs/prototypes/data-binding-graph-default-list-name-runtime-contract.md`.
-Default view-model name APIs, nested/relative/parent lookup, public source
-handles, reverse propagation, broader update queues, listener-owned data
-binding, and nested artboard propagation remain follow-up `#12` slices.
+At that point, default view-model name APIs, nested/relative/parent lookup,
+public source handles, reverse propagation, broader update queues,
+listener-owned data binding, and nested artboard propagation remained follow-up
+`#12` slices.
+
+Current #12 update: default root view-model sources now complete the root
+property-name mutation/relink family. Rust exposes
+`StateMachineInstance::relink_default_view_model_view_model_source_by_property_name`,
+which resolves a root `ViewModelPropertyViewModel.name` on file view model `0`
+and relinks every matching graph source node to the requested referenced
+instance index. The C++ probe adds
+`--runtime-relink-default-view-model-source-viewmodel-by-name`, resolves the
+default file-backed pointer through
+`ViewModelInstanceRuntime::replaceViewModel(name, referencedRuntime)`, and
+compares the existing view-model pointer source/target report surface. The
+contract is
+`docs/prototypes/data-binding-graph-default-viewmodel-name-relink-runtime-contract.md`.
+The default root property-name source mutation family is closed; nested,
+relative, or parent lookup, public source handles, reverse propagation, broader
+update queues, listener-owned data binding, and nested artboard propagation
+remain follow-up `#12` slices.
 
 Current #12 update: graph-owned source mutation now also covers default
 `ViewModelInstanceBoolean` sources. Rust exposes

@@ -370,6 +370,7 @@ enum class RuntimeStateMachineActionKind
     SetViewModelInstanceSourceList,
     SetViewModelInstanceSourceListByName,
     RelinkDefaultViewModelSourceViewModel,
+    RelinkDefaultViewModelSourceViewModelByName,
     RelinkViewModelInstanceSourceViewModel,
     RelinkViewModelInstanceSourceViewModelByNamePath,
     BindEmptyContext,
@@ -3874,6 +3875,43 @@ apply_runtime_state_machine_advances(rive::File* file,
                     viewModelInstance->replaceViewModelByProperty(
                         viewModelSource, rive::ref_rcp(referencedInstance));
                 }
+            }
+            continue;
+        }
+        if (action.kind == RuntimeStateMachineActionKind::
+                               RelinkDefaultViewModelSourceViewModelByName)
+        {
+            auto viewModel =
+                file != nullptr && file->viewModelCount() > 0
+                    ? file->viewModel(0)
+                    : nullptr;
+            auto viewModelInstance =
+                viewModel != nullptr && viewModel->instanceCount() > 0
+                    ? viewModel->instance(0)
+                    : nullptr;
+            auto sourceProperty =
+                find_view_model_property_view_model_by_name_path(
+                    file, viewModel, action.stringValue);
+            auto referencedViewModel =
+                file != nullptr && sourceProperty != nullptr &&
+                        sourceProperty->viewModelReferenceId() <
+                            file->viewModelCount()
+                    ? file->viewModel(sourceProperty->viewModelReferenceId())
+                    : nullptr;
+            auto referencedInstance =
+                referencedViewModel != nullptr &&
+                        action.uintValue < referencedViewModel->instanceCount()
+                    ? referencedViewModel->instance(action.uintValue)
+                    : nullptr;
+            if (viewModelInstance != nullptr && referencedInstance != nullptr)
+            {
+                auto referencedRuntime =
+                    rive::make_rcp<rive::ViewModelInstanceRuntime>(
+                        rive::ref_rcp(referencedInstance));
+                rive::ViewModelInstanceRuntime runtime(
+                    rive::ref_rcp(viewModelInstance));
+                runtime.replaceViewModel(action.stringValue,
+                                         referencedRuntime.get());
             }
             continue;
         }
@@ -12953,6 +12991,31 @@ int main(int argc, const char* argv[])
             action.numberValue = 0.0f;
             action.uintValue = static_cast<uint32_t>(
                 std::strtoull(argv[++i], nullptr, 10));
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
+        if (is_arg(argv[i],
+                   "--runtime-relink-default-view-model-source-viewmodel-by-name"))
+        {
+            if (i + 3 >= argc)
+            {
+                std::cerr << "--runtime-relink-default-view-model-source-viewmodel-by-name requires stateMachineIndex propertyName value\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::
+                RelinkDefaultViewModelSourceViewModelByName;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.stringValue = argv[++i];
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            action.uintValue =
+                static_cast<uint32_t>(std::strtoull(argv[++i], nullptr, 10));
             options.runtimeStateMachineActions.push_back(action);
             continue;
         }

@@ -3093,6 +3093,17 @@ impl RuntimeDefaultViewModelNumberSourceHandle {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeDefaultViewModelBooleanSourceHandle {
+    path: Vec<u32>,
+}
+
+impl RuntimeDefaultViewModelBooleanSourceHandle {
+    pub fn path(&self) -> &[u32] {
+        &self.path
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeImportedViewModelNumberSourceHandle {
     view_model_index: usize,
     instance_index: usize,
@@ -16553,6 +16564,30 @@ impl StateMachineInstance {
         if !self
             .data_bind_graph
             .set_default_view_model_boolean_source_for_path(&path, value)
+        {
+            return false;
+        }
+        self.needs_advance = true;
+        true
+    }
+
+    pub fn default_view_model_boolean_source_handle_by_property_name(
+        &self,
+        file: &RuntimeFile,
+        property_name: &str,
+    ) -> Option<RuntimeDefaultViewModelBooleanSourceHandle> {
+        let path = runtime_default_view_model_boolean_property_path_for_name(file, property_name)?;
+        Some(RuntimeDefaultViewModelBooleanSourceHandle { path })
+    }
+
+    pub fn set_default_view_model_boolean_source_by_source_handle(
+        &mut self,
+        handle: &RuntimeDefaultViewModelBooleanSourceHandle,
+        value: bool,
+    ) -> bool {
+        if !self
+            .data_bind_graph
+            .set_default_view_model_boolean_source_for_path(&handle.path, value)
         {
             return false;
         }

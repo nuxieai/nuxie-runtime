@@ -1450,6 +1450,15 @@ slice.
   completing view-model properties and proves two authored state machines bound
   through the same imported context observe the mutation. The contract is
   `docs/prototypes/data-binding-graph-imported-viewmodel-nested-string-name-path-runtime-contract.md`.
+- Imported nested color property-name path slice:
+  `RuntimeImportedViewModelInstanceContext::set_color_by_property_name_path`
+  resolves a slash-separated path such as `child/tint` through one nested
+  `ViewModelPropertyViewModel` segment to a `ViewModelPropertyColor` leaf and
+  records the color override by the existing graph source path. The C++ probe
+  calls `ViewModelInstanceRuntime::propertyColor("child/tint")` after
+  completing view-model properties and proves two authored state machines bound
+  through the same imported context observe the mutation. The contract is
+  `docs/prototypes/data-binding-graph-imported-viewmodel-nested-color-name-path-runtime-contract.md`.
 - Shared imported boolean source mutation slice:
   `RuntimeImportedViewModelInstanceContext` now also owns boolean source
   overrides for one file-backed imported view-model instance. Mutating a

@@ -59,6 +59,11 @@ slice.
   `propertyValue("tint")` fallback for the file-backed default instance, and
   the existing color transition-condition consumer. The contract is
   `docs/prototypes/data-binding-graph-default-color-name-runtime-contract.md`.
+- Default root enum property-name mutation, covered by a C++ probe through
+  `ViewModelInstanceRuntime::propertyEnum("choice")->valueIndex(...)` with raw
+  `propertyValue("choice")` fallback for the file-backed default instance, and
+  the existing enum transition-condition consumer. The contract is
+  `docs/prototypes/data-binding-graph-default-enum-name-runtime-contract.md`.
 - Graph-owned default `ViewModelInstanceBoolean` source-node mutation by
   state-machine data-bind index, covered by a C++ probe through an existing
   transition-condition consumer.

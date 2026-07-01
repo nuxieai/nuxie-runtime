@@ -184,6 +184,27 @@ impl ArtboardInstance {
         changed
     }
 
+    pub fn advance_artboard_data_binds(&mut self) -> bool {
+        let mut changed = false;
+        for binding in &mut self.artboard_list_bindings {
+            let target_value = match binding.converter.as_ref() {
+                Some(converter) => {
+                    runtime_data_bind_graph_convert_value(converter, &binding.default_value)
+                }
+                None => Some(binding.default_value.clone()),
+            };
+            let target_list_size = match target_value {
+                Some(RuntimeDataBindGraphValue::List { item_count }) => Some(item_count),
+                _ => None,
+            };
+            if binding.target_list_size != target_list_size {
+                binding.target_list_size = target_list_size;
+                changed = true;
+            }
+        }
+        changed
+    }
+
     pub fn artboard_list_binding_source_list_size_for_data_bind(
         &self,
         data_bind_index: usize,

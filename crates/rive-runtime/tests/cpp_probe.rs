@@ -23203,6 +23203,39 @@ fn artboard_default_viewmodel_list_to_component_list_matches_cpp_probe() {
 }
 
 #[test]
+fn artboard_default_viewmodel_list_to_component_list_update_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label =
+        "synthetic/runtime_artboard_default_viewmodel_list_to_component_list_update_cpp.riv";
+    let bytes = synthetic_artboard_default_viewmodel_list_to_component_list(8574);
+    let args = [
+        "--runtime-bind-default-view-model-artboard-context".to_owned(),
+        "--runtime-advance-artboard-after-bind".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    assert!(
+        rust.bind_default_view_model_artboard_list_context(&runtime),
+        "{label} failed to apply default artboard list context"
+    );
+    assert!(
+        rust.advance_artboard_data_binds(),
+        "{label} failed to advance artboard data binds"
+    );
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    compare_artboard_list_binding(cpp_artboard, &rust, 0, label);
+}
+
+#[test]
 fn artboard_default_viewmodel_name_based_list_to_component_list_matches_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
@@ -23245,6 +23278,39 @@ fn artboard_default_viewmodel_number_to_list_component_list_matches_cpp_probe() 
     assert!(
         rust.bind_default_view_model_artboard_list_context(&runtime),
         "{label} failed to apply default artboard list context"
+    );
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    compare_artboard_list_binding(cpp_artboard, &rust, 0, label);
+}
+
+#[test]
+fn artboard_default_viewmodel_number_to_list_component_list_update_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label =
+        "synthetic/runtime_artboard_default_viewmodel_number_to_list_component_list_update_cpp.riv";
+    let bytes = synthetic_artboard_default_viewmodel_number_to_list_component_list(8575);
+    let args = [
+        "--runtime-bind-default-view-model-artboard-context".to_owned(),
+        "--runtime-advance-artboard-after-bind".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    assert!(
+        rust.bind_default_view_model_artboard_list_context(&runtime),
+        "{label} failed to apply default artboard list context"
+    );
+    assert!(
+        rust.advance_artboard_data_binds(),
+        "{label} failed to advance artboard data binds"
     );
 
     let cpp_artboard = cpp

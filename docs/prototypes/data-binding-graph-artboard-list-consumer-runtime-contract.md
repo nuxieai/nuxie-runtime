@@ -39,6 +39,9 @@ layout, or virtualization.
   needing reset.
 - Generated list item identities are proven separately at the binary/converter
   level. They are not instantiated into `ArtboardComponentList` here.
+- The follow-up post-bind advance target-count boundary is covered separately
+  in
+  `docs/prototypes/data-binding-graph-artboard-list-advance-target-count-runtime-contract.md`.
 
 ## Out Of Scope
 

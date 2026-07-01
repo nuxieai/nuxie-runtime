@@ -2808,6 +2808,22 @@ target-to-source list behavior, broader update queues, relative/parent/nested
 lookup, listener-owned data binding, and nested artboard propagation remain
 follow-up `#12` slices.
 
+Current #12 update: artboard-owned list-consumer binding now also covers the
+first post-bind advance target-count report. After binding the default artboard
+view-model context, a zero-second public `Artboard::advance(0.0f)` updates the
+exact `ArtboardComponentList` target list count for direct list sources and
+direct `DataConverterNumberToList` sources. Rust mirrors that through
+`ArtboardInstance::advance_artboard_data_binds()`, while direct
+`Artboard::updateDataBinds(true)` remains outside this admitted boundary
+because the C++ fixtures still report an empty target list there. The contract
+is
+`docs/prototypes/data-binding-graph-artboard-list-advance-target-count-runtime-contract.md`.
+Child artboard clone surfaces, item identity reuse/disposal, map-rule-driven
+child creation, list layout/virtualization, target-to-source list behavior,
+generated-list reverse conversion, broader update queues, relative/parent/nested
+lookup, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
+
 Current #12 update: default-context view-model pointer sources now have a live
 relink API separate from the raw generated setter path.
 `StateMachineInstance::relink_default_view_model_view_model_source_for_data_bind`

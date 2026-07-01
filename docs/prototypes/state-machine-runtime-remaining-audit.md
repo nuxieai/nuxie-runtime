@@ -366,6 +366,15 @@ slice.
   flag behavior without admitting list item instancing, map-rule selection,
   layout, or virtualization. The contract is
   `docs/prototypes/data-binding-graph-artboard-list-consumer-runtime-contract.md`.
+- Artboard list-consumer post-bind advance target-count slice: after binding
+  the default artboard view-model context, a zero-second public
+  `Artboard::advance(0.0f)` updates exact `ArtboardComponentList` target list
+  counts for direct list sources and direct `DataConverterNumberToList`
+  sources. Rust mirrors that report through
+  `ArtboardInstance::advance_artboard_data_binds()` without admitting child
+  artboard clone surfaces, item identity reuse/disposal, map-rule-driven child
+  creation, layout, or virtualization. The contract is
+  `docs/prototypes/data-binding-graph-artboard-list-advance-target-count-runtime-contract.md`.
 - `DataConverterRounder` graph-owned converter execution slice: forward
   conversion for default-context number sources feeding number targets,
   including imported `decimals`, covered by a C++ probe through an existing
@@ -1635,11 +1644,12 @@ slice.
   target-to-source, trigger converter multi-group,
   first direct number/boolean/string/color/enum/asset/artboard/symbol-list-index/trigger/view-model
   target-to-source propagation,
-  first artboard list-consumer immediate bind report,
-  data-binding update queues, artboard component-list item instancing,
-  map-rule selection, list layout/virtualization, remaining generated-list
-  reverse converters, admitted live relative/name lookup with file pointers,
-  converter name paths, relative paths, parent paths, and nested paths.
+  first artboard list-consumer immediate bind and post-bind advance
+  target-count reports, data-binding update queues, full artboard
+  component-list item instancing, map-rule-driven child creation, list
+  layout/virtualization, remaining generated-list reverse converters, admitted
+  live relative/name lookup with file pointers, converter name paths, relative
+  paths, parent paths, and nested paths.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener
   actions.

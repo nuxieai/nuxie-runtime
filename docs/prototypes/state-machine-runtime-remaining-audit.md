@@ -160,6 +160,12 @@ slice.
   `DataConverterBooleanNegate` forward conversion on default-context boolean
   source-to-target bindings, covered by a C++ probe through an existing
   transition-condition consumer.
+- Boolean public-update target-to-source slice: main-`ToTarget | TwoWay`
+  boolean binds now participate in public `updateDataBinds(true)` for direct
+  no-converter and direct `DataConverterBooleanNegate` paths. The C++ probe
+  reports exact boolean binding source/target rows, and Rust mirrors direct
+  writes plus symmetric BooleanNegate reverse conversion before same-update
+  source-to-target reapplication.
 - Second graph-owned converter execution slice:
   `DataConverterTrigger` forward conversion on default-context trigger
   source-to-target bindings, covered by a C++ probe through an existing
@@ -764,6 +770,11 @@ slice.
   target-to-source path for a default-context trigger bind. The C++ probe now
   reports trigger binding source/target rows, and Rust mirrors inherited
   `reverseConvert` pass-through plus same-update source-to-target increment.
+- Boolean public-update target-to-source slice:
+  direct boolean and `DataConverterBooleanNegate` now cover public
+  `updateDataBinds(true)` target-to-source behavior for default-context
+  boolean binds. The C++ probe reports boolean binding source/target rows, and
+  Rust mirrors direct writes plus symmetric BooleanNegate reverse conversion.
 - First graph-owned view-model bindable slice: forward propagation for
   default-context `ViewModelInstanceViewModel.propertyValue` sources feeding
   `BindablePropertyViewModel.propertyValue` targets, covered by a C++ probe
@@ -1311,7 +1322,8 @@ slice.
   number/symbol-list-index-to-number conversion plus graph-represented
   non-number fallbacks and the first operation-value-to-formula public-update
   group, concrete operation pass-through, non-scripting scripted converter
-  pass-through, direct trigger public-update target-to-source,
+  pass-through, direct boolean/BooleanNegate public-update target-to-source,
+  direct trigger public-update target-to-source,
   first direct number/boolean/string/color/enum/asset/artboard/symbol-list-index/trigger/view-model
   target-to-source propagation,
   first artboard list-consumer immediate bind report,

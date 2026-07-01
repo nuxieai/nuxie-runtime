@@ -2213,8 +2213,9 @@ direct `DataConverterGroup<RangeMapper, OperationValue>`, direct
 direct deterministic `DataConverterFormula`, direct
 `DataConverterGroup<OperationValue, Formula>`, warmed direct
 `DataConverterInterpolator`, concrete `DataConverterOperation` pass-through,
-non-scripting `ScriptedDataConverter` pass-through, direct
-`DataConverterTrigger`, and direct `DataConverterToString` string binds.
+non-scripting `ScriptedDataConverter` pass-through, direct boolean and
+`DataConverterBooleanNegate` boolean binds, direct `DataConverterTrigger`, and
+direct `DataConverterToString` string binds.
 The C++ probe exposes `--runtime-update-state-machine-data-binds`, Rust
 mirrors it through
 `StateMachineInstance::update_data_binds_apply_target_to_source`, and the
@@ -2226,6 +2227,7 @@ preserve-then-next-advance ordering. The contracts are
 `docs/prototypes/data-binding-graph-number-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-operation-value-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-operation-value-group-public-update-target-to-source-runtime-contract.md`,
+`docs/prototypes/data-binding-graph-boolean-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-range-mapper-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-range-mapper-group-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-rounder-public-update-target-to-source-runtime-contract.md`,
@@ -2265,6 +2267,19 @@ groups, full dirty-list scheduler parity, imported/owned contexts, pending
 add/remove behavior, re-entry protection, relative/parent/nested lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
+
+Current #12 update: boolean public `updateDataBinds(true)` target-to-source
+behavior now covers direct boolean binds and direct `DataConverterBooleanNegate`.
+The C++ probe reports exact boolean binding source/target values, and Rust
+compares main-`ToTarget | TwoWay` default-context fixtures where public update
+writes the edited target into the source directly or through symmetric
+BooleanNegate reverse conversion before source-to-target reapplication. The
+contract is
+`docs/prototypes/data-binding-graph-boolean-public-update-target-to-source-runtime-contract.md`.
+Boolean converter groups, imported/owned contexts, broader dirty-list
+scheduler parity, pending add/remove behavior, re-entry protection,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
 
 Current #12 update: grouped system operation-value public
 `updateDataBinds(true)` target-to-source behavior now preserves the owning

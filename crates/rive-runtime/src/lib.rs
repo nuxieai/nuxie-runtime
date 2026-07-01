@@ -8902,6 +8902,21 @@ impl RuntimeDataBindGraph {
         Some(value)
     }
 
+    fn default_view_model_boolean_source_value_for_data_bind(
+        &self,
+        data_bind_index: usize,
+    ) -> Option<bool> {
+        let binding = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)?;
+        let source = self.sources.get(binding.source.0)?;
+        let RuntimeDataBindGraphValue::Boolean(value) = source.value else {
+            return None;
+        };
+        Some(value)
+    }
+
     fn default_view_model_list_source_item_count_for_data_bind(
         &self,
         data_bind_index: usize,
@@ -9041,6 +9056,18 @@ impl RuntimeDataBindGraph {
             .find(|binding| binding.data_bind_index == data_bind_index)
             .and_then(|binding| self.targets.get(binding.target.0))?;
         let RuntimeDataBindGraphTarget::Integer { global_id } = target.target else {
+            return None;
+        };
+        Some(global_id)
+    }
+
+    fn boolean_target_global_id_for_data_bind(&self, data_bind_index: usize) -> Option<u32> {
+        let target = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .and_then(|binding| self.targets.get(binding.target.0))?;
+        let RuntimeDataBindGraphTarget::Boolean { global_id } = target.target else {
             return None;
         };
         Some(global_id)
@@ -9481,6 +9508,79 @@ impl RuntimeDataBindGraph {
             self.mark_default_view_model_bindings_dirty();
         }
         changed
+    }
+
+    fn apply_default_view_model_boolean_public_update_targets_to_sources(
+        &mut self,
+        booleans: &[StateMachineBindableBooleanInstance],
+    ) -> bool {
+        if !self.default_view_model_source_context_bound() {
+            return false;
+        }
+
+        let mut updates = Vec::<(Vec<u32>, bool)>::new();
+        let mut applied_target_to_source = false;
+
+        for binding in self.default_view_model_bindings.clone() {
+            let Some(target) = self.targets.get(binding.target.0) else {
+                continue;
+            };
+            let RuntimeDataBindGraphTarget::Boolean { global_id } = target.target else {
+                continue;
+            };
+            let Some(source) = self.sources.get_mut(binding.source.0) else {
+                continue;
+            };
+            let target_to_source_dirty =
+                source.target_to_source_dirty || source.source_to_target_dirty_after_immediate;
+            if !target_to_source_dirty {
+                continue;
+            }
+            source.target_to_source_dirty = false;
+            source.source_to_target_dirty_after_immediate = false;
+            let Some(value) = booleans
+                .iter()
+                .find(|boolean| boolean.global_id == global_id)
+                .map(|boolean| boolean.value)
+            else {
+                continue;
+            };
+            let Some(value) = source.boolean_target_to_source_value(value) else {
+                continue;
+            };
+            applied_target_to_source = true;
+            source.source_to_target_dirty_after_target_to_source = true;
+            updates.push((source.path.clone(), value));
+        }
+
+        let mut changed = false;
+        for (path, value) in updates {
+            for source in &mut self.sources {
+                if !source.bound || source.path != path {
+                    continue;
+                }
+                let (
+                    RuntimeDataBindGraphValue::Boolean(source_value),
+                    RuntimeDataBindGraphValue::Boolean(default_value),
+                ) = (&mut source.value, &mut source.default_value)
+                else {
+                    continue;
+                };
+                if *source_value != value {
+                    *source_value = value;
+                    changed = true;
+                }
+                if *default_value != value {
+                    *default_value = value;
+                    changed = true;
+                }
+            }
+        }
+
+        if changed || applied_target_to_source {
+            self.mark_default_view_model_bindings_dirty();
+        }
+        applied_target_to_source
     }
 
     fn apply_default_view_model_string_targets_to_sources(
@@ -14604,6 +14704,28 @@ impl StateMachineInstance {
             .map(|bindable_number| bindable_number.value)
     }
 
+    pub fn default_view_model_boolean_source_value_for_data_bind(
+        &self,
+        data_bind_index: usize,
+    ) -> Option<bool> {
+        self.data_bind_graph
+            .default_view_model_boolean_source_value_for_data_bind(data_bind_index)
+    }
+
+    pub fn bindable_boolean_value_for_data_bind(&self, data_bind_index: usize) -> Option<bool> {
+        if let Some(value) = self
+            .data_bind_graph
+            .boolean_target_global_id_for_data_bind(data_bind_index)
+            .and_then(|global_id| bindable_boolean_value(&self.bindable_booleans, global_id))
+        {
+            return Some(value);
+        }
+        self.bindable_booleans
+            .iter()
+            .find(|bindable_boolean| bindable_boolean.has_data_bind_index(data_bind_index))
+            .map(|bindable_boolean| bindable_boolean.value)
+    }
+
     pub fn default_view_model_list_source_item_count_for_data_bind(
         &self,
         data_bind_index: usize,
@@ -15670,6 +15792,10 @@ impl StateMachineInstance {
             self.data_bind_graph
                 .apply_default_view_model_number_public_update_targets_to_sources(
                     &self.bindable_numbers,
+                );
+            self.data_bind_graph
+                .apply_default_view_model_boolean_public_update_targets_to_sources(
+                    &self.bindable_booleans,
                 );
             self.data_bind_graph
                 .apply_default_view_model_string_public_update_targets_to_sources(

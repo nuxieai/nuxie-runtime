@@ -23,6 +23,10 @@ groups, list consumers, or the broader dirty-queue scheduler.
 - C++ probe coverage using a second direct `ToTarget` bind to the same source
   and an existing boolean transition-condition consumer.
 
+Public `updateDataBinds(true)` coverage for direct boolean and BooleanNegate
+main-`ToTarget | TwoWay` binds is covered separately by
+`docs/prototypes/data-binding-graph-boolean-public-update-target-to-source-runtime-contract.md`.
+
 ## Out Of Scope
 
 - Reverse conversion for `DataConverterToNumber`, `DataConverterToString`,

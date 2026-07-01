@@ -1720,8 +1720,8 @@ slice.
   live relative/name lookup with file pointers, remaining converter name paths
   beyond the direct and grouped `DataConverterOperationViewModel` unsupported
   boundaries, relative paths, parent paths, and nested source kinds beyond the
-  default-context number, boolean, string, color, enum, symbol-list-index, and
-  asset slices.
+  default-context number, boolean, string, color, enum, symbol-list-index,
+  asset, and artboard slices.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener
   actions.

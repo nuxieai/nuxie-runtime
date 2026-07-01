@@ -28,7 +28,8 @@ index.
 ## Out Of Scope
 
 - Nested source mutation APIs.
-- Nested artboard, trigger, list, and view-model value kinds.
+- Nested source kinds beyond the artboard sibling covered by
+  `docs/prototypes/data-binding-graph-default-viewmodel-nested-artboard-runtime-contract.md`.
 - Name-based, relative, and parent paths.
 - Imported and owned runtime contexts beyond existing dedicated slices.
 - Reverse propagation, broader update queues, listener-owned data binding,

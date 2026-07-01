@@ -3105,6 +3105,38 @@ impl RuntimeImportedViewModelInstanceContext {
     pub fn instance_index(&self) -> usize {
         self.instance_index
     }
+
+    pub fn set_number_by_property_name(
+        &mut self,
+        file: &RuntimeFile,
+        property_name: &str,
+        value: f32,
+    ) -> bool {
+        let Some(path) = runtime_imported_view_model_number_property_path_for_name(
+            file,
+            self.view_model_index,
+            property_name,
+        ) else {
+            return false;
+        };
+        let Some(view_model) = file.view_model(self.view_model_index) else {
+            return false;
+        };
+        let Some(instance) = view_model.instances.into_iter().nth(self.instance_index) else {
+            return false;
+        };
+        let current = self.number_overrides.get(&path).copied().or_else(|| {
+            let source =
+                file.data_context_view_model_property_for_instance(instance.object, &path)?;
+            file.view_model_instance_number_value_for_object(source)
+        });
+        if current == Some(value) {
+            return false;
+        }
+
+        self.number_overrides.insert(path, value);
+        true
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -4091,6 +4123,33 @@ fn runtime_owned_view_model_property_names(
                 .collect()
         })
         .unwrap_or_default()
+}
+
+fn runtime_imported_view_model_number_property_path_for_name(
+    file: &RuntimeFile,
+    view_model_index: usize,
+    property_name: &str,
+) -> Option<Vec<u32>> {
+    if property_name.is_empty() {
+        return None;
+    }
+    let view_model = file.view_model(view_model_index)?;
+    view_model
+        .properties
+        .into_iter()
+        .enumerate()
+        .find_map(|(property_index, property)| {
+            if property.type_name != "ViewModelPropertyNumber" {
+                return None;
+            }
+            if property.string_property("name")? != property_name {
+                return None;
+            }
+            Some(vec![
+                u32::try_from(view_model_index).ok()?,
+                u32::try_from(property_index).ok()?,
+            ])
+        })
 }
 
 fn runtime_owned_view_model_numbers(

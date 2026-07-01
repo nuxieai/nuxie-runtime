@@ -2433,6 +2433,17 @@ machines through the established number binding report surface. The contract
 is
 `docs/prototypes/data-binding-graph-imported-viewmodel-number-shared-mutation-runtime-contract.md`.
 
+Current #12 update: imported view-model number sources now have the first
+root property-name mutation API. `RuntimeImportedViewModelInstanceContext::
+set_number_by_property_name` resolves a root `ViewModelPropertyNumber.name`
+against the file-backed imported view model, records the existing number
+override by resolved source path, and lets two state machines bound through
+the same context observe the mutation. The C++ probe adds
+`--runtime-set-view-model-instance-source-number-by-name`, calls
+`ViewModelInstanceRuntime::propertyNumber(name)`, and compares both state
+machines through the existing number binding report surface. The contract is
+`docs/prototypes/data-binding-graph-imported-viewmodel-number-name-runtime-contract.md`.
+
 Current #12 update: imported view-model boolean sources now match the shared
 scalar mutation pattern. `RuntimeImportedViewModelInstanceContext` records
 boolean source overrides by resolved data-bind source path; mutating a
@@ -2540,11 +2551,11 @@ advancement. The contract is
 Imported-instance mutation beyond shared view-model pointer, number, boolean,
 string, color, enum, symbol-list-index, asset, artboard, trigger, and list
 contexts,
-remaining property-name APIs beyond imported view-model pointer sources and
-owned generated pointer paths, stable public object handles, reverse
-propagation, broader update queues, relative/parent/nested lookup,
-listener-owned data binding, and nested artboard propagation remain follow-up
-`#12` slices.
+remaining property-name APIs beyond imported view-model pointer and root
+number sources and owned generated pointer paths, stable public object
+handles, reverse propagation, broader update queues, relative/parent/nested
+lookup, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
 
 Current #12 update: owned runtime view-model contexts now have the first scalar
 property-name mutation API. `RuntimeOwnedViewModelInstance` records root

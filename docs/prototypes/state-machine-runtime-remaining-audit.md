@@ -858,6 +858,15 @@ slice.
   state machines bound to the same imported `ViewModelInstance`. The contract
   is
   `docs/prototypes/data-binding-graph-imported-viewmodel-number-shared-mutation-runtime-contract.md`.
+- First imported scalar property-name slice:
+  `RuntimeImportedViewModelInstanceContext::set_number_by_property_name` now
+  resolves a root `ViewModelPropertyNumber.name` against one file-backed
+  imported view-model instance and records the existing number source override
+  by resolved path. The C++ probe calls
+  `ViewModelInstanceRuntime::propertyNumber(name)` and proves two authored
+  state machines bound through the same imported context observe the mutation.
+  The contract is
+  `docs/prototypes/data-binding-graph-imported-viewmodel-number-name-runtime-contract.md`.
 - Shared imported boolean source mutation slice:
   `RuntimeImportedViewModelInstanceContext` now also owns boolean source
   overrides for one file-backed imported view-model instance. Mutating a
@@ -1080,9 +1089,9 @@ slice.
   relink, number source, boolean source, string source, color source, enum
   source, symbol-list-index source, asset source, artboard source, trigger
   source, and list source contexts,
-  property-name APIs beyond imported view-model pointer sources, owned
-  generated view-model pointer paths, and stable public handles that update or
-  expose cached `propertyValue` indexes.
+  property-name APIs beyond imported view-model pointer and root number
+  sources, owned generated view-model pointer paths, and stable public handles
+  that update or expose cached `propertyValue` indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
 - Live view-model APIs and data-binding propagation governed by

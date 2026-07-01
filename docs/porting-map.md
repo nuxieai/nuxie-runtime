@@ -638,6 +638,20 @@ public source handles, reverse propagation, broader update queues,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 
+Current #12 update: default root artboard sources now have a stable public
+source handle. `StateMachineInstance` can resolve a root artboard view-model
+property name into `RuntimeDefaultViewModelArtboardSourceHandle`, and
+`set_default_view_model_artboard_source_by_source_handle` writes through the
+existing graph-owned source-path mutation path. Slash-path handle lookup
+remains unresolved. The C++ probe compares the handle mutation against the
+default artboard by-name command and verifies the existing state-machine
+advance and component update reports. The contract is
+`docs/prototypes/data-binding-graph-default-artboard-source-handle-runtime-contract.md`.
+Default source handles for trigger/list/view-model sources,
+nested/relative/parent lookup, reverse propagation, broader update queues,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
+
 Current #12 update: default root trigger sources now match the root artboard
 property-name mutation shape, with the existing trigger target mirror behavior
 preserved. Rust exposes

@@ -224,15 +224,25 @@ slice.
   `StateMachineInstance` can now resolve root asset view-model property names
   on file view model `0` into `RuntimeDefaultViewModelAssetSourceHandle` and
   mutate graph-owned default asset source nodes through that handle. Slash-path
-  lookup remains unresolved, and default handles for other source kinds remain
-  follow-up slices. The C++ probe compares the handle write against the
-  default asset by-name mutation command. The contract is
+  lookup remains unresolved, and default handles for artboard/trigger/list/
+  view-model sources remain follow-up slices. The C++ probe compares the
+  handle write against the default asset by-name mutation command. The
+  contract is
   `docs/prototypes/data-binding-graph-default-asset-source-handle-runtime-contract.md`.
 - Default root artboard property-name mutation, covered by a C++ probe through
   raw `ViewModelInstance::propertyValue("scene")` / property-index lookup for
   the file-backed default instance and the existing artboard
   transition-condition consumer. The contract is
   `docs/prototypes/data-binding-graph-default-artboard-name-runtime-contract.md`.
+- Default artboard source handle slice:
+  `StateMachineInstance` can now resolve root artboard view-model property
+  names on file view model `0` into
+  `RuntimeDefaultViewModelArtboardSourceHandle` and mutate graph-owned default
+  artboard source nodes through that handle. Slash-path lookup remains
+  unresolved, and default handles for trigger/list/view-model sources remain
+  follow-up slices. The C++ probe compares the handle write against the
+  default artboard by-name mutation command. The contract is
+  `docs/prototypes/data-binding-graph-default-artboard-source-handle-runtime-contract.md`.
 - Default root trigger property-name mutation, covered by a C++ probe through
   raw `ViewModelInstance::propertyValue("fire")` / property-index lookup for
   the file-backed default instance and the existing trigger transition-condition

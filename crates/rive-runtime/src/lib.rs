@@ -3254,6 +3254,7 @@ impl RuntimeDataBindGraphValue {
                     | Self::Enum(_)
                     | Self::SymbolListIndex(_)
                     | Self::Asset(_)
+                    | Self::Artboard(_)
                     | Self::ViewModel(_)
             )
         {
@@ -3325,9 +3326,15 @@ impl RuntimeDataBindGraphValue {
                     .asset_value_by_property_path(&property_path)
                     .map(Self::Asset)
             }
-            Self::Artboard(_) => context
-                .artboard_value_by_property_index(usize::try_from(path[1]).ok()?)
-                .map(Self::Artboard),
+            Self::Artboard(_) => {
+                let property_path = path[1..]
+                    .iter()
+                    .map(|property_index| usize::try_from(*property_index).ok())
+                    .collect::<Option<Vec<_>>>()?;
+                context
+                    .artboard_value_by_property_path(&property_path)
+                    .map(Self::Artboard)
+            }
             Self::Trigger(_) => context
                 .trigger_value_by_property_index(usize::try_from(path[1]).ok()?)
                 .map(Self::Trigger),
@@ -3496,6 +3503,7 @@ struct RuntimeOwnedViewModelViewModel {
     enums: Vec<RuntimeOwnedViewModelEnum>,
     symbol_list_indices: Vec<RuntimeOwnedViewModelSymbolListIndex>,
     assets: Vec<RuntimeOwnedViewModelAsset>,
+    artboards: Vec<RuntimeOwnedViewModelArtboard>,
     view_model_instance_ids: Vec<u32>,
     children: Vec<RuntimeOwnedViewModelViewModel>,
     imported_children: BTreeMap<u32, Vec<RuntimeOwnedViewModelViewModel>>,
@@ -3570,6 +3578,13 @@ impl RuntimeOwnedViewModelViewModel {
             .iter()
             .find(|asset| asset.property_index == property_index)
             .map(|asset| asset.value)
+    }
+
+    fn artboard_value_by_property_index(&self, property_index: usize) -> Option<u64> {
+        self.artboards
+            .iter()
+            .find(|artboard| artboard.property_index == property_index)
+            .map(|artboard| artboard.value)
     }
 
     fn set_number_by_property_name(&mut self, property_name: &str, value: f32) -> bool {
@@ -3695,6 +3710,24 @@ impl RuntimeOwnedViewModelViewModel {
             return false;
         }
         asset.value = value;
+        true
+    }
+
+    fn set_artboard_by_property_name(&mut self, property_name: &str, value: u64) -> bool {
+        let Some(property_index) = self.property_index_by_name(property_name) else {
+            return false;
+        };
+        let Some(artboard) = self
+            .artboards
+            .iter_mut()
+            .find(|artboard| artboard.property_index == property_index)
+        else {
+            return false;
+        };
+        if artboard.value == value {
+            return false;
+        }
+        artboard.value = value;
         true
     }
 }
@@ -3902,6 +3935,29 @@ fn runtime_owned_view_model_assets(
                         property_index,
                         value: 0,
                     })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn runtime_owned_view_model_artboards(
+    file: &RuntimeFile,
+    view_model_index: usize,
+) -> Vec<RuntimeOwnedViewModelArtboard> {
+    file.view_model(view_model_index)
+        .map(|view_model| {
+            view_model
+                .properties
+                .into_iter()
+                .enumerate()
+                .filter_map(|(property_index, property)| {
+                    (property.type_name == "ViewModelPropertyArtboard").then_some(
+                        RuntimeOwnedViewModelArtboard {
+                            property_index,
+                            value: 0,
+                        },
+                    )
                 })
                 .collect()
         })
@@ -4140,6 +4196,11 @@ fn runtime_owned_view_model_property_children(
                 assets: referenced_view_model_index
                     .map(|view_model_index| runtime_owned_view_model_assets(file, view_model_index))
                     .unwrap_or_default(),
+                artboards: referenced_view_model_index
+                    .map(|view_model_index| {
+                        runtime_owned_view_model_artboards(file, view_model_index)
+                    })
+                    .unwrap_or_default(),
                 view_model_instance_ids,
                 children,
                 imported_children,
@@ -4298,6 +4359,11 @@ impl RuntimeOwnedViewModelInstance {
                         assets: referenced_view_model_index
                             .map(|view_model_index| {
                                 runtime_owned_view_model_assets(file, view_model_index)
+                            })
+                            .unwrap_or_default(),
+                        artboards: referenced_view_model_index
+                            .map(|view_model_index| {
+                                runtime_owned_view_model_artboards(file, view_model_index)
                             })
                             .unwrap_or_default(),
                         view_model_instance_ids,
@@ -4731,6 +4797,33 @@ impl RuntimeOwnedViewModelInstance {
         self.set_artboard_by_property_index(property_index, value)
     }
 
+    pub fn set_artboard_by_property_name_path(&mut self, property_path: &str, value: u64) -> bool {
+        let property_path = property_path.split('/').collect::<Vec<_>>();
+        if property_path.is_empty() || property_path.iter().any(|segment| segment.is_empty()) {
+            return false;
+        }
+        self.set_artboard_by_property_names(&property_path, value)
+    }
+
+    pub fn set_artboard_by_property_names(&mut self, property_path: &[&str], value: u64) -> bool {
+        if property_path.len() == 1 {
+            return self.set_artboard_by_property_name(property_path[0], value);
+        }
+        let Some((artboard_name, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_names_mut(view_model_path) else {
+            return false;
+        };
+        if !matches!(
+            view_model.value,
+            RuntimeViewModelPointer::OwnedGenerated { .. }
+        ) {
+            return false;
+        }
+        view_model.set_artboard_by_property_name(artboard_name, value)
+    }
+
     pub fn set_trigger_by_property_index(&mut self, property_index: usize, value: u64) -> bool {
         let Some(trigger) = self
             .triggers
@@ -5032,6 +5125,21 @@ impl RuntimeOwnedViewModelInstance {
             .iter()
             .find(|artboard| artboard.property_index == property_index)
             .map(|artboard| artboard.value)
+    }
+
+    fn artboard_value_by_property_path(&self, property_path: &[usize]) -> Option<u64> {
+        if property_path.len() == 1 {
+            return self.artboard_value_by_property_index(property_path[0]);
+        }
+        let (property_index, view_model_path) = property_path.split_last()?;
+        let view_model = self.view_model_by_property_path(view_model_path)?;
+        if !matches!(
+            view_model.value,
+            RuntimeViewModelPointer::OwnedGenerated { .. }
+        ) {
+            return None;
+        }
+        view_model.artboard_value_by_property_index(*property_index)
     }
 
     fn trigger_value_by_property_index(&self, property_index: usize) -> Option<u64> {

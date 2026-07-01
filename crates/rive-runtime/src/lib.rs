@@ -5994,11 +5994,31 @@ fn runtime_imported_view_model_artboard_property_path_for_name(
     )
 }
 
+fn runtime_imported_view_model_artboard_property_path_for_name_path(
+    file: &RuntimeFile,
+    view_model_index: usize,
+    property_path: &str,
+) -> Option<Vec<u32>> {
+    runtime_imported_view_model_property_path_for_name_path(
+        file,
+        view_model_index,
+        property_path,
+        &["ViewModelPropertyArtboard"],
+    )
+}
+
 fn runtime_default_view_model_artboard_property_path_for_name(
     file: &RuntimeFile,
     property_name: &str,
 ) -> Option<Vec<u32>> {
     runtime_imported_view_model_artboard_property_path_for_name(file, 0, property_name)
+}
+
+fn runtime_default_view_model_artboard_property_path_for_name_path(
+    file: &RuntimeFile,
+    property_path: &str,
+) -> Option<Vec<u32>> {
+    runtime_imported_view_model_artboard_property_path_for_name_path(file, 0, property_path)
 }
 
 fn runtime_imported_view_model_trigger_property_path_for_name(
@@ -17523,6 +17543,16 @@ impl StateMachineInstance {
         property_name: &str,
     ) -> Option<RuntimeDefaultViewModelArtboardSourceHandle> {
         let path = runtime_default_view_model_artboard_property_path_for_name(file, property_name)?;
+        Some(RuntimeDefaultViewModelArtboardSourceHandle { path })
+    }
+
+    pub fn default_view_model_artboard_source_handle_by_property_name_path(
+        &self,
+        file: &RuntimeFile,
+        property_path: &str,
+    ) -> Option<RuntimeDefaultViewModelArtboardSourceHandle> {
+        let path =
+            runtime_default_view_model_artboard_property_path_for_name_path(file, property_path)?;
         Some(RuntimeDefaultViewModelArtboardSourceHandle { path })
     }
 

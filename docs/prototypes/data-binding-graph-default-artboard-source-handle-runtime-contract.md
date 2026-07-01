@@ -26,7 +26,10 @@ Out of scope:
 - Number, boolean, string, color, enum, symbol-list-index, asset, trigger,
   list, or view-model source-handle behavior beyond the existing committed
   APIs.
-- Nested, relative, parent, or slash-separated property paths.
+- Changing root-name lookup semantics to accept slash-separated property
+  paths. Nested artboard paths are covered separately by
+  `docs/prototypes/data-binding-graph-default-nested-artboard-source-handle-runtime-contract.md`.
+- Relative or parent property paths.
 - Imported or owned view-model contexts.
 - Stable public handles for artboard instances, list items, trigger events, or
   view-model instance objects.
@@ -37,5 +40,5 @@ Out of scope:
 
 Completion condition: resolving and mutating a default root artboard source by
 handle produces the same state-machine advance and component update reports as
-C++ by-name mutation, no-op repeat writes report unchanged, and slash-path
-handle lookup remains unresolved.
+C++ by-name mutation, no-op repeat writes report unchanged, and root-name
+lookup stays separate from slash-path lookup.

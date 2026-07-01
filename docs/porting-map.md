@@ -439,10 +439,9 @@ remains separate from slash-path lookup. The C++ probe compares the handle
 mutation against the default number by-name command and verifies the existing
 state-machine advance and component update reports. The contract is
 `docs/prototypes/data-binding-graph-default-number-source-handle-runtime-contract.md`.
-Default source handles for artboard/trigger/list/view-model sources,
-nested/relative/parent lookup, reverse propagation, broader update queues,
-listener-owned data binding, and nested artboard propagation remain follow-up
-`#12` slices.
+Default source handles for trigger/list/view-model sources, nested/relative/
+parent lookup, reverse propagation, broader update queues, listener-owned data
+binding, and nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: default nested number sources now have the first nested
 stable public source handle. `StateMachineInstance` can resolve a generated
@@ -732,11 +731,22 @@ Current #12 update: default root artboard sources now have a stable public
 source handle. `StateMachineInstance` can resolve a root artboard view-model
 property name into `RuntimeDefaultViewModelArtboardSourceHandle`, and
 `set_default_view_model_artboard_source_by_source_handle` writes through the
-existing graph-owned source-path mutation path. Slash-path handle lookup
-remains unresolved. The C++ probe compares the handle mutation against the
-default artboard by-name command and verifies the existing state-machine
-advance and component update reports. The contract is
+existing graph-owned source-path mutation path. Root-name handle lookup
+remains separate from slash-path lookup. The C++ probe compares the handle
+mutation against the default artboard by-name command and verifies the
+existing state-machine advance and component update reports. The contract is
 `docs/prototypes/data-binding-graph-default-artboard-source-handle-runtime-contract.md`.
+
+Current #12 update: default nested artboard sources now have a stable public
+source handle. `StateMachineInstance` can resolve a generated child path such
+as `child/scene` into `RuntimeDefaultViewModelArtboardSourceHandle` through
+`default_view_model_artboard_source_handle_by_property_name_path`, and
+`set_default_view_model_artboard_source_by_source_handle` writes through the
+existing graph-owned source-path mutation path. The C++ probe compares the
+handle mutation against the authored `DataBindContext.sourcePathIds` mutation
+path for the matching default-context data bind and verifies the existing
+state-machine advance and component update reports. The contract is
+`docs/prototypes/data-binding-graph-default-nested-artboard-source-handle-runtime-contract.md`.
 Default source handles for trigger/list/view-model sources,
 nested/relative/parent lookup, reverse propagation, broader update queues,
 listener-owned data binding, and nested artboard propagation remain follow-up

@@ -410,6 +410,7 @@ enum class RuntimeStateMachineActionKind
     BindOwnedViewModelTriggerNamePathContext,
     BindOwnedViewModelImportedIntermediateTriggerNamePathContext,
     BindOwnedViewModelListNamePathContext,
+    BindOwnedViewModelImportedIntermediateListNamePathContext,
     FireTrigger,
 };
 
@@ -5665,6 +5666,65 @@ apply_runtime_state_machine_advances(rive::File* file,
             if (viewModelInstance != nullptr)
             {
                 rive::ViewModelInstanceRuntime runtime(viewModelInstance);
+                auto list = runtime.propertyList(action.stringValue);
+                if (list != nullptr)
+                {
+                    auto itemInstance =
+                        rive::make_rcp<rive::ViewModelInstance>();
+                    auto itemRuntime =
+                        rive::make_rcp<rive::ViewModelInstanceRuntime>(
+                            itemInstance);
+                    for (uint32_t itemIndex = 0; itemIndex < action.uintValue;
+                         ++itemIndex)
+                    {
+                        list->addInstance(itemRuntime.get());
+                    }
+                }
+                stateMachine->bindViewModelInstance(viewModelInstance);
+            }
+            continue;
+        }
+        if (action.kind == RuntimeStateMachineActionKind::
+                               BindOwnedViewModelImportedIntermediateListNamePathContext)
+        {
+            auto viewModel =
+                file != nullptr && action.viewModelIndex < file->viewModelCount()
+                    ? file->viewModel(action.viewModelIndex)
+                    : nullptr;
+            auto viewModelInstance =
+                file != nullptr && viewModel != nullptr
+                    ? file->createViewModelInstance(viewModel)
+                    : nullptr;
+            auto rootProperty =
+                viewModel != nullptr ? viewModel->property(action.dataBindIndex)
+                                     : nullptr;
+            auto rootViewModelProperty =
+                rootProperty != nullptr &&
+                        rootProperty->is<rive::ViewModelPropertyViewModel>()
+                    ? rootProperty->as<rive::ViewModelPropertyViewModel>()
+                    : nullptr;
+            auto childViewModel =
+                file != nullptr && rootViewModelProperty != nullptr &&
+                        rootViewModelProperty->viewModelReferenceId() <
+                            file->viewModelCount()
+                    ? file->viewModel(
+                          rootViewModelProperty->viewModelReferenceId())
+                    : nullptr;
+            auto childInstance =
+                childViewModel != nullptr &&
+                        action.viewModelInstanceIndex <
+                            childViewModel->instanceCount()
+                    ? childViewModel->instance(action.viewModelInstanceIndex)
+                    : nullptr;
+            if (viewModelInstance != nullptr && rootProperty != nullptr &&
+                childInstance != nullptr)
+            {
+                auto childRuntime =
+                    rive::make_rcp<rive::ViewModelInstanceRuntime>(
+                        rive::ref_rcp(childInstance));
+                rive::ViewModelInstanceRuntime runtime(viewModelInstance);
+                runtime.replaceViewModelByName(rootProperty->name(),
+                                               childRuntime.get());
                 auto list = runtime.propertyList(action.stringValue);
                 if (list != nullptr)
                 {
@@ -14915,6 +14975,37 @@ int main(int argc, const char* argv[])
             continue;
         }
 
+        if (is_arg(
+                argv[i],
+                "--runtime-bind-owned-view-model-imported-intermediate-list-name-path-state-machine-context"))
+        {
+            if (i + 6 >= argc)
+            {
+                std::cerr << "--runtime-bind-owned-view-model-imported-intermediate-list-name-path-state-machine-context requires stateMachineIndex viewModelIndex rootPropertyIndex childInstanceIndex propertyPath itemCount\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::
+                BindOwnedViewModelImportedIntermediateListNamePathContext;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.viewModelIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.dataBindIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.viewModelInstanceIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            action.stringValue = argv[++i];
+            action.uintValue =
+                static_cast<uint32_t>(std::strtoull(argv[++i], nullptr, 10));
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
         if (is_arg(argv[i], "--runtime-fire-state-machine-trigger"))
         {
             if (i + 2 >= argc)
@@ -14990,6 +15081,7 @@ int main(int argc, const char* argv[])
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-trigger-name-path-state-machine-context stateMachineIndex viewModelIndex propertyPath value\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-imported-intermediate-trigger-name-path-state-machine-context stateMachineIndex viewModelIndex rootPropertyIndex childInstanceIndex propertyPath value\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-list-name-path-state-machine-context stateMachineIndex viewModelIndex propertyPath itemCount\n";
+        std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-imported-intermediate-list-name-path-state-machine-context stateMachineIndex viewModelIndex rootPropertyIndex childInstanceIndex propertyPath itemCount\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-symbol-list-index-state-machine-context stateMachineIndex viewModelIndex propertyIndex value\n";
         std::cerr << "additional runtime flag: --runtime-bind-default-view-model-artboard-context\n";
         std::cerr << "additional runtime flag: --runtime-relink-default-view-model-source-viewmodel stateMachineIndex dataBindIndex value\n";

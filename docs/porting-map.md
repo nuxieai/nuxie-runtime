@@ -3387,6 +3387,21 @@ object-handle APIs, reverse propagation, broader update queues,
 relative/parent/nested lookup, listener-owned data binding, and nested
 artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: owned view-model contexts now explicitly pin direct list
+name-path mutation through an imported replacement intermediate as
+unsupported. The C++ probe replaces generated `child` with an imported child,
+then attempts to append blank item runtimes through
+`ViewModelInstanceRuntime::propertyList("child/items")`; C++ leaves the
+imported child's existing list size selected. Rust matches by returning
+`false` for `set_list_item_count_by_property_name_path("child/items", count)`
+once `child` is imported and by preserving the read-only imported list
+snapshot. The contract is
+`docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-list-name-path-unsupported-runtime-contract.md`.
+Other imported-intermediate value mutation APIs, remaining property-name APIs,
+public object-handle APIs, reverse propagation, broader update queues,
+relative/parent/nested lookup, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
+
 Current #12 update: owned view-model contexts now traverse deeper imported
 replacement intermediates for read-only view-model pointer sources. Replacing
 a generated root child with an imported child by instance index lets a source

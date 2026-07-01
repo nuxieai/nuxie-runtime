@@ -1354,6 +1354,15 @@ slice.
   The C++ probe observes this through bindable-list source-size reports. The
   contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-list-runtime-contract.md`.
+- Owned view-model imported-intermediate list name-path mutation unsupported
+  boundary: replacing a generated root child with an imported child by
+  instance index still lets the graph read `[child, items]`, but attempting to
+  append blank item runtimes through
+  `ViewModelInstanceRuntime::propertyList("child/items")` leaves the imported
+  child's existing list size selected in C++. Rust keeps
+  `set_list_item_count_by_property_name_path("child/items", count)`
+  generated-only and returns `false` once `child` is imported. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-list-name-path-unsupported-runtime-contract.md`.
 - Owned view-model deep imported-intermediate source slice: replacing a
   generated root child with an imported child by instance index lets
   `RuntimeOwnedViewModelInstance` resolve `[child, middle, leaf]` through the

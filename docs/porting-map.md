@@ -3756,7 +3756,7 @@ contract is
 `docs/prototypes/data-binding-graph-imported-viewmodel-trigger-source-handle-runtime-contract.md`.
 Nested property-name paths for list/view-model sources, stable public object
 handles beyond the first imported number, boolean, string, color, enum,
-symbol-list-index, asset, artboard, and trigger source handles, reverse
+symbol-list-index, asset, artboard, trigger, and list source handles, reverse
 propagation, broader update queues, relative/parent/nested lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
@@ -3771,6 +3771,19 @@ synthetic imported-context fixture. Rust mirrors the safe boundary by making
 set_list_item_count_by_property_name_path` return `false` for nested slash
 paths and by keeping the original source item count. The contract is
 `docs/prototypes/data-binding-graph-imported-viewmodel-nested-list-name-path-unsupported-runtime-contract.md`.
+
+Current #12 update: imported view-model list sources now have a root-only
+stable public source handle. `RuntimeImportedViewModelInstanceContext` can
+resolve a root `ViewModelPropertyList.name` into
+`RuntimeImportedViewModelListSourceHandle`, and
+`set_list_item_count_by_source_handle` writes through the existing resolved
+source-path list item-count override only when the handle belongs to the same
+imported view-model instance context. Slash-path handle lookup remains
+unresolved, matching the nested list boundary above. The C++ probe compares the
+handle mutation against the root list by-name path and verifies the existing
+bindable-list source-size reports. Stable list item handles, list item
+identity, and list item value mutation remain out of scope. The contract is
+`docs/prototypes/data-binding-graph-imported-viewmodel-list-source-handle-runtime-contract.md`.
 
 Current #12 update: imported view-model pointer sources now have the nested
 property-name path relink API. `RuntimeImportedViewModelInstanceContext::

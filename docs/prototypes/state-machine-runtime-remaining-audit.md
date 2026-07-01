@@ -1594,6 +1594,17 @@ slice.
   synthetic imported-context fixture. The C++ baseline still proves the bound
   state machine observes the original nested list source. The contract is
   `docs/prototypes/data-binding-graph-imported-viewmodel-nested-list-name-path-unsupported-runtime-contract.md`.
+- Imported list source handle slice:
+  `RuntimeImportedViewModelInstanceContext` can now resolve a root list source
+  into `RuntimeImportedViewModelListSourceHandle` and mutate the source
+  item-count override through that handle only when it belongs to the same
+  imported view-model instance context. Slash-path handle lookup remains
+  unresolved, matching the nested list boundary. The C++ probe compares the
+  handle write against the root list by-name mutation path and proves an
+  observing state machine sees the same bindable-list source size. Stable list
+  item handles, list item identity, and list item value mutation remain out of
+  scope. The contract is
+  `docs/prototypes/data-binding-graph-imported-viewmodel-list-source-handle-runtime-contract.md`.
 - Imported nested view-model pointer property-name path slice:
   `RuntimeImportedViewModelInstanceContext::set_view_model_by_property_name_path`
   resolves a slash-separated path such as `child/grandchild` through nested
@@ -1933,8 +1944,8 @@ slice.
   property-name APIs beyond imported view-model pointer and root
   number/boolean/string/color/enum/symbol-list-index/asset/artboard/trigger/list sources, owned generated view-model pointer
   paths, and stable public handles beyond the first imported number, boolean,
-  string, color, enum, symbol-list-index, asset, artboard, and trigger source
-  handles that update or expose cached `propertyValue` indexes.
+  string, color, enum, symbol-list-index, asset, artboard, trigger, and list
+  source handles that update or expose cached source indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
 - Live view-model APIs and data-binding propagation governed by

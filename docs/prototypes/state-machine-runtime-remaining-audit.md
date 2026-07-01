@@ -39,6 +39,10 @@ slice.
 - Graph-owned default `ViewModelInstanceNumber` source-node mutation by
   state-machine data-bind index, covered by a C++ probe through an existing
   `BlendState1DViewModel` consumer.
+- Default number source mutation same-path observer propagation: the
+  data-bind-index mutation path resolves the selected source path and updates
+  all same-path default-context number source nodes, covered by a C++ probe
+  with a neighboring ordinary direct `ToTarget` number bind.
 - Default root number property-name mutation, covered by a C++ probe through
   `ViewModelInstanceRuntime::propertyNumber("amount")->value(...)` with raw
   `propertyValue("amount")` fallback for the file-backed default instance, and
@@ -778,6 +782,12 @@ slice.
   reapplies itself during the public update, while the observer reports the
   new source value, preserves its previous target value for that action, and
   applies the new source on the next normal state-machine advance.
+- Default source-mutation same-path observer slice:
+  default-context number source mutation by state-machine data-bind index now
+  mutates every same-path number source node rather than only the selected
+  cloned edge, so a neighboring ordinary direct `ToTarget` number bind reports
+  the updated source and applies the updated target on the next state-machine
+  advance.
 - Range-mapper group target-to-source slice: the first direct
   `DataConverterGroup` containing a `DataConverterRangeMapper` now covers a
   main-`ToSource | TwoWay` number bind. The group runs
@@ -1477,6 +1487,7 @@ slice.
   non-number fallbacks and the first operation-value-to-formula public-update
   group, concrete operation pass-through, non-scripting scripted converter
   pass-through, direct boolean/BooleanNegate public-update target-to-source,
+  default number source-mutation same-path observer propagation,
   boolean public-update observer preservation, string public-update observer
   preservation, color public-update observer preservation, enum public-update
   observer preservation, asset public-update observer preservation, artboard

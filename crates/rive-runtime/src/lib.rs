@@ -3072,6 +3072,7 @@ pub struct RuntimeImportedViewModelInstanceContext {
     symbol_list_index_overrides: BTreeMap<Vec<u32>, u64>,
     asset_overrides: BTreeMap<Vec<u32>, u64>,
     artboard_overrides: BTreeMap<Vec<u32>, u64>,
+    trigger_overrides: BTreeMap<Vec<u32>, u64>,
     view_model_overrides: BTreeMap<Vec<u32>, RuntimeViewModelPointer>,
 }
 
@@ -3090,6 +3091,7 @@ impl RuntimeImportedViewModelInstanceContext {
             symbol_list_index_overrides: BTreeMap::new(),
             asset_overrides: BTreeMap::new(),
             artboard_overrides: BTreeMap::new(),
+            trigger_overrides: BTreeMap::new(),
             view_model_overrides: BTreeMap::new(),
         })
     }
@@ -6612,6 +6614,7 @@ impl RuntimeDataBindGraph {
             symbol_list_index_overrides: BTreeMap::new(),
             asset_overrides: BTreeMap::new(),
             artboard_overrides: BTreeMap::new(),
+            trigger_overrides: BTreeMap::new(),
             view_model_overrides: BTreeMap::new(),
         };
         self.bind_imported_view_model_context(file, &context)
@@ -6685,6 +6688,12 @@ impl RuntimeDataBindGraph {
                         .get(&source.path)
                         .copied()
                         .map(RuntimeDataBindGraphValue::Artboard)
+                        .unwrap_or(value),
+                    RuntimeDataBindGraphValue::Trigger(_) => context
+                        .trigger_overrides
+                        .get(&source.path)
+                        .copied()
+                        .map(RuntimeDataBindGraphValue::Trigger)
                         .unwrap_or(value),
                     RuntimeDataBindGraphValue::ViewModel(_) => context
                         .view_model_overrides
@@ -7579,6 +7588,51 @@ impl RuntimeDataBindGraph {
         source.value = RuntimeDataBindGraphValue::Artboard(value);
         source.bound = true;
         context.artboard_overrides.insert(path, value);
+        self.mark_default_view_model_bindings_dirty();
+        true
+    }
+
+    fn set_imported_view_model_context_trigger_source_for_data_bind(
+        &mut self,
+        context: &mut RuntimeImportedViewModelInstanceContext,
+        data_bind_index: usize,
+        value: u64,
+    ) -> bool {
+        if self.context_kind != RuntimeDataBindGraphContextKind::ImportedViewModel {
+            return false;
+        }
+        if self.imported_view_model_context
+            != Some(RuntimeImportedViewModelContextKey {
+                view_model_index: context.view_model_index,
+                instance_index: context.instance_index,
+            })
+        {
+            return false;
+        }
+        let Some(source) = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .map(|binding| binding.source)
+        else {
+            return false;
+        };
+        let Some(source) = self.sources.get_mut(source.0) else {
+            return false;
+        };
+        if !matches!(&source.default_value, RuntimeDataBindGraphValue::Trigger(_)) {
+            return false;
+        }
+        let source_changed = !matches!(&source.value, RuntimeDataBindGraphValue::Trigger(current) if *current == value);
+        let path = source.path.clone();
+        let context_changed = context.trigger_overrides.get(&path) != Some(&value);
+        if !source_changed && !context_changed {
+            return false;
+        }
+
+        source.value = RuntimeDataBindGraphValue::Trigger(value);
+        source.bound = true;
+        context.trigger_overrides.insert(path, value);
         self.mark_default_view_model_bindings_dirty();
         true
     }
@@ -13949,6 +14003,46 @@ impl StateMachineInstance {
         true
     }
 
+    pub fn set_imported_view_model_context_trigger_source_for_data_bind(
+        &mut self,
+        context: &mut RuntimeImportedViewModelInstanceContext,
+        data_bind_index: usize,
+        value: u64,
+    ) -> bool {
+        let bindable_global_id = self
+            .data_bind_graph
+            .default_view_model_trigger_target_global_id_for_data_bind(data_bind_index);
+        if !self
+            .data_bind_graph
+            .set_imported_view_model_context_trigger_source_for_data_bind(
+                context,
+                data_bind_index,
+                value,
+            )
+        {
+            return false;
+        }
+        if let Some(trigger_global_id) = bindable_global_id.and_then(|bindable_global_id| {
+            self.bindable_triggers
+                .iter()
+                .find(|trigger| trigger.global_id == bindable_global_id)
+                .and_then(|trigger| match trigger.source {
+                    RuntimeBindableTriggerSource::DefaultViewModelTrigger { trigger_global_id } => {
+                        Some(trigger_global_id)
+                    }
+                    RuntimeBindableTriggerSource::None => None,
+                })
+        }) && let Some(trigger) = self
+            .view_model_triggers
+            .iter_mut()
+            .find(|trigger| trigger.global_id == trigger_global_id)
+        {
+            trigger.set_value(value);
+        }
+        self.needs_advance = true;
+        true
+    }
+
     pub fn relink_view_model_instance_view_model_source_by_property_name_path(
         &mut self,
         file: &RuntimeFile,
@@ -13999,7 +14093,7 @@ impl StateMachineInstance {
         ) {
             return false;
         }
-        self.bind_active_imported_view_model_triggers(file, view_model_index, instance_index);
+        self.bind_active_imported_view_model_triggers(file, view_model_index, instance_index, None);
         self.needs_advance = true;
         true
     }
@@ -14019,6 +14113,7 @@ impl StateMachineInstance {
             file,
             context.view_model_index,
             context.instance_index,
+            Some(context),
         );
         self.needs_advance = true;
         true
@@ -14244,6 +14339,7 @@ impl StateMachineInstance {
         file: &RuntimeFile,
         view_model_index: usize,
         instance_index: usize,
+        context: Option<&RuntimeImportedViewModelInstanceContext>,
     ) {
         let instance = file
             .view_model(view_model_index)
@@ -14260,9 +14356,14 @@ impl StateMachineInstance {
         let mut active = self.default_view_model_triggers.clone();
         for trigger in &mut active {
             let path = [view_model_path_id, trigger.view_model_property_id];
-            let value = file
-                .data_context_view_model_property_for_instance(instance.object, &path)
-                .and_then(|source| file.view_model_instance_trigger_count_for_object(source));
+            let value = context
+                .and_then(|context| context.trigger_overrides.get(path.as_slice()).copied())
+                .or_else(|| {
+                    file.data_context_view_model_property_for_instance(instance.object, &path)
+                        .and_then(|source| {
+                            file.view_model_instance_trigger_count_for_object(source)
+                        })
+                });
             if let Some(value) = value {
                 trigger.replace_value(value);
             } else {

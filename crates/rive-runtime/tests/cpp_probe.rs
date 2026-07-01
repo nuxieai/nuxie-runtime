@@ -8145,6 +8145,17 @@ fn synthetic_state_machine_default_viewmodel_viewmodel_target_to_source(file_id:
 }
 
 fn synthetic_state_machine_default_viewmodel_trigger_condition(file_id: u64) -> Vec<u8> {
+    synthetic_state_machine_default_viewmodel_trigger_condition_with_state_machines(file_id, 1)
+}
+
+fn synthetic_state_machine_imported_viewmodel_trigger_shared_mutation(file_id: u64) -> Vec<u8> {
+    synthetic_state_machine_default_viewmodel_trigger_condition_with_state_machines(file_id, 2)
+}
+
+fn synthetic_state_machine_default_viewmodel_trigger_condition_with_state_machines(
+    file_id: u64,
+    state_machine_count: usize,
+) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "ViewModel", |bytes| {
             push_string_property(bytes, "ViewModel", "name", "Root");
@@ -8180,43 +8191,45 @@ fn synthetic_state_machine_default_viewmodel_trigger_condition(file_id: u64) -> 
         });
         push_animation_for_single_node(bytes, 1, 4.0, 14.0);
         push_animation_for_single_node(bytes, 1, 20.0, 30.0);
-        push_object_with_properties(bytes, "StateMachine", |_| {});
-        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
-        push_object_with_properties(bytes, "AnyState", |_| {});
-        push_object_with_properties(bytes, "EntryState", |_| {});
-        push_object_with_properties(bytes, "StateTransition", |bytes| {
-            push_uint_property(bytes, "StateTransition", "stateToId", 2);
-        });
-        push_object_with_properties(bytes, "AnimationState", |bytes| {
-            push_uint_property(bytes, "AnimationState", "animationId", 0);
-        });
-        push_object_with_properties(bytes, "StateTransition", |bytes| {
-            push_uint_property(bytes, "StateTransition", "stateToId", 3);
-        });
-        push_bindable_trigger_value_data_bind_context(bytes, 5, &[0, 0]);
-        push_object_with_properties(bytes, "TransitionViewModelCondition", |_| {});
-        push_object_with_properties(bytes, "TransitionPropertyComponentComparator", |bytes| {
-            push_uint_property(
-                bytes,
-                "TransitionPropertyComponentComparator",
-                "objectId",
-                1,
-            );
-            push_uint_property(
-                bytes,
-                "TransitionPropertyComponentComparator",
-                "propertyKey",
-                u64::from(property_key_for_name(
-                    "CustomPropertyTrigger",
-                    "propertyValue",
-                )),
-            );
-        });
-        push_object_with_properties(bytes, "TransitionPropertyViewModelComparator", |_| {});
-        push_object_with_properties(bytes, "AnimationState", |bytes| {
-            push_uint_property(bytes, "AnimationState", "animationId", 1);
-        });
-        push_object_with_properties(bytes, "ExitState", |_| {});
+        for _ in 0..state_machine_count {
+            push_object_with_properties(bytes, "StateMachine", |_| {});
+            push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+            push_object_with_properties(bytes, "AnyState", |_| {});
+            push_object_with_properties(bytes, "EntryState", |_| {});
+            push_object_with_properties(bytes, "StateTransition", |bytes| {
+                push_uint_property(bytes, "StateTransition", "stateToId", 2);
+            });
+            push_object_with_properties(bytes, "AnimationState", |bytes| {
+                push_uint_property(bytes, "AnimationState", "animationId", 0);
+            });
+            push_object_with_properties(bytes, "StateTransition", |bytes| {
+                push_uint_property(bytes, "StateTransition", "stateToId", 3);
+            });
+            push_bindable_trigger_value_data_bind_context(bytes, 5, &[0, 0]);
+            push_object_with_properties(bytes, "TransitionViewModelCondition", |_| {});
+            push_object_with_properties(bytes, "TransitionPropertyComponentComparator", |bytes| {
+                push_uint_property(
+                    bytes,
+                    "TransitionPropertyComponentComparator",
+                    "objectId",
+                    1,
+                );
+                push_uint_property(
+                    bytes,
+                    "TransitionPropertyComponentComparator",
+                    "propertyKey",
+                    u64::from(property_key_for_name(
+                        "CustomPropertyTrigger",
+                        "propertyValue",
+                    )),
+                );
+            });
+            push_object_with_properties(bytes, "TransitionPropertyViewModelComparator", |_| {});
+            push_object_with_properties(bytes, "AnimationState", |bytes| {
+                push_uint_property(bytes, "AnimationState", "animationId", 1);
+            });
+            push_object_with_properties(bytes, "ExitState", |_| {});
+        }
     })
 }
 
@@ -26623,6 +26636,128 @@ fn state_machine_default_viewmodel_trigger_source_mutation_matches_cpp_probe() {
         compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
     }
     compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn state_machine_imported_viewmodel_trigger_source_mutation_is_shared_across_state_machines_matches_cpp_probe()
+ {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label =
+        "synthetic/runtime_state_machine_imported_viewmodel_trigger_source_mutation_shared_cpp.riv";
+    let bytes = synthetic_state_machine_imported_viewmodel_trigger_shared_mutation(8609);
+    let value = 3_u64;
+    let args = [
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-view-model-instance-source-trigger".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        value.to_string(),
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "1".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "1".to_owned(),
+        "0".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine_a = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing first Rust state-machine instance for {label}"));
+    let mut state_machine_b = rust
+        .state_machine_instance(1)
+        .unwrap_or_else(|| panic!("missing second Rust state-machine instance for {label}"));
+    let mut imported_context = RuntimeImportedViewModelInstanceContext::new(&runtime, 0, 0)
+        .unwrap_or_else(|| panic!("missing imported view-model context for {label}"));
+
+    assert!(
+        state_machine_a.bind_imported_view_model_context(&runtime, &imported_context),
+        "{label} failed to bind first imported view-model context"
+    );
+    assert!(
+        state_machine_a.set_imported_view_model_context_trigger_source_for_data_bind(
+            &mut imported_context,
+            0,
+            value
+        ),
+        "{label} failed to mutate imported trigger source"
+    );
+    assert!(
+        state_machine_b.bind_imported_view_model_context(&runtime, &imported_context),
+        "{label} failed to bind second imported view-model context"
+    );
+    let state_machine_b_advanced = rust.advance_state_machine_instance(&mut state_machine_b, 0.0);
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        1,
+        "{label} state-machine report count mismatch"
+    );
+    let cpp_state_machine = cpp_artboard
+        .runtime_state_machine_advances
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ state-machine advance for {label}"));
+    assert_eq!(
+        cpp_state_machine.state_machine_index, 1,
+        "{label} state-machine report index mismatch"
+    );
+    assert_eq!(
+        cpp_state_machine.state_machine_index,
+        state_machine_b.state_machine_index(),
+        "{label} stateMachineIndex mismatch"
+    );
+    assert_eq!(
+        cpp_state_machine.advanced, state_machine_b_advanced,
+        "{label} advance return mismatch"
+    );
+    assert_eq!(
+        cpp_state_machine.current_animation_count,
+        state_machine_b.current_animation_count(),
+        "{label} currentAnimationCount mismatch"
+    );
+    assert_eq!(
+        cpp_state_machine.changed_state_count,
+        state_machine_b.changed_state_count(),
+        "{label} changedStateCount mismatch"
+    );
+    assert_eq!(
+        cpp_state_machine.reported_event_count,
+        state_machine_b.reported_event_count(),
+        "{label} reportedEventCount mismatch"
+    );
+    for (animation_index, cpp_animation) in cpp_state_machine.current_animations.iter().enumerate()
+    {
+        let rust_animation = state_machine_b
+            .current_animation(animation_index)
+            .unwrap_or_else(|| {
+                panic!("missing Rust current animation {animation_index} for {label}")
+            });
+        assert_close(
+            cpp_animation.time,
+            rust_animation.time(),
+            &format!("{label} current animation {animation_index} time"),
+        );
+        assert_eq!(
+            cpp_animation.did_loop,
+            rust_animation.did_loop(),
+            "{label} current animation {animation_index} didLoop mismatch"
+        );
+    }
 }
 
 #[test]

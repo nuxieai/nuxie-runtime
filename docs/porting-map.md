@@ -2506,8 +2506,19 @@ context. The C++ probe adds
 reports for `BindablePropertyArtboard` targets, and compares both state
 machines through that report surface. The contract is
 `docs/prototypes/data-binding-graph-imported-viewmodel-artboard-shared-mutation-runtime-contract.md`.
+
+Current #12 update: imported view-model trigger sources now match the shared
+imported `propertyValue` mutation pattern before trigger reset.
+`RuntimeImportedViewModelInstanceContext` records trigger source overrides by
+resolved data-bind source path; mutating a `ViewModelInstanceTrigger` source
+through one state machine is observed when a second authored state machine
+binds through the same imported context before ordinary advancement can
+consume/reset the trigger count. The C++ probe adds
+`--runtime-set-view-model-instance-source-trigger` and compares the observing
+state machine through its ordinary advance report. The contract is
+`docs/prototypes/data-binding-graph-imported-viewmodel-trigger-shared-mutation-runtime-contract.md`.
 Imported-instance mutation beyond shared view-model pointer, number, boolean,
-string, color, enum, symbol-list-index, asset, and artboard contexts,
+string, color, enum, symbol-list-index, asset, artboard, and trigger contexts,
 remaining property-name APIs beyond imported view-model pointer sources and
 owned generated pointer paths, stable public object handles, reverse
 propagation, broader update queues, relative/parent/nested lookup,

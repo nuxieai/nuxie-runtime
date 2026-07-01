@@ -1924,6 +1924,15 @@ slice.
   follow-up slices. The C++ probe compares the handle write against the
   existing owned-number runtime context command. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-number-source-handle-runtime-contract.md`.
+- Owned boolean source handle slice:
+  `RuntimeOwnedViewModelInstance` can now resolve a root boolean property name
+  into `RuntimeOwnedViewModelBooleanSourceHandle` and mutate owned boolean
+  storage through that handle before binding. Slash-path lookup remains
+  unresolved, and owned source handles for string/color/enum/symbol-list-index/
+  asset/artboard/trigger/list/view-model sources remain follow-up slices. The
+  C++ probe compares the handle write against the existing owned-boolean
+  runtime context command. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-boolean-source-handle-runtime-contract.md`.
 - Owned root scalar property-name completion slice:
   `RuntimeOwnedViewModelInstance` can now mutate all root scalar kinds already
   backed by property-index storage by property name: number, boolean, string,

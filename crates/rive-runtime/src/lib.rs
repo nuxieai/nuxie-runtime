@@ -4986,6 +4986,17 @@ impl RuntimeOwnedViewModelNumberSourceHandle {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeOwnedViewModelBooleanSourceHandle {
+    property_index: usize,
+}
+
+impl RuntimeOwnedViewModelBooleanSourceHandle {
+    pub fn property_index(&self) -> usize {
+        self.property_index
+    }
+}
+
 #[derive(Debug, Clone)]
 struct RuntimeOwnedViewModelNumber {
     property_index: usize,
@@ -7496,6 +7507,25 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         };
         self.set_boolean_by_property_index(property_index, value)
+    }
+
+    pub fn boolean_source_handle_by_property_name(
+        &self,
+        property_name: &str,
+    ) -> Option<RuntimeOwnedViewModelBooleanSourceHandle> {
+        let property_index = self.property_index_by_name(property_name)?;
+        self.booleans
+            .iter()
+            .any(|boolean| boolean.property_index == property_index)
+            .then_some(RuntimeOwnedViewModelBooleanSourceHandle { property_index })
+    }
+
+    pub fn set_boolean_by_source_handle(
+        &mut self,
+        handle: &RuntimeOwnedViewModelBooleanSourceHandle,
+        value: bool,
+    ) -> bool {
+        self.set_boolean_by_property_index(handle.property_index, value)
     }
 
     pub fn set_boolean_by_property_name_path(&mut self, property_path: &str, value: bool) -> bool {

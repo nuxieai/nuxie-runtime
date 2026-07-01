@@ -5503,9 +5503,8 @@ impl RuntimeDataBindGraphSourceNode {
                 Some(RuntimeDataBindGraphValue::String(value))
             }
             (RuntimeDataBindGraphValue::Number(value), RuntimeDataBindGraphValue::String(_))
-                if matches!(
+                if runtime_data_bind_graph_converter_starts_with_to_string(
                     self.converter.as_ref(),
-                    Some(RuntimeDataBindGraphConverter::ToString { .. })
                 ) =>
             {
                 Some(RuntimeDataBindGraphValue::Number(*value))

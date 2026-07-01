@@ -1499,6 +1499,18 @@ Number converter groups, reverse propagation, broader dirty/update queues,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
 
+Current #12 update: the admitted cross-type `DataConverterGroup` path now also
+covers public `updateDataBinds(true)` target-to-source behavior for
+default-context main-`ToTarget | TwoWay` string targets. C++ runs reverse group
+conversion over the edited string target, does not mutate the number source
+when the reverse value remains a string, then reapplies source-to-target from
+the unchanged number through forward `DataConverterToString ->
+DataConverterStringPad` group conversion in the same update. The contract is
+`docs/prototypes/data-binding-graph-to-string-converter-group-public-update-target-to-source-runtime-contract.md`.
+Number converter groups, cross-type main-`ToSource | TwoWay` behavior, broader
+dirty/update queues, relative/parent/nested lookup, listener-owned data
+binding, and nested artboard propagation remain follow-up `#12` slices.
+
 Current #12 update: the first number-to-number `DataConverterGroup` runtime
 execution slice now admits default-context number sources feeding
 `BindablePropertyNumber.propertyValue` targets when the resolved group is made

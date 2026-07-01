@@ -424,6 +424,12 @@ slice.
   targets, preserving the manual target edit through explicit data-context
   advancement and then overwriting it from the unchanged number source through
   ordered group conversion on the next normal advance.
+- Number-to-string converter-group public-update target-to-source slice: the
+  admitted `DataConverterToString -> DataConverterStringPad` group now follows
+  C++ public `updateDataBinds(true)` behavior for main-`ToTarget | TwoWay`
+  string targets. Reverse group conversion leaves the edited string target as
+  a string, so the number source is not mutated, then the same public update
+  reapplies forward group conversion from the unchanged number source.
 - First number-to-number `DataConverterGroup` graph-owned converter execution
   slice: forward composition for default-context number sources feeding number
   targets through an `OperationValue -> Rounder` group, covered by a C++ probe

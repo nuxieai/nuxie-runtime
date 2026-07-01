@@ -2030,8 +2030,9 @@ slice.
 - Owned color source handle slice:
   `RuntimeOwnedViewModelInstance` can now resolve a root color property name
   into `RuntimeOwnedViewModelColorSourceHandle` and mutate owned color storage
-  through that handle before binding. Slash-path lookup remains unresolved.
-  Nested/relative/parent lookup remains a follow-up slice. The C++ probe
+  through that handle before binding. Root-name handle lookup remains separate
+  from slash-path lookup. Nested color paths are covered separately; other
+  nested/relative/parent lookup remains a follow-up slice. The C++ probe
   compares the handle write against the existing owned-color runtime context
   command. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-color-source-handle-runtime-contract.md`.
@@ -2171,6 +2172,15 @@ slice.
   `ViewModelInstanceRuntime::propertyColor("child/tint")->value(...)`. The
   contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-nested-color-name-path-runtime-contract.md`.
+- Owned generated nested color source-handle slice:
+  generated owned view-model children can now expose a stable public color
+  source handle. `RuntimeOwnedViewModelInstance` can resolve `child/tint`
+  into `RuntimeOwnedViewModelColorSourceHandle` through
+  `color_source_handle_by_property_name_path`, and
+  `set_color_by_source_handle` mutates the same generated-child color storage
+  before binding. The C++ probe compares against the existing owned color
+  name-path command. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-nested-color-source-handle-runtime-contract.md`.
 - Owned generated nested enum name-path slice:
   generated owned view-model children can store direct enum value indexes, and
   `RuntimeOwnedViewModelInstance::set_enum_by_property_name_path` can mutate
@@ -2267,7 +2277,7 @@ slice.
   paths, and stable public handles beyond the admitted default nested-number/
   boolean/string/color/enum/symbol-list-index/asset/artboard/trigger/list/view-model
   handles plus default/imported/owned root source handles and owned
-  nested-number/boolean/string handles, especially remaining
+  nested-number/boolean/string/color handles, especially remaining
   nested/relative/parent handles that update or expose cached source indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.

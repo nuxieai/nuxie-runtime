@@ -4615,11 +4615,22 @@ context. The C++ probe uses
 `ViewModelInstanceRuntime::propertyColor("child/tint")->value(...)`. The
 contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-nested-color-name-path-runtime-contract.md`.
-Other nested scalar kinds, imported-intermediate nested scalar paths,
-imported-instance mutation sharing, stable public object handles, reverse
-propagation, broader update queues, relative/parent/nested lookup,
-listener-owned data binding, and nested artboard propagation remain follow-up
-`#12` slices.
+
+Current #12 update: owned generated nested color paths now have a stable
+public nested source handle. `RuntimeOwnedViewModelInstance` can resolve
+`child/tint` into `RuntimeOwnedViewModelColorSourceHandle` through
+`color_source_handle_by_property_name_path`, and
+`set_color_by_source_handle` writes through the same generated-child color
+storage before binding. The C++ probe compares the handle mutation against
+`ViewModelInstanceRuntime::propertyColor("child/tint")->value(...)` and
+verifies the existing state-machine advance and component update reports. The
+contract is
+`docs/prototypes/data-binding-graph-owned-viewmodel-nested-color-source-handle-runtime-contract.md`.
+Other nested scalar source handles beyond number/boolean/string/color,
+imported-intermediate nested scalar paths, imported-instance mutation sharing,
+stable public object handles, reverse propagation, broader update queues,
+relative/parent lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
 
 Current #12 update: owned generated nested enum paths now match the
 number/boolean/string/color nested pattern. Rust stores direct enum value

@@ -1877,6 +1877,52 @@ fn synthetic_state_machine_default_viewmodel_number_blend_state_with_state_machi
     })
 }
 
+fn synthetic_state_machine_default_viewmodel_number_scripted_converter_blend_state_with_flags(
+    file_id: u64,
+    data_bind_flags: u64,
+) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyNumber", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyNumber", "name", "amount");
+        });
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceNumber", "viewModelPropertyId", 0);
+            push_f32_property(bytes, "ViewModelInstanceNumber", "propertyValue", 1.0);
+        });
+        push_object_with_properties(bytes, "ScriptedDataConverter", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_bindable_number_data_bind_context_with_converter_and_flags(
+            bytes,
+            0.0,
+            &[0, 0],
+            Some(0),
+            data_bind_flags,
+        );
+        push_object_with_properties(bytes, "BlendState1DViewModel", |_| {});
+        push_blend_animation_1d(bytes, 0, 0.0);
+        push_blend_animation_1d(bytes, 1, 1.0);
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
 fn synthetic_state_machine_owned_nested_viewmodel_number_blend_state(file_id: u64) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "ViewModel", |bytes| {
@@ -14276,6 +14322,19 @@ fn assert_number_public_update_target_to_source_matches_cpp_probe(label: &str, b
         compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, &step_label);
     }
     compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn scripted_data_converter_public_update_target_to_source_matches_cpp_probe() {
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    let label = "synthetic/runtime_state_machine_scripted_data_converter_public_update_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_number_scripted_converter_blend_state_with_flags(
+            8640,
+            DATA_BIND_TWO_WAY,
+        );
+    assert_number_public_update_target_to_source_matches_cpp_probe(label, bytes);
 }
 
 #[test]

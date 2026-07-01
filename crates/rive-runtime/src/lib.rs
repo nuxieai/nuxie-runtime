@@ -3472,6 +3472,7 @@ struct RuntimeDataBindGraphSourceNode {
 
 #[derive(Debug, Clone, PartialEq)]
 enum RuntimeDataBindGraphConverter {
+    PassThrough,
     BooleanNegate,
     TriggerIncrement,
     ToNumber,
@@ -10840,6 +10841,7 @@ fn runtime_data_bind_graph_convert_value(
     value: &RuntimeDataBindGraphValue,
 ) -> Option<RuntimeDataBindGraphValue> {
     match (converter, value) {
+        (RuntimeDataBindGraphConverter::PassThrough, value) => Some(value.clone()),
         (
             RuntimeDataBindGraphConverter::BooleanNegate,
             RuntimeDataBindGraphValue::Boolean(value),
@@ -11124,6 +11126,7 @@ fn runtime_data_bind_graph_reverse_convert_value(
     value: &RuntimeDataBindGraphValue,
 ) -> Option<RuntimeDataBindGraphValue> {
     match (converter, value) {
+        (RuntimeDataBindGraphConverter::PassThrough, value) => Some(value.clone()),
         (
             RuntimeDataBindGraphConverter::BooleanNegate,
             RuntimeDataBindGraphValue::Boolean(value),
@@ -19548,6 +19551,7 @@ fn runtime_data_bind_graph_converter_for_object(
                 })
                 .collect(),
         ),
+        "ScriptedDataConverter" => RuntimeDataBindGraphConverter::PassThrough,
         "DataConverterBooleanNegate" => RuntimeDataBindGraphConverter::BooleanNegate,
         "DataConverterTrigger" => RuntimeDataBindGraphConverter::TriggerIncrement,
         "DataConverterToNumber" => RuntimeDataBindGraphConverter::ToNumber,

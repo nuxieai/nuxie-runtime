@@ -439,7 +439,7 @@ remains unresolved. The C++ probe compares the handle mutation against the
 default number by-name command and verifies the existing state-machine advance
 and component update reports. The contract is
 `docs/prototypes/data-binding-graph-default-number-source-handle-runtime-contract.md`.
-Default source handles for asset/artboard/trigger/list/view-model sources,
+Default source handles for artboard/trigger/list/view-model sources,
 nested/relative/parent lookup, reverse propagation, broader update queues,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
@@ -606,6 +606,20 @@ report surface. The contract is
 `docs/prototypes/data-binding-graph-default-asset-name-runtime-contract.md`.
 Default trigger/list/view-model name APIs, nested/relative/parent
 lookup, public source handles, reverse propagation, broader update queues,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
+
+Current #12 update: default root asset sources now have a stable public source
+handle. `StateMachineInstance` can resolve a root asset view-model property
+name into `RuntimeDefaultViewModelAssetSourceHandle`, and
+`set_default_view_model_asset_source_by_source_handle` writes through the
+existing graph-owned source-path mutation path. Slash-path handle lookup
+remains unresolved. The C++ probe compares the handle mutation against the
+default asset by-name command and verifies the existing state-machine advance
+and component update reports. The contract is
+`docs/prototypes/data-binding-graph-default-asset-source-handle-runtime-contract.md`.
+Default source handles for artboard/trigger/list/view-model sources,
+nested/relative/parent lookup, reverse propagation, broader update queues,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 

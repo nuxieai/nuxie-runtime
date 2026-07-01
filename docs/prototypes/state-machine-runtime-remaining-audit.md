@@ -210,15 +210,24 @@ slice.
   `ViewModelPropertySymbolListIndex.name` values on file view model `0` into
   `RuntimeDefaultViewModelSymbolListIndexSourceHandle` and mutate graph-owned
   default symbol-list-index source nodes through that handle. Slash-path lookup
-  remains unresolved, and default handles for other source kinds remain
-  follow-up slices. The C++ probe compares the handle write against the
-  default symbol-list-index by-name mutation command. The contract is
+  remains unresolved, and default handles beyond number/boolean/string/color/
+  enum/symbol-list-index/asset remain follow-up slices. The C++ probe compares
+  the handle write against the default symbol-list-index by-name mutation
+  command. The contract is
   `docs/prototypes/data-binding-graph-default-symbol-list-index-source-handle-runtime-contract.md`.
 - Default root asset property-name mutation, covered by a C++ probe through
   raw `ViewModelInstance::propertyValue("image")` / property-index lookup for
   the file-backed default instance and the existing asset transition-condition
   consumer. The contract is
   `docs/prototypes/data-binding-graph-default-asset-name-runtime-contract.md`.
+- Default asset source handle slice:
+  `StateMachineInstance` can now resolve root asset view-model property names
+  on file view model `0` into `RuntimeDefaultViewModelAssetSourceHandle` and
+  mutate graph-owned default asset source nodes through that handle. Slash-path
+  lookup remains unresolved, and default handles for other source kinds remain
+  follow-up slices. The C++ probe compares the handle write against the
+  default asset by-name mutation command. The contract is
+  `docs/prototypes/data-binding-graph-default-asset-source-handle-runtime-contract.md`.
 - Default root artboard property-name mutation, covered by a C++ probe through
   raw `ViewModelInstance::propertyValue("scene")` / property-index lookup for
   the file-backed default instance and the existing artboard

@@ -1,8 +1,7 @@
 # Owned ViewModel Asset Source Handle Runtime Contract
 
-Purpose: extend the owned runtime view-model source-handle family from
-symbol-list-index sources to asset sources without admitting nested owned
-handles or the remaining owned handle kinds.
+Purpose: document the root owned asset source handle without changing root
+lookup semantics or admitting the full owned nested handle family.
 
 This slice resolves a root asset view-model property name on a
 `RuntimeOwnedViewModelInstance` into a
@@ -26,8 +25,11 @@ Out of scope:
 
 - Number, boolean, string, color, enum, and symbol-list-index behavior beyond
   the existing committed APIs, plus artboard, trigger, list, or view-model
-  owned source handles.
-- Nested, relative, parent, or slash-separated property paths.
+  owned source-handle behavior beyond the existing committed APIs.
+- Changing root-name lookup semantics to accept slash-separated property
+  paths. Nested asset paths are covered separately by
+  `docs/prototypes/data-binding-graph-owned-viewmodel-nested-asset-source-handle-runtime-contract.md`.
+- Relative or parent property paths.
 - Imported or default view-model contexts.
 - Persistent owned-context mutation after binding, reverse target-to-source
   propagation, broader update queues, listener-owned data binding, and nested
@@ -36,4 +38,4 @@ Out of scope:
 Completion condition: resolving and mutating a root owned asset source by
 handle produces the same state-machine advance and component update reports as
 the existing C++ owned-asset binding path, no-op repeat writes report
-unchanged, and slash-path handle lookup remains unresolved.
+unchanged, and root-name lookup stays separate from slash-path lookup.

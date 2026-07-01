@@ -2058,10 +2058,11 @@ slice.
 - Owned asset source handle slice:
   `RuntimeOwnedViewModelInstance` can now resolve a root asset property name
   into `RuntimeOwnedViewModelAssetSourceHandle` and mutate owned raw asset id
-  storage through that handle before binding. Slash-path lookup remains
-  unresolved. Nested/relative/parent lookup remains a follow-up slice. The C++
-  probe compares the handle write against the existing owned-asset runtime
-  context command. The contract is
+  storage through that handle before binding. Root-name handle lookup remains
+  separate from slash-path lookup. Nested asset paths are covered separately;
+  other nested/relative/parent lookup remains a follow-up slice. The C++ probe
+  compares the handle write against the existing owned-asset runtime context
+  command. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-asset-source-handle-runtime-contract.md`.
 - Owned artboard source handle slice:
   `RuntimeOwnedViewModelInstance` can now resolve a root artboard property name
@@ -2228,6 +2229,15 @@ slice.
   `child` with `propertyViewModel` before mutating the child's
   `ViewModelInstanceAssetImage` through `propertyValue`. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-nested-asset-name-path-runtime-contract.md`.
+- Owned generated nested asset source-handle slice:
+  generated owned view-model children can now expose a stable public asset
+  source handle. `RuntimeOwnedViewModelInstance` can resolve `child/image`
+  into `RuntimeOwnedViewModelAssetSourceHandle` through
+  `asset_source_handle_by_property_name_path`, and
+  `set_asset_by_source_handle` mutates the same generated-child asset storage
+  before binding. The C++ probe compares against the existing owned asset
+  name-path command. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-nested-asset-source-handle-runtime-contract.md`.
 - Owned generated nested artboard name-path slice:
   generated owned view-model children can store direct artboard IDs, and
   `RuntimeOwnedViewModelInstance::set_artboard_by_property_name_path` can
@@ -2298,7 +2308,7 @@ slice.
   paths, and stable public handles beyond the admitted default nested-number/
   boolean/string/color/enum/symbol-list-index/asset/artboard/trigger/list/view-model
   handles plus default/imported/owned root source handles and owned
-  nested-number/boolean/string/color/enum/symbol-list-index handles,
+  nested-number/boolean/string/color/enum/symbol-list-index/asset handles,
   especially remaining nested/relative/parent handles that update or expose
   cached source indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,

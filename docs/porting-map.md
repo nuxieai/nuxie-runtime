@@ -4695,11 +4695,19 @@ context. The C++ probe resolves the parent view-model path with
 `ViewModelInstanceRuntime::propertyViewModel("child")` and mutates the child's
 `ViewModelInstanceAssetImage` through `propertyValue`. The contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-nested-asset-name-path-runtime-contract.md`.
-Nested artboard, trigger, list, and view-model value paths,
-imported-intermediate nested scalar paths, imported-instance mutation sharing,
-stable public object handles, reverse propagation, broader update queues,
-relative/parent/nested lookup, listener-owned data binding, and nested artboard
-propagation remain follow-up `#12` slices.
+
+Current #12 update: owned generated nested asset paths now have a stable
+public nested source handle. `RuntimeOwnedViewModelInstance` can resolve
+`child/image` into `RuntimeOwnedViewModelAssetSourceHandle` through
+`asset_source_handle_by_property_name_path`, and
+`set_asset_by_source_handle` writes through the same generated-child asset
+storage before binding. The C++ probe compares the handle mutation against the
+existing owned asset name-path command. The contract is
+`docs/prototypes/data-binding-graph-owned-viewmodel-nested-asset-source-handle-runtime-contract.md`.
+Nested object source handles beyond asset, imported-intermediate nested scalar
+paths, imported-instance mutation sharing, reverse propagation, broader update
+queues, relative/parent lookup, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: owned generated nested artboard paths now match the other
 generated nested scalar paths. Rust stores direct artboard IDs on generated

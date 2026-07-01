@@ -162,6 +162,11 @@ slice.
   data-context advancement preserves a manual bindable number target edit,
   then normal state-machine advancement overwrites it from the unchanged
   imported list length.
+- List-to-length public-update target-to-source slice: direct
+  `DataConverterListToLength` now follows C++ public `updateDataBinds(true)`
+  base-reverse/type-mismatch behavior for main-`ToTarget | TwoWay`
+  list-to-number binds. The imported list-length source remains unchanged and
+  the public update reapplies that unchanged length to the number target.
 - `DataConverterRounder` graph-owned converter execution slice: forward
   conversion for default-context number sources feeding number targets,
   including imported `decimals`, covered by a C++ probe through an existing

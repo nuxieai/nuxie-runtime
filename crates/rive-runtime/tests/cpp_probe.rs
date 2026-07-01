@@ -12095,7 +12095,7 @@ fn to_number_boolean_main_to_target_two_way_target_dirty_matches_cpp_probe() {
     assert_number_main_to_target_two_way_target_dirty_matches_cpp_probe(label, bytes);
 }
 
-fn assert_to_number_public_update_target_to_source_matches_cpp_probe(label: &str, bytes: Vec<u8>) {
+fn assert_number_public_update_target_to_source_matches_cpp_probe(label: &str, bytes: Vec<u8>) {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
         return;
@@ -12193,7 +12193,7 @@ fn to_number_boolean_public_update_target_to_source_matches_cpp_probe() {
             8535,
             DATA_BIND_TWO_WAY,
         );
-    assert_to_number_public_update_target_to_source_matches_cpp_probe(label, bytes);
+    assert_number_public_update_target_to_source_matches_cpp_probe(label, bytes);
 }
 
 #[test]
@@ -12207,7 +12207,7 @@ fn to_number_enum_public_update_target_to_source_matches_cpp_probe() {
             8536,
             DATA_BIND_TWO_WAY,
         );
-    assert_to_number_public_update_target_to_source_matches_cpp_probe(label, bytes);
+    assert_number_public_update_target_to_source_matches_cpp_probe(label, bytes);
 }
 
 #[test]
@@ -12221,7 +12221,7 @@ fn to_number_color_public_update_target_to_source_matches_cpp_probe() {
             8537,
             DATA_BIND_TWO_WAY,
         );
-    assert_to_number_public_update_target_to_source_matches_cpp_probe(label, bytes);
+    assert_number_public_update_target_to_source_matches_cpp_probe(label, bytes);
 }
 
 #[test]
@@ -12235,7 +12235,7 @@ fn to_number_string_public_update_target_to_source_matches_cpp_probe() {
             8538,
             DATA_BIND_TWO_WAY,
         );
-    assert_to_number_public_update_target_to_source_matches_cpp_probe(label, bytes);
+    assert_number_public_update_target_to_source_matches_cpp_probe(label, bytes);
 }
 
 #[test]
@@ -12248,7 +12248,7 @@ fn to_number_symbol_list_index_public_update_target_to_source_matches_cpp_probe(
             8539,
             DATA_BIND_TWO_WAY,
         );
-    assert_to_number_public_update_target_to_source_matches_cpp_probe(label, bytes);
+    assert_number_public_update_target_to_source_matches_cpp_probe(label, bytes);
 }
 
 #[test]
@@ -16969,6 +16969,18 @@ fn list_to_length_main_to_target_two_way_target_dirty_matches_cpp_probe() {
         DATA_BIND_TWO_WAY,
     );
     assert_number_main_to_target_two_way_target_dirty_matches_cpp_probe(label, bytes);
+}
+
+#[test]
+fn list_to_length_public_update_target_to_source_matches_cpp_probe() {
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_list_to_length_public_update_target_to_source_cpp.riv";
+    let bytes = synthetic_state_machine_default_viewmodel_list_to_length_blend_state_with_flags(
+        8540,
+        DATA_BIND_TWO_WAY,
+    );
+    assert_number_public_update_target_to_source_matches_cpp_probe(label, bytes);
 }
 
 #[test]

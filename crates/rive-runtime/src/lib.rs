@@ -5336,6 +5336,16 @@ impl RuntimeDataBindGraphSourceNode {
             {
                 Some(RuntimeDataBindGraphValue::SymbolListIndex(*value))
             }
+            (
+                RuntimeDataBindGraphValue::ListLength(value),
+                RuntimeDataBindGraphValue::Number(_),
+            ) if matches!(
+                self.converter.as_ref(),
+                Some(RuntimeDataBindGraphConverter::ListToLength)
+            ) =>
+            {
+                Some(RuntimeDataBindGraphValue::ListLength(*value))
+            }
             (RuntimeDataBindGraphValue::Boolean(_), RuntimeDataBindGraphValue::Boolean(value)) => {
                 Some(RuntimeDataBindGraphValue::Boolean(value))
             }
@@ -6163,6 +6173,10 @@ fn runtime_data_bind_graph_reverse_convert_value(
             Some(RuntimeDataBindGraphValue::Number(*value))
         }
         (RuntimeDataBindGraphConverter::ToNumber, _) => None,
+        (RuntimeDataBindGraphConverter::ListToLength, RuntimeDataBindGraphValue::Number(value)) => {
+            Some(RuntimeDataBindGraphValue::Number(*value))
+        }
+        (RuntimeDataBindGraphConverter::ListToLength, _) => None,
         (
             RuntimeDataBindGraphConverter::OperationValue {
                 operation_type,

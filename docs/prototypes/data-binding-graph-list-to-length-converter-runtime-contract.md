@@ -20,6 +20,9 @@ imported list size needed by the converter.
   the existing graph source resolution path.
 - Main-`ToTarget | TwoWay` state-machine target-dirty behavior is covered by
   `docs/prototypes/data-binding-graph-list-to-length-main-to-target-two-way-target-dirty-runtime-contract.md`.
+- Public `updateDataBinds(true)` target-to-source base-reverse/no-write
+  behavior is covered by
+  `docs/prototypes/data-binding-graph-list-to-length-public-update-target-to-source-runtime-contract.md`.
 - C++ probe coverage through an existing `BlendState1DViewModel` consumer.
 
 ## Out Of Scope
@@ -27,8 +30,10 @@ imported list size needed by the converter.
 - List targets and `BindablePropertyList` behavior.
 - List mutation APIs and update-queue propagation.
 - `DataConverterNumberToList` and generated runtime list items.
-- Reverse conversion.
-- Dirty/update queue parity beyond the linked state-machine target-dirty path.
+- Reverse conversion beyond the linked public-update base-reverse/no-write
+  path.
+- Dirty/update queue parity beyond the linked state-machine target-dirty and
+  public-update paths.
 - Owned runtime view-model list contexts.
 - Relative-path, parent-path, nested-path, and listener-owned behavior.
 

@@ -10,7 +10,9 @@ pointer. The admitted runtime path here is narrower: an artboard-owned
 `DataBindContext` targeting `ArtboardComponentList`, bound through
 `ArtboardInstance::bindViewModelInstance`. In this shape, the C++ runtime probe
 reports the component-list target row but does not resolve the name-based list
-source.
+source. The same unresolved target row persists through direct
+`Artboard::updateDataBinds(true)` and the current post-bind
+`Artboard::advance(0.0f)` target-count boundary.
 
 ## In Scope
 
@@ -22,6 +24,10 @@ source.
 - C++ probe coverage showing the binding row remains present while source list
   size and source number stay absent and the empty target list size is still
   reported.
+- C++ probe coverage for direct post-bind `Artboard::updateDataBinds(true)`
+  preserving the same unresolved source and empty target-list facts.
+- C++ probe coverage for post-bind `Artboard::advance(0.0f)` preserving the
+  same unresolved source and empty target-list facts.
 - Preservation of the existing state-machine-owned `NameBased` unsupported
   boundary.
 
@@ -43,5 +49,7 @@ source.
 - Rust keeps the artboard data-bind target row addressable by data-bind index.
 - Binding the default artboard context returns `false` for this unsupported
   source path.
+- Direct artboard data-bind update and post-bind artboard advance both keep the
+  unresolved source facts and empty target-list report aligned with C++.
 - The existing state-machine `NameBased` unsupported probe continues to report
   the unresolved cloned-data-bind behavior.

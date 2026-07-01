@@ -3613,8 +3613,11 @@ Current #12 update: artboard-owned `NameBased` source paths targeting
 `ArtboardComponentList` now have an explicit runtime unsupported boundary.
 The C++ probe binds the default artboard view-model context against a manifest
 path for `items` and reports the component-list target row plus an empty target
-list size, but no resolved source list. Rust keeps the same target row and
-unresolved source facts. The contract is
+list size, but no resolved source list. Direct post-bind
+`Artboard::updateDataBinds(true)` and post-bind `Artboard::advance(0.0f)`
+preserve the same unresolved source and empty target-list facts. Rust keeps
+the same target row and unresolved source facts across all three entrypoints.
+The contract is
 `docs/prototypes/data-binding-graph-artboard-name-based-source-path-unsupported-runtime-contract.md`.
 Admitted live relative/name lookup with file pointers, converter name paths,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard

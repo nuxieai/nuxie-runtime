@@ -1582,8 +1582,11 @@ slice.
 - Artboard component-list `NameBased` data-bind source-path unsupported
   boundary: binding the default artboard view-model context against a manifest
   path for `items` keeps the component-list target row and empty target-list
-  fact, but C++ does not resolve the source list for this runtime shape. Rust
-  preserves the same unresolved source facts. The contract is
+  fact, but C++ does not resolve the source list for this runtime shape. Direct
+  post-bind `Artboard::updateDataBinds(true)` and post-bind
+  `Artboard::advance(0.0f)` preserve the same unresolved source and empty
+  target-list facts. Rust preserves the same unresolved source facts across all
+  three entrypoints. The contract is
   `docs/prototypes/data-binding-graph-artboard-name-based-source-path-unsupported-runtime-contract.md`.
 
 ## Remaining Runtime Slices

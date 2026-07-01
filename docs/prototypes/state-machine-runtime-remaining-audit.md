@@ -74,6 +74,11 @@ slice.
   the file-backed default instance and the existing asset transition-condition
   consumer. The contract is
   `docs/prototypes/data-binding-graph-default-asset-name-runtime-contract.md`.
+- Default root artboard property-name mutation, covered by a C++ probe through
+  raw `ViewModelInstance::propertyValue("scene")` / property-index lookup for
+  the file-backed default instance and the existing artboard
+  transition-condition consumer. The contract is
+  `docs/prototypes/data-binding-graph-default-artboard-name-runtime-contract.md`.
 - Graph-owned default `ViewModelInstanceBoolean` source-node mutation by
   state-machine data-bind index, covered by a C++ probe through an existing
   transition-condition consumer.

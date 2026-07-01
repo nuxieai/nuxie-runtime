@@ -4585,6 +4585,13 @@ fn runtime_imported_view_model_artboard_property_path_for_name(
     )
 }
 
+fn runtime_default_view_model_artboard_property_path_for_name(
+    file: &RuntimeFile,
+    property_name: &str,
+) -> Option<Vec<u32>> {
+    runtime_imported_view_model_artboard_property_path_for_name(file, 0, property_name)
+}
+
 fn runtime_imported_view_model_trigger_property_path_for_name(
     file: &RuntimeFile,
     view_model_index: usize,
@@ -7768,6 +7775,36 @@ impl RuntimeDataBindGraph {
         if default_context_bound {
             source.value = RuntimeDataBindGraphValue::Artboard(value);
             source.bound = true;
+            self.mark_default_view_model_bindings_dirty();
+        }
+        true
+    }
+
+    fn set_default_view_model_artboard_source_for_path(
+        &mut self,
+        path: &[u32],
+        value: u64,
+    ) -> bool {
+        let default_context_bound = self.default_view_model_source_context_bound();
+        let mut changed = false;
+        for source in self.sources.iter_mut().filter(|source| source.path == path) {
+            let RuntimeDataBindGraphValue::Artboard(current) = &mut source.default_value else {
+                continue;
+            };
+            if *current == value {
+                continue;
+            }
+            *current = value;
+            if default_context_bound {
+                source.value = RuntimeDataBindGraphValue::Artboard(value);
+                source.bound = true;
+            }
+            changed = true;
+        }
+        if !changed {
+            return false;
+        }
+        if default_context_bound {
             self.mark_default_view_model_bindings_dirty();
         }
         true
@@ -14716,6 +14753,27 @@ impl StateMachineInstance {
         if !self
             .data_bind_graph
             .set_default_view_model_artboard_source_for_data_bind(data_bind_index, value)
+        {
+            return false;
+        }
+        self.needs_advance = true;
+        true
+    }
+
+    pub fn set_default_view_model_artboard_source_by_property_name(
+        &mut self,
+        file: &RuntimeFile,
+        property_name: &str,
+        value: u64,
+    ) -> bool {
+        let Some(path) =
+            runtime_default_view_model_artboard_property_path_for_name(file, property_name)
+        else {
+            return false;
+        };
+        if !self
+            .data_bind_graph
+            .set_default_view_model_artboard_source_for_path(&path, value)
         {
             return false;
         }

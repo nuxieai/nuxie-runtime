@@ -508,8 +508,23 @@ file-backed source through `ViewModelInstance::propertyValue` name or
 property-index lookup, and compares the existing asset transition-condition
 report surface. The contract is
 `docs/prototypes/data-binding-graph-default-asset-name-runtime-contract.md`.
-Default artboard/trigger/list/view-model name APIs, nested/relative/parent
+Default trigger/list/view-model name APIs, nested/relative/parent
 lookup, public source handles, reverse propagation, broader update queues,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
+
+Current #12 update: default root artboard sources now match the root asset
+property-name mutation shape. Rust exposes
+`StateMachineInstance::set_default_view_model_artboard_source_by_property_name`,
+which resolves a root `ViewModelPropertyArtboard.name` on file view model `0`
+and mutates every matching graph source node as a raw artboard index. The C++
+probe adds `--runtime-set-default-view-model-source-artboard-by-name`, resolves
+the default file-backed source through `ViewModelInstance::propertyValue` name
+or property-index lookup, and compares the existing artboard
+transition-condition report surface. The contract is
+`docs/prototypes/data-binding-graph-default-artboard-name-runtime-contract.md`.
+Default trigger/list/view-model name APIs, nested/relative/parent lookup,
+public source handles, reverse propagation, broader update queues,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 

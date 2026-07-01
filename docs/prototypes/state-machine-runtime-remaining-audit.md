@@ -406,6 +406,13 @@ slice.
   targets. Reverse group order writes the edited target to the string source
   through base reverse identity, then the same update reapplies forward
   trim-then-pad conversion to the target.
+- String converter-group main-to-source target-to-source slice: the admitted
+  `DataConverterStringTrim -> DataConverterStringPad` group now follows C++
+  main-`ToSource | TwoWay` behavior for string targets. C++ keeps the string
+  source unchanged during explicit data-context advancement even when the
+  edited target would trim and pad under forward group conversion; the next
+  normal state-machine advance refreshes the target from the unchanged source
+  through reverse group order and base reverse identity.
 - First cross-type `DataConverterGroup` graph-owned converter execution slice:
   forward composition for default-context number sources feeding string targets
   through a group whose first effective child is `DataConverterToString`,

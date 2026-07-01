@@ -5559,25 +5559,19 @@ impl RuntimeDataBindGraphSourceNode {
     fn uses_delayed_string_source_to_target_after_main_to_source(&self) -> bool {
         matches!(
             self.converter.as_ref(),
-            Some(
-                RuntimeDataBindGraphConverter::ToString { .. }
-                    | RuntimeDataBindGraphConverter::StringTrim { .. }
-                    | RuntimeDataBindGraphConverter::StringRemoveZeros
-                    | RuntimeDataBindGraphConverter::StringPad { .. }
-            )
-        )
+            Some(RuntimeDataBindGraphConverter::ToString { .. })
+        ) || self
+            .converter
+            .as_ref()
+            .is_some_and(runtime_data_bind_graph_converter_preserves_string_source_on_main_to_source_target_apply)
     }
 
     fn preserves_string_source_on_main_to_source_target_apply(&self) -> bool {
         self.is_main_to_source()
-            && matches!(
-                self.converter.as_ref(),
-                Some(
-                    RuntimeDataBindGraphConverter::StringTrim { .. }
-                        | RuntimeDataBindGraphConverter::StringRemoveZeros
-                        | RuntimeDataBindGraphConverter::StringPad { .. }
-                )
-            )
+            && self
+                .converter
+                .as_ref()
+                .is_some_and(runtime_data_bind_graph_converter_preserves_string_source_on_main_to_source_target_apply)
     }
 
     fn supports_direct_color_target_to_source(&self) -> bool {
@@ -5665,6 +5659,13 @@ impl RuntimeDataBindGraphSourceNode {
             ) if self.is_main_to_source() => self
                 .converter_state
                 .reverse_convert_value(converter, &self.value),
+            Some(converter @ RuntimeDataBindGraphConverter::Group(_))
+                if self.is_main_to_source()
+                    && runtime_data_bind_graph_converter_preserves_string_source_on_main_to_source_target_apply(converter) =>
+            {
+                self.converter_state
+                    .reverse_convert_value(converter, &self.value)
+            }
             Some(converter) => self.converter_state.convert_value(converter, &self.value),
         }
     }
@@ -6104,6 +6105,23 @@ fn runtime_data_bind_graph_interpolator_factor(
         factor = interpolator.transform(factor);
     }
     factor
+}
+
+fn runtime_data_bind_graph_converter_preserves_string_source_on_main_to_source_target_apply(
+    converter: &RuntimeDataBindGraphConverter,
+) -> bool {
+    match converter {
+        RuntimeDataBindGraphConverter::StringTrim { .. }
+        | RuntimeDataBindGraphConverter::StringRemoveZeros
+        | RuntimeDataBindGraphConverter::StringPad { .. } => true,
+        RuntimeDataBindGraphConverter::Group(converters) => {
+            !converters.is_empty()
+                && converters.iter().all(
+                    runtime_data_bind_graph_converter_preserves_string_source_on_main_to_source_target_apply,
+                )
+        }
+        _ => false,
+    }
 }
 
 fn runtime_data_bind_graph_convert_value(

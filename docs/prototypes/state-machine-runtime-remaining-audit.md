@@ -135,6 +135,15 @@ slice.
   `propertyValue("amount")` fallback for the file-backed default instance, and
   the same `BlendState1DViewModel` consumer. The contract is
   `docs/prototypes/data-binding-graph-default-number-name-runtime-contract.md`.
+- Default number source handle slice:
+  `StateMachineInstance` can now resolve root `ViewModelPropertyNumber.name`
+  values on file view model `0` into
+  `RuntimeDefaultViewModelNumberSourceHandle` and mutate graph-owned default
+  number source nodes through that handle. Slash-path lookup remains
+  unresolved, and default handles for other source kinds remain follow-up
+  slices. The C++ probe compares the handle write against the default number
+  by-name mutation command. The contract is
+  `docs/prototypes/data-binding-graph-default-number-source-handle-runtime-contract.md`.
 - Default root boolean property-name mutation, covered by a C++ probe through
   `ViewModelInstanceRuntime::propertyBoolean("enabled")->value(...)` with raw
   `propertyValue("enabled")` fallback for the file-backed default instance,

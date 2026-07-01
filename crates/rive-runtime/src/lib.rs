@@ -3082,6 +3082,17 @@ struct RuntimeImportedViewModelOverrideKey {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeDefaultViewModelNumberSourceHandle {
+    path: Vec<u32>,
+}
+
+impl RuntimeDefaultViewModelNumberSourceHandle {
+    pub fn path(&self) -> &[u32] {
+        &self.path
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeImportedViewModelNumberSourceHandle {
     view_model_index: usize,
     instance_index: usize,
@@ -16476,6 +16487,30 @@ impl StateMachineInstance {
         if !self
             .data_bind_graph
             .set_default_view_model_number_source_for_data_bind(data_bind_index, value)
+        {
+            return false;
+        }
+        self.needs_advance = true;
+        true
+    }
+
+    pub fn default_view_model_number_source_handle_by_property_name(
+        &self,
+        file: &RuntimeFile,
+        property_name: &str,
+    ) -> Option<RuntimeDefaultViewModelNumberSourceHandle> {
+        let path = runtime_default_view_model_number_property_path_for_name(file, property_name)?;
+        Some(RuntimeDefaultViewModelNumberSourceHandle { path })
+    }
+
+    pub fn set_default_view_model_number_source_by_source_handle(
+        &mut self,
+        handle: &RuntimeDefaultViewModelNumberSourceHandle,
+        value: f32,
+    ) -> bool {
+        if !self
+            .data_bind_graph
+            .set_default_view_model_number_source_for_path(&handle.path, value)
         {
             return false;
         }

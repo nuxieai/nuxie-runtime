@@ -425,9 +425,24 @@ and mutates every matching graph source node. The C++ probe adds
 compares the existing `BlendState1DViewModel` report surface. The contract is
 `docs/prototypes/data-binding-graph-default-number-name-runtime-contract.md`.
 Default string/color/enum/symbol-list-index/asset/artboard/trigger/list/view-model
-name APIs, nested/relative/parent lookup, public source handles, reverse
-propagation, broader update queues, listener-owned data binding, and nested
-artboard propagation remain follow-up `#12` slices.
+name APIs, nested/relative/parent lookup, default public source handles beyond
+the first number source handle, reverse propagation, broader update queues,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
+
+Current #12 update: default root number sources now have the first stable
+public source handle. `StateMachineInstance` can resolve a root
+`ViewModelPropertyNumber.name` into `RuntimeDefaultViewModelNumberSourceHandle`,
+and `set_default_view_model_number_source_by_source_handle` writes through the
+existing graph-owned source-path mutation path. Slash-path handle lookup
+remains unresolved. The C++ probe compares the handle mutation against the
+default number by-name command and verifies the existing state-machine advance
+and component update reports. The contract is
+`docs/prototypes/data-binding-graph-default-number-source-handle-runtime-contract.md`.
+Default source handles for boolean/string/color/enum/symbol-list-index/asset/
+artboard/trigger/list/view-model sources, nested/relative/parent lookup,
+reverse propagation, broader update queues, listener-owned data binding, and
+nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: default root boolean sources now match the root number
 property-name mutation shape. Rust exposes

@@ -5008,6 +5008,17 @@ impl RuntimeOwnedViewModelStringSourceHandle {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeOwnedViewModelColorSourceHandle {
+    property_index: usize,
+}
+
+impl RuntimeOwnedViewModelColorSourceHandle {
+    pub fn property_index(&self) -> usize {
+        self.property_index
+    }
+}
+
 #[derive(Debug, Clone)]
 struct RuntimeOwnedViewModelNumber {
     property_index: usize,
@@ -7654,6 +7665,25 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         };
         self.set_color_by_property_index(property_index, value)
+    }
+
+    pub fn color_source_handle_by_property_name(
+        &self,
+        property_name: &str,
+    ) -> Option<RuntimeOwnedViewModelColorSourceHandle> {
+        let property_index = self.property_index_by_name(property_name)?;
+        self.colors
+            .iter()
+            .any(|color| color.property_index == property_index)
+            .then_some(RuntimeOwnedViewModelColorSourceHandle { property_index })
+    }
+
+    pub fn set_color_by_source_handle(
+        &mut self,
+        handle: &RuntimeOwnedViewModelColorSourceHandle,
+        value: u32,
+    ) -> bool {
+        self.set_color_by_property_index(handle.property_index, value)
     }
 
     pub fn set_color_by_property_name_path(&mut self, property_path: &str, value: u32) -> bool {

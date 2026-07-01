@@ -4254,6 +4254,21 @@ list/view-model sources, nested/relative/parent lookup, reverse propagation,
 broader update queues, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
 
+Current #12 update: owned runtime color sources now have a stable public source
+handle. `RuntimeOwnedViewModelInstance` can resolve a root color property name
+into `RuntimeOwnedViewModelColorSourceHandle`, and
+`set_color_by_source_handle` writes through the existing owned color
+property-index storage before binding the owned context to a state machine.
+Slash-path handle lookup remains unresolved. The C++ probe compares the handle
+mutation against the existing owned-color runtime context command and verifies
+the existing state-machine advance and component update reports. The contract
+is
+`docs/prototypes/data-binding-graph-owned-viewmodel-color-source-handle-runtime-contract.md`.
+Owned source handles for enum/symbol-list-index/asset/artboard/trigger/list/
+view-model sources, nested/relative/parent lookup, reverse propagation,
+broader update queues, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
+
 Current #12 update: owned runtime view-model root scalar property-name mutation
 now covers every scalar kind already backed by owned property-index storage:
 number, boolean, string, color, enum, symbol-list-index, asset, artboard, and

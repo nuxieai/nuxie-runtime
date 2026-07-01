@@ -2474,7 +2474,7 @@ updated source and applies the updated target on the next state-machine
 advance. The contract is
 `docs/prototypes/data-binding-graph-default-enum-source-mutation-runtime-contract.md`.
 Same-path data-bind-index source mutation for remaining
-non-number/non-boolean/non-string/non-color/non-enum/non-symbol-list-index/non-asset/non-artboard/non-trigger
+non-number/non-boolean/non-string/non-color/non-enum/non-symbol-list-index/non-asset/non-artboard/non-trigger/non-list
 families, imported and owned contexts, enum key/name APIs, full dirty-list
 scheduler parity, pending add/remove behavior, re-entry protection,
 relative/parent/nested lookup, listener-owned data binding, `Solo` name
@@ -2489,7 +2489,7 @@ reports the updated symbol-list-index source and applies the updated target on
 the next state-machine advance. The contract is
 `docs/prototypes/data-binding-graph-default-symbol-list-index-source-mutation-runtime-contract.md`.
 Same-path data-bind-index source mutation for remaining
-non-number/non-boolean/non-string/non-color/non-enum/non-symbol-list-index/non-asset/non-artboard/non-trigger
+non-number/non-boolean/non-string/non-color/non-enum/non-symbol-list-index/non-asset/non-artboard/non-trigger/non-list
 families, imported and owned contexts, property-name APIs for remaining families,
 full dirty-list scheduler parity, pending add/remove behavior, re-entry
 protection, relative/parent/nested lookup, listener-owned data binding, and
@@ -2504,7 +2504,7 @@ reports the updated source and applies the updated target on the next
 state-machine advance. The contract is
 `docs/prototypes/data-binding-graph-default-asset-source-mutation-runtime-contract.md`.
 Same-path data-bind-index source mutation for remaining
-non-number/non-boolean/non-string/non-color/non-enum/non-symbol-list-index/non-asset/non-artboard/non-trigger
+non-number/non-boolean/non-string/non-color/non-enum/non-symbol-list-index/non-asset/non-artboard/non-trigger/non-list
 families, imported and owned contexts, file-asset/render-image side effects,
 property-name APIs for remaining families, full dirty-list scheduler parity,
 pending add/remove behavior, re-entry protection, relative/parent/nested
@@ -2520,7 +2520,7 @@ reports the updated source and applies the updated target on the next
 state-machine advance. The contract is
 `docs/prototypes/data-binding-graph-default-artboard-source-mutation-runtime-contract.md`.
 Same-path data-bind-index source mutation for remaining
-non-number/non-boolean/non-string/non-color/non-enum/non-symbol-list-index/non-asset/non-artboard/non-trigger
+non-number/non-boolean/non-string/non-color/non-enum/non-symbol-list-index/non-asset/non-artboard/non-trigger/non-list
 families, imported and owned contexts, artboard referencer/remapping side
 effects, property-name APIs for remaining families, full dirty-list scheduler
 parity, pending add/remove behavior, re-entry protection,
@@ -2536,12 +2536,27 @@ reports the updated source and applies the updated target on the next
 state-machine advance. The contract is
 `docs/prototypes/data-binding-graph-default-trigger-source-mutation-runtime-contract.md`.
 Same-path data-bind-index source mutation for remaining
-non-number/non-boolean/non-string/non-color/non-enum/non-symbol-list-index/non-asset/non-artboard/non-trigger
+non-number/non-boolean/non-string/non-color/non-enum/non-symbol-list-index/non-asset/non-artboard/non-trigger/non-list
 families, imported and owned contexts, trigger callback/listener side effects,
 property-name APIs for remaining families, full dirty-list scheduler parity,
 pending add/remove behavior, re-entry protection, relative/parent/nested
 lookup, listener-owned data binding, and nested artboard propagation remain
 follow-up `#12` slices.
+
+Current #12 update: default-context list source mutation by state-machine
+data-bind index now updates same-path graph source nodes instead of only the
+selected cloned edge. A C++ probe mutates a shared
+`ViewModelInstanceList` item count through the first data bind and proves a
+neighboring ordinary direct `ToTarget` bindable-list bind reports the updated
+source size and applies the updated target after data-context advancement. The
+contract is
+`docs/prototypes/data-binding-graph-default-viewmodel-list-source-mutation-runtime-contract.md`.
+Same-path data-bind-index source mutation for remaining
+view-model pointer/relink semantics, imported and owned contexts,
+list-item identity/layout side effects, property-name APIs for remaining
+families, full dirty-list scheduler parity, pending add/remove behavior,
+re-entry protection, relative/parent/nested lookup, listener-owned data
+binding, and nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: grouped system operation-value public
 `updateDataBinds(true)` target-to-source behavior now preserves the owning
@@ -3261,8 +3276,9 @@ contract is
 
 Current #12 update: default view-model list sources now have the same direct
 source mutation seam as the default scalar source family. Mutating a default
-`ViewModelInstanceList` source by state-machine data-bind index updates the
-graph's observable list item count, and the C++ probe adds
+`ViewModelInstanceList` source by state-machine data-bind index updates
+same-path graph source nodes with the observable list item count, and the C++
+probe adds
 `--runtime-set-default-view-model-source-list` to compare existing
 `BindablePropertyList` source-size and target reports after data-context
 advancement. The contract is

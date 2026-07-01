@@ -4259,6 +4259,14 @@ fn synthetic_state_machine_default_viewmodel_list_to_bindable_list(file_id: u64)
     synthetic_state_machine_default_viewmodel_list_to_bindable_list_with_flags(file_id, 0)
 }
 
+fn synthetic_state_machine_default_viewmodel_list_to_bindable_list_observer(
+    file_id: u64,
+) -> Vec<u8> {
+    synthetic_state_machine_default_viewmodel_list_to_bindable_list_with_state_machines_and_observer(
+        file_id, 0, 1, true,
+    )
+}
+
 fn synthetic_state_machine_imported_viewmodel_list_shared_mutation(file_id: u64) -> Vec<u8> {
     synthetic_state_machine_default_viewmodel_list_to_bindable_list_with_state_machines(
         file_id, 0, 2,
@@ -4278,6 +4286,20 @@ fn synthetic_state_machine_default_viewmodel_list_to_bindable_list_with_state_ma
     file_id: u64,
     flags: u64,
     state_machine_count: usize,
+) -> Vec<u8> {
+    synthetic_state_machine_default_viewmodel_list_to_bindable_list_with_state_machines_and_observer(
+        file_id,
+        flags,
+        state_machine_count,
+        false,
+    )
+}
+
+fn synthetic_state_machine_default_viewmodel_list_to_bindable_list_with_state_machines_and_observer(
+    file_id: u64,
+    flags: u64,
+    state_machine_count: usize,
+    include_observer_bind: bool,
 ) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "ViewModel", |bytes| {
@@ -4317,6 +4339,9 @@ fn synthetic_state_machine_default_viewmodel_list_to_bindable_list_with_state_ma
                 push_uint_property(bytes, "AnimationState", "animationId", 0);
             });
             push_bindable_list_data_bind_context_with_flags(bytes, &[0, 0], None, flags);
+            if include_observer_bind {
+                push_bindable_list_data_bind_context_with_flags(bytes, &[0, 0], None, 0);
+            }
             push_object_with_properties(bytes, "ExitState", |_| {});
         }
     })
@@ -22908,6 +22933,86 @@ fn state_machine_default_viewmodel_list_source_mutation_matches_cpp_probe() {
             rust_state_machine.default_view_model_list_source_item_count_for_data_bind(0),
             Some(item_count),
             "{label} Rust default list source mismatch"
+        );
+    }
+}
+
+#[test]
+fn state_machine_default_viewmodel_list_source_mutation_observer_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label =
+        "synthetic/runtime_state_machine_default_viewmodel_list_source_mutation_observer_cpp.riv";
+    let bytes = synthetic_state_machine_default_viewmodel_list_to_bindable_list_observer(8675);
+    let item_count = 5_usize;
+    let args = [
+        "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-default-view-model-source-list".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        item_count.to_string(),
+        "--runtime-advance-state-machine-data-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    assert!(
+        state_machine.bind_default_view_model_context(),
+        "{label} failed to bind default view-model context"
+    );
+    assert!(
+        state_machine.set_default_view_model_list_source_item_count_for_data_bind(0, item_count),
+        "{label} failed to mutate default view-model list source"
+    );
+    let mut rust_reports = Vec::new();
+    assert!(
+        state_machine.advance_data_context(),
+        "{label} failed to advance data context"
+    );
+    rust_reports.push((false, state_machine.clone()));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+    {
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+        compare_state_machine_list_binding(cpp_state_machine, rust_state_machine, 0, label);
+        compare_state_machine_list_binding(cpp_state_machine, rust_state_machine, 1, label);
+        assert_eq!(
+            rust_state_machine.default_view_model_list_source_item_count_for_data_bind(0),
+            Some(item_count),
+            "{label} Rust default list source mismatch"
+        );
+        assert_eq!(
+            rust_state_machine.default_view_model_list_source_item_count_for_data_bind(1),
+            Some(item_count),
+            "{label} Rust default list observer source mismatch"
         );
     }
 }

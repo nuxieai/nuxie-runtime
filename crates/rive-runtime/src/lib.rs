@@ -7778,34 +7778,18 @@ impl RuntimeDataBindGraph {
         data_bind_index: usize,
         item_count: usize,
     ) -> bool {
-        let default_context_bound = self.default_view_model_source_context_bound();
-        let Some(source) = self
+        let Some(path) = self
             .default_view_model_bindings
             .iter()
             .find(|binding| binding.data_bind_index == data_bind_index)
             .map(|binding| binding.source)
+            .and_then(|source| self.sources.get(source.0))
+            .map(|source| source.path.clone())
         else {
             return false;
         };
-        let Some(source) = self.sources.get_mut(source.0) else {
-            return false;
-        };
-        let RuntimeDataBindGraphValue::List {
-            item_count: current,
-        } = &mut source.default_value
-        else {
-            return false;
-        };
-        if *current == item_count {
-            return false;
-        }
-        *current = item_count;
-        if default_context_bound {
-            source.value = RuntimeDataBindGraphValue::List { item_count };
-            source.bound = true;
-            self.mark_default_view_model_bindings_dirty();
-        }
-        true
+
+        self.set_default_view_model_list_source_item_count_for_path(&path, item_count)
     }
 
     fn set_default_view_model_list_source_item_count_for_path(

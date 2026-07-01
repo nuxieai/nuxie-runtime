@@ -76,6 +76,10 @@ slice.
   data-bind-index mutation path resolves the selected source path and updates
   all same-path default-context trigger source nodes, covered by a C++ probe
   with a neighboring ordinary direct `ToTarget` trigger bind.
+- Default list source mutation same-path observer propagation: the
+  data-bind-index mutation path resolves the selected source path and updates
+  all same-path default-context list source nodes, covered by a C++ probe with
+  a neighboring ordinary direct `ToTarget` bindable-list bind.
 - Default root number property-name mutation, covered by a C++ probe through
   `ViewModelInstanceRuntime::propertyNumber("amount")->value(...)` with raw
   `propertyValue("amount")` fallback for the file-backed default instance, and
@@ -1393,10 +1397,11 @@ slice.
 - Default list source mutation slice:
   default root view-model contexts can now mutate a direct
   `ViewModelInstanceList` source item count by state-machine data-bind index.
-  The graph updates the same list source fact used by the existing
-  `BindablePropertyList` report surface, and the C++ probe covers
-  `--runtime-set-default-view-model-source-list` followed by data-context and
-  state-machine advancement. The contract is
+  The graph updates same-path list source facts used by the existing
+  `BindablePropertyList` report surface, and the C++ probe covers both the
+  selected bind and a neighboring ordinary direct `ToTarget` observer after
+  `--runtime-set-default-view-model-source-list`, data-context advancement,
+  and state-machine advancement. The contract is
   `docs/prototypes/data-binding-graph-default-viewmodel-list-source-mutation-runtime-contract.md`.
 - First owned scalar property-name slice:
   `RuntimeOwnedViewModelInstance` records root `ViewModelProperty.name` values
@@ -1577,6 +1582,7 @@ slice.
   default asset source-mutation same-path observer propagation,
   default artboard source-mutation same-path observer propagation,
   default trigger source-mutation same-path observer propagation,
+  default list source-mutation same-path observer propagation,
   boolean public-update observer preservation, string public-update observer
   preservation, color public-update observer preservation, enum public-update
   observer preservation, asset public-update observer preservation, artboard

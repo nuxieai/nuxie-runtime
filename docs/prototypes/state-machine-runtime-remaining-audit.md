@@ -242,6 +242,12 @@ slice.
   symbol-list-index source and its own target during public update, while a
   neighboring ordinary `ToTarget` bind reports the new source and preserves
   its target until the next normal advance.
+- Trigger public-update observer preservation slice:
+  direct trigger binds now cover the first same-path observer case for public
+  `updateDataBinds(true)`. The dirty main-`ToTarget | TwoWay` trigger bind
+  updates the source and its own target during public update, while a
+  neighboring ordinary `ToTarget` bind reports the new source and preserves
+  its target until the next normal advance.
 - First cross-type graph-owned converter execution slice:
   `DataConverterToNumber` forward conversion for default-context boolean
   sources feeding number targets, covered by a C++ probe through an existing
@@ -907,6 +913,10 @@ slice.
   symbol-list-index source from a main-`ToTarget | TwoWay` integer target edit
   and uses the same C++ observer ordering as the other direct value
   public-update lanes for a neighboring ordinary direct `ToTarget` bind.
+- Trigger public-update observer preservation slice:
+  direct trigger public update now uses the same C++ observer ordering as the
+  other direct value public-update lanes for a neighboring ordinary direct
+  `ToTarget` trigger bind.
 - First graph-owned view-model bindable slice: forward propagation for
   default-context `ViewModelInstanceViewModel.propertyValue` sources feeding
   `BindablePropertyViewModel.propertyValue` targets, covered by a C++ probe
@@ -1459,7 +1469,7 @@ slice.
   preservation, color public-update observer preservation, enum public-update
   observer preservation, asset public-update observer preservation, artboard
   public-update observer preservation, symbol-list-index public-update observer
-  preservation,
+  preservation, trigger public-update observer preservation,
   direct trigger public-update target-to-source, direct trigger converter
   explicit target-to-source, trigger source reset reapply,
   trigger converter-group public-update, trigger converter-group explicit

@@ -39,6 +39,8 @@ trigger target-to-source behavior and trigger reset behavior stay unchanged.
 - Trigger converter groups beyond the first
   `DataConverterGroup<DataConverterTrigger>` public-update slice covered by
   `docs/prototypes/data-binding-graph-trigger-converter-group-public-update-target-to-source-runtime-contract.md`.
+- Same-path trigger observer scheduling, covered by
+  `docs/prototypes/data-binding-graph-trigger-public-update-observer-preservation-runtime-contract.md`.
 - Imported/owned contexts, relative/parent/nested lookup, pending add/remove
   behavior, re-entry protection, listener-owned data binding, and nested
   artboard propagation.

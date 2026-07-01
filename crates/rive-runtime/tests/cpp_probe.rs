@@ -8955,6 +8955,19 @@ fn synthetic_state_machine_default_viewmodel_trigger_condition_with_flags(
     )
 }
 
+fn synthetic_state_machine_default_viewmodel_trigger_public_update_observer_condition(
+    file_id: u64,
+) -> Vec<u8> {
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    synthetic_state_machine_default_viewmodel_trigger_condition_with_state_machines_flags_and_observer(
+        file_id,
+        1,
+        DATA_BIND_TWO_WAY,
+        true,
+    )
+}
+
 fn synthetic_state_machine_imported_viewmodel_trigger_shared_mutation(file_id: u64) -> Vec<u8> {
     synthetic_state_machine_default_viewmodel_trigger_condition_with_state_machines(file_id, 2)
 }
@@ -8974,6 +8987,20 @@ fn synthetic_state_machine_default_viewmodel_trigger_condition_with_state_machin
     file_id: u64,
     state_machine_count: usize,
     data_bind_flags: u64,
+) -> Vec<u8> {
+    synthetic_state_machine_default_viewmodel_trigger_condition_with_state_machines_flags_and_observer(
+        file_id,
+        state_machine_count,
+        data_bind_flags,
+        false,
+    )
+}
+
+fn synthetic_state_machine_default_viewmodel_trigger_condition_with_state_machines_flags_and_observer(
+    file_id: u64,
+    state_machine_count: usize,
+    data_bind_flags: u64,
+    include_observer_bind: bool,
 ) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "ViewModel", |bytes| {
@@ -9031,6 +9058,9 @@ fn synthetic_state_machine_default_viewmodel_trigger_condition_with_state_machin
                 None,
                 data_bind_flags,
             );
+            if include_observer_bind {
+                push_bindable_trigger_value_data_bind_context(bytes, 5, &[0, 0]);
+            }
             push_object_with_properties(bytes, "TransitionViewModelCondition", |_| {});
             push_object_with_properties(bytes, "TransitionPropertyComponentComparator", |bytes| {
                 push_uint_property(
@@ -24967,7 +24997,7 @@ fn trigger_converter_multi_group_public_update_target_to_source_matches_cpp_prob
             DATA_BIND_TWO_WAY,
             2,
         );
-    assert_trigger_public_update_target_to_source_matches_cpp_probe(label, bytes);
+    assert_trigger_public_update_target_to_source_matches_cpp_probe(label, bytes, &[0]);
 }
 
 #[test]
@@ -30033,7 +30063,15 @@ fn trigger_public_update_target_to_source_matches_cpp_probe() {
         8643,
         DATA_BIND_TWO_WAY,
     );
-    assert_trigger_public_update_target_to_source_matches_cpp_probe(label, bytes);
+    assert_trigger_public_update_target_to_source_matches_cpp_probe(label, bytes, &[0]);
+}
+
+#[test]
+fn trigger_public_update_observer_preserves_target_matches_cpp_probe() {
+    let label = "synthetic/runtime_state_machine_default_viewmodel_trigger_public_update_observer_preserves_target_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_trigger_public_update_observer_condition(8663);
+    assert_trigger_public_update_target_to_source_matches_cpp_probe(label, bytes, &[0, 1]);
 }
 
 #[test]
@@ -30045,7 +30083,7 @@ fn trigger_converter_public_update_target_to_source_matches_cpp_probe() {
         8642,
         DATA_BIND_TWO_WAY,
     );
-    assert_trigger_public_update_target_to_source_matches_cpp_probe(label, bytes);
+    assert_trigger_public_update_target_to_source_matches_cpp_probe(label, bytes, &[0]);
 }
 
 #[test]
@@ -30058,10 +30096,14 @@ fn trigger_converter_group_public_update_target_to_source_matches_cpp_probe() {
             8647,
             DATA_BIND_TWO_WAY,
         );
-    assert_trigger_public_update_target_to_source_matches_cpp_probe(label, bytes);
+    assert_trigger_public_update_target_to_source_matches_cpp_probe(label, bytes, &[0]);
 }
 
-fn assert_trigger_public_update_target_to_source_matches_cpp_probe(label: &str, bytes: Vec<u8>) {
+fn assert_trigger_public_update_target_to_source_matches_cpp_probe(
+    label: &str,
+    bytes: Vec<u8>,
+    data_bind_indices: &[usize],
+) {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
         return;
@@ -30144,12 +30186,14 @@ fn assert_trigger_public_update_target_to_source_matches_cpp_probe(label: &str, 
             *advanced,
             &step_label,
         );
-        compare_state_machine_trigger_binding(
-            cpp_state_machine,
-            rust_state_machine,
-            0,
-            &step_label,
-        );
+        for data_bind_index in data_bind_indices {
+            compare_state_machine_trigger_binding(
+                cpp_state_machine,
+                rust_state_machine,
+                *data_bind_index,
+                &step_label,
+            );
+        }
     }
     compare_cpp_runtime_update(&cpp, &rust, &report, label);
 }

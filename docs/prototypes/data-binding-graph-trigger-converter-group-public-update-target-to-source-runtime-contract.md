@@ -31,7 +31,10 @@ smallest trigger group shape.
 
 - Explicit `advanceDataContext()` target-to-source behavior for trigger
   converter groups.
-- Multi-child trigger groups and mixed trigger group compositions.
+- Multi-child trigger groups beyond the first two-child all-trigger group
+  covered by
+  `docs/prototypes/data-binding-graph-trigger-converter-multi-group-runtime-contract.md`,
+  plus mixed trigger group compositions.
 - Trigger source reset reapplication after later state-machine advancement.
 - Imported or owned view-model contexts.
 - Trigger listener dispatch, callback/event side effects, and listener-owned

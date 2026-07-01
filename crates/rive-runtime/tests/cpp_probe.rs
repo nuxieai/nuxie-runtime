@@ -8680,6 +8680,18 @@ fn synthetic_state_machine_default_viewmodel_trigger_converter_group_condition_w
     file_id: u64,
     data_bind_flags: u64,
 ) -> Vec<u8> {
+    synthetic_state_machine_default_viewmodel_trigger_converter_group_condition_with_flags_and_count(
+        file_id,
+        data_bind_flags,
+        1,
+    )
+}
+
+fn synthetic_state_machine_default_viewmodel_trigger_converter_group_condition_with_flags_and_count(
+    file_id: u64,
+    data_bind_flags: u64,
+    converter_count: u64,
+) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "ViewModel", |bytes| {
             push_string_property(bytes, "ViewModel", "name", "Root");
@@ -8696,11 +8708,15 @@ fn synthetic_state_machine_default_viewmodel_trigger_converter_group_condition_w
             push_uint_property(bytes, "ViewModelInstanceTrigger", "viewModelPropertyId", 0);
             push_uint_property(bytes, "ViewModelInstanceTrigger", "propertyValue", 0);
         });
-        push_object_with_properties(bytes, "DataConverterTrigger", |_| {});
+        for _ in 0..converter_count {
+            push_object_with_properties(bytes, "DataConverterTrigger", |_| {});
+        }
         push_object_with_properties(bytes, "DataConverterGroup", |_| {});
-        push_object_with_properties(bytes, "DataConverterGroupItem", |bytes| {
-            push_uint_property(bytes, "DataConverterGroupItem", "converterId", 0);
-        });
+        for converter_id in 0..converter_count {
+            push_object_with_properties(bytes, "DataConverterGroupItem", |bytes| {
+                push_uint_property(bytes, "DataConverterGroupItem", "converterId", converter_id);
+            });
+        }
         push_object_with_properties(bytes, "Artboard", |_| {});
         push_object_with_properties(bytes, "Node", |bytes| {
             push_uint_property(bytes, "Node", "parentId", 0);
@@ -8729,7 +8745,7 @@ fn synthetic_state_machine_default_viewmodel_trigger_converter_group_condition_w
             bytes,
             5,
             &[0, 0],
-            Some(1),
+            Some(converter_count),
             data_bind_flags,
         );
         push_object_with_properties(bytes, "TransitionViewModelCondition", |bytes| {
@@ -24368,11 +24384,6 @@ fn state_machine_default_viewmodel_trigger_converter_target_to_source_matches_cp
 
 #[test]
 fn state_machine_default_viewmodel_trigger_converter_group_target_to_source_matches_cpp_probe() {
-    let Some(probe) = probe_path() else {
-        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
-    };
-
     const DATA_BIND_TO_SOURCE: u64 = 1 << 0;
     const DATA_BIND_TWO_WAY: u64 = 1 << 1;
 
@@ -24382,6 +24393,47 @@ fn state_machine_default_viewmodel_trigger_converter_group_target_to_source_matc
             8648,
             DATA_BIND_TO_SOURCE | DATA_BIND_TWO_WAY,
         );
+    assert_trigger_advance_data_context_target_to_source_matches_cpp_probe(label, bytes);
+}
+
+#[test]
+fn trigger_converter_multi_group_public_update_target_to_source_matches_cpp_probe() {
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_trigger_converter_multi_group_public_update_target_to_source_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_trigger_converter_group_condition_with_flags_and_count(
+            8649,
+            DATA_BIND_TWO_WAY,
+            2,
+        );
+    assert_trigger_public_update_target_to_source_matches_cpp_probe(label, bytes);
+}
+
+#[test]
+fn trigger_converter_multi_group_target_to_source_matches_cpp_probe() {
+    const DATA_BIND_TO_SOURCE: u64 = 1 << 0;
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_trigger_converter_multi_group_target_to_source_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_trigger_converter_group_condition_with_flags_and_count(
+            8650,
+            DATA_BIND_TO_SOURCE | DATA_BIND_TWO_WAY,
+            2,
+        );
+    assert_trigger_advance_data_context_target_to_source_matches_cpp_probe(label, bytes);
+}
+
+fn assert_trigger_advance_data_context_target_to_source_matches_cpp_probe(
+    label: &str,
+    bytes: Vec<u8>,
+) {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
     let forced_value = 9_u64;
     let args = [
         "--runtime-advance-state-machine".to_owned(),

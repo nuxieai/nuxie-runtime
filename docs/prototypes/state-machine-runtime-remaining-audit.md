@@ -194,6 +194,11 @@ slice.
   `DataConverterGroup<DataConverterTrigger>`, using C++ group forward order in
   the main-to-source direction so the trigger converter increments the edited
   target before writing the default trigger source.
+- Trigger converter multi-group slice:
+  `DataConverterGroup<DataConverterTrigger, DataConverterTrigger>` now covers
+  the first multi-child all-trigger group for both public
+  `updateDataBinds(true)` main-`ToTarget | TwoWay` and explicit
+  `advanceDataContext()` main-`ToSource | TwoWay` trigger binds.
 - First cross-type graph-owned converter execution slice:
   `DataConverterToNumber` forward conversion for default-context boolean
   sources feeding number targets, covered by a C++ probe through an existing
@@ -814,6 +819,13 @@ slice.
   binds. The C++ probe reports trigger binding source/target rows, and Rust
   mirrors group forward order in the main-to-source direction before writing
   the default trigger source.
+- Trigger converter multi-group slice:
+  `DataConverterGroup<DataConverterTrigger, DataConverterTrigger>` now covers
+  the first multi-child all-trigger group shape. Public update mirrors C++
+  reverse-order target-to-source pass-through plus same-update forward
+  reapplication through two trigger increments, and explicit
+  `advanceDataContext()` mirrors forward-order main-to-source conversion
+  before writing the default trigger source.
 - Boolean public-update target-to-source slice:
   direct boolean and `DataConverterBooleanNegate` now cover public
   `updateDataBinds(true)` target-to-source behavior for default-context
@@ -1370,7 +1382,7 @@ slice.
   direct trigger public-update target-to-source, direct trigger converter
   explicit target-to-source, trigger source reset reapply,
   trigger converter-group public-update, trigger converter-group explicit
-  target-to-source,
+  target-to-source, trigger converter multi-group,
   first direct number/boolean/string/color/enum/asset/artboard/symbol-list-index/trigger/view-model
   target-to-source propagation,
   first artboard list-consumer immediate bind report,

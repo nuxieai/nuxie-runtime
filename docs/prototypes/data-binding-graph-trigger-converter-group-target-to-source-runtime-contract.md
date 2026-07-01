@@ -30,7 +30,10 @@ public `updateDataBinds(true)` trigger converter-group path.
 
 - Public `updateDataBinds(true)` trigger group behavior, which is covered by
   `docs/prototypes/data-binding-graph-trigger-converter-group-public-update-target-to-source-runtime-contract.md`.
-- Multi-child trigger groups and mixed trigger group compositions.
+- Multi-child trigger groups beyond the first two-child all-trigger group
+  covered by
+  `docs/prototypes/data-binding-graph-trigger-converter-multi-group-runtime-contract.md`,
+  plus mixed trigger group compositions.
 - Trigger source reset behavior beyond preserving the existing direct and
   direct-converter reset reapply probes.
 - Imported or owned view-model contexts.

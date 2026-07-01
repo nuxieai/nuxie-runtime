@@ -139,11 +139,19 @@ slice.
   `StateMachineInstance` can now resolve root `ViewModelPropertyNumber.name`
   values on file view model `0` into
   `RuntimeDefaultViewModelNumberSourceHandle` and mutate graph-owned default
-  number source nodes through that handle. Slash-path lookup remains
-  unresolved, and default handles beyond number/boolean remain follow-up
-  slices. The C++ probe compares the handle write against the default number
-  by-name mutation command. The contract is
+  number source nodes through that handle. Root-name handle lookup remains
+  separate from slash-path lookup. The C++ probe compares the handle write
+  against the default number by-name mutation command. The contract is
   `docs/prototypes/data-binding-graph-default-number-source-handle-runtime-contract.md`.
+- Default nested number source handle slice:
+  `StateMachineInstance` can now resolve a generated child path such as
+  `child/amount` into `RuntimeDefaultViewModelNumberSourceHandle` through
+  `default_view_model_number_source_handle_by_property_name_path` and mutate
+  graph-owned default number source nodes through that handle. The C++ probe
+  compares the handle write against the authored `DataBindContext.sourcePathIds`
+  mutation path for the matching default-context data bind. The
+  contract is
+  `docs/prototypes/data-binding-graph-default-nested-number-source-handle-runtime-contract.md`.
 - Default root boolean property-name mutation, covered by a C++ probe through
   `ViewModelInstanceRuntime::propertyBoolean("enabled")->value(...)` with raw
   `propertyValue("enabled")` fallback for the file-backed default instance,
@@ -2149,9 +2157,9 @@ slice.
   source, and list source contexts,
   property-name APIs beyond imported view-model pointer and root
   number/boolean/string/color/enum/symbol-list-index/asset/artboard/trigger/list sources, owned generated view-model pointer
-  paths, and stable public handles beyond the admitted default/imported/owned
-  root source handles, especially nested/relative/parent handles that update
-  or expose cached source indexes.
+  paths, and stable public handles beyond the admitted default nested-number
+  handle plus default/imported/owned root source handles, especially remaining
+  nested/relative/parent handles that update or expose cached source indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
 - Live view-model APIs and data-binding propagation governed by

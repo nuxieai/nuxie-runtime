@@ -5722,6 +5722,13 @@ fn runtime_default_view_model_number_property_path_for_name(
     runtime_imported_view_model_number_property_path_for_name(file, 0, property_name)
 }
 
+fn runtime_default_view_model_number_property_path_for_name_path(
+    file: &RuntimeFile,
+    property_path: &str,
+) -> Option<Vec<u32>> {
+    runtime_imported_view_model_number_property_path_for_name_path(file, 0, property_path)
+}
+
 fn runtime_imported_view_model_boolean_property_path_for_name(
     file: &RuntimeFile,
     view_model_index: usize,
@@ -16940,6 +16947,16 @@ impl StateMachineInstance {
         property_name: &str,
     ) -> Option<RuntimeDefaultViewModelNumberSourceHandle> {
         let path = runtime_default_view_model_number_property_path_for_name(file, property_name)?;
+        Some(RuntimeDefaultViewModelNumberSourceHandle { path })
+    }
+
+    pub fn default_view_model_number_source_handle_by_property_name_path(
+        &self,
+        file: &RuntimeFile,
+        property_path: &str,
+    ) -> Option<RuntimeDefaultViewModelNumberSourceHandle> {
+        let path =
+            runtime_default_view_model_number_property_path_for_name_path(file, property_path)?;
         Some(RuntimeDefaultViewModelNumberSourceHandle { path })
     }
 

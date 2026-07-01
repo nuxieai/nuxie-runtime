@@ -2519,6 +2519,18 @@ context. The C++ probe adds
 compares both state machines through that report surface. The contract is
 `docs/prototypes/data-binding-graph-imported-viewmodel-enum-shared-mutation-runtime-contract.md`.
 
+Current #12 update: imported view-model enum sources now have the root
+property-name mutation API. `RuntimeImportedViewModelInstanceContext::
+set_enum_by_property_name` resolves a root enum view-model property name
+against `ViewModelPropertyEnum`, `ViewModelPropertyEnumCustom`, and
+`ViewModelPropertyEnumSystem`, records the existing enum override by resolved
+source path, and lets two state machines bound through the same context
+observe the mutation. The C++ probe adds
+`--runtime-set-view-model-instance-source-enum-by-name`, calls
+`ViewModelInstanceRuntime::propertyEnum(name)`, and compares both state
+machines through the existing enum binding report surface. The contract is
+`docs/prototypes/data-binding-graph-imported-viewmodel-enum-name-runtime-contract.md`.
+
 Current #12 update: imported view-model symbol-list-index sources now match
 the shared scalar mutation pattern. `RuntimeImportedViewModelInstanceContext`
 records symbol-list-index source overrides by resolved data-bind source path;
@@ -2586,8 +2598,8 @@ Imported-instance mutation beyond shared view-model pointer, number, boolean,
 string, color, enum, symbol-list-index, asset, artboard, trigger, and list
 contexts,
 remaining property-name APIs beyond imported view-model pointer and root
-number/boolean/string/color sources and owned generated pointer paths, stable
-public object handles, reverse propagation, broader update queues,
+number/boolean/string/color/enum sources and owned generated pointer paths,
+stable public object handles, reverse propagation, broader update queues,
 relative/parent/nested lookup, listener-owned data binding, and nested
 artboard propagation remain follow-up `#12` slices.
 

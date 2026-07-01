@@ -930,6 +930,16 @@ slice.
   state machines bound to the same imported `ViewModelInstance` and now emits
   enum binding reports. The contract is
   `docs/prototypes/data-binding-graph-imported-viewmodel-enum-shared-mutation-runtime-contract.md`.
+- Imported enum property-name slice:
+  `RuntimeImportedViewModelInstanceContext::set_enum_by_property_name` now
+  resolves root enum view-model property names across
+  `ViewModelPropertyEnum`, `ViewModelPropertyEnumCustom`, and
+  `ViewModelPropertyEnumSystem`, then records the existing enum source
+  override by resolved path. The C++ probe calls
+  `ViewModelInstanceRuntime::propertyEnum(name)` and proves two authored
+  state machines bound through the same imported context observe the mutation.
+  The contract is
+  `docs/prototypes/data-binding-graph-imported-viewmodel-enum-name-runtime-contract.md`.
 - Shared imported symbol-list-index source mutation slice:
   `RuntimeImportedViewModelInstanceContext` now also owns symbol-list-index
   source overrides for one file-backed imported view-model instance. Mutating a
@@ -1117,7 +1127,7 @@ slice.
   source, symbol-list-index source, asset source, artboard source, trigger
   source, and list source contexts,
   property-name APIs beyond imported view-model pointer and root
-  number/boolean/string/color sources, owned generated view-model pointer
+  number/boolean/string/color/enum sources, owned generated view-model pointer
   paths, and stable public handles that update or expose cached
   `propertyValue` indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,

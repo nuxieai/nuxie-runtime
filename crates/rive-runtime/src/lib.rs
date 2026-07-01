@@ -3242,6 +3242,40 @@ impl RuntimeImportedViewModelInstanceContext {
         self.color_overrides.insert(path, value);
         true
     }
+
+    pub fn set_enum_by_property_name(
+        &mut self,
+        file: &RuntimeFile,
+        property_name: &str,
+        value: u64,
+    ) -> bool {
+        let Some(path) = runtime_imported_view_model_enum_property_path_for_name(
+            file,
+            self.view_model_index,
+            property_name,
+        ) else {
+            return false;
+        };
+        let Some(view_model) = file.view_model(self.view_model_index) else {
+            return false;
+        };
+        let Some(instance) = view_model.instances.into_iter().nth(self.instance_index) else {
+            return false;
+        };
+        let current = self.enum_overrides.get(&path).copied().or_else(|| {
+            let source =
+                file.data_context_view_model_property_for_instance(instance.object, &path)?;
+            (source.type_name == "ViewModelInstanceEnum")
+                .then(|| source.uint_property("propertyValue"))
+                .flatten()
+        });
+        if current == Some(value) {
+            return false;
+        }
+
+        self.enum_overrides.insert(path, value);
+        true
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -4282,11 +4316,42 @@ fn runtime_imported_view_model_color_property_path_for_name(
     )
 }
 
+fn runtime_imported_view_model_enum_property_path_for_name(
+    file: &RuntimeFile,
+    view_model_index: usize,
+    property_name: &str,
+) -> Option<Vec<u32>> {
+    runtime_imported_view_model_property_path_for_type_names(
+        file,
+        view_model_index,
+        property_name,
+        &[
+            "ViewModelPropertyEnum",
+            "ViewModelPropertyEnumCustom",
+            "ViewModelPropertyEnumSystem",
+        ],
+    )
+}
+
 fn runtime_imported_view_model_property_path_for_name(
     file: &RuntimeFile,
     view_model_index: usize,
     property_name: &str,
     property_type_name: &str,
+) -> Option<Vec<u32>> {
+    runtime_imported_view_model_property_path_for_type_names(
+        file,
+        view_model_index,
+        property_name,
+        &[property_type_name],
+    )
+}
+
+fn runtime_imported_view_model_property_path_for_type_names(
+    file: &RuntimeFile,
+    view_model_index: usize,
+    property_name: &str,
+    property_type_names: &[&str],
 ) -> Option<Vec<u32>> {
     if property_name.is_empty() {
         return None;
@@ -4297,7 +4362,7 @@ fn runtime_imported_view_model_property_path_for_name(
         .into_iter()
         .enumerate()
         .find_map(|(property_index, property)| {
-            if property.type_name != property_type_name {
+            if !property_type_names.contains(&property.type_name) {
                 return None;
             }
             if property.string_property("name")? != property_name {

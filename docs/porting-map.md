@@ -670,6 +670,20 @@ nested/relative/parent lookup, public source handles, reverse propagation,
 broader update queues, listener-owned data binding, and nested artboard
 propagation remained follow-up `#12` slices.
 
+Current #12 update: default root trigger sources now have a stable public
+source handle. `StateMachineInstance` can resolve a root trigger view-model
+property name into `RuntimeDefaultViewModelTriggerSourceHandle`, and
+`set_default_view_model_trigger_source_by_source_handle` writes through the
+existing graph-owned source-path mutation path while preserving the default
+trigger target mirror update. Slash-path handle lookup remains unresolved. The
+C++ probe compares the handle mutation against the default trigger by-name
+command and verifies the existing state-machine advance and component update
+reports. The contract is
+`docs/prototypes/data-binding-graph-default-trigger-source-handle-runtime-contract.md`.
+Default source handles for list/view-model sources, nested/relative/parent
+lookup, reverse propagation, broader update queues, listener-owned data
+binding, and nested artboard propagation remain follow-up `#12` slices.
+
 Current #12 update: default root list sources now match the root trigger
 property-name mutation shape for item-count parity. Rust exposes
 `StateMachineInstance::set_default_view_model_list_source_item_count_by_property_name`,

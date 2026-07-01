@@ -248,6 +248,16 @@ slice.
   the file-backed default instance and the existing trigger transition-condition
   consumer. The contract is
   `docs/prototypes/data-binding-graph-default-trigger-name-runtime-contract.md`.
+- Default trigger source handle slice:
+  `StateMachineInstance` can now resolve root trigger view-model property
+  names on file view model `0` into
+  `RuntimeDefaultViewModelTriggerSourceHandle` and mutate graph-owned default
+  trigger source nodes through that handle while preserving trigger target
+  mirror updates. Slash-path lookup remains unresolved, and default handles
+  for list/view-model sources remain follow-up slices. The C++ probe compares
+  the handle write against the default trigger by-name mutation command. The
+  contract is
+  `docs/prototypes/data-binding-graph-default-trigger-source-handle-runtime-contract.md`.
 - Default root list property-name item-count mutation, covered by a C++ probe
   through `ViewModelInstanceRuntime::propertyList("items")` with raw
   `ViewModelInstance::propertyValue("items")` / property-index fallback for the

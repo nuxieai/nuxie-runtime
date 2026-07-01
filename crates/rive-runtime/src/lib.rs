@@ -3170,6 +3170,17 @@ impl RuntimeDefaultViewModelArtboardSourceHandle {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeDefaultViewModelTriggerSourceHandle {
+    path: Vec<u32>,
+}
+
+impl RuntimeDefaultViewModelTriggerSourceHandle {
+    pub fn path(&self) -> &[u32] {
+        &self.path
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeImportedViewModelNumberSourceHandle {
     view_model_index: usize,
     instance_index: usize,
@@ -17141,6 +17152,36 @@ impl StateMachineInstance {
         if !self
             .data_bind_graph
             .set_default_view_model_trigger_source_for_path(&path, value)
+        {
+            return false;
+        }
+        for bindable_global_id in bindable_global_ids {
+            self.set_default_view_model_trigger_target_mirror(bindable_global_id, value);
+        }
+        self.needs_advance = true;
+        true
+    }
+
+    pub fn default_view_model_trigger_source_handle_by_property_name(
+        &self,
+        file: &RuntimeFile,
+        property_name: &str,
+    ) -> Option<RuntimeDefaultViewModelTriggerSourceHandle> {
+        let path = runtime_default_view_model_trigger_property_path_for_name(file, property_name)?;
+        Some(RuntimeDefaultViewModelTriggerSourceHandle { path })
+    }
+
+    pub fn set_default_view_model_trigger_source_by_source_handle(
+        &mut self,
+        handle: &RuntimeDefaultViewModelTriggerSourceHandle,
+        value: u64,
+    ) -> bool {
+        let bindable_global_ids = self
+            .data_bind_graph
+            .default_view_model_trigger_target_global_ids_for_source_path(&handle.path);
+        if !self
+            .data_bind_graph
+            .set_default_view_model_trigger_source_for_path(&handle.path, value)
         {
             return false;
         }

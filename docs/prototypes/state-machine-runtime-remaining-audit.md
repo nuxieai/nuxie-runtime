@@ -291,6 +291,14 @@ slice.
   for main-`ToTarget | TwoWay` number binds. The public update reverse-converts
   the edited target with the imported secondary operand, writes the primary
   source, then reapplies source-to-target in the same update.
+- Operation-view-model group public-update target-to-source slice:
+  `DataConverterGroup<OperationValue, OperationViewModel>` now covers public
+  `updateDataBinds(true)` for main-`ToTarget | TwoWay` number binds. The
+  public update reverse-converts in C++ child order, resolves the
+  operation-view-model secondary operand from the imported default root
+  view-model instance, writes the primary source, and reapplies
+  source-to-target in the same update. The contract is
+  `docs/prototypes/data-binding-graph-operation-viewmodel-group-public-update-target-to-source-runtime-contract.md`.
 - First system operation-value converter slice: direct
   `DataConverterSystemNormalizer` and `DataConverterSystemDegsToRads`
   conversion for default-context number sources feeding number targets when

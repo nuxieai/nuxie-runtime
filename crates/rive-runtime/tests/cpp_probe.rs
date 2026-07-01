@@ -3379,6 +3379,82 @@ fn synthetic_state_machine_default_viewmodel_number_operation_viewmodel_blend_st
     })
 }
 
+fn synthetic_state_machine_default_viewmodel_number_operation_viewmodel_group_blend_state_with_flags(
+    file_id: u64,
+    data_bind_flags: u64,
+) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyNumber", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyNumber", "name", "amount");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyNumber", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyNumber", "name", "factor");
+        });
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceNumber", "viewModelPropertyId", 0);
+            push_f32_property(bytes, "ViewModelInstanceNumber", "propertyValue", 0.4);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceNumber", "viewModelPropertyId", 1);
+            push_f32_property(bytes, "ViewModelInstanceNumber", "propertyValue", 2.0);
+        });
+        push_object_with_properties(bytes, "DataConverterOperationValue", |bytes| {
+            push_uint_property(bytes, "DataConverterOperationValue", "operationType", 2);
+            push_f32_property(bytes, "DataConverterOperationValue", "operationValue", 2.0);
+        });
+        push_object_with_properties(bytes, "DataConverterOperationViewModel", |bytes| {
+            let mut source_path_ids = Vec::new();
+            push_var_uint(&mut source_path_ids, 0);
+            push_var_uint(&mut source_path_ids, 1);
+            push_uint_property(bytes, "DataConverterOperationViewModel", "operationType", 2);
+            push_bytes_property(
+                bytes,
+                "DataConverterOperationViewModel",
+                "sourcePathIds",
+                &source_path_ids,
+            );
+        });
+        push_object_with_properties(bytes, "DataConverterGroup", |_| {});
+        push_object_with_properties(bytes, "DataConverterGroupItem", |bytes| {
+            push_uint_property(bytes, "DataConverterGroupItem", "converterId", 0);
+        });
+        push_object_with_properties(bytes, "DataConverterGroupItem", |bytes| {
+            push_uint_property(bytes, "DataConverterGroupItem", "converterId", 1);
+        });
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_bindable_number_data_bind_context_with_converter_and_flags(
+            bytes,
+            0.0,
+            &[0, 0],
+            Some(2),
+            data_bind_flags,
+        );
+        push_bindable_number_data_bind_context(bytes, 0.0, &[0, 0]);
+        push_object_with_properties(bytes, "BlendState1DViewModel", |_| {});
+        push_blend_animation_1d(bytes, 0, 0.0);
+        push_blend_animation_1d(bytes, 1, 2.0);
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
 fn synthetic_state_machine_default_viewmodel_number_rounder_blend_state(file_id: u64) -> Vec<u8> {
     synthetic_state_machine_default_viewmodel_number_rounder_blend_state_with_flags(file_id, 0)
 }
@@ -15237,6 +15313,96 @@ fn state_machine_default_viewmodel_number_operation_viewmodel_public_update_targ
     let bytes =
         synthetic_state_machine_default_viewmodel_number_operation_viewmodel_blend_state_with_flags(
             8530,
+            DATA_BIND_TWO_WAY,
+        );
+    let args = [
+        "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-state-machine-bindable-number".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "8".to_owned(),
+        "--runtime-update-state-machine-data-binds".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    let mut rust_reports = Vec::new();
+    assert!(
+        state_machine.bind_default_view_model_context(),
+        "{label} failed to bind default view-model context"
+    );
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    assert!(
+        state_machine.set_bindable_number_for_data_bind(0, 8.0),
+        "{label} failed to mutate bindable number"
+    );
+    assert!(
+        state_machine.update_data_binds_apply_target_to_source(),
+        "{label} failed to update data binds"
+    );
+    rust_reports.push((false, state_machine.clone()));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 1.0),
+        state_machine.clone(),
+    ));
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+    {
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+        compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, label);
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn state_machine_default_viewmodel_number_operation_viewmodel_group_public_update_target_to_source_matches_cpp_probe()
+ {
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_number_operation_viewmodel_group_public_update_target_to_source_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_number_operation_viewmodel_group_blend_state_with_flags(
+            8634,
             DATA_BIND_TWO_WAY,
         );
     let args = [

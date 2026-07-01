@@ -2243,6 +2243,22 @@ pending add/remove behavior, re-entry protection, relative/parent/nested
 lookup, listener-owned data binding, and nested artboard propagation remain
 follow-up `#12` slices.
 
+Current #12 update: grouped `DataConverterOperationViewModel` public
+`updateDataBinds(true)` target-to-source behavior now has a narrow parity
+slice. A main-`ToTarget | TwoWay` number bind uses a `DataConverterGroup`
+containing `DataConverterOperationValue` followed by
+`DataConverterOperationViewModel`; public update reverse-converts the edited
+target through the group in C++ child order, resolves the operation-view-model
+secondary operand from the imported default root view-model instance, writes
+the primary number source, and reapplies source-to-target in the same update.
+The contract is
+`docs/prototypes/data-binding-graph-operation-viewmodel-group-public-update-target-to-source-runtime-contract.md`.
+Other grouped operation-view-model compositions, remaining mixed/stateful
+groups, full dirty-list scheduler parity, imported/owned contexts, pending
+add/remove behavior, re-entry protection, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
+
 Current #12 update: owned runtime view-model contexts now cover the first
 live view-model pointer replacement path. `RuntimeOwnedViewModelInstance`
 records root `ViewModelPropertyViewModel` properties plus the imported instance

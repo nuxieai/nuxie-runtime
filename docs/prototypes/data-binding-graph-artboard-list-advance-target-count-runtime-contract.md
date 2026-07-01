@@ -9,8 +9,11 @@ zero-second `Artboard::advance(0.0f)` applies the bound list value to the exact
 
 This follows the C++ runtime boundary observed by the probe. A direct
 `Artboard::updateDataBinds(true)` call after binding still reports an empty
-target list for the synthetic fixtures; the public post-bind advance is the
-smallest admitted behavior that changes the target count.
+target list for the synthetic fixtures; that direct-update boundary is covered
+by
+`docs/prototypes/data-binding-graph-artboard-list-direct-update-boundary-runtime-contract.md`.
+The public post-bind advance is the smallest admitted behavior that changes
+the target count.
 
 ## In Scope
 

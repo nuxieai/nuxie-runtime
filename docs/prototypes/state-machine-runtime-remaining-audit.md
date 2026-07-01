@@ -366,6 +366,13 @@ slice.
   flag behavior without admitting list item instancing, map-rule selection,
   layout, or virtualization. The contract is
   `docs/prototypes/data-binding-graph-artboard-list-consumer-runtime-contract.md`.
+- Artboard list-consumer direct-update boundary: after binding the default
+  artboard view-model context, direct `Artboard::updateDataBinds(true)` keeps
+  exact `ArtboardComponentList` target list counts at the same empty value
+  observed immediately after binding for direct list sources and direct
+  `DataConverterNumberToList` sources. The target-count mutation is reserved
+  for the public post-bind advance boundary. The contract is
+  `docs/prototypes/data-binding-graph-artboard-list-direct-update-boundary-runtime-contract.md`.
 - Artboard list-consumer post-bind advance target-count slice: after binding
   the default artboard view-model context, a zero-second public
   `Artboard::advance(0.0f)` updates exact `ArtboardComponentList` target list
@@ -1644,8 +1651,8 @@ slice.
   target-to-source, trigger converter multi-group,
   first direct number/boolean/string/color/enum/asset/artboard/symbol-list-index/trigger/view-model
   target-to-source propagation,
-  first artboard list-consumer immediate bind and post-bind advance
-  target-count reports, data-binding update queues, full artboard
+  first artboard list-consumer immediate bind, direct-update, and post-bind
+  advance target-count reports, data-binding update queues, full artboard
   component-list item instancing, map-rule-driven child creation, list
   layout/virtualization, remaining generated-list reverse converters, admitted
   live relative/name lookup with file pointers, converter name paths, relative

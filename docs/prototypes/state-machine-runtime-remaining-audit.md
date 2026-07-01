@@ -1951,6 +1951,15 @@ slice.
   handle write against the existing owned-color runtime context command. The
   contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-color-source-handle-runtime-contract.md`.
+- Owned enum source handle slice:
+  `RuntimeOwnedViewModelInstance` can now resolve a root enum property name
+  into `RuntimeOwnedViewModelEnumSourceHandle` and mutate owned enum
+  value-index storage through that handle before binding. Slash-path lookup
+  remains unresolved, and owned source handles for symbol-list-index/asset/
+  artboard/trigger/list/view-model sources remain follow-up slices. The C++
+  probe compares the handle write against the existing owned-enum runtime
+  context command. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-enum-source-handle-runtime-contract.md`.
 - Owned root scalar property-name completion slice:
   `RuntimeOwnedViewModelInstance` can now mutate all root scalar kinds already
   backed by property-index storage by property name: number, boolean, string,

@@ -5019,6 +5019,17 @@ impl RuntimeOwnedViewModelColorSourceHandle {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeOwnedViewModelEnumSourceHandle {
+    property_index: usize,
+}
+
+impl RuntimeOwnedViewModelEnumSourceHandle {
+    pub fn property_index(&self) -> usize {
+        self.property_index
+    }
+}
+
 #[derive(Debug, Clone)]
 struct RuntimeOwnedViewModelNumber {
     property_index: usize,
@@ -7733,6 +7744,25 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         };
         self.set_enum_by_property_index(property_index, value)
+    }
+
+    pub fn enum_source_handle_by_property_name(
+        &self,
+        property_name: &str,
+    ) -> Option<RuntimeOwnedViewModelEnumSourceHandle> {
+        let property_index = self.property_index_by_name(property_name)?;
+        self.enums
+            .iter()
+            .any(|enum_value| enum_value.property_index == property_index)
+            .then_some(RuntimeOwnedViewModelEnumSourceHandle { property_index })
+    }
+
+    pub fn set_enum_by_source_handle(
+        &mut self,
+        handle: &RuntimeOwnedViewModelEnumSourceHandle,
+        value: u64,
+    ) -> bool {
+        self.set_enum_by_property_index(handle.property_index, value)
     }
 
     pub fn set_enum_by_property_name_path(&mut self, property_path: &str, value: u64) -> bool {

@@ -30,6 +30,8 @@ explicit data-context advance.
 
 - Target-to-source for artboard, trigger, symbol-list-index, view-model, and
   list bindables.
+- Public `updateDataBinds(true)` asset target-to-source behavior, covered by
+  `docs/prototypes/data-binding-graph-asset-public-update-observer-preservation-runtime-contract.md`.
 - Pure `ToSource` without `TwoWay`.
 - Reverse converter execution and converter groups in the target-to-source
   direction.

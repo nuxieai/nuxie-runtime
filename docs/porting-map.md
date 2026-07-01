@@ -2333,6 +2333,19 @@ imported/owned contexts, full dirty-list scheduler parity, pending add/remove
 behavior, re-entry protection, relative/parent/nested lookup, listener-owned
 data binding, and nested artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: asset public `updateDataBinds(true)` target-to-source and
+same-path observer scheduling now have a direct-value parity slice. A dirty
+main-`ToTarget | TwoWay` asset bind writes the shared asset source during
+public update and reapplies its own target immediately, while a neighboring
+ordinary direct `ToTarget` asset bind to the same source path reports the new
+source but preserves its previous target until the next normal state-machine
+advance. The contract is
+`docs/prototypes/data-binding-graph-asset-public-update-observer-preservation-runtime-contract.md`.
+Asset loading/replacement behavior, cross-type observers, multiple observers,
+imported/owned contexts, full dirty-list scheduler parity, pending add/remove
+behavior, re-entry protection, relative/parent/nested lookup, listener-owned
+data binding, and nested artboard propagation remain follow-up `#12` slices.
+
 Current #12 update: grouped system operation-value public
 `updateDataBinds(true)` target-to-source behavior now preserves the owning
 data-bind direction inside `DataConverterGroup` children. Rust threads the

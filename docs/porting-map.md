@@ -415,7 +415,23 @@ and mutates every matching graph source node. The C++ probe adds
 `propertyValue("amount")` fallback for the file-backed default instance, and
 compares the existing `BlendState1DViewModel` report surface. The contract is
 `docs/prototypes/data-binding-graph-default-number-name-runtime-contract.md`.
-Default boolean/string/color/enum/symbol-list-index/asset/artboard/trigger/list/view-model
+Default string/color/enum/symbol-list-index/asset/artboard/trigger/list/view-model
+name APIs, nested/relative/parent lookup, public source handles, reverse
+propagation, broader update queues, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
+
+Current #12 update: default root boolean sources now match the root number
+property-name mutation shape. Rust exposes
+`StateMachineInstance::set_default_view_model_boolean_source_by_property_name`,
+which resolves a root `ViewModelPropertyBoolean.name` on file view model `0`
+and mutates every matching graph source node. The C++ probe adds
+`--runtime-set-default-view-model-source-bool-by-name`, drives
+`ViewModelInstanceRuntime::propertyBoolean("enabled")->value(...)` with a raw
+`propertyValue("enabled")` fallback for the file-backed default instance, and
+compares the existing boolean transition-condition report surface. The contract
+is
+`docs/prototypes/data-binding-graph-default-boolean-name-runtime-contract.md`.
+Default string/color/enum/symbol-list-index/asset/artboard/trigger/list/view-model
 name APIs, nested/relative/parent lookup, public source handles, reverse
 propagation, broader update queues, listener-owned data binding, and nested
 artboard propagation remain follow-up `#12` slices.

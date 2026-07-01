@@ -44,6 +44,11 @@ slice.
   `propertyValue("amount")` fallback for the file-backed default instance, and
   the same `BlendState1DViewModel` consumer. The contract is
   `docs/prototypes/data-binding-graph-default-number-name-runtime-contract.md`.
+- Default root boolean property-name mutation, covered by a C++ probe through
+  `ViewModelInstanceRuntime::propertyBoolean("enabled")->value(...)` with raw
+  `propertyValue("enabled")` fallback for the file-backed default instance,
+  and the existing boolean transition-condition consumer. The contract is
+  `docs/prototypes/data-binding-graph-default-boolean-name-runtime-contract.md`.
 - Graph-owned default `ViewModelInstanceBoolean` source-node mutation by
   state-machine data-bind index, covered by a C++ probe through an existing
   transition-condition consumer.

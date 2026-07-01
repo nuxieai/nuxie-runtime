@@ -772,6 +772,13 @@ slice.
   Rust records imported symbol-list-index snapshots per referenced view-model
   instance for read-only graph binding. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-symbol-list-index-runtime-contract.md`.
+- Owned view-model imported-intermediate asset source slice:
+  replacing a generated root child with an imported child by instance index
+  lets `RuntimeOwnedViewModelInstance` resolve `[child, image]` through the
+  imported child's existing `ViewModelInstanceAssetImage.propertyValue`. Rust
+  records imported asset-id snapshots per referenced view-model instance for
+  read-only graph binding. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-asset-runtime-contract.md`.
 - Owned view-model deep imported-intermediate source slice: replacing a
   generated root child with an imported child by instance index lets
   `RuntimeOwnedViewModelInstance` resolve `[child, middle, leaf]` through the
@@ -934,9 +941,9 @@ slice.
   read paths: imported-instance mutation beyond state-machine-local view-model
   pointer relink overlays, property-name APIs beyond imported view-model
   pointer sources, owned generated view-model pointer paths,
-  imported-intermediate scalar kinds beyond number, boolean, string, color,
-  enum, and symbol-list-index, and stable public handles that update or expose
-  cached `propertyValue` indexes.
+  imported-intermediate source kinds beyond number, boolean, string, color,
+  enum, symbol-list-index, and asset, and stable public handles that update or
+  expose cached `propertyValue` indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
 - Live view-model APIs and data-binding propagation governed by

@@ -3533,6 +3533,7 @@ struct RuntimeOwnedViewModelViewModel {
     imported_symbol_list_indices: BTreeMap<u32, Vec<RuntimeOwnedViewModelSymbolListIndex>>,
     lists: Vec<RuntimeOwnedViewModelList>,
     assets: Vec<RuntimeOwnedViewModelAsset>,
+    imported_assets: BTreeMap<u32, Vec<RuntimeOwnedViewModelAsset>>,
     artboards: Vec<RuntimeOwnedViewModelArtboard>,
     triggers: Vec<RuntimeOwnedViewModelTrigger>,
     view_model_instance_ids: Vec<u32>,
@@ -3727,6 +3728,24 @@ impl RuntimeOwnedViewModelViewModel {
             .iter()
             .find(|asset| asset.property_index == property_index)
             .map(|asset| asset.value)
+    }
+
+    fn active_asset_value_by_property_index(&self, property_index: usize) -> Option<u64> {
+        match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => {
+                self.asset_value_by_property_index(property_index)
+            }
+            RuntimeViewModelPointer::Imported { object_id } => self
+                .imported_assets
+                .get(&object_id)
+                .and_then(|assets| {
+                    assets
+                        .iter()
+                        .find(|asset| asset.property_index == property_index)
+                })
+                .map(|asset| asset.value),
+            _ => None,
+        }
     }
 
     fn artboard_value_by_property_index(&self, property_index: usize) -> Option<u64> {
@@ -4509,6 +4528,67 @@ fn runtime_owned_view_model_assets(
         .unwrap_or_default()
 }
 
+fn runtime_owned_view_model_assets_for_instance(
+    file: &RuntimeFile,
+    view_model_index: usize,
+    view_model_instance: &RuntimeObject,
+) -> Vec<RuntimeOwnedViewModelAsset> {
+    file.view_model(view_model_index)
+        .map(|view_model| {
+            view_model
+                .properties
+                .into_iter()
+                .enumerate()
+                .filter_map(|(property_index, property)| {
+                    if !matches!(
+                        property.type_name,
+                        "ViewModelPropertyAsset" | "ViewModelPropertyAssetImage"
+                    ) {
+                        return None;
+                    }
+                    let path = [
+                        u32::try_from(view_model_index).ok()?,
+                        u32::try_from(property_index).ok()?,
+                    ];
+                    let source = file.data_context_view_model_property_for_instance(
+                        view_model_instance,
+                        &path,
+                    )?;
+                    let value = file.view_model_instance_asset_index_for_object(source)?;
+                    Some(RuntimeOwnedViewModelAsset {
+                        property_index,
+                        value,
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn runtime_owned_view_model_imported_assets(
+    file: &RuntimeFile,
+    view_model_index: usize,
+) -> BTreeMap<u32, Vec<RuntimeOwnedViewModelAsset>> {
+    file.view_model(view_model_index)
+        .map(|view_model| {
+            view_model
+                .instances
+                .into_iter()
+                .map(|instance| {
+                    (
+                        instance.object.id,
+                        runtime_owned_view_model_assets_for_instance(
+                            file,
+                            view_model_index,
+                            instance.object,
+                        ),
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 fn runtime_owned_view_model_artboards(
     file: &RuntimeFile,
     view_model_index: usize,
@@ -4823,6 +4903,11 @@ fn runtime_owned_view_model_property_children(
                 assets: referenced_view_model_index
                     .map(|view_model_index| runtime_owned_view_model_assets(file, view_model_index))
                     .unwrap_or_default(),
+                imported_assets: referenced_view_model_index
+                    .map(|view_model_index| {
+                        runtime_owned_view_model_imported_assets(file, view_model_index)
+                    })
+                    .unwrap_or_default(),
                 artboards: referenced_view_model_index
                     .map(|view_model_index| {
                         runtime_owned_view_model_artboards(file, view_model_index)
@@ -5034,6 +5119,11 @@ impl RuntimeOwnedViewModelInstance {
                         assets: referenced_view_model_index
                             .map(|view_model_index| {
                                 runtime_owned_view_model_assets(file, view_model_index)
+                            })
+                            .unwrap_or_default(),
+                        imported_assets: referenced_view_model_index
+                            .map(|view_model_index| {
+                                runtime_owned_view_model_imported_assets(file, view_model_index)
                             })
                             .unwrap_or_default(),
                         artboards: referenced_view_model_index
@@ -5870,13 +5960,7 @@ impl RuntimeOwnedViewModelInstance {
         }
         let (property_index, view_model_path) = property_path.split_last()?;
         let view_model = self.view_model_by_property_path(view_model_path)?;
-        if !matches!(
-            view_model.value,
-            RuntimeViewModelPointer::OwnedGenerated { .. }
-        ) {
-            return None;
-        }
-        view_model.asset_value_by_property_index(*property_index)
+        view_model.active_asset_value_by_property_index(*property_index)
     }
 
     fn artboard_value_by_property_index(&self, property_index: usize) -> Option<u64> {

@@ -2276,11 +2276,28 @@ path and a string transition condition. Rust records imported
 symbol-list-index snapshots per referenced view-model instance and uses them
 only for read-only graph source resolution. The contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-symbol-list-index-runtime-contract.md`.
-Other imported-intermediate scalar kinds beyond number, boolean, string,
-color, enum, and symbol-list-index, persistent imported instance mutation,
-remaining property-name APIs, public object-handle APIs, reverse propagation,
-broader update queues, relative/parent/nested lookup, listener-owned data
-binding, and nested artboard propagation remain follow-up `#12` slices.
+At that slice boundary, asset and other imported-intermediate source kinds
+beyond number, boolean, string, color, enum, and symbol-list-index, persistent
+imported instance mutation, remaining property-name APIs, public object-handle
+APIs, reverse propagation, broader update queues, relative/parent/nested
+lookup, listener-owned data binding, and nested artboard propagation remained
+follow-up `#12` slices.
+
+Current #12 update: owned view-model contexts now traverse one imported
+replacement intermediate for direct asset sources. Replacing a generated root
+child with an imported child by instance index makes a source path such as
+`[root, child, image]` read the imported child's existing
+`ViewModelInstanceAssetImage.propertyValue`, matching C++ state-machine
+data-context binding as observed through an asset transition condition. Rust
+records imported asset-id snapshots per referenced view-model instance and
+uses them only for read-only graph source resolution. The contract is
+`docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-asset-runtime-contract.md`.
+Other imported-intermediate source kinds beyond number, boolean, string,
+color, enum, symbol-list-index, and asset, persistent imported instance
+mutation, remaining property-name APIs, public object-handle APIs, reverse
+propagation, broader update queues, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
 
 Current #12 update: owned view-model contexts now traverse deeper imported
 replacement intermediates for read-only view-model pointer sources. Replacing

@@ -335,6 +335,7 @@ enum class RuntimeStateMachineActionKind
     SetDefaultViewModelSourceString,
     SetDefaultViewModelSourceStringByName,
     SetDefaultViewModelSourceColor,
+    SetDefaultViewModelSourceColorByName,
     SetDefaultViewModelSourceEnum,
     SetDefaultViewModelSourceSymbolListIndex,
     SetDefaultViewModelSourceAsset,
@@ -3233,6 +3234,59 @@ apply_runtime_state_machine_advances(rive::File* file,
                 {
                     source->as<rive::ViewModelInstanceColor>()
                         ->propertyValue(static_cast<int>(action.uintValue));
+                }
+            }
+            continue;
+        }
+        if (action.kind == RuntimeStateMachineActionKind::
+                               SetDefaultViewModelSourceColorByName)
+        {
+            auto viewModel =
+                file != nullptr && file->viewModelCount() > 0
+                    ? file->viewModel(0)
+                    : nullptr;
+            auto viewModelInstance =
+                viewModel != nullptr && viewModel->instanceCount() > 0
+                    ? viewModel->instance(0)
+                    : nullptr;
+            if (viewModelInstance != nullptr)
+            {
+                rive::ViewModelInstanceRuntime runtime(
+                    rive::ref_rcp(viewModelInstance));
+                auto source = runtime.propertyColor(action.stringValue);
+                if (source != nullptr)
+                {
+                    source->value(static_cast<int>(action.uintValue));
+                }
+                else
+                {
+                    auto rawSource = viewModelInstance->propertyValue(
+                        action.stringValue);
+                    if (rawSource == nullptr)
+                    {
+                        auto properties = viewModel->properties();
+                        for (size_t propertyIndex = 0;
+                             propertyIndex < properties.size();
+                             propertyIndex++)
+                        {
+                            auto property = properties[propertyIndex];
+                            if (property == nullptr ||
+                                property->name() != action.stringValue)
+                            {
+                                continue;
+                            }
+                            rawSource = viewModelInstance->propertyValue(
+                                static_cast<uint32_t>(propertyIndex));
+                            break;
+                        }
+                    }
+                    if (rawSource != nullptr &&
+                        rawSource->is<rive::ViewModelInstanceColor>())
+                    {
+                        rawSource->as<rive::ViewModelInstanceColor>()
+                            ->propertyValue(
+                                static_cast<int>(action.uintValue));
+                    }
                 }
             }
             continue;
@@ -11673,6 +11727,31 @@ int main(int argc, const char* argv[])
             action.seconds = 0.0f;
             action.boolValue = false;
             action.numberValue = 0.0f;
+            action.uintValue = static_cast<uint32_t>(
+                std::strtoull(argv[++i], nullptr, 10));
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
+        if (is_arg(argv[i],
+                   "--runtime-set-default-view-model-source-color-by-name"))
+        {
+            if (i + 3 >= argc)
+            {
+                std::cerr << "--runtime-set-default-view-model-source-color-by-name requires stateMachineIndex propertyName value\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::
+                SetDefaultViewModelSourceColorByName;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            action.stringValue = argv[++i];
             action.uintValue = static_cast<uint32_t>(
                 std::strtoull(argv[++i], nullptr, 10));
             options.runtimeStateMachineActions.push_back(action);

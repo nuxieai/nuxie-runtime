@@ -447,7 +447,22 @@ and mutates every matching graph source node. The C++ probe adds
 compares the existing string transition-condition report surface. The contract
 is
 `docs/prototypes/data-binding-graph-default-string-name-runtime-contract.md`.
-Default color/enum/symbol-list-index/asset/artboard/trigger/list/view-model
+Default enum/symbol-list-index/asset/artboard/trigger/list/view-model
+name APIs, nested/relative/parent lookup, public source handles, reverse
+propagation, broader update queues, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
+
+Current #12 update: default root color sources now match the root
+number/boolean/string property-name mutation shape. Rust exposes
+`StateMachineInstance::set_default_view_model_color_source_by_property_name`,
+which resolves a root `ViewModelPropertyColor.name` on file view model `0` and
+mutates every matching graph source node. The C++ probe adds
+`--runtime-set-default-view-model-source-color-by-name`, drives
+`ViewModelInstanceRuntime::propertyColor("tint")->value(...)` with a raw
+`propertyValue("tint")` fallback for the file-backed default instance, and
+compares the existing color transition-condition report surface. The contract
+is `docs/prototypes/data-binding-graph-default-color-name-runtime-contract.md`.
+Default enum/symbol-list-index/asset/artboard/trigger/list/view-model
 name APIs, nested/relative/parent lookup, public source handles, reverse
 propagation, broader update queues, listener-owned data binding, and nested
 artboard propagation remain follow-up `#12` slices.

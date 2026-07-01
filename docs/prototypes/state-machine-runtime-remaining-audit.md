@@ -1468,6 +1468,16 @@ slice.
   view-model properties and proves two authored state machines bound through
   the same imported context observe the mutation. The contract is
   `docs/prototypes/data-binding-graph-imported-viewmodel-nested-enum-name-path-runtime-contract.md`.
+- Imported nested symbol-list-index property-name path slice:
+  `RuntimeImportedViewModelInstanceContext::
+  set_symbol_list_index_by_property_name_path` resolves a slash-separated path
+  such as `child/symbol` through one nested `ViewModelPropertyViewModel`
+  segment to a `ViewModelPropertySymbolListIndex` leaf and records the index
+  override by the existing graph source path. The C++ probe calls
+  `ViewModelInstanceRuntime::propertySymbolListIndex("child/symbol")` after
+  completing view-model properties and proves two authored state machines bound
+  through the same imported context observe the mutation. The contract is
+  `docs/prototypes/data-binding-graph-imported-viewmodel-nested-symbol-list-index-name-path-runtime-contract.md`.
 - Shared imported boolean source mutation slice:
   `RuntimeImportedViewModelInstanceContext` now also owns boolean source
   overrides for one file-backed imported view-model instance. Mutating a

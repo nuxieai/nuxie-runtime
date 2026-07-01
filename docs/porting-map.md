@@ -3580,6 +3580,23 @@ view-model sources, stable public object handles, reverse propagation, broader
 update queues, relative/parent/nested lookup, listener-owned data binding, and
 nested artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: imported view-model symbol-list-index sources now have the
+nested property-name path mutation API. `RuntimeImportedViewModelInstanceContext::
+set_symbol_list_index_by_property_name_path` resolves `child/symbol` through
+one `ViewModelPropertyViewModel` segment to a
+`ViewModelPropertySymbolListIndex` leaf, records the index override by the
+existing graph source path, and lets two state machines bound through the same
+imported context observe the mutation. The C++ probe uses
+`--runtime-set-view-model-instance-source-symbol-list-index-by-name` with the
+slash path after completing view-model properties, matching
+`ViewModelInstanceRuntime::propertySymbolListIndex("child/symbol")`. The
+contract is
+`docs/prototypes/data-binding-graph-imported-viewmodel-nested-symbol-list-index-name-path-runtime-contract.md`.
+Nested property-name paths for asset/artboard/trigger/list/view-model sources,
+stable public object handles, reverse propagation, broader update queues,
+relative/parent/nested lookup, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
+
 Current #12 update: imported view-model boolean sources now match the shared
 scalar mutation pattern. `RuntimeImportedViewModelInstanceContext` records
 boolean source overrides by resolved data-bind source path; mutating a

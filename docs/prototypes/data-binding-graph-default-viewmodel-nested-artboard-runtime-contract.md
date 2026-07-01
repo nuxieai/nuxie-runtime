@@ -28,7 +28,8 @@ artboard index.
 ## Out Of Scope
 
 - Nested source mutation APIs.
-- Nested trigger, list, and view-model value kinds.
+- Nested source kinds beyond the trigger sibling covered by
+  `docs/prototypes/data-binding-graph-default-viewmodel-nested-trigger-runtime-contract.md`.
 - Name-based, relative, and parent paths.
 - Imported and owned runtime contexts beyond existing dedicated slices.
 - Nested-artboard runtime behavior, cloning, remapping, layout, rendering,

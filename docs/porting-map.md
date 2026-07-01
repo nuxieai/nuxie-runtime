@@ -860,16 +860,31 @@ view-model pointer property name into
 `RuntimeDefaultViewModelViewModelSourceHandle`, and
 `relink_default_view_model_view_model_source_by_source_handle` writes through
 the existing graph-owned source-path relink path by imported referenced
-instance index. Slash-path handle lookup remains unresolved. The C++ probe
-compares the handle relink against the default view-model by-name relink
-command and verifies the existing data-context advance, state-machine advance,
-source pointer, target pointer, and component update reports. The contract is
+instance index. Root-name handle lookup remains separate from slash-path
+lookup. The C++ probe compares the handle relink against the default
+view-model by-name relink command and verifies the existing data-context
+advance, state-machine advance, source pointer, target pointer, and component
+update reports. The contract is
 `docs/prototypes/data-binding-graph-default-viewmodel-source-handle-runtime-contract.md`.
-The default root source-handle family is closed for
+
+Current #12 update: default nested view-model pointer sources now complete the
+default nested source-handle value-kind family. `StateMachineInstance` can
+resolve a generated child path such as `child/grandchild` into
+`RuntimeDefaultViewModelViewModelSourceHandle` through
+`default_view_model_view_model_source_handle_by_property_name_path`, and
+`relink_default_view_model_view_model_source_by_source_handle` relinks the
+existing graph-owned source path by imported referenced instance index. The C++
+probe compares the handle relink against the default view-model by-name path
+relink command for the matching nested path and verifies the existing
+data-context advance, state-machine advance, source pointer, target pointer,
+and component update reports. The contract is
+`docs/prototypes/data-binding-graph-default-nested-viewmodel-source-handle-runtime-contract.md`.
+The default root source-handle family and default nested source-handle
+value-kind family are closed for
 number/boolean/string/color/enum/symbol-list-index/asset/artboard/trigger/list/
-view-model sources; nested/relative/parent lookup, reverse propagation,
-broader update queues, listener-owned data binding, and nested artboard
-propagation remain follow-up `#12` slices.
+view-model sources; relative/parent lookup, reverse propagation, broader
+update queues, listener-owned data binding, and nested artboard propagation
+remain follow-up `#12` slices.
 
 Current #12 update: default-context nested number source binding now has its
 first absolute-path runtime slice. A `DataBindContext.sourcePathIds` path of

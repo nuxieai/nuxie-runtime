@@ -358,12 +358,22 @@ slice.
   on file view model `0` into
   `RuntimeDefaultViewModelViewModelSourceHandle` and relink graph-owned
   default view-model source nodes by imported referenced instance index through
-  that handle. Slash-path lookup remains unresolved, and the default root
-  source-handle family is now covered for number/boolean/string/color/enum/
-  symbol-list-index/asset/artboard/trigger/list/view-model sources. The C++
-  probe compares the handle relink against the default view-model by-name
-  relink command. The contract is
+  that handle. Root-name handle lookup remains separate from slash-path lookup,
+  and the default root source-handle family is now covered for
+  number/boolean/string/color/enum/symbol-list-index/asset/artboard/trigger/list/view-model
+  sources. The C++ probe compares the handle relink against the default
+  view-model by-name relink command. The contract is
   `docs/prototypes/data-binding-graph-default-viewmodel-source-handle-runtime-contract.md`.
+- Default nested view-model pointer source handle slice:
+  `StateMachineInstance` can now resolve a generated child path such as
+  `child/grandchild` into `RuntimeDefaultViewModelViewModelSourceHandle`
+  through
+  `default_view_model_view_model_source_handle_by_property_name_path` and
+  relink graph-owned default view-model pointer source nodes by imported
+  referenced instance index through that handle. The C++ probe compares the
+  handle relink against the default view-model by-name path relink command for
+  the matching nested path. The contract is
+  `docs/prototypes/data-binding-graph-default-nested-viewmodel-source-handle-runtime-contract.md`.
 - Graph-owned default `ViewModelInstanceBoolean` source-node mutation by
   state-machine data-bind index, covered by a C++ probe through an existing
   transition-condition consumer.
@@ -2225,7 +2235,8 @@ slice.
   property-name APIs beyond imported view-model pointer and root
   number/boolean/string/color/enum/symbol-list-index/asset/artboard/trigger/list sources, owned generated view-model pointer
   paths, and stable public handles beyond the admitted default nested-number/
-  boolean/string/color/enum/symbol-list-index/asset/artboard/trigger/list handles plus default/imported/owned root source handles, especially
+  boolean/string/color/enum/symbol-list-index/asset/artboard/trigger/list/view-model
+  handles plus default/imported/owned root source handles, especially
   remaining nested/relative/parent handles that update or expose cached source
   indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,

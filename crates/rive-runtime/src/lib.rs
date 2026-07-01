@@ -7108,6 +7108,13 @@ fn runtime_default_view_model_view_model_property_path_for_name(
     runtime_view_model_view_model_property_path_for_names(file, 0, &[property_name])
 }
 
+fn runtime_default_view_model_view_model_property_path_for_name_path(
+    file: &RuntimeFile,
+    property_path: &str,
+) -> Option<Vec<u32>> {
+    runtime_view_model_view_model_property_path_for_name_path(file, 0, property_path)
+}
+
 fn runtime_owned_view_model_view_model_children(
     file: &RuntimeFile,
     view_model_index: usize,
@@ -17896,6 +17903,16 @@ impl StateMachineInstance {
     ) -> Option<RuntimeDefaultViewModelViewModelSourceHandle> {
         let path =
             runtime_default_view_model_view_model_property_path_for_name(file, property_name)?;
+        Some(RuntimeDefaultViewModelViewModelSourceHandle { path })
+    }
+
+    pub fn default_view_model_view_model_source_handle_by_property_name_path(
+        &self,
+        file: &RuntimeFile,
+        property_path: &str,
+    ) -> Option<RuntimeDefaultViewModelViewModelSourceHandle> {
+        let path =
+            runtime_default_view_model_view_model_property_path_for_name_path(file, property_path)?;
         Some(RuntimeDefaultViewModelViewModelSourceHandle { path })
     }
 

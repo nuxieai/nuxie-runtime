@@ -41140,6 +41140,152 @@ fn state_machine_default_viewmodel_viewmodel_source_handle_relink_matches_cpp_pr
 }
 
 #[test]
+fn state_machine_default_viewmodel_nested_viewmodel_source_handle_relink_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_nested_viewmodel_source_handle_relink_cpp.riv";
+    let bytes = synthetic_state_machine_default_nested_viewmodel_viewmodel_bind_source(8783);
+    let property_path = "child/grandchild";
+    let instance_index = 0_usize;
+    let args = [
+        "--complete-view-model-properties".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-relink-default-view-model-source-viewmodel-by-name".to_owned(),
+        "0".to_owned(),
+        property_path.to_owned(),
+        instance_index.to_string(),
+        "--runtime-advance-state-machine-data-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    let mut rust_reports = Vec::new();
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    assert!(
+        state_machine.bind_default_view_model_context(),
+        "{label} failed to bind default view-model context"
+    );
+    let handle = state_machine
+        .default_view_model_view_model_source_handle_by_property_name_path(&runtime, property_path)
+        .unwrap_or_else(|| {
+            panic!("missing nested default view-model pointer source handle for {label}")
+        });
+    assert_eq!(handle.path(), &[0_u32, 0, 0], "{label} handle path");
+    assert!(
+        state_machine
+            .default_view_model_view_model_source_handle_by_property_name(&runtime, property_path)
+            .is_none(),
+        "{label} unexpectedly resolved nested default view-model pointer by root-name handle"
+    );
+    assert!(
+        state_machine
+            .default_view_model_view_model_source_handle_by_property_name_path(
+                &runtime,
+                "child/missing",
+            )
+            .is_none(),
+        "{label} unexpectedly resolved missing nested default view-model pointer handle"
+    );
+    assert!(
+        state_machine
+            .relink_default_view_model_view_model_source_by_source_handle(&handle, instance_index),
+        "{label} failed to relink nested default view-model pointer source by source handle"
+    );
+    assert!(
+        !state_machine
+            .relink_default_view_model_view_model_source_by_source_handle(&handle, instance_index),
+        "{label} reported no-op nested default view-model pointer source handle relink as changed"
+    );
+    assert_eq!(
+        state_machine.default_view_model_view_model_source_instance_index_for_data_bind(0),
+        Some(instance_index),
+        "{label} Rust nested default view-model pointer source mismatch"
+    );
+    assert!(
+        state_machine.advance_data_context(),
+        "{label} failed to advance data context"
+    );
+    rust_reports.push((false, state_machine.clone()));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 1.0),
+        state_machine.clone(),
+    ));
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+    {
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+    }
+    let pointer_report = cpp_artboard
+        .runtime_state_machine_advances
+        .last()
+        .unwrap_or_else(|| panic!("missing C++ pointer report for {label}"));
+    let binding = pointer_report
+        .view_model_bindings
+        .iter()
+        .find(|binding| binding.data_bind_index == 0)
+        .unwrap_or_else(|| panic!("missing C++ view-model binding 0 for {label}"));
+    assert_eq!(
+        binding.source_instance_index,
+        Some(instance_index),
+        "{label} C++ source instance mismatch"
+    );
+    assert_eq!(
+        binding.target_instance_index,
+        Some(instance_index),
+        "{label} C++ target instance mismatch"
+    );
+    assert_eq!(
+        state_machine.default_view_model_view_model_source_instance_index_for_data_bind(0),
+        Some(instance_index),
+        "{label} Rust source instance mismatch"
+    );
+    assert_eq!(
+        state_machine.bindable_view_model_instance_index_for_data_bind(0),
+        Some(instance_index),
+        "{label} Rust target instance mismatch"
+    );
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
 fn state_machine_default_viewmodel_viewmodel_target_to_source_matches_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");

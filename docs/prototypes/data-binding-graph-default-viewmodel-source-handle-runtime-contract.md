@@ -24,7 +24,10 @@ Out of scope:
 
 - Number, boolean, string, color, enum, symbol-list-index, asset, artboard,
   trigger, or list source-handle behavior beyond the existing committed APIs.
-- Nested, relative, parent, or slash-separated property paths.
+- Changing root-name lookup semantics to accept slash-separated property
+  paths. Nested view-model pointer paths are covered separately by
+  `docs/prototypes/data-binding-graph-default-nested-viewmodel-source-handle-runtime-contract.md`.
+- Relative or parent property paths.
 - Imported or owned view-model contexts.
 - Public object handles, replacing generated owned child identities, arbitrary
   user-created runtime view-model instances, list item propagation, reverse
@@ -35,4 +38,4 @@ Completion condition: resolving and relinking a default root view-model source
 by handle produces the same data-context advance, state-machine advance,
 source pointer, target pointer, and component update reports as C++ by-name
 relink, no-op repeat relinks report unchanged, and slash-path handle lookup
-remains unresolved.
+stays separate from root-name lookup.

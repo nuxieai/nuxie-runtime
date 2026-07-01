@@ -4412,6 +4412,45 @@ impl RuntimeDataBindGraph {
         true
     }
 
+    fn relink_view_model_instance_view_model_source_for_data_bind(
+        &mut self,
+        data_bind_index: usize,
+        instance_index: usize,
+    ) -> bool {
+        if self.context_kind != RuntimeDataBindGraphContextKind::ImportedViewModel {
+            return false;
+        }
+        let Some(source) = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .map(|binding| binding.source)
+        else {
+            return false;
+        };
+        let Some(source) = self.sources.get_mut(source.0) else {
+            return false;
+        };
+        let Some(object_id) = source.view_model_instance_ids.get(instance_index).copied() else {
+            return false;
+        };
+        if !matches!(
+            &source.default_value,
+            RuntimeDataBindGraphValue::ViewModel(_)
+        ) {
+            return false;
+        }
+        let value = RuntimeViewModelPointer::Imported { object_id };
+        if matches!(&source.value, RuntimeDataBindGraphValue::ViewModel(current) if *current == value)
+        {
+            return false;
+        }
+        source.value = RuntimeDataBindGraphValue::ViewModel(value);
+        source.bound = true;
+        self.mark_default_view_model_bindings_dirty();
+        true
+    }
+
     fn mark_target_dirty_for_data_bind(
         &mut self,
         data_bind_index: usize,
@@ -10104,6 +10143,24 @@ impl StateMachineInstance {
         if !self
             .data_bind_graph
             .relink_default_view_model_view_model_source_for_data_bind(
+                data_bind_index,
+                instance_index,
+            )
+        {
+            return false;
+        }
+        self.needs_advance = true;
+        true
+    }
+
+    pub fn relink_view_model_instance_view_model_source_for_data_bind(
+        &mut self,
+        data_bind_index: usize,
+        instance_index: usize,
+    ) -> bool {
+        if !self
+            .data_bind_graph
+            .relink_view_model_instance_view_model_source_for_data_bind(
                 data_bind_index,
                 instance_index,
             )

@@ -2131,6 +2131,19 @@ property-name/object-handle APIs, reverse propagation, broader update queues,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
 
+Current #12 update: imported view-model contexts now have the first live
+view-model pointer relink API.
+`StateMachineInstance::relink_view_model_instance_view_model_source_for_data_bind`
+updates the currently bound imported-context graph source to a referenced
+imported child instance; explicit data-context advance pushes it into
+`BindablePropertyViewModel.propertyValue`, matching the C++ probe's
+cached-reference replacement path. The contract is
+`docs/prototypes/data-binding-graph-imported-viewmodel-relink-runtime-contract.md`.
+Persistent `RuntimeFile` mutation across rebinds, nested owned view-model
+pointer paths, property-name/object-handle APIs, reverse propagation, broader
+update queues, relative/parent/nested lookup, listener-owned data binding, and
+nested artboard propagation remain follow-up `#12` slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

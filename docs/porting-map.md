@@ -2377,15 +2377,19 @@ listener-owned data binding, and nested artboard propagation remain follow-up
 
 Current #12 update: deterministic `DataConverterFormula` runtime execution now
 also admits `FormulaTokenFunction` output-queue tokens for number sources
-feeding number targets. The graph consumes the binary-layer formula output
-descriptors so function argument counts match C++ shunting-yard resolution,
-supports deterministic function types from `min` through `atangent2`, and
-keeps C++'s `0.0` fallback for unknown non-random function discriminants. The
-contract is
+feeding number targets, including direct explicit target-to-source and public
+`updateDataBinds(true)` target-to-source scheduling for those function-token
+formulas. The graph consumes the binary-layer formula output descriptors so
+function argument counts match C++ shunting-yard resolution, supports
+deterministic function types from `min` through `atangent2`, keeps C++'s `0.0`
+fallback for unknown non-random function discriminants, and runs the same
+function-token formula conversion before source writes and immediate
+source-to-target reapplication. The contract is
 `docs/prototypes/data-binding-graph-formula-functions-runtime-contract.md`.
 Formula randoms, formula parent-source binding and dirt propagation,
-asset/artboard/view-model/list formula sources, reverse conversion for these
-new function-token shapes, target-to-source queues,
+asset/artboard/view-model/list formula sources, main-`ToTarget | TwoWay`
+target-dirty scheduling for these new function-token shapes, formula converter
+groups beyond the admitted input/value/operation public-update group,
 number-to-list/generated-list/scripted scheduling, broader
 `DataBindContainer` dirty queues,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard

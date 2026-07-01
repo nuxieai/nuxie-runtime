@@ -182,7 +182,7 @@ slice.
   values on file view model `0` into
   `RuntimeDefaultViewModelColorSourceHandle` and mutate graph-owned default
   color source nodes through that handle. Slash-path lookup remains
-  unresolved, and default handles for other source kinds remain follow-up
+  unresolved, and default handles beyond number/boolean/string/color/enum remain follow-up
   slices. The C++ probe compares the handle write against the default color
   by-name mutation command. The contract is
   `docs/prototypes/data-binding-graph-default-color-source-handle-runtime-contract.md`.
@@ -191,6 +191,14 @@ slice.
   `propertyValue("choice")` fallback for the file-backed default instance, and
   the existing enum transition-condition consumer. The contract is
   `docs/prototypes/data-binding-graph-default-enum-name-runtime-contract.md`.
+- Default enum source handle slice:
+  `StateMachineInstance` can now resolve root enum view-model property names
+  on file view model `0` into `RuntimeDefaultViewModelEnumSourceHandle` and
+  mutate graph-owned default enum source nodes through that handle. Slash-path
+  lookup remains unresolved, and default handles for other source kinds remain
+  follow-up slices. The C++ probe compares the handle write against the
+  default enum by-name mutation command. The contract is
+  `docs/prototypes/data-binding-graph-default-enum-source-handle-runtime-contract.md`.
 - Default root symbol-list-index property-name mutation, covered by a C++ probe
   through raw `ViewModelInstance::propertyValue("symbol")` / property-index
   lookup for the file-backed default instance and the existing

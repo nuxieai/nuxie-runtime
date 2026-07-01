@@ -2344,9 +2344,8 @@ inherited base `reverseConvert` as target-to-source pass-through, mirrors the
 default trigger source, then reapplies `DataConverterTrigger::convert` so the
 bindable target receives the incremented trigger count. The contract is
 `docs/prototypes/data-binding-graph-trigger-public-update-target-to-source-runtime-contract.md`.
-Bindable trigger reset after later state-machine advancement, listener
-dispatch, trigger side effects, trigger converter groups, imported/owned
-contexts, broader update queues, relative/parent/nested lookup,
+Listener dispatch, trigger side effects, trigger converter groups,
+imported/owned contexts, broader update queues, relative/parent/nested lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 
@@ -2358,9 +2357,23 @@ writing the default trigger source, and the C++ probe compares exact
 source/target trigger binding rows after the explicit data-context actions.
 The contract is
 `docs/prototypes/data-binding-graph-trigger-converter-target-to-source-runtime-contract.md`.
-Bindable trigger reset after later state-machine advancement, listener
-dispatch, trigger side effects, trigger converter groups, imported/owned
-contexts, broader update queues, relative/parent/nested lookup,
+Trigger source reset reapplication after later state-machine advancement,
+listener dispatch, trigger side effects, trigger converter groups,
+imported/owned contexts, broader update queues, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
+
+Current #12 update: trigger source reset now reapplies to default-context
+trigger bindable targets on the following state-machine advance. Explicit
+`advancedDataContext()` resets bound `ViewModelInstanceTrigger.propertyValue`
+sources to `0`; Rust now marks changed trigger sources for source-to-target
+reapplication, clears stale reset reapply state when an explicit target edit is
+consumed first, and uses C++'s non-main converter direction for
+`DataConverterTrigger` main-`ToSource | TwoWay` source-to-target application so
+reset source `0` writes target `0`. The contract is
+`docs/prototypes/data-binding-graph-trigger-source-reset-reapply-runtime-contract.md`.
+Listener dispatch, trigger side effects, trigger converter groups,
+imported/owned contexts, broader update queues, relative/parent/nested lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 

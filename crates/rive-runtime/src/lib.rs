@@ -9207,8 +9207,10 @@ impl RuntimeDataBindGraph {
             let RuntimeDataBindGraphValue::Trigger(value) = &mut source.value else {
                 continue;
             };
+            let mut source_reset_changed = false;
             if *value != 0 {
                 changed = true;
+                source_reset_changed = true;
             }
             *value = 0;
             if default_context_bound {
@@ -9218,8 +9220,12 @@ impl RuntimeDataBindGraph {
                 };
                 if *default_value != 0 {
                     changed = true;
+                    source_reset_changed = true;
                 }
                 *default_value = 0;
+            }
+            if source_reset_changed && source.applies_source_to_target() {
+                source.source_to_target_dirty_after_target_to_source = true;
             }
         }
         if changed {
@@ -10018,6 +10024,7 @@ impl RuntimeDataBindGraph {
                 continue;
             }
             source.target_to_source_dirty = false;
+            source.source_to_target_dirty_after_target_to_source = false;
             let Some(value) = triggers
                 .iter()
                 .find(|trigger| trigger.global_id == global_id)
@@ -10567,6 +10574,12 @@ impl RuntimeDataBindGraphSourceNode {
                     .reverse_convert_value(converter, &self.value)
             }
             Some(converter @ RuntimeDataBindGraphConverter::Interpolator { .. })
+                if self.is_main_to_source() =>
+            {
+                self.converter_state
+                    .reverse_convert_value(converter, &self.value)
+            }
+            Some(converter @ RuntimeDataBindGraphConverter::TriggerIncrement)
                 if self.is_main_to_source() =>
             {
                 self.converter_state

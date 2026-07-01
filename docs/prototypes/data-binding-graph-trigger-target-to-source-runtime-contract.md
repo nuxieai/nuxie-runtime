@@ -36,6 +36,9 @@ sources.
 - Direct `DataConverterTrigger` main-to-source conversion is covered
   separately by
   `docs/prototypes/data-binding-graph-trigger-converter-target-to-source-runtime-contract.md`.
+- Trigger source reset reapplication after later state-machine advancement is
+  covered separately by
+  `docs/prototypes/data-binding-graph-trigger-source-reset-reapply-runtime-contract.md`.
 - Imported and owned view-model contexts.
 - Trigger listener dispatch, callback/event side effects, and listener-owned
   data binding.

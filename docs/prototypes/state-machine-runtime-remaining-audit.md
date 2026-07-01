@@ -179,6 +179,10 @@ slice.
   trigger binds now participate in explicit `advanceDataContext()` for direct
   `DataConverterTrigger`; C++ main-to-source conversion increments the edited
   bindable target before writing the default trigger source.
+- Trigger source reset reapply slice: trigger source reset from
+  `advanceDataContext()` now reapplies reset value `0` to direct and direct
+  `DataConverterTrigger` bindable targets on the following state-machine
+  advance.
 - First cross-type graph-owned converter execution slice:
   `DataConverterToNumber` forward conversion for default-context boolean
   sources feeding number targets, covered by a C++ probe through an existing
@@ -780,6 +784,13 @@ slice.
   trigger bind. Rust mirrors C++ main-to-source conversion of the edited
   bindable target before writing the default trigger source, with trigger
   binding reports compared after the explicit data-context actions.
+- Trigger source reset reapply slice:
+  `advanceDataContext()` trigger source reset now reapplies to default-context
+  trigger bindable targets on the following state-machine advance. Rust marks
+  changed trigger sources for source-to-target reapplication, clears stale
+  reset reapply state when a later explicit target edit is consumed first, and
+  mirrors C++'s non-main converter direction for direct `DataConverterTrigger`
+  main-`ToSource | TwoWay` source-to-target application.
 - Boolean public-update target-to-source slice:
   direct boolean and `DataConverterBooleanNegate` now cover public
   `updateDataBinds(true)` target-to-source behavior for default-context
@@ -1334,7 +1345,7 @@ slice.
   group, concrete operation pass-through, non-scripting scripted converter
   pass-through, direct boolean/BooleanNegate public-update target-to-source,
   direct trigger public-update target-to-source, direct trigger converter
-  explicit target-to-source,
+  explicit target-to-source, trigger source reset reapply,
   first direct number/boolean/string/color/enum/asset/artboard/symbol-list-index/trigger/view-model
   target-to-source propagation,
   first artboard list-consumer immediate bind report,

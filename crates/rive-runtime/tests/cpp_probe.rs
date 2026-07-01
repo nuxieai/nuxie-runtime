@@ -24149,12 +24149,27 @@ fn state_machine_default_viewmodel_trigger_target_to_source_matches_cpp_probe() 
         rust_reports.len(),
         "{label} state-machine report count mismatch"
     );
-    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+    for (step, (cpp_state_machine, (advanced, rust_state_machine))) in cpp_artboard
         .runtime_state_machine_advances
         .iter()
         .zip(&rust_reports)
+        .enumerate()
     {
-        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+        let step_label = format!("{label} action {step}");
+        compare_state_machine_advance(
+            cpp_state_machine,
+            rust_state_machine,
+            *advanced,
+            &step_label,
+        );
+        if step > 0 {
+            compare_state_machine_trigger_binding(
+                cpp_state_machine,
+                rust_state_machine,
+                0,
+                &step_label,
+            );
+        }
     }
     compare_cpp_runtime_update(&cpp, &rust, &report, label);
 }
@@ -24255,7 +24270,7 @@ fn state_machine_default_viewmodel_trigger_converter_target_to_source_matches_cp
             *advanced,
             &step_label,
         );
-        if (1..=2).contains(&step) {
+        if (1..=3).contains(&step) {
             compare_state_machine_trigger_binding(
                 cpp_state_machine,
                 rust_state_machine,

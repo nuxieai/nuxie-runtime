@@ -47,6 +47,10 @@ slice.
   data-bind-index mutation path resolves the selected source path and updates
   all same-path default-context boolean source nodes, covered by a C++ probe
   with a neighboring ordinary direct `ToTarget` boolean bind.
+- Default string source mutation same-path observer propagation: the
+  data-bind-index mutation path resolves the selected source path and updates
+  all same-path default-context string source nodes, covered by a C++ probe
+  with a neighboring ordinary direct `ToTarget` string bind.
 - Default root number property-name mutation, covered by a C++ probe through
   `ViewModelInstanceRuntime::propertyNumber("amount")->value(...)` with raw
   `propertyValue("amount")` fallback for the file-backed default instance, and
@@ -798,6 +802,12 @@ slice.
   cloned edge, so a neighboring ordinary direct `ToTarget` boolean bind
   reports the updated source and applies the updated target on the next
   state-machine advance.
+- String source-mutation same-path observer slice:
+  default-context string source mutation by state-machine data-bind index now
+  mutates every same-path string source node rather than only the selected
+  cloned edge, so a neighboring ordinary direct `ToTarget` string bind reports
+  the updated source bytes and applies the updated target on the next
+  state-machine advance.
 - Range-mapper group target-to-source slice: the first direct
   `DataConverterGroup` containing a `DataConverterRangeMapper` now covers a
   main-`ToSource | TwoWay` number bind. The group runs
@@ -1499,6 +1509,7 @@ slice.
   pass-through, direct boolean/BooleanNegate public-update target-to-source,
   default number source-mutation same-path observer propagation,
   default boolean source-mutation same-path observer propagation,
+  default string source-mutation same-path observer propagation,
   boolean public-update observer preservation, string public-update observer
   preservation, color public-update observer preservation, enum public-update
   observer preservation, asset public-update observer preservation, artboard

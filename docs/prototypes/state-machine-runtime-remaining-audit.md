@@ -812,6 +812,14 @@ slice.
   `ViewModelInstanceRuntime::propertyColor("child/tint")->value(...)`. The
   contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-nested-color-name-path-runtime-contract.md`.
+- Owned generated nested enum name-path slice:
+  generated owned view-model children can store direct enum value indexes, and
+  `RuntimeOwnedViewModelInstance::set_enum_by_property_name_path` can mutate
+  paths such as `child/choice` before binding. The graph resolves matching
+  nested enum source paths for owned contexts, and the C++ probe calls
+  `ViewModelInstanceRuntime::propertyEnum("child/choice")->valueIndex(...)`.
+  The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-nested-enum-name-path-runtime-contract.md`.
 - First `BindablePropertyList.propertyValue` target-to-source slice:
   state-machine list targets can be mutated by data-bind index, and explicit
   `advancedDataContext()` plus public `updateDataBinds(true)` consume the
@@ -841,8 +849,9 @@ slice.
   read paths: imported-instance mutation beyond state-machine-local view-model
   pointer relink overlays, property-name APIs beyond imported view-model
   pointer sources, owned generated view-model pointer paths, owned root scalar
-  properties, and owned generated nested number/boolean/string/color paths, and
-  stable public handles that update or expose cached `propertyValue` indexes.
+  properties, and owned generated nested number/boolean/string/color/enum
+  paths, and stable public handles that update or expose cached
+  `propertyValue` indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
 - Live view-model APIs and data-binding propagation governed by

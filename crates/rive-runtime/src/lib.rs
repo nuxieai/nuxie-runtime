@@ -3251,6 +3251,7 @@ impl RuntimeDataBindGraphValue {
                     | Self::Boolean(_)
                     | Self::String(_)
                     | Self::Color(_)
+                    | Self::Enum(_)
                     | Self::ViewModel(_)
             )
         {
@@ -3293,9 +3294,15 @@ impl RuntimeDataBindGraphValue {
                     .color_value_by_property_path(&property_path)
                     .map(Self::Color)
             }
-            Self::Enum(_) => context
-                .enum_value_by_property_index(usize::try_from(path[1]).ok()?)
-                .map(Self::Enum),
+            Self::Enum(_) => {
+                let property_path = path[1..]
+                    .iter()
+                    .map(|property_index| usize::try_from(*property_index).ok())
+                    .collect::<Option<Vec<_>>>()?;
+                context
+                    .enum_value_by_property_path(&property_path)
+                    .map(Self::Enum)
+            }
             Self::SymbolListIndex(_) => context
                 .symbol_list_index_value_by_property_index(usize::try_from(path[1]).ok()?)
                 .map(Self::SymbolListIndex),
@@ -3472,6 +3479,7 @@ struct RuntimeOwnedViewModelViewModel {
     booleans: Vec<RuntimeOwnedViewModelBoolean>,
     strings: Vec<RuntimeOwnedViewModelString>,
     colors: Vec<RuntimeOwnedViewModelColor>,
+    enums: Vec<RuntimeOwnedViewModelEnum>,
     view_model_instance_ids: Vec<u32>,
     children: Vec<RuntimeOwnedViewModelViewModel>,
     imported_children: BTreeMap<u32, Vec<RuntimeOwnedViewModelViewModel>>,
@@ -3525,6 +3533,13 @@ impl RuntimeOwnedViewModelViewModel {
             .iter()
             .find(|color| color.property_index == property_index)
             .map(|color| color.value)
+    }
+
+    fn enum_value_by_property_index(&self, property_index: usize) -> Option<u64> {
+        self.enums
+            .iter()
+            .find(|enum_value| enum_value.property_index == property_index)
+            .map(|enum_value| enum_value.value)
     }
 
     fn set_number_by_property_name(&mut self, property_name: &str, value: f32) -> bool {
@@ -3596,6 +3611,24 @@ impl RuntimeOwnedViewModelViewModel {
             return false;
         }
         color.value = value;
+        true
+    }
+
+    fn set_enum_by_property_name(&mut self, property_name: &str, value: u64) -> bool {
+        let Some(property_index) = self.property_index_by_name(property_name) else {
+            return false;
+        };
+        let Some(enum_value) = self
+            .enums
+            .iter_mut()
+            .find(|enum_value| enum_value.property_index == property_index)
+        else {
+            return false;
+        };
+        if enum_value.value == value {
+            return false;
+        }
+        enum_value.value = value;
         true
     }
 }
@@ -3728,6 +3761,33 @@ fn runtime_owned_view_model_colors(
                             value: 0,
                         },
                     )
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn runtime_owned_view_model_enums(
+    file: &RuntimeFile,
+    view_model_index: usize,
+) -> Vec<RuntimeOwnedViewModelEnum> {
+    file.view_model(view_model_index)
+        .map(|view_model| {
+            view_model
+                .properties
+                .into_iter()
+                .enumerate()
+                .filter_map(|(property_index, property)| {
+                    matches!(
+                        property.type_name,
+                        "ViewModelPropertyEnum"
+                            | "ViewModelPropertyEnumCustom"
+                            | "ViewModelPropertyEnumSystem"
+                    )
+                    .then_some(RuntimeOwnedViewModelEnum {
+                        property_index,
+                        value: 0,
+                    })
                 })
                 .collect()
         })
@@ -3955,6 +4015,9 @@ fn runtime_owned_view_model_property_children(
                 colors: referenced_view_model_index
                     .map(|view_model_index| runtime_owned_view_model_colors(file, view_model_index))
                     .unwrap_or_default(),
+                enums: referenced_view_model_index
+                    .map(|view_model_index| runtime_owned_view_model_enums(file, view_model_index))
+                    .unwrap_or_default(),
                 view_model_instance_ids,
                 children,
                 imported_children,
@@ -4095,6 +4158,11 @@ impl RuntimeOwnedViewModelInstance {
                         colors: referenced_view_model_index
                             .map(|view_model_index| {
                                 runtime_owned_view_model_colors(file, view_model_index)
+                            })
+                            .unwrap_or_default(),
+                        enums: referenced_view_model_index
+                            .map(|view_model_index| {
+                                runtime_owned_view_model_enums(file, view_model_index)
                             })
                             .unwrap_or_default(),
                         view_model_instance_ids,
@@ -4363,6 +4431,33 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         };
         self.set_enum_by_property_index(property_index, value)
+    }
+
+    pub fn set_enum_by_property_name_path(&mut self, property_path: &str, value: u64) -> bool {
+        let property_path = property_path.split('/').collect::<Vec<_>>();
+        if property_path.is_empty() || property_path.iter().any(|segment| segment.is_empty()) {
+            return false;
+        }
+        self.set_enum_by_property_names(&property_path, value)
+    }
+
+    pub fn set_enum_by_property_names(&mut self, property_path: &[&str], value: u64) -> bool {
+        if property_path.len() == 1 {
+            return self.set_enum_by_property_name(property_path[0], value);
+        }
+        let Some((enum_name, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_names_mut(view_model_path) else {
+            return false;
+        };
+        if !matches!(
+            view_model.value,
+            RuntimeViewModelPointer::OwnedGenerated { .. }
+        ) {
+            return false;
+        }
+        view_model.set_enum_by_property_name(enum_name, value)
     }
 
     pub fn set_symbol_list_index_by_property_index(
@@ -4674,6 +4769,21 @@ impl RuntimeOwnedViewModelInstance {
             .iter()
             .find(|enum_value| enum_value.property_index == property_index)
             .map(|enum_value| enum_value.value)
+    }
+
+    fn enum_value_by_property_path(&self, property_path: &[usize]) -> Option<u64> {
+        if property_path.len() == 1 {
+            return self.enum_value_by_property_index(property_path[0]);
+        }
+        let (property_index, view_model_path) = property_path.split_last()?;
+        let view_model = self.view_model_by_property_path(view_model_path)?;
+        if !matches!(
+            view_model.value,
+            RuntimeViewModelPointer::OwnedGenerated { .. }
+        ) {
+            return None;
+        }
+        view_model.enum_value_by_property_index(*property_index)
     }
 
     fn symbol_list_index_value_by_property_index(&self, property_index: usize) -> Option<u64> {

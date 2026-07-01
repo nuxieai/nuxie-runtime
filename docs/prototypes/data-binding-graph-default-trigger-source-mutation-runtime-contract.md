@@ -3,21 +3,22 @@
 ## Scope
 
 This slice extends graph-owned source mutation for roadmap item `#12` to
-default trigger sources.
+default trigger sources and same-path observer propagation.
 
 It is limited to a default-context `DataBindContext` whose source resolves to a
 `ViewModelInstanceTrigger` and whose target is already represented by the finite
 default `propertyValue` graph edge set. The mutation updates the
-`RuntimeDataBindGraph` source node with a raw trigger count, marks the default
-edge dirty when the default view-model context is bound, and lets the existing
-graph apply path copy the source value to the cloned bindable target before
+`RuntimeDataBindGraph` source nodes with a raw trigger count, marks the default
+edges dirty when the default view-model context is bound, and lets the existing
+graph apply path copy the source value to cloned bindable targets before
 state-machine layer evaluation.
 
 ## Runtime Rule
 
 `StateMachineInstance::set_default_view_model_trigger_source_for_data_bind`
-mutates only a trigger graph source node selected by state-machine data-bind
-index.
+resolves the trigger graph source path selected by state-machine data-bind
+index and mutates every bound default-context trigger source node with the same
+path.
 
 The C++ probe action
 `--runtime-set-default-view-model-source-trigger <stateMachineIndex> <dataBindIndex> <value>`
@@ -33,11 +34,12 @@ semantics.
 ## Out Of Scope
 
 This slice does not add external view-model contexts, public source handles,
-non-trigger source mutation, trigger callback targets, listener-owned trigger
-dispatch, `ListenerViewModelChange`, callback-driven data binding,
-target-to-source propagation, converter execution, observer/polling queue
-parity, pending add/remove handling, relative paths, parent paths, nested paths,
-or nested artboard data-context propagation.
+remaining non-trigger source mutation observer families, trigger callback
+targets, listener-owned trigger dispatch, `ListenerViewModelChange`,
+callback-driven data binding, target-to-source propagation, converter
+execution, full dirty-list scheduler parity, pending add/remove handling,
+re-entry protection, relative paths, parent paths, nested paths, or nested
+artboard data-context propagation.
 
 Existing `StateMachineFireTrigger` and explicit data-context trigger reset
 behavior remain unchanged.
@@ -50,9 +52,12 @@ propagation.
 
 - The C++ probe can mutate a default `ViewModelInstanceTrigger` source by
   state-machine data-bind index.
-- Rust mutates the matching `RuntimeDataBindGraph` source node rather than a
-  cloned bindable target.
+- Rust mutates matching same-path `RuntimeDataBindGraph` source nodes rather
+  than cloned bindable targets.
 - Mutating after `bind_default_view_model_context` dirties the graph so the next
   state-machine advance observes the changed raw trigger count.
+- A neighboring ordinary direct `ToTarget` trigger bind with the same source
+  path reports the updated source and applies the updated target on the next
+  state-machine advance.
 - A C++ probe-backed test verifies the changed trigger through an existing
   transition-condition consumer.

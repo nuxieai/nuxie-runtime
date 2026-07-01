@@ -72,6 +72,10 @@ slice.
   data-bind-index mutation path resolves the selected source path and updates
   all same-path default-context artboard source nodes, covered by a C++ probe
   with a neighboring ordinary direct `ToTarget` artboard bind.
+- Default trigger source mutation same-path observer propagation: the
+  data-bind-index mutation path resolves the selected source path and updates
+  all same-path default-context trigger source nodes, covered by a C++ probe
+  with a neighboring ordinary direct `ToTarget` trigger bind.
 - Default root number property-name mutation, covered by a C++ probe through
   `ViewModelInstanceRuntime::propertyNumber("amount")->value(...)` with raw
   `propertyValue("amount")` fallback for the file-backed default instance, and
@@ -859,6 +863,12 @@ slice.
   selected cloned edge, so a neighboring ordinary direct `ToTarget` artboard
   bind reports the updated source and applies the updated target on the next
   state-machine advance.
+- Trigger source-mutation same-path observer slice:
+  default-context trigger source mutation by state-machine data-bind index now
+  mutates every same-path trigger source node rather than only the selected
+  cloned edge, so a neighboring ordinary direct `ToTarget` trigger bind
+  reports the updated source and applies the updated target on the next
+  state-machine advance.
 - Range-mapper group target-to-source slice: the first direct
   `DataConverterGroup` containing a `DataConverterRangeMapper` now covers a
   main-`ToSource | TwoWay` number bind. The group runs
@@ -1566,6 +1576,7 @@ slice.
   default symbol-list-index source-mutation same-path observer propagation,
   default asset source-mutation same-path observer propagation,
   default artboard source-mutation same-path observer propagation,
+  default trigger source-mutation same-path observer propagation,
   boolean public-update observer preservation, string public-update observer
   preservation, color public-update observer preservation, enum public-update
   observer preservation, asset public-update observer preservation, artboard

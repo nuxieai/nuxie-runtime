@@ -2178,18 +2178,15 @@ slice.
   number/symbol-list-index-to-number conversion plus graph-represented
   non-number fallbacks and the first operation-value-to-formula public-update
   group, concrete operation pass-through, non-scripting scripted converter
-  pass-through,
-  first direct number/boolean/string/color/enum/asset/artboard/symbol-list-index/trigger/view-model
-  target-to-source propagation,
-  first artboard list-consumer immediate bind, direct-update, and post-bind
-  advance target-count reports, data-binding update queues, full artboard
-  component-list item instancing, map-rule-driven child creation, list
-  layout/virtualization, remaining generated-list reverse converters, admitted
-  live relative/name lookup with file pointers, remaining converter name paths
-  beyond the direct and grouped `DataConverterOperationViewModel` unsupported
-  boundaries, relative paths, parent paths, and nested source kinds beyond the
-  default-context number, boolean, string, color, enum, symbol-list-index,
-  asset, artboard, trigger, list, and view-model slices.
+  pass-through, broader dirty-list target scheduling, data-binding update
+  queues, full artboard component-list item instancing, map-rule-driven child
+  creation, list layout/virtualization, remaining generated-list reverse
+  converters, admitted live relative/name lookup with file pointers, remaining
+  converter name paths beyond the direct and grouped
+  `DataConverterOperationViewModel` unsupported boundaries, relative paths,
+  parent paths, and nested source kinds beyond the default-context number,
+  boolean, string, color, enum, symbol-list-index, asset, artboard, trigger,
+  list, and view-model slices.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener
   actions.

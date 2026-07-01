@@ -3642,6 +3642,21 @@ handles, reverse propagation, broader update queues, relative/parent/nested
 lookup, listener-owned data binding, and nested artboard propagation remain
 follow-up `#12` slices.
 
+Current #12 update: imported view-model list sources now have the nested
+property-name path boundary pinned. The C++ probe path
+`--runtime-set-view-model-instance-source-list-by-name` uses
+`ViewModelInstanceRuntime::propertyList(path)`, but the current C++ probe
+crashes when asked to mutate the nested slash path `child/items` in the
+synthetic imported-context fixture. Rust mirrors the safe boundary by making
+`RuntimeImportedViewModelInstanceContext::
+set_list_item_count_by_property_name_path` return `false` for nested slash
+paths and by keeping the original source item count. The contract is
+`docs/prototypes/data-binding-graph-imported-viewmodel-nested-list-name-path-unsupported-runtime-contract.md`.
+Nested property-name paths for view-model sources, stable public object
+handles, reverse propagation, broader update queues, relative/parent/nested
+lookup, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
+
 Current #12 update: imported view-model boolean sources now match the shared
 scalar mutation pattern. `RuntimeImportedViewModelInstanceContext` records
 boolean source overrides by resolved data-bind source path; mutating a

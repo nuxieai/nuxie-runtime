@@ -1502,6 +1502,14 @@ slice.
   properties. The C++ probe proves the bound state machine keeps the original
   trigger source. The contract is
   `docs/prototypes/data-binding-graph-imported-viewmodel-nested-trigger-name-path-unsupported-runtime-contract.md`.
+- Imported nested list property-name path boundary:
+  `RuntimeImportedViewModelInstanceContext::
+  set_list_item_count_by_property_name_path` returns `false` for a
+  slash-separated path such as `child/items`, matching the current safe
+  boundary after the C++ nested list-by-name mutation probe crashes for the
+  synthetic imported-context fixture. The C++ baseline still proves the bound
+  state machine observes the original nested list source. The contract is
+  `docs/prototypes/data-binding-graph-imported-viewmodel-nested-list-name-path-unsupported-runtime-contract.md`.
 - Shared imported boolean source mutation slice:
   `RuntimeImportedViewModelInstanceContext` now also owns boolean source
   overrides for one file-backed imported view-model instance. Mutating a

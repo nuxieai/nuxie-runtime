@@ -3181,6 +3181,12 @@ fn synthetic_state_machine_default_nested_viewmodel_list_condition(file_id: u64)
     synthetic_state_machine_owned_nested_viewmodel_list_condition_with_imported_child(file_id, 3, 0)
 }
 
+fn synthetic_state_machine_imported_nested_viewmodel_list_shared_mutation(file_id: u64) -> Vec<u8> {
+    synthetic_state_machine_owned_nested_viewmodel_list_condition_with_imported_child_and_state_machines(
+        file_id, 3, 0, 2,
+    )
+}
+
 fn synthetic_state_machine_owned_imported_intermediate_list_condition(file_id: u64) -> Vec<u8> {
     synthetic_state_machine_owned_nested_viewmodel_list_condition_with_imported_child(file_id, 3, 1)
 }
@@ -3189,6 +3195,20 @@ fn synthetic_state_machine_owned_nested_viewmodel_list_condition_with_imported_c
     file_id: u64,
     imported_child_item_count: usize,
     root_child_value: u64,
+) -> Vec<u8> {
+    synthetic_state_machine_owned_nested_viewmodel_list_condition_with_imported_child_and_state_machines(
+        file_id,
+        imported_child_item_count,
+        root_child_value,
+        1,
+    )
+}
+
+fn synthetic_state_machine_owned_nested_viewmodel_list_condition_with_imported_child_and_state_machines(
+    file_id: u64,
+    imported_child_item_count: usize,
+    root_child_value: u64,
+    state_machine_count: usize,
 ) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "ViewModel", |bytes| {
@@ -3244,18 +3264,20 @@ fn synthetic_state_machine_owned_nested_viewmodel_list_condition_with_imported_c
         });
         push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
         push_animation_for_single_node(bytes, 1, 2.0, 12.0);
-        push_object_with_properties(bytes, "StateMachine", |_| {});
-        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
-        push_object_with_properties(bytes, "AnyState", |_| {});
-        push_object_with_properties(bytes, "EntryState", |_| {});
-        push_object_with_properties(bytes, "StateTransition", |bytes| {
-            push_uint_property(bytes, "StateTransition", "stateToId", 2);
-        });
-        push_object_with_properties(bytes, "AnimationState", |bytes| {
-            push_uint_property(bytes, "AnimationState", "animationId", 0);
-        });
-        push_bindable_list_data_bind_context_with_flags(bytes, &[0, 0, 0], None, 0);
-        push_object_with_properties(bytes, "ExitState", |_| {});
+        for _ in 0..state_machine_count {
+            push_object_with_properties(bytes, "StateMachine", |_| {});
+            push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+            push_object_with_properties(bytes, "AnyState", |_| {});
+            push_object_with_properties(bytes, "EntryState", |_| {});
+            push_object_with_properties(bytes, "StateTransition", |bytes| {
+                push_uint_property(bytes, "StateTransition", "stateToId", 2);
+            });
+            push_object_with_properties(bytes, "AnimationState", |bytes| {
+                push_uint_property(bytes, "AnimationState", "animationId", 0);
+            });
+            push_bindable_list_data_bind_context_with_flags(bytes, &[0, 0, 0], None, 0);
+            push_object_with_properties(bytes, "ExitState", |_| {});
+        }
     })
 }
 
@@ -35270,6 +35292,102 @@ fn state_machine_imported_viewmodel_list_source_name_mutation_is_shared_across_s
             rust_state_machine.default_view_model_list_source_item_count_for_data_bind(0),
             Some(item_count),
             "{label} Rust imported list source mismatch"
+        );
+    }
+}
+
+#[test]
+fn state_machine_imported_viewmodel_nested_list_source_name_path_mutation_is_shared_across_state_machines_matches_cpp_probe()
+ {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_imported_viewmodel_nested_list_source_name_path_mutation_shared_cpp.riv";
+    let bytes = synthetic_state_machine_imported_nested_viewmodel_list_shared_mutation(8697);
+    let property_path = "child/items";
+    let initial_item_count = 3_usize;
+    let item_count = 0_usize;
+    let args = [
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "1".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine-data-context".to_owned(),
+        "1".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "1".to_owned(),
+        "0".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine_a = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing first Rust state-machine instance for {label}"));
+    let mut state_machine_b = rust
+        .state_machine_instance(1)
+        .unwrap_or_else(|| panic!("missing second Rust state-machine instance for {label}"));
+    let mut imported_context = RuntimeImportedViewModelInstanceContext::new(&runtime, 0, 0)
+        .unwrap_or_else(|| panic!("missing imported view-model context for {label}"));
+
+    assert!(
+        !imported_context.set_list_item_count_by_property_name_path(
+            &runtime,
+            property_path,
+            item_count
+        ),
+        "{label} unexpectedly mutated imported nested list source by property name path"
+    );
+    assert!(
+        state_machine_a.bind_imported_view_model_context(&runtime, &imported_context),
+        "{label} failed to bind first imported view-model context"
+    );
+    assert!(
+        state_machine_b.bind_imported_view_model_context(&runtime, &imported_context),
+        "{label} failed to bind second imported view-model context"
+    );
+
+    let mut rust_reports = Vec::new();
+    assert!(
+        state_machine_b.advance_data_context(),
+        "{label} failed to advance observing data context"
+    );
+    rust_reports.push((false, state_machine_b.clone()));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine_b, 0.0),
+        state_machine_b.clone(),
+    ));
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+    {
+        assert_eq!(
+            cpp_state_machine.state_machine_index, 1,
+            "{label} state-machine report index mismatch"
+        );
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+        compare_state_machine_list_binding(cpp_state_machine, rust_state_machine, 0, label);
+        assert_eq!(
+            rust_state_machine.default_view_model_list_source_item_count_for_data_bind(0),
+            Some(initial_item_count),
+            "{label} imported nested list source mismatch"
         );
     }
 }

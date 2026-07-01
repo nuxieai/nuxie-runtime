@@ -4835,9 +4835,6 @@ impl RuntimeDataBindGraph {
                 continue;
             }
             source.target_to_source_dirty = false;
-            if !source.bound || !source.supports_direct_string_target_to_source() {
-                continue;
-            }
             let Some(value) = strings
                 .iter()
                 .find(|string| string.global_id == global_id)
@@ -4845,18 +4842,33 @@ impl RuntimeDataBindGraph {
             else {
                 continue;
             };
+            let Some(value) = source.string_target_to_source_value(value) else {
+                continue;
+            };
+            if source.is_main_to_source()
+                && matches!(
+                    source.converter.as_ref(),
+                    Some(RuntimeDataBindGraphConverter::ToString { .. })
+                )
+            {
+                source.source_to_target_dirty_after_immediate = true;
+                changed = true;
+            }
+            let RuntimeDataBindGraphValue::String(value) = value else {
+                continue;
+            };
             let RuntimeDataBindGraphValue::String(source_value) = &mut source.value else {
                 continue;
             };
-            if source_value.as_slice() != value {
-                *source_value = value.to_vec();
+            if source_value.as_slice() != value.as_slice() {
+                *source_value = value.clone();
                 changed = true;
             }
             let RuntimeDataBindGraphValue::String(default_value) = &mut source.default_value else {
                 continue;
             };
-            if default_value.as_slice() != value {
-                *default_value = value.to_vec();
+            if default_value.as_slice() != value.as_slice() {
+                *default_value = value;
                 changed = true;
             }
         }
@@ -5307,6 +5319,9 @@ impl RuntimeDataBindGraph {
                 && source.is_main_to_source()
                 && !source.source_to_target_dirty_after_target_to_source
             {
+                if source.source_to_target_dirty_after_immediate {
+                    skipped_dirty_binding = true;
+                }
                 continue;
             }
             if matches!(phase, RuntimeDataBindGraphApplyPhase::PublicUpdate)
@@ -5466,12 +5481,6 @@ impl RuntimeDataBindGraphSourceNode {
         Some(value)
     }
 
-    fn supports_direct_string_target_to_source(&self) -> bool {
-        self.applies_target_to_source()
-            && self.converter.is_none()
-            && matches!(self.value, RuntimeDataBindGraphValue::String(_))
-    }
-
     fn string_target_to_source_value(&mut self, value: &[u8]) -> Option<RuntimeDataBindGraphValue> {
         if !self.bound || !self.applies_target_to_source() {
             return None;
@@ -5611,6 +5620,12 @@ impl RuntimeDataBindGraphSourceNode {
         match self.converter.as_ref() {
             None => Some(self.value.clone()),
             Some(converter @ RuntimeDataBindGraphConverter::ListToLength)
+                if self.is_main_to_source() =>
+            {
+                self.converter_state
+                    .reverse_convert_value(converter, &self.value)
+            }
+            Some(converter @ RuntimeDataBindGraphConverter::ToString { .. })
                 if self.is_main_to_source() =>
             {
                 self.converter_state
@@ -6338,7 +6353,9 @@ fn runtime_data_bind_graph_reverse_convert_value(
             RuntimeDataBindGraphConverter::ToString { .. },
             RuntimeDataBindGraphValue::String(value),
         ) => Some(RuntimeDataBindGraphValue::String(value.clone())),
-        (RuntimeDataBindGraphConverter::ToString { .. }, _) => None,
+        (RuntimeDataBindGraphConverter::ToString { .. }, _) => {
+            Some(RuntimeDataBindGraphValue::String(Vec::new()))
+        }
         (
             RuntimeDataBindGraphConverter::StringTrim { .. },
             RuntimeDataBindGraphValue::String(value),

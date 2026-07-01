@@ -312,6 +312,13 @@ slice.
   feeding main-`ToTarget | TwoWay` string targets. Non-string sources remain
   unchanged after base reverse conversion, string sources receive the edited
   value, and the public update reapplies source-to-target in the same call.
+- Direct ToString non-string main-to-source target-to-source slice: direct
+  `DataConverterToString` now covers main-`ToSource | TwoWay` string targets
+  backed by number, boolean, trigger, symbol-list-index, color, and enum
+  sources. The edited string target does not write the non-string source,
+  explicit data-context advancement preserves the edit, and the next normal
+  state-machine advance refreshes the target to C++'s empty-string fallback
+  through base reverse conversion.
 - String-trim main-to-target dirty slice: direct `DataConverterStringTrim`
   binds now follow C++ state-machine target-dirty behavior for
   main-`ToTarget | TwoWay` string targets, preserving the manual target edit

@@ -1205,10 +1205,23 @@ identity for the edited string target; non-string sources remain unchanged,
 string sources receive the edited string, and the same public update reapplies
 source-to-target through direct `DataConverterToString`. The contract is
 `docs/prototypes/data-binding-graph-to-string-public-update-target-to-source-runtime-contract.md`.
-String converter families and groups, main-`ToSource | TwoWay` behavior for
-`DataConverterToString`, broader dirty/update queues, relative/parent/nested
-lookup, listener-owned data binding, and nested artboard propagation remain
-follow-up `#12` slices.
+String-source main-`ToSource | TwoWay` behavior for `DataConverterToString`,
+string converter families and groups, broader dirty/update queues,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
+
+Current #12 update: direct `DataConverterToString` now also covers
+main-`ToSource | TwoWay` target-to-source behavior for default-context string
+targets backed by number, boolean, trigger, symbol-list-index, color, and enum
+sources. C++ preserves the edited string target through explicit data-context
+advancement because the reverse value does not match the non-string source,
+then the next normal state-machine advance refreshes the target through base
+`reverseConvert`, yielding the default empty string. The contract is
+`docs/prototypes/data-binding-graph-to-string-non-string-main-to-source-target-to-source-runtime-contract.md`.
+String-source main-`ToSource | TwoWay` behavior for `DataConverterToString`,
+string converter families and groups, broader dirty/update queues,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
 
 Current #12 update: direct `DataConverterStringTrim` binds now cover the
 main-`ToTarget | TwoWay` state-machine target-dirty path for default-context

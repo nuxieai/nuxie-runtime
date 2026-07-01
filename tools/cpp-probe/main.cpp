@@ -139,6 +139,8 @@
 #include "rive/data_bind/converters/data_converter_trigger.hpp"
 #include "rive/data_bind/data_bind.hpp"
 #include "rive/data_bind_flags.hpp"
+#include "rive/data_bind/bindable_property_list.hpp"
+#include "rive/data_bind/data_bind_list_item_consumer.hpp"
 #include "rive/data_bind/bindable_property_artboard.hpp"
 #include "rive/data_bind/bindable_property_asset.hpp"
 #include "rive/data_bind/bindable_property_boolean.hpp"
@@ -160,6 +162,7 @@
 #include "rive/data_bind/data_values/data_value_boolean.hpp"
 #include "rive/data_bind/data_values/data_value_color.hpp"
 #include "rive/data_bind/data_values/data_value_enum.hpp"
+#include "rive/data_bind/data_values/data_value_list.hpp"
 #include "rive/data_bind/data_values/data_value_string.hpp"
 #include "rive/data_bind/data_values/data_value_symbol_list_index.hpp"
 #include "rive/data_bind/data_values/data_value_trigger.hpp"
@@ -474,6 +477,7 @@ struct ProbeOptions
     bool advanceArtboards = true;
     bool runtimeUpdate = false;
     bool instanceArtboards = false;
+    bool runtimeBindDefaultViewModelArtboardContext = false;
     std::vector<RuntimeDoubleMutation> runtimeDoubleMutations;
     std::vector<RuntimeCollapseMutation> runtimeCollapseMutations;
     std::vector<RuntimeArtboardSizeMutation> runtimeArtboardSizeMutations;
@@ -4977,6 +4981,27 @@ void write_artboard_data_bind(std::ostream& out,
         out, "resolvedDataBindContextSourcePathIds", dataBind);
     write_converter_group_items(out, dataBind->converter());
     write_converter_formula_tokens(out, dataBind->converter(), options);
+    auto mutableDataBind = const_cast<rive::DataBind*>(dataBind);
+    auto source = mutableDataBind->source();
+    out << ",\"sourceListSize\":";
+    if (source != nullptr && source->is<rive::ViewModelInstanceList>())
+    {
+        out << source->as<rive::ViewModelInstanceList>()->listItems().size();
+    }
+    else
+    {
+        out << "null";
+    }
+    out << ",\"sourceNumberValue\":";
+    if (source != nullptr && source->is<rive::ViewModelInstanceNumber>())
+    {
+        out << std::setprecision(9)
+            << source->as<rive::ViewModelInstanceNumber>()->propertyValue();
+    }
+    else
+    {
+        out << "null";
+    }
     out << ",\"targetCoreType\":";
     if (dataBind->target() == nullptr)
     {
@@ -4988,6 +5013,40 @@ void write_artboard_data_bind(std::ostream& out,
     }
     out << ",\"targetLocal\":";
     write_local_id_or_null(out, localIds, dataBind->target());
+    out << ",\"targetListSize\":";
+    if (dataBind->target() != nullptr &&
+        dataBind->target()->is<rive::ArtboardComponentList>())
+    {
+        out << dataBind->target()
+                   ->as<rive::ArtboardComponentList>()
+                   ->m_listItems.size();
+    }
+    else if (dataBind->target() != nullptr &&
+             dataBind->target()->is<rive::ViewModelInstanceList>())
+    {
+        out << dataBind->target()
+                   ->as<rive::ViewModelInstanceList>()
+                   ->listItems()
+                   .size();
+    }
+    else
+    {
+        out << "null";
+    }
+    out << ",\"targetShouldResetInstances\":";
+    if (dataBind->target() != nullptr &&
+        dataBind->target()->is<rive::ArtboardComponentList>())
+    {
+        out << (dataBind->target()
+                        ->as<rive::ArtboardComponentList>()
+                        ->m_shouldResetInstances
+                    ? "true"
+                    : "false");
+    }
+    else
+    {
+        out << "null";
+    }
     if (options.propertyValues && options.artboardPropertyValues)
     {
         write_registry_property_values(out, dataBind);
@@ -6974,6 +7033,19 @@ void write_artboard(std::ostream& out,
     apply_runtime_double_mutations(objects, options);
     apply_runtime_collapse_mutations(objects, options);
     apply_runtime_artboard_size_mutations(artboard, options);
+    if (options.runtimeBindDefaultViewModelArtboardContext && file != nullptr)
+    {
+        auto viewModel =
+            file->viewModelCount() > 0 ? file->viewModel(0) : nullptr;
+        auto viewModelInstance =
+            viewModel != nullptr && viewModel->instanceCount() > 0
+                ? viewModel->instance(0)
+                : nullptr;
+        if (viewModelInstance != nullptr)
+        {
+            artboard->bindViewModelInstance(rive::ref_rcp(viewModelInstance));
+        }
+    }
     apply_runtime_animation_applications(instanceArtboard, options);
     auto runtimeAnimationAdvanceReports =
         apply_runtime_animation_advances(instanceArtboard, objects, options);
@@ -8510,6 +8582,13 @@ int main(int argc, const char* argv[])
             continue;
         }
 
+        if (is_arg(argv[i],
+                   "--runtime-bind-default-view-model-artboard-context"))
+        {
+            options.runtimeBindDefaultViewModelArtboardContext = true;
+            continue;
+        }
+
         if (is_arg(argv[i], "--runtime-set-double"))
         {
             if (i + 3 >= argc)
@@ -9562,6 +9641,7 @@ int main(int argc, const char* argv[])
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-viewmodel-default-state-machine-context stateMachineIndex viewModelIndex propertyIndex\n";
         std::cerr << "additional runtime flag: --runtime-set-default-view-model-source-symbol-list-index stateMachineIndex dataBindIndex value\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-symbol-list-index-state-machine-context stateMachineIndex viewModelIndex propertyIndex value\n";
+        std::cerr << "additional runtime flag: --runtime-bind-default-view-model-artboard-context\n";
         return 2;
     }
 

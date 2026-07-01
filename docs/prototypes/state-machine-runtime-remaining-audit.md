@@ -172,6 +172,14 @@ slice.
   for main-`ToSource | TwoWay` list-to-number binds. The target edit does not
   write the list source, and the same dirty pass refreshes the target through
   base reverse conversion to the default number value `0`.
+- First artboard list-consumer slice: default root view-model list sources and
+  direct `DataConverterNumberToList` number sources now bind to exact
+  artboard-owned `ArtboardComponentList` targets at the immediate
+  `Artboard::bindViewModelInstance(...)` boundary. Rust reports the same C++
+  source list/number facts, target local, empty target list size, and reset
+  flag behavior without admitting list item instancing, map-rule selection,
+  layout, or virtualization. The contract is
+  `docs/prototypes/data-binding-graph-artboard-list-consumer-runtime-contract.md`.
 - `DataConverterRounder` graph-owned converter execution slice: forward
   conversion for default-context number sources feeding number targets,
   including imported `decimals`, covered by a C++ probe through an existing
@@ -719,8 +727,11 @@ slice.
   non-number fallbacks,
   first direct number/boolean/string/color/enum/asset/artboard/symbol-list-index/trigger/view-model
   target-to-source propagation,
-  data-binding update queues, remaining list target-to-source behavior and
-  reverse converters, relative paths, parent paths, and nested paths.
+  first artboard list-consumer immediate bind report,
+  data-binding update queues, artboard component-list item instancing,
+  map-rule selection, list layout/virtualization, remaining list
+  target-to-source behavior and reverse converters, relative paths, parent
+  paths, and nested paths.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener
   actions.

@@ -2105,6 +2105,19 @@ view-model pointer relink APIs, reverse propagation, broader update-queue
 parity, relative/parent/nested lookup, listener-owned data binding, and nested
 artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: artboard-owned list-consumer binding now has its first C++
+probe-backed runtime boundary. Exact `ArtboardComponentList` targets bound to
+the default root view-model context report direct `ViewModelInstanceList`
+source sizes and direct `DataConverterNumberToList` source numbers, plus the
+C++ immediate target local, empty target-list size, and reset flag behavior.
+The contract is
+`docs/prototypes/data-binding-graph-artboard-list-consumer-runtime-contract.md`.
+Artboard component-list item instancing, generated child identity propagation,
+map-rule selection, list layout/virtualization, reverse conversion,
+target-to-source list behavior, broader update queues, relative/parent/nested
+lookup, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

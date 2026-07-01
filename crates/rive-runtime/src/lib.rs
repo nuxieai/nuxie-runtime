@@ -27,6 +27,7 @@ pub struct ArtboardInstance {
     update_order: Vec<usize>,
     linear_animations: Vec<RuntimeLinearAnimation>,
     state_machines: Vec<RuntimeStateMachine>,
+    artboard_list_bindings: Vec<RuntimeArtboardListBindingInstance>,
     dirt: ComponentDirt,
     dirt_depth: usize,
     did_change: bool,
@@ -87,6 +88,7 @@ impl ArtboardInstance {
             .collect::<Vec<_>>();
         let linear_animations = build_linear_animations(file, graph, &slots);
         let state_machines = build_state_machines(file, graph, &linear_animations);
+        let artboard_list_bindings = build_artboard_list_bindings(file, graph);
 
         Ok(Self {
             width: dimensions.width,
@@ -101,6 +103,7 @@ impl ArtboardInstance {
             update_order,
             linear_animations,
             state_machines,
+            artboard_list_bindings,
             dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,
             did_change: true,
@@ -140,6 +143,95 @@ impl ArtboardInstance {
 
     pub fn linear_animations(&self) -> &[RuntimeLinearAnimation] {
         &self.linear_animations
+    }
+
+    pub fn bind_default_view_model_artboard_list_context(&mut self, file: &RuntimeFile) -> bool {
+        let Some(default_instance) = file.view_model_default_instance(0) else {
+            return false;
+        };
+
+        let mut changed = false;
+        for binding in &mut self.artboard_list_bindings {
+            let Some(source_value) = binding.default_value.resolve_from_view_model_instance(
+                file,
+                default_instance.object,
+                &binding.path,
+            ) else {
+                continue;
+            };
+            let target_value = match binding.converter.as_ref() {
+                Some(converter) => runtime_data_bind_graph_convert_value(converter, &source_value),
+                None => Some(source_value.clone()),
+            };
+            binding.source_list_size = match &source_value {
+                RuntimeDataBindGraphValue::List { item_count } => Some(*item_count),
+                _ => None,
+            };
+            binding.source_number_value = match source_value {
+                RuntimeDataBindGraphValue::Number(value) => Some(value),
+                _ => None,
+            };
+            binding.should_reset_instances = binding.source_number_value.is_some();
+            let target_list_size = match target_value {
+                Some(RuntimeDataBindGraphValue::List { .. }) => Some(0),
+                _ => None,
+            };
+            if binding.target_list_size != target_list_size {
+                changed = true;
+                binding.target_list_size = target_list_size;
+            }
+        }
+        changed
+    }
+
+    pub fn artboard_list_binding_source_list_size_for_data_bind(
+        &self,
+        data_bind_index: usize,
+    ) -> Option<usize> {
+        self.artboard_list_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .and_then(|binding| binding.source_list_size)
+    }
+
+    pub fn artboard_list_binding_source_number_value_for_data_bind(
+        &self,
+        data_bind_index: usize,
+    ) -> Option<f32> {
+        self.artboard_list_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .and_then(|binding| binding.source_number_value)
+    }
+
+    pub fn artboard_list_binding_target_list_size_for_data_bind(
+        &self,
+        data_bind_index: usize,
+    ) -> Option<usize> {
+        self.artboard_list_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .and_then(|binding| binding.target_list_size)
+    }
+
+    pub fn artboard_list_binding_target_local_for_data_bind(
+        &self,
+        data_bind_index: usize,
+    ) -> Option<usize> {
+        self.artboard_list_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .map(|binding| binding.target_local_id)
+    }
+
+    pub fn artboard_list_binding_should_reset_instances_for_data_bind(
+        &self,
+        data_bind_index: usize,
+    ) -> Option<bool> {
+        self.artboard_list_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .map(|binding| binding.should_reset_instances)
     }
 
     pub fn draw_commands(&self, graph: &ArtboardGraph) -> Vec<RuntimeDrawCommand> {
@@ -2968,6 +3060,9 @@ enum RuntimeDataBindGraphConverter {
     TriggerIncrement,
     ToNumber,
     ListToLength,
+    NumberToList {
+        has_view_model: bool,
+    },
     ToString {
         flags: u64,
         decimals: u64,
@@ -3051,6 +3146,19 @@ struct RuntimeDataBindGraphTargetNode {
     target: RuntimeDataBindGraphTarget,
 }
 
+#[derive(Debug, Clone)]
+struct RuntimeArtboardListBindingInstance {
+    data_bind_index: usize,
+    target_local_id: usize,
+    path: Vec<u32>,
+    converter: Option<RuntimeDataBindGraphConverter>,
+    default_value: RuntimeDataBindGraphValue,
+    source_list_size: Option<usize>,
+    source_number_value: Option<f32>,
+    target_list_size: Option<usize>,
+    should_reset_instances: bool,
+}
+
 #[derive(Debug, Clone, Copy)]
 enum RuntimeDataBindGraphTarget {
     Number { global_id: u32 },
@@ -3073,6 +3181,7 @@ enum RuntimeDataBindGraphValue {
     Color(u32),
     Enum(u64),
     SymbolListIndex(u64),
+    List { item_count: usize },
     ListLength(usize),
     Asset(u64),
     Artboard(u64),
@@ -3119,6 +3228,7 @@ impl RuntimeDataBindGraphValue {
             Self::SymbolListIndex(_) => context
                 .symbol_list_index_value_by_property_index(usize::try_from(path[1]).ok()?)
                 .map(Self::SymbolListIndex),
+            Self::List { .. } => None,
             Self::ListLength(_) => None,
             Self::Asset(_) => context
                 .asset_value_by_property_index(usize::try_from(path[1]).ok()?)
@@ -3163,6 +3273,9 @@ impl RuntimeDataBindGraphValue {
             Self::SymbolListIndex(_) => file
                 .view_model_instance_symbol_list_index_value_for_object(source)
                 .map(Self::SymbolListIndex),
+            Self::List { .. } => file
+                .view_model_instance_list_size_for_object(source)
+                .map(|item_count| Self::List { item_count }),
             Self::ListLength(_) => file
                 .view_model_instance_list_size_for_object(source)
                 .map(Self::ListLength),
@@ -6179,9 +6292,30 @@ fn runtime_data_bind_graph_convert_value(
             RuntimeDataBindGraphConverter::ListToLength,
             RuntimeDataBindGraphValue::ListLength(value),
         ) => Some(RuntimeDataBindGraphValue::Number(*value as f32)),
+        (
+            RuntimeDataBindGraphConverter::ListToLength,
+            RuntimeDataBindGraphValue::List { item_count },
+        ) => Some(RuntimeDataBindGraphValue::Number(*item_count as f32)),
         (RuntimeDataBindGraphConverter::ListToLength, _) => {
             Some(RuntimeDataBindGraphValue::Number(0.0))
         }
+        (
+            RuntimeDataBindGraphConverter::NumberToList { .. },
+            RuntimeDataBindGraphValue::List { item_count },
+        ) => Some(RuntimeDataBindGraphValue::List {
+            item_count: *item_count,
+        }),
+        (
+            RuntimeDataBindGraphConverter::NumberToList { has_view_model },
+            RuntimeDataBindGraphValue::Number(value),
+        ) => Some(RuntimeDataBindGraphValue::List {
+            item_count: if *has_view_model {
+                value.floor().max(0.0) as usize
+            } else {
+                0
+            },
+        }),
+        (RuntimeDataBindGraphConverter::NumberToList { .. }, _) => None,
         (
             RuntimeDataBindGraphConverter::ToString {
                 flags, decimals, ..
@@ -13066,6 +13200,57 @@ fn build_state_machines(
         .collect()
 }
 
+fn build_artboard_list_bindings(
+    file: &RuntimeFile,
+    graph: &ArtboardGraph,
+) -> Vec<RuntimeArtboardListBindingInstance> {
+    let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
+        return Vec::new();
+    };
+    let Some(default_instance) = file.view_model_default_instance(0) else {
+        return Vec::new();
+    };
+
+    file.artboard_data_binds(artboard_index)
+        .into_iter()
+        .enumerate()
+        .filter_map(|(data_bind_index, data_bind)| {
+            let target = data_bind.target?;
+            if target.type_name != "ArtboardComponentList" {
+                return None;
+            }
+            let target_local_id = data_bind.target_local_id?;
+            let path = file.data_bind_context_source_path_ids_for_object(data_bind.object)?;
+            let source =
+                file.data_context_view_model_property_for_instance(default_instance.object, &path)?;
+            let converter = runtime_data_bind_graph_converter(file, data_bind.object);
+            let default_value = match converter.as_ref() {
+                Some(RuntimeDataBindGraphConverter::NumberToList { .. }) => {
+                    RuntimeDataBindGraphValue::Number(
+                        file.view_model_instance_number_value_for_object(source)?,
+                    )
+                }
+                None => RuntimeDataBindGraphValue::List {
+                    item_count: file.view_model_instance_list_size_for_object(source)?,
+                },
+                _ => return None,
+            };
+
+            Some(RuntimeArtboardListBindingInstance {
+                data_bind_index,
+                target_local_id,
+                path: path.to_vec(),
+                converter,
+                default_value,
+                source_list_size: None,
+                source_number_value: None,
+                target_list_size: None,
+                should_reset_instances: false,
+            })
+        })
+        .collect()
+}
+
 fn runtime_bindable_numbers(
     file: &RuntimeFile,
     state_machine: &rive_binary::RuntimeStateMachine<'_>,
@@ -13852,6 +14037,11 @@ fn runtime_data_bind_graph_converter_for_object(
         "DataConverterTrigger" => RuntimeDataBindGraphConverter::TriggerIncrement,
         "DataConverterToNumber" => RuntimeDataBindGraphConverter::ToNumber,
         "DataConverterListToLength" => RuntimeDataBindGraphConverter::ListToLength,
+        "DataConverterNumberToList" => RuntimeDataBindGraphConverter::NumberToList {
+            has_view_model: file
+                .resolved_view_model_for_number_to_list_converter_object(converter)
+                .is_some(),
+        },
         "DataConverterToString" => RuntimeDataBindGraphConverter::ToString {
             flags: converter.uint_property("flags").unwrap_or(0),
             decimals: converter.uint_property("decimals").unwrap_or(0),
@@ -14452,6 +14642,7 @@ mod tests {
             update_order,
             linear_animations: Vec::new(),
             state_machines: Vec::new(),
+            artboard_list_bindings: Vec::new(),
             dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,
             did_change: true,

@@ -26,7 +26,10 @@ Out of scope:
 
 - Symbol-list-index, asset, artboard, trigger, list, or view-model default
   source handles.
-- Nested, relative, parent, or slash-separated property paths.
+- Changing root-name lookup semantics to accept slash-separated property
+  paths. Nested enum paths are covered separately by
+  `docs/prototypes/data-binding-graph-default-nested-enum-source-handle-runtime-contract.md`.
+- Relative or parent property paths.
 - Imported or owned view-model contexts.
 - Public target handles, reverse target-to-source propagation, converter
   family expansion, broader update queues, listener-owned data binding, and
@@ -34,6 +37,6 @@ Out of scope:
 
 Completion condition: a root default enum source handle resolved from `choice`
 mutates the same graph-owned source path as the existing property-name API,
-repeated same-value writes report no change, slash-path lookup stays
-unresolved, and the C++ probe reports the same state-machine advance and
-component update results.
+repeated same-value writes report no change, root-name lookup stays separate
+from slash-path lookup, and the C++ probe reports the same state-machine
+advance and component update results.

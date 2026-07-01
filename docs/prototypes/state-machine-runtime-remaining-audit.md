@@ -84,6 +84,12 @@ slice.
   the file-backed default instance and the existing trigger transition-condition
   consumer. The contract is
   `docs/prototypes/data-binding-graph-default-trigger-name-runtime-contract.md`.
+- Default root list property-name item-count mutation, covered by a C++ probe
+  through `ViewModelInstanceRuntime::propertyList("items")` with raw
+  `ViewModelInstance::propertyValue("items")` / property-index fallback for the
+  file-backed default instance and the existing bindable-list source-size
+  consumer. The contract is
+  `docs/prototypes/data-binding-graph-default-list-name-runtime-contract.md`.
 - Graph-owned default `ViewModelInstanceBoolean` source-node mutation by
   state-machine data-bind index, covered by a C++ probe through an existing
   transition-condition consumer.

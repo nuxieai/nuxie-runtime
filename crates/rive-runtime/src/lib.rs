@@ -4625,6 +4625,13 @@ fn runtime_imported_view_model_list_property_path_for_name(
     )
 }
 
+fn runtime_default_view_model_list_property_path_for_name(
+    file: &RuntimeFile,
+    property_name: &str,
+) -> Option<Vec<u32>> {
+    runtime_imported_view_model_list_property_path_for_name(file, 0, property_name)
+}
+
 fn runtime_imported_view_model_property_path_for_name(
     file: &RuntimeFile,
     view_model_index: usize,
@@ -7905,6 +7912,39 @@ impl RuntimeDataBindGraph {
         if default_context_bound {
             source.value = RuntimeDataBindGraphValue::List { item_count };
             source.bound = true;
+            self.mark_default_view_model_bindings_dirty();
+        }
+        true
+    }
+
+    fn set_default_view_model_list_source_item_count_for_path(
+        &mut self,
+        path: &[u32],
+        item_count: usize,
+    ) -> bool {
+        let default_context_bound = self.default_view_model_source_context_bound();
+        let mut changed = false;
+        for source in self.sources.iter_mut().filter(|source| source.path == path) {
+            let RuntimeDataBindGraphValue::List {
+                item_count: current,
+            } = &mut source.default_value
+            else {
+                continue;
+            };
+            if *current == item_count {
+                continue;
+            }
+            *current = item_count;
+            if default_context_bound {
+                source.value = RuntimeDataBindGraphValue::List { item_count };
+                source.bound = true;
+            }
+            changed = true;
+        }
+        if !changed {
+            return false;
+        }
+        if default_context_bound {
             self.mark_default_view_model_bindings_dirty();
         }
         true
@@ -14932,6 +14972,27 @@ impl StateMachineInstance {
                 data_bind_index,
                 item_count,
             )
+        {
+            return false;
+        }
+        self.needs_advance = true;
+        true
+    }
+
+    pub fn set_default_view_model_list_source_item_count_by_property_name(
+        &mut self,
+        file: &RuntimeFile,
+        property_name: &str,
+        item_count: usize,
+    ) -> bool {
+        let Some(path) =
+            runtime_default_view_model_list_property_path_for_name(file, property_name)
+        else {
+            return false;
+        };
+        if !self
+            .data_bind_graph
+            .set_default_view_model_list_source_item_count_for_path(&path, item_count)
         {
             return false;
         }

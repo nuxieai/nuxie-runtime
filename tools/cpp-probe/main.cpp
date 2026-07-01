@@ -347,6 +347,7 @@ enum class RuntimeStateMachineActionKind
     SetDefaultViewModelSourceTrigger,
     SetDefaultViewModelSourceTriggerByName,
     SetDefaultViewModelSourceList,
+    SetDefaultViewModelSourceListByName,
     SetDefaultViewModelSourceViewModel,
     SetViewModelInstanceSourceNumber,
     SetViewModelInstanceSourceNumberByName,
@@ -3712,6 +3713,73 @@ apply_runtime_state_machine_advances(rive::File* file,
                          ++itemIndex)
                     {
                         runtime.addInstance(itemRuntime.get());
+                    }
+                }
+            }
+            continue;
+        }
+        if (action.kind ==
+            RuntimeStateMachineActionKind::SetDefaultViewModelSourceListByName)
+        {
+            auto viewModel =
+                file != nullptr && file->viewModelCount() > 0
+                    ? file->viewModel(0)
+                    : nullptr;
+            auto viewModelInstance =
+                viewModel != nullptr && viewModel->instanceCount() > 0
+                    ? viewModel->instance(0)
+                    : nullptr;
+            if (viewModelInstance != nullptr)
+            {
+                auto setListCount =
+                    [&](rive::ViewModelInstanceListRuntime* list)
+                {
+                    list->removeAllInstances();
+                    auto itemInstance = rive::make_rcp<rive::ViewModelInstance>();
+                    auto itemRuntime =
+                        rive::make_rcp<rive::ViewModelInstanceRuntime>(
+                            itemInstance);
+                    for (uint32_t itemIndex = 0; itemIndex < action.uintValue;
+                         ++itemIndex)
+                    {
+                        list->addInstance(itemRuntime.get());
+                    }
+                };
+                rive::ViewModelInstanceRuntime runtime(
+                    rive::ref_rcp(viewModelInstance));
+                auto list = runtime.propertyList(action.stringValue);
+                if (list != nullptr)
+                {
+                    setListCount(list);
+                }
+                else
+                {
+                    auto source = viewModelInstance->propertyValue(
+                        action.stringValue);
+                    if (source == nullptr)
+                    {
+                        auto properties = viewModel->properties();
+                        for (size_t propertyIndex = 0;
+                             propertyIndex < properties.size();
+                             propertyIndex++)
+                        {
+                            auto property = properties[propertyIndex];
+                            if (property == nullptr ||
+                                property->name() != action.stringValue)
+                            {
+                                continue;
+                            }
+                            source = viewModelInstance->propertyValue(
+                                static_cast<uint32_t>(propertyIndex));
+                            break;
+                        }
+                    }
+                    if (source != nullptr &&
+                        source->is<rive::ViewModelInstanceList>())
+                    {
+                        rive::ViewModelInstanceListRuntime listRuntime(
+                            source->as<rive::ViewModelInstanceList>());
+                        setListCount(&listRuntime);
                     }
                 }
             }
@@ -12246,6 +12314,31 @@ int main(int argc, const char* argv[])
             action.numberValue = 0.0f;
             action.uintValue = static_cast<uint32_t>(
                 std::strtoull(argv[++i], nullptr, 10));
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
+        if (is_arg(argv[i],
+                   "--runtime-set-default-view-model-source-list-by-name"))
+        {
+            if (i + 3 >= argc)
+            {
+                std::cerr << "--runtime-set-default-view-model-source-list-by-name requires stateMachineIndex propertyName value\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind =
+                RuntimeStateMachineActionKind::SetDefaultViewModelSourceListByName;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            action.stringValue = argv[++i];
+            action.uintValue =
+                static_cast<uint32_t>(std::strtoull(argv[++i], nullptr, 10));
             options.runtimeStateMachineActions.push_back(action);
             continue;
         }

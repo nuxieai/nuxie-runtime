@@ -541,7 +541,21 @@ file-backed source through `ViewModelInstance::propertyValue` name or
 property-index lookup, and compares the existing trigger transition-condition
 report surface. The contract is
 `docs/prototypes/data-binding-graph-default-trigger-name-runtime-contract.md`.
-Default list/view-model name APIs, nested/relative/parent lookup, public source
+Default view-model name APIs, nested/relative/parent lookup, public source
+handles, reverse propagation, broader update queues, listener-owned data
+binding, and nested artboard propagation remain follow-up `#12` slices.
+
+Current #12 update: default root list sources now match the root trigger
+property-name mutation shape for item-count parity. Rust exposes
+`StateMachineInstance::set_default_view_model_list_source_item_count_by_property_name`,
+which resolves a root `ViewModelPropertyList.name` on file view model `0` and
+mutates every matching graph source node by item count. The C++ probe adds
+`--runtime-set-default-view-model-source-list-by-name`, resolves the default
+file-backed list through `ViewModelInstanceRuntime::propertyList` or raw
+`ViewModelInstance::propertyValue` name/property-index lookup, and compares the
+existing bindable-list source-size report surface. The contract is
+`docs/prototypes/data-binding-graph-default-list-name-runtime-contract.md`.
+Default view-model name APIs, nested/relative/parent lookup, public source
 handles, reverse propagation, broader update queues, listener-owned data
 binding, and nested artboard propagation remain follow-up `#12` slices.
 

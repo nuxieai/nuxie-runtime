@@ -11,6 +11,9 @@ imported instance, and propagate that pointer to
 This follows the root owned replacement and generated-child identity slices
 while keeping owned traversal finite and import-file-backed.
 
+Later recursive generated-path support is covered by
+`docs/prototypes/data-binding-graph-owned-viewmodel-recursive-relink-runtime-contract.md`.
+
 ## In Scope
 
 - Owned root view-model contexts bound with `bind_owned_view_model_context`.
@@ -30,7 +33,8 @@ while keeping owned traversal finite and import-file-backed.
 
 ## Out Of Scope
 
-- Deeper owned paths beyond one intermediate generated child.
+- Deeper generated-only owned paths, which are handled by the recursive relink
+  contract.
 - Nested scalar properties, list properties, and list item propagation.
 - Traversal through an imported replacement as an intermediate path segment.
 - Public property-name handles or object handles.

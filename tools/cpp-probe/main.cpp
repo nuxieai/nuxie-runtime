@@ -354,6 +354,7 @@ enum class RuntimeStateMachineActionKind
     BindOwnedViewModelViewModelDefaultContext,
     BindOwnedViewModelViewModelContext,
     BindOwnedViewModelNestedViewModelContext,
+    BindOwnedViewModelDeepViewModelContext,
     BindOwnedViewModelTriggerContext,
     FireTrigger,
 };
@@ -2544,6 +2545,85 @@ apply_runtime_state_machine_advances(rive::File* file,
                     rive::ViewModelInstanceRuntime runtime(viewModelInstance);
                     runtime.replaceViewModel(
                         rootProperty->name() + "/" + nestedProperty->name(),
+                        referencedRuntime.get());
+                }
+                stateMachine->bindViewModelInstance(viewModelInstance);
+            }
+            continue;
+        }
+        if (action.kind ==
+            RuntimeStateMachineActionKind::BindOwnedViewModelDeepViewModelContext)
+        {
+            auto viewModel =
+                file != nullptr && action.viewModelIndex < file->viewModelCount()
+                    ? file->viewModel(action.viewModelIndex)
+                    : nullptr;
+            auto viewModelInstance =
+                file != nullptr && viewModel != nullptr
+                    ? file->createViewModelInstance(viewModel)
+                    : nullptr;
+            auto rootProperty =
+                viewModel != nullptr ? viewModel->property(action.dataBindIndex)
+                                     : nullptr;
+            auto rootViewModelProperty =
+                rootProperty != nullptr &&
+                        rootProperty->is<rive::ViewModelPropertyViewModel>()
+                    ? rootProperty->as<rive::ViewModelPropertyViewModel>()
+                    : nullptr;
+            auto childViewModel =
+                file != nullptr && rootViewModelProperty != nullptr &&
+                        rootViewModelProperty->viewModelReferenceId() <
+                            file->viewModelCount()
+                    ? file->viewModel(
+                          rootViewModelProperty->viewModelReferenceId())
+                    : nullptr;
+            auto middleProperty =
+                childViewModel != nullptr
+                    ? childViewModel->property(action.inputIndex)
+                    : nullptr;
+            auto middleViewModelProperty =
+                middleProperty != nullptr &&
+                        middleProperty->is<rive::ViewModelPropertyViewModel>()
+                    ? middleProperty->as<rive::ViewModelPropertyViewModel>()
+                    : nullptr;
+            auto middleViewModel =
+                file != nullptr && middleViewModelProperty != nullptr &&
+                        middleViewModelProperty->viewModelReferenceId() <
+                            file->viewModelCount()
+                    ? file->viewModel(
+                          middleViewModelProperty->viewModelReferenceId())
+                    : nullptr;
+            auto leafProperty =
+                middleViewModel != nullptr
+                    ? middleViewModel->property(action.viewModelInstanceIndex)
+                    : nullptr;
+            if (viewModelInstance != nullptr && rootProperty != nullptr &&
+                middleProperty != nullptr && leafProperty != nullptr &&
+                leafProperty->is<rive::ViewModelPropertyViewModel>())
+            {
+                auto viewModelProperty =
+                    leafProperty->as<rive::ViewModelPropertyViewModel>();
+                auto referencedViewModel =
+                    file != nullptr &&
+                            viewModelProperty->viewModelReferenceId() <
+                                file->viewModelCount()
+                        ? file->viewModel(
+                              viewModelProperty->viewModelReferenceId())
+                        : nullptr;
+                auto referencedInstance =
+                    referencedViewModel != nullptr &&
+                            action.uintValue < referencedViewModel->instanceCount()
+                        ? referencedViewModel->instance(action.uintValue)
+                        : nullptr;
+                if (referencedInstance != nullptr)
+                {
+                    auto referencedRuntime =
+                        rive::make_rcp<rive::ViewModelInstanceRuntime>(
+                            rive::ref_rcp(referencedInstance));
+                    rive::ViewModelInstanceRuntime runtime(viewModelInstance);
+                    runtime.replaceViewModel(
+                        rootProperty->name() + "/" + middleProperty->name() +
+                            "/" + leafProperty->name(),
                         referencedRuntime.get());
                 }
                 stateMachine->bindViewModelInstance(viewModelInstance);
@@ -9979,6 +10059,36 @@ int main(int argc, const char* argv[])
         }
 
         if (is_arg(argv[i],
+                   "--runtime-bind-owned-view-model-deep-viewmodel-state-machine-context"))
+        {
+            if (i + 6 >= argc)
+            {
+                std::cerr << "--runtime-bind-owned-view-model-deep-viewmodel-state-machine-context requires stateMachineIndex viewModelIndex rootPropertyIndex middlePropertyIndex leafPropertyIndex value\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::
+                BindOwnedViewModelDeepViewModelContext;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.viewModelIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.dataBindIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.viewModelInstanceIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            action.uintValue =
+                static_cast<uint32_t>(std::strtoull(argv[++i], nullptr, 10));
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
+        if (is_arg(argv[i],
                    "--runtime-bind-owned-view-model-viewmodel-default-state-machine-context"))
         {
             if (i + 3 >= argc)
@@ -10094,6 +10204,7 @@ int main(int argc, const char* argv[])
         std::cerr << "additional runtime flag: --runtime-relink-default-view-model-source-viewmodel stateMachineIndex dataBindIndex value\n";
         std::cerr << "additional runtime flag: --runtime-relink-view-model-instance-source-viewmodel stateMachineIndex viewModelIndex instanceIndex dataBindIndex value\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-nested-viewmodel-state-machine-context stateMachineIndex viewModelIndex rootPropertyIndex nestedPropertyIndex value\n";
+        std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-deep-viewmodel-state-machine-context stateMachineIndex viewModelIndex rootPropertyIndex middlePropertyIndex leafPropertyIndex value\n";
         return 2;
     }
 

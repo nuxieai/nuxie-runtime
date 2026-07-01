@@ -3435,10 +3435,16 @@ fn runtime_owned_view_model_view_model_children(
     file: &RuntimeFile,
     view_model_index: usize,
     parent_path: &[usize],
+    ancestor_view_model_indices: &[usize],
 ) -> Vec<RuntimeOwnedViewModelViewModel> {
+    if ancestor_view_model_indices.contains(&view_model_index) {
+        return Vec::new();
+    }
     let Some(view_model) = file.view_model(view_model_index) else {
         return Vec::new();
     };
+    let mut child_ancestors = ancestor_view_model_indices.to_vec();
+    child_ancestors.push(view_model_index);
 
     view_model
         .properties
@@ -3464,6 +3470,7 @@ fn runtime_owned_view_model_view_model_children(
             } else {
                 RuntimeViewModelPointer::Null
             };
+            let has_referenced_view_model = referenced_view_model.is_some();
             let view_model_instance_ids = referenced_view_model
                 .map(|view_model| {
                     view_model
@@ -3473,11 +3480,25 @@ fn runtime_owned_view_model_view_model_children(
                         .collect()
                 })
                 .unwrap_or_default();
+            let children = if has_referenced_view_model {
+                referenced_view_model_index
+                    .map(|view_model_index| {
+                        runtime_owned_view_model_view_model_children(
+                            file,
+                            view_model_index,
+                            &path,
+                            &child_ancestors,
+                        )
+                    })
+                    .unwrap_or_default()
+            } else {
+                Vec::new()
+            };
             Some(RuntimeOwnedViewModelViewModel {
                 property_index,
                 value,
                 view_model_instance_ids,
-                children: Vec::new(),
+                children,
             })
         })
         .collect()
@@ -3559,11 +3580,12 @@ impl RuntimeOwnedViewModelInstance {
                     };
                     let children = if referenced_view_model.is_some() {
                         referenced_view_model_index
-                            .map(|view_model_index| {
+                            .map(|referenced_view_model_index| {
                                 runtime_owned_view_model_view_model_children(
                                     file,
-                                    view_model_index,
+                                    referenced_view_model_index,
                                     &path,
+                                    &[view_model_index],
                                 )
                             })
                             .unwrap_or_default()

@@ -6690,6 +6690,122 @@ fn synthetic_state_machine_owned_nested_viewmodel_viewmodel_source_mutation(
     })
 }
 
+fn synthetic_state_machine_owned_deep_viewmodel_viewmodel_source_mutation(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyViewModel", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyViewModel", "name", "child");
+            push_uint_property(
+                bytes,
+                "ViewModelPropertyViewModel",
+                "viewModelReferenceId",
+                1,
+            );
+        });
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Child");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyViewModel", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyViewModel", "name", "middle");
+            push_uint_property(
+                bytes,
+                "ViewModelPropertyViewModel",
+                "viewModelReferenceId",
+                2,
+            );
+        });
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Middle");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyViewModel", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyViewModel", "name", "leaf");
+            push_uint_property(
+                bytes,
+                "ViewModelPropertyViewModel",
+                "viewModelReferenceId",
+                3,
+            );
+        });
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Leaf");
+        });
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "leaf-a");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 3);
+        });
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "leaf-b");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 3);
+        });
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "middle");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 2);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceViewModel", |bytes| {
+            push_uint_property(
+                bytes,
+                "ViewModelInstanceViewModel",
+                "viewModelPropertyId",
+                0,
+            );
+            push_uint_property(bytes, "ViewModelInstanceViewModel", "propertyValue", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "child");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 1);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceViewModel", |bytes| {
+            push_uint_property(
+                bytes,
+                "ViewModelInstanceViewModel",
+                "viewModelPropertyId",
+                0,
+            );
+            push_uint_property(bytes, "ViewModelInstanceViewModel", "propertyValue", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceViewModel", |bytes| {
+            push_uint_property(
+                bytes,
+                "ViewModelInstanceViewModel",
+                "viewModelPropertyId",
+                0,
+            );
+            push_uint_property(bytes, "ViewModelInstanceViewModel", "propertyValue", 0);
+        });
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+        });
+        push_bindable_view_model_data_bind_context(bytes, &[0, 0, 0, 0]);
+        push_object_with_properties(bytes, "TransitionViewModelCondition", |_| {});
+        push_object_with_properties(bytes, "TransitionPropertyViewModelComparator", |_| {});
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
 fn synthetic_state_machine_default_viewmodel_viewmodel_target_to_source(file_id: u64) -> Vec<u8> {
     const DATA_BIND_TO_SOURCE: u64 = 1 << 0;
     const DATA_BIND_TWO_WAY: u64 = 1 << 1;
@@ -23731,6 +23847,121 @@ fn state_machine_owned_viewmodel_viewmodel_nested_source_relink_matches_cpp_prob
     assert!(
         context.set_view_model_by_property_path(&[0, 0], 1),
         "{label} failed to relink nested owned view-model pointer"
+    );
+    assert!(
+        state_machine.bind_owned_view_model_context(&context),
+        "{label} failed to bind owned view-model context"
+    );
+    assert!(
+        state_machine.advance_data_context(),
+        "{label} failed to advance data context"
+    );
+    rust_reports.push((false, state_machine.clone()));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 1.0),
+        state_machine.clone(),
+    ));
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+    {
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+    }
+    let pointer_report = cpp_artboard
+        .runtime_state_machine_advances
+        .last()
+        .unwrap_or_else(|| panic!("missing C++ pointer report for {label}"));
+    let binding = pointer_report
+        .view_model_bindings
+        .iter()
+        .find(|binding| binding.data_bind_index == 0)
+        .unwrap_or_else(|| panic!("missing C++ view-model binding 0 for {label}"));
+    assert_eq!(
+        binding.source_instance_index,
+        Some(1),
+        "{label} C++ source instance mismatch"
+    );
+    assert_eq!(
+        binding.target_instance_index,
+        Some(1),
+        "{label} C++ target instance mismatch"
+    );
+    assert_eq!(
+        state_machine.default_view_model_view_model_source_instance_index_for_data_bind(0),
+        Some(1),
+        "{label} Rust source instance mismatch"
+    );
+    assert_eq!(
+        state_machine.bindable_view_model_instance_index_for_data_bind(0),
+        Some(1),
+        "{label} Rust target instance mismatch"
+    );
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn state_machine_owned_viewmodel_viewmodel_deep_source_relink_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label =
+        "synthetic/runtime_state_machine_owned_viewmodel_deep_viewmodel_source_relink_cpp.riv";
+    let bytes = synthetic_state_machine_owned_deep_viewmodel_viewmodel_source_mutation(8569);
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-bind-owned-view-model-deep-viewmodel-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+        "--runtime-advance-state-machine-data-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    let mut context = RuntimeOwnedViewModelInstance::new(&runtime, 0)
+        .unwrap_or_else(|| panic!("missing Rust owned view-model context for {label}"));
+
+    let mut rust_reports = Vec::new();
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    assert!(
+        context.set_view_model_by_property_path(&[0, 0, 0], 1),
+        "{label} failed to relink deep owned view-model pointer"
     );
     assert!(
         state_machine.bind_owned_view_model_context(&context),

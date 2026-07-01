@@ -713,6 +713,14 @@ slice.
   `ViewModelInstanceRuntime::replaceViewModel("child/grandchild", value)`
   path through existing view-model binding reports. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-nested-relink-runtime-contract.md`.
+- Recursive generated owned view-model pointer relink slice:
+  `RuntimeOwnedViewModelInstance` now records generated
+  `ViewModelPropertyViewModel` descendants recursively, so a generated-only
+  path such as `[child, middle, leaf]` can be relinked to a referenced imported
+  instance before binding. The C++ probe covers the matching
+  `ViewModelInstanceRuntime::replaceViewModel("child/middle/leaf", value)`
+  path through existing view-model binding reports. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-recursive-relink-runtime-contract.md`.
 - First `BindablePropertyList.propertyValue` target-to-source slice:
   state-machine list targets can be mutated by data-bind index, and explicit
   `advancedDataContext()` plus public `updateDataBinds(true)` consume the
@@ -732,10 +740,10 @@ slice.
   open-url side effects, nested-artboard event propagation, and callback
   targets other than `Event.trigger`.
 - Live view-model pointer relink APIs beyond the first default, imported,
-  owned root-property, and one-intermediate owned paths: deeper owned paths,
-  traversal through imported replacement intermediates, and stable public
-  handles that update or expose cached `referenceViewModelInstance` pointers
-  rather than only raw generated `propertyValue` indexes.
+  owned root-property, and generated-only owned paths: traversal through
+  imported replacement intermediates and stable public handles that update or
+  expose cached `referenceViewModelInstance` pointers rather than only raw
+  generated `propertyValue` indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
 - Live view-model APIs and data-binding propagation governed by

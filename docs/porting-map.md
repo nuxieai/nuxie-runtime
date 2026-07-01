@@ -1217,10 +1217,10 @@ explicit data-context advancement, then the next normal state-machine advance
 reapplies the unchanged string source through imported C++ trim conversion,
 including when elapsed time is zero. The contract is
 `docs/prototypes/data-binding-graph-string-trim-main-to-target-two-way-target-dirty-runtime-contract.md`.
-Remaining string converter families and groups, public-queue reverse
-conversion, broader dirty/update queues, relative/parent/nested lookup,
-listener-owned data binding, and nested artboard propagation remain follow-up
-`#12` slices.
+String converter groups, public-queue reverse conversion beyond the linked
+direct string-family slice, broader dirty/update queues, relative/parent/nested
+lookup, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
 
 Current #12 update: direct `DataConverterStringRemoveZeros` binds now cover the
 main-`ToTarget | TwoWay` state-machine target-dirty path for default-context
@@ -1229,10 +1229,10 @@ explicit data-context advancement, then the next normal state-machine advance
 reapplies the unchanged string source through C++ remove-zero conversion,
 including when elapsed time is zero. The contract is
 `docs/prototypes/data-binding-graph-string-remove-zeros-main-to-target-two-way-target-dirty-runtime-contract.md`.
-Remaining string converter families and groups, public-queue reverse
-conversion, broader dirty/update queues, relative/parent/nested lookup,
-listener-owned data binding, and nested artboard propagation remain follow-up
-`#12` slices.
+String converter groups, public-queue reverse conversion beyond the linked
+direct string-family slice, broader dirty/update queues, relative/parent/nested
+lookup, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
 
 Current #12 update: direct `DataConverterStringPad` binds now cover the
 main-`ToTarget | TwoWay` state-machine target-dirty path for default-context
@@ -1241,9 +1241,23 @@ explicit data-context advancement, then the next normal state-machine advance
 reapplies the unchanged string source through imported C++ pad conversion,
 including when elapsed time is zero. The contract is
 `docs/prototypes/data-binding-graph-string-pad-main-to-target-two-way-target-dirty-runtime-contract.md`.
-Converter groups, public-queue reverse conversion, broader dirty/update queues,
-relative/parent/nested lookup, listener-owned data binding, and nested artboard
-propagation remain follow-up `#12` slices.
+Converter groups, public-queue reverse conversion beyond the linked direct
+string-family slice, broader dirty/update queues, relative/parent/nested
+lookup, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
+
+Current #12 update: direct `DataConverterStringTrim`,
+`DataConverterStringRemoveZeros`, and `DataConverterStringPad` now also cover
+public `updateDataBinds(true)` target-to-source behavior for default-context
+main-`ToTarget | TwoWay` string targets. C++ uses the base converter reverse
+identity for the edited string target, writes that string into the default
+view-model string source, then immediately reapplies source-to-target through
+the direct string converter. The contract is
+`docs/prototypes/data-binding-graph-string-converter-family-public-update-target-to-source-runtime-contract.md`.
+String converter groups, main-`ToSource | TwoWay` behavior for string
+converters, broader dirty/update queues, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
 
 Current #12 update: the first `DataConverterToString` runtime slice now
 supports default-context number sources feeding
@@ -1890,16 +1904,17 @@ preserve-then-next-advance ordering. The contracts are
 `docs/prototypes/data-binding-graph-to-number-boolean-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-to-number-remaining-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-to-string-public-update-target-to-source-runtime-contract.md`,
+`docs/prototypes/data-binding-graph-string-converter-family-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-formula-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-public-update-observer-preservation-runtime-contract.md`,
 and
 `docs/prototypes/data-binding-graph-interpolator-public-update-target-to-source-runtime-contract.md`.
-Public-update coverage for other converter families, broader mixed/stateful
-groups, full dirty-list scheduler parity beyond the first same-path ordinary
-`ToTarget` observer ordering case, imported/owned contexts, pending add/remove
-behavior, re-entry protection,
-relative/parent/nested lookup, listener-owned data binding, and nested artboard
-propagation remain follow-up `#12` slices.
+Public-update coverage for remaining converter families, broader
+mixed/stateful groups, full dirty-list scheduler parity beyond the first
+same-path ordinary `ToTarget` observer ordering case, imported/owned contexts,
+pending add/remove behavior, re-entry protection, relative/parent/nested
+lookup, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
 
 Current #12 update: owned runtime view-model contexts now cover the first
 live view-model pointer replacement path. `RuntimeOwnedViewModelInstance`

@@ -329,6 +329,12 @@ slice.
   TwoWay` string targets, preserving the manual target edit through explicit
   data-context advancement and then overwriting it from the unchanged string
   source through imported pad conversion on the next normal advance.
+- String converter-family public-update target-to-source slice: direct
+  `DataConverterStringTrim`, `DataConverterStringRemoveZeros`, and
+  `DataConverterStringPad` now cover public `updateDataBinds(true)` for
+  main-`ToTarget | TwoWay` string targets. The edited string writes to the
+  string source through base reverse conversion, then the public update
+  reapplies the direct string converter in the same call.
 - First `DataConverterToString` graph-owned converter execution slice:
   forward conversion for default-context number sources feeding string targets,
   covered by a C++ probe through an existing string transition-condition

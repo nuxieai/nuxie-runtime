@@ -17344,6 +17344,23 @@ fn string_trim_main_to_target_two_way_target_dirty_matches_cpp_probe() {
 }
 
 #[test]
+fn string_trim_public_update_target_to_source_matches_cpp_probe() {
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_string_trim_public_update_target_to_source_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_string_trim_converter_condition_with_flags(
+            8549,
+            DATA_BIND_TWO_WAY,
+        );
+    assert_string_public_update_target_to_source_with_edit_matches_cpp_probe(
+        label,
+        bytes,
+        b"  manual\t",
+    );
+}
+
+#[test]
 fn string_remove_zeros_main_to_target_two_way_target_dirty_matches_cpp_probe() {
     const DATA_BIND_TWO_WAY: u64 = 1 << 1;
 
@@ -17357,6 +17374,23 @@ fn string_remove_zeros_main_to_target_two_way_target_dirty_matches_cpp_probe() {
 }
 
 #[test]
+fn string_remove_zeros_public_update_target_to_source_matches_cpp_probe() {
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_string_remove_zeros_public_update_target_to_source_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_string_remove_zeros_converter_condition_with_flags(
+            8550,
+            DATA_BIND_TWO_WAY,
+        );
+    assert_string_public_update_target_to_source_with_edit_matches_cpp_probe(
+        label,
+        bytes,
+        b"120.3400",
+    );
+}
+
+#[test]
 fn string_pad_main_to_target_two_way_target_dirty_matches_cpp_probe() {
     const DATA_BIND_TWO_WAY: u64 = 1 << 1;
 
@@ -17366,6 +17400,18 @@ fn string_pad_main_to_target_two_way_target_dirty_matches_cpp_probe() {
         DATA_BIND_TWO_WAY,
     );
     assert_string_main_to_target_two_way_target_dirty_matches_cpp_probe(label, bytes);
+}
+
+#[test]
+fn string_pad_public_update_target_to_source_matches_cpp_probe() {
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_string_pad_public_update_target_to_source_cpp.riv";
+    let bytes = synthetic_state_machine_default_viewmodel_string_pad_converter_condition_with_flags(
+        8551,
+        DATA_BIND_TWO_WAY,
+    );
+    assert_string_public_update_target_to_source_with_edit_matches_cpp_probe(label, bytes, b"go");
 }
 
 #[test]
@@ -17484,10 +17530,21 @@ fn assert_string_main_to_target_two_way_target_dirty_matches_cpp_probe(
 }
 
 fn assert_string_public_update_target_to_source_matches_cpp_probe(label: &str, bytes: Vec<u8>) {
+    assert_string_public_update_target_to_source_with_edit_matches_cpp_probe(
+        label, bytes, b"manual",
+    );
+}
+
+fn assert_string_public_update_target_to_source_with_edit_matches_cpp_probe(
+    label: &str,
+    bytes: Vec<u8>,
+    edit: &[u8],
+) {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
         return;
     };
+    let edit = std::str::from_utf8(edit).expect("synthetic edit value must be UTF-8");
 
     let args = [
         "--runtime-bind-default-view-model-state-machine-context".to_owned(),
@@ -17498,7 +17555,7 @@ fn assert_string_public_update_target_to_source_matches_cpp_probe(label: &str, b
         "--runtime-set-state-machine-bindable-string".to_owned(),
         "0".to_owned(),
         "0".to_owned(),
-        "manual".to_owned(),
+        edit.to_owned(),
         "--runtime-update-state-machine-data-binds".to_owned(),
         "0".to_owned(),
         "--runtime-advance-state-machine".to_owned(),
@@ -17525,7 +17582,7 @@ fn assert_string_public_update_target_to_source_matches_cpp_probe(label: &str, b
         state_machine.clone(),
     ));
     assert!(
-        state_machine.set_bindable_string_for_data_bind(0, b"manual"),
+        state_machine.set_bindable_string_for_data_bind(0, edit.as_bytes()),
         "{label} failed to mutate bindable string"
     );
     assert!(

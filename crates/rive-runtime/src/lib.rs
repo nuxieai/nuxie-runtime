@@ -6339,6 +6339,21 @@ fn runtime_data_bind_graph_reverse_convert_value(
             RuntimeDataBindGraphValue::String(value),
         ) => Some(RuntimeDataBindGraphValue::String(value.clone())),
         (RuntimeDataBindGraphConverter::ToString { .. }, _) => None,
+        (
+            RuntimeDataBindGraphConverter::StringTrim { .. },
+            RuntimeDataBindGraphValue::String(value),
+        ) => Some(RuntimeDataBindGraphValue::String(value.clone())),
+        (RuntimeDataBindGraphConverter::StringTrim { .. }, _) => None,
+        (
+            RuntimeDataBindGraphConverter::StringRemoveZeros,
+            RuntimeDataBindGraphValue::String(value),
+        ) => Some(RuntimeDataBindGraphValue::String(value.clone())),
+        (RuntimeDataBindGraphConverter::StringRemoveZeros, _) => None,
+        (
+            RuntimeDataBindGraphConverter::StringPad { .. },
+            RuntimeDataBindGraphValue::String(value),
+        ) => Some(RuntimeDataBindGraphValue::String(value.clone())),
+        (RuntimeDataBindGraphConverter::StringPad { .. }, _) => None,
         (RuntimeDataBindGraphConverter::ListToLength, RuntimeDataBindGraphValue::Number(value)) => {
             Some(RuntimeDataBindGraphValue::Number(*value))
         }

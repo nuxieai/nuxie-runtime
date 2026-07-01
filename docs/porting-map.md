@@ -295,6 +295,15 @@ In progress. Direct `LinearAnimation::apply` parity is in place for transform `K
 
 Current #11 update: trigger/self `TransitionViewModelCondition` comparisons now support default-context `BindablePropertyTrigger` sources with C++ probe coverage for no-context, value-trigger comparator, self-comparator, and same-layer used-source suppression cases. This closes the earlier remaining-work item named `trigger/self view-model transition conditions`; Live view-model APIs, nested animation remapping, data binding update queues, bindable-property override propagation from real data contexts, listener-owned dispatch, hit testing, pointer/keyboard/gamepad inputs, draw/render behavior, custom/scripted interpolators beyond transition timing, animation keyframe callback events, `ListenerViewModelChange`, component transition comparands, full layout solving, relative/parent/nested view-model paths for fire triggers, and callback keyframe coverage remain later slices.
 
+Current #11 update: scheduled `StateMachineFireTrigger` actions now have a
+C++-pinned relative `DataBindPath` boundary for the default state-machine
+scheduling path. The relative-path fixture imports a claimed
+`DataBindPath(path=[manifestPathId], isRelative=true)` immediately before the
+fire trigger; C++ leaves the default-context trigger count unchanged, so Rust
+keeps the target unresolved for this shape while preserving the existing
+absolute-path trigger behavior. Broader relative/name-resolved trigger paths
+owned by listener or nested-artboard data contexts remain future slices.
+
 Current #11 update: the first component-comparand runtime slice supports `TransitionPropertyComponentComparator` on the left with literal value comparators on the right for CoreRegistry double, bool, string/bytes, color, generic uint-as-number, and special enum/trigger/asset/artboard uint fields. C++ probe coverage includes static component values, mutable transform reads, and missing/unsupported target default-value comparisons. Component-vs-component, component-vs-view-model, artboard-vs-component, component-vs-artboard, and component view-model pointer comparisons remain later slices.
 
 Current #11 update: component-vs-component `TransitionPropertyComponentComparator` pairs now support C++ compatible number, bool, string/bytes, color, generic uint, enum, trigger, asset, and artboard comparisons, including mutable transform reads and missing/unsupported target default-value behavior. Component-vs-view-model, artboard-vs-component, component-vs-artboard, and component view-model pointer comparisons remain later slices.

@@ -1541,9 +1541,21 @@ fn synthetic_state_machine_fire_trigger_actions(file_id: u64) -> Vec<u8> {
     synthetic_state_machine_fire_trigger_actions_with_alternate(file_id, false)
 }
 
+fn synthetic_state_machine_fire_trigger_relative_path_actions(file_id: u64) -> Vec<u8> {
+    synthetic_state_machine_fire_trigger_actions_with_options(file_id, false, true)
+}
+
 fn synthetic_state_machine_fire_trigger_actions_with_alternate(
     file_id: u64,
     include_alternate: bool,
+) -> Vec<u8> {
+    synthetic_state_machine_fire_trigger_actions_with_options(file_id, include_alternate, false)
+}
+
+fn synthetic_state_machine_fire_trigger_actions_with_options(
+    file_id: u64,
+    include_alternate: bool,
+    relative_path: bool,
 ) -> Vec<u8> {
     const AT_START: u64 = 0;
     const AT_END: u64 = 1;
@@ -1556,6 +1568,9 @@ fn synthetic_state_machine_fire_trigger_actions_with_alternate(
             push_string_property(bytes, "ViewModelPropertyTrigger", "name", "fire");
         });
         push_object_with_properties(bytes, "Backboard", |_| {});
+        if relative_path {
+            push_manifest_name_path_asset(bytes, 79, 7, b"fire");
+        }
         push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
             push_string_property(bytes, "ViewModelInstance", "name", "root");
             push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
@@ -1591,12 +1606,27 @@ fn synthetic_state_machine_fire_trigger_actions_with_alternate(
         push_object_with_properties(bytes, "AnimationState", |bytes| {
             push_uint_property(bytes, "AnimationState", "animationId", 0);
         });
-        push_state_machine_fire_trigger(bytes, &[0, 0], AT_START);
+        let fire_trigger_path = if relative_path {
+            &[79][..]
+        } else {
+            &[0, 0][..]
+        };
+        push_state_machine_fire_trigger_with_relative(
+            bytes,
+            fire_trigger_path,
+            AT_START,
+            relative_path,
+        );
         push_object_with_properties(bytes, "StateTransition", |bytes| {
             push_uint_property(bytes, "StateTransition", "stateToId", 3);
         });
         push_synthetic_bool_transition_condition(bytes, 0);
-        push_state_machine_fire_trigger(bytes, &[0, 0], AT_END);
+        push_state_machine_fire_trigger_with_relative(
+            bytes,
+            fire_trigger_path,
+            AT_END,
+            relative_path,
+        );
         push_object_with_properties(bytes, "AnimationState", |bytes| {
             push_uint_property(bytes, "AnimationState", "animationId", 1);
         });
@@ -1605,17 +1635,34 @@ fn synthetic_state_machine_fire_trigger_actions_with_alternate(
 }
 
 fn push_state_machine_fire_trigger(bytes: &mut Vec<u8>, path: &[u32], occurs_value: u64) {
+    push_state_machine_fire_trigger_with_relative(bytes, path, occurs_value, false);
+}
+
+fn push_state_machine_fire_trigger_with_relative(
+    bytes: &mut Vec<u8>,
+    path: &[u32],
+    occurs_value: u64,
+    is_relative: bool,
+) {
     let mut encoded_path = Vec::new();
     for path_id in path {
         push_var_uint(&mut encoded_path, u64::from(*path_id));
     }
+    if is_relative {
+        push_object_with_properties(bytes, "DataBindPath", |bytes| {
+            push_bytes_property(bytes, "DataBindPath", "path", &encoded_path);
+            push_bool_property(bytes, "DataBindPath", "isRelative", true);
+        });
+    }
     push_object_with_properties(bytes, "StateMachineFireTrigger", |bytes| {
-        push_bytes_property(
-            bytes,
-            "StateMachineFireTrigger",
-            "viewModelPathIds",
-            &encoded_path,
-        );
+        if !is_relative {
+            push_bytes_property(
+                bytes,
+                "StateMachineFireTrigger",
+                "viewModelPathIds",
+                &encoded_path,
+            );
+        }
         if occurs_value != 0 {
             push_uint_property(
                 bytes,
@@ -14156,6 +14203,67 @@ fn state_machine_fire_trigger_actions_match_cpp_probe() {
 
     let label = "synthetic/runtime_state_machine_fire_trigger_actions_cpp.riv";
     let bytes = synthetic_state_machine_fire_trigger_actions(8270);
+    let args = [
+        "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-state-machine-bool".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "true".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    assert!(
+        state_machine.bind_default_view_model_context(),
+        "{label} failed to bind default view-model context"
+    );
+    let mut rust_reports = Vec::new();
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    rust_reports.push((advanced, state_machine.clone()));
+    assert!(state_machine.set_bool(0, true));
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    rust_reports.push((advanced, state_machine.clone()));
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+    {
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn state_machine_fire_trigger_relative_path_actions_match_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_fire_trigger_relative_path_actions_cpp.riv";
+    let bytes = synthetic_state_machine_fire_trigger_relative_path_actions(8677);
     let args = [
         "--runtime-bind-default-view-model-state-machine-context".to_owned(),
         "0".to_owned(),

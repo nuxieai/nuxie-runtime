@@ -12610,16 +12610,20 @@ fn perform_state_machine_fire_actions(
 }
 
 fn runtime_fire_trigger_target_global(file: &RuntimeFile, object: &RuntimeObject) -> Option<u32> {
-    if object
-        .bool_property("isDataBindPathRelative")
-        .unwrap_or(false)
-    {
+    let data_bind_path = file.data_bind_path_for_referencer_object(object)?;
+    let is_relative = data_bind_path
+        .object
+        .and_then(|path_object| path_object.bool_property("isRelative"))
+        .or_else(|| object.bool_property("isDataBindPathRelative"))
+        .unwrap_or(false);
+    if is_relative {
         return None;
     }
-    let path = object.id_list_property("viewModelPathIds")?;
     let default_instance = file.view_model_default_instance(0)?;
-    let target =
-        file.data_context_view_model_property_for_instance(default_instance.object, &path)?;
+    let target = file.data_context_view_model_property_for_instance(
+        default_instance.object,
+        &data_bind_path.resolved_path_ids,
+    )?;
     file.view_model_instance_trigger_count_for_object(target)?;
     Some(target.id)
 }

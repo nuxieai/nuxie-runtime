@@ -2,6 +2,8 @@
 
 Date: 2026-06-29
 
+Relative path boundary update: 2026-07-01
+
 This document continues roadmap item `#11` after the view-model number
 condition slice. It closes the smallest remaining state-machine fire-action
 gap: scheduled `StateMachineFireTrigger` actions mutating a trigger property on
@@ -25,6 +27,10 @@ The goal is complete when the runtime slice can:
   `StateMachineInstance`.
 - Resolve absolute `viewModelPathIds` to imported `ViewModelInstanceTrigger`
   values through existing `rive-binary` data-context lookup rules.
+- Preserve the C++ boundary for claimed relative `DataBindPath` fire-trigger
+  actions in this scheduled state-machine slice: the imported action remains
+  present, but the trigger source is treated as unresolved and no trigger count
+  mutation occurs.
 - Increment the target trigger value when the action's `occursValue` matches
   `atStart` or `atEnd`.
 - Compare the trigger value after public state-machine advances against the C++
@@ -38,8 +44,9 @@ the existing state/transition scheduling path.
 It does not implement:
 
 - full live `DataContext` ownership or public view-model APIs;
-- relative data-bind paths, manifest-name path expansion, or parent-context
-  fallback;
+- parent-context fallback;
+- firing relative/name-resolved paths in listener-owned or nested-artboard data
+  contexts;
 - `TransitionViewModelCondition` trigger comparators;
 - `ListenerViewModelChange` or listener-owned view-model dispatch;
 - data-bind queues, source/target binding, observers, converters, or
@@ -67,7 +74,7 @@ Focused verification:
 
 ```sh
 RIVE_CPP_PROBE=/Users/levi/dev/rive-rust/tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe \
-  cargo test -p rive-runtime --test cpp_probe state_machine_fire_trigger_actions_match_cpp_probe -- --nocapture
+  cargo test -p rive-runtime --test cpp_probe state_machine_fire_trigger -- --nocapture
 ```
 
 Full verification:

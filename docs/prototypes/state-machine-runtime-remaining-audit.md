@@ -21,8 +21,9 @@ slice.
   timing, exit timing, interruption, random transition selection, and transition
   reset behavior for the currently supported animation families.
 - State-machine inputs, scheduled fire/listener actions, fire-trigger actions
-  through the default view-model context, and explicit data-context trigger
-  reset.
+  through the default view-model context, claimed relative `DataBindPath`
+  fire-trigger actions pinned as unresolved for this scheduling path, and
+  explicit data-context trigger reset.
 - View-model transition conditions for number, integer, boolean, color, string,
   enum, asset, trigger/self, artboard, and root view-model pointer cases covered
   by current probes.

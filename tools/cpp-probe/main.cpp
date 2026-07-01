@@ -357,6 +357,7 @@ enum class RuntimeStateMachineActionKind
     BindOwnedViewModelSymbolListIndexContext,
     BindOwnedViewModelSymbolListIndexNamePathContext,
     BindOwnedViewModelAssetContext,
+    BindOwnedViewModelAssetNamePathContext,
     BindOwnedViewModelArtboardContext,
     BindOwnedViewModelViewModelDefaultContext,
     BindOwnedViewModelViewModelContext,
@@ -2575,6 +2576,47 @@ apply_runtime_state_machine_advances(rive::File* file,
             if (viewModelInstance != nullptr && property != nullptr)
             {
                 auto source = viewModelInstance->propertyValue(property->name());
+                if (source != nullptr &&
+                    source->is<rive::ViewModelInstanceAssetImage>())
+                {
+                    source->as<rive::ViewModelInstanceAssetImage>()
+                        ->propertyValue(action.uintValue);
+                }
+                stateMachine->bindViewModelInstance(viewModelInstance);
+            }
+            continue;
+        }
+        if (action.kind == RuntimeStateMachineActionKind::
+                               BindOwnedViewModelAssetNamePathContext)
+        {
+            auto viewModel =
+                file != nullptr && action.viewModelIndex < file->viewModelCount()
+                    ? file->viewModel(action.viewModelIndex)
+                    : nullptr;
+            auto viewModelInstance =
+                file != nullptr && viewModel != nullptr
+                    ? file->createViewModelInstance(viewModel)
+                    : nullptr;
+            if (viewModelInstance != nullptr)
+            {
+                rive::ViewModelInstanceRuntime runtime(viewModelInstance);
+                auto propertyDelimiter = action.stringValue.rfind('/');
+                auto propertyName =
+                    propertyDelimiter == std::string::npos
+                        ? action.stringValue
+                        : action.stringValue.substr(propertyDelimiter + 1);
+                auto ownerInstance = viewModelInstance;
+                if (propertyDelimiter != std::string::npos)
+                {
+                    auto ownerRuntime = runtime.propertyViewModel(
+                        action.stringValue.substr(0, propertyDelimiter));
+                    ownerInstance = ownerRuntime != nullptr
+                                        ? ownerRuntime->instance()
+                                        : nullptr;
+                }
+                auto source = ownerInstance != nullptr
+                                  ? ownerInstance->propertyValue(propertyName)
+                                  : nullptr;
                 if (source != nullptr &&
                     source->is<rive::ViewModelInstanceAssetImage>())
                 {
@@ -10538,6 +10580,35 @@ int main(int argc, const char* argv[])
 
         if (is_arg(
                 argv[i],
+                "--runtime-bind-owned-view-model-asset-name-path-state-machine-context"))
+        {
+            if (i + 4 >= argc)
+            {
+                std::cerr << "--runtime-bind-owned-view-model-asset-name-path-state-machine-context requires stateMachineIndex viewModelIndex propertyPath value\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::
+                BindOwnedViewModelAssetNamePathContext;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.viewModelIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.dataBindIndex = 0;
+            action.viewModelInstanceIndex = 0;
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            action.stringValue = argv[++i];
+            action.uintValue =
+                static_cast<uint32_t>(std::strtoull(argv[++i], nullptr, 10));
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
+        if (is_arg(
+                argv[i],
                 "--runtime-bind-owned-view-model-symbol-list-index-state-machine-context"))
         {
             if (i + 4 >= argc)
@@ -10888,6 +10959,7 @@ int main(int argc, const char* argv[])
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-color-name-path-state-machine-context stateMachineIndex viewModelIndex propertyPath value\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-enum-name-path-state-machine-context stateMachineIndex viewModelIndex propertyPath value\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-symbol-list-index-name-path-state-machine-context stateMachineIndex viewModelIndex propertyPath value\n";
+        std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-asset-name-path-state-machine-context stateMachineIndex viewModelIndex propertyPath value\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-symbol-list-index-state-machine-context stateMachineIndex viewModelIndex propertyIndex value\n";
         std::cerr << "additional runtime flag: --runtime-bind-default-view-model-artboard-context\n";
         std::cerr << "additional runtime flag: --runtime-relink-default-view-model-source-viewmodel stateMachineIndex dataBindIndex value\n";

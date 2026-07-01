@@ -830,6 +830,14 @@ slice.
   child's `ViewModelInstanceSymbolListIndex` through `propertyValue`. The
   contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-nested-symbol-list-index-name-path-runtime-contract.md`.
+- Owned generated nested asset name-path slice:
+  generated owned view-model children can store direct asset IDs, and
+  `RuntimeOwnedViewModelInstance::set_asset_by_property_name_path` can mutate
+  paths such as `child/image` before binding. The graph resolves matching
+  nested asset source paths for owned contexts, and the C++ probe resolves
+  `child` with `propertyViewModel` before mutating the child's
+  `ViewModelInstanceAssetImage` through `propertyValue`. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-nested-asset-name-path-runtime-contract.md`.
 - First `BindablePropertyList.propertyValue` target-to-source slice:
   state-machine list targets can be mutated by data-bind index, and explicit
   `advancedDataContext()` plus public `updateDataBinds(true)` consume the
@@ -860,7 +868,7 @@ slice.
   pointer relink overlays, property-name APIs beyond imported view-model
   pointer sources, owned generated view-model pointer paths, owned root scalar
   properties, and owned generated nested
-  number/boolean/string/color/enum/symbol-list-index paths, and stable public
+  number/boolean/string/color/enum/symbol-list-index/asset paths, and stable public
   handles that update or expose cached
   `propertyValue` indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,

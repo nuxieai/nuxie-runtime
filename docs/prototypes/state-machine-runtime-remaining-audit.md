@@ -846,6 +846,14 @@ slice.
   resolves `child` with `propertyViewModel` before mutating the child's
   `ViewModelInstanceArtboard` through `propertyValue`. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-nested-artboard-name-path-runtime-contract.md`.
+- Owned generated nested trigger name-path slice:
+  generated owned view-model children can store direct trigger values, and
+  `RuntimeOwnedViewModelInstance::set_trigger_by_property_name_path` can
+  mutate paths such as `child/fire` before binding. The graph resolves
+  matching nested trigger source paths for owned contexts, and the C++ probe
+  resolves `child` with `propertyViewModel` before mutating the child's
+  `ViewModelInstanceTrigger` through `propertyValue`. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-nested-trigger-name-path-runtime-contract.md`.
 - First `BindablePropertyList.propertyValue` target-to-source slice:
   state-machine list targets can be mutated by data-bind index, and explicit
   `advancedDataContext()` plus public `updateDataBinds(true)` consume the
@@ -876,8 +884,8 @@ slice.
   pointer relink overlays, property-name APIs beyond imported view-model
   pointer sources, owned generated view-model pointer paths, owned root scalar
   properties, and owned generated nested
-  number/boolean/string/color/enum/symbol-list-index/asset/artboard paths, and stable
-  public handles that update or expose cached
+  number/boolean/string/color/enum/symbol-list-index/asset/artboard/trigger paths, and
+  stable public handles that update or expose cached
   `propertyValue` indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.

@@ -2407,6 +2407,21 @@ reverse propagation, broader update queues, relative/parent/nested lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 
+Current #12 update: owned generated nested trigger paths now match the other
+generated nested scalar paths for raw `propertyValue` binding. Rust stores
+direct trigger values on generated owned view-model children, exposes
+`set_trigger_by_property_name_path("child/fire", value)`, and resolves trigger
+data-bind paths longer than the root scalar shape when binding an owned
+context. The C++ probe resolves the parent view-model path with
+`ViewModelInstanceRuntime::propertyViewModel("child")` and mutates the child's
+`ViewModelInstanceTrigger` through `propertyValue`. The contract is
+`docs/prototypes/data-binding-graph-owned-viewmodel-nested-trigger-name-path-runtime-contract.md`.
+Trigger firing APIs, listener/callback dispatch, nested list and view-model
+value paths, imported-intermediate nested scalar paths, imported-instance
+mutation sharing, stable public object handles, reverse propagation, broader
+update queues, relative/parent/nested lookup, and nested artboard propagation
+remain follow-up `#12` slices.
+
 Current #12 update: state-machine `BindablePropertyList.propertyValue`
 targets now have a probe-backed target-to-source boundary. Rust exposes
 `StateMachineInstance::set_bindable_list_for_data_bind`, tracks list target

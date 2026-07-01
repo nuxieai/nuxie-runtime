@@ -3624,8 +3624,21 @@ mutation. The C++ probe uses
 after completing view-model properties, matching
 `ViewModelInstanceRuntime::propertyEnum("child/choice")`. The contract is
 `docs/prototypes/data-binding-graph-imported-viewmodel-nested-enum-name-path-runtime-contract.md`.
+
+Current #12 update: imported view-model enum sources now have a stable public
+source handle for enum value-index mutation. `RuntimeImportedViewModelInstanceContext`
+can resolve a root or nested `ViewModelPropertyEnum*` name into
+`RuntimeImportedViewModelEnumSourceHandle`, and `set_enum_by_source_handle`
+writes through the existing resolved source-path override only when the handle
+belongs to the same imported view-model instance context. The C++ probe
+compares the handle mutation against
+`ViewModelInstanceRuntime::propertyEnum(name)` and verifies both state machines
+bound through the same context observe the changed enum source value index.
+The contract is
+`docs/prototypes/data-binding-graph-imported-viewmodel-enum-source-handle-runtime-contract.md`.
 Nested property-name paths for symbol-list-index/asset/artboard/trigger/list/
-view-model sources, stable public object handles, reverse propagation, broader
+view-model sources, stable public handles beyond the first imported number,
+boolean, string, color, and enum source handles, reverse propagation, broader
 update queues, relative/parent/nested lookup, listener-owned data binding, and
 nested artboard propagation remain follow-up `#12` slices.
 

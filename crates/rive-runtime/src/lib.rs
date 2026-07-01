@@ -3526,6 +3526,7 @@ struct RuntimeOwnedViewModelViewModel {
     strings: Vec<RuntimeOwnedViewModelString>,
     imported_strings: BTreeMap<u32, Vec<RuntimeOwnedViewModelString>>,
     colors: Vec<RuntimeOwnedViewModelColor>,
+    imported_colors: BTreeMap<u32, Vec<RuntimeOwnedViewModelColor>>,
     enums: Vec<RuntimeOwnedViewModelEnum>,
     symbol_list_indices: Vec<RuntimeOwnedViewModelSymbolListIndex>,
     lists: Vec<RuntimeOwnedViewModelList>,
@@ -3639,6 +3640,24 @@ impl RuntimeOwnedViewModelViewModel {
             .iter()
             .find(|color| color.property_index == property_index)
             .map(|color| color.value)
+    }
+
+    fn active_color_value_by_property_index(&self, property_index: usize) -> Option<u32> {
+        match self.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => {
+                self.color_value_by_property_index(property_index)
+            }
+            RuntimeViewModelPointer::Imported { object_id } => self
+                .imported_colors
+                .get(&object_id)
+                .and_then(|colors| {
+                    colors
+                        .iter()
+                        .find(|color| color.property_index == property_index)
+                })
+                .map(|color| color.value),
+            _ => None,
+        }
     }
 
     fn enum_value_by_property_index(&self, property_index: usize) -> Option<u64> {
@@ -4176,6 +4195,64 @@ fn runtime_owned_view_model_colors(
         .unwrap_or_default()
 }
 
+fn runtime_owned_view_model_colors_for_instance(
+    file: &RuntimeFile,
+    view_model_index: usize,
+    view_model_instance: &RuntimeObject,
+) -> Vec<RuntimeOwnedViewModelColor> {
+    file.view_model(view_model_index)
+        .map(|view_model| {
+            view_model
+                .properties
+                .into_iter()
+                .enumerate()
+                .filter_map(|(property_index, property)| {
+                    if property.type_name != "ViewModelPropertyColor" {
+                        return None;
+                    }
+                    let path = [
+                        u32::try_from(view_model_index).ok()?,
+                        u32::try_from(property_index).ok()?,
+                    ];
+                    let source = file.data_context_view_model_property_for_instance(
+                        view_model_instance,
+                        &path,
+                    )?;
+                    let value = file.view_model_instance_color_value_for_object(source)?;
+                    Some(RuntimeOwnedViewModelColor {
+                        property_index,
+                        value,
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn runtime_owned_view_model_imported_colors(
+    file: &RuntimeFile,
+    view_model_index: usize,
+) -> BTreeMap<u32, Vec<RuntimeOwnedViewModelColor>> {
+    file.view_model(view_model_index)
+        .map(|view_model| {
+            view_model
+                .instances
+                .into_iter()
+                .map(|instance| {
+                    (
+                        instance.object.id,
+                        runtime_owned_view_model_colors_for_instance(
+                            file,
+                            view_model_index,
+                            instance.object,
+                        ),
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 fn runtime_owned_view_model_enums(
     file: &RuntimeFile,
     view_model_index: usize,
@@ -4556,6 +4633,11 @@ fn runtime_owned_view_model_property_children(
                 colors: referenced_view_model_index
                     .map(|view_model_index| runtime_owned_view_model_colors(file, view_model_index))
                     .unwrap_or_default(),
+                imported_colors: referenced_view_model_index
+                    .map(|view_model_index| {
+                        runtime_owned_view_model_imported_colors(file, view_model_index)
+                    })
+                    .unwrap_or_default(),
                 enums: referenced_view_model_index
                     .map(|view_model_index| runtime_owned_view_model_enums(file, view_model_index))
                     .unwrap_or_default(),
@@ -4740,6 +4822,11 @@ impl RuntimeOwnedViewModelInstance {
                         colors: referenced_view_model_index
                             .map(|view_model_index| {
                                 runtime_owned_view_model_colors(file, view_model_index)
+                            })
+                            .unwrap_or_default(),
+                        imported_colors: referenced_view_model_index
+                            .map(|view_model_index| {
+                                runtime_owned_view_model_imported_colors(file, view_model_index)
                             })
                             .unwrap_or_default(),
                         enums: referenced_view_model_index
@@ -5529,13 +5616,7 @@ impl RuntimeOwnedViewModelInstance {
         }
         let (property_index, view_model_path) = property_path.split_last()?;
         let view_model = self.view_model_by_property_path(view_model_path)?;
-        if !matches!(
-            view_model.value,
-            RuntimeViewModelPointer::OwnedGenerated { .. }
-        ) {
-            return None;
-        }
-        view_model.color_value_by_property_index(*property_index)
+        view_model.active_color_value_by_property_index(*property_index)
     }
 
     fn enum_value_by_property_index(&self, property_index: usize) -> Option<u64> {

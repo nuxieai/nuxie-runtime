@@ -2228,9 +2228,24 @@ data-context binding as observed through a string transition condition. Rust
 records imported string snapshots per referenced view-model instance and uses
 them only for read-only graph source resolution. The contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-string-runtime-contract.md`.
-Other imported-intermediate scalar kinds beyond number, boolean, and string,
-persistent imported instance mutation, remaining property-name APIs, public
-object-handle APIs, reverse propagation, broader update queues,
+At that slice boundary, color and other imported-intermediate scalar kinds
+beyond number, boolean, and string, persistent imported instance mutation,
+remaining property-name APIs, public object-handle APIs, reverse propagation,
+broader update queues, relative/parent/nested lookup, listener-owned data
+binding, and nested artboard propagation remained follow-up `#12` slices.
+
+Current #12 update: owned view-model contexts now traverse one imported
+replacement intermediate for direct color sources. Replacing a generated root
+child with an imported child by instance index makes a source path such as
+`[root, child, tint]` read the imported child's existing
+`ViewModelInstanceColor.propertyValue`, matching C++ state-machine
+data-context binding as observed through a color transition condition. Rust
+records imported color snapshots per referenced view-model instance and uses
+them only for read-only graph source resolution. The contract is
+`docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-color-runtime-contract.md`.
+Other imported-intermediate scalar kinds beyond number, boolean, string, and
+color, persistent imported instance mutation, remaining property-name APIs,
+public object-handle APIs, reverse propagation, broader update queues,
 relative/parent/nested lookup, listener-owned data binding, and nested
 artboard propagation remain follow-up `#12` slices.
 

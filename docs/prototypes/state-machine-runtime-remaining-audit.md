@@ -1558,6 +1558,15 @@ slice.
   properties. The C++ probe proves two authored state machines bound through
   the same imported context keep the original artboard source. The contract is
   `docs/prototypes/data-binding-graph-imported-viewmodel-nested-artboard-name-path-unsupported-runtime-contract.md`.
+- Imported artboard source handle slice:
+  `RuntimeImportedViewModelInstanceContext` can now resolve a root artboard
+  source into `RuntimeImportedViewModelArtboardSourceHandle` and mutate through
+  that handle only when it belongs to the same imported view-model instance
+  context. Slash-path handle lookup remains unresolved, matching the nested
+  artboard boundary. The C++ probe compares the handle write against the root
+  artboard by-name mutation path and proves two authored state machines bound
+  through the same imported context observe the artboard index. The contract is
+  `docs/prototypes/data-binding-graph-imported-viewmodel-artboard-source-handle-runtime-contract.md`.
 - Imported nested trigger property-name path boundary:
   `RuntimeImportedViewModelInstanceContext::set_trigger_by_property_name_path`
   returns `false` for a slash-separated path such as `child/fire`, matching
@@ -1913,8 +1922,8 @@ slice.
   property-name APIs beyond imported view-model pointer and root
   number/boolean/string/color/enum/symbol-list-index/asset/artboard/trigger/list sources, owned generated view-model pointer
   paths, and stable public handles beyond the first imported number, boolean,
-  string, color, enum, symbol-list-index, and asset source handles that update
-  or expose cached `propertyValue` indexes.
+  string, color, enum, symbol-list-index, asset, and artboard source handles
+  that update or expose cached `propertyValue` indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
 - Live view-model APIs and data-binding propagation governed by

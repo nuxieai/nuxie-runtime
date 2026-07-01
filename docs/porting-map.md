@@ -3711,10 +3711,24 @@ completing view-model properties. Rust mirrors that by making
 return `false` for nested slash paths and by keeping the original source
 value. The contract is
 `docs/prototypes/data-binding-graph-imported-viewmodel-nested-artboard-name-path-unsupported-runtime-contract.md`.
+
+Current #12 update: imported view-model artboard sources now have a root-only
+stable public source handle. `RuntimeImportedViewModelInstanceContext` can
+resolve a root `ViewModelPropertyArtboard.name` into
+`RuntimeImportedViewModelArtboardSourceHandle`, and
+`set_artboard_by_source_handle` writes through the existing resolved
+source-path override only when the handle belongs to the same imported
+view-model instance context. Slash-path handle lookup remains unresolved,
+matching the nested artboard boundary above. The C++ probe compares the handle
+mutation against the root artboard by-name path and verifies both state
+machines bound through the same context observe the changed artboard index. The
+contract is
+`docs/prototypes/data-binding-graph-imported-viewmodel-artboard-source-handle-runtime-contract.md`.
 Nested property-name paths for trigger/list/view-model sources, stable public
-object handles, reverse propagation, broader update queues,
-relative/parent/nested lookup, listener-owned data binding, and nested
-artboard propagation remain follow-up `#12` slices.
+handles beyond the first imported number, boolean, string, color, enum,
+symbol-list-index, asset, and artboard source handles, reverse propagation,
+broader update queues, relative/parent/nested lookup, listener-owned data
+binding, and nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: imported view-model trigger sources now have the nested
 property-name path boundary pinned. C++ probe

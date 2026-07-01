@@ -3654,10 +3654,24 @@ slash path after completing view-model properties, matching
 `ViewModelInstanceRuntime::propertySymbolListIndex("child/symbol")`. The
 contract is
 `docs/prototypes/data-binding-graph-imported-viewmodel-nested-symbol-list-index-name-path-runtime-contract.md`.
+
+Current #12 update: imported view-model symbol-list-index sources now have a
+stable public source handle for symbol value-index mutation.
+`RuntimeImportedViewModelInstanceContext` can resolve a root or nested
+`ViewModelPropertySymbolListIndex.name` into
+`RuntimeImportedViewModelSymbolListIndexSourceHandle`, and
+`set_symbol_list_index_by_source_handle` writes through the existing resolved
+source-path override only when the handle belongs to the same imported
+view-model instance context. The C++ probe compares the handle mutation against
+`ViewModelInstanceRuntime::propertySymbolListIndex(name)` and verifies both
+state machines bound through the same context observe the changed symbol index
+value. The contract is
+`docs/prototypes/data-binding-graph-imported-viewmodel-symbol-list-index-source-handle-runtime-contract.md`.
 Nested property-name paths for asset/artboard/trigger/list/view-model sources,
-stable public object handles, reverse propagation, broader update queues,
-relative/parent/nested lookup, listener-owned data binding, and nested
-artboard propagation remain follow-up `#12` slices.
+stable public handles beyond the first imported number, boolean, string,
+color, enum, and symbol-list-index source handles, reverse propagation,
+broader update queues, relative/parent/nested lookup, listener-owned data
+binding, and nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: imported view-model asset sources now have the nested
 property-name path boundary pinned. C++ probe

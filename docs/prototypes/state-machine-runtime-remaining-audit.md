@@ -1523,6 +1523,16 @@ slice.
   completing view-model properties and proves two authored state machines bound
   through the same imported context observe the mutation. The contract is
   `docs/prototypes/data-binding-graph-imported-viewmodel-nested-symbol-list-index-name-path-runtime-contract.md`.
+- Imported symbol-list-index source handle slice:
+  `RuntimeImportedViewModelInstanceContext` can now resolve a root or nested
+  symbol-list-index source into
+  `RuntimeImportedViewModelSymbolListIndexSourceHandle` and mutate through
+  that handle only when it belongs to the same imported view-model instance
+  context. The C++ probe compares the handle write against
+  `ViewModelInstanceRuntime::propertySymbolListIndex(name)` and proves two
+  authored state machines bound through the same imported context observe the
+  symbol index value. The contract is
+  `docs/prototypes/data-binding-graph-imported-viewmodel-symbol-list-index-source-handle-runtime-contract.md`.
 - Imported nested asset property-name path boundary:
   `RuntimeImportedViewModelInstanceContext::set_asset_by_property_name_path`
   returns `false` for a slash-separated path such as `child/image`, matching
@@ -1894,8 +1904,8 @@ slice.
   property-name APIs beyond imported view-model pointer and root
   number/boolean/string/color/enum/symbol-list-index/asset/artboard/trigger/list sources, owned generated view-model pointer
   paths, and stable public handles beyond the first imported number, boolean,
-  string, color, and enum source handles that update or expose cached
-  `propertyValue` indexes.
+  string, color, enum, and symbol-list-index source handles that update or
+  expose cached `propertyValue` indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
 - Live view-model APIs and data-binding propagation governed by

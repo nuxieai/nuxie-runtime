@@ -1915,6 +1915,15 @@ slice.
   `ViewModelInstanceRuntime::propertyNumber(name)->value(...)` path before
   binding an owned context to a state machine. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-number-name-runtime-contract.md`.
+- First owned number source handle slice:
+  `RuntimeOwnedViewModelInstance` can now resolve a root number property name
+  into `RuntimeOwnedViewModelNumberSourceHandle` and mutate owned number
+  storage through that handle before binding. Slash-path lookup remains
+  unresolved, and owned source handles for boolean/string/color/enum/
+  symbol-list-index/asset/artboard/trigger/list/view-model sources remain
+  follow-up slices. The C++ probe compares the handle write against the
+  existing owned-number runtime context command. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-number-source-handle-runtime-contract.md`.
 - Owned root scalar property-name completion slice:
   `RuntimeOwnedViewModelInstance` can now mutate all root scalar kinds already
   backed by property-index storage by property name: number, boolean, string,

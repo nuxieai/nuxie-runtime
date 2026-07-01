@@ -4975,6 +4975,17 @@ pub struct RuntimeOwnedViewModelInstance {
     view_models: Vec<RuntimeOwnedViewModelViewModel>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeOwnedViewModelNumberSourceHandle {
+    property_index: usize,
+}
+
+impl RuntimeOwnedViewModelNumberSourceHandle {
+    pub fn property_index(&self) -> usize {
+        self.property_index
+    }
+}
+
 #[derive(Debug, Clone)]
 struct RuntimeOwnedViewModelNumber {
     property_index: usize,
@@ -7417,6 +7428,25 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         };
         self.set_number_by_property_index(property_index, value)
+    }
+
+    pub fn number_source_handle_by_property_name(
+        &self,
+        property_name: &str,
+    ) -> Option<RuntimeOwnedViewModelNumberSourceHandle> {
+        let property_index = self.property_index_by_name(property_name)?;
+        self.numbers
+            .iter()
+            .any(|number| number.property_index == property_index)
+            .then_some(RuntimeOwnedViewModelNumberSourceHandle { property_index })
+    }
+
+    pub fn set_number_by_source_handle(
+        &mut self,
+        handle: &RuntimeOwnedViewModelNumberSourceHandle,
+        value: f32,
+    ) -> bool {
+        self.set_number_by_property_index(handle.property_index, value)
     }
 
     pub fn set_number_by_property_name_path(&mut self, property_path: &str, value: f32) -> bool {

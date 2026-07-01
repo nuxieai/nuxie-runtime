@@ -1827,8 +1827,9 @@ Current #12 update: the first public `updateDataBinds(true)`
 target-to-source paths are now probe-backed for main-`ToTarget | TwoWay`
 number binds with no converter, direct `DataConverterOperationValue`, grouped
 `DataConverterGroup<OperationValue>`, direct `DataConverterRangeMapper`, and
-direct `DataConverterRounder`, direct system operation-value converters, and
-direct `DataConverterOperationViewModel`, plus direct deterministic
+direct `DataConverterGroup<RangeMapper, OperationValue>`, direct
+`DataConverterRounder`, direct system operation-value converters, and direct
+`DataConverterOperationViewModel`, plus direct deterministic
 `DataConverterFormula` and warmed direct `DataConverterInterpolator`.
 The C++ probe exposes `--runtime-update-state-machine-data-binds`, Rust
 mirrors it through
@@ -1840,15 +1841,17 @@ leaves the target at the edited value. The contracts are
 `docs/prototypes/data-binding-graph-operation-value-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-operation-value-group-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-range-mapper-public-update-target-to-source-runtime-contract.md`,
+`docs/prototypes/data-binding-graph-range-mapper-group-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-rounder-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-system-operation-value-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-operation-viewmodel-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-formula-public-update-target-to-source-runtime-contract.md`,
 and
 `docs/prototypes/data-binding-graph-interpolator-public-update-target-to-source-runtime-contract.md`.
-Public-update coverage for range-mapper groups, other converter families,
-mixed/stateful groups, full dirty-list scheduler parity, imported/owned
-contexts, pending add/remove behavior, re-entry protection,
+Public-update coverage for other converter families, broader mixed/stateful
+groups, full dirty-list scheduler parity including neighboring ordinary
+`ToTarget` bind refresh, imported/owned contexts, pending add/remove behavior,
+re-entry protection,
 relative/parent/nested lookup, listener-owned data binding, and nested artboard
 propagation remain follow-up `#12` slices.
 

@@ -28,8 +28,10 @@ is target-to-source.
 
 ## Out Of Scope
 
-- Main-`ToTarget | TwoWay` reverse group scheduling.
-- Public `DataBindContainer::updateDataBinds(true)` scheduler parity.
+- Main-`ToTarget | TwoWay` reverse group scheduling beyond the public
+  mutating-bind slice covered by
+  `docs/prototypes/data-binding-graph-range-mapper-group-public-update-target-to-source-runtime-contract.md`.
+- Broader public `DataBindContainer::updateDataBinds(true)` scheduler parity.
 - Exact `advancedDataContext()` source-to-target scheduling for neighboring
   ordinary `ToTarget` observer binds.
 - Stateful `DataConverterInterpolator` children.

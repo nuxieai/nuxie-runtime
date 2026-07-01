@@ -480,6 +480,13 @@ slice.
   target-to-source contract for main-`ToTarget | TwoWay` number binds. The
   public update reverse-converts the edited target into the source, then
   reapplies source-to-target during the same update.
+- Range-mapper group public-update reverse target-to-source slice:
+  `DataConverterGroup<RangeMapper, OperationValue>` now joins the public
+  `updateDataBinds(true)` target-to-source contract for main-`ToTarget |
+  TwoWay` number binds. The public update applies C++ reverse group order for
+  the mutating bind, writes the source, then reapplies grouped
+  source-to-target during the same update. Neighboring ordinary `ToTarget`
+  bind refresh remains a separate dirty-list scheduler slice.
 - Range-mapper group target-to-source slice: the first direct
   `DataConverterGroup` containing a `DataConverterRangeMapper` now covers a
   main-`ToSource | TwoWay` number bind. The group runs

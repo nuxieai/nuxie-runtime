@@ -32,7 +32,9 @@ source-to-target in the same update.
 
 ## Out Of Scope
 
-- Public-update coverage for range-mapper groups.
+- Public-update coverage for range-mapper groups beyond the mutating-bind
+  slice covered by
+  `docs/prototypes/data-binding-graph-range-mapper-group-public-update-target-to-source-runtime-contract.md`.
 - Public-update coverage for resolved-interpolator range mappers beyond the
   already admitted primitive transform.
 - Public-update coverage for rounder, system-operation converters,

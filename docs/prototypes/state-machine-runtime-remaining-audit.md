@@ -820,6 +820,16 @@ slice.
   `ViewModelInstanceRuntime::propertyEnum("child/choice")->valueIndex(...)`.
   The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-nested-enum-name-path-runtime-contract.md`.
+- Owned generated nested symbol-list-index name-path slice:
+  generated owned view-model children can store direct symbol-list-index
+  values, and
+  `RuntimeOwnedViewModelInstance::set_symbol_list_index_by_property_name_path`
+  can mutate paths such as `child/symbol` before binding. The graph resolves
+  matching nested symbol-list-index source paths for owned contexts, and the
+  C++ probe resolves `child` with `propertyViewModel` before mutating the
+  child's `ViewModelInstanceSymbolListIndex` through `propertyValue`. The
+  contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-nested-symbol-list-index-name-path-runtime-contract.md`.
 - First `BindablePropertyList.propertyValue` target-to-source slice:
   state-machine list targets can be mutated by data-bind index, and explicit
   `advancedDataContext()` plus public `updateDataBinds(true)` consume the
@@ -849,8 +859,9 @@ slice.
   read paths: imported-instance mutation beyond state-machine-local view-model
   pointer relink overlays, property-name APIs beyond imported view-model
   pointer sources, owned generated view-model pointer paths, owned root scalar
-  properties, and owned generated nested number/boolean/string/color/enum
-  paths, and stable public handles that update or expose cached
+  properties, and owned generated nested
+  number/boolean/string/color/enum/symbol-list-index paths, and stable public
+  handles that update or expose cached
   `propertyValue` indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.

@@ -2361,6 +2361,22 @@ propagation, broader update queues, relative/parent/nested lookup,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 
+Current #12 update: owned generated nested symbol-list-index paths now match
+the other generated nested scalar paths. Rust stores direct
+symbol-list-index values on generated owned view-model children, exposes
+`set_symbol_list_index_by_property_name_path("child/symbol", value)`, and
+resolves symbol-list-index data-bind paths longer than the root scalar shape
+when binding an owned context. The C++ probe resolves the parent view-model
+path with `ViewModelInstanceRuntime::propertyViewModel("child")` and mutates
+the child's `ViewModelInstanceSymbolListIndex` through `propertyValue`.
+The contract is
+`docs/prototypes/data-binding-graph-owned-viewmodel-nested-symbol-list-index-name-path-runtime-contract.md`.
+Other nested scalar kinds, imported-intermediate nested scalar paths,
+imported-instance mutation sharing, stable public object handles, reverse
+propagation, broader update queues, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
+
 Current #12 update: state-machine `BindablePropertyList.propertyValue`
 targets now have a probe-backed target-to-source boundary. Rust exposes
 `StateMachineInstance::set_bindable_list_for_data_bind`, tracks list target

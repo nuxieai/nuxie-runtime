@@ -749,6 +749,11 @@ slice.
   source-to-target application and public `updateDataBinds(true)`
   target-to-source application both leave the value unchanged, matching the
   non-scripting C++ probe build.
+- Operation base converter pass-through slice:
+  concrete `DataConverterOperation` now participates in the runtime graph as
+  inherited C++ base converter pass-through for a default-context number bind.
+  Normal source-to-target application and public `updateDataBinds(true)`
+  target-to-source application both leave the value unchanged, matching C++.
 - First graph-owned view-model bindable slice: forward propagation for
   default-context `ViewModelInstanceViewModel.propertyValue` sources feeding
   `BindablePropertyViewModel.propertyValue` targets, covered by a C++ probe
@@ -1295,7 +1300,8 @@ slice.
   operation-value-to-interpolator number smoothing, deterministic formula
   number/symbol-list-index-to-number conversion plus graph-represented
   non-number fallbacks and the first operation-value-to-formula public-update
-  group, non-scripting scripted converter pass-through,
+  group, concrete operation pass-through, non-scripting scripted converter
+  pass-through,
   first direct number/boolean/string/color/enum/asset/artboard/symbol-list-index/trigger/view-model
   target-to-source propagation,
   first artboard list-consumer immediate bind report,

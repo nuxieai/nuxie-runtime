@@ -2212,8 +2212,9 @@ direct `DataConverterGroup<RangeMapper, OperationValue>`, direct
 `DataConverterOperationViewModel`, direct cross-type `DataConverterToNumber`,
 direct deterministic `DataConverterFormula`, direct
 `DataConverterGroup<OperationValue, Formula>`, warmed direct
-`DataConverterInterpolator`, non-scripting `ScriptedDataConverter`
-pass-through, and direct `DataConverterToString` string binds.
+`DataConverterInterpolator`, concrete `DataConverterOperation` pass-through,
+non-scripting `ScriptedDataConverter` pass-through, and direct
+`DataConverterToString` string binds.
 The C++ probe exposes `--runtime-update-state-machine-data-binds`, Rust
 mirrors it through
 `StateMachineInstance::update_data_binds_apply_target_to_source`, and the
@@ -2236,6 +2237,7 @@ preserve-then-next-advance ordering. The contracts are
 `docs/prototypes/data-binding-graph-string-converter-family-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-formula-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-formula-group-public-update-target-to-source-runtime-contract.md`,
+`docs/prototypes/data-binding-graph-operation-pass-through-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-scripted-pass-through-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-public-update-observer-preservation-runtime-contract.md`,
 and
@@ -2304,6 +2306,19 @@ converter groups, full dirty-list scheduler parity, imported/owned contexts,
 pending add/remove behavior, re-entry protection, relative/parent/nested
 lookup, listener-owned data binding, and nested artboard propagation remain
 follow-up `#12` slices.
+
+Current #12 update: concrete `DataConverterOperation` now participates in the
+runtime data-bind graph as inherited C++ base converter pass-through. A
+main-`ToTarget | TwoWay` number bind with a direct operation base converter
+applies source-to-target unchanged, then public `updateDataBinds(true)` applies
+base `reverseConvert` unchanged before reapplying source-to-target in the same
+update. The contract is
+`docs/prototypes/data-binding-graph-operation-pass-through-runtime-contract.md`.
+Arithmetic operation-value/view-model behavior, operation converter groups
+beyond already admitted concrete group slices, full dirty-list scheduler
+parity, imported/owned contexts, pending add/remove behavior, re-entry
+protection, relative/parent/nested lookup, listener-owned data binding, and
+nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: owned runtime view-model contexts now cover the first
 live view-model pointer replacement path. `RuntimeOwnedViewModelInstance`

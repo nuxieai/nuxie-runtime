@@ -19551,7 +19551,9 @@ fn runtime_data_bind_graph_converter_for_object(
                 })
                 .collect(),
         ),
-        "ScriptedDataConverter" => RuntimeDataBindGraphConverter::PassThrough,
+        "DataConverterOperation" | "ScriptedDataConverter" => {
+            RuntimeDataBindGraphConverter::PassThrough
+        }
         "DataConverterBooleanNegate" => RuntimeDataBindGraphConverter::BooleanNegate,
         "DataConverterTrigger" => RuntimeDataBindGraphConverter::TriggerIncrement,
         "DataConverterToNumber" => RuntimeDataBindGraphConverter::ToNumber,

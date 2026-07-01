@@ -1877,8 +1877,9 @@ fn synthetic_state_machine_default_viewmodel_number_blend_state_with_state_machi
     })
 }
 
-fn synthetic_state_machine_default_viewmodel_number_scripted_converter_blend_state_with_flags(
+fn synthetic_state_machine_default_viewmodel_number_pass_through_converter_blend_state_with_flags(
     file_id: u64,
+    converter_type: &str,
     data_bind_flags: u64,
 ) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
@@ -1897,7 +1898,7 @@ fn synthetic_state_machine_default_viewmodel_number_scripted_converter_blend_sta
             push_uint_property(bytes, "ViewModelInstanceNumber", "viewModelPropertyId", 0);
             push_f32_property(bytes, "ViewModelInstanceNumber", "propertyValue", 1.0);
         });
-        push_object_with_properties(bytes, "ScriptedDataConverter", |_| {});
+        push_object_with_properties(bytes, converter_type, |_| {});
         push_object_with_properties(bytes, "Artboard", |_| {});
         push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
         push_animation_for_single_node(bytes, 1, 2.0, 12.0);
@@ -14330,8 +14331,23 @@ fn scripted_data_converter_public_update_target_to_source_matches_cpp_probe() {
 
     let label = "synthetic/runtime_state_machine_scripted_data_converter_public_update_cpp.riv";
     let bytes =
-        synthetic_state_machine_default_viewmodel_number_scripted_converter_blend_state_with_flags(
+        synthetic_state_machine_default_viewmodel_number_pass_through_converter_blend_state_with_flags(
             8640,
+            "ScriptedDataConverter",
+            DATA_BIND_TWO_WAY,
+        );
+    assert_number_public_update_target_to_source_matches_cpp_probe(label, bytes);
+}
+
+#[test]
+fn data_converter_operation_public_update_target_to_source_matches_cpp_probe() {
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    let label = "synthetic/runtime_state_machine_data_converter_operation_public_update_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_number_pass_through_converter_blend_state_with_flags(
+            8641,
+            "DataConverterOperation",
             DATA_BIND_TWO_WAY,
         );
     assert_number_public_update_target_to_source_matches_cpp_probe(label, bytes);

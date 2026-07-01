@@ -6074,6 +6074,20 @@ fn runtime_data_bind_graph_reverse_convert_value(
         )),
         (RuntimeDataBindGraphConverter::OperationValue { .. }, _) => None,
         (
+            RuntimeDataBindGraphConverter::OperationViewModel {
+                operation_type,
+                operation_value,
+            },
+            RuntimeDataBindGraphValue::Number(value),
+        ) => Some(RuntimeDataBindGraphValue::Number(
+            runtime_data_bind_graph_reverse_convert_operation_value(
+                *value,
+                *operation_value,
+                *operation_type,
+            ),
+        )),
+        (RuntimeDataBindGraphConverter::OperationViewModel { .. }, _) => None,
+        (
             RuntimeDataBindGraphConverter::RangeMapper {
                 min_input,
                 max_input,

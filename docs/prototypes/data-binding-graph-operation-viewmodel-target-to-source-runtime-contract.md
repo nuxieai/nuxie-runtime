@@ -9,6 +9,9 @@ C++ target-to-source converter dispatch follows the data bind's main direction.
 For a main-`ToSource` `DataConverterOperationViewModel` bind, the edited
 target value is passed through `convert`, using the resolved secondary
 view-model number operand, before writing the primary view-model number source.
+The main-`ToTarget | TwoWay` public update path, where C++ dispatches
+`reverseConvert` with the same resolved secondary operand, is covered by
+`docs/prototypes/data-binding-graph-operation-viewmodel-public-update-target-to-source-runtime-contract.md`.
 
 ## In Scope
 
@@ -30,8 +33,8 @@ view-model number operand, before writing the primary view-model number source.
 
 - Main-`ToTarget | TwoWay` operation-view-model dirty behavior, covered by
   `docs/prototypes/data-binding-graph-operation-viewmodel-main-to-target-two-way-target-dirty-runtime-contract.md`.
-- Public `DataBindContainer::updateDataBinds(true)` scheduler parity and
-  public-queue `reverseConvert` behavior.
+- Broader public `DataBindContainer::updateDataBinds(true)` scheduler parity
+  beyond the direct operation-view-model dirty bind.
 - Live dependency/dirt propagation when the secondary operation source changes.
 - Recomputing the secondary operand for imported or owned context rebinding.
 - Missing, non-number, relative-path, parent-path, or nested secondary

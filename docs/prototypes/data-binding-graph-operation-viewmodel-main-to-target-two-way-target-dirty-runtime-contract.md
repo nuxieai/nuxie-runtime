@@ -37,7 +37,9 @@ with the resolved secondary view-model number operand.
 - Immediate target-to-source reverse conversion for main-`ToTarget | TwoWay`
   binds.
 - Public `DataBindContainer::updateDataBinds(true)` scheduler parity outside
-  the state-machine bindable-property action path.
+  the state-machine bindable-property action path; the direct
+  operation-view-model public-update variant is covered by
+  `docs/prototypes/data-binding-graph-operation-viewmodel-public-update-target-to-source-runtime-contract.md`.
 - Full dirty-list scheduler parity for neighboring ordinary `ToTarget`
   bindable targets.
 - Live dependency/dirt propagation when the secondary operation source changes.

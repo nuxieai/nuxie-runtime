@@ -199,6 +199,11 @@ slice.
   advancement preserves a manual bindable target edit, then normal
   state-machine advancement overwrites it from the unchanged primary source
   through forward conversion with the imported secondary operand.
+- Operation-view-model public-update target-to-source slice: direct
+  `DataConverterOperationViewModel` now covers public `updateDataBinds(true)`
+  for main-`ToTarget | TwoWay` number binds. The public update reverse-converts
+  the edited target with the imported secondary operand, writes the primary
+  source, then reapplies source-to-target in the same update.
 - First system operation-value converter slice: direct
   `DataConverterSystemNormalizer` and `DataConverterSystemDegsToRads`
   conversion for default-context number sources feeding number targets when

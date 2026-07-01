@@ -421,6 +421,12 @@ slice.
   slice: forward conversion for default-context number sources feeding number
   targets, using a second imported default view-model number as the operation
   operand and covered by a C++ probe through an existing blend-state consumer.
+- Operation-view-model converter name-path unsupported boundary: converter
+  `sourcePathIds` containing a manifest path id for a secondary `factor`
+  property do not use `DataBindContext::resolvePath()` or relative manifest
+  lookup in C++; the secondary operand remains missing and the converter falls
+  back to operand `0.0`. The contract is
+  `docs/prototypes/data-binding-graph-operation-viewmodel-name-path-unsupported-runtime-contract.md`.
 - Operation-view-model target-to-source slice: direct
   `DataConverterOperationViewModel` now covers main-`ToSource | TwoWay` number
   target-to-source writes. The edited target value flows through `convert`
@@ -1658,8 +1664,9 @@ slice.
   advance target-count reports, data-binding update queues, full artboard
   component-list item instancing, map-rule-driven child creation, list
   layout/virtualization, remaining generated-list reverse converters, admitted
-  live relative/name lookup with file pointers, converter name paths, relative
-  paths, parent paths, and nested paths.
+  live relative/name lookup with file pointers, remaining converter name paths
+  beyond the direct `DataConverterOperationViewModel` unsupported boundary,
+  relative paths, parent paths, and nested paths.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener
   actions.

@@ -35,6 +35,9 @@ evaluation.
 - Recomputing the secondary operand for imported or owned context rebinding.
 - Missing, non-number, relative-path, parent-path, or nested secondary
   operation sources.
+- Converter-side manifest name paths; the direct unsupported boundary is
+  covered by
+  `docs/prototypes/data-binding-graph-operation-viewmodel-name-path-unsupported-runtime-contract.md`.
 - Dedicated grouped `DataConverterOperationViewModel` parity coverage beyond
   the existing generic group executor.
 - Formula, interpolator, number-to-list, and scripted converters.

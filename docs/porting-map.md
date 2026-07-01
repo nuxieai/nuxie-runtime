@@ -1181,6 +1181,22 @@ operation-view-model probe coverage, formula, interpolator, number-to-list,
 and scripted converters, relative/parent/nested lookup, listener-owned data
 binding, and nested artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: direct `DataConverterOperationViewModel` converter source
+paths now have an explicit name-path unsupported boundary. C++
+`DataConverterOperationViewModel::bindFromContext()` calls
+`DataContext::getViewModelProperty(sourcePathIds)` directly, so a manifest
+path id for `factor` is not resolved through the file data resolver and leaves
+the secondary operand missing. Rust mirrors the C++ operand `0.0` fallback
+through the existing blend-state probe. The contract is
+`docs/prototypes/data-binding-graph-operation-viewmodel-name-path-unsupported-runtime-contract.md`.
+Stable public source handles, list/view-model bindables, reverse conversion,
+other grouped secondary-source dependency compositions, imported/owned context
+recomputation for the secondary operand, dedicated grouped
+operation-view-model probe coverage, formula, interpolator, number-to-list,
+scripted converters, supported relative/parent/nested lookup surfaces,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
+
 Current #12 update: direct `DataConverterOperationViewModel` now refreshes
 its cached secondary operand and dirties the dependent source when that
 secondary default view-model number is mutated through the state-machine

@@ -3102,6 +3102,27 @@ impl RuntimeImportedViewModelNumberSourceHandle {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeImportedViewModelBooleanSourceHandle {
+    view_model_index: usize,
+    instance_index: usize,
+    path: Vec<u32>,
+}
+
+impl RuntimeImportedViewModelBooleanSourceHandle {
+    pub fn view_model_index(&self) -> usize {
+        self.view_model_index
+    }
+
+    pub fn instance_index(&self) -> usize {
+        self.instance_index
+    }
+
+    pub fn path(&self) -> &[u32] {
+        &self.path
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct RuntimeImportedViewModelInstanceContext {
     view_model_index: usize,
@@ -3251,6 +3272,54 @@ impl RuntimeImportedViewModelInstanceContext {
 
         self.number_overrides.insert(path, value);
         true
+    }
+
+    pub fn boolean_source_handle_by_property_name(
+        &self,
+        file: &RuntimeFile,
+        property_name: &str,
+    ) -> Option<RuntimeImportedViewModelBooleanSourceHandle> {
+        let path = runtime_imported_view_model_boolean_property_path_for_name(
+            file,
+            self.view_model_index,
+            property_name,
+        )?;
+        Some(RuntimeImportedViewModelBooleanSourceHandle {
+            view_model_index: self.view_model_index,
+            instance_index: self.instance_index,
+            path,
+        })
+    }
+
+    pub fn boolean_source_handle_by_property_name_path(
+        &self,
+        file: &RuntimeFile,
+        property_path: &str,
+    ) -> Option<RuntimeImportedViewModelBooleanSourceHandle> {
+        let path = runtime_imported_view_model_boolean_property_path_for_name_path(
+            file,
+            self.view_model_index,
+            property_path,
+        )?;
+        Some(RuntimeImportedViewModelBooleanSourceHandle {
+            view_model_index: self.view_model_index,
+            instance_index: self.instance_index,
+            path,
+        })
+    }
+
+    pub fn set_boolean_by_source_handle(
+        &mut self,
+        file: &RuntimeFile,
+        handle: &RuntimeImportedViewModelBooleanSourceHandle,
+        value: bool,
+    ) -> bool {
+        if handle.view_model_index != self.view_model_index
+            || handle.instance_index != self.instance_index
+        {
+            return false;
+        }
+        self.set_boolean_by_resolved_property_path(file, handle.path.clone(), value)
     }
 
     pub fn set_boolean_by_property_name(

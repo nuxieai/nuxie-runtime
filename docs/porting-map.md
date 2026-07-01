@@ -3539,11 +3539,23 @@ probe uses `--runtime-set-view-model-instance-source-bool-by-name` with the
 slash path after completing view-model properties, matching
 `ViewModelInstanceRuntime::propertyBoolean("child/enabled")`. The contract is
 `docs/prototypes/data-binding-graph-imported-viewmodel-nested-boolean-name-path-runtime-contract.md`.
+
+Current #12 update: imported view-model boolean sources now have a stable
+public source handle matching the number handle shape.
+`RuntimeImportedViewModelInstanceContext` can resolve a root or nested boolean
+property name into `RuntimeImportedViewModelBooleanSourceHandle`, and
+`set_boolean_by_source_handle` writes through the existing resolved
+source-path override only when the handle belongs to the same imported
+view-model instance context. The C++ probe compares the handle mutation against
+`ViewModelInstanceRuntime::propertyBoolean(name)` and verifies both state
+machines bound through the same context observe the changed source value. The
+contract is
+`docs/prototypes/data-binding-graph-imported-viewmodel-boolean-source-handle-runtime-contract.md`.
 Nested property-name paths for string/color/enum/symbol-list-index/asset/
-artboard/trigger/list/view-model sources, stable public object handles,
-reverse propagation, broader update queues, relative/parent/nested lookup,
-listener-owned data binding, and nested artboard propagation remain follow-up
-`#12` slices.
+artboard/trigger/list/view-model sources, stable public handles beyond the
+first imported number and boolean source handles, reverse propagation, broader
+update queues, relative/parent/nested lookup, listener-owned data binding, and
+nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: imported view-model string sources now have the nested
 property-name path mutation API. `RuntimeImportedViewModelInstanceContext::

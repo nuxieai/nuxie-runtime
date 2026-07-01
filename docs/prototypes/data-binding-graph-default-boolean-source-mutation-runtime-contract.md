@@ -8,16 +8,19 @@ default number sources to default boolean sources.
 It is limited to a default-context `DataBindContext` whose source resolves to a
 `ViewModelInstanceBoolean` and whose target is already represented by the
 finite default `propertyValue` graph edge set. The mutation updates the
-`RuntimeDataBindGraph` source node, marks the default edge dirty when the
-default view-model context is bound, and lets the existing graph apply path copy
-the source value to the cloned bindable target before state-machine layer
-evaluation.
+`RuntimeDataBindGraph` source nodes that share the selected source path, marks
+the default edges dirty when the default view-model context is bound, and lets
+the existing graph apply path copy the source value to cloned bindable targets
+before state-machine layer evaluation.
 
 ## Runtime Rule
 
 `StateMachineInstance::set_default_view_model_boolean_source_for_data_bind`
-mutates only a boolean graph source node selected by state-machine data-bind
-index.
+uses the state-machine data-bind index to find the authored source path, then
+mutates every bound boolean source node with that same path. This matches
+C++'s runtime mutation of the underlying
+`ViewModelInstanceBoolean.propertyValue` rather than a single cloned data-bind
+edge.
 
 The C++ probe action
 `--runtime-set-default-view-model-source-bool <stateMachineIndex> <dataBindIndex> <value>`
@@ -29,10 +32,11 @@ state-machine advancement to process the dirty data bind.
 ## Out Of Scope
 
 This slice does not add external view-model contexts, public source handles,
-non-boolean source mutation, target-to-source propagation, converter execution,
-observer/polling queue parity, pending add/remove handling, relative paths,
-parent paths, nested paths, listener-owned data binding, or nested artboard
-data-context propagation.
+same-path propagation for non-number/non-boolean data-bind-index source
+mutation APIs, target-to-source propagation, converter execution,
+observer/polling queue parity beyond this same-path boolean witness, pending
+add/remove handling, relative paths, parent paths, nested paths,
+listener-owned data binding, or nested artboard data-context propagation.
 
 It also does not replace direct cloned-bindable target mutation APIs; those are
 still explicit target override seams until the graph owns target-to-source
@@ -42,9 +46,11 @@ propagation.
 
 - The C++ probe can mutate a default `ViewModelInstanceBoolean` source by
   state-machine data-bind index.
-- Rust mutates the matching `RuntimeDataBindGraph` source node rather than a
-  cloned bindable target.
+- Rust mutates all matching `RuntimeDataBindGraph` boolean source nodes for
+  the selected source path rather than only the first cloned data-bind edge.
 - Mutating after `bind_default_view_model_context` dirties the graph so the next
   state-machine advance observes the changed source value.
 - A C++ probe-backed test verifies the changed boolean through an existing
   transition-condition consumer.
+- A second same-path boolean bind reports the changed source and applies the
+  changed target on the next state-machine advance.

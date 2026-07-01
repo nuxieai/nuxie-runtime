@@ -7431,31 +7431,18 @@ impl RuntimeDataBindGraph {
         data_bind_index: usize,
         value: bool,
     ) -> bool {
-        let default_context_bound = self.default_view_model_source_context_bound();
-        let Some(source) = self
+        let Some(path) = self
             .default_view_model_bindings
             .iter()
             .find(|binding| binding.data_bind_index == data_bind_index)
             .map(|binding| binding.source)
+            .and_then(|source| self.sources.get(source.0))
+            .map(|source| source.path.clone())
         else {
             return false;
         };
-        let Some(source) = self.sources.get_mut(source.0) else {
-            return false;
-        };
-        let RuntimeDataBindGraphValue::Boolean(current) = &mut source.default_value else {
-            return false;
-        };
-        if *current == value {
-            return false;
-        }
-        *current = value;
-        if default_context_bound {
-            source.value = RuntimeDataBindGraphValue::Boolean(value);
-            source.bound = true;
-            self.mark_default_view_model_bindings_dirty();
-        }
-        true
+
+        self.set_default_view_model_boolean_source_for_path(&path, value)
     }
 
     fn set_default_view_model_string_source_for_path(

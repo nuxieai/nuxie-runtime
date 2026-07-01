@@ -2413,10 +2413,25 @@ a neighboring ordinary direct `ToTarget` number bind reports the updated
 source and applies the updated target on the next state-machine advance. The
 contract is
 `docs/prototypes/data-binding-graph-default-number-source-mutation-runtime-contract.md`.
-Same-path data-bind-index source mutation for non-number families, imported
-and owned contexts, full dirty-list scheduler parity, pending add/remove
-behavior, re-entry protection, relative/parent/nested lookup, listener-owned
-data binding, and nested artboard propagation remain follow-up `#12` slices.
+Same-path data-bind-index source mutation for non-number/non-boolean
+families, imported and owned contexts, full dirty-list scheduler parity,
+pending add/remove behavior, re-entry protection, relative/parent/nested
+lookup, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
+
+Current #12 update: default-context boolean source mutation by state-machine
+data-bind index now updates same-path graph source nodes instead of only the
+selected cloned edge. A C++ probe mutates a shared
+`ViewModelInstanceBoolean.propertyValue` through the first data bind and
+proves a neighboring ordinary direct `ToTarget` boolean bind reports the
+updated source and applies the updated target on the next state-machine
+advance. The contract is
+`docs/prototypes/data-binding-graph-default-boolean-source-mutation-runtime-contract.md`.
+Same-path data-bind-index source mutation for remaining non-number/non-boolean
+families, imported and owned contexts, full dirty-list scheduler parity,
+pending add/remove behavior, re-entry protection, relative/parent/nested
+lookup, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
 
 Current #12 update: grouped system operation-value public
 `updateDataBinds(true)` target-to-source behavior now preserves the owning

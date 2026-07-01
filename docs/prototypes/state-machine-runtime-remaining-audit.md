@@ -195,15 +195,25 @@ slice.
   `StateMachineInstance` can now resolve root enum view-model property names
   on file view model `0` into `RuntimeDefaultViewModelEnumSourceHandle` and
   mutate graph-owned default enum source nodes through that handle. Slash-path
-  lookup remains unresolved, and default handles for other source kinds remain
-  follow-up slices. The C++ probe compares the handle write against the
-  default enum by-name mutation command. The contract is
+  lookup remains unresolved, and default handles beyond number/boolean/string/
+  color/enum/symbol-list-index remain follow-up slices. The C++ probe compares
+  the handle write against the default enum by-name mutation command. The
+  contract is
   `docs/prototypes/data-binding-graph-default-enum-source-handle-runtime-contract.md`.
 - Default root symbol-list-index property-name mutation, covered by a C++ probe
   through raw `ViewModelInstance::propertyValue("symbol")` / property-index
   lookup for the file-backed default instance and the existing
   symbol-list-index-to-string transition-condition consumer. The contract is
   `docs/prototypes/data-binding-graph-default-symbol-list-index-name-runtime-contract.md`.
+- Default symbol-list-index source handle slice:
+  `StateMachineInstance` can now resolve root
+  `ViewModelPropertySymbolListIndex.name` values on file view model `0` into
+  `RuntimeDefaultViewModelSymbolListIndexSourceHandle` and mutate graph-owned
+  default symbol-list-index source nodes through that handle. Slash-path lookup
+  remains unresolved, and default handles for other source kinds remain
+  follow-up slices. The C++ probe compares the handle write against the
+  default symbol-list-index by-name mutation command. The contract is
+  `docs/prototypes/data-binding-graph-default-symbol-list-index-source-handle-runtime-contract.md`.
 - Default root asset property-name mutation, covered by a C++ probe through
   raw `ViewModelInstance::propertyValue("image")` / property-index lookup for
   the file-backed default instance and the existing asset transition-condition

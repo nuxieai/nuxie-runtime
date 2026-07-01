@@ -1234,6 +1234,14 @@ slice.
   records imported string snapshots per referenced view-model instance for
   read-only graph binding. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-string-runtime-contract.md`.
+- Owned view-model imported-intermediate string name-path mutation unsupported
+  boundary: replacing a generated root child with an imported child by
+  instance index still lets the graph read `[child, label]`, but attempting
+  `ViewModelInstanceRuntime::propertyString("child/label")->value(...)` from
+  the owned root leaves the imported child's existing string selected in C++.
+  Rust keeps `set_string_by_property_name_path("child/label", value)`
+  generated-only and returns `false` once `child` is imported. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-string-name-path-unsupported-runtime-contract.md`.
 - Owned view-model imported-intermediate color source slice:
   replacing a generated root child with an imported child by instance index
   lets `RuntimeOwnedViewModelInstance` resolve `[child, tint]` through the

@@ -3207,7 +3207,12 @@ impl RuntimeDataBindGraphValue {
         path: &[u32],
     ) -> Option<Self> {
         if path.len() != 2 || usize::try_from(path[0]).ok()? != context.view_model_index {
-            return None;
+            if !matches!(self, Self::ViewModel(_)) {
+                return None;
+            }
+            if path.len() < 2 || usize::try_from(path[0]).ok()? != context.view_model_index {
+                return None;
+            }
         }
         match self {
             Self::Number(_) => context
@@ -3239,9 +3244,15 @@ impl RuntimeDataBindGraphValue {
             Self::Trigger(_) => context
                 .trigger_value_by_property_index(usize::try_from(path[1]).ok()?)
                 .map(Self::Trigger),
-            Self::ViewModel(_) => context
-                .view_model_value_by_property_index(usize::try_from(path[1]).ok()?)
-                .map(Self::ViewModel),
+            Self::ViewModel(_) => {
+                let property_path = path[1..]
+                    .iter()
+                    .map(|property_index| usize::try_from(*property_index).ok())
+                    .collect::<Option<Vec<_>>>()?;
+                context
+                    .view_model_value_by_property_path(&property_path)
+                    .map(Self::ViewModel)
+            }
         }
     }
 
@@ -3389,6 +3400,68 @@ struct RuntimeOwnedViewModelViewModel {
     property_index: usize,
     value: RuntimeViewModelPointer,
     view_model_instance_ids: Vec<u32>,
+    children: Vec<RuntimeOwnedViewModelViewModel>,
+}
+
+fn runtime_owned_view_model_path_key(path: &[usize]) -> u64 {
+    let mut key = 0xcbf29ce484222325u64;
+    for segment in path {
+        key ^= *segment as u64;
+        key = key.wrapping_mul(0x100000001b3);
+    }
+    key
+}
+
+fn runtime_owned_view_model_view_model_children(
+    file: &RuntimeFile,
+    view_model_index: usize,
+    parent_path: &[usize],
+) -> Vec<RuntimeOwnedViewModelViewModel> {
+    let Some(view_model) = file.view_model(view_model_index) else {
+        return Vec::new();
+    };
+
+    view_model
+        .properties
+        .into_iter()
+        .enumerate()
+        .filter_map(|(property_index, property)| {
+            if property.type_name != "ViewModelPropertyViewModel" {
+                return None;
+            }
+            let referenced_view_model_index = property
+                .uint_property("viewModelReferenceId")
+                .and_then(|view_model_reference_id| usize::try_from(view_model_reference_id).ok());
+            let referenced_view_model = referenced_view_model_index
+                .and_then(|view_model_index| file.view_model(view_model_index));
+            let mut path = parent_path.to_vec();
+            path.push(property_index);
+            let value = if referenced_view_model.is_some() {
+                RuntimeViewModelPointer::OwnedGenerated {
+                    view_model_index,
+                    property_index,
+                    path_key: runtime_owned_view_model_path_key(&path),
+                }
+            } else {
+                RuntimeViewModelPointer::Null
+            };
+            let view_model_instance_ids = referenced_view_model
+                .map(|view_model| {
+                    view_model
+                        .instances
+                        .into_iter()
+                        .map(|instance| instance.object.id)
+                        .collect()
+                })
+                .unwrap_or_default();
+            Some(RuntimeOwnedViewModelViewModel {
+                property_index,
+                value,
+                view_model_instance_ids,
+                children: Vec::new(),
+            })
+        })
+        .collect()
 }
 
 impl RuntimeOwnedViewModelInstance {
@@ -3449,19 +3522,34 @@ impl RuntimeOwnedViewModelInstance {
                     value: 0,
                 }),
                 "ViewModelPropertyViewModel" => {
-                    let referenced_view_model = property
-                        .uint_property("viewModelReferenceId")
-                        .and_then(|view_model_reference_id| {
-                            usize::try_from(view_model_reference_id).ok()
-                        })
+                    let referenced_view_model_index =
+                        property.uint_property("viewModelReferenceId").and_then(
+                            |view_model_reference_id| usize::try_from(view_model_reference_id).ok(),
+                        );
+                    let referenced_view_model = referenced_view_model_index
                         .and_then(|view_model_index| file.view_model(view_model_index));
+                    let path = [view_model_index, property_index];
                     let value = if referenced_view_model.is_some() {
                         RuntimeViewModelPointer::OwnedGenerated {
                             view_model_index,
                             property_index,
+                            path_key: runtime_owned_view_model_path_key(&path),
                         }
                     } else {
                         RuntimeViewModelPointer::Null
+                    };
+                    let children = if referenced_view_model.is_some() {
+                        referenced_view_model_index
+                            .map(|view_model_index| {
+                                runtime_owned_view_model_view_model_children(
+                                    file,
+                                    view_model_index,
+                                    &path,
+                                )
+                            })
+                            .unwrap_or_default()
+                    } else {
+                        Vec::new()
                     };
                     let view_model_instance_ids = referenced_view_model
                         .map(|view_model| {
@@ -3476,6 +3564,7 @@ impl RuntimeOwnedViewModelInstance {
                         property_index,
                         value,
                         view_model_instance_ids,
+                        children,
                     });
                 }
                 _ => {}
@@ -3640,11 +3729,15 @@ impl RuntimeOwnedViewModelInstance {
         property_index: usize,
         instance_index: usize,
     ) -> bool {
-        let Some(view_model) = self
-            .view_models
-            .iter_mut()
-            .find(|view_model| view_model.property_index == property_index)
-        else {
+        self.set_view_model_by_property_path(&[property_index], instance_index)
+    }
+
+    pub fn set_view_model_by_property_path(
+        &mut self,
+        property_path: &[usize],
+        instance_index: usize,
+    ) -> bool {
+        let Some(view_model) = self.view_model_by_property_path_mut(property_path) else {
             return false;
         };
         let Some(object_id) = view_model
@@ -3660,6 +3753,54 @@ impl RuntimeOwnedViewModelInstance {
         }
         view_model.value = value;
         true
+    }
+
+    fn view_model_by_property_path(
+        &self,
+        property_path: &[usize],
+    ) -> Option<&RuntimeOwnedViewModelViewModel> {
+        let (property_index, rest) = property_path.split_first()?;
+        let mut view_model = self
+            .view_models
+            .iter()
+            .find(|view_model| view_model.property_index == *property_index)?;
+        for property_index in rest {
+            if !matches!(
+                view_model.value,
+                RuntimeViewModelPointer::OwnedGenerated { .. }
+            ) {
+                return None;
+            }
+            view_model = view_model
+                .children
+                .iter()
+                .find(|view_model| view_model.property_index == *property_index)?;
+        }
+        Some(view_model)
+    }
+
+    fn view_model_by_property_path_mut(
+        &mut self,
+        property_path: &[usize],
+    ) -> Option<&mut RuntimeOwnedViewModelViewModel> {
+        let (property_index, rest) = property_path.split_first()?;
+        let mut view_model = self
+            .view_models
+            .iter_mut()
+            .find(|view_model| view_model.property_index == *property_index)?;
+        for property_index in rest {
+            if !matches!(
+                view_model.value,
+                RuntimeViewModelPointer::OwnedGenerated { .. }
+            ) {
+                return None;
+            }
+            view_model = view_model
+                .children
+                .iter_mut()
+                .find(|view_model| view_model.property_index == *property_index)?;
+        }
+        Some(view_model)
     }
 
     fn number_value_by_property_index(&self, property_index: usize) -> Option<f32> {
@@ -3725,13 +3866,11 @@ impl RuntimeOwnedViewModelInstance {
             .map(|trigger| trigger.value)
     }
 
-    fn view_model_value_by_property_index(
+    fn view_model_value_by_property_path(
         &self,
-        property_index: usize,
+        property_path: &[usize],
     ) -> Option<RuntimeViewModelPointer> {
-        self.view_models
-            .iter()
-            .find(|view_model| view_model.property_index == property_index)
+        self.view_model_by_property_path(property_path)
             .map(|view_model| view_model.value)
     }
 }
@@ -11005,6 +11144,7 @@ enum RuntimeViewModelPointer {
     OwnedGenerated {
         view_model_index: usize,
         property_index: usize,
+        path_key: u64,
     },
     Imported {
         object_id: u32,

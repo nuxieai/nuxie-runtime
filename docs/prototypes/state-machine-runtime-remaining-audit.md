@@ -706,16 +706,24 @@ slice.
   `replaceViewModelByName`. The C++ probe covers binding that owned root
   without replacement through an existing view-model pointer
   transition-condition consumer.
+- First nested owned view-model pointer relink slice: owned root contexts can
+  resolve one generated intermediate `ViewModelInstanceViewModel` child and
+  relink a nested `ViewModelInstanceViewModel` source by referenced imported
+  instance index. The C++ probe covers the matching
+  `ViewModelInstanceRuntime::replaceViewModel("child/grandchild", value)`
+  path through existing view-model binding reports. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-nested-relink-runtime-contract.md`.
 
 ## Remaining Runtime Slices
 
 - Scene callback dispatch side effects: listener notification, audio playback,
   open-url side effects, nested-artboard event propagation, and callback
   targets other than `Event.trigger`.
-- Live view-model pointer relink APIs beyond the first default, imported, and
-  owned root-property paths: nested owned paths that
-  update or expose cached `referenceViewModelInstance` pointers rather than
-  only raw generated `propertyValue` indexes.
+- Live view-model pointer relink APIs beyond the first default, imported,
+  owned root-property, and one-intermediate owned paths: deeper owned paths,
+  traversal through imported replacement intermediates, and stable public
+  handles that update or expose cached `referenceViewModelInstance` pointers
+  rather than only raw generated `propertyValue` indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
 - Live view-model APIs and data-binding propagation governed by

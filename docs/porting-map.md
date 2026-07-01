@@ -2144,6 +2144,20 @@ pointer paths, property-name/object-handle APIs, reverse propagation, broader
 update queues, relative/parent/nested lookup, listener-owned data binding, and
 nested artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: owned view-model contexts now support the first nested
+view-model pointer relink path. `RuntimeOwnedViewModelInstance` stores
+one-intermediate generated owned `ViewModelPropertyViewModel` children and
+`set_view_model_by_property_path(&[rootProperty, nestedProperty], index)`
+can relink the nested source to a referenced imported instance before binding
+the owned context. The C++ probe covers the equivalent
+`ViewModelInstanceRuntime::replaceViewModel("child/grandchild", value)` path.
+The contract is
+`docs/prototypes/data-binding-graph-owned-viewmodel-nested-relink-runtime-contract.md`.
+Deeper owned paths, traversal through imported replacement intermediates,
+public property-name/object-handle APIs, reverse propagation, broader update
+queues, relative/parent/nested lookup, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

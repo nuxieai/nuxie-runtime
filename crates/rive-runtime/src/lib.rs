@@ -5030,6 +5030,17 @@ impl RuntimeOwnedViewModelEnumSourceHandle {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeOwnedViewModelSymbolListIndexSourceHandle {
+    property_index: usize,
+}
+
+impl RuntimeOwnedViewModelSymbolListIndexSourceHandle {
+    pub fn property_index(&self) -> usize {
+        self.property_index
+    }
+}
+
 #[derive(Debug, Clone)]
 struct RuntimeOwnedViewModelNumber {
     property_index: usize,
@@ -7820,6 +7831,25 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         };
         self.set_symbol_list_index_by_property_index(property_index, value)
+    }
+
+    pub fn symbol_list_index_source_handle_by_property_name(
+        &self,
+        property_name: &str,
+    ) -> Option<RuntimeOwnedViewModelSymbolListIndexSourceHandle> {
+        let property_index = self.property_index_by_name(property_name)?;
+        self.symbol_list_indices
+            .iter()
+            .any(|symbol_list_index| symbol_list_index.property_index == property_index)
+            .then_some(RuntimeOwnedViewModelSymbolListIndexSourceHandle { property_index })
+    }
+
+    pub fn set_symbol_list_index_by_source_handle(
+        &mut self,
+        handle: &RuntimeOwnedViewModelSymbolListIndexSourceHandle,
+        value: u64,
+    ) -> bool {
+        self.set_symbol_list_index_by_property_index(handle.property_index, value)
     }
 
     pub fn set_symbol_list_index_by_property_name_path(

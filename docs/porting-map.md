@@ -2590,6 +2590,17 @@ reports for `BindablePropertyArtboard` targets, and compares both state
 machines through that report surface. The contract is
 `docs/prototypes/data-binding-graph-imported-viewmodel-artboard-shared-mutation-runtime-contract.md`.
 
+Current #12 update: imported view-model artboard sources now have the root
+property-name mutation API. `RuntimeImportedViewModelInstanceContext::
+set_artboard_by_property_name` resolves a root `ViewModelPropertyArtboard`
+name against the file-backed imported view model, records the existing
+artboard override by resolved source path, and lets two state machines bound
+through the same context observe the mutation. The C++ probe adds
+`--runtime-set-view-model-instance-source-artboard-by-name`, resolves the root
+imported `ViewModelInstanceArtboard` by name, and compares both state machines
+through the existing artboard binding report surface. The contract is
+`docs/prototypes/data-binding-graph-imported-viewmodel-artboard-name-runtime-contract.md`.
+
 Current #12 update: imported view-model trigger sources now match the shared
 imported `propertyValue` mutation pattern before trigger reset.
 `RuntimeImportedViewModelInstanceContext` records trigger source overrides by
@@ -2624,7 +2635,7 @@ Imported-instance mutation beyond shared view-model pointer, number, boolean,
 string, color, enum, symbol-list-index, asset, artboard, trigger, and list
 contexts,
 remaining property-name APIs beyond imported view-model pointer and root
-number/boolean/string/color/enum/symbol-list-index/asset sources and owned generated pointer paths,
+number/boolean/string/color/enum/symbol-list-index/asset/artboard sources and owned generated pointer paths,
 stable public object handles, reverse propagation, broader update queues,
 relative/parent/nested lookup, listener-owned data binding, and nested
 artboard propagation remain follow-up `#12` slices.

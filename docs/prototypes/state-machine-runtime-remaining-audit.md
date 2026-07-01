@@ -988,6 +988,14 @@ slice.
   artboard binding reports for `BindablePropertyArtboard` targets. The
   contract is
   `docs/prototypes/data-binding-graph-imported-viewmodel-artboard-shared-mutation-runtime-contract.md`.
+- Imported artboard property-name slice:
+  `RuntimeImportedViewModelInstanceContext::set_artboard_by_property_name` now
+  resolves a root `ViewModelPropertyArtboard` name against one file-backed
+  imported view-model instance and records the existing artboard source
+  override by resolved path. The C++ probe resolves the root imported
+  `ViewModelInstanceArtboard` by name and proves two authored state machines
+  bound through the same imported context observe the mutation. The contract is
+  `docs/prototypes/data-binding-graph-imported-viewmodel-artboard-name-runtime-contract.md`.
 - Shared imported trigger source mutation slice:
   `RuntimeImportedViewModelInstanceContext` now also owns trigger source
   overrides for one file-backed imported view-model instance. Mutating a
@@ -1146,7 +1154,7 @@ slice.
   source, symbol-list-index source, asset source, artboard source, trigger
   source, and list source contexts,
   property-name APIs beyond imported view-model pointer and root
-  number/boolean/string/color/enum/symbol-list-index/asset sources, owned generated view-model pointer
+  number/boolean/string/color/enum/symbol-list-index/asset/artboard sources, owned generated view-model pointer
   paths, and stable public handles that update or expose cached
   `propertyValue` indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,

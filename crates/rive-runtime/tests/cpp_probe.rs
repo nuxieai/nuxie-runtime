@@ -17162,6 +17162,97 @@ fn number_to_string_main_to_target_two_way_target_dirty_matches_cpp_probe() {
 }
 
 #[test]
+fn number_to_string_public_update_target_to_source_matches_cpp_probe() {
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_number_to_string_public_update_target_to_source_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_number_to_string_converter_condition_with_flags(
+            8542,
+            DATA_BIND_TWO_WAY,
+        );
+    assert_string_public_update_target_to_source_matches_cpp_probe(label, bytes);
+}
+
+#[test]
+fn boolean_to_string_public_update_target_to_source_matches_cpp_probe() {
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_boolean_to_string_public_update_target_to_source_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_boolean_to_string_converter_condition_with_flags(
+            8543,
+            DATA_BIND_TWO_WAY,
+        );
+    assert_string_public_update_target_to_source_matches_cpp_probe(label, bytes);
+}
+
+#[test]
+fn string_to_string_public_update_target_to_source_matches_cpp_probe() {
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_string_to_string_public_update_target_to_source_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_string_to_string_converter_condition_with_flags(
+            8544,
+            DATA_BIND_TWO_WAY,
+        );
+    assert_string_public_update_target_to_source_matches_cpp_probe(label, bytes);
+}
+
+#[test]
+fn trigger_to_string_public_update_target_to_source_matches_cpp_probe() {
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_trigger_to_string_public_update_target_to_source_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_trigger_to_string_converter_condition_with_flags(
+            8545,
+            DATA_BIND_TWO_WAY,
+        );
+    assert_string_public_update_target_to_source_matches_cpp_probe(label, bytes);
+}
+
+#[test]
+fn symbol_list_index_to_string_public_update_target_to_source_matches_cpp_probe() {
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_symbol_list_index_to_string_public_update_target_to_source_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_symbol_list_index_to_string_converter_condition_with_flags(
+            8546,
+            DATA_BIND_TWO_WAY,
+        );
+    assert_string_public_update_target_to_source_matches_cpp_probe(label, bytes);
+}
+
+#[test]
+fn color_to_string_public_update_target_to_source_matches_cpp_probe() {
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_color_to_string_public_update_target_to_source_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_color_to_string_converter_condition_with_flags(
+            8547,
+            DATA_BIND_TWO_WAY,
+        );
+    assert_string_public_update_target_to_source_matches_cpp_probe(label, bytes);
+}
+
+#[test]
+fn enum_to_string_public_update_target_to_source_matches_cpp_probe() {
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_enum_to_string_public_update_target_to_source_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_enum_to_string_converter_condition_with_flags(
+            8548,
+            DATA_BIND_TWO_WAY,
+        );
+    assert_string_public_update_target_to_source_matches_cpp_probe(label, bytes);
+}
+
+#[test]
 fn boolean_to_string_main_to_target_two_way_target_dirty_matches_cpp_probe() {
     const DATA_BIND_TWO_WAY: u64 = 1 << 1;
 
@@ -17353,6 +17444,93 @@ fn assert_string_main_to_target_two_way_target_dirty_matches_cpp_probe(
     assert!(
         state_machine.advance_data_context(),
         "{label} failed to advance mutated data context"
+    );
+    rust_reports.push((false, state_machine.clone()));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 1.0),
+        state_machine.clone(),
+    ));
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (step, (cpp_state_machine, (advanced, rust_state_machine))) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+        .enumerate()
+    {
+        let step_label = format!("{label} action {step}");
+        compare_state_machine_advance(
+            cpp_state_machine,
+            rust_state_machine,
+            *advanced,
+            &step_label,
+        );
+        compare_state_machine_string_binding(cpp_state_machine, rust_state_machine, 0, &step_label);
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+fn assert_string_public_update_target_to_source_matches_cpp_probe(label: &str, bytes: Vec<u8>) {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let args = [
+        "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-state-machine-bindable-string".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "manual".to_owned(),
+        "--runtime-update-state-machine-data-binds".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    let mut rust_reports = Vec::new();
+    assert!(
+        state_machine.bind_default_view_model_context(),
+        "{label} failed to bind default view-model context"
+    );
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    assert!(
+        state_machine.set_bindable_string_for_data_bind(0, b"manual"),
+        "{label} failed to mutate bindable string"
+    );
+    assert!(
+        state_machine.update_data_binds_apply_target_to_source(),
+        "{label} failed to update data binds"
     );
     rust_reports.push((false, state_machine.clone()));
     rust_reports.push((

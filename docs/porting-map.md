@@ -1193,9 +1193,22 @@ advancement, then the next normal state-machine advance overwrites it with an
 empty string instead of enum metadata, matching C++'s display-label-unsupported
 default-context string-target graph behavior. The contract is
 `docs/prototypes/data-binding-graph-to-string-enum-main-to-target-two-way-target-dirty-runtime-contract.md`.
-String converter families and groups, public-queue reverse conversion, broader
-dirty/update queues, relative/parent/nested lookup, listener-owned data binding,
-and nested artboard propagation remain follow-up `#12` slices.
+String converter families and groups, public-queue reverse conversion for
+string converter families/groups, broader dirty/update queues,
+relative/parent/nested lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
+
+Current #12 update: direct `DataConverterToString` now also covers public
+`updateDataBinds(true)` target-to-source behavior for default-context
+main-`ToTarget | TwoWay` string targets. C++ uses the base converter reverse
+identity for the edited string target; non-string sources remain unchanged,
+string sources receive the edited string, and the same public update reapplies
+source-to-target through direct `DataConverterToString`. The contract is
+`docs/prototypes/data-binding-graph-to-string-public-update-target-to-source-runtime-contract.md`.
+String converter families and groups, main-`ToSource | TwoWay` behavior for
+`DataConverterToString`, broader dirty/update queues, relative/parent/nested
+lookup, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
 
 Current #12 update: direct `DataConverterStringTrim` binds now cover the
 main-`ToTarget | TwoWay` state-machine target-dirty path for default-context
@@ -1856,8 +1869,8 @@ number binds with no converter, direct `DataConverterOperationValue`, grouped
 direct `DataConverterGroup<RangeMapper, OperationValue>`, direct
 `DataConverterRounder`, direct system operation-value converters, direct
 `DataConverterOperationViewModel`, direct cross-type `DataConverterToNumber`,
-plus direct deterministic `DataConverterFormula` and warmed direct
-`DataConverterInterpolator`.
+direct deterministic `DataConverterFormula`, warmed direct
+`DataConverterInterpolator`, and direct `DataConverterToString` string binds.
 The C++ probe exposes `--runtime-update-state-machine-data-binds`, Rust
 mirrors it through
 `StateMachineInstance::update_data_binds_apply_target_to_source`, and the
@@ -1876,6 +1889,7 @@ preserve-then-next-advance ordering. The contracts are
 `docs/prototypes/data-binding-graph-operation-viewmodel-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-to-number-boolean-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-to-number-remaining-public-update-target-to-source-runtime-contract.md`,
+`docs/prototypes/data-binding-graph-to-string-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-formula-public-update-target-to-source-runtime-contract.md`,
 `docs/prototypes/data-binding-graph-public-update-observer-preservation-runtime-contract.md`,
 and

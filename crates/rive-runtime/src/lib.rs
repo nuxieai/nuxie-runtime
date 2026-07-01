@@ -4867,6 +4867,79 @@ impl RuntimeDataBindGraph {
         changed
     }
 
+    fn apply_default_view_model_string_public_update_targets_to_sources(
+        &mut self,
+        strings: &[StateMachineBindableStringInstance],
+    ) -> bool {
+        if !self.default_view_model_source_context_bound() {
+            return false;
+        }
+        let mut updates = Vec::<(Vec<u32>, RuntimeDataBindGraphValue)>::new();
+        let mut applied_target_to_source = false;
+
+        for binding in self.default_view_model_bindings.clone() {
+            let Some(target) = self.targets.get(binding.target.0) else {
+                continue;
+            };
+            let RuntimeDataBindGraphTarget::String { global_id } = target.target else {
+                continue;
+            };
+            let Some(source) = self.sources.get_mut(binding.source.0) else {
+                continue;
+            };
+            let target_to_source_dirty =
+                source.target_to_source_dirty || source.source_to_target_dirty_after_immediate;
+            if !target_to_source_dirty {
+                continue;
+            }
+            source.target_to_source_dirty = false;
+            source.source_to_target_dirty_after_immediate = false;
+            let Some(value) = strings
+                .iter()
+                .find(|string| string.global_id == global_id)
+                .map(|string| string.value.as_slice())
+            else {
+                continue;
+            };
+            let Some(value) = source.string_target_to_source_value(value) else {
+                continue;
+            };
+            applied_target_to_source = true;
+            source.source_to_target_dirty_after_target_to_source = true;
+            updates.push((source.path.clone(), value));
+        }
+
+        let mut changed = false;
+        for (path, value) in updates {
+            for source in &mut self.sources {
+                if !source.bound || source.path != path {
+                    continue;
+                }
+                let (
+                    RuntimeDataBindGraphValue::String(source_value),
+                    RuntimeDataBindGraphValue::String(default_value),
+                    RuntimeDataBindGraphValue::String(value),
+                ) = (&mut source.value, &mut source.default_value, &value)
+                else {
+                    continue;
+                };
+                if source_value.as_slice() != value.as_slice() {
+                    *source_value = value.clone();
+                    changed = true;
+                }
+                if default_value.as_slice() != value.as_slice() {
+                    *default_value = value.clone();
+                    changed = true;
+                }
+            }
+        }
+
+        if changed || applied_target_to_source {
+            self.mark_default_view_model_bindings_dirty();
+        }
+        changed || applied_target_to_source
+    }
+
     fn apply_default_view_model_color_targets_to_sources(
         &mut self,
         colors: &[StateMachineBindableColorInstance],
@@ -5397,6 +5470,78 @@ impl RuntimeDataBindGraphSourceNode {
         self.applies_target_to_source()
             && self.converter.is_none()
             && matches!(self.value, RuntimeDataBindGraphValue::String(_))
+    }
+
+    fn string_target_to_source_value(&mut self, value: &[u8]) -> Option<RuntimeDataBindGraphValue> {
+        if !self.bound || !self.applies_target_to_source() {
+            return None;
+        }
+        let value = RuntimeDataBindGraphValue::String(value.to_vec());
+        let converted = match self.converter.as_ref() {
+            None => value,
+            Some(converter) if self.is_main_to_source() => {
+                self.converter_state.convert_value(converter, &value)?
+            }
+            Some(converter) => self
+                .converter_state
+                .reverse_convert_value(converter, &value)?,
+        };
+        match (&self.value, converted) {
+            (RuntimeDataBindGraphValue::String(_), RuntimeDataBindGraphValue::String(value)) => {
+                Some(RuntimeDataBindGraphValue::String(value))
+            }
+            (RuntimeDataBindGraphValue::Number(value), RuntimeDataBindGraphValue::String(_))
+                if matches!(
+                    self.converter.as_ref(),
+                    Some(RuntimeDataBindGraphConverter::ToString { .. })
+                ) =>
+            {
+                Some(RuntimeDataBindGraphValue::Number(*value))
+            }
+            (RuntimeDataBindGraphValue::Boolean(value), RuntimeDataBindGraphValue::String(_))
+                if matches!(
+                    self.converter.as_ref(),
+                    Some(RuntimeDataBindGraphConverter::ToString { .. })
+                ) =>
+            {
+                Some(RuntimeDataBindGraphValue::Boolean(*value))
+            }
+            (RuntimeDataBindGraphValue::Trigger(value), RuntimeDataBindGraphValue::String(_))
+                if matches!(
+                    self.converter.as_ref(),
+                    Some(RuntimeDataBindGraphConverter::ToString { .. })
+                ) =>
+            {
+                Some(RuntimeDataBindGraphValue::Trigger(*value))
+            }
+            (
+                RuntimeDataBindGraphValue::SymbolListIndex(value),
+                RuntimeDataBindGraphValue::String(_),
+            ) if matches!(
+                self.converter.as_ref(),
+                Some(RuntimeDataBindGraphConverter::ToString { .. })
+            ) =>
+            {
+                Some(RuntimeDataBindGraphValue::SymbolListIndex(*value))
+            }
+            (RuntimeDataBindGraphValue::Color(value), RuntimeDataBindGraphValue::String(_))
+                if matches!(
+                    self.converter.as_ref(),
+                    Some(RuntimeDataBindGraphConverter::ToString { .. })
+                ) =>
+            {
+                Some(RuntimeDataBindGraphValue::Color(*value))
+            }
+            (RuntimeDataBindGraphValue::Enum(value), RuntimeDataBindGraphValue::String(_))
+                if matches!(
+                    self.converter.as_ref(),
+                    Some(RuntimeDataBindGraphConverter::ToString { .. })
+                ) =>
+            {
+                Some(RuntimeDataBindGraphValue::Enum(*value))
+            }
+            _ => None,
+        }
     }
 
     fn supports_direct_color_target_to_source(&self) -> bool {
@@ -6189,6 +6334,11 @@ fn runtime_data_bind_graph_reverse_convert_value(
             Some(RuntimeDataBindGraphValue::Number(*value))
         }
         (RuntimeDataBindGraphConverter::ToNumber, _) => None,
+        (
+            RuntimeDataBindGraphConverter::ToString { .. },
+            RuntimeDataBindGraphValue::String(value),
+        ) => Some(RuntimeDataBindGraphValue::String(value.clone())),
+        (RuntimeDataBindGraphConverter::ToString { .. }, _) => None,
         (RuntimeDataBindGraphConverter::ListToLength, RuntimeDataBindGraphValue::Number(value)) => {
             Some(RuntimeDataBindGraphValue::Number(*value))
         }
@@ -9781,6 +9931,10 @@ impl StateMachineInstance {
             self.data_bind_graph
                 .apply_default_view_model_number_public_update_targets_to_sources(
                     &self.bindable_numbers,
+                );
+            self.data_bind_graph
+                .apply_default_view_model_string_public_update_targets_to_sources(
+                    &self.bindable_strings,
                 );
             self.apply_default_view_model_bindings(
                 true,

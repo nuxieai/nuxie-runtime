@@ -4641,11 +4641,23 @@ context. The C++ probe uses
 `ViewModelInstanceRuntime::propertyEnum("child/choice")->valueIndex(...)`. The
 contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-nested-enum-name-path-runtime-contract.md`.
-Other nested scalar kinds, imported-intermediate nested scalar paths,
-imported-instance mutation sharing, stable public object handles, reverse
-propagation, broader update queues, relative/parent/nested lookup,
-listener-owned data binding, and nested artboard propagation remain follow-up
-`#12` slices.
+
+Current #12 update: owned generated nested enum paths now have a stable public
+nested source handle. `RuntimeOwnedViewModelInstance` can resolve
+`child/choice` into `RuntimeOwnedViewModelEnumSourceHandle` through
+`enum_source_handle_by_property_name_path`, and
+`set_enum_by_source_handle` writes through the same generated-child enum
+value-index storage before binding. The C++ probe compares the handle mutation
+against
+`ViewModelInstanceRuntime::propertyEnum("child/choice")->valueIndex(...)` and
+verifies the existing state-machine advance and component update reports. The
+contract is
+`docs/prototypes/data-binding-graph-owned-viewmodel-nested-enum-source-handle-runtime-contract.md`.
+Other nested scalar source handles beyond number/boolean/string/color/enum,
+imported-intermediate nested scalar paths, imported-instance mutation sharing,
+stable public object handles, reverse propagation, broader update queues,
+relative/parent lookup, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
 
 Current #12 update: owned generated nested symbol-list-index paths now match
 the other generated nested scalar paths. Rust stores direct

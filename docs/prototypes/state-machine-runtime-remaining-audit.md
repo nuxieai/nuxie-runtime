@@ -2039,8 +2039,9 @@ slice.
 - Owned enum source handle slice:
   `RuntimeOwnedViewModelInstance` can now resolve a root enum property name
   into `RuntimeOwnedViewModelEnumSourceHandle` and mutate owned enum
-  value-index storage through that handle before binding. Slash-path lookup
-  remains unresolved. Nested/relative/parent lookup remains a follow-up slice.
+  value-index storage through that handle before binding. Root-name handle
+  lookup remains separate from slash-path lookup. Nested enum paths are covered
+  separately; other nested/relative/parent lookup remains a follow-up slice.
   The C++ probe compares the handle write against the existing owned-enum
   runtime context command. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-enum-source-handle-runtime-contract.md`.
@@ -2189,6 +2190,15 @@ slice.
   `ViewModelInstanceRuntime::propertyEnum("child/choice")->valueIndex(...)`.
   The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-nested-enum-name-path-runtime-contract.md`.
+- Owned generated nested enum source-handle slice:
+  generated owned view-model children can now expose a stable public enum
+  source handle. `RuntimeOwnedViewModelInstance` can resolve `child/choice`
+  into `RuntimeOwnedViewModelEnumSourceHandle` through
+  `enum_source_handle_by_property_name_path`, and
+  `set_enum_by_source_handle` mutates the same generated-child enum
+  value-index storage before binding. The C++ probe compares against the
+  existing owned enum name-path command. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-nested-enum-source-handle-runtime-contract.md`.
 - Owned generated nested symbol-list-index name-path slice:
   generated owned view-model children can store direct symbol-list-index
   values, and
@@ -2277,7 +2287,7 @@ slice.
   paths, and stable public handles beyond the admitted default nested-number/
   boolean/string/color/enum/symbol-list-index/asset/artboard/trigger/list/view-model
   handles plus default/imported/owned root source handles and owned
-  nested-number/boolean/string/color handles, especially remaining
+  nested-number/boolean/string/color/enum handles, especially remaining
   nested/relative/parent handles that update or expose cached source indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.

@@ -378,6 +378,7 @@ enum class RuntimeStateMachineActionKind
     BindViewModelInstanceContext,
     BindOwnedViewModelNumberContext,
     BindOwnedViewModelNumberNamePathContext,
+    BindOwnedViewModelImportedIntermediateNumberNamePathContext,
     BindOwnedViewModelBooleanContext,
     BindOwnedViewModelBooleanNamePathContext,
     BindOwnedViewModelStringContext,
@@ -4271,6 +4272,56 @@ apply_runtime_state_machine_advances(rive::File* file,
             if (viewModelInstance != nullptr)
             {
                 rive::ViewModelInstanceRuntime runtime(viewModelInstance);
+                auto number = runtime.propertyNumber(action.stringValue);
+                if (number != nullptr)
+                {
+                    number->value(action.numberValue);
+                }
+                stateMachine->bindViewModelInstance(viewModelInstance);
+            }
+            continue;
+        }
+        if (action.kind == RuntimeStateMachineActionKind::
+                               BindOwnedViewModelImportedIntermediateNumberNamePathContext)
+        {
+            auto viewModel =
+                file != nullptr && action.viewModelIndex < file->viewModelCount()
+                    ? file->viewModel(action.viewModelIndex)
+                    : nullptr;
+            auto viewModelInstance =
+                file != nullptr && viewModel != nullptr
+                    ? file->createViewModelInstance(viewModel)
+                    : nullptr;
+            auto rootProperty =
+                viewModel != nullptr ? viewModel->property(action.dataBindIndex)
+                                     : nullptr;
+            auto rootViewModelProperty =
+                rootProperty != nullptr &&
+                        rootProperty->is<rive::ViewModelPropertyViewModel>()
+                    ? rootProperty->as<rive::ViewModelPropertyViewModel>()
+                    : nullptr;
+            auto childViewModel =
+                file != nullptr && rootViewModelProperty != nullptr &&
+                        rootViewModelProperty->viewModelReferenceId() <
+                            file->viewModelCount()
+                    ? file->viewModel(
+                          rootViewModelProperty->viewModelReferenceId())
+                    : nullptr;
+            auto childInstance =
+                childViewModel != nullptr &&
+                        action.viewModelInstanceIndex <
+                            childViewModel->instanceCount()
+                    ? childViewModel->instance(action.viewModelInstanceIndex)
+                    : nullptr;
+            if (viewModelInstance != nullptr && rootProperty != nullptr &&
+                childInstance != nullptr)
+            {
+                auto childRuntime =
+                    rive::make_rcp<rive::ViewModelInstanceRuntime>(
+                        rive::ref_rcp(childInstance));
+                rive::ViewModelInstanceRuntime runtime(viewModelInstance);
+                runtime.replaceViewModelByName(rootProperty->name(),
+                                               childRuntime.get());
                 auto number = runtime.propertyNumber(action.stringValue);
                 if (number != nullptr)
                 {
@@ -13453,6 +13504,36 @@ int main(int argc, const char* argv[])
             continue;
         }
 
+        if (is_arg(
+                argv[i],
+                "--runtime-bind-owned-view-model-imported-intermediate-number-name-path-state-machine-context"))
+        {
+            if (i + 6 >= argc)
+            {
+                std::cerr << "--runtime-bind-owned-view-model-imported-intermediate-number-name-path-state-machine-context requires stateMachineIndex viewModelIndex rootPropertyIndex childInstanceIndex propertyPath value\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::
+                BindOwnedViewModelImportedIntermediateNumberNamePathContext;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.viewModelIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.dataBindIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.viewModelInstanceIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.stringValue = argv[++i];
+            action.numberValue =
+                static_cast<float>(std::strtod(argv[++i], nullptr));
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
         if (is_arg(argv[i],
                    "--runtime-bind-owned-view-model-bool-state-machine-context"))
         {
@@ -14166,6 +14247,7 @@ int main(int argc, const char* argv[])
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-viewmodel-default-state-machine-context stateMachineIndex viewModelIndex propertyIndex\n";
         std::cerr << "additional runtime flag: --runtime-set-default-view-model-source-symbol-list-index stateMachineIndex dataBindIndex value\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-number-name-path-state-machine-context stateMachineIndex viewModelIndex propertyPath value\n";
+        std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-imported-intermediate-number-name-path-state-machine-context stateMachineIndex viewModelIndex rootPropertyIndex childInstanceIndex propertyPath value\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-bool-name-path-state-machine-context stateMachineIndex viewModelIndex propertyPath value\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-string-name-path-state-machine-context stateMachineIndex viewModelIndex propertyPath value\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-color-name-path-state-machine-context stateMachineIndex viewModelIndex propertyPath value\n";

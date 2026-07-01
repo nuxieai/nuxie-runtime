@@ -1203,6 +1203,14 @@ slice.
   records imported number snapshots per referenced view-model instance for
   read-only graph binding. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-number-runtime-contract.md`.
+- Owned view-model imported-intermediate number name-path mutation unsupported
+  boundary: replacing a generated root child with an imported child by
+  instance index still lets the graph read `[child, amount]`, but attempting
+  `ViewModelInstanceRuntime::propertyNumber("child/amount")->value(...)` from
+  the owned root leaves the imported child's existing number selected in C++.
+  Rust keeps `set_number_by_property_name_path("child/amount", value)`
+  generated-only and returns `false` once `child` is imported. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-number-name-path-unsupported-runtime-contract.md`.
 - Owned view-model imported-intermediate boolean source slice:
   replacing a generated root child with an imported child by instance index
   lets `RuntimeOwnedViewModelInstance` resolve `[child, enabled]` through the

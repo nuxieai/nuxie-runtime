@@ -4849,6 +4849,15 @@ fn synthetic_state_machine_default_viewmodel_number_to_string_converter_group_co
 fn synthetic_state_machine_default_viewmodel_number_converter_group_blend_state(
     file_id: u64,
 ) -> Vec<u8> {
+    synthetic_state_machine_default_viewmodel_number_converter_group_blend_state_with_flags(
+        file_id, 0,
+    )
+}
+
+fn synthetic_state_machine_default_viewmodel_number_converter_group_blend_state_with_flags(
+    file_id: u64,
+    data_bind_flags: u64,
+) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "ViewModel", |bytes| {
             push_string_property(bytes, "ViewModel", "name", "Root");
@@ -4890,7 +4899,13 @@ fn synthetic_state_machine_default_viewmodel_number_converter_group_blend_state(
         push_object_with_properties(bytes, "StateTransition", |bytes| {
             push_uint_property(bytes, "StateTransition", "stateToId", 2);
         });
-        push_bindable_number_data_bind_context_with_converter(bytes, 0.0, &[0, 0], Some(2));
+        push_bindable_number_data_bind_context_with_converter_and_flags(
+            bytes,
+            0.0,
+            &[0, 0],
+            Some(2),
+            data_bind_flags,
+        );
         push_object_with_properties(bytes, "BlendState1DViewModel", |_| {});
         push_blend_animation_1d(bytes, 0, 0.0);
         push_blend_animation_1d(bytes, 1, 1.0);
@@ -18454,6 +18469,20 @@ fn state_machine_default_viewmodel_number_converter_group_matches_cpp_probe() {
         compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
     }
     compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn state_machine_default_viewmodel_number_converter_group_public_update_target_to_source_matches_cpp_probe()
+ {
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_number_converter_group_public_update_target_to_source_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_number_converter_group_blend_state_with_flags(
+            8566,
+            DATA_BIND_TWO_WAY,
+        );
+    assert_number_public_update_target_to_source_matches_cpp_probe(label, bytes);
 }
 
 #[test]

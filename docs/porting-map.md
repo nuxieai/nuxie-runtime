@@ -1536,6 +1536,19 @@ interpolator child path, formula randoms, generated lists, or target-to-source
 queues, relative/parent/nested lookup, listener-owned data binding, and nested
 artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: the admitted number-to-number `DataConverterGroup` path
+now also covers public `updateDataBinds(true)` target-to-source behavior for
+default-context main-`ToTarget | TwoWay` number targets. C++ writes the edited
+number target to the default number source through reverse
+`DataConverterRounder -> DataConverterOperationValue` group order, then
+reapplies source-to-target through forward `OperationValue -> Rounder`
+conversion in the same update. The contract is
+`docs/prototypes/data-binding-graph-number-converter-group-public-update-target-to-source-runtime-contract.md`.
+Main-`ToSource | TwoWay` behavior for this number group, broader number
+converter groups, broader dirty/update queues, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
+
 Current #12 update: the first stateful runtime data-converter slice now admits
 direct `DataConverterInterpolator` bindings for default-context number sources
 feeding `BindablePropertyNumber.propertyValue` targets. `RuntimeDataBindGraph`

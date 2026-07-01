@@ -441,6 +441,12 @@ slice.
   slice: forward composition for default-context number sources feeding number
   targets through an `OperationValue -> Rounder` group, covered by a C++ probe
   through an existing blend-state consumer.
+- Number-to-number converter-group public-update target-to-source slice: the
+  admitted `DataConverterOperationValue -> DataConverterRounder` group now
+  follows C++ public `updateDataBinds(true)` behavior for main-`ToTarget |
+  TwoWay` number targets. Reverse group order writes the edited target through
+  `Rounder -> OperationValue`, then the same public update reapplies forward
+  `OperationValue -> Rounder` conversion from the updated number source.
 - First stateful `DataConverterInterpolator` graph-owned converter execution
   slice: direct default-context number sources feeding number targets now own
   per-source interpolator state, warm C++'s two-advance startup gate, defer

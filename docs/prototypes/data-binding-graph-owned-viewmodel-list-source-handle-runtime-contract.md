@@ -1,9 +1,8 @@
 # Owned ViewModel List Source Handle Runtime Contract
 
-Purpose: extend the owned runtime view-model source-handle family from trigger
-sources to list sources without admitting list item identity, generated list
-item instances, list item handles, or the remaining owned view-model pointer
-handle work.
+Purpose: document the root owned list source handle without changing root
+lookup semantics or admitting list item identity, generated list item
+instances, list item handles, or the full owned nested handle family.
 
 This slice resolves a root `ViewModelPropertyList.name` on a
 `RuntimeOwnedViewModelInstance` into a
@@ -26,10 +25,13 @@ Out of scope:
 
 - Number, boolean, string, color, enum, symbol-list-index, asset, artboard, and
   trigger behavior beyond the existing committed APIs, plus view-model pointer
-  owned source handles.
+  owned source-handle behavior beyond the existing committed APIs.
 - List item identity, item-level view-model traversal, generated item
   instances, list item handles, map-rule selection, layout, or virtualization.
-- Nested, relative, parent, or slash-separated property paths.
+- Changing root-name lookup semantics to accept slash-separated property
+  paths. Nested list paths are covered separately by
+  `docs/prototypes/data-binding-graph-owned-viewmodel-nested-list-source-handle-runtime-contract.md`.
+- Relative or parent property paths.
 - Imported or default view-model contexts.
 - Persistent owned-context mutation after binding, reverse target-to-source
   propagation, broader update queues, listener-owned data binding, and nested
@@ -38,4 +40,4 @@ Out of scope:
 Completion condition: resolving and mutating a root owned list source by handle
 produces the same state-machine advance and list binding reports as the
 existing C++ owned-list binding path, no-op repeat writes report unchanged, and
-slash-path handle lookup remains unresolved.
+root-name lookup stays separate from slash-path lookup.

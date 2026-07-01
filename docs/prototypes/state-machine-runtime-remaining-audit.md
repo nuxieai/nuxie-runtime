@@ -2085,10 +2085,11 @@ slice.
 - Owned list source handle slice:
   `RuntimeOwnedViewModelInstance` can now resolve a root list property name
   into `RuntimeOwnedViewModelListSourceHandle` and mutate owned list item-count
-  storage through that handle before binding. Slash-path lookup remains
-  unresolved. Nested/relative/parent lookup remains a follow-up slice. The C++
-  probe compares the handle write against the existing owned-list runtime
-  context command. The contract is
+  storage through that handle before binding. Root-name handle lookup remains
+  separate from slash-path lookup. Nested list paths are covered separately;
+  other nested/relative/parent lookup remains a follow-up slice. The C++ probe
+  compares the handle write against the existing owned-list runtime context
+  command. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-list-source-handle-runtime-contract.md`.
 - Owned view-model pointer source handle slice:
   `RuntimeOwnedViewModelInstance` can now resolve a root view-model pointer
@@ -2283,6 +2284,15 @@ slice.
   adding blank item instances to set the observed list size without admitting
   item identity or item-level traversal. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-nested-list-name-path-runtime-contract.md`.
+- Owned generated nested list source-handle slice:
+  generated owned view-model children can now expose a stable public list
+  source handle for item-count mutation. `RuntimeOwnedViewModelInstance` can
+  resolve `child/items` into `RuntimeOwnedViewModelListSourceHandle` through
+  `list_source_handle_by_property_name_path`, and
+  `set_list_item_count_by_source_handle` mutates the same generated-child list
+  item-count storage before binding. The C++ probe compares against the
+  existing owned list name-path command. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-nested-list-source-handle-runtime-contract.md`.
 - First `BindablePropertyList.propertyValue` target-to-source slice:
   state-machine list targets can be mutated by data-bind index, and explicit
   `advancedDataContext()` plus public `updateDataBinds(true)` consume the
@@ -2328,7 +2338,7 @@ slice.
   paths, and stable public handles beyond the admitted default nested-number/
   boolean/string/color/enum/symbol-list-index/asset/artboard/trigger/list/view-model
   handles plus default/imported/owned root source handles and owned
-  nested-number/boolean/string/color/enum/symbol-list-index/asset/artboard/trigger handles,
+  nested-number/boolean/string/color/enum/symbol-list-index/asset/artboard/trigger/list handles,
   especially remaining nested/relative/parent handles that update or expose
   cached source indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,

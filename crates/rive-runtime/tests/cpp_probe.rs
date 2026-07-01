@@ -23001,6 +23001,100 @@ fn state_machine_owned_viewmodel_list_source_handle_bind_source_matches_cpp_prob
 }
 
 #[test]
+fn state_machine_owned_viewmodel_nested_list_source_handle_bind_source_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label =
+        "synthetic/runtime_state_machine_owned_viewmodel_nested_list_source_handle_bind_cpp.riv";
+    let bytes = synthetic_state_machine_owned_nested_viewmodel_list_condition(8787);
+    let property_path = "child/items";
+    let item_count = 3_usize;
+    let args = [
+        "--runtime-bind-owned-view-model-list-name-path-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        property_path.to_owned(),
+        item_count.to_string(),
+        "--runtime-advance-state-machine-data-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    let mut context = RuntimeOwnedViewModelInstance::new(&runtime, 0)
+        .unwrap_or_else(|| panic!("missing Rust owned view-model context for {label}"));
+    let handle = context
+        .list_source_handle_by_property_name_path(property_path)
+        .unwrap_or_else(|| {
+            panic!("missing nested owned view-model list source handle for {label}")
+        });
+
+    assert_eq!(handle.path(), &[0_usize, 0], "{label} handle path");
+    assert_eq!(handle.property_index(), 0, "{label} handle property index");
+    assert!(
+        context
+            .list_source_handle_by_property_name(property_path)
+            .is_none(),
+        "{label} unexpectedly resolved nested owned list source by root-name handle"
+    );
+    assert!(
+        context
+            .list_source_handle_by_property_name_path("child/missing")
+            .is_none(),
+        "{label} unexpectedly resolved missing nested owned list source handle"
+    );
+    assert!(
+        context.set_list_item_count_by_source_handle(&handle, item_count),
+        "{label} failed to mutate nested owned view-model list item count by source handle"
+    );
+    assert!(
+        !context.set_list_item_count_by_source_handle(&handle, item_count),
+        "{label} reported no-op nested owned list source handle mutation as changed"
+    );
+    assert!(
+        state_machine.bind_owned_view_model_context(&context),
+        "{label} failed to bind owned view-model context"
+    );
+    let mut rust_reports = Vec::new();
+    assert!(
+        state_machine.advance_data_context(),
+        "{label} failed to advance data context"
+    );
+    rust_reports.push((false, state_machine.clone()));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+    {
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+        compare_state_machine_list_binding(cpp_state_machine, rust_state_machine, 0, label);
+    }
+}
+
+#[test]
 fn state_machine_owned_viewmodel_nested_list_name_path_bind_source_matches_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");

@@ -4767,11 +4767,20 @@ shape when binding an owned context. The C++ probe resolves
 instances to set the observed size without creating item identity cycles, then
 compares the same bindable-list report surface. The contract is
 `docs/prototypes/data-binding-graph-owned-viewmodel-nested-list-name-path-runtime-contract.md`.
+
+Current #12 update: owned generated nested list paths now have a stable public
+nested source handle for item-count mutation. `RuntimeOwnedViewModelInstance`
+can resolve `child/items` into `RuntimeOwnedViewModelListSourceHandle` through
+`list_source_handle_by_property_name_path`, and
+`set_list_item_count_by_source_handle` writes through the same generated-child
+list item-count storage before binding. The C++ probe compares the handle
+mutation against the existing owned list name-path command. The contract is
+`docs/prototypes/data-binding-graph-owned-viewmodel-nested-list-source-handle-runtime-contract.md`.
 List item identity, item-level view-model traversal, view-model value paths,
 imported-intermediate nested scalar paths, imported-instance mutation sharing,
-stable public object handles, reverse propagation, broader update queues,
-relative/parent/nested lookup, and nested artboard propagation remain
-follow-up `#12` slices.
+stable public object handles beyond asset/artboard/trigger/list, reverse
+propagation, broader update queues, relative/parent lookup, and nested artboard
+propagation remain follow-up `#12` slices.
 
 Current #12 update: state-machine `BindablePropertyList.propertyValue`
 targets now have a probe-backed target-to-source boundary. Rust exposes

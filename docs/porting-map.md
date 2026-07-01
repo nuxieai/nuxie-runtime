@@ -3260,6 +3260,23 @@ APIs, reverse propagation, broader update queues, relative/parent/nested
 lookup, listener-owned data binding, and nested artboard propagation remained
 follow-up `#12` slices.
 
+Current #12 update: owned view-model contexts now explicitly pin direct
+symbol-list-index name-path mutation through an imported replacement
+intermediate as unsupported. The C++ probe replaces generated `child` with an
+imported child, resolves the owner with
+`ViewModelInstanceRuntime::propertyViewModel("child")`, attempts to write the
+child's `ViewModelInstanceSymbolListIndex.propertyValue`, then binds the owned
+context; C++ leaves the imported child's existing symbol-list-index source
+selected. Rust matches by returning `false` for
+`set_symbol_list_index_by_property_name_path("child/symbol", value)` once
+`child` is imported and by preserving the read-only imported
+symbol-list-index snapshot. The contract is
+`docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-symbol-list-index-name-path-unsupported-runtime-contract.md`.
+Other imported-intermediate value mutation APIs, remaining property-name APIs,
+public object-handle APIs, reverse propagation, broader update queues,
+relative/parent/nested lookup, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
+
 Current #12 update: owned view-model contexts now traverse one imported
 replacement intermediate for direct asset sources. Replacing a generated root
 child with an imported child by instance index makes a source path such as

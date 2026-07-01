@@ -1280,6 +1280,16 @@ slice.
   Rust records imported symbol-list-index snapshots per referenced view-model
   instance for read-only graph binding. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-symbol-list-index-runtime-contract.md`.
+- Owned view-model imported-intermediate symbol-list-index name-path mutation
+  unsupported boundary: replacing a generated root child with an imported
+  child by instance index still lets the graph read `[child, symbol]`, but
+  attempting to resolve the owner with
+  `ViewModelInstanceRuntime::propertyViewModel("child")` and write
+  `ViewModelInstanceSymbolListIndex.propertyValue` leaves the imported child's
+  existing symbol-list-index selected in C++. Rust keeps
+  `set_symbol_list_index_by_property_name_path("child/symbol", value)`
+  generated-only and returns `false` once `child` is imported. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-imported-intermediate-symbol-list-index-name-path-unsupported-runtime-contract.md`.
 - Owned view-model imported-intermediate asset source slice:
   replacing a generated root child with an imported child by instance index
   lets `RuntimeOwnedViewModelInstance` resolve `[child, image]` through the

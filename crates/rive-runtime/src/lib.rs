@@ -3140,6 +3140,31 @@ impl RuntimeImportedViewModelInstanceContext {
         ) else {
             return false;
         };
+        self.set_number_by_resolved_property_path(file, path, value)
+    }
+
+    pub fn set_number_by_property_name_path(
+        &mut self,
+        file: &RuntimeFile,
+        property_path: &str,
+        value: f32,
+    ) -> bool {
+        let Some(path) = runtime_imported_view_model_number_property_path_for_name_path(
+            file,
+            self.view_model_index,
+            property_path,
+        ) else {
+            return false;
+        };
+        self.set_number_by_resolved_property_path(file, path, value)
+    }
+
+    fn set_number_by_resolved_property_path(
+        &mut self,
+        file: &RuntimeFile,
+        path: Vec<u32>,
+        value: f32,
+    ) -> bool {
         let Some(view_model) = file.view_model(self.view_model_index) else {
             return false;
         };
@@ -4464,6 +4489,19 @@ fn runtime_imported_view_model_number_property_path_for_name(
     )
 }
 
+fn runtime_imported_view_model_number_property_path_for_name_path(
+    file: &RuntimeFile,
+    view_model_index: usize,
+    property_path: &str,
+) -> Option<Vec<u32>> {
+    runtime_imported_view_model_property_path_for_name_path(
+        file,
+        view_model_index,
+        property_path,
+        &["ViewModelPropertyNumber"],
+    )
+}
+
 fn runtime_default_view_model_number_property_path_for_name(
     file: &RuntimeFile,
     property_name: &str,
@@ -4695,6 +4733,42 @@ fn runtime_imported_view_model_property_path_for_type_names(
                 u32::try_from(property_index).ok()?,
             ])
         })
+}
+
+fn runtime_imported_view_model_property_path_for_name_path(
+    file: &RuntimeFile,
+    view_model_index: usize,
+    property_path: &str,
+    property_type_names: &[&str],
+) -> Option<Vec<u32>> {
+    let property_names = property_path.split('/').collect::<Vec<_>>();
+    if property_names.is_empty() || property_names.iter().any(|segment| segment.is_empty()) {
+        return None;
+    }
+
+    let mut current_view_model_index = view_model_index;
+    let mut path = vec![u32::try_from(view_model_index).ok()?];
+    for (property_name_index, property_name) in property_names.iter().enumerate() {
+        let view_model = file.view_model(current_view_model_index)?;
+        let (property_index, property) = view_model
+            .properties
+            .into_iter()
+            .enumerate()
+            .find(|(_, property)| property.string_property("name") == Some(*property_name))?;
+        path.push(u32::try_from(property_index).ok()?);
+        if property_name_index + 1 == property_names.len() {
+            return property_type_names
+                .contains(&property.type_name)
+                .then_some(path);
+        }
+        if property.type_name != "ViewModelPropertyViewModel" {
+            return None;
+        }
+        current_view_model_index =
+            usize::try_from(property.uint_property("viewModelReferenceId")?).ok()?;
+    }
+
+    None
 }
 
 fn runtime_owned_view_model_numbers(

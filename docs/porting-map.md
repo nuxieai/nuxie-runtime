@@ -3501,6 +3501,22 @@ the same context observe the mutation. The C++ probe adds
 machines through the existing number binding report surface. The contract is
 `docs/prototypes/data-binding-graph-imported-viewmodel-number-name-runtime-contract.md`.
 
+Current #12 update: imported view-model number sources now have the first
+nested property-name path mutation API. `RuntimeImportedViewModelInstanceContext::
+set_number_by_property_name_path` resolves `child/amount` through one
+`ViewModelPropertyViewModel` segment to a `ViewModelPropertyNumber` leaf,
+records the override by the existing graph source path, and lets two state
+machines bound through the same imported context observe the mutation. The C++
+probe uses `--runtime-set-view-model-instance-source-number-by-name` with the
+slash path after completing view-model properties, matching
+`ViewModelInstanceRuntime::propertyNumber("child/amount")`. The contract is
+`docs/prototypes/data-binding-graph-imported-viewmodel-nested-number-name-path-runtime-contract.md`.
+Nested property-name paths for boolean/string/color/enum/symbol-list-index/
+asset/artboard/trigger/list/view-model sources, stable public object handles,
+reverse propagation, broader update queues, relative/parent/nested lookup,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
+
 Current #12 update: imported view-model boolean sources now match the shared
 scalar mutation pattern. `RuntimeImportedViewModelInstanceContext` records
 boolean source overrides by resolved data-bind source path; mutating a

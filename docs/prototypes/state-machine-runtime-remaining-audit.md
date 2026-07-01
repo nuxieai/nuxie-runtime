@@ -430,6 +430,13 @@ slice.
   string targets. Reverse group conversion leaves the edited string target as
   a string, so the number source is not mutated, then the same public update
   reapplies forward group conversion from the unchanged number source.
+- Number-to-string converter-group main-to-source target-to-source slice: the
+  admitted `DataConverterToString -> DataConverterStringPad` group now follows
+  C++ main-`ToSource | TwoWay` behavior for string targets. C++ keeps the
+  number source unchanged during explicit data-context advancement, then the
+  next normal state-machine advance refreshes the target through reverse
+  `DataConverterStringPad -> DataConverterToString` group order to the
+  empty-string fallback.
 - First number-to-number `DataConverterGroup` graph-owned converter execution
   slice: forward composition for default-context number sources feeding number
   targets through an `OperationValue -> Rounder` group, covered by a C++ probe

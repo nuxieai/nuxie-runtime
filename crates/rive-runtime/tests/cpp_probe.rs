@@ -17617,6 +17617,19 @@ fn number_to_string_converter_group_public_update_target_to_source_matches_cpp_p
     assert_string_public_update_target_to_source_matches_cpp_probe(label, bytes);
 }
 
+#[test]
+fn number_to_string_converter_group_main_to_source_two_way_target_to_source_matches_cpp_probe() {
+    const DATA_BIND_TO_SOURCE: u64 = 1 << 0;
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_number_to_string_converter_group_main_to_source_two_way_target_to_source_cpp.riv";
+    let bytes = synthetic_state_machine_default_viewmodel_number_to_string_converter_group_condition_with_flags(
+        8565,
+        DATA_BIND_TO_SOURCE | DATA_BIND_TWO_WAY,
+    );
+    assert_string_main_to_source_two_way_target_to_source_matches_cpp_probe(label, bytes);
+}
+
 fn assert_string_main_to_target_two_way_target_dirty_matches_cpp_probe(
     label: &str,
     bytes: Vec<u8>,

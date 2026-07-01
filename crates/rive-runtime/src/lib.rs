@@ -5556,13 +5556,11 @@ impl RuntimeDataBindGraphSourceNode {
     }
 
     fn uses_delayed_string_source_to_target_after_main_to_source(&self) -> bool {
-        matches!(
-            self.converter.as_ref(),
-            Some(RuntimeDataBindGraphConverter::ToString { .. })
-        ) || self
-            .converter
-            .as_ref()
-            .is_some_and(runtime_data_bind_graph_converter_preserves_string_source_on_main_to_source_target_apply)
+        runtime_data_bind_graph_converter_starts_with_to_string(self.converter.as_ref())
+            || self
+                .converter
+                .as_ref()
+                .is_some_and(runtime_data_bind_graph_converter_preserves_string_source_on_main_to_source_target_apply)
     }
 
     fn preserves_string_source_on_main_to_source_target_apply(&self) -> bool {
@@ -5660,7 +5658,8 @@ impl RuntimeDataBindGraphSourceNode {
                 .reverse_convert_value(converter, &self.value),
             Some(converter @ RuntimeDataBindGraphConverter::Group(_))
                 if self.is_main_to_source()
-                    && runtime_data_bind_graph_converter_preserves_string_source_on_main_to_source_target_apply(converter) =>
+                    && (runtime_data_bind_graph_converter_preserves_string_source_on_main_to_source_target_apply(converter)
+                        || runtime_data_bind_graph_converter_starts_with_to_string(Some(converter))) =>
             {
                 self.converter_state
                     .reverse_convert_value(converter, &self.value)
@@ -6411,17 +6410,17 @@ fn runtime_data_bind_graph_reverse_convert_value(
             RuntimeDataBindGraphConverter::StringTrim { .. },
             RuntimeDataBindGraphValue::String(value),
         ) => Some(RuntimeDataBindGraphValue::String(value.clone())),
-        (RuntimeDataBindGraphConverter::StringTrim { .. }, _) => None,
+        (RuntimeDataBindGraphConverter::StringTrim { .. }, value) => Some(value.clone()),
         (
             RuntimeDataBindGraphConverter::StringRemoveZeros,
             RuntimeDataBindGraphValue::String(value),
         ) => Some(RuntimeDataBindGraphValue::String(value.clone())),
-        (RuntimeDataBindGraphConverter::StringRemoveZeros, _) => None,
+        (RuntimeDataBindGraphConverter::StringRemoveZeros, value) => Some(value.clone()),
         (
             RuntimeDataBindGraphConverter::StringPad { .. },
             RuntimeDataBindGraphValue::String(value),
         ) => Some(RuntimeDataBindGraphValue::String(value.clone())),
-        (RuntimeDataBindGraphConverter::StringPad { .. }, _) => None,
+        (RuntimeDataBindGraphConverter::StringPad { .. }, value) => Some(value.clone()),
         (RuntimeDataBindGraphConverter::ListToLength, RuntimeDataBindGraphValue::Number(value)) => {
             Some(RuntimeDataBindGraphValue::Number(*value))
         }

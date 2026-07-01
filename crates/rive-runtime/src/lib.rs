@@ -4992,12 +4992,16 @@ impl RuntimeOwnedViewModelNumberSourceHandle {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeOwnedViewModelBooleanSourceHandle {
-    property_index: usize,
+    property_path: Vec<usize>,
 }
 
 impl RuntimeOwnedViewModelBooleanSourceHandle {
     pub fn property_index(&self) -> usize {
-        self.property_index
+        self.property_path[self.property_path.len() - 1]
+    }
+
+    pub fn path(&self) -> &[usize] {
+        &self.property_path
     }
 }
 
@@ -5492,6 +5496,10 @@ impl RuntimeOwnedViewModelViewModel {
         let Some(property_index) = self.property_index_by_name(property_name) else {
             return false;
         };
+        self.set_boolean_by_property_index(property_index, value)
+    }
+
+    fn set_boolean_by_property_index(&mut self, property_index: usize, value: bool) -> bool {
         let Some(boolean) = self
             .booleans
             .iter_mut()
@@ -7822,7 +7830,21 @@ impl RuntimeOwnedViewModelInstance {
         self.booleans
             .iter()
             .any(|boolean| boolean.property_index == property_index)
-            .then_some(RuntimeOwnedViewModelBooleanSourceHandle { property_index })
+            .then_some(RuntimeOwnedViewModelBooleanSourceHandle {
+                property_path: vec![property_index],
+            })
+    }
+
+    pub fn boolean_source_handle_by_property_name_path(
+        &self,
+        property_path: &str,
+    ) -> Option<RuntimeOwnedViewModelBooleanSourceHandle> {
+        let property_path = property_path.split('/').collect::<Vec<_>>();
+        if property_path.is_empty() || property_path.iter().any(|segment| segment.is_empty()) {
+            return None;
+        }
+        let property_path = self.boolean_property_path_by_names(&property_path)?;
+        Some(RuntimeOwnedViewModelBooleanSourceHandle { property_path })
     }
 
     pub fn set_boolean_by_source_handle(
@@ -7830,7 +7852,7 @@ impl RuntimeOwnedViewModelInstance {
         handle: &RuntimeOwnedViewModelBooleanSourceHandle,
         value: bool,
     ) -> bool {
-        self.set_boolean_by_property_index(handle.property_index, value)
+        self.set_boolean_by_property_path(&handle.property_path, value)
     }
 
     pub fn set_boolean_by_property_name_path(&mut self, property_path: &str, value: bool) -> bool {
@@ -7858,6 +7880,57 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         }
         view_model.set_boolean_by_property_name(boolean_name, value)
+    }
+
+    fn set_boolean_by_property_path(&mut self, property_path: &[usize], value: bool) -> bool {
+        if property_path.len() == 1 {
+            return self.set_boolean_by_property_index(property_path[0], value);
+        }
+        let Some((boolean_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        if !matches!(
+            view_model.value,
+            RuntimeViewModelPointer::OwnedGenerated { .. }
+        ) {
+            return false;
+        }
+        view_model.set_boolean_by_property_index(*boolean_index, value)
+    }
+
+    fn boolean_property_path_by_names(&self, property_path: &[&str]) -> Option<Vec<usize>> {
+        if property_path.len() == 1 {
+            let property_index = self.property_index_by_name(property_path[0])?;
+            return self
+                .booleans
+                .iter()
+                .any(|boolean| boolean.property_index == property_index)
+                .then_some(vec![property_index]);
+        }
+
+        let (boolean_name, view_model_names) = property_path.split_last()?;
+        let (view_model_path, view_model) =
+            self.view_model_property_path_by_names(view_model_names)?;
+        if !matches!(
+            view_model.value,
+            RuntimeViewModelPointer::OwnedGenerated { .. }
+        ) {
+            return None;
+        }
+        let property_index = view_model.property_index_by_name(boolean_name)?;
+        if !view_model
+            .booleans
+            .iter()
+            .any(|boolean| boolean.property_index == property_index)
+        {
+            return None;
+        }
+        let mut property_path = view_model_path;
+        property_path.push(property_index);
+        Some(property_path)
     }
 
     pub fn set_string_by_property_index(&mut self, property_index: usize, value: &[u8]) -> bool {

@@ -1,8 +1,7 @@
 # Owned ViewModel Boolean Source Handle Runtime Contract
 
-Purpose: extend the owned runtime view-model source-handle family from number
-sources to boolean sources without admitting nested owned handles or the
-remaining owned handle kinds.
+Purpose: document the root owned boolean source handle without changing root
+lookup semantics or admitting the full owned nested handle family.
 
 This slice resolves a root `ViewModelPropertyBoolean.name` on a
 `RuntimeOwnedViewModelInstance` into a
@@ -24,9 +23,12 @@ In scope:
 Out of scope:
 
 - Number behavior beyond the existing committed API, plus string, color, enum,
-  symbol-list-index, asset, artboard, trigger, list, or view-model owned source
-  handles.
-- Nested, relative, parent, or slash-separated property paths.
+  symbol-list-index, asset, artboard, trigger, list, or view-model owned
+  source-handle behavior beyond the existing committed APIs.
+- Changing root-name lookup semantics to accept slash-separated property
+  paths. Nested boolean paths are covered separately by
+  `docs/prototypes/data-binding-graph-owned-viewmodel-nested-boolean-source-handle-runtime-contract.md`.
+- Relative or parent property paths.
 - Imported or default view-model contexts.
 - Persistent owned-context mutation after binding, reverse target-to-source
   propagation, broader update queues, listener-owned data binding, and nested
@@ -35,4 +37,4 @@ Out of scope:
 Completion condition: resolving and mutating a root owned boolean source by
 handle produces the same state-machine advance and component update reports as
 the existing C++ owned-boolean binding path, no-op repeat writes report
-unchanged, and slash-path handle lookup remains unresolved.
+unchanged, and root-name lookup stays separate from slash-path lookup.

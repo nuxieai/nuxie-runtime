@@ -21653,6 +21653,108 @@ fn state_machine_owned_viewmodel_nested_boolean_name_path_bind_source_matches_cp
 }
 
 #[test]
+fn state_machine_owned_viewmodel_nested_boolean_source_handle_bind_source_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label =
+        "synthetic/runtime_state_machine_owned_viewmodel_nested_boolean_source_handle_bind_cpp.riv";
+    let bytes = synthetic_state_machine_owned_nested_viewmodel_boolean_condition(8785);
+    let property_path = "child/enabled";
+    let value = true;
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-bind-owned-view-model-bool-name-path-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        property_path.to_owned(),
+        "1".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    let mut context = RuntimeOwnedViewModelInstance::new(&runtime, 0)
+        .unwrap_or_else(|| panic!("missing Rust owned view-model context for {label}"));
+
+    let mut rust_reports = Vec::new();
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    let handle = context
+        .boolean_source_handle_by_property_name_path(property_path)
+        .unwrap_or_else(|| {
+            panic!("missing nested owned view-model boolean source handle for {label}")
+        });
+    assert_eq!(handle.path(), &[0_usize, 0], "{label} handle path");
+    assert_eq!(handle.property_index(), 0, "{label} handle property index");
+    assert!(
+        context
+            .boolean_source_handle_by_property_name(property_path)
+            .is_none(),
+        "{label} unexpectedly resolved nested owned boolean source by root-name handle"
+    );
+    assert!(
+        context
+            .boolean_source_handle_by_property_name_path("child/missing")
+            .is_none(),
+        "{label} unexpectedly resolved missing nested owned boolean source handle"
+    );
+    assert!(
+        context.set_boolean_by_source_handle(&handle, value),
+        "{label} failed to mutate nested owned view-model boolean by source handle"
+    );
+    assert!(
+        !context.set_boolean_by_source_handle(&handle, value),
+        "{label} reported no-op nested owned boolean source handle mutation as changed"
+    );
+    assert!(
+        state_machine.bind_owned_view_model_context(&context),
+        "{label} failed to bind owned view-model context"
+    );
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 1.0),
+        state_machine.clone(),
+    ));
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+    {
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
 fn state_machine_default_viewmodel_nested_string_bind_source_matches_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");

@@ -2012,10 +2012,11 @@ slice.
 - Owned boolean source handle slice:
   `RuntimeOwnedViewModelInstance` can now resolve a root boolean property name
   into `RuntimeOwnedViewModelBooleanSourceHandle` and mutate owned boolean
-  storage through that handle before binding. Slash-path lookup remains
-  unresolved. Nested/relative/parent lookup remains a follow-up slice. The C++
-  probe compares the handle write against the existing owned-boolean runtime
-  context command. The contract is
+  storage through that handle before binding. Root-name handle lookup remains
+  separate from slash-path lookup. Nested boolean paths are covered separately;
+  other nested/relative/parent lookup remains a follow-up slice. The C++ probe
+  compares the handle write against the existing owned-boolean runtime context
+  command. The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-boolean-source-handle-runtime-contract.md`.
 - Owned string source handle slice:
   `RuntimeOwnedViewModelInstance` can now resolve a root string property name
@@ -2135,6 +2136,15 @@ slice.
   `ViewModelInstanceRuntime::propertyBoolean("child/enabled")->value(...)`.
   The contract is
   `docs/prototypes/data-binding-graph-owned-viewmodel-nested-boolean-name-path-runtime-contract.md`.
+- Owned generated nested boolean source-handle slice:
+  generated owned view-model children can now expose a stable public boolean
+  source handle. `RuntimeOwnedViewModelInstance` can resolve
+  `child/enabled` into `RuntimeOwnedViewModelBooleanSourceHandle` through
+  `boolean_source_handle_by_property_name_path`, and
+  `set_boolean_by_source_handle` mutates the same generated-child boolean
+  storage before binding. The C++ probe compares against the existing owned
+  boolean name-path command. The contract is
+  `docs/prototypes/data-binding-graph-owned-viewmodel-nested-boolean-source-handle-runtime-contract.md`.
 - Owned generated nested string name-path slice:
   generated owned view-model children can store direct string values, and
   `RuntimeOwnedViewModelInstance::set_string_by_property_name_path` can mutate
@@ -2247,8 +2257,8 @@ slice.
   paths, and stable public handles beyond the admitted default nested-number/
   boolean/string/color/enum/symbol-list-index/asset/artboard/trigger/list/view-model
   handles plus default/imported/owned root source handles and owned
-  nested-number handles, especially remaining nested/relative/parent handles
-  that update or expose cached source indexes.
+  nested-number/boolean handles, especially remaining nested/relative/parent
+  handles that update or expose cached source indexes.
 - Listener-owned dispatch: hit testing, listener groups, pointer, keyboard,
   gamepad, semantic/focus inputs, and `ListenerViewModelChange`.
 - Live view-model APIs and data-binding propagation governed by

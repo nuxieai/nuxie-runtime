@@ -2442,8 +2442,19 @@ context. The C++ probe adds
 `--runtime-set-view-model-instance-source-bool` and compares both state
 machines through state-machine advance reports. The contract is
 `docs/prototypes/data-binding-graph-imported-viewmodel-boolean-shared-mutation-runtime-contract.md`.
-Imported-instance mutation beyond shared view-model pointer, number, and
-boolean contexts,
+
+Current #12 update: imported view-model string sources now match the shared
+scalar mutation pattern. `RuntimeImportedViewModelInstanceContext` records
+string source overrides by resolved data-bind source path; mutating a
+`ViewModelInstanceString.propertyValue` source through one state machine is
+observed when a second authored state machine binds through the same imported
+context. The C++ probe adds
+`--runtime-set-view-model-instance-source-string` and compares both state
+machines through the established string binding report surface. The contract
+is
+`docs/prototypes/data-binding-graph-imported-viewmodel-string-shared-mutation-runtime-contract.md`.
+Imported-instance mutation beyond shared view-model pointer, number, boolean,
+and string contexts,
 remaining property-name APIs beyond imported view-model pointer sources and
 owned generated pointer paths, stable public object handles, reverse
 propagation, broader update queues, relative/parent/nested lookup,

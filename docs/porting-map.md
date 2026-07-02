@@ -3253,11 +3253,25 @@ threads the host-supplied graph formula random stream through nested converter
 state and, when the formula child has `randomModeValue == 1`, consumes a fresh
 draw on each state-machine source-to-target evaluation. The contract is
 `docs/prototypes/data-binding-graph-formula-random-group-always-runtime-contract.md`.
-List random formulas, non-number random formulas, grouped
-`RandomMode::sourceChange`, non-default grouped target-to-source/public
-update/target-dirty scheduling, cache invalidation, call counts,
-imported/owned contexts, real random generation, and full dirty-list scheduler
-parity remain follow-up `#12` slices.
+List random formulas, non-number random formulas, non-default grouped
+target-to-source/public update/target-dirty scheduling, cache invalidation,
+call counts, imported/owned contexts, real random generation, and full
+dirty-list scheduler parity remain follow-up `#12` slices.
+
+Current #12 update: graph formula random group source-change mode source-to-target
+Grouped graph-owned `DataConverterFormula` random functions now cover the
+first grouped `RandomMode::sourceChange` source-to-target path for
+default-context number binds. A `DataConverterGroup<OperationValue,
+Formula(random)>` bind caches its host-supplied random value like default
+mode, then clears the nested formula cache when
+`set_default_view_model_number_source_for_data_bind` mutates the bound default
+source before the next source-to-target advance. The contract is
+`docs/prototypes/data-binding-graph-formula-random-group-source-change-runtime-contract.md`.
+List random formulas, non-number random formulas, non-default grouped
+target-to-source/public update/target-dirty scheduling, secondary converter
+dependency invalidation, cache invalidation, call counts, imported/owned
+contexts, real random generation, and full dirty-list scheduler parity remain
+follow-up `#12` slices.
 
 Current #12 update: graph formula random group public update target-to-source
 Grouped graph-owned `DataConverterFormula` random functions now cover public

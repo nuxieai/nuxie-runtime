@@ -1,16 +1,17 @@
-# Data Binding Graph Formula Random Source-Change Target-To-Source Runtime Contract
+# Data Binding Graph Formula Random Source-Change Public Update Target-To-Source Runtime Contract
 
 ## Purpose
 
 Extend the host-supplied graph formula random slice to direct
-`RandomMode::sourceChange` explicit target-to-source scheduling for
+`RandomMode::sourceChange` public target-to-source scheduling for
 default-context number binds.
 
 This covers the C++ behavior where a `DataConverterFormula` random function
-with `randomModeValue == 2` consumes a cached-mode random value for an
-explicit target-to-source source write, treats the changed source as a source
-change, clears that formula cache, and consumes a fresh value for same-pass
-source-to-target reapplication.
+with `randomModeValue == 2` warms its cached random value during the initial
+source-to-target pass, reuses that value for the public target-to-source
+source write, treats the changed source as a source change, clears that
+formula cache, and consumes a fresh value for same-update source-to-target
+reapplication.
 
 ## In Scope
 
@@ -23,17 +24,18 @@ source-to-target reapplication.
 - `DataConverterFormula.randomModeValue == 2`.
 - `StateMachineInstance::set_data_bind_formula_random_values` as the
   host-supplied graph formula random stream.
-- Explicit target-to-source scheduling through `advance_data_context`.
-- Source-to-target reapplication after the target-to-source source write.
+- Public target-to-source scheduling through
+  `update_data_binds_apply_target_to_source`.
+- Same-update source-to-target reapplication after the public target-to-source
+  source write.
 - Source-to-target state-machine advancement and C++ probe number reports.
 
 ## Out Of Scope
 
 - A real Rust random generator or parity with C++ `std::rand()`.
 - Probe CLI support for seeding or queuing C++ runtime random values.
-- Direct public update target-to-source `RandomMode::sourceChange` scheduling
-  is covered separately by
-  `data-binding-graph-formula-random-source-change-public-update-target-to-source-runtime-contract.md`.
+- Explicit target-to-source scheduling is covered separately by
+  `data-binding-graph-formula-random-source-change-target-to-source-runtime-contract.md`.
 - Target-dirty, grouped, list, symbol-list-index, and non-number
   `RandomMode::sourceChange` scheduling.
 - Converter dependency invalidation for secondary source paths, including
@@ -46,12 +48,14 @@ source-to-target reapplication.
 
 ## Completion Checks
 
-- Explicit target-to-source conversion after a target mutation consumes the
-  first supplied random value for the source write.
+- The initial source-to-target advance consumes the first supplied random
+  value.
+- Public target-to-source conversion after a target mutation reuses the warmed
+  source-change random value for the source write.
 - A changed source clears the source-change formula random cache.
-- Same-pass source-to-target reapplication consumes the next supplied random
-  value instead of reusing the target-to-source write value.
+- Same-update source-to-target reapplication consumes the next supplied random
+  value instead of reusing the source-write value.
 - Later source-to-target advances reuse that second value until another source
   change.
-- Existing default-mode, always-mode, and source-change source-mutation random
-  tests still pass.
+- Existing default-mode, always-mode, and explicit source-change
+  target-to-source random tests still pass.

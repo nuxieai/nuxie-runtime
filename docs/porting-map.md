@@ -4961,6 +4961,19 @@ Default artboard and view-model pointer source mutations, relative/parent/
 nested lookup, listener-owned data binding, nested artboard propagation, and
 full dirty-list scheduler parity remain follow-up `#12` slices.
 
+Current #12 update: graph formula default artboard source mutation
+Direct graph-owned `DataConverterFormula` artboard sources now cover post-bind
+default-context root artboard source mutation by formula data-bind index. The
+existing default artboard source mutation path already fans out to every
+matching same-path graph artboard source node, so the formula fallback number
+target and direct artboard observer both refresh after
+`StateMachineInstance::set_default_view_model_artboard_source_for_data_bind`.
+The contract is
+`docs/prototypes/data-binding-graph-formula-default-artboard-mutation-runtime-contract.md`.
+Default view-model pointer source mutation, relative/parent/nested lookup,
+listener-owned data binding, nested artboard propagation, and full dirty-list
+scheduler parity remain follow-up `#12` slices.
+
 Current #12 update: non-scripting `ScriptedDataConverter` now participates in
 the runtime data-bind graph as inherited C++ base converter pass-through. A
 main-`ToTarget | TwoWay` number bind with a direct scripted converter applies

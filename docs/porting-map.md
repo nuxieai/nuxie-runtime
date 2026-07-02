@@ -3170,9 +3170,24 @@ first draw from the C++ state-machine number-binding report before supplying it
 to Rust. The contract is
 `docs/prototypes/data-binding-graph-formula-random-function-runtime-contract.md`.
 Real Rust random generation, C++ probe random seeding/queueing, non-default
-random modes, cache invalidation, random call counts, target-to-source/public
-update random scheduling, grouped/list random formulas, imported/owned
-contexts, and full dirty-list scheduler parity remain follow-up `#12` slices.
+random modes, cache invalidation, random call counts, target-dirty random
+scheduling, grouped/list random formulas, imported/owned contexts, and full
+dirty-list scheduler parity remain follow-up `#12` slices.
+
+Current #12 update: graph formula random target-to-source
+Direct graph-owned `DataConverterFormula` random functions now reuse the
+host-supplied default-mode formula random cache through direct number
+target-to-source scheduling. Rust threads the graph formula random stream into
+the number target-to-source path, so both explicit `advancedDataContext()` for
+a main-`ToSource | TwoWay` random formula bind and public
+`updateDataBinds(true)` for a main-`ToTarget | TwoWay` random formula bind
+match C++: the explicit path after a target mutation, and the public path after
+the initial source-to-target draw. The contract is
+`docs/prototypes/data-binding-graph-formula-random-target-to-source-runtime-contract.md`.
+Target-dirty random formulas, grouped/list random formulas, non-number random
+formulas, non-default random modes, cache invalidation, call counts,
+imported/owned contexts, real random generation, and full dirty-list scheduler
+parity remain follow-up `#12` slices.
 
 Current #12 update: non-scripting `ScriptedDataConverter` now participates in
 the runtime data-bind graph as inherited C++ base converter pass-through. A

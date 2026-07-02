@@ -11768,6 +11768,7 @@ impl RuntimeDataBindGraph {
         }
         let mut updates = Vec::<(Vec<u32>, RuntimeDataBindGraphValue)>::new();
         let mut applied_target_to_source = false;
+        let mut formula_random_source = std::mem::take(&mut self.formula_random_source);
 
         for binding in self.default_view_model_bindings.clone() {
             let Some(target) = self.targets.get(binding.target.0) else {
@@ -11796,7 +11797,9 @@ impl RuntimeDataBindGraph {
             else {
                 continue;
             };
-            let Some(value) = source.number_target_to_source_value(value) else {
+            let Some(value) =
+                source.number_target_to_source_value(value, &mut formula_random_source)
+            else {
                 continue;
             };
             if !include_deferred_main_to_target
@@ -11884,6 +11887,7 @@ impl RuntimeDataBindGraph {
         if changed || applied_target_to_source {
             self.mark_default_view_model_bindings_dirty();
         }
+        self.formula_random_source = formula_random_source;
         changed || applied_target_to_source
     }
 
@@ -13224,18 +13228,30 @@ impl RuntimeDataBindGraphSourceNode {
         self.flags & DATA_BIND_FLAG_DIRECTION_TO_SOURCE != 0
     }
 
-    fn number_target_to_source_value(&mut self, value: f32) -> Option<RuntimeDataBindGraphValue> {
+    fn number_target_to_source_value(
+        &mut self,
+        value: f32,
+        formula_random_source: &mut RuntimeDataBindGraphFormulaRandomSource,
+    ) -> Option<RuntimeDataBindGraphValue> {
         if !self.bound || !self.applies_target_to_source() {
             return None;
         }
         let converted = match self.converter.as_ref() {
             None => RuntimeDataBindGraphValue::Number(value),
-            Some(converter) if self.is_main_to_source() => self
-                .converter_state
-                .convert_value(converter, &RuntimeDataBindGraphValue::Number(value))?,
+            Some(converter) if self.is_main_to_source() => {
+                self.converter_state.convert_value_with_formula_randoms(
+                    converter,
+                    &RuntimeDataBindGraphValue::Number(value),
+                    formula_random_source,
+                )?
+            }
             Some(converter) => self
                 .converter_state
-                .reverse_convert_value(converter, &RuntimeDataBindGraphValue::Number(value))?,
+                .reverse_convert_value_with_formula_randoms(
+                    converter,
+                    &RuntimeDataBindGraphValue::Number(value),
+                    formula_random_source,
+                )?,
         };
         match (&self.value, converted) {
             (RuntimeDataBindGraphValue::Number(_), RuntimeDataBindGraphValue::Number(value)) => {

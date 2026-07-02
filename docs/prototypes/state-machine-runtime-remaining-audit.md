@@ -3493,6 +3493,12 @@ slice.
   C++ only stores `ViewModelInstanceNumber` secondary sources, so non-number
   secondary values use the `0.0` operand fallback. The contract is
   `docs/prototypes/data-binding-graph-operation-viewmodel-non-number-operand-runtime-contract.md`.
+- Operation-view-model non-number context recompute slice:
+  direct and grouped `DataConverterOperationViewModel` imported/owned
+  runtime-context binding now has explicit symbol-list-index fallback
+  coverage. C++ keeps the `0.0` operand fallback when the recomputed
+  secondary source is not a `ViewModelInstanceNumber`. The contract is
+  `docs/prototypes/data-binding-graph-operation-viewmodel-non-number-context-recompute-runtime-contract.md`.
 - Operation-view-model context recompute slice:
   direct `DataConverterOperationViewModel` number operands now refresh when
   imported or owned runtime view-model contexts are bound, while default

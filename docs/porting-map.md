@@ -6378,9 +6378,9 @@ absolute `viewModelId`/`viewModelPropertyId` path against the default
 view-model instance, and missing, non-number, and manifest-name path cases
 preserve the existing C++ `0.0` operand fallback. The contract is
 `docs/prototypes/data-binding-graph-operation-viewmodel-runtime-data-context-operand-contract.md`.
-Imported/owned context recomputation for operation-view-model operands, live
-relative/name converter paths, broader dirty/update queues, listener-owned
-data binding, and nested artboard propagation remain follow-up `#12` slices.
+Live relative/name converter paths, broader dirty/update queues,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
 
 Current #12 update: `DataConverterOperationViewModel` non-number secondary
 operands now have explicit direct and grouped default-context fallback
@@ -6389,9 +6389,23 @@ secondary sources, so a `ViewModelInstanceSymbolListIndex` operand path uses
 the `0.0` fallback both directly and inside
 `DataConverterGroup<OperationValue, OperationViewModel>`. The contract is
 `docs/prototypes/data-binding-graph-operation-viewmodel-non-number-operand-runtime-contract.md`.
-Imported/owned non-number recomputation, relative/name converter paths,
-broader dirty/update queues, listener-owned data binding, and nested artboard
-propagation remain follow-up `#12` slices.
+Imported/owned runtime-context fallback is covered by the later
+operation-viewmodel non-number context recompute slice. Relative/name
+converter paths, broader dirty/update queues, listener-owned data binding, and
+nested artboard propagation remain follow-up `#12` slices.
+
+Current #12 update: `DataConverterOperationViewModel` non-number secondary
+operands now also have imported and owned runtime-context fallback coverage
+for direct converters and for
+`DataConverterGroup<OperationValue, OperationViewModel>`. The C++ probe uses
+an additive operation-viewmodel converter so a mistaken symbol-list-index
+numeric operand would be observable, while C++ keeps the `0.0` operand
+fallback because the resolved secondary source is not a
+`ViewModelInstanceNumber`. The contract is
+`docs/prototypes/data-binding-graph-operation-viewmodel-non-number-context-recompute-runtime-contract.md`.
+Relative/name converter paths, mutation-driven recompute for non-number
+operands, broader dirty/update queues, listener-owned data binding, and
+nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: direct `DataConverterOperationViewModel` operands now
 recompute for imported and owned runtime view-model contexts. Imported context
@@ -6414,9 +6428,8 @@ view-model storage. The contract is
 `docs/prototypes/data-binding-graph-operation-viewmodel-group-context-recompute-runtime-contract.md`.
 Additional converter group orders beyond the observed
 `OperationViewModel, OperationValue` reverse-order slice, relative/name
-converter paths, imported/owned non-number secondary recompute, broader
-dirty/update queues, listener-owned data binding, and nested artboard
-propagation remain follow-up `#12` slices.
+converter paths, broader dirty/update queues, listener-owned data binding, and
+nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: grouped `DataConverterOperationViewModel` operands now
 also have explicit default-context rebind coverage after imported and owned
@@ -6426,9 +6439,8 @@ runtime context changed the nested secondary number operand. The contract is
 `docs/prototypes/data-binding-graph-operation-viewmodel-group-default-rebind-runtime-contract.md`.
 Additional converter group orders beyond the observed
 `OperationViewModel, OperationValue` reverse-order slice, relative/name
-converter paths, imported/owned non-number secondary recompute, broader
-dirty/update queues, listener-owned data binding, and nested artboard
-propagation remain follow-up `#12` slices.
+converter paths, broader dirty/update queues, listener-owned data binding, and
+nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: grouped `DataConverterOperationViewModel` operands now
 have the first observable non-default group-order coverage. A C++ probe uses
@@ -6438,9 +6450,8 @@ binds an imported runtime view-model context to refresh the
 operation-viewmodel operand before the ordered group runs. The contract is
 `docs/prototypes/data-binding-graph-operation-viewmodel-group-order-runtime-contract.md`.
 Exhaustive converter group permutations, relative/name converter paths,
-imported/owned non-number secondary recompute, broader dirty/update queues,
-listener-owned data binding, and nested artboard propagation remain follow-up
-`#12` slices.
+broader dirty/update queues, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
 
 Current #12 update: imported runtime number source mutation now refreshes
 direct `DataConverterOperationViewModel` secondary operands when the mutated
@@ -6449,10 +6460,10 @@ source path matches the converter operand path. This keeps a bound imported
 leaving the stored default operand intact for later default-context rebinding.
 The contract is
 `docs/prototypes/data-binding-graph-operation-viewmodel-imported-number-mutation-runtime-contract.md`.
-Relative/name converter paths, non-number secondary operands, mutation-driven
-recompute for other converter families, broader dirty/update queues,
-listener-owned data binding, and nested artboard propagation remain follow-up
-`#12` slices.
+Relative/name converter paths, mutation-driven non-number secondary operand
+recompute, mutation-driven recompute for other converter families, broader
+dirty/update queues, listener-owned data binding, and nested artboard
+propagation remain follow-up `#12` slices.
 
 Current #12 update: imported runtime number source mutation now also refreshes
 `DataConverterOperationViewModel` secondary operands nested inside the grouped
@@ -6463,9 +6474,8 @@ contract is
 `docs/prototypes/data-binding-graph-operation-viewmodel-group-imported-number-mutation-runtime-contract.md`.
 Additional converter group orders beyond the observed
 `OperationViewModel, OperationValue` reverse-order slice, relative/name
-converter paths, imported/owned non-number secondary recompute, broader
-dirty/update queues, listener-owned data binding, and nested artboard
-propagation remain follow-up `#12` slices.
+converter paths, broader dirty/update queues, listener-owned data binding, and
+nested artboard propagation remain follow-up `#12` slices.
 
 ## #13: Nested Artboards And Hosts
 

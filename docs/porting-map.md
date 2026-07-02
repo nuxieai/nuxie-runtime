@@ -4718,6 +4718,18 @@ scheduling, imported/owned contexts, source mutation APIs, relative/parent/
 nested lookup, listener-owned data binding, nested artboard propagation, and
 full dirty-list scheduler parity remain follow-up `#12` slices.
 
+Current #12 update: graph formula object fallback scheduling
+Direct graph-owned `DataConverterFormula` object-like sources now preserve the
+asset, artboard, or view-model pointer source when a formula-bound number
+target is manually edited, then match C++ reapplication behavior for explicit
+`advanceDataContext()`, public `updateDataBinds(true)`, and main
+`ToTarget | TwoWay` target-dirty scheduling. The contract is
+`docs/prototypes/data-binding-graph-formula-object-fallback-scheduling-runtime-contract.md`.
+Random/function-token object fallbacks, imported/owned contexts, source
+mutation APIs, relative/parent/nested lookup, listener-owned data binding,
+nested artboard propagation, and full dirty-list scheduler parity remain
+follow-up `#12` slices.
+
 Current #12 update: non-scripting `ScriptedDataConverter` now participates in
 the runtime data-bind graph as inherited C++ base converter pass-through. A
 main-`ToTarget | TwoWay` number bind with a direct scripted converter applies

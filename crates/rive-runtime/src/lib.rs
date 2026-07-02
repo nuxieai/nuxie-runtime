@@ -14370,6 +14370,27 @@ impl RuntimeDataBindGraphSourceNode {
             {
                 Some(RuntimeDataBindGraphValue::Enum(*value))
             }
+            (RuntimeDataBindGraphValue::Asset(value), RuntimeDataBindGraphValue::Number(_))
+                if self.converter.as_ref().is_some_and(
+                    runtime_data_bind_graph_converter_preserves_non_trigger_non_number_source_on_number_target_apply,
+                ) =>
+            {
+                Some(RuntimeDataBindGraphValue::Asset(*value))
+            }
+            (RuntimeDataBindGraphValue::Artboard(value), RuntimeDataBindGraphValue::Number(_))
+                if self.converter.as_ref().is_some_and(
+                    runtime_data_bind_graph_converter_preserves_non_trigger_non_number_source_on_number_target_apply,
+                ) =>
+            {
+                Some(RuntimeDataBindGraphValue::Artboard(*value))
+            }
+            (RuntimeDataBindGraphValue::ViewModel(value), RuntimeDataBindGraphValue::Number(_))
+                if self.converter.as_ref().is_some_and(
+                    runtime_data_bind_graph_converter_preserves_non_trigger_non_number_source_on_number_target_apply,
+                ) =>
+            {
+                Some(RuntimeDataBindGraphValue::ViewModel(*value))
+            }
             (RuntimeDataBindGraphValue::Trigger(value), RuntimeDataBindGraphValue::Number(_))
                 if self.converter.as_ref().is_some_and(
                     runtime_data_bind_graph_converter_preserves_trigger_source_on_number_target_apply,

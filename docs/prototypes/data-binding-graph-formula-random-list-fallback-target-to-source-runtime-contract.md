@@ -45,6 +45,9 @@ formula fallback. This remains true when the formula output queue contains
 - Public-update `BindablePropertyList` list-target target-to-source behavior
   is covered by
   `data-binding-graph-formula-random-list-fallback-bindable-list-public-update-target-to-source-runtime-contract.md`.
+- Main-`ToTarget | TwoWay` target-dirty behavior for random-function formula
+  list sources is covered by
+  `data-binding-graph-formula-random-list-fallback-main-to-target-two-way-target-dirty-runtime-contract.md`.
 - Generated list item creation, artboard component-list instancing, map-rule
   selection, layout, and virtualization.
 - Number-source random formula evaluation and scheduling, covered by the

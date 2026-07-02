@@ -1,15 +1,16 @@
-# Data Binding Graph Formula List Fallback Main-To-Target Two-Way Target Dirty Runtime Contract
+# Data Binding Graph Formula Random List Fallback Main-To-Target Two-Way Target Dirty Runtime Contract
 
 ## Purpose
 
-Pin main-`ToTarget | TwoWay` target-dirty behavior for deterministic
+Pin main-`ToTarget | TwoWay` target-dirty behavior for random-function
 `DataConverterFormula` list fallback sources feeding number targets.
 
 C++ keeps the imported `ViewModelInstanceList` source unchanged when a
-formula-bound number target is manually edited. The manual target edit
+random-formula-bound number target is manually edited. The manual target edit
 survives explicit `advanceDataContext()`, and later normal state-machine
 advancement reapplies source-to-target conversion, writing the formula list
-fallback scalar to the target.
+fallback scalar to the target. For this list fallback shape, supplied random
+values do not change the observable result.
 
 ## In Scope
 
@@ -19,8 +20,9 @@ fallback scalar to the target.
   children.
 - `BindablePropertyNumber.propertyValue` targets consumed by
   `BlendState1DViewModel`.
-- Direct `DataConverterFormula` with a single deterministic
-  `FormulaTokenInput` output token.
+- Direct `DataConverterFormula` with a `FormulaTokenFunction` output token.
+- `FunctionType::random` and `DataConverterFormula.randomModeValue` values
+  `0`, `1`, and `2`.
 - Main-`ToTarget | TwoWay` data-bind flags, without the `ToSource` direction
   flag.
 - Initial source-to-target flushing through a normal state-machine advance.
@@ -36,14 +38,12 @@ fallback scalar to the target.
 
 ## Out Of Scope
 
+- Deterministic `FormulaTokenInput` target-dirty behavior, covered by
+  `data-binding-graph-formula-list-fallback-main-to-target-two-way-target-dirty-runtime-contract.md`.
 - Source-to-target list fallback behavior, covered by
   `data-binding-graph-formula-list-fallback-runtime-contract.md`.
-- Explicit target-to-source behavior, covered by
-  `data-binding-graph-formula-list-fallback-explicit-target-to-source-runtime-contract.md`.
-- Public `updateDataBinds(true)` target-to-source behavior, covered by
-  `data-binding-graph-formula-list-fallback-public-update-target-to-source-runtime-contract.md`.
-- Random-function formula list fallback target-dirty behavior, covered by
-  `data-binding-graph-formula-random-list-fallback-main-to-target-two-way-target-dirty-runtime-contract.md`.
+- Explicit and public-update random target-to-source behavior, covered by
+  `data-binding-graph-formula-random-list-fallback-target-to-source-runtime-contract.md`.
 - `BindablePropertyList.propertyValue` targets, covered by the bindable-list
   formula fallback contracts.
 - Generated list item creation, generated item identity, item-level binding,
@@ -54,13 +54,15 @@ fallback scalar to the target.
 
 ## Completion Checks
 
-- The initial normal state-machine advance applies the formula list fallback
-  scalar to `BindablePropertyNumber.propertyValue`.
+- The initial normal state-machine advance applies the random-function formula
+  list fallback scalar to `BindablePropertyNumber.propertyValue`.
 - A manual edit to the number target is preserved through explicit
   data-context advancement.
 - A later normal state-machine advance reapplies the formula fallback scalar
   to the number target.
 - Rust reports the same unchanged source list size as C++ throughout the
   sequence.
-- Existing deterministic formula list source-to-target and reverse probes
-  continue to pass.
+- Random modes `0`, `1`, and `2` match C++ even when Rust is supplied non-zero
+  random values.
+- Existing random formula list source-to-target and reverse probes continue to
+  pass.

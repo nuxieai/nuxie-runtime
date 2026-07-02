@@ -49,7 +49,9 @@ non-number, non-symbol-list-index inputs.
 - Random-function target-to-source propagation for formula list sources is
   covered separately by
   `data-binding-graph-formula-random-list-fallback-target-to-source-runtime-contract.md`.
-- Random-function target-dirty behavior for formula list sources.
+- Random-function target-dirty behavior for formula list sources is covered
+  separately by
+  `data-binding-graph-formula-random-list-fallback-main-to-target-two-way-target-dirty-runtime-contract.md`.
 - Broader target-to-source propagation.
 - Formula parent-source binding, source dependents, and add-dirt behavior.
 - A real Rust random generator, C++ random seeding/queueing, or random

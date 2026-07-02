@@ -5,24 +5,30 @@
 Pin C++ parity for default-context object sources flowing through longer grouped
 formula fallback converter chains in source-to-target application.
 
-This slice covers two three-child `DataConverterGroup` shapes:
+This contract covers the first six longer `DataConverterGroup` shapes:
 
 - `DataConverterGroup<FormulaFallback, OperationValue, OperationValue>`
 - `DataConverterGroup<OperationValue, FormulaFallback, OperationValue>`
+- `DataConverterGroup<FormulaFallback, OperationValue, OperationValue, OperationValue>`
+- `DataConverterGroup<OperationValue, FormulaFallback, OperationValue, OperationValue>`
+- `DataConverterGroup<OperationValue, OperationValue, FormulaFallback, OperationValue>`
+- `DataConverterGroup<OperationValue, OperationValue, OperationValue, FormulaFallback>`
 
 The purpose is to close the first longer-group hole without turning
 `rive-runtime`'s data-bind graph admission rule into a general runtime
 scheduler. The runtime admission rule is intentionally limited to groups with
 exactly one formula fallback child and only operation-value children around it;
-the C++ oracle coverage in this slice is the two three-child shapes above.
+the C++ oracle coverage in this contract is the three- and four-child shapes
+above.
 
 ## In Scope
 
 - Default view-model state-machine context binding.
 - Asset, artboard, and view-model pointer root sources.
 - Source-to-target application into a `BindablePropertyNumber` target.
-- Three-child groups containing exactly one `DataConverterFormula` fallback
-  converter and otherwise only `DataConverterOperationValue` converters.
+- Three- and four-child groups containing exactly one `DataConverterFormula`
+  fallback converter and otherwise only `DataConverterOperationValue`
+  converters.
 - Formula fallback token variants:
   - `FormulaTokenInput`.
   - `FormulaTokenFunction(random)` with `randomModeValue` values `0`, `1`, and
@@ -37,8 +43,8 @@ the C++ oracle coverage in this slice is the two three-child shapes above.
   converters.
 - Target-to-source/public-update behavior for longer grouped object fallback
   converters.
-- Four-or-more-child group permutations not exercised by the C++ oracle in
-  this slice.
+- Five-or-more-child group permutations not exercised by the C++ oracle in
+  this contract.
 - Groups with multiple formulas, no formula, or non-operation converter
   children around the formula.
 - Relative, parent, name-based, or nested source path admission.
@@ -67,3 +73,4 @@ the C++ oracle coverage in this slice is the two three-child shapes above.
 ## Validation
 
 - `state_machine_default_viewmodel_object_formula_random_longer_group_fallbacks_match_cpp_probe`
+- `state_machine_default_viewmodel_object_formula_random_four_child_group_fallbacks_match_cpp_probe`

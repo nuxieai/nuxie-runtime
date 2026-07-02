@@ -34,8 +34,11 @@ random value on the next formula evaluation.
 - Probe CLI support for seeding or queuing C++ runtime random values.
 - Grouped random call-count parity outside the observed grouped bind and
   formula `addDirt` random-cache behavior.
-- Grouped target-to-source, public update, and target-dirty scheduling for
-  non-default random modes.
+- Grouped explicit target-to-source `RandomMode::sourceChange` scheduling is
+  covered separately by
+  `data-binding-graph-formula-random-group-source-change-target-to-source-runtime-contract.md`.
+- Grouped public update and target-dirty scheduling for non-default random
+  modes.
 - List formula, symbol-list-index, and non-number random formula scheduling.
 - Converter dependency invalidation for secondary source paths, including
   `DataConverterOperationViewModel` dependencies.

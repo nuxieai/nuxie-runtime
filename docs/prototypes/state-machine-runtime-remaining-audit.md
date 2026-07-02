@@ -1202,6 +1202,17 @@ slice.
   update/target-dirty scheduling, secondary converter dependency invalidation,
   cache invalidation, call counts, imported/owned contexts, and real random
   generation remain follow-up slices.
+- `DataConverterFormula` random group source-change target-to-source slice:
+  default-context number sources feeding number targets through a
+  main-`ToSource | TwoWay` `DataConverterGroup<OperationValue,
+  Formula(random)>` now apply explicit target mutations through forward group
+  order when `randomModeValue == 2`. Rust consumes a host-supplied random
+  value for the target-to-source source write, clears the nested formula
+  random cache when the graph source changes, and consumes a fresh value for
+  same-pass source-to-target reapplication, matching C++. Grouped
+  public-update, grouped target-dirty, list formulas, non-number, secondary
+  converter dependency invalidation, cache invalidation, call counts,
+  imported/owned contexts, and real random generation remain follow-up slices.
 - `DataConverterFormula` random group public-update target-to-source slice:
   default-context number sources feeding number targets through a
   main-`ToTarget | TwoWay` `DataConverterGroup<OperationValue,

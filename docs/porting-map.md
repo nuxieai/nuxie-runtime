@@ -3170,9 +3170,9 @@ first draw from the C++ state-machine number-binding report before supplying it
 to Rust. The contract is
 `docs/prototypes/data-binding-graph-formula-random-function-runtime-contract.md`.
 Real Rust random generation, C++ probe random seeding/queueing, non-default
-random modes, cache invalidation, random call counts, grouped/list random
-formulas, imported/owned contexts, and full dirty-list scheduler parity remain
-follow-up `#12` slices.
+random modes, cache invalidation, random call counts, list random formulas,
+imported/owned contexts, and full dirty-list scheduler parity remain follow-up
+`#12` slices.
 
 Current #12 update: graph formula random target-to-source
 Direct graph-owned `DataConverterFormula` random functions now reuse the
@@ -3184,10 +3184,10 @@ a main-`ToSource | TwoWay` random formula bind and public
 match C++: the explicit path after a target mutation, and the public path after
 the initial source-to-target draw. The contract is
 `docs/prototypes/data-binding-graph-formula-random-target-to-source-runtime-contract.md`.
-Grouped/list random formulas, non-number random formulas, non-default random
-modes, cache invalidation, call counts, imported/owned contexts, real random
-generation, and full dirty-list scheduler parity remain follow-up `#12`
-slices.
+Grouped random target-to-source/public-update scheduling, list random formulas,
+non-number random formulas, non-default random modes, cache invalidation, call
+counts, imported/owned contexts, real random generation, and full dirty-list
+scheduler parity remain follow-up `#12` slices.
 
 Current #12 update: graph formula random target-dirty
 Direct graph-owned `DataConverterFormula` random functions now cover
@@ -3197,10 +3197,23 @@ preserved through explicit data-context advancement, then the next normal
 state-machine advance reapplies the unchanged source through the cached
 host-supplied formula random value. The contract is
 `docs/prototypes/data-binding-graph-formula-random-target-dirty-runtime-contract.md`.
-Grouped/list random formulas, non-number random formulas, non-default random
-modes, cache invalidation, call counts, imported/owned contexts, real random
-generation, and full dirty-list scheduler parity remain follow-up `#12`
-slices.
+Grouped random target-dirty scheduling, list random formulas, non-number random
+formulas, non-default random modes, cache invalidation, call counts,
+imported/owned contexts, real random generation, and full dirty-list scheduler
+parity remain follow-up `#12` slices.
+
+Current #12 update: graph formula random group source-to-target
+Grouped graph-owned `DataConverterFormula` random functions now cover the
+first source-to-target group path for default-context number binds. A
+`DataConverterGroup<OperationValue, Formula(random)>` bind threads the
+host-supplied graph formula random stream through nested converter state,
+draws the same default-mode random value as C++, and reuses the cached grouped
+formula value on later state-machine advancement. The contract is
+`docs/prototypes/data-binding-graph-formula-random-group-runtime-contract.md`.
+Grouped random target-to-source/public-update/target-dirty scheduling, list
+random formulas, non-number random formulas, non-default random modes, cache
+invalidation, call counts, imported/owned contexts, real random generation,
+and full dirty-list scheduler parity remain follow-up `#12` slices.
 
 Current #12 update: non-scripting `ScriptedDataConverter` now participates in
 the runtime data-bind graph as inherited C++ base converter pass-through. A

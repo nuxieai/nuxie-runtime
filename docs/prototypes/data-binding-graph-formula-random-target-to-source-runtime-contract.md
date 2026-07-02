@@ -37,8 +37,11 @@ source-to-target evaluation.
 - Probe CLI support for seeding or queuing C++ runtime random values.
 - `RandomMode::always`, `RandomMode::sourceChange`, random cache invalidation,
   random call-count parity, and formula `addDirt` random-cache behavior.
-- Grouped formula, list formula, symbol-list-index, and non-number random
-  formula scheduling. Target-dirty scheduling is covered separately by
+- Grouped source-to-target scheduling is covered separately by
+  `data-binding-graph-formula-random-group-runtime-contract.md`; grouped
+  target-to-source/public-update scheduling, list formula,
+  symbol-list-index, and non-number random formula scheduling remain out of
+  scope. Target-dirty scheduling is covered separately by
   `data-binding-graph-formula-random-target-dirty-runtime-contract.md`.
 - External, imported, and owned contexts for this converter/source
   combination.

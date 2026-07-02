@@ -31,8 +31,10 @@ the unchanged source through the same cached random formula value.
 - Probe CLI support for seeding or queuing C++ runtime random values.
 - `RandomMode::always`, `RandomMode::sourceChange`, random cache invalidation,
   random call-count parity, and formula `addDirt` random-cache behavior.
-- Grouped formula, list formula, symbol-list-index, and non-number random
-  formula scheduling.
+- Grouped source-to-target scheduling is covered separately by
+  `data-binding-graph-formula-random-group-runtime-contract.md`; grouped
+  target-dirty scheduling, list formula, symbol-list-index, and non-number
+  random formula scheduling remain out of scope.
 - External, imported, and owned contexts for this converter/source
   combination.
 - Relative-path, parent-path, nested-path, listener-owned, and update-queue

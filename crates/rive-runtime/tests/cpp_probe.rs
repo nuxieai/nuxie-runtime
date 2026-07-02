@@ -4143,6 +4143,21 @@ enum FormulaFallbackTokenKind {
     RandomFunction { random_mode_value: u64 },
 }
 
+#[derive(Clone, Copy)]
+enum FormulaFallbackGroupShape {
+    FormulaOperation {
+        operation_value: f32,
+    },
+    FormulaOperationOperation {
+        first_operation_value: f32,
+        second_operation_value: f32,
+    },
+    OperationFormulaOperation {
+        before_operation_value: f32,
+        after_operation_value: f32,
+    },
+}
+
 fn push_formula_fallback_converter(bytes: &mut Vec<u8>, token_kind: FormulaFallbackTokenKind) {
     push_object_with_properties(bytes, "DataConverterFormula", |bytes| match token_kind {
         FormulaFallbackTokenKind::Input => {}
@@ -4177,31 +4192,73 @@ fn push_formula_fallback_converter(bytes: &mut Vec<u8>, token_kind: FormulaFallb
     }
 }
 
+fn push_operation_value_converter(bytes: &mut Vec<u8>, operation_value: f32) {
+    push_object_with_properties(bytes, "DataConverterOperationValue", |bytes| {
+        push_uint_property(bytes, "DataConverterOperationValue", "operationType", 0);
+        push_f32_property(
+            bytes,
+            "DataConverterOperationValue",
+            "operationValue",
+            operation_value,
+        );
+    });
+}
+
+fn push_group_converter_with_items(bytes: &mut Vec<u8>, converter_ids: &[u64]) {
+    push_object_with_properties(bytes, "DataConverterGroup", |_| {});
+    for converter_id in converter_ids {
+        push_object_with_properties(bytes, "DataConverterGroupItem", |bytes| {
+            push_uint_property(
+                bytes,
+                "DataConverterGroupItem",
+                "converterId",
+                *converter_id,
+            );
+        });
+    }
+}
+
+fn push_formula_fallback_group_converter(
+    bytes: &mut Vec<u8>,
+    group_shape: Option<FormulaFallbackGroupShape>,
+) -> u64 {
+    match group_shape {
+        Some(FormulaFallbackGroupShape::FormulaOperation { operation_value }) => {
+            push_operation_value_converter(bytes, operation_value);
+            push_group_converter_with_items(bytes, &[0, 1]);
+            2
+        }
+        Some(FormulaFallbackGroupShape::FormulaOperationOperation {
+            first_operation_value,
+            second_operation_value,
+        }) => {
+            push_operation_value_converter(bytes, first_operation_value);
+            push_operation_value_converter(bytes, second_operation_value);
+            push_group_converter_with_items(bytes, &[0, 1, 2]);
+            3
+        }
+        Some(FormulaFallbackGroupShape::OperationFormulaOperation {
+            before_operation_value,
+            after_operation_value,
+        }) => {
+            push_operation_value_converter(bytes, before_operation_value);
+            push_operation_value_converter(bytes, after_operation_value);
+            push_group_converter_with_items(bytes, &[1, 0, 2]);
+            3
+        }
+        None => 0,
+    }
+}
+
 fn push_optional_formula_fallback_group_converter(
     bytes: &mut Vec<u8>,
     group_operation_value: Option<f32>,
 ) -> u64 {
-    if let Some(operation_value) = group_operation_value {
-        push_object_with_properties(bytes, "DataConverterOperationValue", |bytes| {
-            push_uint_property(bytes, "DataConverterOperationValue", "operationType", 0);
-            push_f32_property(
-                bytes,
-                "DataConverterOperationValue",
-                "operationValue",
-                operation_value,
-            );
-        });
-        push_object_with_properties(bytes, "DataConverterGroup", |_| {});
-        push_object_with_properties(bytes, "DataConverterGroupItem", |bytes| {
-            push_uint_property(bytes, "DataConverterGroupItem", "converterId", 0);
-        });
-        push_object_with_properties(bytes, "DataConverterGroupItem", |bytes| {
-            push_uint_property(bytes, "DataConverterGroupItem", "converterId", 1);
-        });
-        2
-    } else {
-        0
-    }
+    push_formula_fallback_group_converter(
+        bytes,
+        group_operation_value
+            .map(|operation_value| FormulaFallbackGroupShape::FormulaOperation { operation_value }),
+    )
 }
 
 fn synthetic_state_machine_default_viewmodel_boolean_formula_fallback_blend_state_with_token(
@@ -4551,6 +4608,24 @@ fn synthetic_state_machine_default_viewmodel_object_formula_fallback_blend_state
     data_bind_flags: u64,
     group_operation_value: Option<f32>,
 ) -> Vec<u8> {
+    synthetic_state_machine_default_viewmodel_object_formula_fallback_blend_state_with_token_flags_and_group_shape(
+        file_id,
+        source_kind,
+        token_kind,
+        data_bind_flags,
+        group_operation_value.map(|operation_value| FormulaFallbackGroupShape::FormulaOperation {
+            operation_value,
+        }),
+    )
+}
+
+fn synthetic_state_machine_default_viewmodel_object_formula_fallback_blend_state_with_token_flags_and_group_shape(
+    file_id: u64,
+    source_kind: FormulaFallbackObjectSourceKind,
+    token_kind: FormulaFallbackTokenKind,
+    data_bind_flags: u64,
+    group_shape: Option<FormulaFallbackGroupShape>,
+) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "ViewModel", |bytes| {
             push_string_property(bytes, "ViewModel", "name", "Root");
@@ -4583,8 +4658,7 @@ fn synthetic_state_machine_default_viewmodel_object_formula_fallback_blend_state
         }
         push_object_with_properties(bytes, "Backboard", |_| {});
         push_formula_fallback_converter(bytes, token_kind);
-        let converter_id =
-            push_optional_formula_fallback_group_converter(bytes, group_operation_value);
+        let converter_id = push_formula_fallback_group_converter(bytes, group_shape);
         push_object_with_properties(bytes, "Artboard", |_| {});
         match source_kind {
             FormulaFallbackObjectSourceKind::Asset => {
@@ -31326,6 +31400,184 @@ fn state_machine_default_viewmodel_object_formula_random_group_fallbacks_match_c
                 );
             }
             compare_cpp_runtime_update(&cpp, &rust, &report, &label);
+        }
+    }
+}
+
+#[test]
+fn state_machine_default_viewmodel_object_formula_random_longer_group_fallbacks_match_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let source_cases = [
+        FormulaFallbackObjectSourceKind::Asset,
+        FormulaFallbackObjectSourceKind::Artboard,
+        FormulaFallbackObjectSourceKind::ViewModel,
+    ];
+    let token_cases = [
+        ("input", FormulaFallbackTokenKind::Input),
+        (
+            "random_mode_0",
+            FormulaFallbackTokenKind::RandomFunction {
+                random_mode_value: 0,
+            },
+        ),
+        (
+            "random_mode_1",
+            FormulaFallbackTokenKind::RandomFunction {
+                random_mode_value: 1,
+            },
+        ),
+        (
+            "random_mode_2",
+            FormulaFallbackTokenKind::RandomFunction {
+                random_mode_value: 2,
+            },
+        ),
+    ];
+    let group_cases = [
+        (
+            "formula_operation_operation",
+            FormulaFallbackGroupShape::FormulaOperationOperation {
+                first_operation_value: 3.0,
+                second_operation_value: 4.0,
+            },
+        ),
+        (
+            "operation_formula_operation",
+            FormulaFallbackGroupShape::OperationFormulaOperation {
+                before_operation_value: 4.0,
+                after_operation_value: 3.0,
+            },
+        ),
+    ];
+
+    for (group_index, (group_label, group_shape)) in group_cases.iter().copied().enumerate() {
+        for (source_index, source_kind) in source_cases.iter().copied().enumerate() {
+            for (token_index, (token_label, token_kind)) in token_cases.iter().copied().enumerate()
+            {
+                let label = format!(
+                    "synthetic/runtime_state_machine_default_viewmodel_{}_formula_random_{group_label}_fallback_{token_label}_cpp.riv",
+                    source_kind.label(),
+                );
+                let bytes =
+                    synthetic_state_machine_default_viewmodel_object_formula_fallback_blend_state_with_token_flags_and_group_shape(
+                        9606
+                            + (group_index as u64 * 12)
+                            + (source_index as u64 * 4)
+                            + token_index as u64,
+                        source_kind,
+                        token_kind,
+                        0,
+                        Some(group_shape),
+                    );
+                let args = [
+                    "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+                    "0".to_owned(),
+                    "--runtime-advance-state-machine".to_owned(),
+                    "0".to_owned(),
+                    "0".to_owned(),
+                    "--runtime-advance-state-machine".to_owned(),
+                    "0".to_owned(),
+                    "1".to_owned(),
+                ];
+
+                let seeded_random_values = [0.875_f32, 0.625, 0.25, 0.125];
+                let expected_counts = match group_shape {
+                    FormulaFallbackGroupShape::FormulaOperationOperation { .. } => [0_usize, 0],
+                    FormulaFallbackGroupShape::OperationFormulaOperation { .. } => match token_kind
+                    {
+                        FormulaFallbackTokenKind::Input => [0_usize, 0],
+                        FormulaFallbackTokenKind::RandomFunction {
+                            random_mode_value: 0,
+                        } => [1_usize, 1],
+                        FormulaFallbackTokenKind::RandomFunction {
+                            random_mode_value: 1,
+                        } => [1_usize, 1],
+                        FormulaFallbackTokenKind::RandomFunction {
+                            random_mode_value: 2,
+                        } => [1_usize, 1],
+                        FormulaFallbackTokenKind::RandomFunction { random_mode_value } => {
+                            panic!("{label} unsupported random mode {random_mode_value}")
+                        }
+                    },
+                    FormulaFallbackGroupShape::FormulaOperation { .. } => {
+                        panic!("{label} unexpected two-converter group shape")
+                    }
+                };
+                let probe_args = counted_runtime_random_probe_args(&seeded_random_values, &args);
+                let cpp = read_cpp_probe_bytes_with_args(&probe, &label, &bytes, &probe_args);
+                let (_, mut rust) = read_rust_instance_from_bytes(&bytes, &label);
+                let mut state_machine = rust
+                    .state_machine_instance(0)
+                    .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+                assert!(
+                    state_machine.bind_default_view_model_context(),
+                    "{label} failed to bind default view-model context"
+                );
+                state_machine.set_data_bind_formula_random_values(&seeded_random_values);
+                assert_formula_random_call_count(&state_machine, 0, &label, "after random reset");
+                let rust_reports = [
+                    (
+                        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+                        state_machine.clone(),
+                    ),
+                    (
+                        rust.advance_state_machine_instance(&mut state_machine, 1.0),
+                        state_machine.clone(),
+                    ),
+                ];
+                assert_formula_random_call_count(
+                    &state_machine,
+                    expected_counts[1],
+                    &label,
+                    "after reapply",
+                );
+                let report = rust.update_components();
+
+                let cpp_artboard = cpp
+                    .artboards
+                    .first()
+                    .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+                assert_eq!(
+                    cpp_artboard.runtime_state_machine_advances.len(),
+                    rust_reports.len(),
+                    "{label} state-machine report count mismatch"
+                );
+                for (index, (cpp_state_machine, (advanced, rust_state_machine))) in cpp_artboard
+                    .runtime_state_machine_advances
+                    .iter()
+                    .zip(&rust_reports)
+                    .enumerate()
+                {
+                    let step_label = format!("{label} action {index}");
+                    compare_state_machine_advance(
+                        cpp_state_machine,
+                        rust_state_machine,
+                        *advanced,
+                        &step_label,
+                    );
+                    compare_state_machine_number_binding(
+                        cpp_state_machine,
+                        rust_state_machine,
+                        0,
+                        &step_label,
+                    );
+                    assert_eq!(
+                        cpp_state_machine.random_total_calls, expected_counts[index],
+                        "{label} C++ random totalCalls mismatch at report {index}"
+                    );
+                    assert_eq!(
+                        cpp_state_machine.random_total_calls,
+                        rust_state_machine.data_bind_formula_random_call_count(),
+                        "{label} C++ and Rust random call count mismatch at report {index}"
+                    );
+                }
+                compare_cpp_runtime_update(&cpp, &rust, &report, &label);
+            }
         }
     }
 }

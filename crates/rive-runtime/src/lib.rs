@@ -15053,25 +15053,37 @@ fn runtime_data_bind_graph_converter_preserves_trigger_source_on_number_target_a
 fn runtime_data_bind_graph_group_operation_formula_accepts_non_number_source(
     converters: &[RuntimeDataBindGraphConverter],
 ) -> bool {
-    matches!(
-        converters,
-        [
-            RuntimeDataBindGraphConverter::OperationValue { .. },
-            RuntimeDataBindGraphConverter::Formula { .. }
-        ]
-    )
+    let Some(formula_index) = converters
+        .iter()
+        .position(|converter| matches!(converter, RuntimeDataBindGraphConverter::Formula { .. }))
+    else {
+        return false;
+    };
+    converters.len() >= 2
+        && formula_index > 0
+        && converters.iter().enumerate().all(|(index, converter)| {
+            index == formula_index
+                || matches!(
+                    converter,
+                    RuntimeDataBindGraphConverter::OperationValue { .. }
+                )
+        })
 }
 
 fn runtime_data_bind_graph_group_formula_operation_accepts_non_number_source(
     converters: &[RuntimeDataBindGraphConverter],
 ) -> bool {
-    matches!(
-        converters,
-        [
-            RuntimeDataBindGraphConverter::Formula { .. },
-            RuntimeDataBindGraphConverter::OperationValue { .. }
-        ]
-    )
+    converters.len() >= 2
+        && matches!(
+            converters.first(),
+            Some(RuntimeDataBindGraphConverter::Formula { .. })
+        )
+        && converters[1..].iter().all(|converter| {
+            matches!(
+                converter,
+                RuntimeDataBindGraphConverter::OperationValue { .. }
+            )
+        })
 }
 
 #[derive(Debug, Clone, Default)]

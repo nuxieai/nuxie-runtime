@@ -5077,6 +5077,23 @@ Longer group permutations, relative/parent/nested lookup, listener-owned data
 binding, nested artboard propagation, and full dirty-list scheduler parity
 remain follow-up `#12` slices.
 
+Current #12 update: default-context longer grouped object-source formula
+fallback source-to-target behavior now covers the three-child
+`DataConverterGroup<FormulaFallback, OperationValue, OperationValue>` and
+`DataConverterGroup<OperationValue, FormulaFallback, OperationValue>` shapes.
+Asset, artboard, and view-model pointer sources preserve C++ admission into
+number targets. Formula-first longer groups remain random-inert for object
+sources, while operation-before-formula longer groups match C++'s one initial
+random provider call for `FormulaTokenFunction(random)` modes `0`, `1`, and
+`2` with no extra call on a later no-change advance. The contract is
+`docs/prototypes/data-binding-graph-formula-default-object-random-longer-group-runtime-contract.md`.
+Additional longer group permutations (four-or-more-child C++ oracle coverage,
+multiple formulas, non-operation children, imported/owned context variants,
+mutation/relink, and target-to-source/public-update paths),
+relative/parent/nested lookup, listener-owned data binding, nested artboard
+propagation, and full dirty-list scheduler parity remain follow-up `#12`
+slices.
+
 Current #12 update: non-scripting `ScriptedDataConverter` now participates in
 the runtime data-bind graph as inherited C++ base converter pass-through. A
 main-`ToTarget | TwoWay` number bind with a direct scripted converter applies

@@ -3898,12 +3898,14 @@ symbol-list-index sources feeding number targets. Default mode consumes one
 initial draw and reuses it across later advancement, always mode consumes one
 draw per grouped formula evaluation with the second evaluation scheduled by a
 symbol-list-index source mutation, and source-change mode consumes one initial
-draw plus one refresh after a symbol-list-index source mutation. The contract is
+draw plus one refresh after a symbol-list-index source mutation. The C++ probe
+now seeds deterministic random values and reports per-action
+`randomTotalCalls`, so this slice compares the Rust host-stream count directly
+against the C++ total after every grouped source-to-target report. The contract is
 `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-group-call-count-runtime-contract.md`.
 List/non-number paths, imported/owned contexts, real random generation,
-probe-visible C++ `RandomProvider::totalCalls`, secondary dependency
-invalidation, and full dirty-list scheduler parity remain follow-up `#12`
-slices.
+secondary dependency invalidation, and full dirty-list scheduler parity remain
+follow-up `#12` slices.
 
 Current #12 update: graph formula random symbol-list-index group explicit target-to-source
 Grouped graph-owned `DataConverterFormula` random functions now cover explicit

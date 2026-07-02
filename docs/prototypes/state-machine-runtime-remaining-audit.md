@@ -1159,6 +1159,18 @@ slice.
   nested lookup, listener-owned data binding, nested artboard propagation, and
   full dirty-list scheduler parity remain follow-up slices. The contract is
   `docs/prototypes/data-binding-graph-formula-trigger-context-runtime-contract.md`.
+- Deterministic `DataConverterFormula` owned trigger mutation slice: post-bind
+  owned root trigger source mutation by state-machine data-bind index now
+  refreshes the direct formula fallback number target and a same-path direct
+  trigger observer. The Rust runtime exposes
+  `set_owned_view_model_context_trigger_source_for_data_bind`, and the C++
+  probe retains active owned trigger contexts plus
+  `--runtime-set-owned-view-model-source-trigger` for parity comparison.
+  List owned mutation, random formulas, reverse/public-update/target-dirty
+  scheduling, relative/parent/nested lookup, listener-owned data binding,
+  nested artboard propagation, and full dirty-list scheduler parity remain
+  follow-up slices. The contract is
+  `docs/prototypes/data-binding-graph-formula-owned-trigger-mutation-runtime-contract.md`.
 - Deterministic `DataConverterFormula` imported/owned list-context slice:
   imported and owned runtime view-model list contexts now feed rebound source
   item counts into the direct formula fallback path before normal state-machine

@@ -3324,12 +3324,11 @@ refresh after
 The C++ probe now retains active owned string contexts for this comparison. The
 contract is
 `docs/prototypes/data-binding-graph-formula-owned-string-mutation-runtime-contract.md`.
-Trigger/list formula contexts, imported same-path fanout for
-non-boolean/non-enum/non-color/non-string source kinds, formula random
-functions, reverse propagation, public update, target-dirty scheduling,
-generated list item identity, relative/parent/nested lookup, listener-owned
-data binding, nested artboard propagation, and full dirty-list scheduler parity
-remain follow-up `#12` slices.
+Trigger/list owned mutation, formula random functions, reverse propagation,
+public update, target-dirty scheduling, generated list item identity,
+relative/parent/nested lookup, listener-owned data binding, nested artboard
+propagation, and full dirty-list scheduler parity remain follow-up `#12`
+slices.
 
 Current #12 update: deterministic formula trigger contexts
 Direct graph-owned `DataConverterFormula` fallback now covers trigger sources
@@ -3339,6 +3338,17 @@ trigger observer, so imported-context trigger mutation now fans out to every
 bound same-path trigger source node in the active graph before dirty
 reapplication. The contract is
 `docs/prototypes/data-binding-graph-formula-trigger-context-runtime-contract.md`.
+
+Current #12 update: deterministic formula owned trigger source mutation
+Direct graph-owned `DataConverterFormula` trigger fallback now covers
+post-bind owned root trigger source mutation by state-machine data-bind index.
+The same-path direct trigger observer and formula fallback number target both
+refresh after
+`StateMachineInstance::set_owned_view_model_context_trigger_source_for_data_bind`.
+The C++ probe now retains active owned trigger contexts and exposes
+`--runtime-set-owned-view-model-source-trigger` for this comparison. The
+contract is
+`docs/prototypes/data-binding-graph-formula-owned-trigger-mutation-runtime-contract.md`.
 List formula contexts, imported same-path fanout for
 non-boolean/non-enum/non-color/non-string/non-trigger source kinds, formula
 random functions, reverse propagation, public update, target-dirty scheduling,

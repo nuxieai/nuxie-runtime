@@ -10530,6 +10530,73 @@ impl RuntimeDataBindGraph {
         true
     }
 
+    fn set_owned_view_model_context_trigger_source_for_data_bind(
+        &mut self,
+        context: &mut RuntimeOwnedViewModelInstance,
+        data_bind_index: usize,
+        value: u64,
+    ) -> bool {
+        if self.context_kind != RuntimeDataBindGraphContextKind::OwnedViewModel {
+            return false;
+        }
+        let Some(source) = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .map(|binding| binding.source)
+        else {
+            return false;
+        };
+        let Some(source) = self.sources.get(source.0) else {
+            return false;
+        };
+        if !matches!(&source.default_value, RuntimeDataBindGraphValue::Trigger(_)) {
+            return false;
+        }
+        let path = source.path.clone();
+        let Some(property_path) =
+            runtime_owned_view_model_property_path_from_source_path(context, &path)
+        else {
+            return false;
+        };
+        let Some(current_context_value) =
+            runtime_owned_view_model_trigger_value_for_source_path(context, &path)
+        else {
+            return false;
+        };
+        let context_changed = current_context_value != value;
+        let source_changed = self.sources.iter().any(|source| {
+            source.path == path
+                && matches!(source.default_value, RuntimeDataBindGraphValue::Trigger(_))
+                && (!source.bound
+                    || !matches!(&source.value, RuntimeDataBindGraphValue::Trigger(current) if *current == value))
+        });
+
+        if !source_changed && !context_changed {
+            return false;
+        }
+
+        if context_changed && !context.set_trigger_by_property_path(&property_path, value) {
+            return false;
+        }
+
+        for source in self.sources.iter_mut().filter(|source| {
+            source.path == path
+                && matches!(source.default_value, RuntimeDataBindGraphValue::Trigger(_))
+        }) {
+            let changed = !source.bound
+                || !matches!(&source.value, RuntimeDataBindGraphValue::Trigger(current) if *current == value);
+            source.value = RuntimeDataBindGraphValue::Trigger(value);
+            source.bound = true;
+            if changed {
+                source.reset_formula_random_state_for_source_change();
+            }
+        }
+
+        self.mark_default_view_model_bindings_dirty();
+        true
+    }
+
     fn set_default_view_model_boolean_source_for_path(
         &mut self,
         path: &[u32],
@@ -15163,6 +15230,15 @@ fn runtime_owned_view_model_string_value_for_source_path<'a>(
     let property_path =
         runtime_owned_view_model_property_path_from_source_path(context, source_path)?;
     context.string_value_by_property_path(&property_path)
+}
+
+fn runtime_owned_view_model_trigger_value_for_source_path(
+    context: &RuntimeOwnedViewModelInstance,
+    source_path: &[u32],
+) -> Option<u64> {
+    let property_path =
+        runtime_owned_view_model_property_path_from_source_path(context, source_path)?;
+    context.trigger_value_by_property_path(&property_path)
 }
 
 fn runtime_owned_view_model_property_path_from_source_path(
@@ -20328,6 +20404,26 @@ impl StateMachineInstance {
         if !self
             .data_bind_graph
             .set_owned_view_model_context_string_source_for_data_bind(
+                context,
+                data_bind_index,
+                value,
+            )
+        {
+            return false;
+        }
+        self.needs_advance = true;
+        true
+    }
+
+    pub fn set_owned_view_model_context_trigger_source_for_data_bind(
+        &mut self,
+        context: &mut RuntimeOwnedViewModelInstance,
+        data_bind_index: usize,
+        value: u64,
+    ) -> bool {
+        if !self
+            .data_bind_graph
+            .set_owned_view_model_context_trigger_source_for_data_bind(
                 context,
                 data_bind_index,
                 value,

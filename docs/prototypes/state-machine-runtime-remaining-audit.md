@@ -3475,6 +3475,11 @@ slice.
   unresolved relative/nested/parent boundaries in the current fixture. The
   contract is
   `docs/prototypes/data-context-runtime-lookup-support-contract.md`.
+- Imported source `RuntimeDataContext` wiring slice:
+  imported state-machine source binding now uses `RuntimeDataContext` for the
+  already-admitted absolute source lookup path while preserving override-map
+  application after lookup. The contract is
+  `docs/prototypes/data-binding-graph-imported-source-runtime-data-context-wiring-contract.md`.
 - Operation-view-model runtime `DataContext` operand slice:
   direct `DataConverterOperationViewModel` secondary operand resolution now
   constructs a `RuntimeDataContext` for the default view-model instance and

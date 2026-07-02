@@ -6361,6 +6361,16 @@ Live data-bind wiring for relative/name paths, converter name paths, runtime
 mutation/relink through data contexts, listener-owned data binding, and nested
 artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: imported state-machine source binding now routes its
+already-admitted absolute source lookup through `RuntimeDataContext`.
+`bind_imported_view_model_context` uses the same context wrapper for source
+values and operation-view-model operands, while preserving the existing
+override-map application after lookup. The contract is
+`docs/prototypes/data-binding-graph-imported-source-runtime-data-context-wiring-contract.md`.
+Relative/name/parent path admission, listener-owned data contexts, nested
+artboard propagation, broader dirty/update queues, and reverse propagation
+remain follow-up `#12` slices.
+
 Current #12 update: direct `DataConverterOperationViewModel` secondary operand
 resolution is now the first graph-owned converter path to consume
 `RuntimeDataContext`. The converter still reads its `sourcePathIds` as an

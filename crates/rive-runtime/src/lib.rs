@@ -4936,8 +4936,25 @@ impl RuntimeDataBindGraphValue {
         view_model_instance: &RuntimeObject,
         path: &[u32],
     ) -> Option<Self> {
-        let source =
-            file.data_context_view_model_property_for_instance(view_model_instance, path)?;
+        let context = RuntimeDataContext::from_instance_object(file, view_model_instance)?;
+        self.resolve_from_data_context(file, &context, path)
+    }
+
+    fn resolve_from_data_context(
+        &self,
+        file: &RuntimeFile,
+        context: &RuntimeDataContext<'_>,
+        path: &[u32],
+    ) -> Option<Self> {
+        if matches!(self, Self::ViewModel(_)) {
+            return context.absolute_instance(path).map(|reference| {
+                Self::ViewModel(RuntimeViewModelPointer::Imported {
+                    object_id: reference.object.id,
+                })
+            });
+        }
+
+        let source = context.absolute_property(path)?;
         match self {
             Self::Number(_) => file
                 .view_model_instance_number_value_for_object(source)
@@ -4975,13 +4992,7 @@ impl RuntimeDataBindGraphValue {
             Self::Trigger(_) => file
                 .view_model_instance_trigger_count_for_object(source)
                 .map(Self::Trigger),
-            Self::ViewModel(_) => file
-                .data_context_view_model_instance_for_instance(view_model_instance, path)
-                .map(|reference| {
-                    Self::ViewModel(RuntimeViewModelPointer::Imported {
-                        object_id: reference.object.id,
-                    })
-                }),
+            Self::ViewModel(_) => None,
         }
     }
 }
@@ -9862,7 +9873,7 @@ impl RuntimeDataBindGraph {
             if let Some(value) =
                 source
                     .value
-                    .resolve_from_view_model_instance(file, instance.object, &source.path)
+                    .resolve_from_data_context(file, &runtime_context, &source.path)
             {
                 let value = match value {
                     RuntimeDataBindGraphValue::Number(_) => context

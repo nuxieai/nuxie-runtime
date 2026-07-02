@@ -3502,10 +3502,23 @@ produces a number, then reapplies that unchanged source through the formula
 fallback so the number target returns to C++'s `0.0` fallback for
 `randomModeValue` values `0`, `1`, and `2`. The contract is
 `docs/prototypes/data-binding-graph-formula-random-boolean-fallback-target-to-source-runtime-contract.md`.
-Enum, color, string, trigger, list, symbol-list-index, imported/owned
-contexts, real random generation, random call counts, secondary dependency
-invalidation, and full dirty-list scheduler parity remain follow-up `#12`
-slices.
+Enum, color, string, and trigger target-to-source behavior is covered
+separately below. List, symbol-list-index, imported/owned contexts, real
+random generation, random call counts, secondary dependency invalidation, and
+full dirty-list scheduler parity remain follow-up `#12` slices.
+
+Current #12 update: graph formula random remaining fallbacks target-to-source
+Direct graph-owned `DataConverterFormula` random functions now cover explicit
+`advanceDataContext()` and public `updateDataBinds(true)` target-to-source
+behavior for default-context enum, color, string, and trigger sources feeding
+number targets. Rust preserves the unchanged source when random-function
+formula conversion produces a number, then reapplies that unchanged source
+through the formula fallback so the number target returns to C++'s `0.0`
+fallback for `randomModeValue` values `0`, `1`, and `2`. The contract is
+`docs/prototypes/data-binding-graph-formula-random-remaining-fallbacks-target-to-source-runtime-contract.md`.
+List, symbol-list-index, imported/owned contexts, real random generation,
+random call counts, secondary dependency invalidation, and full dirty-list
+scheduler parity remain follow-up `#12` slices.
 
 Current #12 update: graph formula list fallback
 Direct graph-owned `DataConverterFormula` now admits default-context list

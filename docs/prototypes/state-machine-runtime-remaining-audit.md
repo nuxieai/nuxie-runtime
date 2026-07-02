@@ -1147,11 +1147,23 @@ slice.
   reapply that unchanged source through the formula fallback during explicit
   `advanceDataContext()` and public `updateDataBinds(true)`. Random modes
   `0`, `1`, and `2` all return the number target to C++'s `0.0` fallback even
-  when Rust receives non-zero supplied random values. Enum, color, string,
-  trigger, list, symbol-list-index, imported/owned contexts, real random
-  generation, and random call-count parity remain follow-up slices. The
-  contract is
+  when Rust receives non-zero supplied random values. Enum, color, string, and
+  trigger random target-to-source behavior is covered separately below; list,
+  symbol-list-index, imported/owned contexts, real random generation, and
+  random call-count parity remain follow-up slices. The contract is
   `docs/prototypes/data-binding-graph-formula-random-boolean-fallback-target-to-source-runtime-contract.md`.
+- `DataConverterFormula` remaining random fallback target-to-source slice:
+  default-context enum, color, string, and trigger sources feeding
+  main-`ToSource | TwoWay` and main-`ToTarget | TwoWay` number targets now
+  preserve the unchanged source when random-function formula conversion
+  produces a number, then reapply that unchanged source through the formula
+  fallback during explicit `advanceDataContext()` and public
+  `updateDataBinds(true)`. Random modes `0`, `1`, and `2` all return the
+  number target to C++'s `0.0` fallback even when Rust receives non-zero
+  supplied random values. List, symbol-list-index, imported/owned contexts,
+  real random generation, and random call-count parity remain follow-up
+  slices. The contract is
+  `docs/prototypes/data-binding-graph-formula-random-remaining-fallbacks-target-to-source-runtime-contract.md`.
 - `DataConverterFormula` random always-mode source-to-target slice:
   default-context number sources feeding number targets now execute direct
   `FunctionType::random` output-queue tokens when `randomModeValue == 1`.

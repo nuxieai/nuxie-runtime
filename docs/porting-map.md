@@ -3681,8 +3681,23 @@ fallback so the number target returns to C++'s `0.0` fallback for
 `docs/prototypes/data-binding-graph-formula-random-boolean-fallback-target-to-source-runtime-contract.md`.
 Enum, color, string, trigger, list, and symbol-list-index target-to-source
 behavior is covered separately below. Imported/owned contexts, real random
-generation, random call counts, secondary dependency invalidation, and full
-dirty-list scheduler parity remain follow-up `#12` slices.
+generation, enum/color/string/trigger target-to-source random call counts,
+secondary dependency invalidation, and full dirty-list scheduler parity remain
+follow-up `#12` slices. Boolean target-to-source call counts are covered
+separately below.
+
+Current #12 update: graph formula random boolean target-to-source call counts
+Direct graph-owned `DataConverterFormula` random functions now cover Rust's
+host-supplied random-stream call count for boolean target-to-source fallback.
+Explicit `advanceDataContext()` and public `updateDataBinds(true)` each
+consume one hidden pull during reverse reapplication, then reuse that count
+through later normal advances for `randomModeValue` values `0`, `1`, and `2`,
+matching the C++ probe observable fallback values. The contract is
+`docs/prototypes/data-binding-graph-formula-random-boolean-fallback-target-to-source-call-count-runtime-contract.md`.
+Probe-visible C++ `RandomProvider::totalCalls`, enum/color/string/trigger
+target-to-source call counts, imported/owned contexts, real random generation,
+secondary dependency invalidation, and full dirty-list scheduler parity remain
+follow-up `#12` slices.
 
 Current #12 update: graph formula random remaining fallbacks target-to-source
 Direct graph-owned `DataConverterFormula` random functions now cover explicit

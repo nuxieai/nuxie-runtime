@@ -26,11 +26,14 @@ data-context advancement.
 - Later normal state-machine advancement after that target-dirty pass.
 - C++ probe comparisons for the observable binding values around those call
   count assertions.
+- C++ probe `--runtime-random-reset`, repeated `--runtime-random-value`, and
+  per-action `runtimeStateMachineAdvances[].randomTotalCalls` comparisons.
 
 ## Out Of Scope
 
-- Probe-visible C++ `RandomProvider::totalCalls()`. The current C++ probe links
-  the non-`TESTING` runtime build, where that API is not available.
+- Upstream C++ `TESTING` builds or direct use of
+  `RandomProvider::totalCalls()` outside the probe-owned counted provider
+  shim.
 - A real Rust random generator, random seeding, platform RNG behavior, or
   parity with C++ `std::rand()`.
 - Direct symbol-list-index source-to-target call counts, which are covered by
@@ -62,4 +65,6 @@ data-context advancement.
   source-to-target advance, preserves the cache through target-dirty
   advancement because the symbol-list-index source did not change, and reuses
   the cached value on later normal advances.
+- The C++ probe's `randomTotalCalls` reports match the expected C++ source
+  semantics and Rust's host-stream call count for every target-dirty report.
 - The same fixtures continue to match C++ probe binding values.

@@ -1134,10 +1134,24 @@ slice.
   prove C++'s early formula fallback for `FunctionType::random` output tokens.
   Rust writes `0.0` before random-token evaluation for `randomModeValue` values
   `0`, `1`, and `2`; the probe supplies Rust random values to prove they do
-  not affect the result. List formulas, target-to-source reverse conversion for
-  non-number formula sources, imported/owned contexts, real random generation,
-  and random call-count parity remain follow-up slices. The contract is
+  not affect the result. Boolean target-to-source behavior is covered
+  separately below. List formulas, target-to-source reverse conversion for the
+  remaining non-number formula sources, imported/owned contexts, real random
+  generation, and random call-count parity remain follow-up slices. The
+  contract is
   `docs/prototypes/data-binding-graph-formula-random-non-number-fallback-runtime-contract.md`.
+- `DataConverterFormula` random boolean fallback target-to-source slice:
+  default-context boolean sources feeding main-`ToSource | TwoWay` and
+  main-`ToTarget | TwoWay` number targets now preserve the unchanged boolean
+  source when random-function formula conversion produces a number, then
+  reapply that unchanged source through the formula fallback during explicit
+  `advanceDataContext()` and public `updateDataBinds(true)`. Random modes
+  `0`, `1`, and `2` all return the number target to C++'s `0.0` fallback even
+  when Rust receives non-zero supplied random values. Enum, color, string,
+  trigger, list, symbol-list-index, imported/owned contexts, real random
+  generation, and random call-count parity remain follow-up slices. The
+  contract is
+  `docs/prototypes/data-binding-graph-formula-random-boolean-fallback-target-to-source-runtime-contract.md`.
 - `DataConverterFormula` random always-mode source-to-target slice:
   default-context number sources feeding number targets now execute direct
   `FunctionType::random` output-queue tokens when `randomModeValue == 1`.

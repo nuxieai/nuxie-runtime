@@ -41,7 +41,10 @@ formula converter's `randomModeValue`.
   symbol-list-index random contracts.
 - Number-source random formula evaluation and scheduling, which is covered by
   the direct and grouped random contracts.
-- Target-to-source reverse conversion for non-number formula sources.
+- Boolean random fallback target-to-source behavior is covered separately by
+  `data-binding-graph-formula-random-boolean-fallback-target-to-source-runtime-contract.md`.
+- Target-to-source reverse conversion for the remaining non-number formula
+  sources.
 - Formula parent-source binding, source dependents, and add-dirt behavior.
 - A real Rust random generator, C++ random seeding/queueing, or random
   call-count parity.

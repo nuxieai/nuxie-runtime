@@ -3487,10 +3487,25 @@ those non-number, non-symbol-list-index sources before evaluating formula
 tokens, so `FunctionType::random` is ignored for `randomModeValue` values `0`,
 `1`, and `2`. The contract is
 `docs/prototypes/data-binding-graph-formula-random-non-number-fallback-runtime-contract.md`.
-List formulas, target-to-source reverse conversion for non-number formula
-sources, imported/owned contexts, real random generation, random call counts,
-secondary dependency invalidation, and full dirty-list scheduler parity remain
-follow-up `#12` slices.
+List formulas, target-to-source reverse conversion for the remaining
+non-number formula sources, imported/owned contexts, real random generation,
+random call counts, secondary dependency invalidation, and full dirty-list
+scheduler parity remain follow-up `#12` slices. Boolean target-to-source
+behavior is covered separately below.
+
+Current #12 update: graph formula random boolean fallback target-to-source
+Direct graph-owned `DataConverterFormula` random functions now cover explicit
+`advanceDataContext()` and public `updateDataBinds(true)` target-to-source
+behavior for default-context boolean sources feeding number targets. Rust
+preserves the unchanged boolean source when random-function formula conversion
+produces a number, then reapplies that unchanged source through the formula
+fallback so the number target returns to C++'s `0.0` fallback for
+`randomModeValue` values `0`, `1`, and `2`. The contract is
+`docs/prototypes/data-binding-graph-formula-random-boolean-fallback-target-to-source-runtime-contract.md`.
+Enum, color, string, trigger, list, symbol-list-index, imported/owned
+contexts, real random generation, random call counts, secondary dependency
+invalidation, and full dirty-list scheduler parity remain follow-up `#12`
+slices.
 
 Current #12 update: graph formula list fallback
 Direct graph-owned `DataConverterFormula` now admits default-context list
@@ -3500,11 +3515,11 @@ early fallback value `0.0` for both `FormulaTokenInput` and
 `FunctionType::random` output tokens with `randomModeValue` values `0`, `1`,
 and `2`. The contract is
 `docs/prototypes/data-binding-graph-formula-list-fallback-runtime-contract.md`.
-Public-update target-to-source behavior for formula list sources is covered
-separately below. List targets, generated list items, explicit main-`ToSource`
-reverse conversion for formula list sources, imported/owned contexts, real
-random generation, random call counts, secondary dependency invalidation, and
-full dirty-list scheduler parity remain follow-up `#12` slices.
+Public-update and explicit target-to-source behavior for formula list sources
+is covered separately below. List targets, generated list items,
+imported/owned contexts, real random generation, random call counts,
+secondary dependency invalidation, and full dirty-list scheduler parity remain
+follow-up `#12` slices.
 
 Current #12 update: graph formula boolean fallback public update target-to-source
 Direct graph-owned `DataConverterFormula` now covers public

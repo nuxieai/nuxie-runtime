@@ -31331,6 +31331,314 @@ fn state_machine_default_viewmodel_object_formula_random_group_fallbacks_match_c
 }
 
 #[test]
+fn state_machine_default_viewmodel_object_formula_random_group_source_change_mutations_match_cpp_probe()
+ {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let source_cases = [
+        FormulaFallbackObjectSourceKind::Asset,
+        FormulaFallbackObjectSourceKind::Artboard,
+        FormulaFallbackObjectSourceKind::ViewModel,
+    ];
+    let token_cases = [
+        ("input", FormulaFallbackTokenKind::Input),
+        (
+            "random_mode_0",
+            FormulaFallbackTokenKind::RandomFunction {
+                random_mode_value: 0,
+            },
+        ),
+        (
+            "random_mode_1",
+            FormulaFallbackTokenKind::RandomFunction {
+                random_mode_value: 1,
+            },
+        ),
+        (
+            "random_mode_2",
+            FormulaFallbackTokenKind::RandomFunction {
+                random_mode_value: 2,
+            },
+        ),
+    ];
+
+    for (source_index, source_kind) in source_cases.iter().copied().enumerate() {
+        for (token_index, (token_label, token_kind)) in token_cases.iter().copied().enumerate() {
+            let label = format!(
+                "synthetic/runtime_state_machine_default_viewmodel_{}_formula_random_group_source_change_mutation_{}_cpp.riv",
+                source_kind.label(),
+                token_label
+            );
+            let file_id = 9546 + (source_index as u64 * 4) + token_index as u64;
+            let bytes = match source_kind {
+                FormulaFallbackObjectSourceKind::Asset => {
+                    synthetic_state_machine_default_viewmodel_asset_formula_context_blend_state_with_token_and_group(
+                        file_id,
+                        token_kind,
+                        Some(3.0),
+                    )
+                }
+                FormulaFallbackObjectSourceKind::Artboard => {
+                    synthetic_state_machine_default_viewmodel_artboard_formula_context_blend_state_with_token_and_group(
+                        file_id,
+                        token_kind,
+                        Some(3.0),
+                    )
+                }
+                FormulaFallbackObjectSourceKind::ViewModel => {
+                    synthetic_state_machine_default_viewmodel_viewmodel_formula_context_blend_state_with_token_and_group(
+                        file_id,
+                        token_kind,
+                        Some(3.0),
+                    )
+                }
+            };
+            let initial_object_value = match source_kind {
+                FormulaFallbackObjectSourceKind::Asset => 4_u64,
+                FormulaFallbackObjectSourceKind::Artboard => 1_u64,
+                FormulaFallbackObjectSourceKind::ViewModel => 0_u64,
+            };
+            let mutated_object_value = 13_u64;
+            let initial_instance = 0_usize;
+            let relinked_instance = 1_usize;
+            let args = match source_kind {
+                FormulaFallbackObjectSourceKind::Asset => vec![
+                    "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+                    "0".to_owned(),
+                    "--runtime-advance-state-machine".to_owned(),
+                    "0".to_owned(),
+                    "0".to_owned(),
+                    "--runtime-set-default-view-model-source-asset".to_owned(),
+                    "0".to_owned(),
+                    "0".to_owned(),
+                    mutated_object_value.to_string(),
+                    "--runtime-advance-state-machine".to_owned(),
+                    "0".to_owned(),
+                    "0".to_owned(),
+                    "--runtime-advance-state-machine".to_owned(),
+                    "0".to_owned(),
+                    "1".to_owned(),
+                ],
+                FormulaFallbackObjectSourceKind::Artboard => vec![
+                    "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+                    "0".to_owned(),
+                    "--runtime-advance-state-machine".to_owned(),
+                    "0".to_owned(),
+                    "0".to_owned(),
+                    "--runtime-set-default-view-model-source-artboard".to_owned(),
+                    "0".to_owned(),
+                    "0".to_owned(),
+                    mutated_object_value.to_string(),
+                    "--runtime-advance-state-machine".to_owned(),
+                    "0".to_owned(),
+                    "0".to_owned(),
+                    "--runtime-advance-state-machine".to_owned(),
+                    "0".to_owned(),
+                    "1".to_owned(),
+                ],
+                FormulaFallbackObjectSourceKind::ViewModel => vec![
+                    "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+                    "0".to_owned(),
+                    "--runtime-advance-state-machine".to_owned(),
+                    "0".to_owned(),
+                    "0".to_owned(),
+                    "--runtime-relink-default-view-model-source-viewmodel".to_owned(),
+                    "0".to_owned(),
+                    "0".to_owned(),
+                    relinked_instance.to_string(),
+                    "--runtime-advance-state-machine-data-context".to_owned(),
+                    "0".to_owned(),
+                    "--runtime-advance-state-machine".to_owned(),
+                    "0".to_owned(),
+                    "0".to_owned(),
+                    "--runtime-advance-state-machine".to_owned(),
+                    "0".to_owned(),
+                    "1".to_owned(),
+                ],
+            };
+
+            let seeded_random_values = [0.875_f32, 0.625, 0.25, 0.125];
+            let expected_counts =
+                if matches!(source_kind, FormulaFallbackObjectSourceKind::ViewModel) {
+                    vec![0_usize, 0, 0, 0]
+                } else {
+                    vec![0_usize, 0, 0]
+                };
+            let probe_args = counted_runtime_random_probe_args(&seeded_random_values, &args);
+            let cpp = read_cpp_probe_bytes_with_args(&probe, &label, &bytes, &probe_args);
+            let (_, mut rust) = read_rust_instance_from_bytes(&bytes, &label);
+            let mut state_machine = rust
+                .state_machine_instance(0)
+                .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+            assert!(
+                state_machine.bind_default_view_model_context(),
+                "{label} failed to bind default view-model context"
+            );
+            state_machine.set_data_bind_formula_random_values(&seeded_random_values);
+            assert_formula_random_call_count(&state_machine, 0, &label, "after random reset");
+            let mut rust_reports = Vec::new();
+            rust_reports.push((
+                rust.advance_state_machine_instance(&mut state_machine, 0.0),
+                state_machine.clone(),
+            ));
+            assert_formula_random_call_count(&state_machine, 0, &label, "after initial advance");
+
+            match source_kind {
+                FormulaFallbackObjectSourceKind::Asset => assert!(
+                    state_machine
+                        .set_default_view_model_asset_source_for_data_bind(0, mutated_object_value),
+                    "{label} failed to mutate default asset source"
+                ),
+                FormulaFallbackObjectSourceKind::Artboard => assert!(
+                    state_machine.set_default_view_model_artboard_source_for_data_bind(
+                        0,
+                        mutated_object_value
+                    ),
+                    "{label} failed to mutate default artboard source"
+                ),
+                FormulaFallbackObjectSourceKind::ViewModel => {
+                    assert!(
+                        state_machine.relink_default_view_model_view_model_source_for_data_bind(
+                            0,
+                            relinked_instance
+                        ),
+                        "{label} failed to relink default view-model pointer source"
+                    );
+                    assert!(
+                        state_machine.advance_data_context(),
+                        "{label} failed to advance default view-model pointer context"
+                    );
+                    rust_reports.push((false, state_machine.clone()));
+                    assert_formula_random_call_count(
+                        &state_machine,
+                        0,
+                        &label,
+                        "after data-context advance",
+                    );
+                }
+            }
+
+            rust_reports.push((
+                rust.advance_state_machine_instance(&mut state_machine, 0.0),
+                state_machine.clone(),
+            ));
+            assert_formula_random_call_count(&state_machine, 0, &label, "after mutation advance");
+            rust_reports.push((
+                rust.advance_state_machine_instance(&mut state_machine, 1.0),
+                state_machine.clone(),
+            ));
+            assert_formula_random_call_count(&state_machine, 0, &label, "after later advance");
+            let report = rust.update_components();
+
+            let cpp_artboard = cpp
+                .artboards
+                .first()
+                .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+            assert_eq!(
+                cpp_artboard.runtime_state_machine_advances.len(),
+                rust_reports.len(),
+                "{label} state-machine report count mismatch"
+            );
+            for (step, (cpp_state_machine, (advanced, rust_state_machine))) in cpp_artboard
+                .runtime_state_machine_advances
+                .iter()
+                .zip(&rust_reports)
+                .enumerate()
+            {
+                let step_label = format!("{label} action {step}");
+                compare_state_machine_advance(
+                    cpp_state_machine,
+                    rust_state_machine,
+                    *advanced,
+                    &step_label,
+                );
+                compare_state_machine_number_binding(
+                    cpp_state_machine,
+                    rust_state_machine,
+                    0,
+                    &step_label,
+                );
+                assert_eq!(
+                    cpp_state_machine.random_total_calls, expected_counts[step],
+                    "{step_label} C++ random totalCalls mismatch"
+                );
+                assert_eq!(
+                    cpp_state_machine.random_total_calls,
+                    rust_state_machine.data_bind_formula_random_call_count(),
+                    "{step_label} C++ and Rust random call count mismatch"
+                );
+                match source_kind {
+                    FormulaFallbackObjectSourceKind::Asset => {
+                        let expected_source = if step == 0 {
+                            initial_object_value
+                        } else {
+                            mutated_object_value
+                        };
+                        compare_state_machine_asset_binding(
+                            cpp_state_machine,
+                            rust_state_machine,
+                            1,
+                            &step_label,
+                        );
+                        assert_eq!(
+                            rust_state_machine
+                                .default_view_model_asset_source_value_for_data_bind(1),
+                            Some(expected_source),
+                            "{step_label} Rust default asset source mismatch"
+                        );
+                    }
+                    FormulaFallbackObjectSourceKind::Artboard => {
+                        let expected_source = if step == 0 {
+                            initial_object_value
+                        } else {
+                            mutated_object_value
+                        };
+                        compare_state_machine_artboard_binding(
+                            cpp_state_machine,
+                            rust_state_machine,
+                            1,
+                            &step_label,
+                        );
+                        assert_eq!(
+                            rust_state_machine
+                                .default_view_model_artboard_source_value_for_data_bind(1),
+                            Some(expected_source),
+                            "{step_label} Rust default artboard source mismatch"
+                        );
+                    }
+                    FormulaFallbackObjectSourceKind::ViewModel => {
+                        let expected_source = if step == 0 {
+                            initial_instance
+                        } else {
+                            relinked_instance
+                        };
+                        compare_state_machine_view_model_binding(
+                            cpp_state_machine,
+                            rust_state_machine,
+                            1,
+                            &step_label,
+                        );
+                        assert_eq!(
+                            rust_state_machine
+                                .default_view_model_view_model_source_instance_index_for_data_bind(
+                                    1
+                                ),
+                            Some(expected_source),
+                            "{step_label} Rust default view-model pointer source mismatch"
+                        );
+                    }
+                }
+            }
+            compare_cpp_runtime_update(&cpp, &rust, &report, &label);
+        }
+    }
+}
+
+#[test]
 fn state_machine_imported_viewmodel_object_formula_random_group_contexts_match_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");

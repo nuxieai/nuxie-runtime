@@ -1172,6 +1172,17 @@ slice.
   target-to-source/public-update/target-dirty, list formulas, non-number,
   cache invalidation, call counts, imported/owned contexts, and real random
   generation remain follow-up slices.
+- `DataConverterFormula` random group always-mode public-update
+  target-to-source slice: default-context number sources feeding number targets
+  through a main-`ToTarget | TwoWay` `DataConverterGroup<OperationValue,
+  Formula(random)>` now apply public target mutations through reverse group
+  order when `randomModeValue == 1`. Rust consumes fresh host-supplied random
+  values for initial source-to-target application, the public target-to-source
+  source write, same-update source-to-target reapplication, and later
+  state-machine advances, matching C++. Grouped target-dirty, source-change
+  grouped target-to-source/public-update/target-dirty, list formulas,
+  non-number, cache invalidation, call counts, imported/owned contexts, and
+  real random generation remain follow-up slices.
 - `DataConverterFormula` random group source-change source-to-target slice:
   default-context number sources feeding number targets through
   `DataConverterGroup<OperationValue, Formula(random)>` now thread

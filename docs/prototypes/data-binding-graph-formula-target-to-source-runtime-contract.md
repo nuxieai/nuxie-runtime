@@ -45,7 +45,10 @@ The main-`ToTarget | TwoWay` public update path, where C++
   beyond the immediate same-bind refresh listed above.
 - Formula converter groups.
 - Symbol-list-index target-to-source formula writes.
-- Non-number sources or targets.
+- Boolean formula fallback explicit target-to-source behavior is covered
+  separately by
+  `docs/prototypes/data-binding-graph-formula-boolean-fallback-explicit-target-to-source-runtime-contract.md`.
+- Other non-number sources or targets.
 - Number-to-list, generated-list, scripted, and live context-aware converters.
 - Imported and owned view-model contexts.
 - Pending add/remove behavior, observer-list parity, re-entry protection,

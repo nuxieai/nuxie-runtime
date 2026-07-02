@@ -36,8 +36,10 @@ because boolean values are neither number nor symbol-list-index inputs.
 - Public-update target-to-source propagation for this boolean fallback source
   is covered separately by
   `data-binding-graph-formula-boolean-fallback-public-update-target-to-source-runtime-contract.md`.
-- Explicit main-`ToSource` reverse conversion and broader target-to-source
-  propagation.
+- Explicit main-`ToSource` target-to-source propagation for this boolean
+  fallback source is covered separately by
+  `data-binding-graph-formula-boolean-fallback-explicit-target-to-source-runtime-contract.md`.
+- Broader target-to-source propagation.
 - Formula converter groups beyond any composition already admitted by the
   generic graph group executor.
 - Number-to-list, generated-list, scripted, and live context-aware converters.

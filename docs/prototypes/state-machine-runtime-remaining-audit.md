@@ -1000,9 +1000,19 @@ slice.
   conversion produces a number, then reapply the unchanged source through the
   formula fallback during public `updateDataBinds(true)`. Enum, color, string,
   trigger, list, symbol-list-index, imported/owned contexts, random formulas,
-  and explicit main-`ToSource` fallback reverse behavior remain follow-up
-  slices. The contract is
+  and explicit main-`ToSource` fallback reverse behavior for the remaining
+  source types remain follow-up slices; boolean explicit behavior is covered
+  separately below. The contract is
   `docs/prototypes/data-binding-graph-formula-boolean-fallback-public-update-target-to-source-runtime-contract.md`.
+- First `DataConverterFormula` non-number fallback explicit target-to-source
+  slice: default-context boolean sources feeding main-`ToSource | TwoWay`
+  number targets now preserve the unchanged boolean source when main-direction
+  formula conversion produces a number, then reapply the unchanged source
+  through the formula fallback during explicit `advanceDataContext()`. Enum,
+  color, string, trigger, list, symbol-list-index, imported/owned contexts,
+  random formulas, secondary dependency invalidation, and broader dirty-list
+  scheduling remain follow-up slices. The contract is
+  `docs/prototypes/data-binding-graph-formula-boolean-fallback-explicit-target-to-source-runtime-contract.md`.
 - Remaining graph-represented `DataConverterFormula` non-number fallback
   public-update reverse slice: default-context enum, color, string, and
   trigger sources feeding main-`ToTarget | TwoWay` number targets now preserve

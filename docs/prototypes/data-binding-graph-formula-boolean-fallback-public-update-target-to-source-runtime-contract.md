@@ -32,7 +32,8 @@ target to `0.0`.
 ## Out Of Scope
 
 - Main-`ToSource | TwoWay` explicit data-context target-to-source behavior for
-  boolean formula fallback sources.
+  boolean formula fallback sources is covered separately by
+  `data-binding-graph-formula-boolean-fallback-explicit-target-to-source-runtime-contract.md`.
 - Enum, color, string, and trigger formula fallback public-update reverse
   behavior is covered separately by
   `data-binding-graph-formula-remaining-fallbacks-public-update-target-to-source-runtime-contract.md`.

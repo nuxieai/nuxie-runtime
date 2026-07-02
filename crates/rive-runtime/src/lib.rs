@@ -11868,6 +11868,7 @@ impl RuntimeDataBindGraph {
                     _ => false,
                 };
                 if source_changed {
+                    source.reset_formula_random_state_for_source_change();
                     if source.is_main_to_source()
                         && matches!(
                             source.converter.as_ref(),

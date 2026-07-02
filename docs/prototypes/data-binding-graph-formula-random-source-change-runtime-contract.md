@@ -33,8 +33,11 @@ random value on the next formula evaluation.
 - Random call-count parity outside the observed direct bind.
 - `RandomMode::always` scheduling beyond the already documented direct
   source-to-target slice.
-- Target-to-source, public update, target-dirty, grouped, list,
-  symbol-list-index, and non-number `RandomMode::sourceChange` scheduling.
+- Direct explicit target-to-source `RandomMode::sourceChange` scheduling is
+  covered separately by
+  `data-binding-graph-formula-random-source-change-target-to-source-runtime-contract.md`.
+- Public update, target-dirty, grouped, list, symbol-list-index, and non-number
+  `RandomMode::sourceChange` scheduling.
 - Converter dependency invalidation for secondary source paths, including
   `DataConverterOperationViewModel` dependencies.
 - External, imported, and owned contexts for this converter/source

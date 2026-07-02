@@ -48,6 +48,9 @@ The main-`ToTarget | TwoWay` public update path, where C++
 - Boolean formula fallback explicit target-to-source behavior is covered
   separately by
   `docs/prototypes/data-binding-graph-formula-boolean-fallback-explicit-target-to-source-runtime-contract.md`.
+- Enum, color, string, and trigger formula fallback explicit target-to-source
+  behavior is covered separately by
+  `docs/prototypes/data-binding-graph-formula-remaining-fallbacks-explicit-target-to-source-runtime-contract.md`.
 - Other non-number sources or targets.
 - Number-to-list, generated-list, scripted, and live context-aware converters.
 - Imported and owned view-model contexts.

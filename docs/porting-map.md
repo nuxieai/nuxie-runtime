@@ -3514,11 +3514,12 @@ unchanged boolean source when reverse formula conversion produces a number,
 then reapplies that unchanged source through the formula fallback so the
 number target returns to C++'s `0.0` fallback. The contract is
 `docs/prototypes/data-binding-graph-formula-boolean-fallback-public-update-target-to-source-runtime-contract.md`.
-Enum, color, string, trigger, list, symbol-list-index, imported/owned
-contexts, random formula reverse behavior, explicit main-`ToSource` fallback
-reverse behavior for the remaining source types, secondary dependency
-invalidation, and full dirty-list scheduler parity remain follow-up `#12`
-slices. Boolean explicit behavior is covered separately below.
+Enum, color, string, trigger, list, and symbol-list-index public-update
+behavior is covered separately below. Explicit main-`ToSource` behavior for
+boolean and the other graph-represented fallback source kinds is also covered
+separately below. Imported/owned contexts, random formula reverse behavior,
+secondary dependency invalidation, and full dirty-list scheduler parity remain
+follow-up `#12` slices.
 
 Current #12 update: graph formula boolean fallback explicit target-to-source
 Direct graph-owned `DataConverterFormula` now covers explicit
@@ -3528,9 +3529,23 @@ unchanged boolean source when main-direction formula conversion produces a
 number, then reapplies that unchanged source through the formula fallback so
 the number target returns to C++'s `0.0` fallback. The contract is
 `docs/prototypes/data-binding-graph-formula-boolean-fallback-explicit-target-to-source-runtime-contract.md`.
-Enum, color, string, trigger, list, symbol-list-index, imported/owned
-contexts, random formula reverse behavior, secondary dependency invalidation,
-and full dirty-list scheduler parity remain follow-up `#12` slices.
+Enum, color, string, and trigger explicit behavior is covered separately
+below. List, symbol-list-index, imported/owned contexts, random formula
+reverse behavior, secondary dependency invalidation, and full dirty-list
+scheduler parity remain follow-up `#12` slices.
+
+Current #12 update: graph formula remaining fallbacks explicit target-to-source
+Direct graph-owned `DataConverterFormula` now covers explicit
+`advanceDataContext()` target-to-source behavior for main-`ToSource | TwoWay`
+default-context enum, color, string, and trigger sources feeding number
+targets. Rust preserves the unchanged non-number source when main-direction
+formula conversion produces a number, then reapplies that unchanged source
+through the formula fallback so the number target returns to C++'s `0.0`
+fallback. The contract is
+`docs/prototypes/data-binding-graph-formula-remaining-fallbacks-explicit-target-to-source-runtime-contract.md`.
+List, symbol-list-index, imported/owned contexts, random formula reverse
+behavior, secondary dependency invalidation, and full dirty-list scheduler
+parity remain follow-up `#12` slices.
 
 Current #12 update: graph formula remaining fallbacks public update target-to-source
 Direct graph-owned `DataConverterFormula` now covers public
@@ -3541,11 +3556,11 @@ conversion produces a number, then reapplies that unchanged source through the
 formula fallback so the number target returns to C++'s `0.0` fallback. The
 contract is
 `docs/prototypes/data-binding-graph-formula-remaining-fallbacks-public-update-target-to-source-runtime-contract.md`.
-List fallback public-update reverse behavior is covered separately below.
-Symbol-list-index, imported/owned contexts, random formula reverse behavior,
-explicit main-`ToSource` fallback reverse behavior, secondary dependency
-invalidation, and full dirty-list scheduler parity remain follow-up `#12`
-slices.
+Explicit main-`ToSource` behavior for these source kinds is covered separately
+above. List and symbol-list-index public-update behavior is covered separately
+below. Imported/owned contexts, random formula reverse behavior, secondary
+dependency invalidation, and full dirty-list scheduler parity remain follow-up
+`#12` slices.
 
 Current #12 update: graph formula list fallback public update target-to-source
 Direct graph-owned `DataConverterFormula` now covers public

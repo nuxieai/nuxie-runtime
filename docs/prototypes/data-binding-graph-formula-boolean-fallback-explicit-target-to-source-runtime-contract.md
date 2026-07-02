@@ -35,8 +35,11 @@ boolean source through the formula fallback, restoring the number target to
 - Main-`ToTarget | TwoWay` public-update behavior for boolean formula fallback
   sources, covered separately by
   `data-binding-graph-formula-boolean-fallback-public-update-target-to-source-runtime-contract.md`.
-- Enum, color, string, trigger, list, and symbol-list-index formula fallback
-  explicit target-to-source behavior.
+- Enum, color, string, and trigger formula fallback explicit target-to-source
+  behavior is covered separately by
+  `data-binding-graph-formula-remaining-fallbacks-explicit-target-to-source-runtime-contract.md`.
+- List and symbol-list-index formula fallback explicit target-to-source
+  behavior.
 - Asset, artboard, and view-model pointer formula fallback reverse behavior.
 - `FormulaTokenFunction`, random formula values, and `randomModeValue`.
 - Formula converter groups.

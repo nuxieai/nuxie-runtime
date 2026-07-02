@@ -38,7 +38,8 @@ fallback, restoring the number target to `0.0`.
 - Boolean fallback public-update reverse behavior, covered separately by
   `data-binding-graph-formula-boolean-fallback-public-update-target-to-source-runtime-contract.md`.
 - Main-`ToSource | TwoWay` explicit data-context target-to-source behavior for
-  non-number formula fallback sources.
+  these source kinds is covered separately by
+  `data-binding-graph-formula-remaining-fallbacks-explicit-target-to-source-runtime-contract.md`.
 - List formula fallback public-update reverse behavior is covered separately by
   `data-binding-graph-formula-list-fallback-public-update-target-to-source-runtime-contract.md`.
 - Symbol-list-index formula public-update reverse behavior is covered

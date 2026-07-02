@@ -1046,11 +1046,11 @@ slice.
   fallback value `0.0`. This covers both deterministic `FormulaTokenInput` and
   source-to-target `FunctionType::random` tokens with `randomModeValue` values
   `0`, `1`, and `2`; random values supplied to Rust do not affect the fallback
-  result. Public-update and explicit target-to-source behavior are covered
-  separately below; the first list-target behavior is covered separately
-  below. Random list targets, generated list items, imported/owned contexts,
-  real random generation, and random call-count parity remain follow-up slices.
-  The contract is
+  result. Public-update, explicit target-to-source, and deterministic
+  target-dirty behavior are covered separately below; the first list-target
+  behavior is covered separately below. Random target-dirty, generated list
+  items, imported/owned contexts, real random generation, and random
+  call-count parity remain follow-up slices. The contract is
   `docs/prototypes/data-binding-graph-formula-list-fallback-runtime-contract.md`.
 - `DataConverterFormula` list fallback bindable-list target slice:
   default-context list sources feeding state-machine
@@ -1159,11 +1159,12 @@ slice.
   the formula fallback during public `updateDataBinds(true)`. The first
   deterministic formula list target and deterministic explicit formula
   list-target target-to-source behavior are covered separately above.
-  Generated list items, list-target target-to-source scheduling beyond the
-  deterministic explicit/public-update slices, imported/owned contexts, and
-  random formulas remain follow-up slices. Explicit main-`ToSource` behavior
-  for number targets and symbol-list-index public-update reverse behavior are
-  covered separately below. The contract is
+  Deterministic target-dirty behavior is covered separately below. Generated
+  list items, list-target target-to-source scheduling beyond the deterministic
+  explicit/public-update slices, imported/owned contexts, and random formulas
+  remain follow-up slices. Explicit main-`ToSource` behavior for number
+  targets and symbol-list-index public-update reverse behavior are covered
+  separately below. The contract is
   `docs/prototypes/data-binding-graph-formula-list-fallback-public-update-target-to-source-runtime-contract.md`.
 - `DataConverterFormula` list fallback explicit target-to-source slice:
   default-context list sources feeding main-`ToSource | TwoWay` number targets
@@ -1171,11 +1172,20 @@ slice.
   conversion produces a number, then reapply that unchanged list source through
   the formula fallback during explicit `advanceDataContext()`.
   The deterministic formula list target explicit behavior is covered
-  separately above. Symbol-list-index explicit behavior is covered separately
-  below; imported/owned contexts, random formulas, secondary dependency
-  invalidation, and broader dirty-list scheduling remain follow-up slices. The
-  contract is
+  separately above. Deterministic target-dirty behavior is covered separately
+  below. Symbol-list-index explicit behavior is covered separately below;
+  imported/owned contexts, random formulas, secondary dependency invalidation,
+  and broader dirty-list scheduling remain follow-up slices. The contract is
   `docs/prototypes/data-binding-graph-formula-list-fallback-explicit-target-to-source-runtime-contract.md`.
+- `DataConverterFormula` list fallback target-dirty slice: default-context
+  list sources feeding main-`ToTarget | TwoWay` number targets through a
+  deterministic `FormulaTokenInput` converter now preserve the manually edited
+  number target during explicit `advanceDataContext()`, keep reporting the
+  imported source list size, and reapply the numeric formula fallback on later
+  normal state-machine advancement. Random target-dirty, imported/owned
+  contexts, secondary dependency invalidation, and full dirty-list scheduler
+  parity remain follow-up slices. The contract is
+  `docs/prototypes/data-binding-graph-formula-list-fallback-main-to-target-two-way-target-dirty-runtime-contract.md`.
 - `DataConverterFormula` symbol-list-index public-update reverse slice:
   default-context symbol-list-index sources feeding main-`ToTarget | TwoWay`
   number targets now preserve the unchanged symbol-list-index source when

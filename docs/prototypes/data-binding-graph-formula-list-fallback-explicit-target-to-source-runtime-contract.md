@@ -36,6 +36,9 @@ target to `0.0`.
 - Main-`ToTarget | TwoWay` public-update behavior for list formula fallback
   sources, covered separately by
   `data-binding-graph-formula-list-fallback-public-update-target-to-source-runtime-contract.md`.
+- Main-`ToTarget | TwoWay` target-dirty behavior for deterministic formula
+  list sources, covered separately by
+  `data-binding-graph-formula-list-fallback-main-to-target-two-way-target-dirty-runtime-contract.md`.
 - List-target `BindablePropertyList` behavior, generated list item creation,
   artboard component-list instancing, map-rule selection, layout, and
   virtualization.

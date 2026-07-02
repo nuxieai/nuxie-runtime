@@ -42,7 +42,9 @@ target to `0.0`.
 - Boolean, enum, color, string, and trigger formula fallback explicit
   target-to-source behavior, covered separately by the non-list explicit
   fallback contracts.
-- Symbol-list-index formula fallback explicit target-to-source behavior.
+- Symbol-list-index formula explicit target-to-source behavior is covered
+  separately by
+  `data-binding-graph-formula-symbol-list-index-explicit-target-to-source-runtime-contract.md`.
 - Asset, artboard, and view-model pointer formula fallback reverse behavior.
 - `FormulaTokenFunction`, random formula values, and `randomModeValue`.
 - Formula converter groups.

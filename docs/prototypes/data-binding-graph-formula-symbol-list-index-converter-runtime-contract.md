@@ -35,8 +35,10 @@ formula evaluator before writing number targets.
 - Public-update target-to-source propagation for symbol-list-index formula
   sources is covered separately by
   `data-binding-graph-formula-symbol-list-index-public-update-target-to-source-runtime-contract.md`.
-- Explicit main-`ToSource` reverse conversion and broader target-to-source
-  propagation.
+- Explicit main-`ToSource` target-to-source propagation for symbol-list-index
+  formula sources is covered separately by
+  `data-binding-graph-formula-symbol-list-index-explicit-target-to-source-runtime-contract.md`.
+- Broader target-to-source propagation.
 - Formula converter groups beyond any composition already admitted by the
   generic graph group executor.
 - Number-to-list, generated-list, scripted, and live context-aware converters.

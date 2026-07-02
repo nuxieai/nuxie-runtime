@@ -34,7 +34,8 @@ the formula converter, restoring the number target to the formula value.
 ## Out Of Scope
 
 - Main-`ToSource | TwoWay` explicit data-context target-to-source behavior for
-  symbol-list-index formula sources.
+  symbol-list-index formula sources is covered separately by
+  `data-binding-graph-formula-symbol-list-index-explicit-target-to-source-runtime-contract.md`.
 - Boolean, enum, color, string, trigger, and list formula fallback
   public-update reverse behavior, covered separately by the fallback
   public-update contracts.

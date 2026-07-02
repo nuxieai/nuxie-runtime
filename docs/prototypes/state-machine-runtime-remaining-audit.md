@@ -1065,18 +1065,28 @@ slice.
   now preserve the unchanged imported list source when main-direction formula
   conversion produces a number, then reapply that unchanged list source through
   the formula fallback during explicit `advanceDataContext()`.
-  Symbol-list-index, imported/owned contexts, random formulas, secondary
-  dependency invalidation, and broader dirty-list scheduling remain follow-up
-  slices. The contract is
+  Symbol-list-index explicit behavior is covered separately below;
+  imported/owned contexts, random formulas, secondary dependency invalidation,
+  and broader dirty-list scheduling remain follow-up slices. The contract is
   `docs/prototypes/data-binding-graph-formula-list-fallback-explicit-target-to-source-runtime-contract.md`.
 - `DataConverterFormula` symbol-list-index public-update reverse slice:
   default-context symbol-list-index sources feeding main-`ToTarget | TwoWay`
   number targets now preserve the unchanged symbol-list-index source when
   reverse formula conversion produces a number, then reapply that unchanged
   source through the formula converter during public `updateDataBinds(true)`.
-  Imported/owned contexts, random formulas, and explicit main-`ToSource`
-  symbol-list-index reverse behavior remain follow-up slices. The contract is
+  Explicit main-`ToSource` behavior is covered separately below;
+  imported/owned contexts and random formulas remain follow-up slices. The
+  contract is
   `docs/prototypes/data-binding-graph-formula-symbol-list-index-public-update-target-to-source-runtime-contract.md`.
+- `DataConverterFormula` symbol-list-index explicit target-to-source slice:
+  default-context symbol-list-index sources feeding main-`ToSource | TwoWay`
+  number targets now preserve the unchanged symbol-list-index source when
+  main-direction formula conversion produces a number, then reapply that
+  unchanged source through the formula converter during explicit
+  `advanceDataContext()`. Imported/owned contexts, random formulas, secondary
+  dependency invalidation, and broader dirty-list scheduling remain follow-up
+  slices. The contract is
+  `docs/prototypes/data-binding-graph-formula-symbol-list-index-explicit-target-to-source-runtime-contract.md`.
 - Deterministic `DataConverterFormula` function-token slice:
   default-context number and symbol-list-index sources feeding number targets
   now execute `FormulaTokenFunction` output-queue tokens for deterministic

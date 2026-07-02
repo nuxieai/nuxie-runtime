@@ -3585,9 +3585,10 @@ unchanged imported list source when main-direction formula conversion produces
 a number, then reapplies that unchanged list source through the formula
 fallback so the number target returns to C++'s `0.0` fallback. The contract is
 `docs/prototypes/data-binding-graph-formula-list-fallback-explicit-target-to-source-runtime-contract.md`.
-Symbol-list-index, imported/owned contexts, random formula reverse behavior,
-secondary dependency invalidation, and full dirty-list scheduler parity remain
-follow-up `#12` slices.
+Symbol-list-index explicit behavior is covered separately below.
+Imported/owned contexts, random formula reverse behavior, secondary dependency
+invalidation, and full dirty-list scheduler parity remain follow-up `#12`
+slices.
 
 Current #12 update: graph formula symbol-list-index public update target-to-source
 Direct graph-owned `DataConverterFormula` now covers public
@@ -3598,8 +3599,21 @@ conversion produces a number, then reapplies that unchanged source through the
 formula converter so the number target returns to the C++ formula value. The
 contract is
 `docs/prototypes/data-binding-graph-formula-symbol-list-index-public-update-target-to-source-runtime-contract.md`.
-Imported/owned contexts, random formula reverse behavior, explicit
-main-`ToSource` symbol-list-index reverse behavior, secondary dependency
+Explicit main-`ToSource` symbol-list-index behavior is covered separately
+below. Imported/owned contexts, random formula reverse behavior, secondary
+dependency invalidation, and full dirty-list scheduler parity remain follow-up
+`#12` slices.
+
+Current #12 update: graph formula symbol-list-index explicit target-to-source
+Direct graph-owned `DataConverterFormula` now covers explicit
+`advanceDataContext()` target-to-source behavior for main-`ToSource | TwoWay`
+default-context symbol-list-index sources feeding number targets. Rust
+preserves the unchanged symbol-list-index source when main-direction formula
+conversion produces a number, then reapplies that unchanged source through the
+formula converter so the number target returns to the C++ formula value. The
+contract is
+`docs/prototypes/data-binding-graph-formula-symbol-list-index-explicit-target-to-source-runtime-contract.md`.
+Imported/owned contexts, random formula reverse behavior, secondary dependency
 invalidation, and full dirty-list scheduler parity remain follow-up `#12`
 slices.
 

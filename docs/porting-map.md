@@ -3445,9 +3445,9 @@ draw on each state-machine source-to-target evaluation. The contract is
 `docs/prototypes/data-binding-graph-formula-random-group-always-runtime-contract.md`.
 List random formulas, non-number random formulas, non-default grouped
 target-to-source/public update/target-dirty scheduling, cache invalidation,
-grouped target-to-source/public-update/target-dirty call counts,
-imported/owned contexts, real random generation, and full dirty-list scheduler
-parity remain follow-up `#12` slices. Grouped source-to-target call counts are
+grouped public-update/target-dirty call counts, imported/owned contexts, real
+random generation, and full dirty-list scheduler parity remain follow-up `#12`
+slices. Grouped source-to-target and explicit target-to-source call counts are
 covered separately below.
 
 Current #12 update: graph formula random group always mode explicit target-to-source
@@ -3455,15 +3455,15 @@ Grouped graph-owned `DataConverterFormula` random functions now cover explicit
 `advance_data_context` target-to-source scheduling for
 `DataConverterGroup<OperationValue, Formula(random)>` default-context number
 binds when `randomModeValue == 1`. Rust consumes fresh host-supplied random
-values for the target-to-source source write, same-pass source-to-target
-reapplication, and later state-machine advances, matching C++. The contract
-is
+values for the target-to-source source write and same-pass source-to-target
+reapplication. Later normal advances in this fixture do not reschedule the
+grouped formula without another source or target mutation. The contract is
 `docs/prototypes/data-binding-graph-formula-random-group-always-target-to-source-runtime-contract.md`.
 Grouped public-update, grouped target-dirty, source-change grouped
-target-to-source/public-update/target-dirty, list, remaining non-number
-random scheduling, cache invalidation, call counts, imported/owned contexts,
-real random generation, and full dirty-list scheduler parity remain follow-up
-`#12` slices.
+public-update/target-dirty, list, remaining non-number random scheduling,
+cache invalidation, call counts, imported/owned contexts, real random
+generation, and full dirty-list scheduler parity remain follow-up `#12`
+slices.
 
 Current #12 update: graph formula random group always mode public update target-to-source
 Grouped graph-owned `DataConverterFormula` random functions now cover public
@@ -3504,10 +3504,10 @@ source before the next source-to-target advance. The contract is
 `docs/prototypes/data-binding-graph-formula-random-group-source-change-runtime-contract.md`.
 List random formulas, non-number random formulas, non-default grouped
 target-to-source/public update/target-dirty scheduling, secondary converter
-dependency invalidation, cache invalidation, grouped
-target-to-source/public-update/target-dirty call counts, imported/owned
-contexts, real random generation, and full dirty-list scheduler parity remain
-follow-up `#12` slices.
+dependency invalidation, cache invalidation, grouped public-update/target-dirty
+call counts, imported/owned contexts, real random generation, and full
+dirty-list scheduler parity remain follow-up `#12` slices. Grouped explicit
+target-to-source call counts are covered separately below.
 
 Current #12 update: graph formula random group source-to-target call counts
 Grouped graph-owned `DataConverterFormula` random functions now pin Rust's
@@ -3520,11 +3520,11 @@ evaluation, and source-change mode consumes once initially, consumes again
 after the bound source changes, and then reuses that refreshed cache. The
 contract is
 `docs/prototypes/data-binding-graph-formula-random-group-call-count-runtime-contract.md`.
-Probe-visible C++ `RandomProvider::totalCalls`, grouped
-target-to-source/public-update/target-dirty call counts, list/non-number paths,
-imported/owned contexts, secondary dependency invalidation, real RNG
-generation/seeding, and full dirty-list scheduler parity remain follow-up
-`#12` slices.
+Probe-visible C++ `RandomProvider::totalCalls`, grouped public-update/
+target-dirty call counts, list/non-number paths, imported/owned contexts,
+secondary dependency invalidation, real RNG generation/seeding, and full
+dirty-list scheduler parity remain follow-up `#12` slices. Grouped explicit
+target-to-source call counts are covered separately below.
 
 Current #12 update: graph formula random group source-change mode explicit target-to-source
 Grouped graph-owned `DataConverterFormula` random functions now cover explicit
@@ -3539,6 +3539,23 @@ Grouped source-change public-update/target-dirty, list, remaining non-number
 random scheduling, secondary converter dependency invalidation, cache
 invalidation, call counts, imported/owned contexts, real random generation,
 and full dirty-list scheduler parity remain follow-up `#12` slices.
+
+Current #12 update: graph formula random group explicit target-to-source call counts
+Grouped graph-owned `DataConverterFormula` random functions now pin Rust's
+host-supplied random-stream call counts for explicit
+`advance_data_context` target-to-source scheduling on default-context number
+binds. For `DataConverterGroup<OperationValue, Formula(random)>`, default
+random mode consumes one value and reuses it through same-pass reapplication
+and later advances; always mode consumes two values during the explicit pass
+and does not pull again on later normal advances in this fixture; source-change
+mode consumes for the source write, clears the nested cache for the changed
+source, consumes again for same-pass reapplication, and likewise does not pull
+again on later normal advances. The contract is
+`docs/prototypes/data-binding-graph-formula-random-group-target-to-source-call-count-runtime-contract.md`.
+Probe-visible C++ `RandomProvider::totalCalls`, grouped public-update/
+target-dirty call counts, list/non-number paths, imported/owned contexts,
+secondary dependency invalidation, real RNG generation/seeding, and full
+dirty-list scheduler parity remain follow-up `#12` slices.
 
 Current #12 update: graph formula random group source-change mode public update target-to-source
 Grouped graph-owned `DataConverterFormula` random functions now cover public

@@ -36,8 +36,9 @@ host-stream pulls needed to match C++ probe number reports.
   parity with C++ `std::rand()`.
 - Queue-content parity beyond values supplied by
   `set_data_bind_formula_random_values`.
-- Grouped explicit target-to-source, public-update target-to-source, and
-  target-dirty call counts.
+- Grouped explicit target-to-source call counts are covered separately by
+  `data-binding-graph-formula-random-group-target-to-source-call-count-runtime-contract.md`.
+- Grouped public-update target-to-source and target-dirty call counts.
 - Direct call counts, which are covered by the direct call-count contracts.
 - List-source, symbol-list-index, and non-number random formula call counts.
 - Imported contexts, owned contexts, and secondary converter dependency

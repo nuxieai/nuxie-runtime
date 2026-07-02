@@ -41,7 +41,9 @@ source-to-target reapplication.
 - Stateful grouped converters mixed with random formulas.
 - Secondary converter dependency invalidation beyond the observed grouped
   source write.
-- Random call-count parity outside the observed grouped bind.
+- Grouped explicit target-to-source host random call-count parity is covered
+  separately by
+  `data-binding-graph-formula-random-group-target-to-source-call-count-runtime-contract.md`.
 - External, imported, and owned contexts for this converter/source
   combination.
 - Relative-path, parent-path, nested-path, listener-owned, and update-queue

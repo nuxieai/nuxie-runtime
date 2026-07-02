@@ -2862,6 +2862,7 @@ struct RuntimeBindableNumberDefaultViewModelSource {
     flags: u64,
     converter: Option<RuntimeDataBindGraphConverter>,
     value: RuntimeDataBindGraphValue,
+    view_model_instance_ids: Vec<u32>,
 }
 
 #[derive(Debug, Clone)]
@@ -9527,7 +9528,7 @@ impl RuntimeDataBindGraph {
 
         for bindable in &state_machine.bindable_numbers {
             for source in &bindable.default_view_model_sources {
-                Self::push_default_view_model_binding(
+                let source_handle = Self::push_default_view_model_binding(
                     &mut sources,
                     &mut targets,
                     &mut default_view_model_bindings,
@@ -9540,6 +9541,9 @@ impl RuntimeDataBindGraph {
                     },
                     source.value.clone(),
                 );
+                if let Some(node) = sources.get_mut(source_handle.0) {
+                    node.view_model_instance_ids = source.view_model_instance_ids.clone();
+                }
             }
         }
         for bindable in &state_machine.bindable_integers {
@@ -24583,12 +24587,24 @@ fn runtime_bindable_number_default_view_model_source(
             file.view_model_instance_number_value_for_object(source)?,
         ),
     };
+    let view_model_instance_ids = if matches!(&value, RuntimeDataBindGraphValue::ViewModel(_)) {
+        let reference =
+            file.data_context_view_model_instance_for_instance(default_instance.object, &path)?;
+        file.view_model(reference.view_model_index)?
+            .instances
+            .into_iter()
+            .map(|instance| instance.object.id)
+            .collect()
+    } else {
+        Vec::new()
+    };
     Some(RuntimeBindableNumberDefaultViewModelSource {
         data_bind_index,
         path: path.to_vec(),
         flags: data_bind.uint_property("flags").unwrap_or(0),
         converter,
         value,
+        view_model_instance_ids,
     })
 }
 

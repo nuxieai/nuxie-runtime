@@ -3494,8 +3494,12 @@ apply_runtime_state_machine_advances(rive::File* file,
                 if (viewModelSource != nullptr && sourceProperty != nullptr &&
                     referencedInstance != nullptr)
                 {
-                    viewModelInstance->replaceViewModelByProperty(
-                        viewModelSource, rive::ref_rcp(referencedInstance));
+                    auto referencedRuntime =
+                        rive::make_rcp<rive::ViewModelInstanceRuntime>(
+                            rive::ref_rcp(referencedInstance));
+                    rive::ViewModelInstanceRuntime runtime(viewModelInstance);
+                    runtime.replaceViewModelByName(sourceProperty->name(),
+                                                   referencedRuntime.get());
                 }
             }
             continue;
@@ -5571,6 +5575,8 @@ apply_runtime_state_machine_advances(rive::File* file,
                                                    referencedRuntime.get());
                 }
                 stateMachine->bindViewModelInstance(viewModelInstance);
+                activeOwnedViewModelInstances[action.stateMachineIndex] =
+                    viewModelInstance;
             }
             continue;
         }

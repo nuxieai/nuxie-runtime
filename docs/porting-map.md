@@ -4890,6 +4890,21 @@ APIs, relative/parent/nested lookup, listener-owned data binding, nested
 artboard propagation, and full dirty-list scheduler parity remain follow-up
 `#12` slices.
 
+Current #12 update: graph formula owned view-model pointer source mutation
+Direct graph-owned `DataConverterFormula` view-model pointer sources now cover
+post-bind owned root pointer source mutation by formula data-bind index. Formula
+number source nodes retain the referenced view-model instance id table needed
+for `StateMachineInstance::set_owned_view_model_context_view_model_source_for_data_bind`.
+The same-path direct view-model observer and formula fallback number target
+both refresh after the pointer relink. The C++ probe now retains active owned
+view-model pointer contexts for this comparison and uses the same
+`ViewModelInstanceRuntime::replaceViewModelByName` path for pointer mutation as
+it uses for initial owned-context binding. The contract is
+`docs/prototypes/data-binding-graph-formula-owned-viewmodel-mutation-runtime-contract.md`.
+Imported/default source mutation APIs, relative/parent/nested lookup,
+listener-owned data binding, nested artboard propagation, and full dirty-list
+scheduler parity remain follow-up `#12` slices.
+
 Current #12 update: non-scripting `ScriptedDataConverter` now participates in
 the runtime data-bind graph as inherited C++ base converter pass-through. A
 main-`ToTarget | TwoWay` number bind with a direct scripted converter applies

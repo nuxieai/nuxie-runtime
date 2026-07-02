@@ -11853,6 +11853,88 @@ impl RuntimeDataBindGraph {
         true
     }
 
+    fn set_owned_view_model_context_view_model_source_for_data_bind(
+        &mut self,
+        context: &mut RuntimeOwnedViewModelInstance,
+        data_bind_index: usize,
+        instance_index: usize,
+    ) -> bool {
+        if self.context_kind != RuntimeDataBindGraphContextKind::OwnedViewModel {
+            return false;
+        }
+        let Some(source) = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .map(|binding| binding.source)
+        else {
+            return false;
+        };
+        let Some(source) = self.sources.get(source.0) else {
+            return false;
+        };
+        if !matches!(
+            &source.default_value,
+            RuntimeDataBindGraphValue::ViewModel(_)
+        ) {
+            return false;
+        }
+        let Some(object_id) = source.view_model_instance_ids.get(instance_index).copied() else {
+            return false;
+        };
+        let path = source.path.clone();
+        let Some(property_path) =
+            runtime_owned_view_model_property_path_from_source_path(context, &path)
+        else {
+            return false;
+        };
+        let Some(current_context_value) =
+            runtime_owned_view_model_view_model_value_for_source_path(context, &path)
+        else {
+            return false;
+        };
+        let value = RuntimeViewModelPointer::Imported { object_id };
+        let context_changed = current_context_value != value;
+        let source_changed = self.sources.iter().any(|source| {
+            source.path == path
+                && matches!(
+                    source.default_value,
+                    RuntimeDataBindGraphValue::ViewModel(_)
+                )
+                && (!source.bound
+                    || !matches!(&source.value, RuntimeDataBindGraphValue::ViewModel(current) if *current == value))
+        });
+
+        if !source_changed && !context_changed {
+            return false;
+        }
+
+        if context_changed
+            && !context.set_view_model_by_property_path(&property_path, instance_index)
+        {
+            return false;
+        }
+
+        for source in self.sources.iter_mut().filter(|source| {
+            source.path == path
+                && matches!(
+                    source.default_value,
+                    RuntimeDataBindGraphValue::ViewModel(_)
+                )
+        }) {
+            let changed = !source.bound
+                || !matches!(&source.value, RuntimeDataBindGraphValue::ViewModel(current) if *current == value);
+            source.value = RuntimeDataBindGraphValue::ViewModel(value);
+            source.bound = true;
+            if changed {
+                source.reset_formula_random_state_for_source_change();
+            }
+        }
+
+        self.mark_default_view_model_bindings_dirty();
+        true
+    }
+
     fn set_imported_view_model_context_asset_source_for_data_bind(
         &mut self,
         context: &mut RuntimeImportedViewModelInstanceContext,
@@ -15487,6 +15569,15 @@ fn runtime_owned_view_model_artboard_value_for_source_path(
     let property_path =
         runtime_owned_view_model_property_path_from_source_path(context, source_path)?;
     context.artboard_value_by_property_path(&property_path)
+}
+
+fn runtime_owned_view_model_view_model_value_for_source_path(
+    context: &RuntimeOwnedViewModelInstance,
+    source_path: &[u32],
+) -> Option<RuntimeViewModelPointer> {
+    let property_path =
+        runtime_owned_view_model_property_path_from_source_path(context, source_path)?;
+    context.view_model_value_by_property_path(&property_path)
 }
 
 fn runtime_owned_view_model_property_path_from_source_path(
@@ -20735,6 +20826,26 @@ impl StateMachineInstance {
                 context,
                 data_bind_index,
                 value,
+            )
+        {
+            return false;
+        }
+        self.needs_advance = true;
+        true
+    }
+
+    pub fn set_owned_view_model_context_view_model_source_for_data_bind(
+        &mut self,
+        context: &mut RuntimeOwnedViewModelInstance,
+        data_bind_index: usize,
+        instance_index: usize,
+    ) -> bool {
+        if !self
+            .data_bind_graph
+            .set_owned_view_model_context_view_model_source_for_data_bind(
+                context,
+                data_bind_index,
+                instance_index,
             )
         {
             return false;

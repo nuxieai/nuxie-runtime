@@ -6401,9 +6401,11 @@ context binding resolves the nested secondary number operand from the bound
 view-model instance, and owned context binding resolves it from owned runtime
 view-model storage. The contract is
 `docs/prototypes/data-binding-graph-operation-viewmodel-group-context-recompute-runtime-contract.md`.
-Arbitrary converter group orders, relative/name converter paths, non-number
-secondary operands, broader dirty/update queues, listener-owned data binding,
-and nested artboard propagation remain follow-up `#12` slices.
+Additional converter group orders beyond the observed
+`OperationViewModel, OperationValue` reverse-order slice, relative/name
+converter paths, non-number secondary operands, broader dirty/update queues,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
 
 Current #12 update: grouped `DataConverterOperationViewModel` operands now
 also have explicit default-context rebind coverage after imported and owned
@@ -6411,9 +6413,22 @@ context recompute. The recursive reset restores the stored default operand for
 `DataConverterGroup<OperationValue, OperationViewModel>` after a non-default
 runtime context changed the nested secondary number operand. The contract is
 `docs/prototypes/data-binding-graph-operation-viewmodel-group-default-rebind-runtime-contract.md`.
-Arbitrary converter group orders, relative/name converter paths, non-number
-secondary operands, broader dirty/update queues, listener-owned data binding,
-and nested artboard propagation remain follow-up `#12` slices.
+Additional converter group orders beyond the observed
+`OperationViewModel, OperationValue` reverse-order slice, relative/name
+converter paths, non-number secondary operands, broader dirty/update queues,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
+
+Current #12 update: grouped `DataConverterOperationViewModel` operands now
+have the first observable non-default group-order coverage. A C++ probe uses
+`DataConverterGroup<OperationViewModel, OperationValue>` with mixed
+multiply/subtract operations so group order affects the converted number, then
+binds an imported runtime view-model context to refresh the
+operation-viewmodel operand before the ordered group runs. The contract is
+`docs/prototypes/data-binding-graph-operation-viewmodel-group-order-runtime-contract.md`.
+Exhaustive converter group permutations, relative/name converter paths,
+non-number secondary operands, broader dirty/update queues, listener-owned
+data binding, and nested artboard propagation remain follow-up `#12` slices.
 
 Current #12 update: imported runtime number source mutation now refreshes
 direct `DataConverterOperationViewModel` secondary operands when the mutated
@@ -6434,9 +6449,11 @@ converted `amount` source, the direct `amount` source, and the direct `factor`
 source all match C++ after mutating the bound imported `factor` source. The
 contract is
 `docs/prototypes/data-binding-graph-operation-viewmodel-group-imported-number-mutation-runtime-contract.md`.
-Arbitrary converter group orders, relative/name converter paths, non-number
-secondary operands, broader dirty/update queues, listener-owned data binding,
-and nested artboard propagation remain follow-up `#12` slices.
+Additional converter group orders beyond the observed
+`OperationViewModel, OperationValue` reverse-order slice, relative/name
+converter paths, non-number secondary operands, broader dirty/update queues,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
 
 ## #13: Nested Artboards And Hosts
 

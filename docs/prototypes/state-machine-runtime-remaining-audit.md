@@ -3505,6 +3505,14 @@ slice.
   recursive reset restores the stored default operand after non-default runtime
   contexts changed it. The contract is
   `docs/prototypes/data-binding-graph-operation-viewmodel-group-default-rebind-runtime-contract.md`.
+- Operation-view-model grouped order slice:
+  `DataConverterOperationViewModel` now has the first observable non-default
+  group-order coverage. The C++ probe uses
+  `DataConverterGroup<OperationViewModel, OperationValue>` with mixed
+  multiply/subtract operations so ordered converter execution is visible after
+  imported context binding refreshes the nested secondary operand. The
+  contract is
+  `docs/prototypes/data-binding-graph-operation-viewmodel-group-order-runtime-contract.md`.
 - Operation-view-model imported number mutation slice:
   mutating an already-bound imported number source now refreshes matching
   direct `DataConverterOperationViewModel` secondary operands without

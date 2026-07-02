@@ -4809,6 +4809,18 @@ contexts, source mutation APIs, relative/parent/nested lookup, listener-owned
 data binding, nested artboard propagation, and full dirty-list scheduler
 parity remain follow-up `#12` slices.
 
+Current #12 update: graph formula view-model imported/owned contexts
+Direct graph-owned `DataConverterFormula` view-model pointer sources now cover
+imported and owned root view-model contexts. Rust refreshes the pointer source
+when rebinding to an alternate serialized root `ViewModelInstance` or a
+relinked owned context, then preserves C++'s formula object fallback by
+writing `0.0` to the number target while a same-path view-model observer
+reports the rebound child instance index. The contract is
+`docs/prototypes/data-binding-graph-formula-viewmodel-context-runtime-contract.md`.
+Random/function-token object contexts, source mutation APIs, relative/parent/
+nested lookup, listener-owned data binding, nested artboard propagation, and
+full dirty-list scheduler parity remain follow-up `#12` slices.
+
 Current #12 update: non-scripting `ScriptedDataConverter` now participates in
 the runtime data-bind graph as inherited C++ base converter pass-through. A
 main-`ToTarget | TwoWay` number bind with a direct scripted converter applies

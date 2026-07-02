@@ -11743,8 +11743,11 @@ impl RuntimeDataBindGraph {
                 }
                 *default_value = 0;
             }
-            if source_reset_changed && source.applies_source_to_target() {
-                source.source_to_target_dirty_after_target_to_source = true;
+            if source_reset_changed {
+                source.reset_formula_random_state_for_source_change();
+                if source.applies_source_to_target() {
+                    source.source_to_target_dirty_after_target_to_source = true;
+                }
             }
         }
         if changed {

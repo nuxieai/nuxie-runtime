@@ -1850,21 +1850,19 @@ slice.
   host-supplied default-mode random stream through nested group converter
   state. The grouped formula draws the C++-derived random value on first
   source-to-target advancement and reuses the cached value on later
-  state-machine advancement. List formulas, grouped non-number
-  target-to-source/public update/target-dirty scheduling, cache invalidation,
-  imported/owned contexts, and real random generation remain follow-up slices.
-  Grouped number and non-number source-to-target call-count paths are covered
-  separately below.
+  state-machine advancement. List formulas, cache invalidation, imported/owned
+  contexts, and real random generation remain follow-up slices. Grouped
+  non-number source-to-target, target-to-source, public-update, and
+  target-dirty scheduling is covered separately below.
 - `DataConverterFormula` random group always-mode source-to-target slice:
   default-context number sources feeding number targets through
   `DataConverterGroup<OperationValue, Formula(random)>` now thread
   `randomModeValue == 1` through nested group converter state. The grouped
   formula consumes a fresh C++-derived random value on each source-to-target
-  state-machine advancement. List formulas, grouped non-number
-  target-to-source/public update/target-dirty scheduling, cache invalidation,
-  imported/owned contexts, and real random generation remain follow-up slices.
-  Grouped number and non-number source-to-target call-count paths are covered
-  separately below.
+  state-machine advancement. List formulas, cache invalidation, imported/owned
+  contexts, and real random generation remain follow-up slices. Grouped
+  non-number source-to-target, target-to-source, public-update, and
+  target-dirty scheduling is covered separately below.
 - `DataConverterFormula` random group always-mode target-to-source slice:
   default-context number sources feeding number targets through a
   main-`ToSource | TwoWay` `DataConverterGroup<OperationValue,
@@ -1885,10 +1883,10 @@ slice.
   values for initial source-to-target application, the public target-to-source
   source write, and same-update source-to-target reapplication. Later normal
   state-machine advances in this fixture do not reschedule the grouped formula
-  without another source or target mutation. Grouped target-dirty,
-  source-change grouped target-dirty, list formulas, non-number, cache
+  without another source or target mutation. List formulas, non-number, cache
   invalidation, call counts, imported/owned contexts, and real random
-  generation remain follow-up slices.
+  generation remain follow-up slices. Grouped target-dirty and source-change
+  grouped target-dirty are covered separately below.
 - `DataConverterFormula` random group always-mode target-dirty slice:
   default-context number sources feeding number targets through a
   main-`ToTarget | TwoWay` `DataConverterGroup<OperationValue,
@@ -1905,11 +1903,10 @@ slice.
   `randomModeValue == 2` through nested group converter state. The grouped
   formula caches the C++-derived random value like default mode, then clears
   that nested formula cache when the bound default source mutates. List
-  formulas, grouped non-number target-to-source/public update/target-dirty
-  scheduling, secondary converter dependency invalidation, cache invalidation,
+  formulas, secondary converter dependency invalidation, cache invalidation,
   imported/owned contexts, and real random generation remain follow-up slices.
-  Grouped non-number source-to-target call counts are covered separately
-  below.
+  Grouped non-number source-to-target, target-to-source, public-update, and
+  target-dirty call counts are covered separately below.
 - `DataConverterFormula` random group non-number source-to-target slice:
   default-context boolean, enum, color, string, and trigger sources feeding
   number targets through `DataConverterGroup<OperationValue, Formula(random)>`
@@ -1920,11 +1917,11 @@ slice.
   and mirrors trigger source mutations into the active/default view-model
   trigger report even when the data-bind target is a number. C++ and Rust
   random call counts match for default `[1, 1]`, always `[1, 2, 2]`, and
-  source-change `[1, 2, 2]` source-to-target schedules. Grouped non-number
-  target-dirty behavior, list paths, imported/owned contexts, secondary
-  dependency invalidation, and real random generation remain follow-up slices.
-  Grouped non-number explicit target-to-source and public-update behavior are
-  covered separately below.
+  source-change `[1, 2, 2]` source-to-target schedules. List paths,
+  imported/owned contexts, secondary dependency invalidation, and real random
+  generation remain follow-up slices. Grouped non-number explicit
+  target-to-source, public-update, and target-dirty behavior are covered
+  separately below.
 - `DataConverterFormula` random group non-number explicit target-to-source
   slice: default-context boolean, enum, color, string, and trigger sources
   feeding number targets through a main-`ToSource | TwoWay`
@@ -1933,10 +1930,10 @@ slice.
   performs the same immediate source-to-target reapply that C++ reports for
   `randomModeValue` values `0`, `1`, and `2`. C++ and Rust random call counts
   match at `[1, 1, 1]` for default, always, and source-change explicit
-  target-to-source schedules. Grouped non-number target-dirty behavior, list
-  paths, imported/owned contexts, secondary dependency invalidation, and real
-  random generation remain follow-up slices. Grouped non-number public-update
-  behavior is covered separately below.
+  target-to-source schedules. List paths, imported/owned contexts, secondary
+  dependency invalidation, and real random generation remain follow-up slices.
+  Grouped non-number public-update and target-dirty behavior are covered
+  separately below.
 - `DataConverterFormula` random group non-number public-update slice:
   default-context boolean, enum, color, string, and trigger sources feeding
   number targets through a main-`ToTarget | TwoWay`
@@ -1945,9 +1942,21 @@ slice.
   source-to-target in the same update after an initial source-to-target pass
   warms the grouped formula random path. C++ and Rust random call counts match
   for default/source-change `[1, 1, 1, 1]` and always `[1, 3, 3, 3]` public
-  update schedules. Grouped non-number target-dirty behavior, list paths,
-  imported/owned contexts, secondary dependency invalidation, and real random
-  generation remain follow-up slices.
+  update schedules. List paths, imported/owned contexts, secondary dependency
+  invalidation, and real random generation remain follow-up slices. Grouped
+  non-number target-dirty behavior is covered separately below.
+- `DataConverterFormula` random group non-number target-dirty slice:
+  default-context boolean, enum, color, string, and trigger sources feeding
+  number targets through a main-`ToTarget | TwoWay`
+  `DataConverterGroup<OperationValue, Formula(random)>` now preserve a manual
+  number target edit during explicit data-context advancement, then match C++'s
+  later source-to-target reapply for `randomModeValue` values `0`, `1`, and
+  `2`. C++ and Rust random call counts match for default `[1, 1, 1, 1]`,
+  always `[1, 1, 2, 2]`, non-trigger source-change `[1, 1, 1, 1]`, and trigger
+  source-change `[1, 1, 2, 2]` schedules. The trigger source-change case clears
+  the nested grouped formula random cache when the bound trigger reset changes
+  the source. List paths, imported/owned contexts, secondary dependency
+  invalidation, and real random generation remain follow-up slices.
 - `DataConverterFormula` random group source-change target-to-source slice:
   default-context number sources feeding number targets through a
   main-`ToSource | TwoWay` `DataConverterGroup<OperationValue,

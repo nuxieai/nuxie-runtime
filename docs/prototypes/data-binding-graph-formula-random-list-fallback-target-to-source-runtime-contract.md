@@ -42,9 +42,11 @@ formula fallback. This remains true when the formula output queue contains
 - Explicit target-to-source `BindablePropertyList` list-target behavior is
   covered by
   `data-binding-graph-formula-random-list-fallback-bindable-list-explicit-target-to-source-runtime-contract.md`.
-- Public-update `BindablePropertyList` list-target target-to-source
-  scheduling, generated list item creation, artboard component-list
-  instancing, map-rule selection, layout, and virtualization.
+- Public-update `BindablePropertyList` list-target target-to-source behavior
+  is covered by
+  `data-binding-graph-formula-random-list-fallback-bindable-list-public-update-target-to-source-runtime-contract.md`.
+- Generated list item creation, artboard component-list instancing, map-rule
+  selection, layout, and virtualization.
 - Number-source random formula evaluation and scheduling, covered by the
   direct and grouped random contracts.
 - Asset, artboard, and view-model pointer formula fallback reverse behavior.

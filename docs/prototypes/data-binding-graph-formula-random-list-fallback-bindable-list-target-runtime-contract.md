@@ -39,7 +39,8 @@ normal state-machine advancement applies the numeric fallback target value.
   covered by
   `data-binding-graph-formula-random-list-fallback-bindable-list-explicit-target-to-source-runtime-contract.md`.
 - Public-update target-to-source behavior for random-function formula list
-  targets.
+  targets, covered by
+  `data-binding-graph-formula-random-list-fallback-bindable-list-public-update-target-to-source-runtime-contract.md`.
 - Target-dirty scheduling for formula list targets.
 - `DataConverterNumberToList`, which is covered by the existing bindable-list
   and number-to-list contracts.

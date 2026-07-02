@@ -3965,11 +3965,14 @@ target-to-source scheduling through
 symbol-list-index sources feeding number targets. Default and source-change
 modes keep the warmed source-to-target draw because the symbol-list-index
 source is preserved rather than changed; always mode consumes one initial draw
-plus two more values during the public update. The contract is
+plus two more values during the public update. The C++ probe now seeds
+deterministic random values and reports per-action `randomTotalCalls`, so this
+slice compares the Rust host-stream count directly against the C++ total after
+every grouped public-update report. The contract is
 `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-group-public-update-call-count-runtime-contract.md`.
-Imported/owned contexts, real random generation, probe-visible C++
-`RandomProvider::totalCalls`, secondary dependency invalidation, and full
-dirty-list scheduler parity remain follow-up `#12` slices.
+Imported/owned contexts, real random generation, secondary dependency
+invalidation, and full dirty-list scheduler parity remain follow-up `#12`
+slices.
 
 Current #12 update: graph formula random symbol-list-index group target-dirty
 Grouped graph-owned `DataConverterFormula` random functions now cover

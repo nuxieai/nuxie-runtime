@@ -28,11 +28,14 @@ main-`ToSource | TwoWay` number binds.
   evaluation.
 - C++ probe comparisons for the observable binding values around those call
   count assertions.
+- C++ probe `--runtime-random-reset`, repeated `--runtime-random-value`, and
+  per-action `runtimeStateMachineAdvances[].randomTotalCalls` comparisons.
 
 ## Out Of Scope
 
-- Probe-visible C++ `RandomProvider::totalCalls()`. The current C++ probe links
-  the non-`TESTING` runtime build, where that API is not available.
+- Upstream C++ `TESTING` builds or direct use of
+  `RandomProvider::totalCalls()` outside the probe-owned counted provider
+  shim.
 - A real Rust random generator, random seeding, platform RNG behavior, or
   parity with C++ `std::rand()`.
 - Public `update_data_binds_apply_target_to_source` call counts are covered by
@@ -57,4 +60,7 @@ main-`ToSource | TwoWay` number binds.
   write, clears the cache for the changed source, consumes a second value for
   same-pass source-to-target reapplication, and does not consume additional
   values on later normal advances in this direct fixture.
+- The C++ probe's `randomTotalCalls` reports match the expected C++ source
+  semantics and Rust's host-stream call count for every explicit
+  target-to-source report.
 - The same fixtures continue to match C++ probe binding values.

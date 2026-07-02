@@ -48,7 +48,8 @@ formula path.
 - List formula random scheduling and non-number fallback random scheduling.
 - A real Rust random generator or parity with C++ `std::rand()`.
 - Probe CLI support for seeding or queuing C++ runtime random values.
-- Random call-count parity outside the observed direct bind actions.
+- Target-dirty host random call-count parity is covered separately by
+  `data-binding-graph-formula-random-symbol-list-index-target-dirty-call-count-runtime-contract.md`.
 - Formula `addDirt` random-cache behavior and secondary dependency
   invalidation.
 - External, imported, and owned contexts for this converter/source

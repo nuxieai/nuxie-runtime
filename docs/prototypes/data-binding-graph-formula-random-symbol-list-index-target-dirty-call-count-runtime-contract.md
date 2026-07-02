@@ -1,13 +1,14 @@
-# Data Binding Graph Formula Random SymbolListIndex Target-To-Source Call Count Runtime Contract
+# Data Binding Graph Formula Random SymbolListIndex Target-Dirty Call Count Runtime Contract
 
 ## Purpose
 
-Extend direct symbol-list-index random formula call-count coverage from
-source-to-target advancement into explicit target-to-source scheduling.
+Extend direct symbol-list-index random formula call-count coverage into
+main-`ToTarget | TwoWay` target-dirty scheduling.
 
 This pins how many values Rust pulls from the host-supplied formula random
-stream while matching the existing C++ probe binding reports for
-main-`ToSource | TwoWay` number binds fed by symbol-list-index sources.
+stream while matching the existing C++ probe binding reports for direct
+symbol-list-index binds that preserve a manual target edit through explicit
+data-context advancement.
 
 ## In Scope
 
@@ -18,14 +19,11 @@ main-`ToSource | TwoWay` number binds fed by symbol-list-index sources.
 - `FormulaTokenFunction` with `functionType == FunctionType::random`.
 - `ViewModelInstanceSymbolListIndex.propertyValue` sources feeding
   `BindablePropertyNumber.propertyValue` targets.
-- Explicit target-to-source scheduling through `advance_data_context` after a
-  bindable number target mutation.
+- Initial source-to-target state-machine advancement.
+- Manual bindable-number target mutation followed by explicit
+  `advance_data_context`, preserving the edited target.
 - `DataConverterFormula.randomModeValue` values `0`, `1`, and `2`.
-- Same-pass source-to-target reapplication after explicit target-to-source
-  preserves the unchanged symbol-list-index source.
-- Later normal state-machine advancement after that explicit target-to-source
-  pass, proving no additional random values are pulled without another formula
-  evaluation.
+- Later normal state-machine advancement after that target-dirty pass.
 - C++ probe comparisons for the observable binding values around those call
   count assertions.
 
@@ -37,10 +35,11 @@ main-`ToSource | TwoWay` number binds fed by symbol-list-index sources.
   parity with C++ `std::rand()`.
 - Direct symbol-list-index source-to-target call counts, which are covered by
   `data-binding-graph-formula-random-symbol-list-index-call-count-runtime-contract.md`.
-- Direct public-update symbol-list-index call counts are covered by
+- Direct explicit target-to-source symbol-list-index call counts, which are
+  covered by
+  `data-binding-graph-formula-random-symbol-list-index-target-to-source-call-count-runtime-contract.md`.
+- Direct public-update symbol-list-index call counts, which are covered by
   `data-binding-graph-formula-random-symbol-list-index-public-update-call-count-runtime-contract.md`.
-- Direct target-dirty symbol-list-index call counts are covered by
-  `data-binding-graph-formula-random-symbol-list-index-target-dirty-call-count-runtime-contract.md`.
 - Grouped symbol-list-index call counts.
 - Number-source call counts, which are covered by the direct number call-count
   contracts.
@@ -52,14 +51,15 @@ main-`ToSource | TwoWay` number binds fed by symbol-list-index sources.
 ## Completion Checks
 
 - Setting a new host random stream resets the Rust call count to zero.
-- Default random mode consumes one value during explicit target-to-source
-  reapplication and does not consume additional values on later normal
-  advances.
-- Always random mode consumes two values during explicit target-to-source
-  scheduling: the hidden reverse-conversion draw and the visible same-pass
-  reapply draw. It does not consume additional values on later normal
-  advances in this fixture.
-- Source-change random mode consumes one value during explicit target-to-source
-  reapplication and reuses it because the symbol-list-index source is
-  preserved rather than changed.
+- Default random mode consumes one value during the initial source-to-target
+  advance and reuses that cached value through target-dirty preservation and
+  later normal advances.
+- Always random mode consumes one value during the initial source-to-target
+  advance, consumes one more value on the first later normal reapply, and does
+  not consume an additional value on the second later normal advance in this
+  direct fixture.
+- Source-change random mode consumes one value during the initial
+  source-to-target advance, preserves the cache through target-dirty
+  advancement because the symbol-list-index source did not change, and reuses
+  the cached value on later normal advances.
 - The same fixtures continue to match C++ probe binding values.

@@ -3742,6 +3742,20 @@ imported/owned, real random generation, probe-visible C++
 `RandomProvider::totalCalls`, secondary dependency invalidation, and full
 dirty-list scheduler parity remain follow-up `#12` slices.
 
+Current #12 update: graph formula random symbol-list-index target-dirty call counts
+Direct graph-owned `DataConverterFormula` random functions now expose Rust's
+host-supplied random-stream call count for main-`ToTarget | TwoWay`
+target-dirty scheduling on default-context symbol-list-index sources feeding
+number targets. Default and source-change modes consume one initial draw and
+reuse it through target-dirty preservation and later normal advances; always
+mode consumes one initial draw, one later reapply draw, and no additional
+second-later draw. The contract is
+`docs/prototypes/data-binding-graph-formula-random-symbol-list-index-target-dirty-call-count-runtime-contract.md`.
+Grouped symbol-list-index, list/non-number, imported/owned, real random
+generation, probe-visible C++ `RandomProvider::totalCalls`, secondary
+dependency invalidation, and full dirty-list scheduler parity remain follow-up
+`#12` slices.
+
 Current #12 update: graph formula random symbol-list-index target-dirty
 Direct graph-owned `DataConverterFormula` random functions now cover
 main-`ToTarget | TwoWay` target-dirty scheduling for default-context
@@ -3756,9 +3770,9 @@ Grouped symbol-list-index default-mode source-to-target behavior is covered
 separately below. Grouped non-default source-to-target and grouped explicit
 target-to-source behavior are covered separately below. Grouped public-update
 target-to-source and target-dirty behavior are covered separately below.
-Imported/owned contexts, real random generation, random call counts, secondary
-dependency invalidation, and full dirty-list scheduler parity remain follow-up
-`#12` slices.
+Imported/owned contexts, real random generation, grouped/list/non-number
+random call counts, secondary dependency invalidation, and full dirty-list
+scheduler parity remain follow-up `#12` slices.
 
 Current #12 update: graph formula random symbol-list-index group source-to-target
 Grouped graph-owned `DataConverterFormula` random functions now cover the

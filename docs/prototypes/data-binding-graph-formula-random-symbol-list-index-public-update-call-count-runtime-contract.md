@@ -41,7 +41,8 @@ main-`ToTarget | TwoWay` number binds fed by symbol-list-index sources.
 - Direct explicit target-to-source symbol-list-index call counts, which are
   covered by
   `data-binding-graph-formula-random-symbol-list-index-target-to-source-call-count-runtime-contract.md`.
-- Direct target-dirty symbol-list-index call counts.
+- Direct target-dirty symbol-list-index call counts are covered by
+  `data-binding-graph-formula-random-symbol-list-index-target-dirty-call-count-runtime-contract.md`.
 - Grouped symbol-list-index call counts.
 - Number-source call counts, which are covered by the direct number call-count
   contracts.

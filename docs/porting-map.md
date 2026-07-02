@@ -3941,9 +3941,21 @@ advancement, keeps the symbol-list-index source unchanged, and reapplies
 C++'s formula value on later normal state-machine advancement. The contract
 is
 `docs/prototypes/data-binding-graph-formula-symbol-list-index-main-to-target-two-way-target-dirty-runtime-contract.md`.
-Deterministic function-token target-dirty behavior, imported/owned contexts,
-secondary dependency invalidation, and full dirty-list scheduler parity remain
-follow-up `#12` slices.
+Deterministic function-token target-dirty behavior is covered separately
+below. Imported/owned contexts, secondary dependency invalidation, and full
+dirty-list scheduler parity remain follow-up `#12` slices.
+
+Current #12 update: graph formula symbol-list-index function target-dirty
+Direct graph-owned `DataConverterFormula` now covers main-`ToTarget | TwoWay`
+target-dirty behavior for default-context symbol-list-index sources feeding
+number targets through deterministic `FormulaTokenFunction` output tokens.
+Rust preserves the manually edited number target during explicit data-context
+advancement, keeps the symbol-list-index source unchanged, and reapplies
+C++'s function-token formula value on later normal state-machine advancement.
+The contract is
+`docs/prototypes/data-binding-graph-formula-symbol-list-index-function-main-to-target-two-way-target-dirty-runtime-contract.md`.
+Imported/owned contexts, secondary dependency invalidation, and full
+dirty-list scheduler parity remain follow-up `#12` slices.
 
 Current #12 update: graph formula random group public update target-to-source
 Grouped graph-owned `DataConverterFormula` random functions now cover public

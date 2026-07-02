@@ -1223,10 +1223,20 @@ slice.
   now preserve the manually edited number target during explicit
   `advanceDataContext()`, keep the symbol-list-index source unchanged, and
   reapply the C++ formula value on later normal state-machine advancement.
-  Deterministic function-token target-dirty behavior, imported/owned contexts,
-  secondary dependency invalidation, and full dirty-list scheduler parity
-  remain follow-up slices. The contract is
+  Deterministic function-token target-dirty behavior is covered separately
+  below. Imported/owned contexts, secondary dependency invalidation, and full
+  dirty-list scheduler parity remain follow-up slices. The contract is
   `docs/prototypes/data-binding-graph-formula-symbol-list-index-main-to-target-two-way-target-dirty-runtime-contract.md`.
+- `DataConverterFormula` symbol-list-index function target-dirty slice:
+  default-context symbol-list-index sources feeding main-`ToTarget | TwoWay`
+  number targets through deterministic `FormulaTokenFunction` output tokens
+  now preserve the manually edited number target during explicit
+  `advanceDataContext()`, keep the symbol-list-index source unchanged, and
+  reapply the C++ function-token formula value on later normal state-machine
+  advancement. Imported/owned contexts, secondary dependency invalidation,
+  and full dirty-list scheduler parity remain follow-up slices. The contract
+  is
+  `docs/prototypes/data-binding-graph-formula-symbol-list-index-function-main-to-target-two-way-target-dirty-runtime-contract.md`.
 - Deterministic `DataConverterFormula` function-token slice:
   default-context number and symbol-list-index sources feeding number targets
   now execute `FormulaTokenFunction` output-queue tokens for deterministic

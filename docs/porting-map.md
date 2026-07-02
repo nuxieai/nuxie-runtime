@@ -3683,9 +3683,12 @@ number targets. Rust keeps the count at zero across repeated advances for
 fallback values. The contract is
 `docs/prototypes/data-binding-graph-formula-random-non-number-fallback-call-count-runtime-contract.md`.
 Target-to-source non-number behavior is covered separately below.
-Probe-visible C++ `RandomProvider::totalCalls`, imported/owned contexts, real
-random generation, secondary dependency invalidation, and full dirty-list
-scheduler parity remain follow-up `#12` slices.
+The C++ probe now seeds deterministic random values and reports per-action
+`randomTotalCalls`, so this slice compares zero Rust host-stream pulls directly
+against the zero C++ total after every source-to-target fallback report.
+Imported/owned contexts, real random generation, secondary dependency
+invalidation, and full dirty-list scheduler parity remain follow-up `#12`
+slices.
 
 Current #12 update: graph formula random boolean fallback target-to-source
 Direct graph-owned `DataConverterFormula` random functions now cover explicit

@@ -30,11 +30,14 @@ without pulling from the supplied formula random stream.
   observable for pulls from the host-supplied formula random stream.
 - C++ probe comparisons for the same source-to-target fallback values around
   the call-count assertions.
+- C++ probe `--runtime-random-reset`, repeated `--runtime-random-value`, and
+  per-action `runtimeStateMachineAdvances[].randomTotalCalls` comparisons.
 
 ## Out Of Scope
 
-- Probe-visible C++ `RandomProvider::totalCalls()`. The current C++ probe links
-  the non-`TESTING` runtime build, where that API is not available.
+- Upstream C++ `TESTING` builds or direct use of
+  `RandomProvider::totalCalls()` outside the probe-owned counted provider
+  shim.
 - A real Rust random generator, random seeding, platform RNG behavior, or
   parity with C++ `std::rand()`.
 - Queue-content parity beyond values supplied by
@@ -62,4 +65,6 @@ without pulling from the supplied formula random stream.
   random modes `0`, `1`, and `2` leaves the call count at zero.
 - Repeated source-to-target advancement without a source mutation still leaves
   the call count at zero.
+- The C++ probe's `randomTotalCalls` reports remain zero and match Rust's
+  host-stream call count for every non-number source-to-target fallback report.
 - The same fixtures continue to match C++ probe binding values.

@@ -32,11 +32,14 @@ one hidden host random value during explicit or public reverse reapplication.
   observable for pulls from the host-supplied formula random stream.
 - C++ probe comparisons for the same target-to-source fallback values around
   the call-count assertions.
+- C++ probe `--runtime-random-reset`, repeated `--runtime-random-value`, and
+  per-action `runtimeStateMachineAdvances[].randomTotalCalls` comparisons.
 
 ## Out Of Scope
 
-- Probe-visible C++ `RandomProvider::totalCalls()`. The current C++ probe links
-  the non-`TESTING` runtime build, where that API is not available.
+- Upstream C++ `TESTING` builds or direct use of
+  `RandomProvider::totalCalls()` outside the probe-owned counted provider
+  shim.
 - A real Rust random generator, random seeding, platform RNG behavior, or
   parity with C++ `std::rand()`.
 - Queue-content parity beyond values supplied by
@@ -69,4 +72,7 @@ one hidden host random value during explicit or public reverse reapplication.
   `updateDataBinds(true)` and reuses that count through later normal advances.
 - Enum, color, string, and trigger sources all preserve those counts for
   random modes `0`, `1`, and `2`.
+- The C++ probe's `randomTotalCalls` reports match the expected C++ remaining
+  fallback reverse-path semantics and Rust's host-stream call count for every
+  enum, color, string, and trigger target-to-source report.
 - The same fixtures continue to match C++ probe binding values.

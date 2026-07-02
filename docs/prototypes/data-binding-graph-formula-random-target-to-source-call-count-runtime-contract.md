@@ -35,7 +35,8 @@ main-`ToSource | TwoWay` number binds.
   the non-`TESTING` runtime build, where that API is not available.
 - A real Rust random generator, random seeding, platform RNG behavior, or
   parity with C++ `std::rand()`.
-- Public `update_data_binds_apply_target_to_source` call counts.
+- Public `update_data_binds_apply_target_to_source` call counts are covered by
+  `data-binding-graph-formula-random-public-update-call-count-runtime-contract.md`.
 - Target-dirty call counts.
 - Grouped converters, list sources, symbol-list-index sources, non-number
   fallback sources, imported contexts, owned contexts, secondary converter

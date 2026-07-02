@@ -19818,10 +19818,20 @@ fn state_machine_default_viewmodel_number_formula_random_function_public_update_
         "{label} failed to bind default view-model context"
     );
     state_machine.set_data_bind_formula_random_values(&[formula_random_value]);
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        0,
+        "{label} call count should reset with supplied random values"
+    );
     rust_reports.push((
         rust.advance_state_machine_instance(&mut state_machine, 0.0),
         state_machine.clone(),
     ));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        1,
+        "{label} initial advance should consume one default-mode random"
+    );
     assert!(
         state_machine.set_bindable_number_for_data_bind(0, 0.4),
         "{label} failed to mutate bindable number"
@@ -19830,15 +19840,30 @@ fn state_machine_default_viewmodel_number_formula_random_function_public_update_
         state_machine.update_data_binds_apply_target_to_source(),
         "{label} failed to update data binds"
     );
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        1,
+        "{label} public update should reuse the cached default-mode random"
+    );
     rust_reports.push((false, state_machine.clone()));
     rust_reports.push((
         rust.advance_state_machine_instance(&mut state_machine, 0.0),
         state_machine.clone(),
     ));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        1,
+        "{label} first advance should reuse the cached default-mode random"
+    );
     rust_reports.push((
         rust.advance_state_machine_instance(&mut state_machine, 1.0),
         state_machine.clone(),
     ));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        1,
+        "{label} second advance should reuse the cached default-mode random"
+    );
     let report = rust.update_components();
 
     assert_eq!(
@@ -19940,10 +19965,20 @@ fn state_machine_default_viewmodel_number_formula_random_function_always_public_
         first_advance_random,
         second_advance_random,
     ]);
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        0,
+        "{label} call count should reset with supplied random values"
+    );
     rust_reports.push((
         rust.advance_state_machine_instance(&mut state_machine, 0.0),
         state_machine.clone(),
     ));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        1,
+        "{label} initial advance should consume one always-mode random"
+    );
     assert!(
         state_machine.set_bindable_number_for_data_bind(0, 0.4),
         "{label} failed to mutate bindable number"
@@ -19952,15 +19987,30 @@ fn state_machine_default_viewmodel_number_formula_random_function_always_public_
         state_machine.update_data_binds_apply_target_to_source(),
         "{label} failed to update data binds"
     );
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        3,
+        "{label} public update should consume two more always-mode randoms"
+    );
     rust_reports.push((false, state_machine.clone()));
     rust_reports.push((
         rust.advance_state_machine_instance(&mut state_machine, 0.0),
         state_machine.clone(),
     ));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        3,
+        "{label} first advance should not consume another always-mode random"
+    );
     rust_reports.push((
         rust.advance_state_machine_instance(&mut state_machine, 1.0),
         state_machine.clone(),
     ));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        3,
+        "{label} second advance should not consume another always-mode random"
+    );
     let report = rust.update_components();
 
     assert_eq!(
@@ -20053,10 +20103,20 @@ fn state_machine_default_viewmodel_number_formula_random_function_source_change_
         first_advance_random,
         second_advance_random,
     ]);
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        0,
+        "{label} call count should reset with supplied random values"
+    );
     rust_reports.push((
         rust.advance_state_machine_instance(&mut state_machine, 0.0),
         state_machine.clone(),
     ));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        1,
+        "{label} initial advance should consume one source-change random"
+    );
     assert!(
         state_machine.set_bindable_number_for_data_bind(0, 0.4),
         "{label} failed to mutate bindable number"
@@ -20065,15 +20125,30 @@ fn state_machine_default_viewmodel_number_formula_random_function_source_change_
         state_machine.update_data_binds_apply_target_to_source(),
         "{label} failed to update data binds"
     );
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        2,
+        "{label} public update should consume one refreshed source-change random"
+    );
     rust_reports.push((false, state_machine.clone()));
     rust_reports.push((
         rust.advance_state_machine_instance(&mut state_machine, 0.0),
         state_machine.clone(),
     ));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        2,
+        "{label} first advance should not consume another source-change random"
+    );
     rust_reports.push((
         rust.advance_state_machine_instance(&mut state_machine, 1.0),
         state_machine.clone(),
     ));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        2,
+        "{label} second advance should not consume another source-change random"
+    );
     let report = rust.update_components();
 
     assert_eq!(

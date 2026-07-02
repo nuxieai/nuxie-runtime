@@ -43,7 +43,9 @@ reapplication.
   scheduling.
 - Converter dependency invalidation for secondary source paths, including
   `DataConverterOperationViewModel` dependencies.
-- Random call-count parity outside the observed direct bind.
+- Direct public-update call counts for random modes `0`, `1`, and `2` are
+  covered separately by
+  `data-binding-graph-formula-random-public-update-call-count-runtime-contract.md`.
 - External, imported, and owned contexts for this converter/source
   combination.
 - Relative-path, parent-path, nested-path, listener-owned, and update-queue
@@ -58,7 +60,8 @@ reapplication.
 - A changed source clears the source-change formula random cache.
 - Same-update source-to-target reapplication consumes the next supplied random
   value instead of reusing the source-write value.
-- Later source-to-target advances reuse that second value until another source
-  change.
+- Later normal advances in this direct fixture preserve the same-update
+  reapplication result without consuming more supplied random values unless
+  another source change schedules a formula evaluation.
 - Existing default-mode, always-mode, and explicit source-change
   target-to-source random tests still pass.

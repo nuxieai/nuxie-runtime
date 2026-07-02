@@ -9,8 +9,9 @@ number binds.
 This covers the C++ behavior where a `DataConverterFormula` random function
 with `randomModeValue == 1` consumes fresh random values across the initial
 source-to-target pass, public `updateDataBinds(true)` target-to-source source
-write, same-update source-to-target reapplication, and later state-machine
-advancement.
+write, and same-update source-to-target reapplication. Later normal advances in
+this direct fixture do not pull additional random values unless another formula
+evaluation is scheduled.
 
 ## In Scope
 
@@ -35,8 +36,10 @@ advancement.
   `data-binding-graph-formula-random-always-target-to-source-runtime-contract.md`.
 - Target-dirty, grouped, list, symbol-list-index, and non-number
   `RandomMode::always` target-to-source scheduling.
-- `RandomMode::sourceChange`, random cache invalidation, random call-count
-  parity outside the observed direct bind, and formula `addDirt`
+- Direct public-update call counts for random modes `0`, `1`, and `2` are
+  covered separately by
+  `data-binding-graph-formula-random-public-update-call-count-runtime-contract.md`.
+- `RandomMode::sourceChange`, random cache invalidation, and formula `addDirt`
   random-cache behavior.
 - External, imported, and owned contexts for this converter/source
   combination.
@@ -51,6 +54,7 @@ advancement.
   supplied random value for the source write.
 - Same-update source-to-target reapplication consumes another supplied random
   value instead of reusing the source-write value.
-- Later source-to-target advances keep consuming fresh supplied random values.
+- Later normal advances in this direct fixture preserve the public-update
+  result without consuming more supplied random values.
 - Existing default-mode and explicit target-to-source always-mode random tests
   still pass.

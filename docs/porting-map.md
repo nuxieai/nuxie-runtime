@@ -4835,6 +4835,20 @@ mutation APIs, relative/parent/nested lookup, listener-owned data binding,
 nested artboard propagation, and full dirty-list scheduler parity remain
 follow-up `#12` slices.
 
+Current #12 update: graph formula random artboard imported/owned contexts
+Direct graph-owned `DataConverterFormula` artboard sources now cover imported
+and owned root view-model contexts when the formula output token is
+`FunctionType::random` with `randomModeValue` values `0`, `1`, and `2`. Rust
+refreshes the rebound artboard source, preserves C++'s object fallback by
+writing `0.0` to the number target, keeps a same-path artboard observer on the
+rebound artboard id, and reports zero random-provider calls just like C++. The
+contract is
+`docs/prototypes/data-binding-graph-formula-random-artboard-context-runtime-contract.md`.
+Random/function-token view-model pointer contexts, source mutation APIs,
+relative/parent/nested lookup, listener-owned data binding, nested artboard
+propagation, and full dirty-list scheduler parity remain follow-up `#12`
+slices.
+
 Current #12 update: non-scripting `ScriptedDataConverter` now participates in
 the runtime data-bind graph as inherited C++ base converter pass-through. A
 main-`ToTarget | TwoWay` number bind with a direct scripted converter applies

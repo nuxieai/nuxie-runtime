@@ -4693,6 +4693,16 @@ fn synthetic_state_machine_default_viewmodel_asset_formula_context_blend_state_w
 fn synthetic_state_machine_default_viewmodel_artboard_formula_context_blend_state(
     file_id: u64,
 ) -> Vec<u8> {
+    synthetic_state_machine_default_viewmodel_artboard_formula_context_blend_state_with_token(
+        file_id,
+        FormulaFallbackTokenKind::Input,
+    )
+}
+
+fn synthetic_state_machine_default_viewmodel_artboard_formula_context_blend_state_with_token(
+    file_id: u64,
+    token_kind: FormulaFallbackTokenKind,
+) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "ViewModel", |bytes| {
             push_string_property(bytes, "ViewModel", "name", "Root");
@@ -4701,7 +4711,7 @@ fn synthetic_state_machine_default_viewmodel_artboard_formula_context_blend_stat
             push_string_property(bytes, "ViewModelPropertyArtboard", "name", "scene");
         });
         push_object_with_properties(bytes, "Backboard", |_| {});
-        push_formula_fallback_converter(bytes, FormulaFallbackTokenKind::Input);
+        push_formula_fallback_converter(bytes, token_kind);
         push_object_with_properties(bytes, "Artboard", |_| {});
         push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
             push_string_property(bytes, "ViewModelInstance", "name", "root");
@@ -28368,6 +28378,222 @@ fn state_machine_owned_viewmodel_artboard_formula_context_matches_cpp_probe() {
         );
     }
     compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn state_machine_imported_viewmodel_artboard_formula_random_context_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    for random_mode_value in [0_u64, 1, 2] {
+        let label = format!(
+            "synthetic/runtime_state_machine_imported_viewmodel_artboard_formula_random_context_mode_{random_mode_value}_cpp.riv"
+        );
+        let bytes = synthetic_state_machine_default_viewmodel_artboard_formula_context_blend_state_with_token(
+            9472 + random_mode_value,
+            FormulaFallbackTokenKind::RandomFunction { random_mode_value },
+        );
+        let args = [
+            "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "1".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "1".to_owned(),
+        ];
+        let seeded_random_values = [0.875_f32, 0.625, 0.25, 0.125];
+        let probe_args = counted_runtime_random_probe_args(&seeded_random_values, &args);
+
+        let cpp = read_cpp_probe_bytes_with_args(&probe, &label, &bytes, &probe_args);
+        let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, &label);
+        let mut state_machine = rust
+            .state_machine_instance(0)
+            .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+        let imported_context = RuntimeImportedViewModelInstanceContext::new(&runtime, 0, 1)
+            .unwrap_or_else(|| panic!("missing imported view-model context for {label}"));
+
+        state_machine.set_data_bind_formula_random_values(&seeded_random_values);
+        assert_formula_random_call_count(&state_machine, 0, &label, "after random reset");
+        assert!(
+            state_machine.bind_imported_view_model_context(&runtime, &imported_context),
+            "{label} failed to bind imported view-model context"
+        );
+        let rust_reports = [
+            (
+                rust.advance_state_machine_instance(&mut state_machine, 0.0),
+                state_machine.clone(),
+            ),
+            (
+                rust.advance_state_machine_instance(&mut state_machine, 1.0),
+                state_machine.clone(),
+            ),
+        ];
+        assert_formula_random_call_count(&state_machine, 0, &label, "after reapply");
+        let report = rust.update_components();
+
+        let cpp_artboard = cpp
+            .artboards
+            .first()
+            .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+        assert_eq!(
+            cpp_artboard.runtime_state_machine_advances.len(),
+            rust_reports.len(),
+            "{label} state-machine report count mismatch"
+        );
+        for (step, (cpp_state_machine, (advanced, rust_state_machine))) in cpp_artboard
+            .runtime_state_machine_advances
+            .iter()
+            .zip(&rust_reports)
+            .enumerate()
+        {
+            let step_label = format!("{label} action {step}");
+            compare_state_machine_advance(
+                cpp_state_machine,
+                rust_state_machine,
+                *advanced,
+                &step_label,
+            );
+            compare_state_machine_number_binding(
+                cpp_state_machine,
+                rust_state_machine,
+                0,
+                &step_label,
+            );
+            compare_state_machine_artboard_binding(
+                cpp_state_machine,
+                rust_state_machine,
+                1,
+                &step_label,
+            );
+            assert_eq!(
+                cpp_state_machine.random_total_calls, 0,
+                "{step_label} C++ random totalCalls mismatch"
+            );
+            assert_eq!(
+                rust_state_machine.default_view_model_artboard_source_value_for_data_bind(1),
+                Some(7),
+                "{step_label} Rust imported artboard source mismatch"
+            );
+        }
+        compare_cpp_runtime_update(&cpp, &rust, &report, &label);
+    }
+}
+
+#[test]
+fn state_machine_owned_viewmodel_artboard_formula_random_context_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    for random_mode_value in [0_u64, 1, 2] {
+        let label = format!(
+            "synthetic/runtime_state_machine_owned_viewmodel_artboard_formula_random_context_mode_{random_mode_value}_cpp.riv"
+        );
+        let bytes = synthetic_state_machine_default_viewmodel_artboard_formula_context_blend_state_with_token(
+            9475 + random_mode_value,
+            FormulaFallbackTokenKind::RandomFunction { random_mode_value },
+        );
+        let value = 13_u64;
+        let args = [
+            "--runtime-bind-owned-view-model-artboard-state-machine-context".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            value.to_string(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "1".to_owned(),
+        ];
+        let seeded_random_values = [0.875_f32, 0.625, 0.25, 0.125];
+        let probe_args = counted_runtime_random_probe_args(&seeded_random_values, &args);
+
+        let cpp = read_cpp_probe_bytes_with_args(&probe, &label, &bytes, &probe_args);
+        let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, &label);
+        let mut state_machine = rust
+            .state_machine_instance(0)
+            .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+        let mut context = RuntimeOwnedViewModelInstance::new(&runtime, 0)
+            .unwrap_or_else(|| panic!("missing Rust owned view-model context for {label}"));
+
+        state_machine.set_data_bind_formula_random_values(&seeded_random_values);
+        assert_formula_random_call_count(&state_machine, 0, &label, "after random reset");
+        assert!(
+            context.set_artboard_by_property_index(0, value),
+            "{label} failed to mutate owned view-model artboard"
+        );
+        assert!(
+            state_machine.bind_owned_view_model_context(&context),
+            "{label} failed to bind owned view-model context"
+        );
+        let rust_reports = [
+            (
+                rust.advance_state_machine_instance(&mut state_machine, 0.0),
+                state_machine.clone(),
+            ),
+            (
+                rust.advance_state_machine_instance(&mut state_machine, 1.0),
+                state_machine.clone(),
+            ),
+        ];
+        assert_formula_random_call_count(&state_machine, 0, &label, "after reapply");
+        let report = rust.update_components();
+
+        let cpp_artboard = cpp
+            .artboards
+            .first()
+            .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+        assert_eq!(
+            cpp_artboard.runtime_state_machine_advances.len(),
+            rust_reports.len(),
+            "{label} state-machine report count mismatch"
+        );
+        for (step, (cpp_state_machine, (advanced, rust_state_machine))) in cpp_artboard
+            .runtime_state_machine_advances
+            .iter()
+            .zip(&rust_reports)
+            .enumerate()
+        {
+            let step_label = format!("{label} action {step}");
+            compare_state_machine_advance(
+                cpp_state_machine,
+                rust_state_machine,
+                *advanced,
+                &step_label,
+            );
+            compare_state_machine_number_binding(
+                cpp_state_machine,
+                rust_state_machine,
+                0,
+                &step_label,
+            );
+            compare_state_machine_artboard_binding(
+                cpp_state_machine,
+                rust_state_machine,
+                1,
+                &step_label,
+            );
+            assert_eq!(
+                cpp_state_machine.random_total_calls, 0,
+                "{step_label} C++ random totalCalls mismatch"
+            );
+            assert_eq!(
+                rust_state_machine.default_view_model_artboard_source_value_for_data_bind(1),
+                Some(value),
+                "{step_label} Rust owned artboard source mismatch"
+            );
+        }
+        compare_cpp_runtime_update(&cpp, &rust, &report, &label);
+    }
 }
 
 #[test]

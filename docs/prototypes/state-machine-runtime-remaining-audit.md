@@ -1017,6 +1017,18 @@ slice.
   write C++'s early fallback value `0.0`. A C++ probe uses a non-zero imported
   bindable target default to prove the fallback write is observable through an
   existing blend-state consumer.
+- Deterministic `DataConverterFormula` imported/owned boolean-context slice:
+  imported and owned runtime view-model boolean contexts now feed rebound
+  source values into the direct formula fallback path before normal
+  state-machine advancement. The fixture includes a same-path direct boolean
+  observer, so imported-context boolean mutation now fans out to every
+  same-path boolean source node in the active graph. Enum/color/string/trigger
+  and list formula contexts, same-path imported fanout for non-boolean source
+  kinds, random formulas, reverse/public-update/target-dirty scheduling,
+  generated list item identity, relative/parent/nested lookup, listener-owned
+  data binding, nested artboard propagation, and full dirty-list scheduler
+  parity remain follow-up slices. The contract is
+  `docs/prototypes/data-binding-graph-formula-boolean-context-runtime-contract.md`.
 - First `DataConverterFormula` non-number fallback public-update reverse
   slice: default-context boolean sources feeding main-`ToTarget | TwoWay`
   number targets now preserve the unchanged boolean source when reverse formula

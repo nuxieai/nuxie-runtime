@@ -5119,6 +5119,8 @@ apply_runtime_state_machine_advances(rive::File* file,
                         ->propertyValue(action.uintValue);
                 }
                 stateMachine->bindViewModelInstance(viewModelInstance);
+                activeOwnedViewModelInstances[action.stateMachineIndex] =
+                    viewModelInstance;
             }
             continue;
         }

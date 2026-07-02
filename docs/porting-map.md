@@ -4862,6 +4862,20 @@ Source mutation APIs, relative/parent/nested lookup, listener-owned data
 binding, nested artboard propagation, and full dirty-list scheduler parity
 remain follow-up `#12` slices.
 
+Current #12 update: graph formula owned asset source mutation
+Direct graph-owned `DataConverterFormula` asset sources now cover post-bind
+owned root asset source mutation by state-machine data-bind index. The
+same-path direct asset observer and formula fallback number target both
+refresh after
+`StateMachineInstance::set_owned_view_model_context_asset_source_for_data_bind`.
+The C++ probe now retains active owned asset contexts for this comparison. The
+contract is
+`docs/prototypes/data-binding-graph-formula-owned-asset-mutation-runtime-contract.md`.
+Artboard and view-model pointer owned source mutations, imported/default
+source mutation APIs, relative/parent/nested lookup, listener-owned data
+binding, nested artboard propagation, and full dirty-list scheduler parity
+remain follow-up `#12` slices.
+
 Current #12 update: non-scripting `ScriptedDataConverter` now participates in
 the runtime data-bind graph as inherited C++ base converter pass-through. A
 main-`ToTarget | TwoWay` number bind with a direct scripted converter applies

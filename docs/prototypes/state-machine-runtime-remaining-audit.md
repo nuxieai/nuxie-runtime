@@ -3525,6 +3525,13 @@ slice.
   imported context binding refreshes the nested secondary operand. The
   contract is
   `docs/prototypes/data-binding-graph-operation-viewmodel-group-order-runtime-contract.md`.
+- Operation-view-model grouped reverse-order coverage slice:
+  `DataConverterGroup<OperationViewModel, OperationValue>` now has default
+  context, owned context, and imported secondary-number source mutation
+  coverage using additive operation-viewmodel conversion followed by
+  operation-value multiplication so the order remains observable. The contract
+  is
+  `docs/prototypes/data-binding-graph-operation-viewmodel-group-reverse-order-coverage-runtime-contract.md`.
 - Operation-view-model imported number mutation slice:
   mutating an already-bound imported number source now refreshes matching
   direct `DataConverterOperationViewModel` secondary operands without

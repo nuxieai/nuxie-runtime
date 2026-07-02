@@ -34,7 +34,8 @@ formula value.
   random call-count parity, and formula `addDirt` random-cache behavior.
 - Grouped target-dirty scheduling is covered separately by
   `data-binding-graph-formula-random-group-target-dirty-runtime-contract.md`;
-  grouped explicit target-to-source scheduling remains out of scope.
+  grouped explicit target-to-source scheduling is covered separately by
+  `data-binding-graph-formula-random-group-target-to-source-runtime-contract.md`.
 - List formula, symbol-list-index, and non-number random formula scheduling.
 - Stateful grouped converters mixed with random formulas.
 - External, imported, and owned contexts for this converter/source

@@ -41,9 +41,10 @@ source-to-target evaluation.
   `data-binding-graph-formula-random-group-runtime-contract.md`; grouped
   public update target-to-source scheduling is covered separately by
   `data-binding-graph-formula-random-group-public-update-target-to-source-runtime-contract.md`;
-  grouped explicit target-to-source scheduling, list formula,
-  symbol-list-index, and non-number random formula scheduling remain out of
-  scope. Direct target-dirty scheduling is covered separately by
+  grouped explicit target-to-source scheduling is covered separately by
+  `data-binding-graph-formula-random-group-target-to-source-runtime-contract.md`.
+  List formula, symbol-list-index, and non-number random formula scheduling
+  remain out of scope. Direct target-dirty scheduling is covered separately by
   `data-binding-graph-formula-random-target-dirty-runtime-contract.md`.
 - External, imported, and owned contexts for this converter/source
   combination.

@@ -3184,10 +3184,10 @@ a main-`ToSource | TwoWay` random formula bind and public
 match C++: the explicit path after a target mutation, and the public path after
 the initial source-to-target draw. The contract is
 `docs/prototypes/data-binding-graph-formula-random-target-to-source-runtime-contract.md`.
-Grouped random explicit target-to-source scheduling, list random formulas,
-non-number random formulas, non-default random modes, cache invalidation, call
-counts, imported/owned contexts, real random generation, and full dirty-list
-scheduler parity remain follow-up `#12` slices.
+List random formulas, non-number random formulas, non-default random modes,
+cache invalidation, call counts, imported/owned contexts, real random
+generation, and full dirty-list scheduler parity remain follow-up `#12`
+slices.
 
 Current #12 update: graph formula random target-dirty
 Direct graph-owned `DataConverterFormula` random functions now cover
@@ -3210,10 +3210,10 @@ host-supplied graph formula random stream through nested converter state,
 draws the same default-mode random value as C++, and reuses the cached grouped
 formula value on later state-machine advancement. The contract is
 `docs/prototypes/data-binding-graph-formula-random-group-runtime-contract.md`.
-Grouped random explicit target-to-source scheduling, list random formulas,
-non-number random formulas, non-default random modes, cache invalidation, call
-counts, imported/owned contexts, real random generation, and full dirty-list
-scheduler parity remain follow-up `#12` slices.
+List random formulas, non-number random formulas, non-default random modes,
+cache invalidation, call counts, imported/owned contexts, real random
+generation, and full dirty-list scheduler parity remain follow-up `#12`
+slices.
 
 Current #12 update: graph formula random group public update target-to-source
 Grouped graph-owned `DataConverterFormula` random functions now cover public
@@ -3224,10 +3224,24 @@ mutation through C++ reverse group order, reuses the cached default-mode
 formula random value, and reapplies source-to-target in the same public update.
 The contract is
 `docs/prototypes/data-binding-graph-formula-random-group-public-update-target-to-source-runtime-contract.md`.
-Grouped random explicit target-to-source scheduling, list random formulas,
-non-number random formulas, non-default random modes, cache invalidation, call
-counts, imported/owned contexts, real random generation, and full dirty-list
-scheduler parity remain follow-up `#12` slices.
+List random formulas, non-number random formulas, non-default random modes,
+cache invalidation, call counts, imported/owned contexts, real random
+generation, and full dirty-list scheduler parity remain follow-up `#12`
+slices.
+
+Current #12 update: graph formula random group explicit target-to-source
+Grouped graph-owned `DataConverterFormula` random functions now cover explicit
+main-`ToSource | TwoWay` target-to-source scheduling for default-context number
+binds. A manual edit to a `DataConverterGroup<OperationValue,
+Formula(random)>` target is applied through forward group order during
+explicit data-context advancement, and a neighboring direct number bind
+observes the grouped source write on subsequent state-machine advancement. The
+contract is
+`docs/prototypes/data-binding-graph-formula-random-group-target-to-source-runtime-contract.md`.
+List random formulas, non-number random formulas, non-default random modes,
+cache invalidation, call counts, imported/owned contexts, real random
+generation, and full dirty-list scheduler parity remain follow-up `#12`
+slices.
 
 Current #12 update: graph formula random group target-dirty
 Grouped graph-owned `DataConverterFormula` random functions now cover
@@ -3238,10 +3252,10 @@ through explicit data-context advancement, then the next normal state-machine
 advance reapplies the unchanged source through the cached grouped formula
 random value. The contract is
 `docs/prototypes/data-binding-graph-formula-random-group-target-dirty-runtime-contract.md`.
-Grouped random explicit target-to-source scheduling, list random formulas,
-non-number random formulas, non-default random modes, cache invalidation, call
-counts, imported/owned contexts, real random generation, and full dirty-list
-scheduler parity remain follow-up `#12` slices.
+List random formulas, non-number random formulas, non-default random modes,
+cache invalidation, call counts, imported/owned contexts, real random
+generation, and full dirty-list scheduler parity remain follow-up `#12`
+slices.
 
 Current #12 update: non-scripting `ScriptedDataConverter` now participates in
 the runtime data-bind graph as inherited C++ base converter pass-through. A

@@ -38,6 +38,9 @@ formula evaluator before writing number targets.
 - Explicit main-`ToSource` target-to-source propagation for symbol-list-index
   formula sources is covered separately by
   `data-binding-graph-formula-symbol-list-index-explicit-target-to-source-runtime-contract.md`.
+- Main-`ToTarget | TwoWay` target-dirty behavior for symbol-list-index formula
+  sources is covered separately by
+  `data-binding-graph-formula-symbol-list-index-main-to-target-two-way-target-dirty-runtime-contract.md`.
 - Broader target-to-source propagation.
 - Formula converter groups beyond any composition already admitted by the
   generic graph group executor.

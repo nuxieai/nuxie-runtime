@@ -38,6 +38,9 @@ the number target to the formula value.
 - Main-`ToTarget | TwoWay` public-update behavior for symbol-list-index formula
   sources, covered separately by
   `data-binding-graph-formula-symbol-list-index-public-update-target-to-source-runtime-contract.md`.
+- Main-`ToTarget | TwoWay` target-dirty behavior for symbol-list-index formula
+  sources, covered separately by
+  `data-binding-graph-formula-symbol-list-index-main-to-target-two-way-target-dirty-runtime-contract.md`.
 - Boolean, enum, color, string, trigger, and list formula fallback explicit
   target-to-source behavior, covered separately by the fallback explicit
   contracts.

@@ -1225,6 +1225,16 @@ slice.
   target-dirty, list formulas, non-number, secondary converter dependency
   invalidation, cache invalidation, call counts, imported/owned contexts, and
   real random generation remain follow-up slices.
+- `DataConverterFormula` random group source-change target-dirty slice:
+  default-context number sources feeding number targets through a
+  main-`ToTarget | TwoWay` `DataConverterGroup<OperationValue,
+  Formula(random)>` now preserve a manual target edit through explicit
+  data-context advancement when `randomModeValue == 2` without treating the
+  target edit as a source change, then reuse the cached host-supplied random
+  value on later normal state-machine advances, matching C++. List formulas,
+  non-number, secondary converter dependency invalidation, cache invalidation,
+  call counts, imported/owned contexts, and real random generation remain
+  follow-up slices.
 - `DataConverterFormula` random group public-update target-to-source slice:
   default-context number sources feeding number targets through a
   main-`ToTarget | TwoWay` `DataConverterGroup<OperationValue,

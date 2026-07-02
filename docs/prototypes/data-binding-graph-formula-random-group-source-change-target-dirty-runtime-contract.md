@@ -1,18 +1,16 @@
-# Data Binding Graph Formula Random Group Source-Change Public Update Target-To-Source Runtime Contract
+# Data Binding Graph Formula Random Group Source-Change Target-Dirty Runtime Contract
 
 ## Purpose
 
 Extend the host-supplied graph formula random slice to grouped
-`RandomMode::sourceChange` public target-to-source scheduling for
+`RandomMode::sourceChange` main-`ToTarget | TwoWay` target-dirty behavior for
 default-context number binds.
 
-This covers the C++ behavior where a `DataConverterFormula` random function
-inside `DataConverterGroup<OperationValue, Formula(random)>` has
-`randomModeValue == 2`, warms its cached random value during the initial
-source-to-target pass, reuses that value for the public target-to-source
-source write, treats the changed source as a source change, clears the nested
-formula cache, and consumes a fresh value for same-update source-to-target
-reapplication.
+This covers the C++ behavior where the initial grouped source-to-target pass
+consumes a cached-mode random value, a manual target edit is preserved through
+explicit data-context advancement, and later normal state-machine advances
+reapply the unchanged source through the same cached random value because the
+source did not change.
 
 ## In Scope
 
@@ -26,10 +24,7 @@ reapplication.
 - `DataConverterFormula.randomModeValue == 2`.
 - `StateMachineInstance::set_data_bind_formula_random_values` as the
   host-supplied graph formula random stream.
-- Public target-to-source scheduling through
-  `update_data_binds_apply_target_to_source`.
-- Same-update source-to-target reapplication after the public target-to-source
-  source write.
+- Explicit data-context advancement preserving a manual target edit.
 - Source-to-target state-machine advancement and C++ probe number reports.
 
 ## Out Of Scope
@@ -39,13 +34,13 @@ reapplication.
 - Grouped explicit target-to-source `RandomMode::sourceChange` scheduling is
   covered separately by
   `data-binding-graph-formula-random-group-source-change-target-to-source-runtime-contract.md`.
-- Grouped target-dirty `RandomMode::sourceChange` scheduling is covered
-  separately by
-  `data-binding-graph-formula-random-group-source-change-target-dirty-runtime-contract.md`.
+- Grouped public update target-to-source `RandomMode::sourceChange` scheduling
+  is covered separately by
+  `data-binding-graph-formula-random-group-source-change-public-update-target-to-source-runtime-contract.md`.
 - List formula, symbol-list-index, and non-number random formula scheduling.
 - Stateful grouped converters mixed with random formulas.
 - Secondary converter dependency invalidation beyond the observed grouped
-  source write.
+  source.
 - Random call-count parity outside the observed grouped bind.
 - External, imported, and owned contexts for this converter/source
   combination.
@@ -56,13 +51,9 @@ reapplication.
 
 - The initial source-to-target advance consumes the first supplied random
   value.
-- Public target-to-source conversion after a target mutation reuses the warmed
-  source-change random value for the source write.
-- A changed source clears the nested source-change formula random cache.
-- Same-update source-to-target reapplication consumes the next supplied random
-  value instead of reusing the source-write value.
-- Later source-to-target advances reuse that second value until another source
-  change.
+- Explicit data-context advancement preserves the manual target edit without
+  treating the target edit as a source change.
+- Later normal state-machine advances reuse the cached supplied random value.
 - Existing grouped default-mode, grouped always, grouped source-change
-  source-to-target, and grouped source-change explicit target-to-source random
-  tests still pass.
+  source-to-target, grouped source-change explicit target-to-source, and
+  grouped source-change public-update tests still pass.

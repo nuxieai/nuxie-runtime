@@ -57,7 +57,9 @@ draw to Rust before advancing.
 - Symbol-list-index source-to-target random formula behavior is covered
   separately by
   `data-binding-graph-formula-random-symbol-list-index-runtime-contract.md`;
-  other non-number random formula sources remain out of scope.
+  boolean, enum, color, string, and trigger source-to-target random fallback
+  behavior is covered separately by
+  `data-binding-graph-formula-random-non-number-fallback-runtime-contract.md`.
 - External, imported, and owned contexts for this converter/source
   combination.
 - Relative-path, parent-path, nested-path, listener-owned, and update-queue

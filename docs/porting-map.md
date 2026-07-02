@@ -3479,6 +3479,19 @@ invalidation, cache invalidation, call counts, imported/owned contexts, real
 random generation, and full dirty-list scheduler parity remain follow-up `#12`
 slices.
 
+Current #12 update: graph formula random non-number fallback
+Direct graph-owned `DataConverterFormula` random functions now cover the
+source-to-target fallback path for default-context boolean, enum, color,
+string, and trigger sources feeding number targets. C++ returns `0.0` for
+those non-number, non-symbol-list-index sources before evaluating formula
+tokens, so `FunctionType::random` is ignored for `randomModeValue` values `0`,
+`1`, and `2`. The contract is
+`docs/prototypes/data-binding-graph-formula-random-non-number-fallback-runtime-contract.md`.
+List formulas, target-to-source reverse conversion for non-number formula
+sources, imported/owned contexts, real random generation, random call counts,
+secondary dependency invalidation, and full dirty-list scheduler parity remain
+follow-up `#12` slices.
+
 Current #12 update: graph formula random group public update target-to-source
 Grouped graph-owned `DataConverterFormula` random functions now cover public
 `updateDataBinds(true)` target-to-source scheduling for a

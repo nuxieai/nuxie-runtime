@@ -1042,6 +1042,15 @@ slice.
   formula cache when the bound default symbol-list-index source mutates. List
   formulas, other non-number random formulas, imported/owned contexts, and
   real random generation remain follow-up slices.
+- `DataConverterFormula` random non-number fallback slice: default-context
+  boolean, enum, color, string, and trigger sources feeding number targets now
+  prove C++'s early formula fallback for `FunctionType::random` output tokens.
+  Rust writes `0.0` before random-token evaluation for `randomModeValue` values
+  `0`, `1`, and `2`; the probe supplies Rust random values to prove they do
+  not affect the result. List formulas, target-to-source reverse conversion for
+  non-number formula sources, imported/owned contexts, real random generation,
+  and random call-count parity remain follow-up slices. The contract is
+  `docs/prototypes/data-binding-graph-formula-random-non-number-fallback-runtime-contract.md`.
 - `DataConverterFormula` random always-mode source-to-target slice:
   default-context number sources feeding number targets now execute direct
   `FunctionType::random` output-queue tokens when `randomModeValue == 1`.

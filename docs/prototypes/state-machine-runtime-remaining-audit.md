@@ -1921,9 +1921,10 @@ slice.
   trigger report even when the data-bind target is a number. C++ and Rust
   random call counts match for default `[1, 1]`, always `[1, 2, 2]`, and
   source-change `[1, 2, 2]` source-to-target schedules. Grouped non-number
-  target-to-source/public-update/target-dirty behavior, list paths,
-  imported/owned contexts, secondary dependency invalidation, and real random
-  generation remain follow-up slices.
+  target-dirty behavior, list paths, imported/owned contexts, secondary
+  dependency invalidation, and real random generation remain follow-up slices.
+  Grouped non-number explicit target-to-source and public-update behavior are
+  covered separately below.
 - `DataConverterFormula` random group non-number explicit target-to-source
   slice: default-context boolean, enum, color, string, and trigger sources
   feeding number targets through a main-`ToSource | TwoWay`
@@ -1932,9 +1933,21 @@ slice.
   performs the same immediate source-to-target reapply that C++ reports for
   `randomModeValue` values `0`, `1`, and `2`. C++ and Rust random call counts
   match at `[1, 1, 1]` for default, always, and source-change explicit
-  target-to-source schedules. Grouped non-number public-update/target-dirty
-  behavior, list paths, imported/owned contexts, secondary dependency
-  invalidation, and real random generation remain follow-up slices.
+  target-to-source schedules. Grouped non-number target-dirty behavior, list
+  paths, imported/owned contexts, secondary dependency invalidation, and real
+  random generation remain follow-up slices. Grouped non-number public-update
+  behavior is covered separately below.
+- `DataConverterFormula` random group non-number public-update slice:
+  default-context boolean, enum, color, string, and trigger sources feeding
+  number targets through a main-`ToTarget | TwoWay`
+  `DataConverterGroup<OperationValue, Formula(random)>` now preserve the
+  non-number source during public `updateDataBinds(true)` and reapply
+  source-to-target in the same update after an initial source-to-target pass
+  warms the grouped formula random path. C++ and Rust random call counts match
+  for default/source-change `[1, 1, 1, 1]` and always `[1, 3, 3, 3]` public
+  update schedules. Grouped non-number target-dirty behavior, list paths,
+  imported/owned contexts, secondary dependency invalidation, and real random
+  generation remain follow-up slices.
 - `DataConverterFormula` random group source-change target-to-source slice:
   default-context number sources feeding number targets through a
   main-`ToSource | TwoWay` `DataConverterGroup<OperationValue,

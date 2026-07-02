@@ -3361,12 +3361,15 @@ values during the public update, and no additional values on later normal
 advances; source-change mode consumes once initially, reuses that warmed value
 for the public target-to-source write, consumes one refreshed value for
 same-update reapplication, and does not pull again on later normal advances
-without another scheduled formula evaluation. The contract is
+without another scheduled formula evaluation. The C++ probe now seeds
+deterministic random values and reports per-action `randomTotalCalls`, so this
+slice compares the Rust host-stream count directly against the C++ total after
+every public-update report. The contract is
 `docs/prototypes/data-binding-graph-formula-random-public-update-call-count-runtime-contract.md`.
-Probe-visible C++ `RandomProvider::totalCalls`, grouped/list/non-number paths,
-imported/owned contexts, secondary dependency invalidation, real RNG
-generation/seeding, and full dirty-list scheduler parity remain follow-up
-`#12` slices. Direct target-dirty call counts are covered separately below.
+Grouped/list/non-number paths, imported/owned contexts, secondary dependency
+invalidation, real RNG generation/seeding, and full dirty-list scheduler parity
+remain follow-up `#12` slices. Direct target-dirty call counts are covered
+separately below.
 
 Current #12 update: graph formula random target-dirty call counts
 Direct graph-owned `DataConverterFormula` random functions now pin Rust's

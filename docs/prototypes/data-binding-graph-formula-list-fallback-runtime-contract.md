@@ -55,9 +55,9 @@ non-number, non-symbol-list-index inputs.
 - Broader target-to-source propagation.
 - Formula parent-source binding, source dependents, and add-dirt behavior.
 - A real Rust random generator or C++ random seeding/queueing.
-- Broader random call-count parity. The random-token zero-pull
-  source-to-target list fallback case is covered by
-  `data-binding-graph-formula-random-call-count-runtime-contract.md`.
+- Broader random call-count parity. Random-token zero-pull list fallback
+  cases are covered by
+  `data-binding-graph-formula-random-list-fallback-call-count-runtime-contract.md`.
 - External, imported, and owned contexts for this converter/source
   combination.
 - Relative-path, parent-path, nested-path, listener-owned, and update-queue

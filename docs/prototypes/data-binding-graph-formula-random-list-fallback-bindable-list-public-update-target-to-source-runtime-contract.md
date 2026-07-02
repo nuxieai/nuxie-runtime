@@ -50,8 +50,9 @@ the formula fallback value for `randomModeValue` values `0`, `1`, and `2`.
   list layout, virtualization, and `DataBindListItemConsumer` behavior.
 - Artboard-owned `ArtboardComponentList` targets.
 - Imported, owned, relative, parent, and nested view-model contexts.
-- Real random generation, random call counts, secondary dependency
-  invalidation, and full dirty-list scheduler parity.
+- Real random generation, secondary dependency invalidation, and full
+  dirty-list scheduler parity. List fallback random call counts are covered by
+  `data-binding-graph-formula-random-list-fallback-call-count-runtime-contract.md`.
 
 ## Completion Checks
 

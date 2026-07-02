@@ -49,8 +49,10 @@ fallback scalar to the target.
 - Generated list item creation, generated item identity, item-level binding,
   list layout, virtualization, and `DataBindListItemConsumer` behavior.
 - Imported, owned, relative, parent, and nested view-model contexts.
-- Real random generation, random call counts, secondary dependency
-  invalidation, and full dirty-list scheduler parity.
+- Real random generation, secondary dependency invalidation, and full
+  dirty-list scheduler parity. Random-function list fallback call counts are
+  covered by
+  `data-binding-graph-formula-random-list-fallback-call-count-runtime-contract.md`.
 
 ## Completion Checks
 

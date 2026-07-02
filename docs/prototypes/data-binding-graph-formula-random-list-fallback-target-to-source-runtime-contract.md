@@ -57,8 +57,9 @@ formula fallback. This remains true when the formula output queue contains
 - Formula parent-source binding, source dependents, and general add-dirt
   behavior beyond the same-pass reapplication listed above.
 - Full C++ dirty-list scheduling for neighboring ordinary `ToTarget` binds.
-- A real Rust random generator, C++ random seeding/queueing, or random
-  call-count parity.
+- A real Rust random generator or C++ random seeding/queueing. List fallback
+  random call counts are covered by
+  `data-binding-graph-formula-random-list-fallback-call-count-runtime-contract.md`.
 - Imported and owned view-model contexts beyond the imported list items that
   make up the default list source.
 - Relative-path, parent-path, nested-path, listener-owned data binding, nested

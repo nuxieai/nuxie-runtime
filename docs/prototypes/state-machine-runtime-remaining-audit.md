@@ -1146,8 +1146,9 @@ slice.
   value on later normal state-machine advancement. Formula random-function
   list targets, deterministic target-to-source, and deterministic/random
   target-dirty behavior are covered separately below. Generated list items,
-  imported/owned contexts, real random generation, and random call-count
-  parity remain follow-up slices. The contract is
+  imported/owned contexts, real random generation, secondary dependency
+  invalidation, and full dirty-list scheduler parity remain follow-up slices.
+  The contract is
   `docs/prototypes/data-binding-graph-formula-list-fallback-bindable-list-target-runtime-contract.md`.
 - `DataConverterFormula` random list fallback bindable-list target slice:
   default-context list sources feeding state-machine
@@ -1157,10 +1158,11 @@ slice.
   list target scalar during explicit data-context advancement, ignore supplied
   random values for this observable fallback, and apply C++'s numeric fallback
   target value on later normal state-machine advancement. Generated list
-  items, imported/owned contexts, real random generation, and random
-  call-count parity remain follow-up slices. Random explicit/public-update
-  target-to-source behavior and random target-dirty behavior are covered
-  separately below. The contract is
+  items, imported/owned contexts, real random generation, secondary
+  dependency invalidation, and full dirty-list scheduler parity remain
+  follow-up slices. Random explicit/public-update target-to-source behavior,
+  random target-dirty behavior, and random call counts are covered separately
+  below. The contract is
   `docs/prototypes/data-binding-graph-formula-random-list-fallback-bindable-list-target-runtime-contract.md`.
 - `DataConverterFormula` list fallback bindable-list explicit
   target-to-source slice: default-context list sources feeding state-machine
@@ -1174,8 +1176,8 @@ slice.
   public-update list-target target-to-source behavior is covered separately
   below. The deterministic and random target-dirty paths are covered
   separately below. Generated list items, imported/owned contexts, real random
-  generation, and random call-count parity remain follow-up slices. The
-  contract is
+  generation, secondary dependency invalidation, and full dirty-list
+  scheduler parity remain follow-up slices. The contract is
   `docs/prototypes/data-binding-graph-formula-list-fallback-bindable-list-explicit-target-to-source-runtime-contract.md`.
 - `DataConverterFormula` list fallback bindable-list public-update
   target-to-source slice: default-context list sources feeding state-machine
@@ -1187,8 +1189,9 @@ slice.
   covered separately below, and random public-update list-target
   target-to-source behavior is covered separately below. Generated list items,
   deterministic and random target-dirty behavior is covered separately below.
-  Imported/owned contexts, real random generation, and random call-count
-  parity remain follow-up slices. The contract is
+  Imported/owned contexts, real random generation, secondary dependency
+  invalidation, and full dirty-list scheduler parity remain follow-up slices.
+  The contract is
   `docs/prototypes/data-binding-graph-formula-list-fallback-bindable-list-public-update-target-to-source-runtime-contract.md`.
 - `DataConverterFormula` list fallback bindable-list target-dirty slice:
   default-context list sources feeding state-machine
@@ -1198,8 +1201,8 @@ slice.
   source list size, and reapply the numeric formula fallback on later normal
   state-machine advancement. Random target-dirty behavior is covered
   separately below. Generated list items, imported/owned contexts, real random
-  generation, and random call-count parity remain follow-up slices. The
-  contract is
+  generation, secondary dependency invalidation, and full dirty-list
+  scheduler parity remain follow-up slices. The contract is
   `docs/prototypes/data-binding-graph-formula-list-fallback-bindable-list-main-to-target-two-way-target-dirty-runtime-contract.md`.
 - `DataConverterFormula` random list fallback bindable-list target-dirty
   slice: default-context list sources feeding state-machine
@@ -1209,8 +1212,10 @@ slice.
   `advanceDataContext()`, keep reporting the imported source list size, ignore
   supplied random values for this observable fallback, and reapply the numeric
   formula fallback on later normal state-machine advancement. Generated list
-  items, imported/owned contexts, real random generation, and random
-  call-count parity remain follow-up slices. The contract is
+  items, imported/owned contexts, real random generation, secondary
+  dependency invalidation, and full dirty-list scheduler parity remain
+  follow-up slices. Random call counts are covered separately below. The
+  contract is
   `docs/prototypes/data-binding-graph-formula-random-list-fallback-bindable-list-main-to-target-two-way-target-dirty-runtime-contract.md`.
 - `DataConverterFormula` random list fallback bindable-list explicit
   target-to-source slice: default-context list sources feeding state-machine
@@ -1222,8 +1227,10 @@ slice.
   reapplying the numeric formula fallback during the same explicit pass.
   Random public-update list-target target-to-source behavior is covered
   separately below. Random target-dirty behavior is covered separately above.
-  Generated list items, imported/owned contexts, real random generation, and
-  random call-count parity remain follow-up slices. The contract is
+  Generated list items, imported/owned contexts, real random generation,
+  secondary dependency invalidation, and full dirty-list scheduler parity
+  remain follow-up slices. Random call counts are covered separately below.
+  The contract is
   `docs/prototypes/data-binding-graph-formula-random-list-fallback-bindable-list-explicit-target-to-source-runtime-contract.md`.
 - `DataConverterFormula` random list fallback bindable-list public-update
   target-to-source slice: default-context list sources feeding state-machine
@@ -1234,9 +1241,23 @@ slice.
   fallback, and reapply the numeric formula fallback to the list target during
   the same public update, matching C++. Random target-dirty behavior is
   covered separately above. Generated list items, imported/owned contexts,
-  real random generation, and random call-count parity remain follow-up
-  slices. The contract is
+  real random generation, secondary dependency invalidation, and full
+  dirty-list scheduler parity remain follow-up slices. Random call counts are
+  covered by the list call-count slice below. The contract is
   `docs/prototypes/data-binding-graph-formula-random-list-fallback-bindable-list-public-update-target-to-source-runtime-contract.md`.
+- `DataConverterFormula` random list fallback call-count slice:
+  default-context list sources flowing through direct `FunctionType::random`
+  fallback tokens now expose Rust's host-supplied random-stream pull count
+  for number targets and state-machine `BindablePropertyList.propertyValue`
+  targets. Source-to-target and target-dirty list fallback paths stay at zero,
+  bindable-list targets stay at zero, and number-target explicit/public
+  reverse reapplication consumes one hidden pull before matching the same C++
+  probe observable fallback values for `randomModeValue` values `0`, `1`, and
+  `2`. Probe-visible C++ `RandomProvider::totalCalls`, remaining non-list
+  non-number sources, imported/owned contexts, real random generation,
+  secondary dependency invalidation, and full dirty-list scheduler parity
+  remain follow-up slices. The contract is
+  `docs/prototypes/data-binding-graph-formula-random-list-fallback-call-count-runtime-contract.md`.
 - `DataConverterFormula` list fallback public-update reverse slice:
   default-context list sources feeding main-`ToTarget | TwoWay` number targets
   now preserve the unchanged imported list source when reverse formula
@@ -1532,9 +1553,9 @@ slice.
   grouped formula evaluation with the second evaluation scheduled by a
   symbol-list-index source mutation, and source-change mode consumes one
   initial draw plus one refresh after a symbol-list-index source mutation.
-  List/non-number paths, imported/owned contexts, real random generation, and
-  probe-visible C++ `RandomProvider::totalCalls` behavior remain follow-up
-  slices. The contract is
+  Remaining non-list non-number paths, imported/owned contexts, real random
+  generation, and probe-visible C++ `RandomProvider::totalCalls` behavior
+  remain follow-up slices. The contract is
   `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-group-call-count-runtime-contract.md`.
 - `DataConverterFormula` random symbol-list-index group explicit
   target-to-source slice: default-context symbol-list-index sources feeding
@@ -1572,8 +1593,8 @@ slice.
   reports for `randomModeValue` values `0`, `1`, and `2`. Grouped target-dirty
   behavior is covered separately below. List formulas, remaining non-number
   random scheduling, imported/owned contexts, real random generation, and
-  list/non-number random call-count parity remain follow-up slices. The
-  contract is
+  remaining non-list non-number random call-count parity remain follow-up
+  slices. The contract is
   `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-group-public-update-target-to-source-runtime-contract.md`.
 - `DataConverterFormula` random symbol-list-index group public-update
   call-count slice: default-context symbol-list-index sources feeding number
@@ -1596,8 +1617,8 @@ slice.
   the unchanged symbol-list-index source through the grouped formula path on
   later normal state-machine advances for `randomModeValue` values `0`, `1`,
   and `2`, matching C++. List formulas, remaining non-number random
-  scheduling, imported/owned contexts, real random generation, and
-  list/non-number random call-count parity remain follow-up slices. The
+  scheduling, imported/owned contexts, real random generation, and remaining
+  non-list non-number random call-count parity remain follow-up slices. The
   contract is
   `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-group-target-dirty-runtime-contract.md`.
 - `DataConverterFormula` random symbol-list-index group target-dirty

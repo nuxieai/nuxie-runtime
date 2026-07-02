@@ -1,15 +1,14 @@
-# Data Binding Graph Formula Random Group Runtime Contract
+# Data Binding Graph Formula Random Group Public Update Target-To-Source Runtime Contract
 
 ## Purpose
 
-Extend the host-supplied graph formula random slice to the first grouped
-converter path: a default-context number source feeding a number target through
-`DataConverterGroup<OperationValue, Formula(random)>`.
+Extend the host-supplied graph formula random group slice to public
+`updateDataBinds(true)` behavior for a main-`ToTarget | TwoWay` number bind.
 
-This proves that runtime graph conversion passes the same per-state-machine
-formula random stream through nested group converter state, and that the
-grouped formula caches the default-mode random value like the direct formula
-path.
+This covers the C++ behavior where public update applies a grouped random
+formula target mutation through reverse group order, then reapplies
+source-to-target in the same update using the cached default-mode random
+formula value.
 
 ## In Scope
 
@@ -17,13 +16,15 @@ path.
 - Root-only `DataBindContext.sourcePathIds` of shape `[0, propertyIndex]`.
 - `ViewModelInstanceNumber.propertyValue` sources feeding
   `BindablePropertyNumber.propertyValue` targets.
+- A main-`ToTarget | TwoWay` data bind.
 - `DataConverterGroup` with a direct `DataConverterOperationValue` child
   followed by a direct `DataConverterFormula` child.
 - `FormulaTokenFunction` with `functionType == FunctionType::random`.
 - Default `DataConverterFormula.randomModeValue == 0`.
 - `StateMachineInstance::set_data_bind_formula_random_values` as the
   host-supplied graph formula random stream.
-- Source-to-target state-machine advancement and C++ probe number reports.
+- Public `StateMachineInstance::update_data_binds_apply_target_to_source`.
+- C++ probe coverage through number binding reports.
 
 ## Out Of Scope
 
@@ -31,10 +32,7 @@ path.
 - Probe CLI support for seeding or queuing C++ runtime random values.
 - `RandomMode::always`, `RandomMode::sourceChange`, random cache invalidation,
   random call-count parity, and formula `addDirt` random-cache behavior.
-- Grouped public update target-to-source scheduling is covered separately by
-  `data-binding-graph-formula-random-group-public-update-target-to-source-runtime-contract.md`;
-  grouped explicit target-to-source and target-dirty scheduling remain out of
-  scope.
+- Grouped explicit target-to-source and target-dirty scheduling.
 - List formula, symbol-list-index, and non-number random formula scheduling.
 - Stateful grouped converters mixed with random formulas.
 - External, imported, and owned contexts for this converter/source
@@ -44,10 +42,10 @@ path.
 
 ## Completion Checks
 
-- A grouped formula random bind draws from the same host-supplied random stream
-  used by direct formula random binds.
-- The grouped formula caches that default-mode random value across subsequent
-  source-to-target state-machine advancement.
-- C++ probe number reports match Rust after both the initial zero-time advance
-  and a later positive-time advance.
-- Existing direct formula random tests still pass.
+- Initial source-to-target advancement draws and caches the supplied grouped
+  formula random value.
+- Public update after a target mutation runs grouped target-to-source behavior
+  with the cached random value and reports the same number binding state as
+  C++.
+- The following normal state-machine advances continue to match C++.
+- Existing direct and grouped formula random source-to-target tests still pass.

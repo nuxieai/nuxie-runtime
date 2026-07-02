@@ -39,9 +39,11 @@ source-to-target evaluation.
   random call-count parity, and formula `addDirt` random-cache behavior.
 - Grouped source-to-target scheduling is covered separately by
   `data-binding-graph-formula-random-group-runtime-contract.md`; grouped
-  target-to-source/public-update scheduling, list formula,
+  public update target-to-source scheduling is covered separately by
+  `data-binding-graph-formula-random-group-public-update-target-to-source-runtime-contract.md`;
+  grouped explicit target-to-source scheduling, list formula,
   symbol-list-index, and non-number random formula scheduling remain out of
-  scope. Target-dirty scheduling is covered separately by
+  scope. Direct target-dirty scheduling is covered separately by
   `data-binding-graph-formula-random-target-dirty-runtime-contract.md`.
 - External, imported, and owned contexts for this converter/source
   combination.

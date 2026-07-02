@@ -1027,8 +1027,8 @@ slice.
   target-to-source scheduling. The C++ probe covers explicit
   `advancedDataContext()` for a main-`ToSource | TwoWay` random formula bind
   with a direct observer, and public `updateDataBinds(true)` for a
-  main-`ToTarget | TwoWay` random formula bind. Grouped target-to-source and
-  public-update scheduling, list formulas, non-number, non-default random
+  main-`ToTarget | TwoWay` random formula bind. Grouped explicit
+  target-to-source scheduling, list formulas, non-number, non-default random
   modes, cache invalidation, call counts, imported/owned contexts, and real
   random generation remain follow-up slices.
 - `DataConverterFormula` random target-dirty slice:
@@ -1044,10 +1044,20 @@ slice.
   host-supplied default-mode random stream through nested group converter
   state. The grouped formula draws the C++-derived random value on first
   source-to-target advancement and reuses the cached value on later
-  state-machine advancement. Grouped target-to-source/public-update/
-  target-dirty scheduling, list formulas, non-number, non-default random
-  modes, cache invalidation, call counts, imported/owned contexts, and real
-  random generation remain follow-up slices.
+  state-machine advancement. Grouped explicit target-to-source and
+  target-dirty scheduling, list formulas, non-number, non-default random modes,
+  cache invalidation, call counts, imported/owned contexts, and real random
+  generation remain follow-up slices.
+- `DataConverterFormula` random group public-update target-to-source slice:
+  default-context number sources feeding number targets through a
+  main-`ToTarget | TwoWay`
+  `DataConverterGroup<OperationValue, Formula(random)>` now apply public
+  `updateDataBinds(true)` target mutations through reverse group order, reuse
+  the cached default-mode formula random value, and reapply source-to-target
+  in the same update. Grouped explicit target-to-source and target-dirty
+  scheduling, list formulas, non-number, non-default random modes, cache
+  invalidation, call counts, imported/owned contexts, and real random
+  generation remain follow-up slices.
 - First graph-owned target-to-source slice: direct default-context number
   sources feeding number targets now honor `ToSource | TwoWay` target mutation
   on explicit data-context advance. A C++ probe uses two binds to the same

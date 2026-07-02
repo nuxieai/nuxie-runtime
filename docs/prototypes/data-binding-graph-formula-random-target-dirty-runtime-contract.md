@@ -33,8 +33,10 @@ the unchanged source through the same cached random formula value.
   random call-count parity, and formula `addDirt` random-cache behavior.
 - Grouped source-to-target scheduling is covered separately by
   `data-binding-graph-formula-random-group-runtime-contract.md`; grouped
-  target-dirty scheduling, list formula, symbol-list-index, and non-number
-  random formula scheduling remain out of scope.
+  public update target-to-source scheduling is covered separately by
+  `data-binding-graph-formula-random-group-public-update-target-to-source-runtime-contract.md`;
+  grouped target-dirty scheduling, list formula, symbol-list-index, and
+  non-number random formula scheduling remain out of scope.
 - External, imported, and owned contexts for this converter/source
   combination.
 - Relative-path, parent-path, nested-path, listener-owned, and update-queue

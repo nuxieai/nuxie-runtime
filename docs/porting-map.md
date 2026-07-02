@@ -3184,7 +3184,7 @@ a main-`ToSource | TwoWay` random formula bind and public
 match C++: the explicit path after a target mutation, and the public path after
 the initial source-to-target draw. The contract is
 `docs/prototypes/data-binding-graph-formula-random-target-to-source-runtime-contract.md`.
-Grouped random target-to-source/public-update scheduling, list random formulas,
+Grouped random explicit target-to-source scheduling, list random formulas,
 non-number random formulas, non-default random modes, cache invalidation, call
 counts, imported/owned contexts, real random generation, and full dirty-list
 scheduler parity remain follow-up `#12` slices.
@@ -3210,7 +3210,21 @@ host-supplied graph formula random stream through nested converter state,
 draws the same default-mode random value as C++, and reuses the cached grouped
 formula value on later state-machine advancement. The contract is
 `docs/prototypes/data-binding-graph-formula-random-group-runtime-contract.md`.
-Grouped random target-to-source/public-update/target-dirty scheduling, list
+Grouped random explicit target-to-source and target-dirty scheduling, list
+random formulas, non-number random formulas, non-default random modes, cache
+invalidation, call counts, imported/owned contexts, real random generation,
+and full dirty-list scheduler parity remain follow-up `#12` slices.
+
+Current #12 update: graph formula random group public update target-to-source
+Grouped graph-owned `DataConverterFormula` random functions now cover public
+`updateDataBinds(true)` target-to-source scheduling for a main-`ToTarget |
+TwoWay` default-context number bind. A
+`DataConverterGroup<OperationValue, Formula(random)>` bind applies the target
+mutation through C++ reverse group order, reuses the cached default-mode
+formula random value, and reapplies source-to-target in the same public update.
+The contract is
+`docs/prototypes/data-binding-graph-formula-random-group-public-update-target-to-source-runtime-contract.md`.
+Grouped random explicit target-to-source and target-dirty scheduling, list
 random formulas, non-number random formulas, non-default random modes, cache
 invalidation, call counts, imported/owned contexts, real random generation,
 and full dirty-list scheduler parity remain follow-up `#12` slices.

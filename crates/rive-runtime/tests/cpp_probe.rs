@@ -19389,39 +19389,17 @@ fn state_machine_symbol_list_index_formula_random_function_group_target_dirty_ca
             "1".to_owned(),
         ];
 
-        let cpp = read_cpp_probe_bytes_with_args(&probe, &label, &bytes, &args);
+        let seeded_random_values = [0.25_f32, 0.75, 0.5];
+        let probe_args = counted_runtime_random_probe_args(&seeded_random_values, &args);
+        let cpp = read_cpp_probe_bytes_with_args(&probe, &label, &bytes, &probe_args);
         let cpp_artboard = cpp
             .artboards
             .first()
             .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
-        let initial_random = infer_formula_random_value_from_cpp_number_binding(
-            cpp_artboard,
-            0,
-            0,
-            2.0,
-            6.0,
-            &label,
-        );
         let formula_random_values = if random_mode_value == 1 {
-            let first_reapply_random = infer_formula_random_value_from_cpp_number_binding(
-                cpp_artboard,
-                2,
-                0,
-                2.0,
-                6.0,
-                &label,
-            );
-            let second_reapply_random = infer_formula_random_value_from_cpp_number_binding(
-                cpp_artboard,
-                3,
-                0,
-                2.0,
-                6.0,
-                &label,
-            );
-            vec![initial_random, first_reapply_random, second_reapply_random]
+            seeded_random_values.to_vec()
         } else {
-            vec![initial_random]
+            vec![seeded_random_values[0]]
         };
 
         let (_, mut rust) = read_rust_instance_from_bytes(&bytes, &label);
@@ -19488,13 +19466,23 @@ fn state_machine_symbol_list_index_formula_random_function_group_target_dirty_ca
             rust_reports.len(),
             "{label} state-machine report count mismatch"
         );
-        for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        for (report_index, (cpp_state_machine, (advanced, rust_state_machine))) in cpp_artboard
             .runtime_state_machine_advances
             .iter()
             .zip(&rust_reports)
+            .enumerate()
         {
             compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, &label);
             compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, &label);
+            assert_eq!(
+                cpp_state_machine.random_total_calls, expected_counts[report_index],
+                "{label} C++ random totalCalls mismatch at report {report_index}"
+            );
+            assert_eq!(
+                cpp_state_machine.random_total_calls,
+                rust_state_machine.data_bind_formula_random_call_count(),
+                "{label} C++ and Rust random call count mismatch at report {report_index}"
+            );
         }
         compare_cpp_runtime_update(&cpp, &rust, &report, &label);
     }

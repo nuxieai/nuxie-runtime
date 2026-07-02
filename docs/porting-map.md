@@ -3996,12 +3996,14 @@ target-dirty scheduling through
 symbol-list-index sources feeding number targets. Default and source-change
 modes consume one initial draw and reuse it through target-dirty preservation
 and later normal advances; always mode consumes one initial draw, one later
-reapply draw, and no additional second-later draw. The contract is
+reapply draw, and no additional second-later draw. The C++ probe now seeds
+deterministic random values and reports per-action `randomTotalCalls`, so this
+slice compares the Rust host-stream count directly against the C++ total after
+every grouped target-dirty report. The contract is
 `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-group-target-dirty-call-count-runtime-contract.md`.
 Remaining non-list non-number paths, imported/owned contexts, real random
-generation, probe-visible C++ `RandomProvider::totalCalls`, secondary
-dependency invalidation, and full dirty-list scheduler parity remain
-follow-up `#12` slices.
+generation, secondary dependency invalidation, and full dirty-list scheduler
+parity remain follow-up `#12` slices.
 
 Current #12 update: graph formula list fallback
 Direct graph-owned `DataConverterFormula` now admits default-context list

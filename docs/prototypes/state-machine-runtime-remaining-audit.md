@@ -1024,11 +1024,22 @@ slice.
   Rust draws from the host-supplied graph formula random stream on each
   formula evaluation instead of reusing the default-mode cached random value.
   The C++ probe derives two draws from two number-binding reports and supplies
-  both values to Rust before advancing. `RandomMode::sourceChange`, broader
-  `RandomMode::always` scheduling, real Rust random generation, C++ random
-  seeding/queueing, cache invalidation, call counts, list scheduling, and
-  non-number random formulas remain outside the graph until fuller
-  random-source state contracts exist.
+  both values to Rust before advancing. Broader `RandomMode::always`
+  scheduling, real Rust random generation, C++ random seeding/queueing, cache
+  invalidation, call counts, list scheduling, and non-number random formulas
+  remain outside the graph until fuller random-source state contracts exist.
+- `DataConverterFormula` random source-change source-to-target slice:
+  default-context number sources feeding number targets now execute direct
+  `FunctionType::random` output-queue tokens when `randomModeValue == 2`.
+  Rust caches the host-supplied random value like the default mode, but clears
+  that cache when `set_default_view_model_number_source_for_data_bind` mutates
+  the bound default source. The C++ probe derives the pre-change and
+  post-change draws from number-binding reports and supplies both values to
+  Rust before advancing. Broader `RandomMode::sourceChange` scheduling,
+  secondary converter dependency invalidation, real Rust random generation,
+  C++ random seeding/queueing, call counts, list scheduling, and non-number
+  random formulas remain outside the graph until fuller random-source state
+  contracts exist.
 - `DataConverterFormula` random target-to-source slice:
   default-context number sources feeding number targets now reuse the
   host-supplied default-mode formula random cache through direct

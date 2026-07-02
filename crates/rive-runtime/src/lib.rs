@@ -9997,6 +9997,7 @@ impl RuntimeDataBindGraph {
                 source.value = RuntimeDataBindGraphValue::Number(value);
                 source.bound = true;
             }
+            source.reset_formula_random_state_for_source_change();
             changed = true;
         }
         if !changed {
@@ -13500,6 +13501,16 @@ impl RuntimeDataBindGraphSourceNode {
         self.converter_state.reset_formula_randoms();
     }
 
+    fn reset_formula_random_state_for_source_change(&mut self) {
+        if self
+            .converter
+            .as_ref()
+            .is_some_and(runtime_data_bind_graph_converter_contains_source_change_random)
+        {
+            self.reset_formula_random_state();
+        }
+    }
+
     fn advance_stateful_converter(
         &mut self,
         elapsed_seconds: f32,
@@ -13763,6 +13774,27 @@ impl RuntimeDataBindGraphConverterState {
             }
             Self::Interpolator(_) | Self::None => {}
         }
+    }
+}
+
+fn runtime_data_bind_graph_converter_contains_source_change_random(
+    converter: &RuntimeDataBindGraphConverter,
+) -> bool {
+    match converter {
+        RuntimeDataBindGraphConverter::Formula { tokens } => {
+            tokens.iter().any(|token| match token {
+                RuntimeDataBindGraphFormulaToken::Function {
+                    function_type,
+                    random_mode,
+                    ..
+                } => *function_type == 16 && *random_mode == 2,
+                _ => false,
+            })
+        }
+        RuntimeDataBindGraphConverter::Group(converters) => converters
+            .iter()
+            .any(runtime_data_bind_graph_converter_contains_source_change_random),
+        _ => false,
     }
 }
 
@@ -23674,7 +23706,7 @@ fn runtime_data_bind_graph_formula_converter(
             "FormulaTokenFunction" => {
                 let function_type = token.object.uint_property("functionType").unwrap_or(0);
                 let random_mode = converter.uint_property("randomModeValue").unwrap_or(0);
-                if function_type == 16 && random_mode > 1 {
+                if function_type == 16 && random_mode > 2 {
                     return RuntimeDataBindGraphConverter::Unsupported;
                 }
                 tokens.push(RuntimeDataBindGraphFormulaToken::Function {

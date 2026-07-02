@@ -39,10 +39,12 @@ draw to Rust before advancing.
 - Probe CLI support for seeding or queuing C++ runtime random values.
 - Direct source-to-target `RandomMode::always` scheduling is covered
   separately by
-  `data-binding-graph-formula-random-always-runtime-contract.md`;
-  `RandomMode::sourceChange`, random cache invalidation, random call-count
-  parity beyond the direct always-mode slice, and formula `addDirt`
-  random-cache behavior remain out of scope.
+  `data-binding-graph-formula-random-always-runtime-contract.md`; direct
+  source-to-target `RandomMode::sourceChange` scheduling is covered separately
+  by
+  `data-binding-graph-formula-random-source-change-runtime-contract.md`.
+  Random call-count parity beyond those direct slices and broader formula
+  `addDirt` random-cache behavior remain out of scope.
 - Direct number target-to-source/public-update scheduling is covered separately
   by
   `data-binding-graph-formula-random-target-to-source-runtime-contract.md`;

@@ -27,11 +27,14 @@ host-stream pulls needed to match C++ probe number reports.
   `set_default_view_model_number_source_for_data_bind`.
 - C++ probe comparisons for the observable binding values around those Rust
   call-count assertions.
+- C++ probe `--runtime-random-reset`, repeated `--runtime-random-value`, and
+  per-action `runtimeStateMachineAdvances[].randomTotalCalls` comparisons.
 
 ## Out Of Scope
 
-- Probe-visible C++ `RandomProvider::totalCalls()`. The current C++ probe links
-  the non-`TESTING` runtime build, where that API is not available.
+- Upstream C++ `TESTING` builds or direct use of
+  `RandomProvider::totalCalls()` outside the probe-owned counted provider
+  shim.
 - A real Rust random generator, random seeding, platform RNG behavior, or
   parity with C++ `std::rand()`.
 - Queue-content parity beyond values supplied by
@@ -58,4 +61,7 @@ host-stream pulls needed to match C++ probe number reports.
   schedules a later evaluation.
 - Source-change random mode consumes once initially, consumes again after the
   source changes, and then reuses the refreshed grouped formula cache.
+- The C++ probe's `randomTotalCalls` reports match the expected C++ grouped
+  source-to-target semantics and Rust's host-stream call count for every
+  grouped source-to-target report.
 - The same grouped fixtures continue to match C++ probe binding values.

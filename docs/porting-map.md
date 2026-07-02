@@ -3545,11 +3545,13 @@ evaluation, and source-change mode consumes once initially, consumes again
 after the bound source changes, and then reuses that refreshed cache. The
 contract is
 `docs/prototypes/data-binding-graph-formula-random-group-call-count-runtime-contract.md`.
-Probe-visible C++ `RandomProvider::totalCalls`, grouped public-update/
-target-dirty call counts, list/non-number paths, imported/owned contexts,
-secondary dependency invalidation, real RNG generation/seeding, and full
-dirty-list scheduler parity remain follow-up `#12` slices. Grouped explicit
-target-to-source call counts are covered separately below.
+The C++ probe now seeds deterministic random values and reports per-action
+`randomTotalCalls`, so this slice compares the Rust host-stream count directly
+against the C++ total after every grouped source-to-target report. Grouped
+public-update/target-dirty call counts, list/non-number paths, imported/owned
+contexts, secondary dependency invalidation, real RNG generation/seeding, and
+full dirty-list scheduler parity remain follow-up `#12` slices. Grouped
+explicit target-to-source call counts are covered separately below.
 
 Current #12 update: graph formula random group source-change mode explicit target-to-source
 Grouped graph-owned `DataConverterFormula` random functions now cover explicit

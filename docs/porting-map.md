@@ -4770,6 +4770,19 @@ mutation APIs, relative/parent/nested lookup, listener-owned data binding,
 nested artboard propagation, and full dirty-list scheduler parity remain
 follow-up `#12` slices.
 
+Current #12 update: graph formula random object fallback target-dirty
+Direct graph-owned `DataConverterFormula` object-like sources now cover main
+`ToTarget | TwoWay` target-dirty scheduling for `FunctionType::random` output
+tokens with `randomModeValue` values `0`, `1`, and `2`. Rust preserves the
+manual number-target edit through explicit data-context advancement, then
+reapplies C++'s `0.0` fallback from the unchanged object-like source on later
+normal state-machine advancement, with zero random-provider calls on both
+sides. The contract is
+`docs/prototypes/data-binding-graph-formula-random-object-fallback-main-to-target-two-way-target-dirty-runtime-contract.md`.
+Imported/owned contexts, source mutation APIs, relative/parent/nested lookup,
+listener-owned data binding, nested artboard propagation, and full dirty-list
+scheduler parity remain follow-up `#12` slices.
+
 Current #12 update: non-scripting `ScriptedDataConverter` now participates in
 the runtime data-bind graph as inherited C++ base converter pass-through. A
 main-`ToTarget | TwoWay` number bind with a direct scripted converter applies

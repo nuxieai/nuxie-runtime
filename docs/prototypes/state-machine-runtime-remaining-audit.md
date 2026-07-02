@@ -1117,6 +1117,16 @@ slice.
   grouped/list/non-number `RandomMode::sourceChange`, secondary converter
   dependency invalidation, real Rust random generation, C++ random
   seeding/queueing, and call counts remain follow-up slices.
+- `DataConverterFormula` random source-change target-dirty slice:
+  default-context number sources feeding number targets now execute
+  main-`ToTarget | TwoWay` target-dirty scheduling when `randomModeValue == 2`.
+  Rust consumes a host-supplied random value for the initial source-to-target
+  pass, preserves a manual target edit through explicit data-context
+  advancement without treating the target edit as a source change, and reuses
+  the cached value on later normal state-machine advances, matching C++.
+  Grouped/list/non-number `RandomMode::sourceChange`, secondary converter
+  dependency invalidation, real Rust random generation, C++ random
+  seeding/queueing, and call counts remain follow-up slices.
 - `DataConverterFormula` random target-to-source slice:
   default-context number sources feeding number targets now reuse the
   host-supplied default-mode formula random cache through direct

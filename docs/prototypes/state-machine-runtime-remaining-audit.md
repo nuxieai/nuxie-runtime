@@ -1532,8 +1532,8 @@ slice.
   grouped formula evaluation with the second evaluation scheduled by a
   symbol-list-index source mutation, and source-change mode consumes one
   initial draw plus one refresh after a symbol-list-index source mutation.
-  Grouped public-update and target-dirty call counts, list/non-number paths,
-  imported/owned contexts, real random generation, and probe-visible C++
+  Grouped target-dirty call counts, list/non-number paths, imported/owned
+  contexts, real random generation, and probe-visible C++
   `RandomProvider::totalCalls` behavior remain follow-up slices. The contract is
   `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-group-call-count-runtime-contract.md`.
 - `DataConverterFormula` random symbol-list-index group explicit
@@ -1559,10 +1559,10 @@ slice.
   advancement. Default and source-change modes consume one visible reapply
   draw because the symbol-list-index source is preserved rather than changed;
   always mode consumes two values during the explicit pass, including the
-  hidden grouped reverse-conversion draw. Grouped public-update and
-  target-dirty call counts, list/non-number paths, imported/owned contexts,
-  real random generation, and probe-visible C++ `RandomProvider::totalCalls`
-  behavior remain follow-up slices. The contract is
+  hidden grouped reverse-conversion draw. Grouped target-dirty call counts,
+  list/non-number paths, imported/owned contexts, real random generation, and
+  probe-visible C++ `RandomProvider::totalCalls` behavior remain follow-up
+  slices. The contract is
   `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-group-target-to-source-call-count-runtime-contract.md`.
 - `DataConverterFormula` random symbol-list-index group public-update
   target-to-source slice: default-context symbol-list-index sources feeding
@@ -1573,8 +1573,22 @@ slice.
   reports for `randomModeValue` values `0`, `1`, and `2`. Grouped target-dirty
   behavior is covered separately below. List formulas, remaining non-number
   random scheduling, imported/owned contexts, real random generation, and
-  random call-count parity remain follow-up slices. The contract is
+  grouped target-dirty call-count parity remain follow-up slices. The contract is
   `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-group-public-update-target-to-source-runtime-contract.md`.
+- `DataConverterFormula` random symbol-list-index group public-update
+  call-count slice: default-context symbol-list-index sources feeding number
+  targets through main-`ToTarget | TwoWay`
+  `DataConverterGroup<OperationValue, Formula(random)>` now expose Rust's
+  host-supplied random-stream pull count during public `updateDataBinds(true)`
+  target-to-source scheduling and later normal advancement. Default and
+  source-change modes keep the warmed source-to-target draw because the
+  symbol-list-index source is preserved rather than changed; always mode
+  consumes one initial draw plus two more values during the public update.
+  Grouped target-dirty call counts, list/non-number paths, imported/owned
+  contexts, real random generation, and probe-visible C++
+  `RandomProvider::totalCalls` behavior remain follow-up slices. The contract
+  is
+  `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-group-public-update-call-count-runtime-contract.md`.
 - `DataConverterFormula` random symbol-list-index group target-dirty slice:
   default-context symbol-list-index sources feeding number targets through
   main-`ToTarget | TwoWay`

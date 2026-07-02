@@ -1253,10 +1253,9 @@ slice.
   bindable-list targets stay at zero, and number-target explicit/public
   reverse reapplication consumes one hidden pull before matching the same C++
   probe observable fallback values for `randomModeValue` values `0`, `1`, and
-  `2`. Probe-visible C++ `RandomProvider::totalCalls`, remaining non-list
-  non-number sources, imported/owned contexts, real random generation,
-  secondary dependency invalidation, and full dirty-list scheduler parity
-  remain follow-up slices. The contract is
+  `2`. Probe-visible C++ `RandomProvider::totalCalls`, imported/owned
+  contexts, real random generation, secondary dependency invalidation, and
+  full dirty-list scheduler parity remain follow-up slices. The contract is
   `docs/prototypes/data-binding-graph-formula-random-list-fallback-call-count-runtime-contract.md`.
 - `DataConverterFormula` list fallback public-update reverse slice:
   default-context list sources feeding main-`ToTarget | TwoWay` number targets
@@ -1658,9 +1657,9 @@ slice.
   number, reapply the source in the same public update, and match C++ target
   reports for `randomModeValue` values `0`, `1`, and `2`. Grouped target-dirty
   behavior is covered separately below. List formulas, remaining non-number
-  random scheduling, imported/owned contexts, real random generation, and
-  remaining non-list non-number random call-count parity remain follow-up
-  slices. The contract is
+  random scheduling, imported/owned contexts, real random generation,
+  secondary dependency invalidation, and full dirty-list scheduler parity
+  remain follow-up slices. The contract is
   `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-group-public-update-target-to-source-runtime-contract.md`.
 - `DataConverterFormula` random symbol-list-index group public-update
   call-count slice: default-context symbol-list-index sources feeding number
@@ -1683,9 +1682,9 @@ slice.
   the unchanged symbol-list-index source through the grouped formula path on
   later normal state-machine advances for `randomModeValue` values `0`, `1`,
   and `2`, matching C++. List formulas, remaining non-number random
-  scheduling, imported/owned contexts, real random generation, and remaining
-  non-list non-number random call-count parity remain follow-up slices. The
-  contract is
+  scheduling, imported/owned contexts, real random generation, secondary
+  dependency invalidation, and full dirty-list scheduler parity remain
+  follow-up slices. The contract is
   `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-group-target-dirty-runtime-contract.md`.
 - `DataConverterFormula` random symbol-list-index group target-dirty
   call-count slice: default-context symbol-list-index sources feeding number

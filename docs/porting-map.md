@@ -6618,9 +6618,17 @@ direct converters and for
 observer updates, while the operation-viewmodel operand stays on C++'s `0.0`
 fallback. The contract is
 `docs/prototypes/data-binding-graph-operation-viewmodel-owned-color-mutation-runtime-contract.md`.
+
+Current #12 update: owned runtime enum source mutation now preserves the
+`DataConverterOperationViewModel` non-number secondary operand fallback for
+direct converters and for
+`DataConverterGroup<OperationValue, OperationViewModel>`. The same-path enum
+observer updates, while the operation-viewmodel operand stays on C++'s `0.0`
+fallback. The contract is
+`docs/prototypes/data-binding-graph-operation-viewmodel-owned-enum-mutation-runtime-contract.md`.
 Longer and exotic converter group permutations, relative/name converter paths,
 owned-context source mutation APIs beyond root number, symbol-list-index,
-boolean, string, and color OperationViewModel operands, mutation-driven
+boolean, string, color, and enum OperationViewModel operands, mutation-driven
 recompute for other converter families, broader dirty/update queues,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.

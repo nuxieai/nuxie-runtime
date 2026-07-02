@@ -3672,6 +3672,13 @@ slice.
   This uses the existing owned color mutation command rather than admitting
   non-number operation-viewmodel operands. The contract is
   `docs/prototypes/data-binding-graph-operation-viewmodel-owned-color-mutation-runtime-contract.md`.
+- Operation-view-model owned enum mutation slice:
+  mutating an already-bound owned enum source by state-machine data-bind index
+  now updates the ordinary enum bind while direct and grouped
+  `DataConverterOperationViewModel` operands keep the C++ `0.0` fallback.
+  This uses the existing owned enum mutation command rather than admitting
+  non-number operation-viewmodel operands. The contract is
+  `docs/prototypes/data-binding-graph-operation-viewmodel-owned-enum-mutation-runtime-contract.md`.
 
 ## Remaining Runtime Slices
 
@@ -3728,7 +3735,7 @@ slice.
   and grouped
   `DataConverterOperationViewModel` unsupported boundaries, owned-context
   source mutation APIs beyond root number, symbol-list-index, boolean, string,
-  and color OperationViewModel operands, relative paths, parent paths, and
+  color, and enum OperationViewModel operands, relative paths, parent paths, and
   nested source kinds beyond the default-context number, boolean, string,
   color, enum, symbol-list-index, asset, artboard, trigger, list, and
   view-model slices.

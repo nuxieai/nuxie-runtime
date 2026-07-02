@@ -36,8 +36,11 @@ evaluation instead of reusing the default-mode cached value.
 - Grouped source-to-target `RandomMode::always` scheduling is covered
   separately by
   `data-binding-graph-formula-random-group-always-runtime-contract.md`.
-- Target-to-source, public update, target-dirty, list, symbol-list-index, and
-  non-number `RandomMode::always` scheduling.
+- Symbol-list-index source-to-target `RandomMode::always` scheduling is
+  covered separately by
+  `data-binding-graph-formula-random-symbol-list-index-always-runtime-contract.md`.
+- Target-to-source, public update, target-dirty, list, and other non-number
+  `RandomMode::always` scheduling.
 - External, imported, and owned contexts for this converter/source
   combination.
 - Relative-path, parent-path, nested-path, listener-owned, and update-queue

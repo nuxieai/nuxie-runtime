@@ -3186,6 +3186,18 @@ Real Rust random generation, C++ probe random seeding/queueing,
 non-number random formulas, imported/owned contexts, and full dirty-list
 scheduler parity remain follow-up `#12` slices.
 
+Current #12 update: graph formula random symbol-list-index always mode source-to-target
+Direct graph-owned `DataConverterFormula` random functions now cover
+`RandomMode::always` for default-context symbol-list-index sources feeding
+number targets. Rust casts the symbol-list-index source to `f32` and consumes
+a fresh host-supplied random value on each source-to-target state-machine
+evaluation like C++. The contract is
+`docs/prototypes/data-binding-graph-formula-random-symbol-list-index-always-runtime-contract.md`.
+Real Rust random generation, C++ probe random seeding/queueing,
+`RandomMode::sourceChange`, list random formulas, other non-number random
+formulas, imported/owned contexts, and full dirty-list scheduler parity remain
+follow-up `#12` slices.
+
 Current #12 update: graph formula random always mode source-to-target
 Direct graph-owned `DataConverterFormula` random functions now cover the first
 `RandomMode::always` slice for default-context number sources feeding number

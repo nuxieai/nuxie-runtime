@@ -1026,6 +1026,14 @@ slice.
   reuses the cached value on later state-machine advancement like C++. List
   formulas, other non-number random formulas, non-default random modes,
   imported/owned contexts, and real random generation remain follow-up slices.
+- `DataConverterFormula` random symbol-list-index always-mode source-to-target
+  slice: default-context symbol-list-index sources feeding number targets now
+  execute direct `FunctionType::random` output-queue tokens when
+  `randomModeValue == 1`. Rust casts the symbol-list-index source to `f32`
+  before formula evaluation and consumes a fresh host-supplied random value on
+  each source-to-target state-machine advancement like C++. List formulas,
+  other non-number random formulas, `RandomMode::sourceChange`,
+  imported/owned contexts, and real random generation remain follow-up slices.
 - `DataConverterFormula` random always-mode source-to-target slice:
   default-context number sources feeding number targets now execute direct
   `FunctionType::random` output-queue tokens when `randomModeValue == 1`.

@@ -1,15 +1,14 @@
-# Data Binding Graph Formula Random SymbolListIndex Runtime Contract
+# Data Binding Graph Formula Random SymbolListIndex Always Runtime Contract
 
 ## Purpose
 
-Extend the host-supplied graph formula random slice to the first non-number
-formula input path: default-context symbol-list-index sources feeding number
-targets through a direct `DataConverterFormula` random function.
+Extend the host-supplied graph formula random slice to direct
+`RandomMode::always` behavior for default-context symbol-list-index sources
+feeding number targets.
 
-This covers the C++ behavior where `DataConverterFormula::convert` casts
-`DataValueSymbolListIndex` to `float` before formula evaluation, while the
-random function still draws and caches from the formula random state like the
-direct number-source default-mode path.
+This covers the C++ behavior where a `DataConverterFormula` random function
+with `randomModeValue == 1` consumes a fresh random value on each formula
+evaluation, after the symbol-list-index source has been cast to `float`.
 
 ## In Scope
 
@@ -19,7 +18,7 @@ direct number-source default-mode path.
   `BindablePropertyNumber.propertyValue` targets.
 - Direct `DataConverterFormula` converters resolved from `DataBind.converterId`.
 - `FormulaTokenFunction` with `functionType == FunctionType::random`.
-- Default `DataConverterFormula.randomModeValue == 0`.
+- `DataConverterFormula.randomModeValue == 1`.
 - `StateMachineInstance::set_data_bind_formula_random_values` as the
   host-supplied graph formula random stream.
 - Source-to-target state-machine advancement and C++ probe number reports.
@@ -28,9 +27,6 @@ direct number-source default-mode path.
 
 - A real Rust random generator or parity with C++ `std::rand()`.
 - Probe CLI support for seeding or queuing C++ runtime random values.
-- Direct source-to-target `RandomMode::always` scheduling is covered
-  separately by
-  `data-binding-graph-formula-random-symbol-list-index-always-runtime-contract.md`.
 - `RandomMode::sourceChange`, random cache invalidation, random call-count
   parity, and formula `addDirt` random-cache behavior for symbol-list-index
   sources.
@@ -46,6 +42,6 @@ direct number-source default-mode path.
 
 - A default symbol-list-index source is converted to `f32` before random
   formula evaluation.
-- The first source-to-target advance consumes the supplied random value.
-- A later source-to-target advance reuses the cached default-mode random value.
-- Existing deterministic symbol-list-index formula tests still pass.
+- The first source-to-target advance consumes the first supplied random value.
+- A later source-to-target advance consumes the next supplied random value.
+- Existing default-mode symbol-list-index random formula tests still pass.

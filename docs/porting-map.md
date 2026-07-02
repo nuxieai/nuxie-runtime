@@ -3265,6 +3265,15 @@ enum observer, so imported-context enum mutation now fans out to every bound
 same-path enum source node in the active graph before dirty reapplication. The
 contract is
 `docs/prototypes/data-binding-graph-formula-enum-context-runtime-contract.md`.
+
+Current #12 update: deterministic formula owned enum source mutation
+Direct graph-owned `DataConverterFormula` enum fallback now covers post-bind
+owned root enum source mutation by state-machine data-bind index. The
+same-path direct enum observer and formula fallback number target both refresh
+after `StateMachineInstance::set_owned_view_model_context_enum_source_for_data_bind`.
+The C++ probe now retains active owned enum contexts for this comparison. The
+contract is
+`docs/prototypes/data-binding-graph-formula-owned-enum-mutation-runtime-contract.md`.
 Color/string/trigger/list formula contexts, imported same-path fanout for
 non-boolean/non-enum source kinds, formula random functions, reverse
 propagation, public update, target-dirty scheduling, generated list item

@@ -1087,6 +1087,18 @@ slice.
   artboard propagation, and full dirty-list scheduler parity remain follow-up
   slices. The contract is
   `docs/prototypes/data-binding-graph-formula-enum-context-runtime-contract.md`.
+- Deterministic `DataConverterFormula` owned enum mutation slice: post-bind
+  owned root enum source mutation by state-machine data-bind index now
+  refreshes the direct formula fallback number target and a same-path direct
+  enum observer. The Rust runtime exposes
+  `set_owned_view_model_context_enum_source_for_data_bind`, and the C++ probe
+  retains active owned enum contexts plus
+  `--runtime-set-owned-view-model-source-enum` for parity comparison.
+  Color/string/trigger/list owned mutation, random formulas,
+  reverse/public-update/target-dirty scheduling, relative/parent/nested lookup,
+  listener-owned data binding, nested artboard propagation, and full
+  dirty-list scheduler parity remain follow-up slices. The contract is
+  `docs/prototypes/data-binding-graph-formula-owned-enum-mutation-runtime-contract.md`.
 - Deterministic `DataConverterFormula` imported/owned color-context slice:
   imported and owned runtime view-model color contexts now feed rebound source
   values into the direct formula fallback path before normal state-machine

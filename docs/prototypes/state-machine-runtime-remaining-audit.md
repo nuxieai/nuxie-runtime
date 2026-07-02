@@ -3693,6 +3693,13 @@ slice.
   This uses the existing owned list mutation command rather than admitting
   non-number operation-viewmodel operands. The contract is
   `docs/prototypes/data-binding-graph-operation-viewmodel-owned-list-mutation-runtime-contract.md`.
+- Operation-view-model owned asset mutation slice:
+  mutating an already-bound owned asset source by state-machine data-bind index
+  now updates the ordinary asset bind while direct and grouped
+  `DataConverterOperationViewModel` operands keep the C++ `0.0` fallback.
+  This adds the owned asset source mutation command and Rust bridge rather than
+  admitting non-number operation-viewmodel operands. The contract is
+  `docs/prototypes/data-binding-graph-operation-viewmodel-owned-asset-mutation-runtime-contract.md`.
 
 ## Remaining Runtime Slices
 
@@ -3749,10 +3756,10 @@ slice.
   and grouped
   `DataConverterOperationViewModel` unsupported boundaries, owned-context
   source mutation APIs beyond root number, symbol-list-index, boolean, string,
-  color, enum, trigger, and list OperationViewModel operands, relative paths,
-  parent paths, and nested source kinds beyond the default-context number,
-  boolean, string, color, enum, symbol-list-index, asset, artboard, trigger, list, and
-  view-model slices.
+  color, enum, trigger, list, and asset OperationViewModel operands, relative
+  paths, parent paths, and nested source kinds beyond the default-context
+  number, boolean, string, color, enum, symbol-list-index, asset, artboard,
+  trigger, list, and view-model slices.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener
   actions.

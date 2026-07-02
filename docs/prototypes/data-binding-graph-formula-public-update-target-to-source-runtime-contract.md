@@ -35,7 +35,9 @@ queue uses the already admitted `FormulaTokenInput`, `FormulaTokenValue`, and
 - Formula parent-source binding, source dependents, and general add-dirt
   behavior.
 - Formula converter groups.
-- Symbol-list-index target-to-source formula writes.
+- Symbol-list-index formula public-update reverse behavior is covered
+  separately by
+  `data-binding-graph-formula-symbol-list-index-public-update-target-to-source-runtime-contract.md`.
 - Boolean-source formula fallback public-update reverse behavior is covered
   separately by
   `data-binding-graph-formula-boolean-fallback-public-update-target-to-source-runtime-contract.md`.

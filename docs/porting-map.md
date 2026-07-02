@@ -3542,10 +3542,25 @@ unchanged imported list source when reverse formula conversion produces a
 number, then reapplies that unchanged list source through the formula fallback
 so the number target returns to C++'s `0.0` fallback. The contract is
 `docs/prototypes/data-binding-graph-formula-list-fallback-public-update-target-to-source-runtime-contract.md`.
-List targets, generated list items, symbol-list-index, imported/owned
-contexts, random formula reverse behavior, explicit main-`ToSource` fallback
-reverse behavior, secondary dependency invalidation, and full dirty-list
-scheduler parity remain follow-up `#12` slices.
+List targets, generated list items, imported/owned contexts, random formula
+reverse behavior, explicit main-`ToSource` fallback reverse behavior,
+secondary dependency invalidation, and full dirty-list scheduler parity remain
+follow-up `#12` slices. Symbol-list-index public-update reverse behavior is
+covered separately below.
+
+Current #12 update: graph formula symbol-list-index public update target-to-source
+Direct graph-owned `DataConverterFormula` now covers public
+`updateDataBinds(true)` target-to-source behavior for main-`ToTarget | TwoWay`
+default-context symbol-list-index sources feeding number targets. Rust
+preserves the unchanged symbol-list-index source when reverse formula
+conversion produces a number, then reapplies that unchanged source through the
+formula converter so the number target returns to the C++ formula value. The
+contract is
+`docs/prototypes/data-binding-graph-formula-symbol-list-index-public-update-target-to-source-runtime-contract.md`.
+Imported/owned contexts, random formula reverse behavior, explicit
+main-`ToSource` symbol-list-index reverse behavior, secondary dependency
+invalidation, and full dirty-list scheduler parity remain follow-up `#12`
+slices.
 
 Current #12 update: graph formula random group public update target-to-source
 Grouped graph-owned `DataConverterFormula` random functions now cover public

@@ -38,8 +38,10 @@ target to `0.0`.
   `data-binding-graph-formula-remaining-fallbacks-public-update-target-to-source-runtime-contract.md`.
 - List formula fallback public-update reverse behavior is covered separately by
   `data-binding-graph-formula-list-fallback-public-update-target-to-source-runtime-contract.md`.
-- Symbol-list-index, asset, artboard, and view-model pointer formula fallback
-  reverse behavior.
+- Symbol-list-index formula public-update reverse behavior is covered
+  separately by
+  `data-binding-graph-formula-symbol-list-index-public-update-target-to-source-runtime-contract.md`.
+- Asset, artboard, and view-model pointer formula fallback reverse behavior.
 - `FormulaTokenFunction`, random formula values, and `randomModeValue`.
 - Formula converter groups.
 - Formula parent-source binding, source dependents, and general add-dirt

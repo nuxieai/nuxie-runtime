@@ -39,8 +39,10 @@ fallback, restoring the number target to `0.0`.
 - List-target `BindablePropertyList` behavior, generated list item creation,
   artboard component-list instancing, map-rule selection, layout, and
   virtualization.
-- Symbol-list-index, asset, artboard, and view-model pointer formula fallback
-  reverse behavior.
+- Symbol-list-index formula public-update reverse behavior is covered
+  separately by
+  `data-binding-graph-formula-symbol-list-index-public-update-target-to-source-runtime-contract.md`.
+- Asset, artboard, and view-model pointer formula fallback reverse behavior.
 - `FormulaTokenFunction`, random formula values, and `randomModeValue`.
 - Formula converter groups.
 - Formula parent-source binding, source dependents, and general add-dirt

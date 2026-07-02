@@ -1034,10 +1034,19 @@ slice.
   now preserve the unchanged imported list source when reverse formula
   conversion produces a number, then reapply that unchanged list source through
   the formula fallback during public `updateDataBinds(true)`. List targets,
-  generated list items, symbol-list-index, imported/owned contexts, random
-  formulas, and explicit main-`ToSource` fallback reverse behavior remain
-  follow-up slices. The contract is
+  generated list items, imported/owned contexts, random formulas, and explicit
+  main-`ToSource` fallback reverse behavior remain follow-up slices;
+  symbol-list-index public-update reverse behavior is covered separately
+  below. The contract is
   `docs/prototypes/data-binding-graph-formula-list-fallback-public-update-target-to-source-runtime-contract.md`.
+- `DataConverterFormula` symbol-list-index public-update reverse slice:
+  default-context symbol-list-index sources feeding main-`ToTarget | TwoWay`
+  number targets now preserve the unchanged symbol-list-index source when
+  reverse formula conversion produces a number, then reapply that unchanged
+  source through the formula converter during public `updateDataBinds(true)`.
+  Imported/owned contexts, random formulas, and explicit main-`ToSource`
+  symbol-list-index reverse behavior remain follow-up slices. The contract is
+  `docs/prototypes/data-binding-graph-formula-symbol-list-index-public-update-target-to-source-runtime-contract.md`.
 - Deterministic `DataConverterFormula` function-token slice:
   default-context number and symbol-list-index sources feeding number targets
   now execute `FormulaTokenFunction` output-queue tokens for deterministic

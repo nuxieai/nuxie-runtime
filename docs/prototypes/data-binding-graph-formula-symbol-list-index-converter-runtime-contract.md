@@ -32,7 +32,11 @@ formula evaluator before writing number targets.
   `data-binding-graph-formula-random-symbol-list-index-runtime-contract.md`.
 - Non-number and non-symbol-list-index formula inputs.
 - Formula parent-source binding, source dependents, and add-dirt behavior.
-- Reverse conversion and target-to-source propagation.
+- Public-update target-to-source propagation for symbol-list-index formula
+  sources is covered separately by
+  `data-binding-graph-formula-symbol-list-index-public-update-target-to-source-runtime-contract.md`.
+- Explicit main-`ToSource` reverse conversion and broader target-to-source
+  propagation.
 - Formula converter groups beyond any composition already admitted by the
   generic graph group executor.
 - Number-to-list, generated-list, scripted, and live context-aware converters.

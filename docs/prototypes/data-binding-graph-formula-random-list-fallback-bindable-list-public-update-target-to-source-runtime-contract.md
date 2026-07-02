@@ -41,7 +41,7 @@ the formula fallback value for `randomModeValue` values `0`, `1`, and `2`.
   `data-binding-graph-formula-random-list-fallback-bindable-list-explicit-target-to-source-runtime-contract.md`.
 - Source-to-target random list-target fallback behavior, covered by
   `data-binding-graph-formula-random-list-fallback-bindable-list-target-runtime-contract.md`.
-- Target-dirty scheduling for formula list targets.
+- Random-function target-dirty scheduling for formula list targets.
 - `DataConverterNumberToList`, which is covered by the existing bindable-list
   and number-to-list contracts.
 - Generated list item creation, generated item identity, item-level binding,

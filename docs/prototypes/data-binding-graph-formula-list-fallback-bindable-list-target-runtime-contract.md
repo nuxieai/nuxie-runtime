@@ -39,8 +39,10 @@ value on later normal state-machine advancement.
 - Public-update target-to-source scheduling for deterministic formula list
   targets is covered separately by
   `data-binding-graph-formula-list-fallback-bindable-list-public-update-target-to-source-runtime-contract.md`.
-- Remaining target-to-source scheduling for formula list targets.
-- Target-dirty scheduling for formula list targets.
+- Main-`ToTarget | TwoWay` target-dirty scheduling for deterministic formula
+  list targets is covered separately by
+  `data-binding-graph-formula-list-fallback-bindable-list-main-to-target-two-way-target-dirty-runtime-contract.md`.
+- Remaining random target-dirty scheduling for formula list targets.
 - `DataConverterNumberToList`, which is covered by the existing bindable-list
   and number-to-list contracts.
 - Generated list item creation, generated item identity, item-level binding,

@@ -5022,10 +5022,9 @@ values while keeping object-source random fallback tokens random-inert for
 `FormulaTokenInput` and `FormulaTokenFunction(random)` modes `0`, `1`, and
 `2`. The contract is
 `docs/prototypes/data-binding-graph-formula-default-object-random-group-fallback-runtime-contract.md`.
-Target-to-source grouped object fallback behavior, longer group permutations,
-relative/parent/nested lookup, listener-owned data binding, nested artboard
-propagation, and full dirty-list scheduler parity remain follow-up `#12`
-slices.
+Longer group permutations, relative/parent/nested lookup, listener-owned data
+binding, nested artboard propagation, and full dirty-list scheduler parity
+remain follow-up `#12` slices.
 
 Current #12 update: default-context post-bind grouped object-source formula
 fallback mutation/relink now covers the
@@ -5035,10 +5034,9 @@ rows while reapplying the grouped converter to the number target, and
 `FormulaTokenFunction(random)` fallback modes `0`, `1`, and `2` remain
 random-inert with zero runtime random provider calls. The contract is
 `docs/prototypes/data-binding-graph-formula-default-object-random-group-source-change-runtime-contract.md`.
-Target-to-source grouped object fallback behavior, longer group permutations,
-relative/parent/nested lookup, listener-owned data binding, nested artboard
-propagation, and full dirty-list scheduler parity remain follow-up `#12`
-slices.
+Longer group permutations, relative/parent/nested lookup, listener-owned data
+binding, nested artboard propagation, and full dirty-list scheduler parity
+remain follow-up `#12` slices.
 
 Current #12 update: imported and owned grouped object-source formula fallback
 source-to-target behavior now covers the
@@ -5048,10 +5046,9 @@ sources while matching C++ number target values, and
 `FormulaTokenFunction(random)` fallback modes `0`, `1`, and `2` remain
 random-inert with zero runtime random provider calls. The contract is
 `docs/prototypes/data-binding-graph-formula-owned-imported-object-random-group-context-runtime-contract.md`.
-Target-to-source grouped object fallback behavior, longer group permutations,
-relative/parent/nested lookup, listener-owned data binding, nested artboard
-propagation, and full dirty-list scheduler parity remain follow-up `#12`
-slices.
+Longer group permutations, relative/parent/nested lookup, listener-owned data
+binding, nested artboard propagation, and full dirty-list scheduler parity
+remain follow-up `#12` slices.
 
 Current #12 update: imported and owned post-bind grouped object-source formula
 fallback mutation/relink now covers the
@@ -5062,10 +5059,23 @@ observer rows while reapplying the grouped converter to the number target, and
 `FormulaTokenFunction(random)` fallback modes `0`, `1`, and `2` remain
 random-inert with zero runtime random provider calls. The contract is
 `docs/prototypes/data-binding-graph-formula-owned-imported-object-random-group-source-change-runtime-contract.md`.
-Target-to-source grouped object fallback behavior, longer group permutations,
-relative/parent/nested lookup, listener-owned data binding, nested artboard
-propagation, and full dirty-list scheduler parity remain follow-up `#12`
-slices.
+Longer group permutations, relative/parent/nested lookup, listener-owned data
+binding, nested artboard propagation, and full dirty-list scheduler parity
+remain follow-up `#12` slices.
+
+Current #12 update: default-context grouped object-source formula fallback
+target-to-source behavior now covers explicit data-context advancement and
+public `updateDataBinds(true)` for the
+`DataConverterGroup<FormulaFallback, OperationValue>` shape. Formula-first
+groups now preserve object sources during number target-to-source application,
+reverse operation-value non-number intermediates to C++'s numeric default, and
+match C++ target reports and random provider call counts for
+`FormulaTokenInput` and `FormulaTokenFunction(random)` modes `0`, `1`, and
+`2`. The contract is
+`docs/prototypes/data-binding-graph-formula-default-object-random-group-target-to-source-runtime-contract.md`.
+Longer group permutations, relative/parent/nested lookup, listener-owned data
+binding, nested artboard propagation, and full dirty-list scheduler parity
+remain follow-up `#12` slices.
 
 Current #12 update: non-scripting `ScriptedDataConverter` now participates in
 the runtime data-bind graph as inherited C++ base converter pass-through. A

@@ -15034,6 +15034,7 @@ fn runtime_data_bind_graph_converter_preserves_non_trigger_non_number_source_on_
         converter,
         RuntimeDataBindGraphConverter::Group(converters)
             if runtime_data_bind_graph_group_operation_formula_accepts_non_number_source(converters)
+                || runtime_data_bind_graph_group_formula_operation_accepts_non_number_source(converters)
     )
 }
 
@@ -15045,6 +15046,7 @@ fn runtime_data_bind_graph_converter_preserves_trigger_source_on_number_target_a
             converter,
             RuntimeDataBindGraphConverter::Group(converters)
                 if runtime_data_bind_graph_group_operation_formula_accepts_non_number_source(converters)
+                    || runtime_data_bind_graph_group_formula_operation_accepts_non_number_source(converters)
         )
 }
 
@@ -16058,7 +16060,9 @@ fn runtime_data_bind_graph_reverse_convert_value(
                 *operation_type,
             ),
         )),
-        (RuntimeDataBindGraphConverter::OperationValue { .. }, _) => None,
+        (RuntimeDataBindGraphConverter::OperationValue { .. }, _) => {
+            Some(RuntimeDataBindGraphValue::Number(0.0))
+        }
         (
             RuntimeDataBindGraphConverter::OperationViewModel {
                 operation_type,
@@ -16073,7 +16077,9 @@ fn runtime_data_bind_graph_reverse_convert_value(
                 *operation_type,
             ),
         )),
-        (RuntimeDataBindGraphConverter::OperationViewModel { .. }, _) => None,
+        (RuntimeDataBindGraphConverter::OperationViewModel { .. }, _) => {
+            Some(RuntimeDataBindGraphValue::Number(0.0))
+        }
         (
             RuntimeDataBindGraphConverter::RangeMapper {
                 min_input,
@@ -16123,7 +16129,9 @@ fn runtime_data_bind_graph_reverse_convert_value(
                 *operation_type,
             )
         })),
-        (RuntimeDataBindGraphConverter::SystemOperationValue { .. }, _) => None,
+        (RuntimeDataBindGraphConverter::SystemOperationValue { .. }, _) => {
+            Some(RuntimeDataBindGraphValue::Number(0.0))
+        }
         (
             RuntimeDataBindGraphConverter::Formula { tokens },
             RuntimeDataBindGraphValue::Number(value),

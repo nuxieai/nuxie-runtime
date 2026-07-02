@@ -3482,6 +3482,12 @@ slice.
   missing, non-number, and manifest-name source paths is unchanged. The
   contract is
   `docs/prototypes/data-binding-graph-operation-viewmodel-runtime-data-context-operand-contract.md`.
+- Operation-view-model context recompute slice:
+  direct `DataConverterOperationViewModel` number operands now refresh when
+  imported or owned runtime view-model contexts are bound, while default
+  rebinding restores the stored default operand. Missing, non-number, and
+  manifest-name converter paths keep the existing fallback. The contract is
+  `docs/prototypes/data-binding-graph-operation-viewmodel-context-recompute-runtime-contract.md`.
 
 ## Remaining Runtime Slices
 

@@ -4663,6 +4663,7 @@ enum RuntimeDataBindGraphConverter {
     OperationViewModel {
         operation_type: u64,
         operation_value: f32,
+        default_operation_value: f32,
         source_path: Option<Vec<u32>>,
     },
     SystemOperationValue {
@@ -9804,6 +9805,9 @@ impl RuntimeDataBindGraph {
         for source in &mut self.sources {
             source.value = source.default_value.clone();
             source.bound = true;
+            if let Some(converter) = source.converter.as_mut() {
+                runtime_data_bind_graph_reset_operation_view_model_converter_to_default(converter);
+            }
             source.reset_converter_state();
         }
         self.context_kind = RuntimeDataBindGraphContextKind::DefaultViewModel;
@@ -9847,6 +9851,10 @@ impl RuntimeDataBindGraph {
             return false;
         };
         let Some(instance) = view_model.instances.into_iter().nth(instance_index) else {
+            return false;
+        };
+        let Some(runtime_context) = RuntimeDataContext::from_instance_object(file, instance.object)
+        else {
             return false;
         };
 
@@ -9939,6 +9947,13 @@ impl RuntimeDataBindGraph {
             } else {
                 source.bound = false;
             }
+            if let Some(converter) = source.converter.as_mut() {
+                runtime_data_bind_graph_refresh_operation_view_model_converter_for_imported_context(
+                    file,
+                    converter,
+                    &runtime_context,
+                );
+            }
             source.reset_converter_state();
         }
         self.context_kind = RuntimeDataBindGraphContextKind::ImportedViewModel;
@@ -9960,6 +9975,11 @@ impl RuntimeDataBindGraph {
                 source.bound = true;
             } else {
                 source.bound = false;
+            }
+            if let Some(converter) = source.converter.as_mut() {
+                runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_context(
+                    converter, context,
+                );
             }
             source.reset_converter_state();
         }
@@ -14481,10 +14501,14 @@ fn runtime_data_bind_graph_refresh_operation_view_model_number_converter_for_pat
     match converter {
         RuntimeDataBindGraphConverter::OperationViewModel {
             operation_value,
+            default_operation_value,
             source_path: Some(source_path),
             ..
-        } if source_path.as_slice() == path && *operation_value != value => {
+        } if source_path.as_slice() == path
+            && (*operation_value != value || *default_operation_value != value) =>
+        {
             *operation_value = value;
+            *default_operation_value = value;
             true
         }
         RuntimeDataBindGraphConverter::Group(converters) => {
@@ -14499,6 +14523,112 @@ fn runtime_data_bind_graph_refresh_operation_view_model_number_converter_for_pat
         }
         _ => false,
     }
+}
+
+fn runtime_data_bind_graph_reset_operation_view_model_converter_to_default(
+    converter: &mut RuntimeDataBindGraphConverter,
+) -> bool {
+    match converter {
+        RuntimeDataBindGraphConverter::OperationViewModel {
+            operation_value,
+            default_operation_value,
+            ..
+        } if *operation_value != *default_operation_value => {
+            *operation_value = *default_operation_value;
+            true
+        }
+        RuntimeDataBindGraphConverter::Group(converters) => {
+            let mut changed = false;
+            for converter in converters {
+                changed |= runtime_data_bind_graph_reset_operation_view_model_converter_to_default(
+                    converter,
+                );
+            }
+            changed
+        }
+        _ => false,
+    }
+}
+
+fn runtime_data_bind_graph_refresh_operation_view_model_converter_for_imported_context(
+    file: &RuntimeFile,
+    converter: &mut RuntimeDataBindGraphConverter,
+    context: &RuntimeDataContext<'_>,
+) -> bool {
+    match converter {
+        RuntimeDataBindGraphConverter::OperationViewModel {
+            operation_value,
+            source_path: Some(source_path),
+            ..
+        } => {
+            let value = context
+                .absolute_property(source_path)
+                .and_then(|source| file.view_model_instance_number_value_for_object(source))
+                .unwrap_or(0.0);
+            if *operation_value == value {
+                return false;
+            }
+            *operation_value = value;
+            true
+        }
+        RuntimeDataBindGraphConverter::Group(converters) => {
+            let mut changed = false;
+            for converter in converters {
+                changed |=
+                    runtime_data_bind_graph_refresh_operation_view_model_converter_for_imported_context(
+                        file, converter, context,
+                    );
+            }
+            changed
+        }
+        _ => false,
+    }
+}
+
+fn runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_context(
+    converter: &mut RuntimeDataBindGraphConverter,
+    context: &RuntimeOwnedViewModelInstance,
+) -> bool {
+    match converter {
+        RuntimeDataBindGraphConverter::OperationViewModel {
+            operation_value,
+            source_path: Some(source_path),
+            ..
+        } => {
+            let value = runtime_owned_view_model_number_value_for_source_path(context, source_path)
+                .unwrap_or(0.0);
+            if *operation_value == value {
+                return false;
+            }
+            *operation_value = value;
+            true
+        }
+        RuntimeDataBindGraphConverter::Group(converters) => {
+            let mut changed = false;
+            for converter in converters {
+                changed |=
+                    runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_context(
+                        converter, context,
+                    );
+            }
+            changed
+        }
+        _ => false,
+    }
+}
+
+fn runtime_owned_view_model_number_value_for_source_path(
+    context: &RuntimeOwnedViewModelInstance,
+    source_path: &[u32],
+) -> Option<f32> {
+    if source_path.len() < 2 || usize::try_from(source_path[0]).ok()? != context.view_model_index {
+        return None;
+    }
+    let property_path = source_path[1..]
+        .iter()
+        .map(|property_index| usize::try_from(*property_index).ok())
+        .collect::<Option<Vec<_>>>()?;
+    context.number_value_by_property_path(&property_path)
 }
 
 fn runtime_data_bind_graph_convert_value(
@@ -24062,6 +24192,10 @@ fn runtime_data_bind_graph_converter_for_object(
             RuntimeDataBindGraphConverter::OperationViewModel {
                 operation_type: converter.uint_property("operationType").unwrap_or(0),
                 operation_value: operand.as_ref().map(|operand| operand.value).unwrap_or(0.0),
+                default_operation_value: operand
+                    .as_ref()
+                    .map(|operand| operand.value)
+                    .unwrap_or(0.0),
                 source_path: operand.map(|operand| operand.path),
             }
         }

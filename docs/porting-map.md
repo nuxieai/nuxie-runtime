@@ -6372,6 +6372,18 @@ Imported/owned context recomputation for operation-view-model operands, live
 relative/name converter paths, broader dirty/update queues, listener-owned
 data binding, and nested artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: direct `DataConverterOperationViewModel` operands now
+recompute for imported and owned runtime view-model contexts. Imported context
+binding resolves the secondary number operand through the bound
+`RuntimeDataContext`; owned context binding resolves it from owned runtime
+view-model storage; default-context rebinding restores the stored default
+operand. Missing, non-number, and manifest-name converter paths keep the
+existing C++ `0.0` fallback. The contract is
+`docs/prototypes/data-binding-graph-operation-viewmodel-context-recompute-runtime-contract.md`.
+Relative/name converter paths, imported/owned recomputation for other
+converter families, broader dirty/update queues, listener-owned data binding,
+and nested artboard propagation remain follow-up `#12` slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

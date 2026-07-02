@@ -4723,6 +4723,20 @@ fn synthetic_state_machine_default_viewmodel_number_operation_viewmodel_name_pat
         false,
         &[77],
         true,
+        None,
+    )
+}
+
+fn synthetic_state_machine_imported_viewmodel_number_operation_viewmodel_blend_state(
+    file_id: u64,
+) -> Vec<u8> {
+    synthetic_state_machine_default_viewmodel_number_operation_viewmodel_blend_state_with_flags_factor_bind_and_converter_path(
+        file_id,
+        0,
+        false,
+        &[0, 1],
+        false,
+        Some(3.0),
     )
 }
 
@@ -4737,6 +4751,7 @@ fn synthetic_state_machine_default_viewmodel_number_operation_viewmodel_blend_st
         include_factor_bind,
         &[0, 1],
         false,
+        None,
     )
 }
 
@@ -4746,6 +4761,7 @@ fn synthetic_state_machine_default_viewmodel_number_operation_viewmodel_blend_st
     include_factor_bind: bool,
     converter_source_path: &[u32],
     include_manifest_path: bool,
+    alternate_instance_factor: Option<f32>,
 ) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "ViewModel", |bytes| {
@@ -4773,6 +4789,25 @@ fn synthetic_state_machine_default_viewmodel_number_operation_viewmodel_blend_st
             push_uint_property(bytes, "ViewModelInstanceNumber", "viewModelPropertyId", 1);
             push_f32_property(bytes, "ViewModelInstanceNumber", "propertyValue", 2.0);
         });
+        if let Some(alternate_factor) = alternate_instance_factor {
+            push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+                push_string_property(bytes, "ViewModelInstance", "name", "alternate");
+                push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+            });
+            push_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+                push_uint_property(bytes, "ViewModelInstanceNumber", "viewModelPropertyId", 0);
+                push_f32_property(bytes, "ViewModelInstanceNumber", "propertyValue", 0.4);
+            });
+            push_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+                push_uint_property(bytes, "ViewModelInstanceNumber", "viewModelPropertyId", 1);
+                push_f32_property(
+                    bytes,
+                    "ViewModelInstanceNumber",
+                    "propertyValue",
+                    alternate_factor,
+                );
+            });
+        }
         push_object_with_properties(bytes, "DataConverterOperationViewModel", |bytes| {
             let mut source_path_ids = Vec::new();
             for path_id in converter_source_path {
@@ -29468,6 +29503,165 @@ fn state_machine_default_viewmodel_number_operation_viewmodel_converter_matches_
         .zip(&rust_reports)
     {
         compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn state_machine_imported_viewmodel_number_operation_viewmodel_converter_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_imported_viewmodel_number_operation_viewmodel_converter_cpp.riv";
+    let bytes =
+        synthetic_state_machine_imported_viewmodel_number_operation_viewmodel_blend_state(8712);
+    let args = [
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    let imported_context = RuntimeImportedViewModelInstanceContext::new(&runtime, 0, 1)
+        .unwrap_or_else(|| panic!("missing imported view-model context for {label}"));
+
+    assert!(
+        state_machine.bind_imported_view_model_context(&runtime, &imported_context),
+        "{label} failed to bind imported view-model context"
+    );
+    let rust_reports = [
+        (
+            rust.advance_state_machine_instance(&mut state_machine, 0.0),
+            state_machine.clone(),
+        ),
+        (
+            rust.advance_state_machine_instance(&mut state_machine, 1.0),
+            state_machine.clone(),
+        ),
+    ];
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+    {
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+        compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, label);
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn state_machine_owned_viewmodel_number_operation_viewmodel_converter_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_owned_viewmodel_number_operation_viewmodel_converter_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_number_operation_viewmodel_blend_state(8713);
+    let value = 0.4_f32;
+    let args = [
+        "--runtime-bind-owned-view-model-number-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        value.to_string(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+        "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    let mut context = RuntimeOwnedViewModelInstance::new(&runtime, 0)
+        .unwrap_or_else(|| panic!("missing owned view-model context for {label}"));
+
+    assert!(
+        context.set_number_by_property_index(0, value),
+        "{label} failed to set owned primary number"
+    );
+    assert!(
+        state_machine.bind_owned_view_model_context(&context),
+        "{label} failed to bind owned view-model context"
+    );
+    let mut rust_reports = Vec::new();
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 1.0),
+        state_machine.clone(),
+    ));
+    assert!(
+        state_machine.bind_default_view_model_context(),
+        "{label} failed to rebind default view-model context"
+    );
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 1.0),
+        state_machine.clone(),
+    ));
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+    {
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+        compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, label);
     }
     compare_cpp_runtime_update(&cpp, &rust, &report, label);
 }

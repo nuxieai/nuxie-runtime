@@ -28115,6 +28115,141 @@ fn state_machine_default_viewmodel_asset_formula_source_mutation_matches_cpp_pro
 }
 
 #[test]
+fn state_machine_default_viewmodel_asset_formula_random_source_change_mutation_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_asset_formula_random_source_change_mutation_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_asset_formula_context_blend_state_with_token(
+            9500,
+            FormulaFallbackTokenKind::RandomFunction {
+                random_mode_value: 2,
+            },
+        );
+    let initial_value = 4_u64;
+    let mutated_value = 13_u64;
+    let args = [
+        "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-default-view-model-source-asset".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        mutated_value.to_string(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+    ];
+
+    let seeded_random_values = [0.25_f32, 0.75];
+    let expected_counts = [0_usize, 0, 0];
+    let probe_args = counted_runtime_random_probe_args(&seeded_random_values, &args);
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &probe_args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    assert!(
+        state_machine.bind_default_view_model_context(),
+        "{label} failed to bind default view-model context"
+    );
+    state_machine.set_data_bind_formula_random_values(&seeded_random_values);
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        0,
+        "{label} random call count should reset with supplied values"
+    );
+    let mut rust_reports = Vec::new();
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        0,
+        "{label} object fallback random should stay inert on initial advance"
+    );
+    assert!(
+        state_machine.set_default_view_model_asset_source_for_data_bind(0, mutated_value),
+        "{label} failed to mutate default asset source"
+    );
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        0,
+        "{label} object fallback random should stay inert after source mutation"
+    );
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 1.0),
+        state_machine.clone(),
+    ));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        0,
+        "{label} object fallback random should stay inert on later advance"
+    );
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (step, (cpp_state_machine, (advanced, rust_state_machine))) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+        .enumerate()
+    {
+        let step_label = format!("{label} action {step}");
+        let expected_source = if step == 0 {
+            initial_value
+        } else {
+            mutated_value
+        };
+        compare_state_machine_advance(
+            cpp_state_machine,
+            rust_state_machine,
+            *advanced,
+            &step_label,
+        );
+        compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, &step_label);
+        compare_state_machine_asset_binding(cpp_state_machine, rust_state_machine, 1, &step_label);
+        assert_eq!(
+            cpp_state_machine.random_total_calls, expected_counts[step],
+            "{step_label} C++ random totalCalls mismatch"
+        );
+        assert_eq!(
+            cpp_state_machine.random_total_calls,
+            rust_state_machine.data_bind_formula_random_call_count(),
+            "{step_label} C++ and Rust random call count mismatch"
+        );
+        assert_eq!(
+            rust_state_machine.default_view_model_asset_source_value_for_data_bind(1),
+            Some(expected_source),
+            "{step_label} Rust default asset source mismatch"
+        );
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
 fn state_machine_owned_viewmodel_asset_formula_context_matches_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
@@ -28817,6 +28952,147 @@ fn state_machine_default_viewmodel_artboard_formula_source_mutation_matches_cpp_
             rust_state_machine,
             1,
             &step_label,
+        );
+        assert_eq!(
+            rust_state_machine.default_view_model_artboard_source_value_for_data_bind(1),
+            Some(expected_source),
+            "{step_label} Rust default artboard source mismatch"
+        );
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn state_machine_default_viewmodel_artboard_formula_random_source_change_mutation_matches_cpp_probe()
+ {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_artboard_formula_random_source_change_mutation_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_artboard_formula_context_blend_state_with_token(
+            9501,
+            FormulaFallbackTokenKind::RandomFunction {
+                random_mode_value: 2,
+            },
+        );
+    let initial_value = 1_u64;
+    let mutated_value = 13_u64;
+    let args = [
+        "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-default-view-model-source-artboard".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        mutated_value.to_string(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+    ];
+
+    let seeded_random_values = [0.25_f32, 0.75];
+    let expected_counts = [0_usize, 0, 0];
+    let probe_args = counted_runtime_random_probe_args(&seeded_random_values, &args);
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &probe_args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    assert!(
+        state_machine.bind_default_view_model_context(),
+        "{label} failed to bind default view-model context"
+    );
+    state_machine.set_data_bind_formula_random_values(&seeded_random_values);
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        0,
+        "{label} random call count should reset with supplied values"
+    );
+    let mut rust_reports = Vec::new();
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        0,
+        "{label} object fallback random should stay inert on initial advance"
+    );
+    assert!(
+        state_machine.set_default_view_model_artboard_source_for_data_bind(0, mutated_value),
+        "{label} failed to mutate default artboard source"
+    );
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        0,
+        "{label} object fallback random should stay inert after source mutation"
+    );
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 1.0),
+        state_machine.clone(),
+    ));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        0,
+        "{label} object fallback random should stay inert on later advance"
+    );
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (step, (cpp_state_machine, (advanced, rust_state_machine))) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+        .enumerate()
+    {
+        let step_label = format!("{label} action {step}");
+        let expected_source = if step == 0 {
+            initial_value
+        } else {
+            mutated_value
+        };
+        compare_state_machine_advance(
+            cpp_state_machine,
+            rust_state_machine,
+            *advanced,
+            &step_label,
+        );
+        compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, &step_label);
+        compare_state_machine_artboard_binding(
+            cpp_state_machine,
+            rust_state_machine,
+            1,
+            &step_label,
+        );
+        assert_eq!(
+            cpp_state_machine.random_total_calls, expected_counts[step],
+            "{step_label} C++ random totalCalls mismatch"
+        );
+        assert_eq!(
+            cpp_state_machine.random_total_calls,
+            rust_state_machine.data_bind_formula_random_call_count(),
+            "{step_label} C++ and Rust random call count mismatch"
         );
         assert_eq!(
             rust_state_machine.default_view_model_artboard_source_value_for_data_bind(1),
@@ -29557,6 +29833,160 @@ fn state_machine_default_viewmodel_viewmodel_formula_source_relink_matches_cpp_p
             rust_state_machine,
             1,
             &step_label,
+        );
+        assert_eq!(
+            rust_state_machine.default_view_model_view_model_source_instance_index_for_data_bind(1),
+            Some(expected_source),
+            "{step_label} Rust default view-model pointer source mismatch"
+        );
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn state_machine_default_viewmodel_viewmodel_formula_random_source_change_relink_matches_cpp_probe()
+{
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_viewmodel_formula_random_source_change_relink_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_viewmodel_formula_context_blend_state_with_token(
+            9502,
+            FormulaFallbackTokenKind::RandomFunction {
+                random_mode_value: 2,
+            },
+        );
+    let initial_instance = 0_usize;
+    let relinked_instance = 1_usize;
+    let args = [
+        "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-relink-default-view-model-source-viewmodel".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        relinked_instance.to_string(),
+        "--runtime-advance-state-machine-data-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+    ];
+
+    let seeded_random_values = [0.25_f32, 0.75];
+    let expected_counts = [0_usize, 0, 0, 0];
+    let probe_args = counted_runtime_random_probe_args(&seeded_random_values, &args);
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &probe_args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    assert!(
+        state_machine.bind_default_view_model_context(),
+        "{label} failed to bind default view-model context"
+    );
+    state_machine.set_data_bind_formula_random_values(&seeded_random_values);
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        0,
+        "{label} random call count should reset with supplied values"
+    );
+    let mut rust_reports = Vec::new();
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        0,
+        "{label} object fallback random should stay inert on initial advance"
+    );
+    assert!(
+        state_machine
+            .relink_default_view_model_view_model_source_for_data_bind(0, relinked_instance),
+        "{label} failed to relink default view-model pointer source"
+    );
+    assert!(
+        state_machine.advance_data_context(),
+        "{label} failed to advance default view-model pointer context"
+    );
+    rust_reports.push((false, state_machine.clone()));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        0,
+        "{label} object fallback random should stay inert on data-context advance"
+    );
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        0,
+        "{label} object fallback random should stay inert on first later advance"
+    );
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 1.0),
+        state_machine.clone(),
+    ));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        0,
+        "{label} object fallback random should stay inert on second later advance"
+    );
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (step, (cpp_state_machine, (advanced, rust_state_machine))) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+        .enumerate()
+    {
+        let step_label = format!("{label} action {step}");
+        let expected_source = if step == 0 {
+            initial_instance
+        } else {
+            relinked_instance
+        };
+        compare_state_machine_advance(
+            cpp_state_machine,
+            rust_state_machine,
+            *advanced,
+            &step_label,
+        );
+        compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, &step_label);
+        compare_state_machine_view_model_binding(
+            cpp_state_machine,
+            rust_state_machine,
+            1,
+            &step_label,
+        );
+        assert_eq!(
+            cpp_state_machine.random_total_calls, expected_counts[step],
+            "{step_label} C++ random totalCalls mismatch"
+        );
+        assert_eq!(
+            cpp_state_machine.random_total_calls,
+            rust_state_machine.data_bind_formula_random_call_count(),
+            "{step_label} C++ and Rust random call count mismatch"
         );
         assert_eq!(
             rust_state_machine.default_view_model_view_model_source_instance_index_for_data_bind(1),

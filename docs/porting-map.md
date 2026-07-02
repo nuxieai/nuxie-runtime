@@ -3383,8 +3383,10 @@ source-change mode consumes once initially, preserves the cache because the
 target edit does not change the source, and reuses that cached value on later
 normal advances. The contract is
 `docs/prototypes/data-binding-graph-formula-random-target-dirty-call-count-runtime-contract.md`.
-Probe-visible C++ `RandomProvider::totalCalls`, grouped/list/non-number paths,
-imported/owned contexts, secondary dependency invalidation, real RNG
+The C++ probe now seeds deterministic random values and reports per-action
+`randomTotalCalls`, so this slice compares the Rust host-stream count directly
+against the C++ total after every target-dirty report. Grouped/list/non-number
+paths, imported/owned contexts, secondary dependency invalidation, real RNG
 generation/seeding, and full dirty-list scheduler parity remain follow-up
 `#12` slices.
 

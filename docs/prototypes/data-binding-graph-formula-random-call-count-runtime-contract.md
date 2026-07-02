@@ -36,10 +36,12 @@ every pull from `StateMachineInstance::set_data_bind_formula_random_values`.
   parity with C++ `std::rand()`.
 - Queue-content parity beyond values supplied by
   `set_data_bind_formula_random_values`.
-- Grouped converters, target-to-source scheduling, public update scheduling,
-  target-dirty scheduling, imported contexts, owned contexts, and secondary
-  converter dependency invalidation. Those behaviors are covered or tracked by
-  narrower scheduling contracts.
+- Direct explicit target-to-source call counts are covered separately by
+  `data-binding-graph-formula-random-target-to-source-call-count-runtime-contract.md`.
+- Grouped converters, public update scheduling, target-dirty scheduling,
+  imported contexts, owned contexts, and secondary converter dependency
+  invalidation. Those behaviors are covered or tracked by narrower scheduling
+  contracts.
 - Full dirty-list scheduler parity.
 
 ## Completion Checks

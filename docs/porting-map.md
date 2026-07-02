@@ -3293,10 +3293,10 @@ sources do not consume random values because C++ returns the numeric fallback
 before evaluating formula tokens. The contract is
 `docs/prototypes/data-binding-graph-formula-random-call-count-runtime-contract.md`.
 Probe-visible C++ `RandomProvider::totalCalls`, real RNG generation/seeding,
-grouped converters, target-to-source scheduling, public update scheduling,
-target-dirty scheduling, imported/owned contexts, secondary dependency
-invalidation, and full dirty-list scheduler parity remain follow-up `#12`
-slices.
+grouped converters, public update scheduling, target-dirty scheduling,
+imported/owned contexts, secondary dependency invalidation, and full
+dirty-list scheduler parity remain follow-up `#12` slices. Direct explicit
+target-to-source call-count coverage is tracked separately below.
 
 Current #12 update: graph formula random source-change mode explicit target-to-source
 Direct graph-owned `DataConverterFormula` random functions now cover explicit
@@ -3309,8 +3309,25 @@ C++. The contract is
 `docs/prototypes/data-binding-graph-formula-random-source-change-target-to-source-runtime-contract.md`.
 Public update, target-dirty, grouped/list/non-number
 `RandomMode::sourceChange` scheduling, secondary converter dependency
-invalidation, random call counts, imported/owned contexts, and full dirty-list
-scheduler parity remain follow-up `#12` slices.
+invalidation, broader random call-count coverage, imported/owned contexts, and
+full dirty-list scheduler parity remain follow-up `#12` slices.
+
+Current #12 update: graph formula random explicit target-to-source call counts
+Direct graph-owned `DataConverterFormula` random functions now pin Rust's
+host-supplied random-stream call counts for explicit `advance_data_context`
+target-to-source scheduling on default-context number binds. Default random
+mode consumes once and reuses the cached value across same-pass reapplication
+and later advances; always mode consumes two values during the explicit
+target-to-source pass and does not pull again on later normal advances;
+source-change mode consumes for the source write, clears the cache for the
+changed source, consumes again for same-pass reapplication, and likewise does
+not pull again on later normal advances without another scheduled formula
+evaluation. The contract is
+`docs/prototypes/data-binding-graph-formula-random-target-to-source-call-count-runtime-contract.md`.
+Probe-visible C++ `RandomProvider::totalCalls`, public-update call counts,
+target-dirty call counts, grouped/list/non-number paths, imported/owned
+contexts, secondary dependency invalidation, real RNG generation/seeding, and
+full dirty-list scheduler parity remain follow-up `#12` slices.
 
 Current #12 update: graph formula random source-change mode public update target-to-source
 Direct graph-owned `DataConverterFormula` random functions now cover public

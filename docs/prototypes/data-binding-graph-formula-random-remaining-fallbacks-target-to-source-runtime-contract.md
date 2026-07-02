@@ -51,8 +51,10 @@ for `randomModeValue` values `0`, `1`, and `2`.
 - Formula parent-source binding, source dependents, and general add-dirt
   behavior beyond the same-pass reapplication listed above.
 - Full C++ dirty-list scheduling for neighboring ordinary `ToTarget` binds.
-- A real Rust random generator, C++ random seeding/queueing, or random
-  call-count parity.
+- A real Rust random generator or C++ random seeding/queueing.
+- Enum, color, string, and trigger target-to-source random call counts are
+  covered by
+  `data-binding-graph-formula-random-remaining-fallbacks-target-to-source-call-count-runtime-contract.md`.
 - Imported and owned view-model contexts.
 - Relative-path, parent-path, nested-path, listener-owned data binding, nested
   artboards, and render/layout behavior.

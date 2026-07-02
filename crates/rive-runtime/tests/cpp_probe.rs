@@ -26216,9 +26216,16 @@ fn state_machine_default_viewmodel_remaining_random_formula_fallbacks_explicit_t
                 "{label} failed to bind default view-model context"
             );
             state_machine.set_data_bind_formula_random_values(&[0.875, 0.625, 0.25, 0.125]);
+            assert_formula_random_call_count(&state_machine, 0, &label, "after random reset");
             assert!(
                 state_machine.advance_data_context(),
                 "{label} failed to advance initial data context"
+            );
+            assert_formula_random_call_count(
+                &state_machine,
+                0,
+                &label,
+                "after initial data-context advance",
             );
             rust_reports.push((false, state_machine.clone()));
             assert!(
@@ -26229,15 +26236,23 @@ fn state_machine_default_viewmodel_remaining_random_formula_fallbacks_explicit_t
                 state_machine.advance_data_context(),
                 "{label} failed to advance mutated data context"
             );
+            assert_formula_random_call_count(
+                &state_machine,
+                1,
+                &label,
+                "after mutated data-context advance",
+            );
             rust_reports.push((false, state_machine.clone()));
             rust_reports.push((
                 rust.advance_state_machine_instance(&mut state_machine, 0.0),
                 state_machine.clone(),
             ));
+            assert_formula_random_call_count(&state_machine, 1, &label, "after first reapply");
             rust_reports.push((
                 rust.advance_state_machine_instance(&mut state_machine, 1.0),
                 state_machine.clone(),
             ));
+            assert_formula_random_call_count(&state_machine, 1, &label, "after second reapply");
             let report = rust.update_components();
 
             let cpp_artboard = cpp
@@ -26335,10 +26350,12 @@ fn state_machine_default_viewmodel_remaining_random_formula_fallbacks_public_upd
                 "{label} failed to bind default view-model context"
             );
             state_machine.set_data_bind_formula_random_values(&[0.875, 0.625, 0.25, 0.125]);
+            assert_formula_random_call_count(&state_machine, 0, &label, "after random reset");
             rust_reports.push((
                 rust.advance_state_machine_instance(&mut state_machine, 0.0),
                 state_machine.clone(),
             ));
+            assert_formula_random_call_count(&state_machine, 0, &label, "after initial advance");
             assert!(
                 state_machine.set_bindable_number_for_data_bind(0, 0.4),
                 "{label} failed to mutate bindable number"
@@ -26347,15 +26364,18 @@ fn state_machine_default_viewmodel_remaining_random_formula_fallbacks_public_upd
                 state_machine.update_data_binds_apply_target_to_source(),
                 "{label} failed to apply public target-to-source update"
             );
+            assert_formula_random_call_count(&state_machine, 1, &label, "after public update");
             rust_reports.push((false, state_machine.clone()));
             rust_reports.push((
                 rust.advance_state_machine_instance(&mut state_machine, 0.0),
                 state_machine.clone(),
             ));
+            assert_formula_random_call_count(&state_machine, 1, &label, "after first reapply");
             rust_reports.push((
                 rust.advance_state_machine_instance(&mut state_machine, 1.0),
                 state_machine.clone(),
             ));
+            assert_formula_random_call_count(&state_machine, 1, &label, "after second reapply");
             let report = rust.update_components();
 
             let cpp_artboard = cpp

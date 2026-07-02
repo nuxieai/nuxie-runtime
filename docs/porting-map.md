@@ -3314,6 +3314,16 @@ string observer, so imported-context string mutation now fans out to every
 bound same-path string source node in the active graph before dirty
 reapplication. The contract is
 `docs/prototypes/data-binding-graph-formula-string-context-runtime-contract.md`.
+
+Current #12 update: deterministic formula owned string source mutation
+Direct graph-owned `DataConverterFormula` string fallback now covers post-bind
+owned root string source mutation by state-machine data-bind index. The
+same-path direct string observer and formula fallback number target both
+refresh after
+`StateMachineInstance::set_owned_view_model_context_string_source_for_data_bind`.
+The C++ probe now retains active owned string contexts for this comparison. The
+contract is
+`docs/prototypes/data-binding-graph-formula-owned-string-mutation-runtime-contract.md`.
 Trigger/list formula contexts, imported same-path fanout for
 non-boolean/non-enum/non-color/non-string source kinds, formula random
 functions, reverse propagation, public update, target-dirty scheduling,

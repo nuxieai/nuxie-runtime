@@ -1215,11 +1215,25 @@ slice.
   number-producing operation-value child, and evaluate the nested default-mode
   random formula with the host-supplied random stream. Rust matches C++ by
   caching that random value across subsequent source-to-target state-machine
-  advancement. Grouped non-default, grouped target-to-source/public-update/
-  target-dirty, list formulas, remaining non-number random scheduling,
-  imported/owned contexts, real random generation, and random call-count parity
-  remain follow-up slices. The contract is
+  advancement. Grouped non-default source-to-target behavior is covered
+  separately below. Grouped target-to-source/public-update/target-dirty, list
+  formulas, remaining non-number random scheduling, imported/owned contexts,
+  real random generation, and random call-count parity remain follow-up slices.
+  The contract is
   `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-group-runtime-contract.md`.
+- `DataConverterFormula` random symbol-list-index group non-default
+  source-to-target slice: default-context symbol-list-index sources feeding
+  number targets through `DataConverterGroup<OperationValue, Formula(random)>`
+  now cover `RandomMode::always` and `RandomMode::sourceChange`. Rust consumes
+  fresh host-supplied random values on each always-mode source-to-target
+  advancement, and clears the nested formula cache when
+  `set_default_view_model_symbol_list_index_source_for_data_bind` mutates the
+  bound source before the next source-change advance. Grouped
+  target-to-source/public-update/target-dirty, list formulas, remaining
+  non-number random scheduling, imported/owned contexts, real random
+  generation, and random call-count parity remain follow-up slices. The
+  contract is
+  `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-group-non-default-runtime-contract.md`.
 - `DataConverterFormula` random always-mode source-to-target slice:
   default-context number sources feeding number targets now execute direct
   `FunctionType::random` output-queue tokens when `randomModeValue == 1`.

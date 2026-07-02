@@ -41,8 +41,11 @@ fresh random value on the next formula evaluation.
 - Grouped symbol-list-index default-mode source-to-target scheduling is
   covered separately by
   `data-binding-graph-formula-random-symbol-list-index-group-runtime-contract.md`.
-- Grouped `RandomMode::sourceChange`, list, and non-symbol non-number random
-  formula scheduling.
+- Grouped symbol-list-index `RandomMode::sourceChange` source-to-target
+  scheduling is covered separately by
+  `data-binding-graph-formula-random-symbol-list-index-group-non-default-runtime-contract.md`.
+- Grouped target-to-source, grouped target-dirty, list, and non-symbol
+  non-number random formula scheduling.
 - Converter dependency invalidation for secondary source paths.
 - Formula parent-source binding, source dependents, and add-dirt behavior.
 - External, imported, and owned contexts for this converter/source

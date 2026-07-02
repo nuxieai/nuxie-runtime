@@ -3575,11 +3575,26 @@ through the first group child, and evaluates the nested default-mode random
 formula with the same host-supplied random stream and cache behavior as direct
 formula binds. The contract is
 `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-group-runtime-contract.md`.
-Grouped non-default, grouped target-to-source/public-update/target-dirty,
-list formulas, remaining non-number random scheduling, imported/owned
-contexts, real random generation, random call counts, secondary dependency
-invalidation, and full dirty-list scheduler parity remain follow-up `#12`
-slices.
+Grouped non-default source-to-target behavior is covered separately below.
+Grouped target-to-source/public-update/target-dirty, list formulas, remaining
+non-number random scheduling, imported/owned contexts, real random generation,
+random call counts, secondary dependency invalidation, and full dirty-list
+scheduler parity remain follow-up `#12` slices.
+
+Current #12 update: graph formula random symbol-list-index group non-default source-to-target
+Grouped graph-owned `DataConverterFormula` random functions now cover
+`RandomMode::always` and `RandomMode::sourceChange` source-to-target behavior
+for `DataConverterGroup<OperationValue, Formula(random)>` over
+default-context symbol-list-index sources feeding number targets. Rust
+consumes fresh host-supplied random values for always-mode grouped formula
+advancement, and clears the nested formula cache when
+`set_default_view_model_symbol_list_index_source_for_data_bind` mutates the
+bound default source for source-change mode. The contract is
+`docs/prototypes/data-binding-graph-formula-random-symbol-list-index-group-non-default-runtime-contract.md`.
+Grouped target-to-source/public-update/target-dirty, list formulas, remaining
+non-number random scheduling, imported/owned contexts, real random generation,
+random call counts, secondary dependency invalidation, and full dirty-list
+scheduler parity remain follow-up `#12` slices.
 
 Current #12 update: graph formula list fallback
 Direct graph-owned `DataConverterFormula` now admits default-context list

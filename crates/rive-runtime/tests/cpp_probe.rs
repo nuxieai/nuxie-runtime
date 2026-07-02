@@ -29138,6 +29138,126 @@ fn state_machine_imported_viewmodel_viewmodel_formula_context_matches_cpp_probe(
 }
 
 #[test]
+fn state_machine_imported_viewmodel_viewmodel_formula_source_relink_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_imported_viewmodel_viewmodel_formula_source_relink_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_viewmodel_formula_context_blend_state(9489);
+    let initial_instance = 1_usize;
+    let relinked_instance = 0_usize;
+    let args = [
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        initial_instance.to_string(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-relink-view-model-instance-source-viewmodel".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        initial_instance.to_string(),
+        "0".to_owned(),
+        relinked_instance.to_string(),
+        "--runtime-advance-state-machine-data-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    let mut imported_context =
+        RuntimeImportedViewModelInstanceContext::new(&runtime, 0, initial_instance)
+            .unwrap_or_else(|| panic!("missing imported view-model context for {label}"));
+
+    assert!(
+        state_machine.bind_imported_view_model_context(&runtime, &imported_context),
+        "{label} failed to bind imported view-model context"
+    );
+    let mut rust_reports = Vec::new();
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    assert!(
+        state_machine.relink_imported_view_model_context_view_model_source_for_data_bind(
+            &mut imported_context,
+            0,
+            relinked_instance
+        ),
+        "{label} failed to relink imported view-model pointer source"
+    );
+    assert!(
+        state_machine.advance_data_context(),
+        "{label} failed to advance imported view-model pointer context"
+    );
+    rust_reports.push((false, state_machine.clone()));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 1.0),
+        state_machine.clone(),
+    ));
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (step, (cpp_state_machine, (advanced, rust_state_machine))) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+        .enumerate()
+    {
+        let step_label = format!("{label} action {step}");
+        let expected_source = if step == 0 {
+            initial_instance
+        } else {
+            relinked_instance
+        };
+        compare_state_machine_advance(
+            cpp_state_machine,
+            rust_state_machine,
+            *advanced,
+            &step_label,
+        );
+        compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, &step_label);
+        compare_state_machine_view_model_binding(
+            cpp_state_machine,
+            rust_state_machine,
+            1,
+            &step_label,
+        );
+        assert_eq!(
+            rust_state_machine.default_view_model_view_model_source_instance_index_for_data_bind(1),
+            Some(expected_source),
+            "{step_label} Rust imported view-model pointer source mismatch"
+        );
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
 fn state_machine_owned_viewmodel_viewmodel_formula_context_matches_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");

@@ -11225,7 +11225,7 @@ impl RuntimeDataBindGraph {
         else {
             return false;
         };
-        let Some(source) = self.sources.get_mut(source.0) else {
+        let Some(source) = self.sources.get(source.0) else {
             return false;
         };
         let Some(object_id) = source
@@ -11242,13 +11242,35 @@ impl RuntimeDataBindGraph {
             return false;
         }
         let value = RuntimeViewModelPointer::Imported { object_id };
-        if matches!(&source.value, RuntimeDataBindGraphValue::ViewModel(current) if *current == value)
-        {
+        let path = source.path.clone();
+        let source_changed = self.sources.iter().any(|source| {
+            source.path == path
+                && matches!(
+                    &source.default_value,
+                    RuntimeDataBindGraphValue::ViewModel(_)
+                )
+                && (!source.bound
+                    || !matches!(&source.value, RuntimeDataBindGraphValue::ViewModel(current) if *current == value))
+        });
+        if !source_changed {
             return false;
         }
-        let path = source.path.clone();
-        source.value = RuntimeDataBindGraphValue::ViewModel(value);
-        source.bound = true;
+
+        for source in self.sources.iter_mut().filter(|source| {
+            source.path == path
+                && matches!(
+                    &source.default_value,
+                    RuntimeDataBindGraphValue::ViewModel(_)
+                )
+        }) {
+            let changed = !source.bound
+                || !matches!(&source.value, RuntimeDataBindGraphValue::ViewModel(current) if *current == value);
+            source.value = RuntimeDataBindGraphValue::ViewModel(value);
+            source.bound = true;
+            if changed {
+                source.reset_formula_random_state_for_source_change();
+            }
+        }
         self.imported_view_model_overrides.insert(
             RuntimeImportedViewModelOverrideKey {
                 view_model_index: context.view_model_index,
@@ -11303,15 +11325,36 @@ impl RuntimeDataBindGraph {
             return false;
         }
         let value = RuntimeViewModelPointer::Imported { object_id };
-        let source_changed = !matches!(&source.value, RuntimeDataBindGraphValue::ViewModel(current) if *current == value);
         let path = source.path.clone();
+        let source_changed = self.sources.iter().any(|source| {
+            source.path == path
+                && matches!(
+                    &source.default_value,
+                    RuntimeDataBindGraphValue::ViewModel(_)
+                )
+                && (!source.bound
+                    || !matches!(&source.value, RuntimeDataBindGraphValue::ViewModel(current) if *current == value))
+        });
         let context_changed = context.view_model_overrides.get(&path) != Some(&value);
         if !source_changed && !context_changed {
             return false;
         }
 
-        source.value = RuntimeDataBindGraphValue::ViewModel(value);
-        source.bound = true;
+        for source in self.sources.iter_mut().filter(|source| {
+            source.path == path
+                && matches!(
+                    &source.default_value,
+                    RuntimeDataBindGraphValue::ViewModel(_)
+                )
+        }) {
+            let changed = !source.bound
+                || !matches!(&source.value, RuntimeDataBindGraphValue::ViewModel(current) if *current == value);
+            source.value = RuntimeDataBindGraphValue::ViewModel(value);
+            source.bound = true;
+            if changed {
+                source.reset_formula_random_state_for_source_change();
+            }
+        }
         context.view_model_overrides.insert(path.clone(), value);
         self.imported_view_model_overrides.insert(
             RuntimeImportedViewModelOverrideKey {

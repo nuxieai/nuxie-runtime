@@ -3245,6 +3245,20 @@ cache invalidation, call counts, imported/owned contexts, real random
 generation, and full dirty-list scheduler parity remain follow-up `#12`
 slices.
 
+Current #12 update: graph formula random group always mode source-to-target
+Grouped graph-owned `DataConverterFormula` random functions now cover the
+first grouped `RandomMode::always` source-to-target path for default-context
+number binds. A `DataConverterGroup<OperationValue, Formula(random)>` bind
+threads the host-supplied graph formula random stream through nested converter
+state and, when the formula child has `randomModeValue == 1`, consumes a fresh
+draw on each state-machine source-to-target evaluation. The contract is
+`docs/prototypes/data-binding-graph-formula-random-group-always-runtime-contract.md`.
+List random formulas, non-number random formulas, grouped
+`RandomMode::sourceChange`, non-default grouped target-to-source/public
+update/target-dirty scheduling, cache invalidation, call counts,
+imported/owned contexts, real random generation, and full dirty-list scheduler
+parity remain follow-up `#12` slices.
+
 Current #12 update: graph formula random group public update target-to-source
 Grouped graph-owned `DataConverterFormula` random functions now cover public
 `updateDataBinds(true)` target-to-source scheduling for a

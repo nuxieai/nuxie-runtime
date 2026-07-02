@@ -1065,6 +1065,15 @@ slice.
   state-machine advancement. List formulas, non-number, non-default random
   modes, cache invalidation, call counts, imported/owned contexts, and real
   random generation remain follow-up slices.
+- `DataConverterFormula` random group always-mode source-to-target slice:
+  default-context number sources feeding number targets through
+  `DataConverterGroup<OperationValue, Formula(random)>` now thread
+  `randomModeValue == 1` through nested group converter state. The grouped
+  formula consumes a fresh C++-derived random value on each source-to-target
+  state-machine advancement. List formulas, non-number, grouped
+  `RandomMode::sourceChange`, non-default grouped target-to-source/public
+  update/target-dirty scheduling, cache invalidation, call counts,
+  imported/owned contexts, and real random generation remain follow-up slices.
 - `DataConverterFormula` random group public-update target-to-source slice:
   default-context number sources feeding number targets through a
   main-`ToTarget | TwoWay` `DataConverterGroup<OperationValue,

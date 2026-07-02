@@ -1,14 +1,15 @@
-# Data Binding Graph Formula Random Always Runtime Contract
+# Data Binding Graph Formula Random Group Always Runtime Contract
 
 ## Purpose
 
-Extend the host-supplied graph formula random slice to direct
+Extend the host-supplied graph formula random slice to grouped
 `RandomMode::always` source-to-target behavior for default-context number
 binds.
 
 This covers the C++ behavior where a `DataConverterFormula` random function
-with `randomModeValue == 1` consumes a fresh random value on each formula
-evaluation instead of reusing the default-mode cached value.
+inside `DataConverterGroup<OperationValue, Formula(random)>` has
+`randomModeValue == 1` and consumes a fresh random value on each formula
+evaluation instead of reusing the grouped formula state's cached value.
 
 ## In Scope
 
@@ -16,7 +17,8 @@ evaluation instead of reusing the default-mode cached value.
 - Root-only `DataBindContext.sourcePathIds` of shape `[0, propertyIndex]`.
 - `ViewModelInstanceNumber.propertyValue` sources feeding
   `BindablePropertyNumber.propertyValue` targets.
-- Direct `DataConverterFormula` converters resolved from `DataBind.converterId`.
+- `DataConverterGroup` with a direct `DataConverterOperationValue` child
+  followed by a direct `DataConverterFormula` child.
 - `FormulaTokenFunction` with `functionType == FunctionType::random`.
 - `DataConverterFormula.randomModeValue == 1`.
 - `StateMachineInstance::set_data_bind_formula_random_values` as the
@@ -27,17 +29,13 @@ evaluation instead of reusing the default-mode cached value.
 
 - A real Rust random generator or parity with C++ `std::rand()`.
 - Probe CLI support for seeding or queuing C++ runtime random values.
-- Direct source-to-target `RandomMode::sourceChange` scheduling is covered
-  separately by
-  `data-binding-graph-formula-random-source-change-runtime-contract.md`;
-  broader random cache invalidation, random call-count parity outside the
-  observed direct bind, and formula `addDirt` random-cache behavior remain out
-  of scope.
-- Grouped source-to-target `RandomMode::always` scheduling is covered
-  separately by
-  `data-binding-graph-formula-random-group-always-runtime-contract.md`.
-- Target-to-source, public update, target-dirty, list, symbol-list-index, and
-  non-number `RandomMode::always` scheduling.
+- Grouped `RandomMode::sourceChange` cache invalidation, random call-count
+  parity outside the observed grouped bind, and formula `addDirt`
+  random-cache behavior.
+- Grouped target-to-source, public update, and target-dirty scheduling for
+  non-default random modes.
+- List formula, symbol-list-index, and non-number random formula scheduling.
+- Stateful grouped converters mixed with random formulas.
 - External, imported, and owned contexts for this converter/source
   combination.
 - Relative-path, parent-path, nested-path, listener-owned, and update-queue
@@ -45,9 +43,8 @@ evaluation instead of reusing the default-mode cached value.
 
 ## Completion Checks
 
-- The runtime graph accepts a direct formula random function when
-  `randomModeValue == 1`.
+- A grouped formula random bind accepts `randomModeValue == 1`.
 - The first source-to-target advance consumes the first supplied random value.
 - A later source-to-target advance consumes the next supplied random value
   instead of reusing the first one.
-- Existing default-mode random formula tests still pass.
+- Existing default-mode grouped random formula tests still pass.

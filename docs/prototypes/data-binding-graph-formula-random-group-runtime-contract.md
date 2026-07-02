@@ -29,8 +29,11 @@ path.
 
 - A real Rust random generator or parity with C++ `std::rand()`.
 - Probe CLI support for seeding or queuing C++ runtime random values.
-- `RandomMode::always`, `RandomMode::sourceChange`, random cache invalidation,
-  random call-count parity, and formula `addDirt` random-cache behavior.
+- Grouped source-to-target `RandomMode::always` scheduling is covered
+  separately by
+  `data-binding-graph-formula-random-group-always-runtime-contract.md`.
+- `RandomMode::sourceChange`, broader random cache invalidation, random
+  call-count parity, and formula `addDirt` random-cache behavior.
 - Grouped public update target-to-source scheduling is covered separately by
   `data-binding-graph-formula-random-group-public-update-target-to-source-runtime-contract.md`;
   grouped target-dirty scheduling is covered separately by

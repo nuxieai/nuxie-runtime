@@ -35,7 +35,8 @@ fallback, restoring the number target to `0.0`.
   reverse behavior, covered separately by the non-list fallback public-update
   contracts.
 - Main-`ToSource | TwoWay` explicit data-context target-to-source behavior for
-  formula list sources.
+  formula list sources is covered separately by
+  `data-binding-graph-formula-list-fallback-explicit-target-to-source-runtime-contract.md`.
 - List-target `BindablePropertyList` behavior, generated list item creation,
   artboard component-list instancing, map-rule selection, layout, and
   virtualization.

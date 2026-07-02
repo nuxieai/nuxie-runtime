@@ -3543,9 +3543,10 @@ formula conversion produces a number, then reapplies that unchanged source
 through the formula fallback so the number target returns to C++'s `0.0`
 fallback. The contract is
 `docs/prototypes/data-binding-graph-formula-remaining-fallbacks-explicit-target-to-source-runtime-contract.md`.
-List, symbol-list-index, imported/owned contexts, random formula reverse
-behavior, secondary dependency invalidation, and full dirty-list scheduler
-parity remain follow-up `#12` slices.
+List explicit behavior is covered separately below. Symbol-list-index,
+imported/owned contexts, random formula reverse behavior, secondary dependency
+invalidation, and full dirty-list scheduler parity remain follow-up `#12`
+slices.
 
 Current #12 update: graph formula remaining fallbacks public update target-to-source
 Direct graph-owned `DataConverterFormula` now covers public
@@ -3571,10 +3572,22 @@ number, then reapplies that unchanged list source through the formula fallback
 so the number target returns to C++'s `0.0` fallback. The contract is
 `docs/prototypes/data-binding-graph-formula-list-fallback-public-update-target-to-source-runtime-contract.md`.
 List targets, generated list items, imported/owned contexts, random formula
-reverse behavior, explicit main-`ToSource` fallback reverse behavior,
+reverse behavior, secondary dependency invalidation, and full dirty-list
+scheduler parity remain follow-up `#12` slices. Explicit main-`ToSource`
+behavior and symbol-list-index public-update reverse behavior are covered
+separately below.
+
+Current #12 update: graph formula list fallback explicit target-to-source
+Direct graph-owned `DataConverterFormula` now covers explicit
+`advanceDataContext()` target-to-source behavior for main-`ToSource | TwoWay`
+default-context list sources feeding number targets. Rust preserves the
+unchanged imported list source when main-direction formula conversion produces
+a number, then reapplies that unchanged list source through the formula
+fallback so the number target returns to C++'s `0.0` fallback. The contract is
+`docs/prototypes/data-binding-graph-formula-list-fallback-explicit-target-to-source-runtime-contract.md`.
+Symbol-list-index, imported/owned contexts, random formula reverse behavior,
 secondary dependency invalidation, and full dirty-list scheduler parity remain
-follow-up `#12` slices. Symbol-list-index public-update reverse behavior is
-covered separately below.
+follow-up `#12` slices.
 
 Current #12 update: graph formula symbol-list-index public update target-to-source
 Direct graph-owned `DataConverterFormula` now covers public

@@ -42,8 +42,10 @@ number target to `0.0`.
 - Main-`ToTarget | TwoWay` public-update behavior for these source kinds,
   covered separately by
   `data-binding-graph-formula-remaining-fallbacks-public-update-target-to-source-runtime-contract.md`.
-- List and symbol-list-index formula fallback explicit target-to-source
-  behavior.
+- List formula fallback explicit target-to-source behavior is covered
+  separately by
+  `data-binding-graph-formula-list-fallback-explicit-target-to-source-runtime-contract.md`.
+- Symbol-list-index formula fallback explicit target-to-source behavior.
 - Asset, artboard, and view-model pointer formula fallback reverse behavior.
 - `FormulaTokenFunction`, random formula values, and `randomModeValue`.
 - Formula converter groups.

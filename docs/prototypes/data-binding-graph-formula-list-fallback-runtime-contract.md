@@ -35,8 +35,10 @@ non-number, non-symbol-list-index inputs.
 - Public-update target-to-source propagation for formula list sources is
   covered separately by
   `data-binding-graph-formula-list-fallback-public-update-target-to-source-runtime-contract.md`.
-- Explicit main-`ToSource` reverse conversion and broader target-to-source
-  propagation.
+- Explicit main-`ToSource` target-to-source propagation for formula list
+  sources is covered separately by
+  `data-binding-graph-formula-list-fallback-explicit-target-to-source-runtime-contract.md`.
+- Broader target-to-source propagation.
 - Formula parent-source binding, source dependents, and add-dirt behavior.
 - A real Rust random generator, C++ random seeding/queueing, or random
   call-count parity.

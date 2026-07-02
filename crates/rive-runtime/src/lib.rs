@@ -10064,6 +10064,27 @@ impl RuntimeDataBindGraph {
         changed
     }
 
+    fn refresh_operation_view_model_number_dependents_for_imported_context_path(
+        &mut self,
+        path: &[u32],
+        value: f32,
+    ) -> bool {
+        let mut changed = false;
+        for source in &mut self.sources {
+            let Some(converter) = source.converter.as_mut() else {
+                continue;
+            };
+            if !runtime_data_bind_graph_refresh_operation_view_model_number_converter_for_imported_context_path(
+                converter, path, value,
+            ) {
+                continue;
+            }
+            source.source_to_target_dirty_after_target_to_source = true;
+            changed = true;
+        }
+        changed
+    }
+
     fn set_default_view_model_boolean_source_for_path(
         &mut self,
         path: &[u32],
@@ -10765,6 +10786,7 @@ impl RuntimeDataBindGraph {
             }
         }
 
+        self.refresh_operation_view_model_number_dependents_for_imported_context_path(&path, value);
         context.number_overrides.insert(path, value);
         self.mark_default_view_model_bindings_dirty();
         true
@@ -14518,6 +14540,33 @@ fn runtime_data_bind_graph_refresh_operation_view_model_number_converter_for_pat
                     runtime_data_bind_graph_refresh_operation_view_model_number_converter_for_path(
                         converter, path, value,
                     );
+            }
+            changed
+        }
+        _ => false,
+    }
+}
+
+fn runtime_data_bind_graph_refresh_operation_view_model_number_converter_for_imported_context_path(
+    converter: &mut RuntimeDataBindGraphConverter,
+    path: &[u32],
+    value: f32,
+) -> bool {
+    match converter {
+        RuntimeDataBindGraphConverter::OperationViewModel {
+            operation_value,
+            source_path: Some(source_path),
+            ..
+        } if source_path.as_slice() == path && *operation_value != value => {
+            *operation_value = value;
+            true
+        }
+        RuntimeDataBindGraphConverter::Group(converters) => {
+            let mut changed = false;
+            for converter in converters {
+                changed |= runtime_data_bind_graph_refresh_operation_view_model_number_converter_for_imported_context_path(
+                    converter, path, value,
+                );
             }
             changed
         }

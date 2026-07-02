@@ -6384,6 +6384,18 @@ Relative/name converter paths, imported/owned recomputation for other
 converter families, broader dirty/update queues, listener-owned data binding,
 and nested artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: imported runtime number source mutation now refreshes
+direct `DataConverterOperationViewModel` secondary operands when the mutated
+source path matches the converter operand path. This keeps a bound imported
+`factor` source and the dependent converted `amount` source in sync while
+leaving the stored default operand intact for later default-context rebinding.
+The contract is
+`docs/prototypes/data-binding-graph-operation-viewmodel-imported-number-mutation-runtime-contract.md`.
+Relative/name converter paths, non-number secondary operands, mutation-driven
+recompute for other converter families, broader dirty/update queues,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

@@ -3488,6 +3488,11 @@ slice.
   rebinding restores the stored default operand. Missing, non-number, and
   manifest-name converter paths keep the existing fallback. The contract is
   `docs/prototypes/data-binding-graph-operation-viewmodel-context-recompute-runtime-contract.md`.
+- Operation-view-model imported number mutation slice:
+  mutating an already-bound imported number source now refreshes matching
+  direct `DataConverterOperationViewModel` secondary operands without
+  overwriting the stored default operand. The contract is
+  `docs/prototypes/data-binding-graph-operation-viewmodel-imported-number-mutation-runtime-contract.md`.
 
 ## Remaining Runtime Slices
 

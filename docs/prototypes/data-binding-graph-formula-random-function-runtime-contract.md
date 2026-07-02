@@ -39,10 +39,11 @@ draw to Rust before advancing.
 - Probe CLI support for seeding or queuing C++ runtime random values.
 - `RandomMode::always`, `RandomMode::sourceChange`, random cache invalidation,
   random call-count parity, and formula `addDirt` random-cache behavior.
-- Target-dirty, grouped formula, and list formula scheduling with random
-  functions. Direct number target-to-source/public-update scheduling is covered
-  separately by
-  `data-binding-graph-formula-random-target-to-source-runtime-contract.md`.
+- Grouped formula and list formula scheduling with random functions. Direct
+  number target-to-source/public-update scheduling is covered separately by
+  `data-binding-graph-formula-random-target-to-source-runtime-contract.md`;
+  target-dirty scheduling is covered separately by
+  `data-binding-graph-formula-random-target-dirty-runtime-contract.md`.
 - Random formula behavior for symbol-list-index or non-number sources.
 - External, imported, and owned contexts for this converter/source
   combination.

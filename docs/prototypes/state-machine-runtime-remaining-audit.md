@@ -1019,18 +1019,25 @@ slice.
   mode. The C++ probe derives the first draw from the C++ number-binding report
   and supplies the same value to Rust before advancing. Non-default random
   modes, real Rust random generation, C++ random seeding/queueing, cache
-  invalidation, call counts, target-dirty/group/list scheduling, and non-number
-  random formulas remain outside the graph until fuller random-source state
-  contracts exist.
+  invalidation, call counts, group/list scheduling, and non-number random
+  formulas remain outside the graph until fuller random-source state contracts
+  exist.
 - `DataConverterFormula` random target-to-source slice:
   default-context number sources feeding number targets now reuse the
   host-supplied default-mode formula random cache through direct
   target-to-source scheduling. The C++ probe covers explicit
   `advancedDataContext()` for a main-`ToSource | TwoWay` random formula bind
   with a direct observer, and public `updateDataBinds(true)` for a
-  main-`ToTarget | TwoWay` random formula bind. Target-dirty, grouped/list,
-  non-number, non-default random modes, cache invalidation, call counts,
-  imported/owned contexts, and real random generation remain follow-up slices.
+  main-`ToTarget | TwoWay` random formula bind. Grouped/list, non-number,
+  non-default random modes, cache invalidation, call counts, imported/owned
+  contexts, and real random generation remain follow-up slices.
+- `DataConverterFormula` random target-dirty slice:
+  direct main-`ToTarget | TwoWay` random formula binds now preserve a manual
+  target edit through explicit data-context advancement, then reapply the
+  unchanged source through the cached formula random value on the next normal
+  state-machine advance. Grouped/list, non-number, non-default random modes,
+  cache invalidation, call counts, imported/owned contexts, and real random
+  generation remain follow-up slices.
 - First graph-owned target-to-source slice: direct default-context number
   sources feeding number targets now honor `ToSource | TwoWay` target mutation
   on explicit data-context advance. A C++ probe uses two binds to the same

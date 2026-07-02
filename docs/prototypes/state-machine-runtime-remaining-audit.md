@@ -1059,11 +1059,23 @@ slice.
   random tokens do not consume random values for non-number,
   non-symbol-list-index formula inputs. Probe-visible C++
   `RandomProvider::totalCalls`, real RNG generation/seeding, grouped
-  converters, imported/owned contexts, secondary dependency invalidation, and
-  full dirty-list scheduler parity remain follow-up slices. Direct explicit
-  target-to-source, public-update, and target-dirty call counts are covered
-  separately below. The contract is
+  target-to-source/public-update/target-dirty call counts, imported/owned
+  contexts, secondary dependency invalidation, and full dirty-list scheduler
+  parity remain follow-up slices. Direct explicit target-to-source,
+  public-update, and target-dirty call counts are covered separately below.
+  Grouped source-to-target call counts are covered separately below. The
+  contract is
   `docs/prototypes/data-binding-graph-formula-random-call-count-runtime-contract.md`.
+- `DataConverterFormula` random grouped call-count source-to-target slice:
+  default-context number sources feeding number targets through
+  `DataConverterGroup<OperationValue, Formula(random)>` now expose Rust's
+  host-supplied random-stream pull count and cover default, always, and
+  source-change random modes. Probe-visible C++
+  `RandomProvider::totalCalls`, real RNG generation/seeding, grouped
+  target-to-source/public-update/target-dirty call counts, list and non-number
+  paths, imported/owned contexts, secondary dependency invalidation, and full
+  dirty-list scheduler parity remain follow-up slices. The contract is
+  `docs/prototypes/data-binding-graph-formula-random-group-call-count-runtime-contract.md`.
 - `DataConverterFormula` random call-count explicit target-to-source slice:
   default-context number sources feeding number targets now expose
   host-supplied random-stream pull counts for explicit

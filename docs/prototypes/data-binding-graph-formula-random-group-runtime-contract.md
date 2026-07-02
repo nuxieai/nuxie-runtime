@@ -35,8 +35,11 @@ path.
 - Grouped source-to-target `RandomMode::sourceChange` scheduling is covered
   separately by
   `data-binding-graph-formula-random-group-source-change-runtime-contract.md`.
-- Broader random cache invalidation, random call-count parity, and formula
-  `addDirt` random-cache behavior.
+- Grouped source-to-target host random call-count parity is covered separately
+  by
+  `data-binding-graph-formula-random-group-call-count-runtime-contract.md`;
+  broader random cache invalidation and formula `addDirt` random-cache
+  behavior remain out of scope here.
 - Grouped public update target-to-source scheduling is covered separately by
   `data-binding-graph-formula-random-group-public-update-target-to-source-runtime-contract.md`;
   grouped target-dirty scheduling is covered separately by

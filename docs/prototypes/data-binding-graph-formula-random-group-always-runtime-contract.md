@@ -23,6 +23,8 @@ evaluation instead of reusing the grouped formula state's cached value.
 - `DataConverterFormula.randomModeValue == 1`.
 - `StateMachineInstance::set_data_bind_formula_random_values` as the
   host-supplied graph formula random stream.
+- Source mutation through
+  `set_default_view_model_number_source_for_data_bind`.
 - Source-to-target state-machine advancement and C++ probe number reports.
 
 ## Out Of Scope
@@ -32,8 +34,11 @@ evaluation instead of reusing the grouped formula state's cached value.
 - Grouped source-to-target `RandomMode::sourceChange` scheduling is covered
   separately by
   `data-binding-graph-formula-random-group-source-change-runtime-contract.md`.
-- Grouped random call-count parity outside the observed grouped bind and
-  formula `addDirt` random-cache behavior.
+- Grouped source-to-target host random call-count parity for the observed bind
+  is covered separately by
+  `data-binding-graph-formula-random-group-call-count-runtime-contract.md`;
+  broader call-count parity and formula `addDirt` random-cache behavior remain
+  out of scope here.
 - Grouped explicit target-to-source `RandomMode::always` scheduling is covered
   separately by
   `data-binding-graph-formula-random-group-always-target-to-source-runtime-contract.md`.
@@ -50,6 +55,8 @@ evaluation instead of reusing the grouped formula state's cached value.
 
 - A grouped formula random bind accepts `randomModeValue == 1`.
 - The first source-to-target advance consumes the first supplied random value.
-- A later source-to-target advance consumes the next supplied random value
-  instead of reusing the first one.
+- A source mutation schedules a later source-to-target formula evaluation that
+  consumes the next supplied random value instead of reusing the first one.
+- A later advance without another source mutation does not reschedule the
+  grouped formula.
 - Existing default-mode grouped random formula tests still pass.

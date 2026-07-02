@@ -18122,6 +18122,11 @@ fn state_machine_default_viewmodel_number_formula_random_function_group_matches_
         "{label} failed to bind default view-model context"
     );
     state_machine.set_data_bind_formula_random_values(&[formula_random_value]);
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        0,
+        "{label} call count should reset with supplied random values"
+    );
     let rust_reports = [
         (
             rust.advance_state_machine_instance(&mut state_machine, 0.0),
@@ -18132,6 +18137,16 @@ fn state_machine_default_viewmodel_number_formula_random_function_group_matches_
             state_machine.clone(),
         ),
     ];
+    assert_eq!(
+        rust_reports[0].1.data_bind_formula_random_call_count(),
+        1,
+        "{label} first advance should consume one grouped default-mode random"
+    );
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        1,
+        "{label} later advance should reuse the grouped default-mode random"
+    );
     let report = rust.update_components();
 
     assert_eq!(
@@ -18831,9 +18846,17 @@ fn state_machine_default_viewmodel_number_formula_random_function_group_always_m
             false,
             1,
         );
+    let value = 1.0;
     let args = [
         "--runtime-bind-default-view-model-state-machine-context".to_owned(),
         "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-default-view-model-source-number".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        value.to_string(),
         "--runtime-advance-state-machine".to_owned(),
         "0".to_owned(),
         "0".to_owned(),
@@ -18862,16 +18885,43 @@ fn state_machine_default_viewmodel_number_formula_random_function_group_always_m
         "{label} failed to bind default view-model context"
     );
     state_machine.set_data_bind_formula_random_values(&[first_random, second_random]);
-    let rust_reports = [
-        (
-            rust.advance_state_machine_instance(&mut state_machine, 0.0),
-            state_machine.clone(),
-        ),
-        (
-            rust.advance_state_machine_instance(&mut state_machine, 1.0),
-            state_machine.clone(),
-        ),
-    ];
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        0,
+        "{label} call count should reset with supplied random values"
+    );
+    let mut rust_reports = Vec::new();
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        1,
+        "{label} first advance should consume one grouped always-mode random"
+    );
+    assert!(
+        state_machine.set_default_view_model_number_source_for_data_bind(0, value),
+        "{label} failed to mutate default view-model number source"
+    );
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        2,
+        "{label} source mutation should consume a fresh grouped always-mode random"
+    );
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 1.0),
+        state_machine.clone(),
+    ));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        2,
+        "{label} later advance should not reschedule the grouped always-mode formula"
+    );
     let report = rust.update_components();
 
     assert_eq!(
@@ -18950,11 +19000,21 @@ fn state_machine_default_viewmodel_number_formula_random_function_group_source_c
         "{label} failed to bind default view-model context"
     );
     state_machine.set_data_bind_formula_random_values(&[first_random, second_random]);
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        0,
+        "{label} call count should reset with supplied random values"
+    );
     let mut rust_reports = Vec::new();
     rust_reports.push((
         rust.advance_state_machine_instance(&mut state_machine, 0.0),
         state_machine.clone(),
     ));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        1,
+        "{label} first advance should consume one grouped source-change random"
+    );
     assert!(
         state_machine.set_default_view_model_number_source_for_data_bind(0, value),
         "{label} failed to mutate default view-model number source"
@@ -18963,10 +19023,20 @@ fn state_machine_default_viewmodel_number_formula_random_function_group_source_c
         rust.advance_state_machine_instance(&mut state_machine, 0.0),
         state_machine.clone(),
     ));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        2,
+        "{label} source mutation should refresh the grouped source-change random"
+    );
     rust_reports.push((
         rust.advance_state_machine_instance(&mut state_machine, 1.0),
         state_machine.clone(),
     ));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        2,
+        "{label} later advance should reuse the refreshed grouped source-change random"
+    );
     let report = rust.update_components();
 
     assert_eq!(

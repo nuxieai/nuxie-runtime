@@ -3727,6 +3727,21 @@ imported/owned, real random generation, probe-visible C++
 `RandomProvider::totalCalls`, secondary dependency invalidation, and full
 dirty-list scheduler parity remain follow-up `#12` slices.
 
+Current #12 update: graph formula random symbol-list-index public-update call counts
+Direct graph-owned `DataConverterFormula` random functions now expose Rust's
+host-supplied random-stream call count for public `updateDataBinds(true)`
+target-to-source scheduling on default-context symbol-list-index sources
+feeding number targets. Default and source-change modes keep the warmed
+source-to-target draw because the symbol-list-index source is preserved rather
+than changed; always mode consumes one initial draw plus two more values during
+the public update, and later normal advances do not pull more values. The
+contract is
+`docs/prototypes/data-binding-graph-formula-random-symbol-list-index-public-update-call-count-runtime-contract.md`.
+Direct target-dirty, grouped symbol-list-index, list/non-number,
+imported/owned, real random generation, probe-visible C++
+`RandomProvider::totalCalls`, secondary dependency invalidation, and full
+dirty-list scheduler parity remain follow-up `#12` slices.
+
 Current #12 update: graph formula random symbol-list-index target-dirty
 Direct graph-owned `DataConverterFormula` random functions now cover
 main-`ToTarget | TwoWay` target-dirty scheduling for default-context

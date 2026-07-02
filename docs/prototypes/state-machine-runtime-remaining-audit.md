@@ -1455,6 +1455,18 @@ slice.
   C++ `RandomProvider::totalCalls` behavior remain follow-up slices. The
   contract is
   `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-target-to-source-call-count-runtime-contract.md`.
+- `DataConverterFormula` random symbol-list-index public-update call-count
+  slice: default-context symbol-list-index sources feeding main-`ToTarget |
+  TwoWay` number targets now expose Rust's host-supplied random-stream pull
+  count during public `updateDataBinds(true)` target-to-source scheduling and
+  later normal advancement. Default and source-change modes keep the warmed
+  source-to-target draw because the symbol-list-index source is preserved
+  rather than changed; always mode consumes one initial draw plus two more
+  values during the public update. Target-dirty, grouped symbol-list-index,
+  list/non-number, imported/owned, real random generation, and probe-visible
+  C++ `RandomProvider::totalCalls` behavior remain follow-up slices. The
+  contract is
+  `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-public-update-call-count-runtime-contract.md`.
 - `DataConverterFormula` random symbol-list-index target-dirty slice:
   default-context symbol-list-index sources feeding main-`ToTarget | TwoWay`
   number targets now preserve a manual number target edit through explicit

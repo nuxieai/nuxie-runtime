@@ -60,8 +60,8 @@ through the same random formula scheduling path.
 - Explicit target-to-source host random call-count parity is covered separately
   by
   `data-binding-graph-formula-random-symbol-list-index-target-to-source-call-count-runtime-contract.md`.
-- Public-update host random call-count parity outside the observed direct bind
-  values.
+- Public-update host random call-count parity is covered separately by
+  `data-binding-graph-formula-random-symbol-list-index-public-update-call-count-runtime-contract.md`.
 - Formula `addDirt` random-cache behavior and secondary dependency
   invalidation.
 - External, imported, and owned contexts for this converter/source

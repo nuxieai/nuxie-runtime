@@ -3518,6 +3518,20 @@ contexts, random formula reverse behavior, explicit main-`ToSource` fallback
 reverse behavior, secondary dependency invalidation, and full dirty-list
 scheduler parity remain follow-up `#12` slices.
 
+Current #12 update: graph formula remaining fallbacks public update target-to-source
+Direct graph-owned `DataConverterFormula` now covers public
+`updateDataBinds(true)` target-to-source behavior for main-`ToTarget | TwoWay`
+default-context enum, color, string, and trigger sources feeding number
+targets. Rust preserves the unchanged non-number source when reverse formula
+conversion produces a number, then reapplies that unchanged source through the
+formula fallback so the number target returns to C++'s `0.0` fallback. The
+contract is
+`docs/prototypes/data-binding-graph-formula-remaining-fallbacks-public-update-target-to-source-runtime-contract.md`.
+List, symbol-list-index, imported/owned contexts, random formula reverse
+behavior, explicit main-`ToSource` fallback reverse behavior, secondary
+dependency invalidation, and full dirty-list scheduler parity remain follow-up
+`#12` slices.
+
 Current #12 update: graph formula random group public update target-to-source
 Grouped graph-owned `DataConverterFormula` random functions now cover public
 `updateDataBinds(true)` target-to-source scheduling for a

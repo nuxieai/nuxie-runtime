@@ -1004,6 +1004,15 @@ slice.
   slices. The contract is
   `docs/prototypes/data-binding-graph-formula-boolean-fallback-public-update-target-to-source-runtime-contract.md`.
 - Remaining graph-represented `DataConverterFormula` non-number fallback
+  public-update reverse slice: default-context enum, color, string, and
+  trigger sources feeding main-`ToTarget | TwoWay` number targets now preserve
+  the unchanged source when reverse formula conversion produces a number, then
+  reapply that unchanged source through the formula fallback during public
+  `updateDataBinds(true)`. List, symbol-list-index, imported/owned contexts,
+  random formulas, and explicit main-`ToSource` fallback reverse behavior
+  remain follow-up slices. The contract is
+  `docs/prototypes/data-binding-graph-formula-remaining-fallbacks-public-update-target-to-source-runtime-contract.md`.
+- Remaining graph-represented `DataConverterFormula` non-number fallback
   slice: default-context enum, color, string, and trigger sources feeding
   number targets now enter the formula converter and write C++'s early fallback
   value `0.0`. A C++ probe matrix uses non-zero imported bindable target

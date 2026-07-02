@@ -13275,7 +13275,10 @@ impl RuntimeDataBindGraphSourceNode {
             (RuntimeDataBindGraphValue::String(value), RuntimeDataBindGraphValue::Number(_))
                 if matches!(
                     self.converter.as_ref(),
-                    Some(RuntimeDataBindGraphConverter::ToNumber)
+                    Some(
+                        RuntimeDataBindGraphConverter::ToNumber
+                            | RuntimeDataBindGraphConverter::Formula { .. }
+                    )
                 ) =>
             {
                 Some(RuntimeDataBindGraphValue::String(value.clone()))
@@ -13283,7 +13286,10 @@ impl RuntimeDataBindGraphSourceNode {
             (RuntimeDataBindGraphValue::Color(value), RuntimeDataBindGraphValue::Number(_))
                 if matches!(
                     self.converter.as_ref(),
-                    Some(RuntimeDataBindGraphConverter::ToNumber)
+                    Some(
+                        RuntimeDataBindGraphConverter::ToNumber
+                            | RuntimeDataBindGraphConverter::Formula { .. }
+                    )
                 ) =>
             {
                 Some(RuntimeDataBindGraphValue::Color(*value))
@@ -13291,10 +13297,21 @@ impl RuntimeDataBindGraphSourceNode {
             (RuntimeDataBindGraphValue::Enum(value), RuntimeDataBindGraphValue::Number(_))
                 if matches!(
                     self.converter.as_ref(),
-                    Some(RuntimeDataBindGraphConverter::ToNumber)
+                    Some(
+                        RuntimeDataBindGraphConverter::ToNumber
+                            | RuntimeDataBindGraphConverter::Formula { .. }
+                    )
                 ) =>
             {
                 Some(RuntimeDataBindGraphValue::Enum(*value))
+            }
+            (RuntimeDataBindGraphValue::Trigger(value), RuntimeDataBindGraphValue::Number(_))
+                if matches!(
+                    self.converter.as_ref(),
+                    Some(RuntimeDataBindGraphConverter::Formula { .. })
+                ) =>
+            {
+                Some(RuntimeDataBindGraphValue::Trigger(*value))
             }
             (
                 RuntimeDataBindGraphValue::SymbolListIndex(value),

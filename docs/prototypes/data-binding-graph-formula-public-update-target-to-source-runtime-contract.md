@@ -39,6 +39,9 @@ queue uses the already admitted `FormulaTokenInput`, `FormulaTokenValue`, and
 - Boolean-source formula fallback public-update reverse behavior is covered
   separately by
   `data-binding-graph-formula-boolean-fallback-public-update-target-to-source-runtime-contract.md`.
+- Enum, color, string, and trigger formula fallback public-update reverse
+  behavior is covered separately by
+  `data-binding-graph-formula-remaining-fallbacks-public-update-target-to-source-runtime-contract.md`.
 - Other non-number sources or targets.
 - Public-update coverage for interpolator, number-to-list, list, string,
   mixed groups, stateful groups, or scripted converters.

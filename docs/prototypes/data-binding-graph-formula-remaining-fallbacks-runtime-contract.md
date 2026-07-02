@@ -36,7 +36,11 @@ source kinds because they are neither number nor symbol-list-index inputs.
   this number-target graph path.
 - `FormulaTokenFunction`, random formula values, and `randomModeValue`.
 - Formula parent-source binding, source dependents, and add-dirt behavior.
-- Reverse conversion and target-to-source propagation.
+- Public-update target-to-source propagation for these enum, color, string,
+  and trigger fallback sources is covered separately by
+  `data-binding-graph-formula-remaining-fallbacks-public-update-target-to-source-runtime-contract.md`.
+- Explicit main-`ToSource` reverse conversion and broader target-to-source
+  propagation.
 - Formula converter groups beyond any composition already admitted by the
   generic graph group executor.
 - Number-to-list, generated-list, scripted, and live context-aware converters.

@@ -33,8 +33,11 @@ target to `0.0`.
 
 - Main-`ToSource | TwoWay` explicit data-context target-to-source behavior for
   boolean formula fallback sources.
-- Enum, color, string, trigger, list, symbol-list-index, asset, artboard, and
-  view-model pointer formula fallback reverse behavior.
+- Enum, color, string, and trigger formula fallback public-update reverse
+  behavior is covered separately by
+  `data-binding-graph-formula-remaining-fallbacks-public-update-target-to-source-runtime-contract.md`.
+- List, symbol-list-index, asset, artboard, and view-model pointer formula
+  fallback reverse behavior.
 - `FormulaTokenFunction`, random formula values, and `randomModeValue`.
 - Formula converter groups.
 - Formula parent-source binding, source dependents, and general add-dirt

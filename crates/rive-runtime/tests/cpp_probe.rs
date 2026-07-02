@@ -28448,6 +28448,113 @@ fn state_machine_owned_viewmodel_color_formula_context_matches_cpp_probe() {
 }
 
 #[test]
+fn state_machine_owned_viewmodel_color_formula_source_mutation_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label =
+        "synthetic/runtime_state_machine_owned_viewmodel_color_formula_source_mutation_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_formula_fallback_blend_state_with_token_flags_and_observer(
+            9311,
+            FormulaFallbackSourceKind::Color,
+            FormulaFallbackTokenKind::Input,
+            0,
+            true,
+        );
+    let initial_value = 0xff00_aa44_u32;
+    let mutated_value = 0x7f11_2233_u32;
+    let args = [
+        "--runtime-bind-owned-view-model-color-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        initial_value.to_string(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-owned-view-model-source-color".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        mutated_value.to_string(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    let mut context = RuntimeOwnedViewModelInstance::new(&runtime, 0)
+        .unwrap_or_else(|| panic!("missing Rust owned view-model context for {label}"));
+
+    assert!(
+        context.set_color_by_property_index(0, initial_value),
+        "{label} failed to set initial owned view-model color"
+    );
+    assert!(
+        state_machine.bind_owned_view_model_context(&context),
+        "{label} failed to bind owned view-model context"
+    );
+    let mut rust_reports = Vec::new();
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    assert!(
+        state_machine.set_owned_view_model_context_color_source_for_data_bind(
+            &mut context,
+            0,
+            mutated_value
+        ),
+        "{label} failed to mutate owned color source"
+    );
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 1.0),
+        state_machine.clone(),
+    ));
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (step, (cpp_state_machine, (advanced, rust_state_machine))) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+        .enumerate()
+    {
+        let step_label = format!("{label} action {step}");
+        compare_state_machine_advance(
+            cpp_state_machine,
+            rust_state_machine,
+            *advanced,
+            &step_label,
+        );
+        compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, &step_label);
+        compare_state_machine_color_binding(cpp_state_machine, rust_state_machine, 1, &step_label);
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
 fn state_machine_imported_viewmodel_string_formula_context_matches_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");

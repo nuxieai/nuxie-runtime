@@ -3289,6 +3289,16 @@ color observer, so imported-context color mutation now fans out to every bound
 same-path color source node in the active graph before dirty reapplication. The
 contract is
 `docs/prototypes/data-binding-graph-formula-color-context-runtime-contract.md`.
+
+Current #12 update: deterministic formula owned color source mutation
+Direct graph-owned `DataConverterFormula` color fallback now covers post-bind
+owned root color source mutation by state-machine data-bind index. The
+same-path direct color observer and formula fallback number target both
+refresh after
+`StateMachineInstance::set_owned_view_model_context_color_source_for_data_bind`.
+The C++ probe now retains active owned color contexts for this comparison. The
+contract is
+`docs/prototypes/data-binding-graph-formula-owned-color-mutation-runtime-contract.md`.
 String/trigger/list formula contexts, imported same-path fanout for
 non-boolean/non-enum/non-color source kinds, formula random functions, reverse
 propagation, public update, target-dirty scheduling, generated list item

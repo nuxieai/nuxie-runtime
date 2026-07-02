@@ -3714,9 +3714,12 @@ consume one hidden pull during reverse reapplication, then reuse that count
 through later normal advances for `randomModeValue` values `0`, `1`, and `2`,
 matching the C++ probe observable fallback values. The contract is
 `docs/prototypes/data-binding-graph-formula-random-boolean-fallback-target-to-source-call-count-runtime-contract.md`.
-Probe-visible C++ `RandomProvider::totalCalls`, imported/owned contexts, real
-random generation, secondary dependency invalidation, and full dirty-list
-scheduler parity remain follow-up `#12` slices.
+The C++ probe now seeds deterministic random values and reports per-action
+`randomTotalCalls`, so this slice compares Rust's hidden reverse-path pull
+count directly against the C++ total after every boolean target-to-source
+report. Imported/owned contexts, real random generation, secondary dependency
+invalidation, and full dirty-list scheduler parity remain follow-up `#12`
+slices.
 
 Current #12 update: graph formula random boolean fallback target-dirty
 Direct graph-owned `DataConverterFormula` random functions now cover

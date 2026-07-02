@@ -1403,9 +1403,11 @@ slice.
   clearing after
   `set_default_view_model_symbol_list_index_source_for_data_bind`. Direct
   explicit target-to-source, public-update, target-dirty, grouped
-  symbol-list-index, list/non-number, imported/owned, real random generation,
-  and probe-visible C++ `RandomProvider::totalCalls` behavior remain follow-up
-  slices. The contract is
+  symbol-list-index, list/non-number, imported/owned, and real random
+  generation remain follow-up slices. The C++ probe now seeds deterministic
+  random values and reports per-action `randomTotalCalls`, so this slice
+  compares the Rust host-stream count directly against the C++ total after
+  every source-to-target report. The contract is
   `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-call-count-runtime-contract.md`.
 - `DataConverterFormula` random non-number fallback slice: default-context
   boolean, enum, color, string, and trigger sources feeding number targets now
@@ -1425,11 +1427,13 @@ slice.
   number targets now expose Rust's host-supplied random-stream pull count for
   direct source-to-target fallback. Rust keeps the count at zero across
   repeated advances for `randomModeValue` values `0`, `1`, and `2` while the
-  same fixtures continue to match C++ probe fallback values. Target-to-source
-  non-number behavior is covered separately below. Probe-visible C++
-  `RandomProvider::totalCalls`, imported/owned contexts, real random
-  generation, secondary dependency invalidation, and full dirty-list
-  scheduler parity remain follow-up slices. The contract is
+  same fixtures continue to match C++ probe fallback values. The C++ probe now
+  seeds deterministic random values and reports per-action `randomTotalCalls`,
+  so this slice compares zero Rust host-stream pulls directly against the zero
+  C++ total after every source-to-target fallback report. Target-to-source
+  non-number behavior is covered separately below. Imported/owned contexts,
+  real random generation, secondary dependency invalidation, and full
+  dirty-list scheduler parity remain follow-up slices. The contract is
   `docs/prototypes/data-binding-graph-formula-random-non-number-fallback-call-count-runtime-contract.md`.
 - `DataConverterFormula` random boolean fallback target-to-source slice:
   default-context boolean sources feeding main-`ToSource | TwoWay` and
@@ -1454,10 +1458,12 @@ slice.
   fallback. Each reverse path consumes one hidden pull during reapplication
   and reuses that count through later normal advances for `randomModeValue`
   values `0`, `1`, and `2`, while the same fixtures continue to match C++
-  probe fallback values. Probe-visible C++ `RandomProvider::totalCalls`,
-  imported/owned contexts, real random generation, secondary dependency
-  invalidation, and full dirty-list scheduler parity remain follow-up slices.
-  The contract is
+  probe fallback values. The C++ probe now seeds deterministic random values
+  and reports per-action `randomTotalCalls`, so this slice compares Rust's
+  hidden reverse-path pull count directly against the C++ total after every
+  boolean target-to-source report. Imported/owned contexts, real random
+  generation, secondary dependency invalidation, and full dirty-list scheduler
+  parity remain follow-up slices. The contract is
   `docs/prototypes/data-binding-graph-formula-random-boolean-fallback-target-to-source-call-count-runtime-contract.md`.
 - `DataConverterFormula` random boolean fallback target-dirty slice:
   default-context boolean sources feeding number targets now preserve a manual
@@ -1504,10 +1510,13 @@ slice.
   target-to-source fallback. Each reverse path consumes one hidden pull during
   reapplication and reuses that count through later normal advances for
   `randomModeValue` values `0`, `1`, and `2`, while the same fixtures continue
-  to match C++ probe fallback values. Probe-visible C++
-  `RandomProvider::totalCalls`, imported/owned contexts, real random
-  generation, secondary dependency invalidation, and full dirty-list scheduler
-  parity remain follow-up slices. The contract is
+  to match C++ probe fallback values. The C++ probe now seeds deterministic
+  random values and reports per-action `randomTotalCalls`, so this slice
+  compares Rust's hidden reverse-path pull count directly against the C++
+  total after every enum/color/string/trigger target-to-source report.
+  Imported/owned contexts, real random generation, secondary dependency
+  invalidation, and full dirty-list scheduler parity remain follow-up slices.
+  The contract is
   `docs/prototypes/data-binding-graph-formula-random-remaining-fallbacks-target-to-source-call-count-runtime-contract.md`.
 - `DataConverterFormula` random list fallback target-to-source slice:
   default-context list sources feeding main-`ToSource | TwoWay` and
@@ -1542,10 +1551,12 @@ slice.
   source-change modes consume one visible reapply draw because the
   symbol-list-index source is preserved rather than changed; always mode
   consumes two values during the explicit pass, including the hidden reverse
-  conversion draw. Public-update, target-dirty, grouped symbol-list-index,
-  list/non-number, imported/owned, real random generation, and probe-visible
-  C++ `RandomProvider::totalCalls` behavior remain follow-up slices. The
-  contract is
+  conversion draw. The C++ probe now seeds deterministic random values and
+  reports per-action `randomTotalCalls`, so this slice compares the Rust
+  host-stream count directly against the C++ total after every explicit
+  target-to-source report. Public-update, target-dirty, grouped
+  symbol-list-index, list/non-number, imported/owned, and real random
+  generation remain follow-up slices. The contract is
   `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-target-to-source-call-count-runtime-contract.md`.
 - `DataConverterFormula` random symbol-list-index public-update call-count
   slice: default-context symbol-list-index sources feeding main-`ToTarget |
@@ -1554,10 +1565,12 @@ slice.
   later normal advancement. Default and source-change modes keep the warmed
   source-to-target draw because the symbol-list-index source is preserved
   rather than changed; always mode consumes one initial draw plus two more
-  values during the public update. Target-dirty, grouped symbol-list-index,
-  list/non-number, imported/owned, real random generation, and probe-visible
-  C++ `RandomProvider::totalCalls` behavior remain follow-up slices. The
-  contract is
+  values during the public update. The C++ probe now seeds deterministic
+  random values and reports per-action `randomTotalCalls`, so this slice
+  compares the Rust host-stream count directly against the C++ total after
+  every public-update report. Target-dirty, grouped symbol-list-index,
+  list/non-number, imported/owned, and real random generation remain follow-up
+  slices. The contract is
   `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-public-update-call-count-runtime-contract.md`.
 - `DataConverterFormula` random symbol-list-index target-dirty call-count
   slice: default-context symbol-list-index sources feeding main-`ToTarget |
@@ -1565,9 +1578,11 @@ slice.
   count for target-dirty preservation and later normal advancement. Default
   and source-change modes consume one initial draw and reuse it through
   preservation and later advances; always mode consumes one initial draw, one
-  later reapply draw, and no additional second-later draw. Grouped
-  symbol-list-index, list/non-number, imported/owned, real random generation,
-  and probe-visible C++ `RandomProvider::totalCalls` behavior remain follow-up
+  later reapply draw, and no additional second-later draw. The C++ probe now
+  seeds deterministic random values and reports per-action `randomTotalCalls`,
+  so this slice compares the Rust host-stream count directly against the C++
+  total after every target-dirty report. Grouped symbol-list-index,
+  list/non-number, imported/owned, and real random generation remain follow-up
   slices. The contract is
   `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-target-dirty-call-count-runtime-contract.md`.
 - `DataConverterFormula` random symbol-list-index target-dirty slice:
@@ -1624,9 +1639,11 @@ slice.
   grouped formula evaluation with the second evaluation scheduled by a
   symbol-list-index source mutation, and source-change mode consumes one
   initial draw plus one refresh after a symbol-list-index source mutation.
-  Remaining non-list non-number paths, imported/owned contexts, real random
-  generation, and probe-visible C++ `RandomProvider::totalCalls` behavior
-  remain follow-up slices. The contract is
+  The C++ probe now seeds deterministic random values and reports per-action
+  `randomTotalCalls`, so this slice compares the Rust host-stream count
+  directly against the C++ total after every grouped source-to-target report.
+  Remaining non-list non-number paths, imported/owned contexts, and real
+  random generation remain follow-up slices. The contract is
   `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-group-call-count-runtime-contract.md`.
 - `DataConverterFormula` random symbol-list-index group explicit
   target-to-source slice: default-context symbol-list-index sources feeding
@@ -1651,9 +1668,12 @@ slice.
   advancement. Default and source-change modes consume one visible reapply
   draw because the symbol-list-index source is preserved rather than changed;
   always mode consumes two values during the explicit pass, including the
-  hidden grouped reverse-conversion draw. List/non-number paths,
-  imported/owned contexts, real random generation, and probe-visible C++
-  `RandomProvider::totalCalls` behavior remain follow-up slices. The contract is
+  hidden grouped reverse-conversion draw. The C++ probe now seeds
+  deterministic random values and reports per-action `randomTotalCalls`, so
+  this slice compares the Rust host-stream count directly against the C++
+  total after every grouped explicit target-to-source report. List/non-number
+  paths, imported/owned contexts, and real random generation remain follow-up
+  slices. The contract is
   `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-group-target-to-source-call-count-runtime-contract.md`.
 - `DataConverterFormula` random symbol-list-index group public-update
   target-to-source slice: default-context symbol-list-index sources feeding
@@ -1675,10 +1695,12 @@ slice.
   target-to-source scheduling and later normal advancement. Default and
   source-change modes keep the warmed source-to-target draw because the
   symbol-list-index source is preserved rather than changed; always mode
-  consumes one initial draw plus two more values during the public update.
-  List/non-number paths, imported/owned contexts, real random generation, and
-  probe-visible C++ `RandomProvider::totalCalls` behavior remain follow-up
-  slices. The contract is
+  consumes one initial draw plus two more values during the public update. The
+  C++ probe now seeds deterministic random values and reports per-action
+  `randomTotalCalls`, so this slice compares the Rust host-stream count
+  directly against the C++ total after every grouped public-update report.
+  List/non-number paths, imported/owned contexts, and real random generation
+  remain follow-up slices. The contract is
   `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-group-public-update-call-count-runtime-contract.md`.
 - `DataConverterFormula` random symbol-list-index group target-dirty slice:
   default-context symbol-list-index sources feeding number targets through
@@ -1700,9 +1722,11 @@ slice.
   later normal advancement. Default and source-change modes consume one
   initial draw and reuse it through preservation and later advances; always
   mode consumes one initial draw, one later reapply draw, and no additional
-  second-later draw. List/non-number paths, imported/owned contexts, real
-  random generation, and probe-visible C++ `RandomProvider::totalCalls`
-  behavior remain follow-up slices. The contract is
+  second-later draw. The C++ probe now seeds deterministic random values and
+  reports per-action `randomTotalCalls`, so this slice compares the Rust
+  host-stream count directly against the C++ total after every grouped
+  target-dirty report. List/non-number paths, imported/owned contexts, and
+  real random generation remain follow-up slices. The contract is
   `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-group-target-dirty-call-count-runtime-contract.md`.
 - `DataConverterFormula` random always-mode source-to-target slice:
   default-context number sources feeding number targets now execute direct

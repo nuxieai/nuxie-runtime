@@ -3222,9 +3222,11 @@ is
 `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-call-count-runtime-contract.md`.
 Direct explicit target-to-source, public-update, target-dirty, grouped
 symbol-list-index, list/non-number, imported/owned, real random generation,
-probe-visible C++ `RandomProvider::totalCalls`, secondary dependency
-invalidation, and full dirty-list scheduler parity remain follow-up `#12`
-slices.
+secondary dependency invalidation, and full dirty-list scheduler parity remain
+follow-up `#12` slices. The C++ probe now seeds deterministic random values
+and reports per-action `randomTotalCalls`, so this slice compares the Rust
+host-stream count directly against the C++ total after every source-to-target
+report.
 
 Current #12 update: graph formula random always mode source-to-target
 Direct graph-owned `DataConverterFormula` random functions now cover the first

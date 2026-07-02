@@ -39,8 +39,10 @@ host-stream pulls needed to match C++ probe number reports.
 - Grouped explicit target-to-source symbol-list-index call counts are covered
   by
   `data-binding-graph-formula-random-symbol-list-index-group-target-to-source-call-count-runtime-contract.md`.
-- Grouped public-update symbol-list-index call counts.
-- Grouped target-dirty symbol-list-index call counts.
+- Grouped public-update symbol-list-index call counts are covered by
+  `data-binding-graph-formula-random-symbol-list-index-group-public-update-call-count-runtime-contract.md`.
+- Grouped target-dirty symbol-list-index call counts are covered by
+  `data-binding-graph-formula-random-symbol-list-index-group-target-dirty-call-count-runtime-contract.md`.
 - Direct symbol-list-index call counts, which are covered by the direct
   symbol-list-index call-count contracts.
 - Number-source grouped call counts, which are covered by

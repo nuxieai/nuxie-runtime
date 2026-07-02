@@ -1,14 +1,14 @@
-# Data Binding Graph Formula Random Symbol-List-Index Group Public-Update Call Count Runtime Contract
+# Data Binding Graph Formula Random Symbol-List-Index Group Target-Dirty Call Count Runtime Contract
 
 ## Purpose
 
-Extend grouped symbol-list-index random call-count coverage into public
-`update_data_binds_apply_target_to_source` scheduling.
+Extend grouped symbol-list-index random call-count coverage into
+main-`ToTarget | TwoWay` target-dirty scheduling.
 
 This pins how many values Rust pulls from the host-supplied formula random
-stream while matching the existing C++ probe binding reports for
-main-`ToTarget | TwoWay` symbol-list-index binds that use
-`DataConverterGroup<OperationValue, Formula(random)>`.
+stream while matching the existing C++ probe binding reports for grouped
+symbol-list-index binds that preserve a manual target edit through explicit
+data-context advancement.
 
 ## In Scope
 
@@ -16,21 +16,16 @@ main-`ToTarget | TwoWay` symbol-list-index binds that use
 - Root-only `DataBindContext.sourcePathIds` of shape `[0, propertyIndex]`.
 - `ViewModelInstanceSymbolListIndex.propertyValue` sources feeding
   `BindablePropertyNumber.propertyValue` targets.
-- Main-`ToTarget | TwoWay` data-bind flags with public
-  `StateMachineInstance::update_data_binds_apply_target_to_source`.
+- Main-`ToTarget | TwoWay` data-bind flags with explicit
+  `StateMachineInstance::advance_data_context` after a manual target edit.
 - `DataConverterGroup` with a direct `DataConverterOperationValue` child
   followed by a direct `DataConverterFormula` child.
 - `FormulaTokenFunction` with `functionType == FunctionType::random`.
 - `DataConverterFormula.randomModeValue` values `0`, `1`, and `2`.
 - Initial source-to-target state-machine advancement.
-- Public target-to-source scheduling through
-  `update_data_binds_apply_target_to_source` after a bindable number target
-  mutation.
-- Same-update source-to-target reapplication after public target-to-source
-  preserves the unchanged symbol-list-index source.
-- Later normal state-machine advancement after that public update, proving no
-  additional values are pulled without another grouped formula evaluation in
-  these fixtures.
+- Manual bindable-number target mutation followed by explicit
+  `advance_data_context`, preserving the edited target.
+- Later normal state-machine advancement after that target-dirty pass.
 - C++ probe comparisons for the observable binding values around those Rust
   call-count assertions.
 
@@ -47,8 +42,8 @@ main-`ToTarget | TwoWay` symbol-list-index binds that use
 - Grouped explicit target-to-source symbol-list-index call counts are covered
   by
   `data-binding-graph-formula-random-symbol-list-index-group-target-to-source-call-count-runtime-contract.md`.
-- Grouped target-dirty symbol-list-index call counts are covered by
-  `data-binding-graph-formula-random-symbol-list-index-group-target-dirty-call-count-runtime-contract.md`.
+- Grouped public-update symbol-list-index call counts are covered by
+  `data-binding-graph-formula-random-symbol-list-index-group-public-update-call-count-runtime-contract.md`.
 - Direct symbol-list-index call counts, which are covered by the direct
   symbol-list-index call-count contracts.
 - Number-source grouped call counts, which are covered by the grouped number
@@ -63,14 +58,15 @@ main-`ToTarget | TwoWay` symbol-list-index binds that use
 - Setting a new host random stream resets the grouped symbol-list-index Rust
   call count to zero.
 - Default random mode consumes one value during the initial grouped
-  source-to-target advance and reuses that cached value through public
-  target-to-source, same-update reapplication, and later normal advances.
+  source-to-target advance and reuses that cached value through target-dirty
+  preservation and later normal advances.
 - Always random mode consumes one value during the initial grouped
-  source-to-target advance, consumes two more values during the public update,
-  and does not consume additional values on later normal advances in this
-  grouped fixture.
+  source-to-target advance, consumes one more value on the first later normal
+  reapply, and does not consume an additional value on the second later normal
+  advance in this grouped fixture.
 - Source-change random mode consumes one value during the initial grouped
-  source-to-target advance and reuses it because the symbol-list-index source
-  is preserved rather than changed by the public update.
+  source-to-target advance, preserves the cache through target-dirty
+  advancement because the symbol-list-index source did not change, and reuses
+  the cached value on later normal advances.
 - The same grouped symbol-list-index fixtures continue to match C++ probe
   binding values.

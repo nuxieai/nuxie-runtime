@@ -42,7 +42,11 @@ direct number-source default-mode path.
 - Target-dirty symbol-list-index random formula scheduling is covered
   separately by
   `data-binding-graph-formula-random-symbol-list-index-target-dirty-runtime-contract.md`.
-- Grouped, list, and non-symbol non-number random formula scheduling.
+- Grouped symbol-list-index default-mode source-to-target scheduling is
+  covered separately by
+  `data-binding-graph-formula-random-symbol-list-index-group-runtime-contract.md`.
+- Grouped non-default, grouped target-to-source, grouped target-dirty, list,
+  and non-symbol non-number random formula scheduling.
 - Formula parent-source binding, source dependents, and add-dirt behavior.
 - External, imported, and owned contexts for this converter/source
   combination.

@@ -43,7 +43,10 @@ path.
   `data-binding-graph-formula-random-group-target-dirty-runtime-contract.md`;
   grouped explicit target-to-source scheduling is covered separately by
   `data-binding-graph-formula-random-group-target-to-source-runtime-contract.md`.
-- List formula, symbol-list-index, and non-number random formula scheduling.
+- Grouped symbol-list-index default-mode source-to-target scheduling is
+  covered separately by
+  `data-binding-graph-formula-random-symbol-list-index-group-runtime-contract.md`.
+- List formula and non-number random formula scheduling.
 - Stateful grouped converters mixed with random formulas.
 - External, imported, and owned contexts for this converter/source
   combination.

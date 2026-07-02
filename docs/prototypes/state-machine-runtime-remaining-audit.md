@@ -1202,10 +1202,24 @@ slice.
   state-machine advances. Random modes `0`, `1`, and `2` match the C++ probe
   target reports; default and source-change modes reuse cached values when no
   symbol-list-index source mutation occurs, while always mode consumes fresh
-  values on later normal advances. Grouped symbol-list-index random formulas,
+  values on later normal advances. Grouped symbol-list-index default-mode
+  source-to-target behavior is covered separately below. Grouped non-default,
+  grouped target-to-source/public-update/target-dirty, imported/owned
+  contexts, real random generation, and random call-count parity remain
+  follow-up slices. The contract is
+  `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-target-dirty-runtime-contract.md`.
+- `DataConverterFormula` random symbol-list-index group source-to-target
+  slice: default-context symbol-list-index sources feeding number targets
+  through `DataConverterGroup<OperationValue, Formula(random)>` now enter the
+  runtime data-bind graph as typed symbol-list-index sources, pass through the
+  number-producing operation-value child, and evaluate the nested default-mode
+  random formula with the host-supplied random stream. Rust matches C++ by
+  caching that random value across subsequent source-to-target state-machine
+  advancement. Grouped non-default, grouped target-to-source/public-update/
+  target-dirty, list formulas, remaining non-number random scheduling,
   imported/owned contexts, real random generation, and random call-count parity
   remain follow-up slices. The contract is
-  `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-target-dirty-runtime-contract.md`.
+  `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-group-runtime-contract.md`.
 - `DataConverterFormula` random always-mode source-to-target slice:
   default-context number sources feeding number targets now execute direct
   `FunctionType::random` output-queue tokens when `randomModeValue == 1`.

@@ -13836,6 +13836,21 @@ fn runtime_data_bind_graph_converter_contains_source_change_random(
     }
 }
 
+fn runtime_data_bind_graph_converter_accepts_symbol_list_index_number_source(
+    converter: &RuntimeDataBindGraphConverter,
+) -> bool {
+    match converter {
+        RuntimeDataBindGraphConverter::ToNumber
+        | RuntimeDataBindGraphConverter::OperationValue { .. }
+        | RuntimeDataBindGraphConverter::OperationViewModel { .. }
+        | RuntimeDataBindGraphConverter::Formula { .. } => true,
+        RuntimeDataBindGraphConverter::Group(converters) => converters
+            .first()
+            .is_some_and(runtime_data_bind_graph_converter_accepts_symbol_list_index_number_source),
+        _ => false,
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 struct RuntimeDataBindGraphFormulaState {
     randoms: Vec<f32>,
@@ -22862,6 +22877,21 @@ fn runtime_bindable_number_default_view_model_source(
                 RuntimeDataBindGraphValue::Trigger(value)
             } else if let Some(item_count) = file.view_model_instance_list_size_for_object(source) {
                 RuntimeDataBindGraphValue::List { item_count }
+            } else {
+                return None;
+            }
+        }
+        Some(RuntimeDataBindGraphConverter::Group(converters))
+            if converters.first().is_some_and(
+                runtime_data_bind_graph_converter_accepts_symbol_list_index_number_source,
+            ) =>
+        {
+            if let Some(value) = file.view_model_instance_number_value_for_object(source) {
+                RuntimeDataBindGraphValue::Number(value)
+            } else if let Some(value) =
+                file.view_model_instance_symbol_list_index_value_for_object(source)
+            {
+                RuntimeDataBindGraphValue::SymbolListIndex(value)
             } else {
                 return None;
             }

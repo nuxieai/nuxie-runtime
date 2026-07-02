@@ -33,8 +33,10 @@ symbol-list-index source mutation.
   `data-binding-graph-formula-random-symbol-list-index-group-runtime-contract.md`.
 - Grouped symbol-list-index explicit target-to-source scheduling is covered by
   `data-binding-graph-formula-random-symbol-list-index-group-target-to-source-runtime-contract.md`.
-- Grouped symbol-list-index public-update target-to-source and target-dirty
-  scheduling.
+- Grouped symbol-list-index public-update target-to-source scheduling is
+  covered by
+  `data-binding-graph-formula-random-symbol-list-index-group-public-update-target-to-source-runtime-contract.md`.
+- Grouped symbol-list-index target-dirty scheduling.
 - Direct symbol-list-index random formula behavior, covered by the direct
   symbol-list-index random contracts.
 - List formula random scheduling and non-number fallback random scheduling.

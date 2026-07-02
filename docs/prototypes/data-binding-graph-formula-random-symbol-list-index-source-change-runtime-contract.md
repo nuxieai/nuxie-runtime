@@ -47,8 +47,11 @@ fresh random value on the next formula evaluation.
 - Grouped symbol-list-index explicit target-to-source scheduling is covered
   separately by
   `data-binding-graph-formula-random-symbol-list-index-group-target-to-source-runtime-contract.md`.
-- Grouped public-update target-to-source, grouped target-dirty, list, and
-  non-symbol non-number random formula scheduling.
+- Grouped symbol-list-index public-update target-to-source scheduling is
+  covered separately by
+  `data-binding-graph-formula-random-symbol-list-index-group-public-update-target-to-source-runtime-contract.md`.
+- Grouped target-dirty, list, and non-symbol non-number random formula
+  scheduling.
 - Converter dependency invalidation for secondary source paths.
 - Formula parent-source binding, source dependents, and add-dirt behavior.
 - External, imported, and owned contexts for this converter/source

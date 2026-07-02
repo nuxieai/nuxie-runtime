@@ -1,15 +1,15 @@
-# Data Binding Graph Formula Random Symbol-List-Index Group Target-To-Source Runtime Contract
+# Data Binding Graph Formula Random Symbol-List-Index Group Public-Update Target-To-Source Runtime Contract
 
 ## Purpose
 
-Pin explicit target-to-source scheduling for grouped symbol-list-index random
+Pin public target-to-source scheduling for grouped symbol-list-index random
 formula binds.
 
-This extends the grouped symbol-list-index random formula source-to-target
-contracts by proving that a main-`ToSource | TwoWay` number target can be
-manually edited, explicitly advanced through `advance_data_context`, preserve
-the unchanged symbol-list-index source, and then reapply that source through
-the grouped formula path with C++ parity.
+This extends the explicit grouped target-to-source contract by proving that a
+main-`ToTarget | TwoWay` number target can be manually edited, applied through
+`update_data_binds_apply_target_to_source`, preserve the unchanged
+symbol-list-index source, and reapply that source in the same public update
+with C++ parity.
 
 ## In Scope
 
@@ -17,16 +17,16 @@ the grouped formula path with C++ parity.
 - Root-only `DataBindContext.sourcePathIds` of shape `[0, propertyIndex]`.
 - `ViewModelInstanceSymbolListIndex.propertyValue` sources feeding
   `BindablePropertyNumber.propertyValue` targets.
-- Main-`ToSource | TwoWay` data-bind flags advanced through
-  `StateMachineInstance::advance_data_context`.
+- Main-`ToTarget | TwoWay` data-bind flags with public
+  `StateMachineInstance::update_data_binds_apply_target_to_source`.
 - `DataConverterGroup` with a direct `DataConverterOperationValue` child
   followed by a direct `DataConverterFormula` child.
 - `FormulaTokenFunction` with `functionType == FunctionType::random`.
 - `DataConverterFormula.randomModeValue` values `0`, `1`, and `2`.
-- Preservation of the unchanged symbol-list-index source when reverse formula
+- Preservation of the unchanged symbol-list-index source when grouped reverse
   conversion produces a number.
-- Reapplication of the preserved source through grouped reverse order, including
-  the operation-value reverse scale visible in C++ target reports.
+- Same-update source-to-target reapplication after the public target-to-source
+  pass.
 - `StateMachineInstance::set_data_bind_formula_random_values` as the
   host-supplied graph formula random stream.
 
@@ -36,9 +36,8 @@ the grouped formula path with C++ parity.
   `data-binding-graph-formula-random-symbol-list-index-group-runtime-contract.md`
   and
   `data-binding-graph-formula-random-symbol-list-index-group-non-default-runtime-contract.md`.
-- Grouped symbol-list-index public-update target-to-source scheduling, covered
-  by
-  `data-binding-graph-formula-random-symbol-list-index-group-public-update-target-to-source-runtime-contract.md`.
+- Grouped symbol-list-index explicit target-to-source scheduling, covered by
+  `data-binding-graph-formula-random-symbol-list-index-group-target-to-source-runtime-contract.md`.
 - Grouped symbol-list-index target-dirty scheduling.
 - Direct symbol-list-index random formula behavior, covered by the direct
   symbol-list-index random contracts.
@@ -56,10 +55,11 @@ the grouped formula path with C++ parity.
 
 ## Completion Checks
 
-- Explicit `advance_data_context` target-to-source applies for grouped
-  symbol-list-index random formula binds with random modes `0`, `1`, and `2`.
+- Public `update_data_binds_apply_target_to_source` applies grouped
+  symbol-list-index random formula target-to-source for random modes `0`, `1`,
+  and `2`.
 - The symbol-list-index source remains unchanged when grouped reverse
   conversion produces a number.
-- The same explicit pass marks the bind dirty for source-to-target reapply.
-- C++ probe number reports match Rust for the explicit target-to-source report
-  and the later normal state-machine advances.
+- The same public update reapplies the preserved source to the number target.
+- C++ probe number reports match Rust for the initial source-to-target report,
+  the public-update report, and the later normal state-machine advances.

@@ -3687,7 +3687,8 @@ list target scalar during explicit data-context advancement, ignores supplied
 random values for this observable fallback, and applies C++'s numeric fallback
 target value on later normal state-machine advancement. The contract is
 `docs/prototypes/data-binding-graph-formula-random-list-fallback-bindable-list-target-runtime-contract.md`.
-Generated list items, public-update and target-to-source scheduling for
+Random explicit target-to-source behavior is covered separately below.
+Generated list items, random public-update target-to-source scheduling for
 formula list targets, imported/owned contexts, real random generation, random
 call counts, secondary dependency invalidation, and full dirty-list scheduler
 parity remain follow-up `#12` slices.
@@ -3703,10 +3704,11 @@ numeric formula fallback during the same explicit target-to-source pass. The
 contract is
 `docs/prototypes/data-binding-graph-formula-list-fallback-bindable-list-explicit-target-to-source-runtime-contract.md`.
 The deterministic public-update list-target reverse path is covered
-separately below. Random formula list-target target-to-source, generated list
-items, imported/owned contexts, real random generation, random call counts,
-secondary dependency invalidation, and full dirty-list scheduler parity remain
-follow-up `#12` slices.
+separately below. Random explicit list-target target-to-source behavior is
+covered separately below. Random public-update list-target target-to-source,
+generated list items, imported/owned contexts, real random generation, random
+call counts, secondary dependency invalidation, and full dirty-list scheduler
+parity remain follow-up `#12` slices.
 
 Current #12 update: graph formula list fallback bindable-list public update target-to-source
 Direct graph-owned `DataConverterFormula` now covers public
@@ -3717,7 +3719,24 @@ default-context list sources feeding state-machine
 size and, matching C++, reapplies the numeric formula fallback to the list
 target during the same public update. The contract is
 `docs/prototypes/data-binding-graph-formula-list-fallback-bindable-list-public-update-target-to-source-runtime-contract.md`.
-Random formula list-target target-to-source, generated list items,
+Random explicit list-target target-to-source behavior is covered separately
+below. Random public-update list-target target-to-source, generated list
+items, imported/owned contexts, real random generation, random call counts,
+secondary dependency invalidation, and full dirty-list scheduler parity remain
+follow-up `#12` slices.
+
+Current #12 update: graph formula random list fallback bindable-list explicit target-to-source
+Direct graph-owned `DataConverterFormula` now covers explicit
+`advanceDataContext()` target-to-source behavior for main-`ToSource | TwoWay`
+default-context list sources feeding state-machine
+`BindablePropertyList.propertyValue` targets through `FunctionType::random`
+output tokens with `randomModeValue` values `0`, `1`, and `2`. Rust preserves
+the edited list-target scalar, keeps reporting the imported source list size,
+ignores supplied random values for this observable reverse fallback, and
+avoids reapplying C++'s numeric formula fallback during the same explicit
+target-to-source pass. The contract is
+`docs/prototypes/data-binding-graph-formula-random-list-fallback-bindable-list-explicit-target-to-source-runtime-contract.md`.
+Random public-update list-target target-to-source, generated list items,
 imported/owned contexts, real random generation, random call counts,
 secondary dependency invalidation, and full dirty-list scheduler parity remain
 follow-up `#12` slices.

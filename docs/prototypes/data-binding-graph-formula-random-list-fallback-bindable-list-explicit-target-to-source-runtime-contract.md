@@ -1,17 +1,18 @@
-# Data Binding Graph Formula List Fallback Bindable-List Explicit Target-To-Source Runtime Contract
+# Data Binding Graph Formula Random List Fallback Bindable-List Explicit Target-To-Source Runtime Contract
 
 ## Purpose
 
-Pin explicit target-to-source behavior for deterministic
+Pin explicit target-to-source behavior for random-function
 `DataConverterFormula` list fallback sources feeding
 `BindablePropertyList.propertyValue` targets.
 
 C++ does not write an edited scalar list-target value back into a
-`ViewModelInstanceList` source through this path, and it also does not
-immediately reapply the formula numeric fallback to the list target during the
-same explicit data-context advancement. The observable result is that the
-source still reports the imported list size and the edited list-target scalar
-is preserved.
+`ViewModelInstanceList` source through this path, and it does not immediately
+reapply the random-function formula numeric fallback to the list target during
+the same explicit data-context advancement. The observable result matches the
+deterministic explicit path: the source still reports the imported list size
+and the edited list-target scalar is preserved for `randomModeValue` values
+`0`, `1`, and `2`.
 
 ## In Scope
 
@@ -22,8 +23,9 @@ is preserved.
 - `ViewModelInstanceList` sources with imported `ViewModelInstanceListItem`
   children.
 - `BindablePropertyList.propertyValue` state-machine targets.
-- Direct `DataConverterFormula` with a single deterministic
-  `FormulaTokenInput` output token.
+- Direct `DataConverterFormula` with a `FormulaTokenFunction` output token.
+- `FunctionType::random` and `DataConverterFormula.randomModeValue` values
+  `0`, `1`, and `2`.
 - Mutating the bindable list target scalar by data-bind index before explicit
   data-context advancement.
 - Existing C++ probe list binding reports:
@@ -34,16 +36,12 @@ is preserved.
 
 ## Out Of Scope
 
-- Source-to-target list-target fallback behavior, covered by
-  `data-binding-graph-formula-list-fallback-bindable-list-target-runtime-contract.md`.
-- Public `updateDataBinds(true)` target-to-source behavior for deterministic
-  formula list targets, covered by
-  `data-binding-graph-formula-list-fallback-bindable-list-public-update-target-to-source-runtime-contract.md`.
-- Explicit target-to-source behavior for random-function formula list targets,
-  covered by
-  `data-binding-graph-formula-random-list-fallback-bindable-list-explicit-target-to-source-runtime-contract.md`.
-- Public `updateDataBinds(true)` target-to-source behavior for
-  random-function formula list targets.
+- Deterministic explicit target-to-source behavior, covered by
+  `data-binding-graph-formula-list-fallback-bindable-list-explicit-target-to-source-runtime-contract.md`.
+- Source-to-target random list-target fallback behavior, covered by
+  `data-binding-graph-formula-random-list-fallback-bindable-list-target-runtime-contract.md`.
+- Public `updateDataBinds(true)` target-to-source behavior for random-function
+  formula list targets.
 - Target-dirty scheduling for formula list targets.
 - `DataConverterNumberToList`, which is covered by the existing bindable-list
   and number-to-list contracts.
@@ -56,7 +54,7 @@ is preserved.
 
 ## Completion Checks
 
-- A deterministic formula list source bound to
+- A random-function formula list source bound to
   `BindablePropertyList.propertyValue` can participate in an explicit
   target-to-source pass.
 - Rust reports the same unchanged source list size as C++ after explicit
@@ -65,5 +63,7 @@ is preserved.
   data-context advancement.
 - The formula numeric fallback is not reapplied to the list target during the
   same explicit target-to-source pass.
-- Existing deterministic formula list-target, random formula list-target, and
-  direct bindable-list target-to-source probes continue to pass.
+- Random modes `0`, `1`, and `2` match C++ even when Rust is supplied non-zero
+  random values.
+- Existing deterministic formula list-target reverse and random formula
+  list-target source-to-target probes continue to pass.

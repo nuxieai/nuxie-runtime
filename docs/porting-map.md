@@ -3235,6 +3235,21 @@ identity, relative/parent/nested lookup, listener-owned data binding, nested
 artboard propagation, and full dirty-list scheduler parity remain follow-up
 `#12` slices.
 
+Current #12 update: deterministic formula string contexts
+Direct graph-owned `DataConverterFormula` fallback now covers string sources
+that are rebound through imported and owned runtime view-model contexts before
+normal state-machine advancement. The fixture also includes a same-path direct
+string observer, so imported-context string mutation now fans out to every
+bound same-path string source node in the active graph before dirty
+reapplication. The contract is
+`docs/prototypes/data-binding-graph-formula-string-context-runtime-contract.md`.
+Trigger/list formula contexts, imported same-path fanout for
+non-boolean/non-enum/non-color/non-string source kinds, formula random
+functions, reverse propagation, public update, target-dirty scheduling,
+generated list item identity, relative/parent/nested lookup, listener-owned
+data binding, nested artboard propagation, and full dirty-list scheduler parity
+remain follow-up `#12` slices.
+
 Current #12 update: first graph formula random function
 Direct graph-owned `DataConverterFormula` converters now admit the first
 `FunctionType::random` slice for default-context number sources feeding number

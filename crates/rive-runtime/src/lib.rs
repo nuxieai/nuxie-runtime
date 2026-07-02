@@ -10820,25 +10820,43 @@ impl RuntimeDataBindGraph {
         else {
             return false;
         };
-        let Some(source) = self.sources.get_mut(source.0) else {
+        let Some(source) = self.sources.get(source.0) else {
             return false;
         };
         if !matches!(&source.default_value, RuntimeDataBindGraphValue::String(_)) {
             return false;
         }
-        let source_changed = !matches!(&source.value, RuntimeDataBindGraphValue::String(current) if current.as_slice() == value);
         let path = source.path.clone();
         let context_changed = context
             .string_overrides
             .get(&path)
             .map(|current| current.as_slice())
             != Some(value);
+
+        let source_changed = self.sources.iter().any(|source| {
+            source.path == path
+                && matches!(source.default_value, RuntimeDataBindGraphValue::String(_))
+                && (!source.bound
+                    || !matches!(&source.value, RuntimeDataBindGraphValue::String(current) if current.as_slice() == value))
+        });
+
         if !source_changed && !context_changed {
             return false;
         }
 
-        source.value = RuntimeDataBindGraphValue::String(value.to_vec());
-        source.bound = true;
+        for source in self.sources.iter_mut().filter(|source| {
+            source.path == path
+                && matches!(source.default_value, RuntimeDataBindGraphValue::String(_))
+        }) {
+            let changed = !source.bound
+                || !matches!(&source.value, RuntimeDataBindGraphValue::String(current) if current.as_slice() == value);
+            source.value = RuntimeDataBindGraphValue::String(value.to_vec());
+            source.bound = true;
+            if changed {
+                source.reset_formula_random_state_for_source_change();
+            }
+        }
+
         context.string_overrides.insert(path, value.to_vec());
         self.mark_default_view_model_bindings_dirty();
         true

@@ -6405,6 +6405,16 @@ Arbitrary converter group orders, relative/name converter paths, non-number
 secondary operands, broader dirty/update queues, listener-owned data binding,
 and nested artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: grouped `DataConverterOperationViewModel` operands now
+also have explicit default-context rebind coverage after imported and owned
+context recompute. The recursive reset restores the stored default operand for
+`DataConverterGroup<OperationValue, OperationViewModel>` after a non-default
+runtime context changed the nested secondary number operand. The contract is
+`docs/prototypes/data-binding-graph-operation-viewmodel-group-default-rebind-runtime-contract.md`.
+Arbitrary converter group orders, relative/name converter paths, non-number
+secondary operands, broader dirty/update queues, listener-owned data binding,
+and nested artboard propagation remain follow-up `#12` slices.
+
 Current #12 update: imported runtime number source mutation now refreshes
 direct `DataConverterOperationViewModel` secondary operands when the mutated
 source path matches the converter operand path. This keeps a bound imported

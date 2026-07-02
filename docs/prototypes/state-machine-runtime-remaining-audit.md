@@ -3498,6 +3498,13 @@ slice.
   `DataConverterGroup<OperationValue, OperationViewModel>` now have explicit
   imported and owned context recompute coverage. The contract is
   `docs/prototypes/data-binding-graph-operation-viewmodel-group-context-recompute-runtime-contract.md`.
+- Operation-view-model grouped default rebind slice:
+  `DataConverterOperationViewModel` operands nested inside
+  `DataConverterGroup<OperationValue, OperationViewModel>` now have explicit
+  imported-to-default and owned-to-default context rebind coverage, proving the
+  recursive reset restores the stored default operand after non-default runtime
+  contexts changed it. The contract is
+  `docs/prototypes/data-binding-graph-operation-viewmodel-group-default-rebind-runtime-contract.md`.
 - Operation-view-model imported number mutation slice:
   mutating an already-bound imported number source now refreshes matching
   direct `DataConverterOperationViewModel` secondary operands without

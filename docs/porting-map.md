@@ -6347,6 +6347,20 @@ Live data-bind wiring for those relative/name paths, converter name paths,
 live parent paths, runtime mutation/relink through these reports, listener-owned
 data binding, and nested artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: file-backed `DataContext` lookup facts now also have a
+graph-callable runtime resolver. `RuntimeDataContext` wraps a borrowed
+`RuntimeFile`, a current imported `ViewModelInstance`, and optional parent
+contexts, and delegates absolute, manifest-relative, parent-chain, and
+`ViewModelInstance::propertyFromPath` lookups to the existing C++-audited
+`rive-binary` helpers. The existing full `--data-context-lookups` comparison
+now flows through this resolver, and a direct Rust test pins the positive
+absolute root lookup facts plus the unresolved relative/nested/parent
+boundaries exposed by the current fixture. The contract is
+`docs/prototypes/data-context-runtime-lookup-support-contract.md`.
+Live data-bind wiring for relative/name paths, converter name paths, runtime
+mutation/relink through data contexts, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

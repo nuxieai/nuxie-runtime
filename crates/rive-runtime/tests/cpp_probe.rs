@@ -1,12 +1,12 @@
 use rive_binary::{RuntimeFile, read_runtime_file};
 use rive_graph::GraphFile;
 use rive_runtime::{
-    ArtboardInstance, ComponentDirt, Mat2D, RuntimeComponent, RuntimeDataContextLookupKind,
-    RuntimeDataContextLookupReport, RuntimeDrawCommandKind, RuntimeFeatherState,
-    RuntimeGradientStop, RuntimeImportedViewModelInstanceContext, RuntimeOwnedViewModelInstance,
-    RuntimePathCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind, RuntimeShapePaintState,
-    StateMachineInputKind, StateMachineInstance, TransformProperty,
-    runtime_data_context_lookup_reports,
+    ArtboardInstance, ComponentDirt, Mat2D, RuntimeComponent, RuntimeDataContext,
+    RuntimeDataContextLookupKind, RuntimeDataContextLookupReport, RuntimeDrawCommandKind,
+    RuntimeFeatherState, RuntimeGradientStop, RuntimeImportedViewModelInstanceContext,
+    RuntimeOwnedViewModelInstance, RuntimePathCommand, RuntimeShapePaintKind,
+    RuntimeShapePaintPathKind, RuntimeShapePaintState, StateMachineInputKind, StateMachineInstance,
+    TransformProperty, runtime_data_context_lookup_reports,
 };
 use rive_schema::definition_by_name;
 use serde::Deserialize;
@@ -12426,6 +12426,79 @@ fn data_context_file_backed_lookup_reports_match_cpp_probe() {
         .collect::<Vec<_>>();
 
     assert_eq!(cpp_reports, rust_reports, "{label} lookup report mismatch");
+}
+
+#[test]
+fn runtime_data_context_covers_absolute_and_unresolved_relative_parent_paths() {
+    let label = "data-context-runtime-resolver";
+    let bytes = synthetic_data_context_nested_viewmodel_lookup(89602);
+    let rust = read_runtime_file(&bytes).unwrap_or_else(|err| {
+        panic!("failed to import {label}: {err:#}");
+    });
+
+    let root_context = RuntimeDataContext::new(&rust, 0, 0)
+        .unwrap_or_else(|| panic!("missing root data context for {label}"));
+    let child_context = RuntimeDataContext::new(&rust, 1, 0)
+        .unwrap_or_else(|| panic!("missing child data context for {label}"));
+    let root_with_child_parent = root_context.clone().with_parent(&child_context);
+
+    let absolute_child = root_context
+        .absolute_property_ref(&[0, 0])
+        .unwrap_or_else(|| panic!("missing absolute child property for {label}"));
+    assert_eq!(
+        (
+            absolute_child.view_model_index,
+            absolute_child.name.as_str()
+        ),
+        (0, "child"),
+        "{label} absolute child property mismatch"
+    );
+
+    let absolute_root_instance = root_context
+        .absolute_instance_ref(&[0])
+        .unwrap_or_else(|| panic!("missing absolute root instance for {label}"));
+    assert_eq!(
+        (
+            absolute_root_instance.view_model_index,
+            absolute_root_instance.name.as_str()
+        ),
+        (0, "root-instance"),
+        "{label} absolute root instance mismatch"
+    );
+
+    assert_eq!(
+        root_context.property_from_path_ref(&[0, 0]),
+        None,
+        "{label} propertyFromPath should preserve unresolved nested amount boundary"
+    );
+    assert_eq!(
+        root_context.relative_property_ref(&[77, 78]),
+        None,
+        "{label} relative lookup should preserve unresolved nested amount boundary"
+    );
+
+    assert_eq!(
+        root_context.relative_property_ref(&[77]),
+        None,
+        "{label} relative child property should preserve unresolved name boundary"
+    );
+
+    assert_eq!(
+        root_with_child_parent.parent_instances().len(),
+        1,
+        "{label} parent chain length mismatch"
+    );
+    assert_eq!(
+        root_with_child_parent.relative_property_ref(&[78]),
+        None,
+        "{label} parent-fallback should preserve unresolved amount boundary"
+    );
+
+    assert_eq!(
+        root_context.relative_instance_ref(&[77]),
+        None,
+        "{label} relative child instance should preserve unresolved reference boundary"
+    );
 }
 
 #[test]

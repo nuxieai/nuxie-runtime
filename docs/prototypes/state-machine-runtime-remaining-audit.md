@@ -3466,6 +3466,15 @@ slice.
   property lookup. The C++ probe compares the complete read-only report for a
   nested view-model fixture. The contract is
   `docs/prototypes/data-context-file-backed-lookup-runtime-contract.md`.
+- Runtime `DataContext` lookup support slice:
+  `RuntimeDataContext` now wraps the file-backed current/parent
+  `ViewModelInstance` chain and delegates absolute, manifest-relative,
+  parent-chain, and `ViewModelInstance::propertyFromPath` lookups to the
+  existing C++-audited binary helpers. The lookup report now uses the wrapper,
+  and direct runtime coverage pins the supported root lookup facts plus the
+  unresolved relative/nested/parent boundaries in the current fixture. The
+  contract is
+  `docs/prototypes/data-context-runtime-lookup-support-contract.md`.
 
 ## Remaining Runtime Slices
 

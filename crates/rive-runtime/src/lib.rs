@@ -10063,6 +10063,7 @@ impl RuntimeDataBindGraph {
                 source.value = RuntimeDataBindGraphValue::Boolean(value);
                 source.bound = true;
             }
+            source.reset_formula_random_state_for_source_change();
             changed = true;
         }
         if !changed {
@@ -10112,6 +10113,7 @@ impl RuntimeDataBindGraph {
                 source.value = RuntimeDataBindGraphValue::String(value.to_vec());
                 source.bound = true;
             }
+            source.reset_formula_random_state_for_source_change();
             changed = true;
         }
         if !changed {
@@ -10157,6 +10159,7 @@ impl RuntimeDataBindGraph {
                 source.value = RuntimeDataBindGraphValue::Color(value);
                 source.bound = true;
             }
+            source.reset_formula_random_state_for_source_change();
             changed = true;
         }
         if !changed {
@@ -10202,6 +10205,7 @@ impl RuntimeDataBindGraph {
                 source.value = RuntimeDataBindGraphValue::Enum(value);
                 source.bound = true;
             }
+            source.reset_formula_random_state_for_source_change();
             changed = true;
         }
         if !changed {
@@ -10411,6 +10415,7 @@ impl RuntimeDataBindGraph {
                 source.value = RuntimeDataBindGraphValue::Trigger(value);
                 source.bound = true;
             }
+            source.reset_formula_random_state_for_source_change();
             changed = true;
         }
         if !changed {
@@ -11534,6 +11539,21 @@ impl RuntimeDataBindGraph {
             return None;
         };
         Some(value)
+    }
+
+    fn default_view_model_trigger_source_property_id_for_data_bind(
+        &self,
+        data_bind_index: usize,
+    ) -> Option<u32> {
+        let binding = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)?;
+        let source = self.sources.get(binding.source.0)?;
+        if !matches!(source.default_value, RuntimeDataBindGraphValue::Trigger(_)) {
+            return None;
+        }
+        source.path.last().copied()
     }
 
     fn number_target_global_id_for_data_bind(&self, data_bind_index: usize) -> Option<u32> {
@@ -13897,6 +13917,18 @@ fn runtime_data_bind_graph_converter_preserves_symbol_list_index_source_on_numbe
         RuntimeDataBindGraphConverter::ToNumber | RuntimeDataBindGraphConverter::Formula { .. }
     ) || (matches!(converter, RuntimeDataBindGraphConverter::Group(_))
         && runtime_data_bind_graph_converter_accepts_symbol_list_index_number_source(converter))
+}
+
+fn runtime_data_bind_graph_group_operation_formula_accepts_non_number_source(
+    converters: &[RuntimeDataBindGraphConverter],
+) -> bool {
+    matches!(
+        converters,
+        [
+            RuntimeDataBindGraphConverter::OperationValue { .. },
+            RuntimeDataBindGraphConverter::Formula { .. }
+        ]
+    )
 }
 
 #[derive(Debug, Clone, Default)]
@@ -18976,6 +19008,30 @@ impl StateMachineInstance {
         }
     }
 
+    fn set_default_view_model_trigger_source_mirror(
+        &mut self,
+        view_model_property_id: u32,
+        value: u64,
+    ) {
+        if let Some(trigger) = self
+            .default_view_model_triggers
+            .iter_mut()
+            .find(|trigger| trigger.view_model_property_id == view_model_property_id)
+        {
+            trigger.set_value(value);
+        }
+        if self
+            .data_bind_graph
+            .default_view_model_source_context_bound()
+            && let Some(trigger) = self
+                .view_model_triggers
+                .iter_mut()
+                .find(|trigger| trigger.view_model_property_id == view_model_property_id)
+        {
+            trigger.set_value(value);
+        }
+    }
+
     fn sync_default_view_model_trigger_mirrors_from_data_bind_graph(&mut self) {
         let updates: Vec<(u32, u64)> = self
             .bindable_triggers
@@ -19010,11 +19066,17 @@ impl StateMachineInstance {
         let bindable_global_id = self
             .data_bind_graph
             .default_view_model_trigger_target_global_id_for_data_bind(data_bind_index);
+        let trigger_property_id = self
+            .data_bind_graph
+            .default_view_model_trigger_source_property_id_for_data_bind(data_bind_index);
         if !self
             .data_bind_graph
             .set_default_view_model_trigger_source_for_data_bind(data_bind_index, value)
         {
             return false;
+        }
+        if let Some(trigger_property_id) = trigger_property_id {
+            self.set_default_view_model_trigger_source_mirror(trigger_property_id, value);
         }
         if let Some(bindable_global_id) = bindable_global_id {
             self.set_default_view_model_trigger_target_mirror(bindable_global_id, value);
@@ -19042,6 +19104,9 @@ impl StateMachineInstance {
             .set_default_view_model_trigger_source_for_path(&path, value)
         {
             return false;
+        }
+        if let Some(trigger_property_id) = path.last().copied() {
+            self.set_default_view_model_trigger_source_mirror(trigger_property_id, value);
         }
         for bindable_global_id in bindable_global_ids {
             self.set_default_view_model_trigger_target_mirror(bindable_global_id, value);
@@ -19082,6 +19147,9 @@ impl StateMachineInstance {
             .set_default_view_model_trigger_source_for_path(&handle.path, value)
         {
             return false;
+        }
+        if let Some(trigger_property_id) = handle.path.last().copied() {
+            self.set_default_view_model_trigger_source_mirror(trigger_property_id, value);
         }
         for bindable_global_id in bindable_global_ids {
             self.set_default_view_model_trigger_target_mirror(bindable_global_id, value);
@@ -22957,6 +23025,27 @@ fn runtime_bindable_number_default_view_model_source(
                 file.view_model_instance_symbol_list_index_value_for_object(source)
             {
                 RuntimeDataBindGraphValue::SymbolListIndex(value)
+            } else if runtime_data_bind_graph_group_operation_formula_accepts_non_number_source(
+                converters,
+            ) {
+                if let Some(value) = file.view_model_instance_boolean_value_for_object(source) {
+                    RuntimeDataBindGraphValue::Boolean(value)
+                } else if source.type_name == "ViewModelInstanceEnum" {
+                    RuntimeDataBindGraphValue::Enum(source.uint_property("propertyValue")?)
+                } else if let Some(value) = file.view_model_instance_color_value_for_object(source)
+                {
+                    RuntimeDataBindGraphValue::Color(value)
+                } else if let Some(value) =
+                    file.view_model_instance_string_value_bytes_for_object(source)
+                {
+                    RuntimeDataBindGraphValue::String(value.to_vec())
+                } else if let Some(value) =
+                    file.view_model_instance_trigger_count_for_object(source)
+                {
+                    RuntimeDataBindGraphValue::Trigger(value)
+                } else {
+                    return None;
+                }
             } else {
                 return None;
             }

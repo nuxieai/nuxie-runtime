@@ -4408,6 +4408,216 @@ fn synthetic_state_machine_default_viewmodel_formula_fallback_blend_state_with_t
     })
 }
 
+#[derive(Clone, Copy)]
+enum FormulaFallbackScalarSourceKind {
+    Boolean,
+    Other(FormulaFallbackSourceKind),
+}
+
+impl FormulaFallbackScalarSourceKind {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Boolean => "boolean",
+            Self::Other(source_kind) => source_kind.label(),
+        }
+    }
+
+    fn append_source_mutation_args(self, args: &mut Vec<String>) {
+        match self {
+            Self::Boolean => args.extend([
+                "--runtime-set-default-view-model-source-bool".to_owned(),
+                "0".to_owned(),
+                "0".to_owned(),
+                "false".to_owned(),
+            ]),
+            Self::Other(FormulaFallbackSourceKind::Enum) => args.extend([
+                "--runtime-set-default-view-model-source-enum".to_owned(),
+                "0".to_owned(),
+                "0".to_owned(),
+                "0".to_owned(),
+            ]),
+            Self::Other(FormulaFallbackSourceKind::Color) => args.extend([
+                "--runtime-set-default-view-model-source-color".to_owned(),
+                "0".to_owned(),
+                "0".to_owned(),
+                "2".to_owned(),
+            ]),
+            Self::Other(FormulaFallbackSourceKind::String) => args.extend([
+                "--runtime-set-default-view-model-source-string".to_owned(),
+                "0".to_owned(),
+                "0".to_owned(),
+                "2.0suffix".to_owned(),
+            ]),
+            Self::Other(FormulaFallbackSourceKind::Trigger) => args.extend([
+                "--runtime-set-default-view-model-source-trigger".to_owned(),
+                "0".to_owned(),
+                "0".to_owned(),
+                "4".to_owned(),
+            ]),
+        }
+    }
+
+    fn mutate_source(self, state_machine: &mut StateMachineInstance, label: &str) {
+        let changed = match self {
+            Self::Boolean => {
+                state_machine.set_default_view_model_boolean_source_for_data_bind(0, false)
+            }
+            Self::Other(FormulaFallbackSourceKind::Enum) => {
+                state_machine.set_default_view_model_enum_source_for_data_bind(0, 0)
+            }
+            Self::Other(FormulaFallbackSourceKind::Color) => {
+                state_machine.set_default_view_model_color_source_for_data_bind(0, 2)
+            }
+            Self::Other(FormulaFallbackSourceKind::String) => {
+                state_machine.set_default_view_model_string_source_for_data_bind(0, b"2.0suffix")
+            }
+            Self::Other(FormulaFallbackSourceKind::Trigger) => {
+                state_machine.set_default_view_model_trigger_source_for_data_bind(0, 4)
+            }
+        };
+        assert!(
+            changed,
+            "{label} failed to mutate default view-model {} source",
+            self.label()
+        );
+    }
+}
+
+fn synthetic_state_machine_default_viewmodel_non_number_formula_function_group_blend_state_with_random_mode(
+    file_id: u64,
+    source_kind: FormulaFallbackScalarSourceKind,
+    random_mode_value: u64,
+) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        if matches!(
+            source_kind,
+            FormulaFallbackScalarSourceKind::Other(FormulaFallbackSourceKind::Enum)
+        ) {
+            push_object_with_properties(bytes, "DataEnumCustom", |bytes| {
+                push_string_property(bytes, "DataEnumCustom", "name", "Choice");
+            });
+            push_object_with_properties(bytes, "DataEnumValue", |bytes| {
+                push_string_property(bytes, "DataEnumValue", "key", "first");
+                push_string_property(bytes, "DataEnumValue", "value", "First Label");
+            });
+            push_object_with_properties(bytes, "DataEnumValue", |bytes| {
+                push_string_property(bytes, "DataEnumValue", "key", "second");
+                push_string_property(bytes, "DataEnumValue", "value", "Second Label");
+            });
+        }
+        match source_kind {
+            FormulaFallbackScalarSourceKind::Boolean => {
+                push_object_with_properties(bytes, "ViewModelPropertyBoolean", |bytes| {
+                    push_string_property(bytes, "ViewModelPropertyBoolean", "name", "enabled");
+                });
+            }
+            FormulaFallbackScalarSourceKind::Other(FormulaFallbackSourceKind::Enum) => {
+                push_object_with_properties(bytes, "ViewModelPropertyEnumCustom", |bytes| {
+                    push_string_property(bytes, "ViewModelPropertyEnumCustom", "name", "choice");
+                    push_uint_property(bytes, "ViewModelPropertyEnumCustom", "enumId", 0);
+                });
+            }
+            FormulaFallbackScalarSourceKind::Other(FormulaFallbackSourceKind::Color) => {
+                push_object_with_properties(bytes, "ViewModelPropertyColor", |bytes| {
+                    push_string_property(bytes, "ViewModelPropertyColor", "name", "tint");
+                });
+            }
+            FormulaFallbackScalarSourceKind::Other(FormulaFallbackSourceKind::String) => {
+                push_object_with_properties(bytes, "ViewModelPropertyString", |bytes| {
+                    push_string_property(bytes, "ViewModelPropertyString", "name", "amount");
+                });
+            }
+            FormulaFallbackScalarSourceKind::Other(FormulaFallbackSourceKind::Trigger) => {
+                push_object_with_properties(bytes, "ViewModelPropertyTrigger", |bytes| {
+                    push_string_property(bytes, "ViewModelPropertyTrigger", "name", "fire");
+                });
+            }
+        }
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        match source_kind {
+            FormulaFallbackScalarSourceKind::Boolean => {
+                push_object_with_properties(bytes, "ViewModelInstanceBoolean", |bytes| {
+                    push_uint_property(bytes, "ViewModelInstanceBoolean", "viewModelPropertyId", 0);
+                    push_bool_property(bytes, "ViewModelInstanceBoolean", "propertyValue", true);
+                });
+            }
+            FormulaFallbackScalarSourceKind::Other(FormulaFallbackSourceKind::Enum) => {
+                push_object_with_properties(bytes, "ViewModelInstanceEnum", |bytes| {
+                    push_uint_property(bytes, "ViewModelInstanceEnum", "viewModelPropertyId", 0);
+                    push_uint_property(bytes, "ViewModelInstanceEnum", "propertyValue", 1);
+                });
+            }
+            FormulaFallbackScalarSourceKind::Other(FormulaFallbackSourceKind::Color) => {
+                push_object_with_properties(bytes, "ViewModelInstanceColor", |bytes| {
+                    push_uint_property(bytes, "ViewModelInstanceColor", "viewModelPropertyId", 0);
+                    push_color_property(bytes, "ViewModelInstanceColor", "propertyValue", 1);
+                });
+            }
+            FormulaFallbackScalarSourceKind::Other(FormulaFallbackSourceKind::String) => {
+                push_object_with_properties(bytes, "ViewModelInstanceString", |bytes| {
+                    push_uint_property(bytes, "ViewModelInstanceString", "viewModelPropertyId", 0);
+                    push_string_property(
+                        bytes,
+                        "ViewModelInstanceString",
+                        "propertyValue",
+                        "1.0suffix",
+                    );
+                });
+            }
+            FormulaFallbackScalarSourceKind::Other(FormulaFallbackSourceKind::Trigger) => {
+                push_object_with_properties(bytes, "ViewModelInstanceTrigger", |bytes| {
+                    push_uint_property(bytes, "ViewModelInstanceTrigger", "viewModelPropertyId", 0);
+                    push_uint_property(bytes, "ViewModelInstanceTrigger", "propertyValue", 3);
+                });
+            }
+        }
+        push_object_with_properties(bytes, "DataConverterOperationValue", |bytes| {
+            push_uint_property(bytes, "DataConverterOperationValue", "operationType", 2);
+            push_f32_property(bytes, "DataConverterOperationValue", "operationValue", 2.0);
+        });
+        push_formula_fallback_converter(
+            bytes,
+            FormulaFallbackTokenKind::RandomFunction { random_mode_value },
+        );
+        push_object_with_properties(bytes, "DataConverterGroup", |_| {});
+        push_object_with_properties(bytes, "DataConverterGroupItem", |bytes| {
+            push_uint_property(bytes, "DataConverterGroupItem", "converterId", 0);
+        });
+        push_object_with_properties(bytes, "DataConverterGroupItem", |bytes| {
+            push_uint_property(bytes, "DataConverterGroupItem", "converterId", 1);
+        });
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_bindable_number_data_bind_context_with_converter_and_flags(
+            bytes,
+            0.75,
+            &[0, 0],
+            Some(2),
+            0,
+        );
+        push_object_with_properties(bytes, "BlendState1DViewModel", |_| {});
+        push_blend_animation_1d(bytes, 0, 0.0);
+        push_blend_animation_1d(bytes, 1, 1.0);
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
 fn synthetic_state_machine_default_viewmodel_number_operation_viewmodel_blend_state(
     file_id: u64,
 ) -> Vec<u8> {
@@ -18596,6 +18806,166 @@ fn state_machine_symbol_list_index_formula_random_function_group_call_counts_mat
             );
         }
         compare_cpp_runtime_update(&cpp, &rust, &report, &label);
+    }
+}
+
+#[test]
+fn state_machine_default_viewmodel_non_number_formula_random_function_group_call_counts_match_cpp_probe()
+ {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let source_kinds = [
+        FormulaFallbackScalarSourceKind::Boolean,
+        FormulaFallbackScalarSourceKind::Other(FormulaFallbackSourceKind::Enum),
+        FormulaFallbackScalarSourceKind::Other(FormulaFallbackSourceKind::Color),
+        FormulaFallbackScalarSourceKind::Other(FormulaFallbackSourceKind::String),
+        FormulaFallbackScalarSourceKind::Other(FormulaFallbackSourceKind::Trigger),
+    ];
+    let random_mode_cases: &[(&str, u64, bool, &[usize])] = &[
+        ("default", 0, false, &[1, 1]),
+        ("always", 1, true, &[1, 2, 2]),
+        ("source_change", 2, true, &[1, 2, 2]),
+    ];
+    let seeded_random_values = [0.25_f32, 0.75, 0.5];
+
+    for (source_index, source_kind) in source_kinds.iter().copied().enumerate() {
+        for (mode_index, (case_label, random_mode_value, mutate_source, expected_counts)) in
+            random_mode_cases.iter().copied().enumerate()
+        {
+            let label = format!(
+                "synthetic/runtime_state_machine_default_viewmodel_{}_formula_random_function_group_call_count_{case_label}_cpp.riv",
+                source_kind.label()
+            );
+            let bytes =
+                synthetic_state_machine_default_viewmodel_non_number_formula_function_group_blend_state_with_random_mode(
+                    9160 + (source_index as u64 * 3) + mode_index as u64,
+                    source_kind,
+                    random_mode_value,
+                );
+            let mut args = vec![
+                "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+                "0".to_owned(),
+                "--runtime-advance-state-machine".to_owned(),
+                "0".to_owned(),
+                "0".to_owned(),
+            ];
+            if mutate_source {
+                source_kind.append_source_mutation_args(&mut args);
+            }
+            args.extend([
+                "--runtime-advance-state-machine".to_owned(),
+                "0".to_owned(),
+                if mutate_source {
+                    "0".to_owned()
+                } else {
+                    "1".to_owned()
+                },
+            ]);
+            if expected_counts.len() > 2 {
+                args.extend([
+                    "--runtime-advance-state-machine".to_owned(),
+                    "0".to_owned(),
+                    "1".to_owned(),
+                ]);
+            }
+
+            let probe_args = counted_runtime_random_probe_args(&seeded_random_values, &args);
+            let cpp = read_cpp_probe_bytes_with_args(&probe, &label, &bytes, &probe_args);
+            let cpp_artboard = cpp
+                .artboards
+                .first()
+                .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+            let (_, mut rust) = read_rust_instance_from_bytes(&bytes, &label);
+            let mut state_machine = rust
+                .state_machine_instance(0)
+                .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+            assert!(
+                state_machine.bind_default_view_model_context(),
+                "{label} failed to bind default view-model context"
+            );
+            state_machine.set_data_bind_formula_random_values(&seeded_random_values);
+            assert_eq!(
+                state_machine.data_bind_formula_random_call_count(),
+                0,
+                "{label} call count should reset with supplied random values"
+            );
+            let mut rust_reports = Vec::new();
+            rust_reports.push((
+                rust.advance_state_machine_instance(&mut state_machine, 0.0),
+                state_machine.clone(),
+            ));
+            assert_eq!(
+                state_machine.data_bind_formula_random_call_count(),
+                expected_counts[0],
+                "{label} first advance random call count mismatch"
+            );
+            let second_elapsed = if mutate_source {
+                source_kind.mutate_source(&mut state_machine, &label);
+                0.0
+            } else {
+                1.0
+            };
+            rust_reports.push((
+                rust.advance_state_machine_instance(&mut state_machine, second_elapsed),
+                state_machine.clone(),
+            ));
+            assert_eq!(
+                state_machine.data_bind_formula_random_call_count(),
+                expected_counts[1],
+                "{label} second advance random call count mismatch"
+            );
+            if expected_counts.len() > 2 {
+                rust_reports.push((
+                    rust.advance_state_machine_instance(&mut state_machine, 1.0),
+                    state_machine.clone(),
+                ));
+                assert_eq!(
+                    state_machine.data_bind_formula_random_call_count(),
+                    expected_counts[2],
+                    "{label} third advance random call count mismatch"
+                );
+            }
+            let report = rust.update_components();
+
+            assert_eq!(
+                cpp_artboard.runtime_state_machine_advances.len(),
+                rust_reports.len(),
+                "{label} state-machine report count mismatch"
+            );
+            for (report_index, (cpp_state_machine, (advanced, rust_state_machine))) in cpp_artboard
+                .runtime_state_machine_advances
+                .iter()
+                .zip(&rust_reports)
+                .enumerate()
+            {
+                compare_state_machine_advance(
+                    cpp_state_machine,
+                    rust_state_machine,
+                    *advanced,
+                    &label,
+                );
+                compare_state_machine_number_binding(
+                    cpp_state_machine,
+                    rust_state_machine,
+                    0,
+                    &label,
+                );
+                assert_eq!(
+                    cpp_state_machine.random_total_calls, expected_counts[report_index],
+                    "{label} C++ random totalCalls mismatch at report {report_index}"
+                );
+                assert_eq!(
+                    cpp_state_machine.random_total_calls,
+                    rust_state_machine.data_bind_formula_random_call_count(),
+                    "{label} C++ and Rust random call count mismatch at report {report_index}"
+                );
+            }
+            compare_cpp_runtime_update(&cpp, &rust, &report, &label);
+        }
     }
 }
 

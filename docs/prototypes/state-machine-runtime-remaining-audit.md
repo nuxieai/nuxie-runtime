@@ -1004,6 +1004,14 @@ slice.
   listener-owned data binding, nested artboard propagation, and full
   dirty-list scheduler parity remain follow-up slices. The contract is
   `docs/prototypes/data-binding-graph-formula-number-context-fanout-runtime-contract.md`.
+- Deterministic `DataConverterFormula` owned number mutation slice: post-bind
+  owned root-number source mutation by state-machine data-bind index now
+  refreshes the direct formula-converted number target and a same-path direct
+  number observer. Symbol-list-index owned mutation, random formulas,
+  reverse/public-update/target-dirty scheduling, relative/parent/nested lookup,
+  listener-owned data binding, nested artboard propagation, and full
+  dirty-list scheduler parity remain follow-up slices. The contract is
+  `docs/prototypes/data-binding-graph-formula-owned-number-mutation-runtime-contract.md`.
 - Second deterministic `DataConverterFormula` graph-owned converter execution
   slice: default-context symbol-list-index sources feeding number targets are
   now cast to `f32` before entering the deterministic formula evaluator. A C++

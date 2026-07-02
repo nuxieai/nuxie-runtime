@@ -3183,6 +3183,14 @@ every bound same-path number source node in the active graph before dirty
 reapplication, and owned-context binding refreshes both the formula source and
 observer source. The contract is
 `docs/prototypes/data-binding-graph-formula-number-context-fanout-runtime-contract.md`.
+
+Current #12 update: deterministic formula owned number source mutation
+Direct graph-owned `DataConverterFormula` number contexts now cover post-bind
+owned root-number source mutation by state-machine data-bind index. The
+same-path direct number observer and formula-converted number target both
+refresh after `StateMachineInstance::set_owned_view_model_context_number_source_for_data_bind`.
+The contract is
+`docs/prototypes/data-binding-graph-formula-owned-number-mutation-runtime-contract.md`.
 Symbol-list-index same-path formula context fanout, formula random functions,
 reverse propagation, public update, target-dirty scheduling,
 relative/parent/nested lookup, listener-owned data binding, nested artboard

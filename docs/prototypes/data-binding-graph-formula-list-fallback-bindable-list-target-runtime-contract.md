@@ -33,7 +33,11 @@ value on later normal state-machine advancement.
 
 - Formula random-function tokens for list targets are covered separately by
   `data-binding-graph-formula-random-list-fallback-bindable-list-target-runtime-contract.md`.
-- Public-update and target-to-source scheduling for formula list targets.
+- Explicit target-to-source scheduling for deterministic formula list targets
+  is covered separately by
+  `data-binding-graph-formula-list-fallback-bindable-list-explicit-target-to-source-runtime-contract.md`.
+- Public-update scheduling and remaining target-to-source scheduling for
+  formula list targets.
 - Target-dirty scheduling for formula list targets.
 - `DataConverterNumberToList`, which is covered by the existing bindable-list
   and number-to-list contracts.

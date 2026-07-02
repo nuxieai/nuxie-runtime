@@ -3672,8 +3672,9 @@ data-context advancement, and applies C++'s numeric fallback target value on
 later normal state-machine advancement. The contract is
 `docs/prototypes/data-binding-graph-formula-list-fallback-bindable-list-target-runtime-contract.md`.
 Formula random-function list targets are covered separately below. Generated
-list items, public-update and target-to-source scheduling for formula list
-targets, imported/owned contexts, real random generation, random call counts,
+list items, public-update scheduling for formula list targets,
+target-to-source scheduling beyond the deterministic explicit slice,
+imported/owned contexts, real random generation, random call counts,
 secondary dependency invalidation, and full dirty-list scheduler parity remain
 follow-up `#12` slices.
 
@@ -3690,6 +3691,21 @@ Generated list items, public-update and target-to-source scheduling for
 formula list targets, imported/owned contexts, real random generation, random
 call counts, secondary dependency invalidation, and full dirty-list scheduler
 parity remain follow-up `#12` slices.
+
+Current #12 update: graph formula list fallback bindable-list explicit target-to-source
+Direct graph-owned `DataConverterFormula` now covers explicit
+`advanceDataContext()` target-to-source behavior for main-`ToSource | TwoWay`
+default-context list sources feeding state-machine
+`BindablePropertyList.propertyValue` targets through a deterministic
+`FormulaTokenInput` converter. Rust preserves the edited list-target scalar,
+keeps reporting the imported source list size, and avoids reapplying C++'s
+numeric formula fallback during the same explicit target-to-source pass. The
+contract is
+`docs/prototypes/data-binding-graph-formula-list-fallback-bindable-list-explicit-target-to-source-runtime-contract.md`.
+Public-update scheduling for formula list targets, random formula list-target
+target-to-source, generated list items, imported/owned contexts, real random
+generation, random call counts, secondary dependency invalidation, and full
+dirty-list scheduler parity remain follow-up `#12` slices.
 
 Current #12 update: graph formula boolean fallback public update target-to-source
 Direct graph-owned `DataConverterFormula` now covers public
@@ -3756,11 +3772,13 @@ unchanged imported list source when reverse formula conversion produces a
 number, then reapplies that unchanged list source through the formula fallback
 so the number target returns to C++'s `0.0` fallback. The contract is
 `docs/prototypes/data-binding-graph-formula-list-fallback-public-update-target-to-source-runtime-contract.md`.
-The first deterministic formula list target is covered separately above.
-Generated list items, formula list-target public-update/target-to-source
-scheduling, imported/owned contexts, random formula reverse behavior,
-secondary dependency invalidation, and full dirty-list scheduler parity remain
-follow-up `#12` slices. Explicit main-`ToSource` behavior and
+The first deterministic formula list target and deterministic explicit
+formula list-target target-to-source behavior are covered separately above.
+Generated list items, formula list-target public-update scheduling,
+list-target target-to-source scheduling beyond that deterministic explicit
+slice, imported/owned contexts, random formula reverse behavior, secondary
+dependency invalidation, and full dirty-list scheduler parity remain follow-up
+`#12` slices. Explicit main-`ToSource` behavior for number targets and
 symbol-list-index public-update reverse behavior are covered separately below.
 
 Current #12 update: graph formula list fallback explicit target-to-source
@@ -3771,7 +3789,8 @@ unchanged imported list source when main-direction formula conversion produces
 a number, then reapplies that unchanged list source through the formula
 fallback so the number target returns to C++'s `0.0` fallback. The contract is
 `docs/prototypes/data-binding-graph-formula-list-fallback-explicit-target-to-source-runtime-contract.md`.
-Symbol-list-index explicit behavior is covered separately below.
+The deterministic formula list target explicit behavior is covered separately
+above. Symbol-list-index explicit behavior is covered separately below.
 Imported/owned contexts, random formula reverse behavior, secondary dependency
 invalidation, and full dirty-list scheduler parity remain follow-up `#12`
 slices.

@@ -12850,7 +12850,10 @@ impl RuntimeDataBindGraph {
                 continue;
             }
             consumed_target_to_source = true;
-            if source.applies_source_to_target() {
+            if source.applies_source_to_target()
+                && (include_deferred_main_to_target
+                    || !source.suppresses_explicit_list_target_reapply_after_formula())
+            {
                 source.source_to_target_dirty_after_target_to_source = true;
                 needs_source_to_target_noop = true;
             }
@@ -13240,6 +13243,16 @@ impl RuntimeDataBindGraphSourceNode {
 
     fn is_main_to_source(&self) -> bool {
         self.flags & DATA_BIND_FLAG_DIRECTION_TO_SOURCE != 0
+    }
+
+    fn suppresses_explicit_list_target_reapply_after_formula(&self) -> bool {
+        matches!(
+            (&self.value, self.converter.as_ref()),
+            (
+                RuntimeDataBindGraphValue::List { .. },
+                Some(RuntimeDataBindGraphConverter::Formula { .. })
+            )
+        )
     }
 
     fn number_target_to_source_value(

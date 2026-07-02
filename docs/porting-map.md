@@ -4948,6 +4948,19 @@ Default-context object-source mutation, relative/parent/nested lookup,
 listener-owned data binding, nested artboard propagation, and full dirty-list
 scheduler parity remain follow-up `#12` slices.
 
+Current #12 update: graph formula default asset source mutation
+Direct graph-owned `DataConverterFormula` asset sources now cover post-bind
+default-context root asset source mutation by formula data-bind index. The
+existing default asset source mutation path already fans out to every matching
+same-path graph asset source node, so the formula fallback number target and
+direct asset observer both refresh after
+`StateMachineInstance::set_default_view_model_asset_source_for_data_bind`.
+The contract is
+`docs/prototypes/data-binding-graph-formula-default-asset-mutation-runtime-contract.md`.
+Default artboard and view-model pointer source mutations, relative/parent/
+nested lookup, listener-owned data binding, nested artboard propagation, and
+full dirty-list scheduler parity remain follow-up `#12` slices.
+
 Current #12 update: non-scripting `ScriptedDataConverter` now participates in
 the runtime data-bind graph as inherited C++ base converter pass-through. A
 main-`ToTarget | TwoWay` number bind with a direct scripted converter applies

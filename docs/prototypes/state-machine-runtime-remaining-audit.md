@@ -1410,9 +1410,21 @@ slice.
   not affect the result. Boolean target-to-source behavior is covered
   separately below. List formulas, target-to-source reverse conversion for the
   remaining non-number formula sources, imported/owned contexts, real random
-  generation, and random call-count parity remain follow-up slices. The
+  generation, and target-to-source random call-count parity remain follow-up
+  slices. Source-to-target call counts are covered separately below. The
   contract is
   `docs/prototypes/data-binding-graph-formula-random-non-number-fallback-runtime-contract.md`.
+- `DataConverterFormula` random non-number source-to-target call-count slice:
+  default-context boolean, enum, color, string, and trigger sources feeding
+  number targets now expose Rust's host-supplied random-stream pull count for
+  direct source-to-target fallback. Rust keeps the count at zero across
+  repeated advances for `randomModeValue` values `0`, `1`, and `2` while the
+  same fixtures continue to match C++ probe fallback values. Probe-visible C++
+  `RandomProvider::totalCalls`, target-to-source non-number call counts,
+  imported/owned contexts, real random generation, secondary dependency
+  invalidation, and full dirty-list scheduler parity remain follow-up slices.
+  The contract is
+  `docs/prototypes/data-binding-graph-formula-random-non-number-fallback-call-count-runtime-contract.md`.
 - `DataConverterFormula` random boolean fallback target-to-source slice:
   default-context boolean sources feeding main-`ToSource | TwoWay` and
   main-`ToTarget | TwoWay` number targets now preserve the unchanged boolean

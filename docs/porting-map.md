@@ -3652,9 +3652,23 @@ tokens, so `FunctionType::random` is ignored for `randomModeValue` values `0`,
 `docs/prototypes/data-binding-graph-formula-random-non-number-fallback-runtime-contract.md`.
 List formulas, target-to-source reverse conversion for the remaining
 non-number formula sources, imported/owned contexts, real random generation,
-random call counts, secondary dependency invalidation, and full dirty-list
-scheduler parity remain follow-up `#12` slices. Boolean target-to-source
-behavior is covered separately below.
+target-to-source random call counts, secondary dependency invalidation, and
+full dirty-list scheduler parity remain follow-up `#12` slices. Boolean
+target-to-source behavior is covered separately below. Source-to-target call
+counts are covered separately below.
+
+Current #12 update: graph formula random non-number source-to-target call counts
+Direct graph-owned `DataConverterFormula` random functions now cover Rust's
+host-supplied random-stream call count for source-to-target fallback on
+default-context boolean, enum, color, string, and trigger sources feeding
+number targets. Rust keeps the count at zero across repeated advances for
+`randomModeValue` values `0`, `1`, and `2`, matching the C++ probe observable
+fallback values. The contract is
+`docs/prototypes/data-binding-graph-formula-random-non-number-fallback-call-count-runtime-contract.md`.
+Probe-visible C++ `RandomProvider::totalCalls`, target-to-source non-number
+call counts, imported/owned contexts, real random generation, secondary
+dependency invalidation, and full dirty-list scheduler parity remain
+follow-up `#12` slices.
 
 Current #12 update: graph formula random boolean fallback target-to-source
 Direct graph-owned `DataConverterFormula` random functions now cover explicit

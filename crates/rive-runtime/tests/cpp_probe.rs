@@ -24431,16 +24431,18 @@ fn state_machine_default_viewmodel_random_formula_fallbacks_match_cpp_probe() {
                 "{label} failed to bind default view-model context"
             );
             state_machine.set_data_bind_formula_random_values(&[0.875, 0.625]);
-            let rust_reports = [
-                (
-                    rust.advance_state_machine_instance(&mut state_machine, 0.0),
-                    state_machine.clone(),
-                ),
-                (
-                    rust.advance_state_machine_instance(&mut state_machine, 1.0),
-                    state_machine.clone(),
-                ),
-            ];
+            assert_formula_random_call_count(&state_machine, 0, &label, "after random reset");
+            let mut rust_reports = Vec::new();
+            rust_reports.push((
+                rust.advance_state_machine_instance(&mut state_machine, 0.0),
+                state_machine.clone(),
+            ));
+            assert_formula_random_call_count(&state_machine, 0, &label, "after first advance");
+            rust_reports.push((
+                rust.advance_state_machine_instance(&mut state_machine, 1.0),
+                state_machine.clone(),
+            ));
+            assert_formula_random_call_count(&state_machine, 0, &label, "after second advance");
             let report = rust.update_components();
 
             let cpp_artboard = cpp

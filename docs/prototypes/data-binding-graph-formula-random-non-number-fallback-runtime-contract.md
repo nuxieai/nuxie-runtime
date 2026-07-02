@@ -48,8 +48,10 @@ formula converter's `randomModeValue`.
   `data-binding-graph-formula-random-remaining-fallbacks-target-to-source-runtime-contract.md`.
 - Target-to-source reverse conversion for other formula sources.
 - Formula parent-source binding, source dependents, and add-dirt behavior.
-- A real Rust random generator, C++ random seeding/queueing, or random
-  call-count parity.
+- A real Rust random generator or C++ random seeding/queueing.
+- Source-to-target random call counts are covered by
+  `data-binding-graph-formula-random-non-number-fallback-call-count-runtime-contract.md`.
+- Target-to-source random call counts.
 - External, imported, and owned contexts for this converter/source
   combination.
 - Relative-path, parent-path, nested-path, listener-owned, and update-queue

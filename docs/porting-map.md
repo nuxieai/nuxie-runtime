@@ -3194,9 +3194,21 @@ a fresh host-supplied random value on each source-to-target state-machine
 evaluation like C++. The contract is
 `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-always-runtime-contract.md`.
 Real Rust random generation, C++ probe random seeding/queueing,
-`RandomMode::sourceChange`, list random formulas, other non-number random
-formulas, imported/owned contexts, and full dirty-list scheduler parity remain
-follow-up `#12` slices.
+list random formulas, other non-number random formulas, imported/owned
+contexts, and full dirty-list scheduler parity remain follow-up `#12` slices.
+
+Current #12 update: graph formula random symbol-list-index source-change mode source-to-target
+Direct graph-owned `DataConverterFormula` random functions now cover
+`RandomMode::sourceChange` for default-context symbol-list-index sources
+feeding number targets. Rust casts the symbol-list-index source to `f32`,
+caches the host-supplied random like default mode, and clears that formula
+random cache when
+`set_default_view_model_symbol_list_index_source_for_data_bind` mutates the
+bound default source before the next source-to-target advance. The contract is
+`docs/prototypes/data-binding-graph-formula-random-symbol-list-index-source-change-runtime-contract.md`.
+Real Rust random generation, C++ probe random seeding/queueing, list random
+formulas, other non-number random formulas, imported/owned contexts, and full
+dirty-list scheduler parity remain follow-up `#12` slices.
 
 Current #12 update: graph formula random always mode source-to-target
 Direct graph-owned `DataConverterFormula` random functions now cover the first

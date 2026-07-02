@@ -31,9 +31,11 @@ direct number-source default-mode path.
 - Direct source-to-target `RandomMode::always` scheduling is covered
   separately by
   `data-binding-graph-formula-random-symbol-list-index-always-runtime-contract.md`.
-- `RandomMode::sourceChange`, random cache invalidation, random call-count
-  parity, and formula `addDirt` random-cache behavior for symbol-list-index
-  sources.
+- Direct source-to-target `RandomMode::sourceChange` scheduling is covered
+  separately by
+  `data-binding-graph-formula-random-symbol-list-index-source-change-runtime-contract.md`.
+- Broader random cache invalidation, random call-count parity, and formula
+  `addDirt` random-cache behavior for symbol-list-index sources.
 - Target-to-source, public update, target-dirty, grouped, list, and non-symbol
   non-number random formula scheduling.
 - Formula parent-source binding, source dependents, and add-dirt behavior.

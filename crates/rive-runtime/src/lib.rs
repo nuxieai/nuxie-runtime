@@ -10240,6 +10240,7 @@ impl RuntimeDataBindGraph {
                 source.value = RuntimeDataBindGraphValue::SymbolListIndex(value);
                 source.bound = true;
             }
+            source.reset_formula_random_state_for_source_change();
             changed = true;
         }
         if !changed {

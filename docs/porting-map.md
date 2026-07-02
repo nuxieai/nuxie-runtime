@@ -3821,11 +3821,10 @@ draw per grouped formula evaluation with the second evaluation scheduled by a
 symbol-list-index source mutation, and source-change mode consumes one initial
 draw plus one refresh after a symbol-list-index source mutation. The contract is
 `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-group-call-count-runtime-contract.md`.
-Grouped explicit target-to-source, public-update, and target-dirty call
-counts, list/non-number paths, imported/owned contexts, real random
-generation, probe-visible C++ `RandomProvider::totalCalls`, secondary
-dependency invalidation, and full dirty-list scheduler parity remain follow-up
-`#12` slices.
+Grouped public-update and target-dirty call counts, list/non-number paths,
+imported/owned contexts, real random generation, probe-visible C++
+`RandomProvider::totalCalls`, secondary dependency invalidation, and full
+dirty-list scheduler parity remain follow-up `#12` slices.
 
 Current #12 update: graph formula random symbol-list-index group explicit target-to-source
 Grouped graph-owned `DataConverterFormula` random functions now cover explicit
@@ -3841,7 +3840,24 @@ values. The contract is
 Grouped public-update target-to-source behavior is covered separately below.
 Grouped target-dirty behavior is covered separately below. List formulas,
 remaining non-number random scheduling, imported/owned contexts, real random
-generation, random call counts, secondary dependency invalidation, and full
+generation, grouped public-update and target-dirty call counts, secondary
+dependency invalidation, and full dirty-list scheduler parity remain follow-up
+`#12` slices.
+
+Current #12 update: graph formula random symbol-list-index group explicit target-to-source call counts
+Grouped graph-owned `DataConverterFormula` random functions now expose Rust's
+host-supplied random-stream call count for explicit `advance_data_context`
+target-to-source scheduling through
+`DataConverterGroup<OperationValue, Formula(random)>` default-context
+symbol-list-index sources feeding number targets. Default and source-change
+modes consume one visible reapply draw because the symbol-list-index source is
+preserved rather than changed; always mode consumes two values during the
+explicit pass, including the hidden grouped reverse-conversion draw. The
+contract is
+`docs/prototypes/data-binding-graph-formula-random-symbol-list-index-group-target-to-source-call-count-runtime-contract.md`.
+Grouped public-update and target-dirty call counts, list/non-number paths,
+imported/owned contexts, real random generation, probe-visible C++
+`RandomProvider::totalCalls`, secondary dependency invalidation, and full
 dirty-list scheduler parity remain follow-up `#12` slices.
 
 Current #12 update: graph formula random symbol-list-index group public-update target-to-source

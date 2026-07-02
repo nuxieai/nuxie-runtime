@@ -3191,11 +3191,10 @@ same-path direct number observer and formula-converted number target both
 refresh after `StateMachineInstance::set_owned_view_model_context_number_source_for_data_bind`.
 The contract is
 `docs/prototypes/data-binding-graph-formula-owned-number-mutation-runtime-contract.md`.
-Symbol-list-index same-path formula context fanout, formula random functions,
-reverse propagation, public update, target-dirty scheduling,
-relative/parent/nested lookup, listener-owned data binding, nested artboard
-propagation, and full dirty-list scheduler parity remain follow-up `#12`
-slices.
+Formula random functions, reverse propagation, public update,
+target-dirty scheduling, relative/parent/nested lookup, listener-owned data
+binding, nested artboard propagation, and full dirty-list scheduler parity
+remain follow-up `#12` slices.
 
 Current #12 update: deterministic formula symbol-list-index contexts
 Direct graph-owned `DataConverterFormula` converters now cover
@@ -3219,6 +3218,15 @@ symbol-list-index source node in the active graph before dirty reapplication,
 and owned-context binding refreshes both the formula source and observer
 source. The contract is
 `docs/prototypes/data-binding-graph-formula-symbol-list-index-context-fanout-runtime-contract.md`.
+
+Current #12 update: deterministic formula owned symbol-list-index source mutation
+Direct graph-owned `DataConverterFormula` symbol-list-index contexts now cover
+post-bind owned root symbol-list-index source mutation by state-machine
+data-bind index. The same-path direct symbol-list-index observer and
+formula-converted number target both refresh after
+`StateMachineInstance::set_owned_view_model_context_symbol_list_index_source_for_data_bind`.
+The contract is
+`docs/prototypes/data-binding-graph-formula-owned-symbol-mutation-runtime-contract.md`.
 Formula random functions, reverse propagation, public update,
 target-dirty scheduling, relative/parent/nested lookup, listener-owned data
 binding, nested artboard propagation, and full dirty-list scheduler parity

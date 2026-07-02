@@ -24192,9 +24192,10 @@ fn runtime_data_bind_graph_default_operation_view_model_operand(
     let Some(default_instance) = file.view_model_default_instance(0) else {
         return Some(RuntimeDataBindGraphOperationViewModelOperand { path, value: 0.0 });
     };
-    let Some(value) =
-        file.data_context_view_model_property_for_instance(default_instance.object, &path)
-    else {
+    let Some(context) = RuntimeDataContext::from_instance_reference(file, default_instance) else {
+        return Some(RuntimeDataBindGraphOperationViewModelOperand { path, value: 0.0 });
+    };
+    let Some(value) = context.absolute_property(&path) else {
         return Some(RuntimeDataBindGraphOperationViewModelOperand { path, value: 0.0 });
     };
     if file.view_model_instance_value_data_type_for_object(value)

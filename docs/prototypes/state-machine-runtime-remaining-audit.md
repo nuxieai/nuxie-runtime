@@ -3475,6 +3475,13 @@ slice.
   unresolved relative/nested/parent boundaries in the current fixture. The
   contract is
   `docs/prototypes/data-context-runtime-lookup-support-contract.md`.
+- Operation-view-model runtime `DataContext` operand slice:
+  direct `DataConverterOperationViewModel` secondary operand resolution now
+  constructs a `RuntimeDataContext` for the default view-model instance and
+  uses absolute lookup through that wrapper. Existing C++ fallback behavior for
+  missing, non-number, and manifest-name source paths is unchanged. The
+  contract is
+  `docs/prototypes/data-binding-graph-operation-viewmodel-runtime-data-context-operand-contract.md`.
 
 ## Remaining Runtime Slices
 

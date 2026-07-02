@@ -6361,6 +6361,17 @@ Live data-bind wiring for relative/name paths, converter name paths, runtime
 mutation/relink through data contexts, listener-owned data binding, and nested
 artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: direct `DataConverterOperationViewModel` secondary operand
+resolution is now the first graph-owned converter path to consume
+`RuntimeDataContext`. The converter still reads its `sourcePathIds` as an
+absolute `viewModelId`/`viewModelPropertyId` path against the default
+view-model instance, and missing, non-number, and manifest-name path cases
+preserve the existing C++ `0.0` operand fallback. The contract is
+`docs/prototypes/data-binding-graph-operation-viewmodel-runtime-data-context-operand-contract.md`.
+Imported/owned context recomputation for operation-view-model operands, live
+relative/name converter paths, broader dirty/update queues, listener-owned
+data binding, and nested artboard propagation remain follow-up `#12` slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

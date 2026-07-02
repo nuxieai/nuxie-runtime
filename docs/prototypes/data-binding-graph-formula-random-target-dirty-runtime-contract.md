@@ -31,8 +31,11 @@ the unchanged source through the same cached random formula value.
 - Probe CLI support for seeding or queuing C++ runtime random values.
 - Direct target-dirty `RandomMode::always` scheduling is covered separately by
   `data-binding-graph-formula-random-always-target-dirty-runtime-contract.md`.
-- `RandomMode::sourceChange`, random cache invalidation, random call-count
-  parity, and formula `addDirt` random-cache behavior.
+- Direct target-dirty call counts for random modes `0`, `1`, and `2` are
+  covered separately by
+  `data-binding-graph-formula-random-target-dirty-call-count-runtime-contract.md`.
+- `RandomMode::sourceChange`, random cache invalidation, and formula `addDirt`
+  random-cache behavior.
 - Grouped source-to-target scheduling is covered separately by
   `data-binding-graph-formula-random-group-runtime-contract.md`; grouped
   public update target-to-source scheduling is covered separately by

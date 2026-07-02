@@ -1,13 +1,14 @@
-# Data Binding Graph Formula Random Public Update Call Count Runtime Contract
+# Data Binding Graph Formula Random Target-Dirty Call Count Runtime Contract
 
 ## Purpose
 
-Extend formula random call-count coverage into direct public
-`update_data_binds_apply_target_to_source` scheduling.
+Extend formula random call-count coverage into direct main-`ToTarget | TwoWay`
+target-dirty scheduling.
 
 This pins how many values Rust pulls from the host-supplied formula random
-stream while matching the existing C++ probe binding reports for
-main-`ToTarget | TwoWay` number binds.
+stream while matching the existing C++ probe binding reports for direct number
+binds that preserve a manual target edit through explicit data-context
+advancement.
 
 ## In Scope
 
@@ -19,14 +20,10 @@ main-`ToTarget | TwoWay` number binds.
 - `ViewModelInstanceNumber.propertyValue` sources feeding
   `BindablePropertyNumber.propertyValue` targets.
 - Initial source-to-target state-machine advancement.
-- Public target-to-source scheduling through
-  `update_data_binds_apply_target_to_source` after a bindable number target
-  mutation.
+- Manual bindable-number target mutation followed by explicit
+  `advance_data_context`, preserving the edited target.
 - `DataConverterFormula.randomModeValue` values `0`, `1`, and `2`.
-- Same-update source-to-target reapplication after public target-to-source
-  source writes.
-- Later normal state-machine advancement after that public update, proving no
-  additional random values are pulled without another formula evaluation.
+- Later normal state-machine advancement after that target-dirty pass.
 - C++ probe comparisons for the observable binding values around those call
   count assertions.
 
@@ -39,8 +36,9 @@ main-`ToTarget | TwoWay` number binds.
 - Explicit `advance_data_context` target-to-source call counts, which are
   covered by
   `data-binding-graph-formula-random-target-to-source-call-count-runtime-contract.md`.
-- Target-dirty call counts are covered by
-  `data-binding-graph-formula-random-target-dirty-call-count-runtime-contract.md`.
+- Public `update_data_binds_apply_target_to_source` call counts, which are
+  covered by
+  `data-binding-graph-formula-random-public-update-call-count-runtime-contract.md`.
 - Grouped converters, list sources, symbol-list-index sources, non-number
   fallback sources, imported contexts, owned contexts, secondary converter
   dependency invalidation, and full dirty-list scheduler parity.
@@ -49,14 +47,14 @@ main-`ToTarget | TwoWay` number binds.
 
 - Setting a new host random stream resets the Rust call count to zero.
 - Default random mode consumes one value during the initial source-to-target
-  advance and reuses that cached value through public target-to-source,
-  same-update reapplication, and later normal advances.
+  advance and reuses that cached value through target-dirty preservation and
+  later normal advances.
 - Always random mode consumes one value during the initial source-to-target
-  advance, consumes two more values during the public update, and does not
-  consume additional values on later normal advances in this direct fixture.
+  advance, consumes one more value on the first later normal reapply, and does
+  not consume an additional value on the second later normal advance in this
+  direct fixture.
 - Source-change random mode consumes one value during the initial
-  source-to-target advance, reuses that warmed value for the public
-  target-to-source source write, consumes one refreshed value for same-update
-  source-to-target reapplication, and does not consume additional values on
-  later normal advances in this direct fixture.
+  source-to-target advance, preserves the cache through target-dirty
+  advancement because the source did not change, and reuses the cached value
+  on later normal advances.
 - The same fixtures continue to match C++ probe binding values.

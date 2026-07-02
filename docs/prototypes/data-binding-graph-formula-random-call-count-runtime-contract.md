@@ -40,9 +40,11 @@ every pull from `StateMachineInstance::set_data_bind_formula_random_values`.
   `data-binding-graph-formula-random-target-to-source-call-count-runtime-contract.md`.
 - Direct public update target-to-source call counts are covered separately by
   `data-binding-graph-formula-random-public-update-call-count-runtime-contract.md`.
-- Grouped converters, target-dirty scheduling, imported contexts, owned
-  contexts, and secondary converter dependency invalidation. Those behaviors
-  are covered or tracked by narrower scheduling contracts.
+- Direct target-dirty call counts are covered separately by
+  `data-binding-graph-formula-random-target-dirty-call-count-runtime-contract.md`.
+- Grouped converters, imported contexts, owned contexts, and secondary
+  converter dependency invalidation. Those behaviors are covered or tracked by
+  narrower scheduling contracts.
 - Full dirty-list scheduler parity.
 
 ## Completion Checks

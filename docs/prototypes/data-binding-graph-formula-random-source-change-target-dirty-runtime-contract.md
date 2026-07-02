@@ -41,7 +41,9 @@ not change.
   scheduling.
 - Converter dependency invalidation for secondary source paths, including
   `DataConverterOperationViewModel` dependencies.
-- Random call-count parity outside the observed direct bind.
+- Direct target-dirty call counts for random modes `0`, `1`, and `2` are
+  covered separately by
+  `data-binding-graph-formula-random-target-dirty-call-count-runtime-contract.md`.
 - External, imported, and owned contexts for this converter/source
   combination.
 - Relative-path, parent-path, nested-path, listener-owned, and update-queue

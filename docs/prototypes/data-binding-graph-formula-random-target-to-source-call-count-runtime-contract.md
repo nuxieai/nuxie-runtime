@@ -37,7 +37,8 @@ main-`ToSource | TwoWay` number binds.
   parity with C++ `std::rand()`.
 - Public `update_data_binds_apply_target_to_source` call counts are covered by
   `data-binding-graph-formula-random-public-update-call-count-runtime-contract.md`.
-- Target-dirty call counts.
+- Target-dirty call counts are covered by
+  `data-binding-graph-formula-random-target-dirty-call-count-runtime-contract.md`.
 - Grouped converters, list sources, symbol-list-index sources, non-number
   fallback sources, imported contexts, owned contexts, secondary converter
   dependency invalidation, and full dirty-list scheduler parity.

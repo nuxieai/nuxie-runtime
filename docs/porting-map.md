@@ -5022,8 +5022,7 @@ values while keeping object-source random fallback tokens random-inert for
 `FormulaTokenInput` and `FormulaTokenFunction(random)` modes `0`, `1`, and
 `2`. The contract is
 `docs/prototypes/data-binding-graph-formula-default-object-random-group-fallback-runtime-contract.md`.
-Imported/owned post-bind grouped object mutation/relink, target-to-source
-grouped object fallback behavior, longer group permutations,
+Target-to-source grouped object fallback behavior, longer group permutations,
 relative/parent/nested lookup, listener-owned data binding, nested artboard
 propagation, and full dirty-list scheduler parity remain follow-up `#12`
 slices.
@@ -5036,8 +5035,7 @@ rows while reapplying the grouped converter to the number target, and
 `FormulaTokenFunction(random)` fallback modes `0`, `1`, and `2` remain
 random-inert with zero runtime random provider calls. The contract is
 `docs/prototypes/data-binding-graph-formula-default-object-random-group-source-change-runtime-contract.md`.
-Imported/owned post-bind grouped object mutation/relink, target-to-source
-grouped object fallback behavior, longer group permutations,
+Target-to-source grouped object fallback behavior, longer group permutations,
 relative/parent/nested lookup, listener-owned data binding, nested artboard
 propagation, and full dirty-list scheduler parity remain follow-up `#12`
 slices.
@@ -5050,8 +5048,21 @@ sources while matching C++ number target values, and
 `FormulaTokenFunction(random)` fallback modes `0`, `1`, and `2` remain
 random-inert with zero runtime random provider calls. The contract is
 `docs/prototypes/data-binding-graph-formula-owned-imported-object-random-group-context-runtime-contract.md`.
-Imported/owned post-bind grouped object mutation/relink, target-to-source
-grouped object fallback behavior, longer group permutations,
+Target-to-source grouped object fallback behavior, longer group permutations,
+relative/parent/nested lookup, listener-owned data binding, nested artboard
+propagation, and full dirty-list scheduler parity remain follow-up `#12`
+slices.
+
+Current #12 update: imported and owned post-bind grouped object-source formula
+fallback mutation/relink now covers the
+`DataConverterGroup<FormulaFallback, OperationValue>` shape. Imported asset and
+artboard source mutation, imported view-model pointer relink, and owned
+asset/artboard/view-model pointer source mutation update same-path object
+observer rows while reapplying the grouped converter to the number target, and
+`FormulaTokenFunction(random)` fallback modes `0`, `1`, and `2` remain
+random-inert with zero runtime random provider calls. The contract is
+`docs/prototypes/data-binding-graph-formula-owned-imported-object-random-group-source-change-runtime-contract.md`.
+Target-to-source grouped object fallback behavior, longer group permutations,
 relative/parent/nested lookup, listener-owned data binding, nested artboard
 propagation, and full dirty-list scheduler parity remain follow-up `#12`
 slices.

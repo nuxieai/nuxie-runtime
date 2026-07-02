@@ -6396,6 +6396,17 @@ recompute for other converter families, broader dirty/update queues,
 listener-owned data binding, and nested artboard propagation remain follow-up
 `#12` slices.
 
+Current #12 update: imported runtime number source mutation now also refreshes
+`DataConverterOperationViewModel` secondary operands nested inside the grouped
+`DataConverterGroup<OperationValue, OperationViewModel>` path. The grouped
+converted `amount` source, the direct `amount` source, and the direct `factor`
+source all match C++ after mutating the bound imported `factor` source. The
+contract is
+`docs/prototypes/data-binding-graph-operation-viewmodel-group-imported-number-mutation-runtime-contract.md`.
+Arbitrary converter group orders, relative/name converter paths, non-number
+secondary operands, broader dirty/update queues, listener-owned data binding,
+and nested artboard propagation remain follow-up `#12` slices.
+
 ## #13: Nested Artboards And Hosts
 
 Blocked by: #9, #12

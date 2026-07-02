@@ -6394,6 +6394,17 @@ Relative/name converter paths, imported/owned recomputation for other
 converter families, broader dirty/update queues, listener-owned data binding,
 and nested artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: grouped `DataConverterOperationViewModel` operands now
+have explicit imported and owned context recompute coverage for the
+`DataConverterGroup<OperationValue, OperationViewModel>` path. Imported
+context binding resolves the nested secondary number operand from the bound
+view-model instance, and owned context binding resolves it from owned runtime
+view-model storage. The contract is
+`docs/prototypes/data-binding-graph-operation-viewmodel-group-context-recompute-runtime-contract.md`.
+Arbitrary converter group orders, relative/name converter paths, non-number
+secondary operands, broader dirty/update queues, listener-owned data binding,
+and nested artboard propagation remain follow-up `#12` slices.
+
 Current #12 update: imported runtime number source mutation now refreshes
 direct `DataConverterOperationViewModel` secondary operands when the mutated
 source path matches the converter operand path. This keeps a bound imported

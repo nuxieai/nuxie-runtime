@@ -37,7 +37,9 @@ formula fallback. This remains true when the formula output queue contains
 - Boolean, enum, color, string, and trigger random fallback target-to-source
   behavior, covered separately by the non-list random fallback contracts.
 - Symbol-list-index random formula target-to-source behavior.
-- List-target `BindablePropertyList` behavior, generated list item creation,
+- Source-to-target `BindablePropertyList` list-target behavior is covered by
+  `data-binding-graph-formula-random-list-fallback-bindable-list-target-runtime-contract.md`.
+- List-target target-to-source scheduling, generated list item creation,
   artboard component-list instancing, map-rule selection, layout, and
   virtualization.
 - Number-source random formula evaluation and scheduling, covered by the

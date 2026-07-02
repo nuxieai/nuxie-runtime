@@ -3671,10 +3671,25 @@ source list size, preserves the list target scalar during explicit
 data-context advancement, and applies C++'s numeric fallback target value on
 later normal state-machine advancement. The contract is
 `docs/prototypes/data-binding-graph-formula-list-fallback-bindable-list-target-runtime-contract.md`.
-Formula random-function list targets, generated list items, public-update and
-target-to-source scheduling for formula list targets, imported/owned contexts,
-real random generation, random call counts, secondary dependency invalidation,
-and full dirty-list scheduler parity remain follow-up `#12` slices.
+Formula random-function list targets are covered separately below. Generated
+list items, public-update and target-to-source scheduling for formula list
+targets, imported/owned contexts, real random generation, random call counts,
+secondary dependency invalidation, and full dirty-list scheduler parity remain
+follow-up `#12` slices.
+
+Current #12 update: graph formula random list fallback bindable-list target
+Direct graph-owned `DataConverterFormula` now admits default-context list
+sources feeding state-machine `BindablePropertyList.propertyValue` targets
+through `FunctionType::random` output tokens with `randomModeValue` values
+`0`, `1`, and `2`. Rust reports the imported source list size, preserves the
+list target scalar during explicit data-context advancement, ignores supplied
+random values for this observable fallback, and applies C++'s numeric fallback
+target value on later normal state-machine advancement. The contract is
+`docs/prototypes/data-binding-graph-formula-random-list-fallback-bindable-list-target-runtime-contract.md`.
+Generated list items, public-update and target-to-source scheduling for
+formula list targets, imported/owned contexts, real random generation, random
+call counts, secondary dependency invalidation, and full dirty-list scheduler
+parity remain follow-up `#12` slices.
 
 Current #12 update: graph formula boolean fallback public update target-to-source
 Direct graph-owned `DataConverterFormula` now covers public

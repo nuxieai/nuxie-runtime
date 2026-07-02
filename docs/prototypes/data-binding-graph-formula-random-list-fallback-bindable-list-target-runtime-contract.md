@@ -1,16 +1,17 @@
-# Data Binding Graph Formula List Fallback Bindable-List Target Runtime Contract
+# Data Binding Graph Formula Random List Fallback Bindable-List Target Runtime Contract
 
 ## Purpose
 
-Pin the first list-target behavior for `DataConverterFormula` list fallback
-sources.
+Pin random-function list-target behavior for `DataConverterFormula` list
+fallback sources.
 
 C++ keeps a default-context `ViewModelInstanceList` source represented for a
 `BindablePropertyList.propertyValue` target even when the bind has a direct
-`DataConverterFormula`. A deterministic `FormulaTokenInput` over that list
-source reports the original source list size, preserves the list target during
-explicit data-context advancement, and then applies the numeric fallback target
-value on later normal state-machine advancement.
+`DataConverterFormula` whose output token is `FunctionType::random`. For list
+inputs, the random function does not consume Rust's supplied random values for
+the observable fallback result: the source reports the original list size, the
+list target is preserved during explicit data-context advancement, and later
+normal state-machine advancement applies the numeric fallback target value.
 
 ## In Scope
 
@@ -19,8 +20,9 @@ value on later normal state-machine advancement.
 - `ViewModelInstanceList` sources with imported `ViewModelInstanceListItem`
   children.
 - `BindablePropertyList.propertyValue` state-machine targets.
-- Direct `DataConverterFormula` with a single deterministic
-  `FormulaTokenInput` output token.
+- Direct `DataConverterFormula` with a `FormulaTokenFunction` output token.
+- `FunctionType::random` and `DataConverterFormula.randomModeValue` values
+  `0`, `1`, and `2`.
 - Explicit `advance_data_context` followed by normal state-machine
   advancement.
 - Existing C++ probe list binding reports:
@@ -31,8 +33,8 @@ value on later normal state-machine advancement.
 
 ## Out Of Scope
 
-- Formula random-function tokens for list targets are covered separately by
-  `data-binding-graph-formula-random-list-fallback-bindable-list-target-runtime-contract.md`.
+- Deterministic `FormulaTokenInput` list-target behavior, covered by
+  `data-binding-graph-formula-list-fallback-bindable-list-target-runtime-contract.md`.
 - Public-update and target-to-source scheduling for formula list targets.
 - Target-dirty scheduling for formula list targets.
 - `DataConverterNumberToList`, which is covered by the existing bindable-list
@@ -46,11 +48,14 @@ value on later normal state-machine advancement.
 
 ## Completion Checks
 
-- A formula list source bound to `BindablePropertyList.propertyValue` is
-  admitted into the runtime data-bind graph.
+- A random-function formula list source bound to
+  `BindablePropertyList.propertyValue` is admitted into the runtime data-bind
+  graph.
 - Rust reports the same source list size as C++ for the formula list bind.
 - Explicit data-context advancement preserves the list target scalar.
 - Later normal state-machine advancement applies the formula fallback scalar to
   the list target.
-- Existing direct list and `DataConverterNumberToList` bindable-list probes
-  continue to pass.
+- Random modes `0`, `1`, and `2` match C++ even when Rust is supplied non-zero
+  random values.
+- Existing deterministic formula list-target, direct list, and
+  `DataConverterNumberToList` bindable-list probes continue to pass.

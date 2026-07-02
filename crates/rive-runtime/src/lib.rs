@@ -13333,6 +13333,18 @@ impl RuntimeDataBindGraphSourceNode {
             {
                 Some(RuntimeDataBindGraphValue::ListLength(*value))
             }
+            (
+                RuntimeDataBindGraphValue::List { item_count },
+                RuntimeDataBindGraphValue::Number(_),
+            ) if matches!(
+                self.converter.as_ref(),
+                Some(RuntimeDataBindGraphConverter::Formula { .. })
+            ) =>
+            {
+                Some(RuntimeDataBindGraphValue::List {
+                    item_count: *item_count,
+                })
+            }
             (RuntimeDataBindGraphValue::Boolean(_), RuntimeDataBindGraphValue::Boolean(value)) => {
                 Some(RuntimeDataBindGraphValue::Boolean(value))
             }

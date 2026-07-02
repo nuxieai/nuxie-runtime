@@ -32,7 +32,11 @@ non-number, non-symbol-list-index inputs.
   virtualization.
 - `DataConverterListToLength`, which is covered separately.
 - `DataConverterNumberToList`, which is covered separately.
-- Target-to-source reverse conversion for formula list sources.
+- Public-update target-to-source propagation for formula list sources is
+  covered separately by
+  `data-binding-graph-formula-list-fallback-public-update-target-to-source-runtime-contract.md`.
+- Explicit main-`ToSource` reverse conversion and broader target-to-source
+  propagation.
 - Formula parent-source binding, source dependents, and add-dirt behavior.
 - A real Rust random generator, C++ random seeding/queueing, or random
   call-count parity.

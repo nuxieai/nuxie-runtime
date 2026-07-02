@@ -30,11 +30,14 @@ main-`ToSource | TwoWay` number binds that use
   formula evaluation in these fixtures.
 - C++ probe comparisons for the observable binding values around those Rust
   call-count assertions.
+- C++ probe `--runtime-random-reset`, repeated `--runtime-random-value`, and
+  per-action `runtimeStateMachineAdvances[].randomTotalCalls` comparisons.
 
 ## Out Of Scope
 
-- Probe-visible C++ `RandomProvider::totalCalls()`. The current C++ probe links
-  the non-`TESTING` runtime build, where that API is not available.
+- Upstream C++ `TESTING` builds or direct use of
+  `RandomProvider::totalCalls()` outside the probe-owned counted provider
+  shim.
 - A real Rust random generator, random seeding, platform RNG behavior, or
   parity with C++ `std::rand()`.
 - Queue-content parity beyond values supplied by
@@ -63,4 +66,7 @@ main-`ToSource | TwoWay` number binds that use
   consumes a second value for same-pass source-to-target reapplication, and
   does not consume additional values on later normal advances in this grouped
   fixture.
+- The C++ probe's `randomTotalCalls` reports match the expected C++ grouped
+  target-to-source semantics and Rust's host-stream call count for every
+  grouped explicit target-to-source report.
 - The same fixtures continue to match C++ probe binding values.

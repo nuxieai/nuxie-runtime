@@ -17644,28 +17644,6 @@ fn infer_formula_random_value_from_cpp_number_binding_scaled_target(
     (target_value * target_scale - lower_bound) / (upper_bound - lower_bound)
 }
 
-fn infer_formula_random_value_from_cpp_number_binding_source(
-    cpp_artboard: &CppArtboard,
-    report_index: usize,
-    data_bind_index: usize,
-    lower_bound: f32,
-    upper_bound: f32,
-    label: &str,
-) -> f32 {
-    let source_value = cpp_artboard
-        .runtime_state_machine_advances
-        .get(report_index)
-        .and_then(|advance| {
-            advance
-                .number_bindings
-                .iter()
-                .find(|binding| binding.data_bind_index == data_bind_index)
-        })
-        .and_then(|binding| binding.source_value)
-        .unwrap_or_else(|| panic!("missing C++ random formula source value for {label}"));
-    (source_value - lower_bound) / (upper_bound - lower_bound)
-}
-
 fn infer_formula_random_value_from_cpp_number_binding_scaled_source(
     cpp_artboard: &CppArtboard,
     report_index: usize,
@@ -19787,19 +19765,15 @@ fn state_machine_default_viewmodel_number_formula_random_function_group_target_t
         "1".to_owned(),
     ];
 
-    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let seeded_random_values = [0.25_f32];
+    let expected_counts = [1_usize, 1, 1];
+    let probe_args = counted_runtime_random_probe_args(&seeded_random_values, &args);
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &probe_args);
     let cpp_artboard = cpp
         .artboards
         .first()
         .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
-    let formula_random_value = infer_formula_random_value_from_cpp_number_binding_source(
-        cpp_artboard,
-        0,
-        0,
-        2.0,
-        6.0,
-        label,
-    );
+    let formula_random_value = seeded_random_values[0];
 
     let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
     let mut state_machine = rust
@@ -19864,6 +19838,15 @@ fn state_machine_default_viewmodel_number_formula_random_function_group_target_t
     {
         compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
         compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, label);
+        assert_eq!(
+            cpp_state_machine.random_total_calls, expected_counts[index],
+            "{label} C++ random totalCalls mismatch at report {index}"
+        );
+        assert_eq!(
+            cpp_state_machine.random_total_calls,
+            rust_state_machine.data_bind_formula_random_call_count(),
+            "{label} C++ and Rust random call count mismatch at report {index}"
+        );
         if index >= 1 {
             compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 1, label);
         }
@@ -19912,46 +19895,14 @@ fn state_machine_default_viewmodel_number_formula_random_function_group_always_t
         "1".to_owned(),
     ];
 
-    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let seeded_random_values = [0.25_f32, 0.75];
+    let expected_counts = [2_usize, 2, 2];
+    let probe_args = counted_runtime_random_probe_args(&seeded_random_values, &args);
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &probe_args);
     let cpp_artboard = cpp
         .artboards
         .first()
         .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
-    let target_to_source_random = infer_formula_random_value_from_cpp_number_binding_source(
-        cpp_artboard,
-        0,
-        0,
-        2.0,
-        6.0,
-        label,
-    );
-    let reapply_random = infer_formula_random_value_from_cpp_number_binding_scaled_target(
-        cpp_artboard,
-        0,
-        0,
-        2.0,
-        2.0,
-        6.0,
-        label,
-    );
-    let first_advance_random = infer_formula_random_value_from_cpp_number_binding_scaled_target(
-        cpp_artboard,
-        1,
-        0,
-        2.0,
-        2.0,
-        6.0,
-        label,
-    );
-    let second_advance_random = infer_formula_random_value_from_cpp_number_binding_scaled_target(
-        cpp_artboard,
-        2,
-        0,
-        2.0,
-        2.0,
-        6.0,
-        label,
-    );
 
     let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
     let mut state_machine = rust
@@ -19963,12 +19914,7 @@ fn state_machine_default_viewmodel_number_formula_random_function_group_always_t
         state_machine.bind_default_view_model_context(),
         "{label} failed to bind default view-model context"
     );
-    state_machine.set_data_bind_formula_random_values(&[
-        target_to_source_random,
-        reapply_random,
-        first_advance_random,
-        second_advance_random,
-    ]);
+    state_machine.set_data_bind_formula_random_values(&seeded_random_values);
     assert_eq!(
         state_machine.data_bind_formula_random_call_count(),
         0,
@@ -20021,6 +19967,15 @@ fn state_machine_default_viewmodel_number_formula_random_function_group_always_t
     {
         compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
         compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, label);
+        assert_eq!(
+            cpp_state_machine.random_total_calls, expected_counts[index],
+            "{label} C++ random totalCalls mismatch at report {index}"
+        );
+        assert_eq!(
+            cpp_state_machine.random_total_calls,
+            rust_state_machine.data_bind_formula_random_call_count(),
+            "{label} C++ and Rust random call count mismatch at report {index}"
+        );
         if index >= 1 {
             compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 1, label);
         }
@@ -20069,46 +20024,14 @@ fn state_machine_default_viewmodel_number_formula_random_function_group_source_c
         "1".to_owned(),
     ];
 
-    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let seeded_random_values = [0.25_f32, 0.75];
+    let expected_counts = [2_usize, 2, 2];
+    let probe_args = counted_runtime_random_probe_args(&seeded_random_values, &args);
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &probe_args);
     let cpp_artboard = cpp
         .artboards
         .first()
         .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
-    let target_to_source_random = infer_formula_random_value_from_cpp_number_binding_source(
-        cpp_artboard,
-        0,
-        0,
-        2.0,
-        6.0,
-        label,
-    );
-    let reapply_random = infer_formula_random_value_from_cpp_number_binding_scaled_target(
-        cpp_artboard,
-        0,
-        0,
-        2.0,
-        2.0,
-        6.0,
-        label,
-    );
-    let first_advance_random = infer_formula_random_value_from_cpp_number_binding_scaled_target(
-        cpp_artboard,
-        1,
-        0,
-        2.0,
-        2.0,
-        6.0,
-        label,
-    );
-    let second_advance_random = infer_formula_random_value_from_cpp_number_binding_scaled_target(
-        cpp_artboard,
-        2,
-        0,
-        2.0,
-        2.0,
-        6.0,
-        label,
-    );
 
     let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
     let mut state_machine = rust
@@ -20120,12 +20043,7 @@ fn state_machine_default_viewmodel_number_formula_random_function_group_source_c
         state_machine.bind_default_view_model_context(),
         "{label} failed to bind default view-model context"
     );
-    state_machine.set_data_bind_formula_random_values(&[
-        target_to_source_random,
-        reapply_random,
-        first_advance_random,
-        second_advance_random,
-    ]);
+    state_machine.set_data_bind_formula_random_values(&seeded_random_values);
     assert_eq!(
         state_machine.data_bind_formula_random_call_count(),
         0,
@@ -20178,6 +20096,15 @@ fn state_machine_default_viewmodel_number_formula_random_function_group_source_c
     {
         compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
         compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, label);
+        assert_eq!(
+            cpp_state_machine.random_total_calls, expected_counts[index],
+            "{label} C++ random totalCalls mismatch at report {index}"
+        );
+        assert_eq!(
+            cpp_state_machine.random_total_calls,
+            rust_state_machine.data_bind_formula_random_call_count(),
+            "{label} C++ and Rust random call count mismatch at report {index}"
+        );
         if index >= 1 {
             compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 1, label);
         }

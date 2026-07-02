@@ -33,8 +33,10 @@ formula converter's `randomModeValue`.
 
 ## Out Of Scope
 
-- Asset, artboard, view-model pointer, list, and other source kinds not
-  admitted by this number-target graph path.
+- List random fallback behavior is covered separately by
+  `data-binding-graph-formula-list-fallback-runtime-contract.md`.
+- Asset, artboard, view-model pointer, and other source kinds not admitted by
+  this number-target graph path.
 - Symbol-list-index random formula evaluation, which is covered by the
   symbol-list-index random contracts.
 - Number-source random formula evaluation and scheduling, which is covered by

@@ -3492,6 +3492,19 @@ sources, imported/owned contexts, real random generation, random call counts,
 secondary dependency invalidation, and full dirty-list scheduler parity remain
 follow-up `#12` slices.
 
+Current #12 update: graph formula list fallback
+Direct graph-owned `DataConverterFormula` now admits default-context list
+sources feeding number targets. Rust keeps the list item count as a graph
+source value, enters the formula converter, and matches C++ by writing the
+early fallback value `0.0` for both `FormulaTokenInput` and
+`FunctionType::random` output tokens with `randomModeValue` values `0`, `1`,
+and `2`. The contract is
+`docs/prototypes/data-binding-graph-formula-list-fallback-runtime-contract.md`.
+List targets, generated list items, target-to-source reverse conversion for
+formula list sources, imported/owned contexts, real random generation, random
+call counts, secondary dependency invalidation, and full dirty-list scheduler
+parity remain follow-up `#12` slices.
+
 Current #12 update: graph formula random group public update target-to-source
 Grouped graph-owned `DataConverterFormula` random functions now cover public
 `updateDataBinds(true)` target-to-source scheduling for a

@@ -26,7 +26,11 @@ because boolean values are neither number nor symbol-list-index inputs.
 
 ## Out Of Scope
 
-- Enum, color, string, trigger, list, and other non-number formula inputs.
+- Enum, color, string, and trigger fallback behavior is covered separately by
+  `data-binding-graph-formula-remaining-fallbacks-runtime-contract.md`; list
+  fallback behavior is covered separately by
+  `data-binding-graph-formula-list-fallback-runtime-contract.md`.
+- Asset, artboard, view-model pointer, and other non-number formula inputs.
 - `FormulaTokenFunction`, random formula values, and `randomModeValue`.
 - Formula parent-source binding, source dependents, and add-dirt behavior.
 - Reverse conversion and target-to-source propagation.

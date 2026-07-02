@@ -30,8 +30,10 @@ source kinds because they are neither number nor symbol-list-index inputs.
 
 ## Out Of Scope
 
-- Asset, artboard, view-model pointer, list, and other source kinds not
-  admitted by this number-target graph path.
+- List fallback behavior is covered separately by
+  `data-binding-graph-formula-list-fallback-runtime-contract.md`.
+- Asset, artboard, view-model pointer, and other source kinds not admitted by
+  this number-target graph path.
 - `FormulaTokenFunction`, random formula values, and `randomModeValue`.
 - Formula parent-source binding, source dependents, and add-dirt behavior.
 - Reverse conversion and target-to-source propagation.

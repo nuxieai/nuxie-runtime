@@ -22824,6 +22824,8 @@ fn runtime_bindable_number_default_view_model_source(
                 RuntimeDataBindGraphValue::String(value.to_vec())
             } else if let Some(value) = file.view_model_instance_trigger_count_for_object(source) {
                 RuntimeDataBindGraphValue::Trigger(value)
+            } else if let Some(item_count) = file.view_model_instance_list_size_for_object(source) {
+                RuntimeDataBindGraphValue::List { item_count }
             } else {
                 return None;
             }

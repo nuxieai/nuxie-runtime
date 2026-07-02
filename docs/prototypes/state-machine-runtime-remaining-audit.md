@@ -1000,6 +1000,15 @@ slice.
   value `0.0`. A C++ probe matrix uses non-zero imported bindable target
   defaults to prove each fallback write is observable through an existing
   blend-state consumer.
+- `DataConverterFormula` list fallback slice: default-context list sources
+  feeding number targets now enter the formula converter and write C++'s early
+  fallback value `0.0`. This covers both deterministic `FormulaTokenInput` and
+  source-to-target `FunctionType::random` tokens with `randomModeValue` values
+  `0`, `1`, and `2`; random values supplied to Rust do not affect the fallback
+  result. List targets, generated list items, reverse conversion, imported/
+  owned contexts, real random generation, and random call-count parity remain
+  follow-up slices. The contract is
+  `docs/prototypes/data-binding-graph-formula-list-fallback-runtime-contract.md`.
 - Deterministic `DataConverterFormula` function-token slice:
   default-context number and symbol-list-index sources feeding number targets
   now execute `FormulaTokenFunction` output-queue tokens for deterministic

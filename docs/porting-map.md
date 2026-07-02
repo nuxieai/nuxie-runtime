@@ -3197,10 +3197,10 @@ preserved through explicit data-context advancement, then the next normal
 state-machine advance reapplies the unchanged source through the cached
 host-supplied formula random value. The contract is
 `docs/prototypes/data-binding-graph-formula-random-target-dirty-runtime-contract.md`.
-Grouped random target-dirty scheduling, list random formulas, non-number random
-formulas, non-default random modes, cache invalidation, call counts,
-imported/owned contexts, real random generation, and full dirty-list scheduler
-parity remain follow-up `#12` slices.
+List random formulas, non-number random formulas, non-default random modes,
+cache invalidation, call counts, imported/owned contexts, real random
+generation, and full dirty-list scheduler parity remain follow-up `#12`
+slices.
 
 Current #12 update: graph formula random group source-to-target
 Grouped graph-owned `DataConverterFormula` random functions now cover the
@@ -3210,24 +3210,38 @@ host-supplied graph formula random stream through nested converter state,
 draws the same default-mode random value as C++, and reuses the cached grouped
 formula value on later state-machine advancement. The contract is
 `docs/prototypes/data-binding-graph-formula-random-group-runtime-contract.md`.
-Grouped random explicit target-to-source and target-dirty scheduling, list
-random formulas, non-number random formulas, non-default random modes, cache
-invalidation, call counts, imported/owned contexts, real random generation,
-and full dirty-list scheduler parity remain follow-up `#12` slices.
+Grouped random explicit target-to-source scheduling, list random formulas,
+non-number random formulas, non-default random modes, cache invalidation, call
+counts, imported/owned contexts, real random generation, and full dirty-list
+scheduler parity remain follow-up `#12` slices.
 
 Current #12 update: graph formula random group public update target-to-source
 Grouped graph-owned `DataConverterFormula` random functions now cover public
-`updateDataBinds(true)` target-to-source scheduling for a main-`ToTarget |
-TwoWay` default-context number bind. A
+`updateDataBinds(true)` target-to-source scheduling for a
+main-`ToTarget | TwoWay` default-context number bind. A
 `DataConverterGroup<OperationValue, Formula(random)>` bind applies the target
 mutation through C++ reverse group order, reuses the cached default-mode
 formula random value, and reapplies source-to-target in the same public update.
 The contract is
 `docs/prototypes/data-binding-graph-formula-random-group-public-update-target-to-source-runtime-contract.md`.
-Grouped random explicit target-to-source and target-dirty scheduling, list
-random formulas, non-number random formulas, non-default random modes, cache
-invalidation, call counts, imported/owned contexts, real random generation,
-and full dirty-list scheduler parity remain follow-up `#12` slices.
+Grouped random explicit target-to-source scheduling, list random formulas,
+non-number random formulas, non-default random modes, cache invalidation, call
+counts, imported/owned contexts, real random generation, and full dirty-list
+scheduler parity remain follow-up `#12` slices.
+
+Current #12 update: graph formula random group target-dirty
+Grouped graph-owned `DataConverterFormula` random functions now cover
+main-`ToTarget | TwoWay` state-machine target-dirty behavior for
+default-context number binds. A manual edit to a
+`DataConverterGroup<OperationValue, Formula(random)>` target is preserved
+through explicit data-context advancement, then the next normal state-machine
+advance reapplies the unchanged source through the cached grouped formula
+random value. The contract is
+`docs/prototypes/data-binding-graph-formula-random-group-target-dirty-runtime-contract.md`.
+Grouped random explicit target-to-source scheduling, list random formulas,
+non-number random formulas, non-default random modes, cache invalidation, call
+counts, imported/owned contexts, real random generation, and full dirty-list
+scheduler parity remain follow-up `#12` slices.
 
 Current #12 update: non-scripting `ScriptedDataConverter` now participates in
 the runtime data-bind graph as inherited C++ base converter pass-through. A

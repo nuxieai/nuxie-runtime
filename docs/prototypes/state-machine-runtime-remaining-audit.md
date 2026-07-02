@@ -1035,26 +1035,33 @@ slice.
   direct main-`ToTarget | TwoWay` random formula binds now preserve a manual
   target edit through explicit data-context advancement, then reapply the
   unchanged source through the cached formula random value on the next normal
-  state-machine advance. Grouped target-dirty scheduling, list formulas,
-  non-number, non-default random modes, cache invalidation, call counts,
-  imported/owned contexts, and real random generation remain follow-up slices.
+  state-machine advance. List formulas, non-number, non-default random modes,
+  cache invalidation, call counts, imported/owned contexts, and real random
+  generation remain follow-up slices.
 - `DataConverterFormula` random group source-to-target slice:
   default-context number sources feeding number targets through
   `DataConverterGroup<OperationValue, Formula(random)>` now thread the
   host-supplied default-mode random stream through nested group converter
   state. The grouped formula draws the C++-derived random value on first
   source-to-target advancement and reuses the cached value on later
-  state-machine advancement. Grouped explicit target-to-source and
-  target-dirty scheduling, list formulas, non-number, non-default random modes,
-  cache invalidation, call counts, imported/owned contexts, and real random
-  generation remain follow-up slices.
+  state-machine advancement. Grouped explicit target-to-source scheduling,
+  list formulas, non-number, non-default random modes, cache invalidation,
+  call counts, imported/owned contexts, and real random generation remain
+  follow-up slices.
 - `DataConverterFormula` random group public-update target-to-source slice:
   default-context number sources feeding number targets through a
-  main-`ToTarget | TwoWay`
-  `DataConverterGroup<OperationValue, Formula(random)>` now apply public
-  `updateDataBinds(true)` target mutations through reverse group order, reuse
-  the cached default-mode formula random value, and reapply source-to-target
-  in the same update. Grouped explicit target-to-source and target-dirty
+  main-`ToTarget | TwoWay` `DataConverterGroup<OperationValue,
+  Formula(random)>` now apply public `updateDataBinds(true)` target mutations
+  through reverse group order, reuse the cached default-mode formula random
+  value, and reapply source-to-target in the same update. Grouped explicit
+  target-to-source scheduling, list formulas, non-number, non-default random
+  modes, cache invalidation, call counts, imported/owned contexts, and real
+  random generation remain follow-up slices.
+- `DataConverterFormula` random group target-dirty slice:
+  direct main-`ToTarget | TwoWay` grouped random formula binds now preserve a
+  manual target edit through explicit data-context advancement, then reapply
+  the unchanged source through the cached grouped formula random value on the
+  next normal state-machine advance. Grouped explicit target-to-source
   scheduling, list formulas, non-number, non-default random modes, cache
   invalidation, call counts, imported/owned contexts, and real random
   generation remain follow-up slices.

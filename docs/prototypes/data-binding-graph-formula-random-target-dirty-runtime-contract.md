@@ -35,8 +35,10 @@ the unchanged source through the same cached random formula value.
   `data-binding-graph-formula-random-group-runtime-contract.md`; grouped
   public update target-to-source scheduling is covered separately by
   `data-binding-graph-formula-random-group-public-update-target-to-source-runtime-contract.md`;
-  grouped target-dirty scheduling, list formula, symbol-list-index, and
-  non-number random formula scheduling remain out of scope.
+  grouped target-dirty scheduling is covered separately by
+  `data-binding-graph-formula-random-group-target-dirty-runtime-contract.md`.
+  List formula, symbol-list-index, and non-number random formula scheduling
+  remain out of scope.
 - External, imported, and owned contexts for this converter/source
   combination.
 - Relative-path, parent-path, nested-path, listener-owned, and update-queue

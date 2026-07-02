@@ -1063,6 +1063,18 @@ slice.
   data binding, nested artboard propagation, and full dirty-list scheduler
   parity remain follow-up slices. The contract is
   `docs/prototypes/data-binding-graph-formula-boolean-context-runtime-contract.md`.
+- Deterministic `DataConverterFormula` owned boolean mutation slice:
+  post-bind owned root boolean source mutation by state-machine data-bind
+  index now refreshes the direct formula fallback number target and a
+  same-path direct boolean observer. The Rust runtime exposes
+  `set_owned_view_model_context_boolean_source_for_data_bind`, and the C++
+  probe retains active owned boolean contexts plus
+  `--runtime-set-owned-view-model-source-bool` for parity comparison.
+  Enum/color/string/trigger/list owned mutation, random formulas,
+  reverse/public-update/target-dirty scheduling, relative/parent/nested lookup,
+  listener-owned data binding, nested artboard propagation, and full
+  dirty-list scheduler parity remain follow-up slices. The contract is
+  `docs/prototypes/data-binding-graph-formula-owned-boolean-mutation-runtime-contract.md`.
 - Deterministic `DataConverterFormula` imported/owned enum-context slice:
   imported and owned runtime view-model enum contexts now feed rebound source
   values into the direct formula fallback path before normal state-machine

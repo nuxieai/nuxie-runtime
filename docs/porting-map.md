@@ -3240,6 +3240,16 @@ boolean observer, so imported-context boolean mutation now fans out to every
 bound same-path boolean source node in the active graph before dirty
 reapplication. The contract is
 `docs/prototypes/data-binding-graph-formula-boolean-context-runtime-contract.md`.
+
+Current #12 update: deterministic formula owned boolean source mutation
+Direct graph-owned `DataConverterFormula` boolean fallback now covers
+post-bind owned root boolean source mutation by state-machine data-bind index.
+The same-path direct boolean observer and formula fallback number target both
+refresh after
+`StateMachineInstance::set_owned_view_model_context_boolean_source_for_data_bind`.
+The C++ probe now retains active owned boolean contexts for this comparison.
+The contract is
+`docs/prototypes/data-binding-graph-formula-owned-boolean-mutation-runtime-contract.md`.
 Enum/color/string/trigger/list formula contexts, imported same-path fanout for
 non-boolean source kinds, formula random functions, reverse propagation,
 public update, target-dirty scheduling, generated list item identity,

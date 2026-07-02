@@ -5014,6 +5014,20 @@ Grouped object-source fallback permutations, relative/parent/nested lookup,
 listener-owned data binding, nested artboard propagation, and full dirty-list
 scheduler parity remain follow-up `#12` slices.
 
+Current #12 update: default-context grouped object-source formula fallback
+source-to-target behavior now covers the `DataConverterGroup<FormulaFallback,
+OperationValue>` shape. Asset, artboard, and view-model pointer sources now
+admit this formula-first group path into number targets, matching C++ target
+values while keeping object-source random fallback tokens random-inert for
+`FormulaTokenInput` and `FormulaTokenFunction(random)` modes `0`, `1`, and
+`2`. The contract is
+`docs/prototypes/data-binding-graph-formula-default-object-random-group-fallback-runtime-contract.md`.
+Imported/owned grouped object fallback contexts, post-bind grouped object
+mutation/relink, target-to-source grouped object fallback behavior, longer
+group permutations, relative/parent/nested lookup, listener-owned data binding,
+nested artboard propagation, and full dirty-list scheduler parity remain
+follow-up `#12` slices.
+
 Current #12 update: non-scripting `ScriptedDataConverter` now participates in
 the runtime data-bind graph as inherited C++ base converter pass-through. A
 main-`ToTarget | TwoWay` number bind with a direct scripted converter applies

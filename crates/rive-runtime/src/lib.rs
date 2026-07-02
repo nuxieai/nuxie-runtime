@@ -15060,6 +15060,18 @@ fn runtime_data_bind_graph_group_operation_formula_accepts_non_number_source(
     )
 }
 
+fn runtime_data_bind_graph_group_formula_operation_accepts_non_number_source(
+    converters: &[RuntimeDataBindGraphConverter],
+) -> bool {
+    matches!(
+        converters,
+        [
+            RuntimeDataBindGraphConverter::Formula { .. },
+            RuntimeDataBindGraphConverter::OperationValue { .. }
+        ]
+    )
+}
+
 #[derive(Debug, Clone, Default)]
 struct RuntimeDataBindGraphFormulaState {
     randoms: Vec<f32>,
@@ -24636,6 +24648,8 @@ fn runtime_bindable_number_default_view_model_source(
                 RuntimeDataBindGraphValue::SymbolListIndex(value)
             } else if runtime_data_bind_graph_group_operation_formula_accepts_non_number_source(
                 converters,
+            ) || runtime_data_bind_graph_group_formula_operation_accepts_non_number_source(
+                converters,
             ) {
                 if let Some(value) = file.view_model_instance_boolean_value_for_object(source) {
                     RuntimeDataBindGraphValue::Boolean(value)
@@ -24652,6 +24666,16 @@ fn runtime_bindable_number_default_view_model_source(
                     file.view_model_instance_trigger_count_for_object(source)
                 {
                     RuntimeDataBindGraphValue::Trigger(value)
+                } else if source.type_name == "ViewModelInstanceAssetImage" {
+                    RuntimeDataBindGraphValue::Asset(source.uint_property("propertyValue")?)
+                } else if source.type_name == "ViewModelInstanceArtboard" {
+                    RuntimeDataBindGraphValue::Artboard(source.uint_property("propertyValue")?)
+                } else if let Some(reference) = file
+                    .data_context_view_model_instance_for_instance(default_instance.object, &path)
+                {
+                    RuntimeDataBindGraphValue::ViewModel(RuntimeViewModelPointer::Imported {
+                        object_id: reference.object.id,
+                    })
                 } else {
                     return None;
                 }

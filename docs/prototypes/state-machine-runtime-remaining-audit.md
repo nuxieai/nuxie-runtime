@@ -1047,18 +1047,33 @@ slice.
   source-to-target `FunctionType::random` tokens with `randomModeValue` values
   `0`, `1`, and `2`; random values supplied to Rust do not affect the fallback
   result. Public-update and explicit target-to-source behavior are covered
-  separately below; list targets, generated list items, imported/owned
-  contexts, real random generation, and random call-count parity remain
-  follow-up slices. The contract is
+  separately below; the first list-target behavior is covered separately
+  below. Random list targets, generated list items, imported/owned contexts,
+  real random generation, and random call-count parity remain follow-up slices.
+  The contract is
   `docs/prototypes/data-binding-graph-formula-list-fallback-runtime-contract.md`.
+- `DataConverterFormula` list fallback bindable-list target slice:
+  default-context list sources feeding state-machine
+  `BindablePropertyList.propertyValue` targets through a deterministic
+  `FormulaTokenInput` converter now enter the runtime data-bind graph, report
+  the imported source list size, preserve the list target scalar during
+  explicit data-context advancement, and apply C++'s numeric fallback target
+  value on later normal state-machine advancement. Formula random-function
+  list targets, generated list items, public-update and target-to-source
+  scheduling for formula list targets, imported/owned contexts, real random
+  generation, and random call-count parity remain follow-up slices. The
+  contract is
+  `docs/prototypes/data-binding-graph-formula-list-fallback-bindable-list-target-runtime-contract.md`.
 - `DataConverterFormula` list fallback public-update reverse slice:
   default-context list sources feeding main-`ToTarget | TwoWay` number targets
   now preserve the unchanged imported list source when reverse formula
   conversion produces a number, then reapply that unchanged list source through
-  the formula fallback during public `updateDataBinds(true)`. List targets,
-  generated list items, imported/owned contexts, and random formulas remain
-  follow-up slices. Explicit main-`ToSource` behavior and symbol-list-index
-  public-update reverse behavior are covered separately below. The contract is
+  the formula fallback during public `updateDataBinds(true)`. The first
+  deterministic formula list target is covered separately above. Generated
+  list items, formula list-target public-update/target-to-source scheduling,
+  imported/owned contexts, and random formulas remain follow-up slices.
+  Explicit main-`ToSource` behavior and symbol-list-index public-update
+  reverse behavior are covered separately below. The contract is
   `docs/prototypes/data-binding-graph-formula-list-fallback-public-update-target-to-source-runtime-contract.md`.
 - `DataConverterFormula` list fallback explicit target-to-source slice:
   default-context list sources feeding main-`ToSource | TwoWay` number targets

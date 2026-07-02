@@ -27,9 +27,11 @@ non-number, non-symbol-list-index inputs.
 
 ## Out Of Scope
 
-- List-target `BindablePropertyList` behavior, generated list item creation,
-  artboard component-list instancing, map-rule selection, layout, and
-  virtualization.
+- Deterministic list-target `BindablePropertyList` behavior is covered
+  separately by
+  `data-binding-graph-formula-list-fallback-bindable-list-target-runtime-contract.md`.
+- Formula random-function list targets, generated list item creation, artboard
+  component-list instancing, map-rule selection, layout, and virtualization.
 - `DataConverterListToLength`, which is covered separately.
 - `DataConverterNumberToList`, which is covered separately.
 - Public-update target-to-source propagation for formula list sources is

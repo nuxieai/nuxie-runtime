@@ -4987,6 +4987,7 @@ struct RuntimeDataBindGraphTargetsMut<'a> {
     enums: &'a mut [StateMachineBindableEnumInstance],
     assets: &'a mut [StateMachineBindableAssetInstance],
     artboards: &'a mut [StateMachineBindableArtboardInstance],
+    lists: &'a mut [StateMachineBindableListInstance],
     triggers: &'a mut [StateMachineBindableTriggerInstance],
     view_models: &'a mut [StateMachineBindableViewModelInstance],
     include_view_models: bool,
@@ -13211,6 +13212,14 @@ impl RuntimeDataBindGraph {
             let Some(value) = source.converted_value(&mut formula_random_source) else {
                 continue;
             };
+            if matches!(phase, RuntimeDataBindGraphApplyPhase::Immediate)
+                && !source.source_to_target_dirty_after_target_to_source
+                && matches!(target.target, RuntimeDataBindGraphTarget::List { .. })
+                && matches!(value, RuntimeDataBindGraphValue::Number(_))
+            {
+                skipped_dirty_binding = true;
+                continue;
+            }
             targets.apply_default_view_model_binding(&target.target, &value);
             source.source_to_target_dirty_after_immediate = false;
             source.source_to_target_dirty_after_target_to_source = false;
@@ -15164,6 +15173,18 @@ impl RuntimeDataBindGraphTargetsMut<'_> {
             }
             (RuntimeDataBindGraphTarget::List { .. }, RuntimeDataBindGraphValue::List { .. }) => {
                 // C++ only applies list values to DataBindListItemConsumer targets.
+            }
+            (
+                RuntimeDataBindGraphTarget::List { global_id },
+                RuntimeDataBindGraphValue::Number(value),
+            ) => {
+                if let Some(target) = self
+                    .lists
+                    .iter_mut()
+                    .find(|target| target.global_id == *global_id)
+                {
+                    target.set_value(value.floor().max(0.0) as usize);
+                }
             }
             (
                 RuntimeDataBindGraphTarget::Trigger { global_id },
@@ -19772,6 +19793,7 @@ impl StateMachineInstance {
                 enums: &mut self.bindable_enums,
                 assets: &mut self.bindable_assets,
                 artboards: &mut self.bindable_artboards,
+                lists: &mut self.bindable_lists,
                 triggers: &mut self.bindable_triggers,
                 view_models: &mut self.bindable_view_models,
                 include_view_models,
@@ -23353,6 +23375,9 @@ fn runtime_bindable_list_default_view_model_source(
                 file.view_model_instance_number_value_for_object(source?)?,
             )
         }
+        Some(RuntimeDataBindGraphConverter::Formula { .. }) => RuntimeDataBindGraphValue::List {
+            item_count: file.view_model_instance_list_size_for_object(source?)?,
+        },
         None => RuntimeDataBindGraphValue::List {
             item_count: match source {
                 Some(source) => file.view_model_instance_list_size_for_object(source)?,

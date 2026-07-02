@@ -1183,6 +1183,15 @@ slice.
   grouped target-to-source/public-update/target-dirty, list formulas,
   non-number, cache invalidation, call counts, imported/owned contexts, and
   real random generation remain follow-up slices.
+- `DataConverterFormula` random group always-mode target-dirty slice:
+  default-context number sources feeding number targets through a
+  main-`ToTarget | TwoWay` `DataConverterGroup<OperationValue,
+  Formula(random)>` now preserve a manual target edit through explicit
+  data-context advancement when `randomModeValue == 1`, then consume fresh
+  host-supplied random values on later normal state-machine advances,
+  matching C++. Source-change grouped target-to-source/public-update/
+  target-dirty, list formulas, non-number, cache invalidation, call counts,
+  imported/owned contexts, and real random generation remain follow-up slices.
 - `DataConverterFormula` random group source-change source-to-target slice:
   default-context number sources feeding number targets through
   `DataConverterGroup<OperationValue, Formula(random)>` now thread

@@ -13317,12 +13317,8 @@ impl RuntimeDataBindGraphSourceNode {
             (
                 RuntimeDataBindGraphValue::SymbolListIndex(value),
                 RuntimeDataBindGraphValue::Number(_),
-            ) if matches!(
-                self.converter.as_ref(),
-                Some(
-                    RuntimeDataBindGraphConverter::ToNumber
-                        | RuntimeDataBindGraphConverter::Formula { .. }
-                )
+            ) if self.converter.as_ref().is_some_and(
+                runtime_data_bind_graph_converter_preserves_symbol_list_index_source_on_number_target_apply,
             ) =>
             {
                 Some(RuntimeDataBindGraphValue::SymbolListIndex(*value))
@@ -13849,6 +13845,16 @@ fn runtime_data_bind_graph_converter_accepts_symbol_list_index_number_source(
             .is_some_and(runtime_data_bind_graph_converter_accepts_symbol_list_index_number_source),
         _ => false,
     }
+}
+
+fn runtime_data_bind_graph_converter_preserves_symbol_list_index_source_on_number_target_apply(
+    converter: &RuntimeDataBindGraphConverter,
+) -> bool {
+    matches!(
+        converter,
+        RuntimeDataBindGraphConverter::ToNumber | RuntimeDataBindGraphConverter::Formula { .. }
+    ) || (matches!(converter, RuntimeDataBindGraphConverter::Group(_))
+        && runtime_data_bind_graph_converter_accepts_symbol_list_index_number_source(converter))
 }
 
 #[derive(Debug, Clone, Default)]

@@ -3560,10 +3560,11 @@ random formula path on later normal advances for `randomModeValue` values `0`,
 `1`, and `2`. The contract is
 `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-target-dirty-runtime-contract.md`.
 Grouped symbol-list-index default-mode source-to-target behavior is covered
-separately below. Grouped non-default, grouped target-to-source/public-update/
-target-dirty, imported/owned contexts, real random generation, random call
-counts, secondary dependency invalidation, and full dirty-list scheduler
-parity remain follow-up `#12` slices.
+separately below. Grouped non-default source-to-target and grouped explicit
+target-to-source behavior are covered separately below. Grouped public-update
+target-to-source/target-dirty, imported/owned contexts, real random
+generation, random call counts, secondary dependency invalidation, and full
+dirty-list scheduler parity remain follow-up `#12` slices.
 
 Current #12 update: graph formula random symbol-list-index group source-to-target
 Grouped graph-owned `DataConverterFormula` random functions now cover the
@@ -3576,7 +3577,8 @@ formula with the same host-supplied random stream and cache behavior as direct
 formula binds. The contract is
 `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-group-runtime-contract.md`.
 Grouped non-default source-to-target behavior is covered separately below.
-Grouped target-to-source/public-update/target-dirty, list formulas, remaining
+Grouped explicit target-to-source behavior is covered separately below.
+Grouped public-update target-to-source/target-dirty, list formulas, remaining
 non-number random scheduling, imported/owned contexts, real random generation,
 random call counts, secondary dependency invalidation, and full dirty-list
 scheduler parity remain follow-up `#12` slices.
@@ -3591,7 +3593,24 @@ advancement, and clears the nested formula cache when
 `set_default_view_model_symbol_list_index_source_for_data_bind` mutates the
 bound default source for source-change mode. The contract is
 `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-group-non-default-runtime-contract.md`.
-Grouped target-to-source/public-update/target-dirty, list formulas, remaining
+Grouped explicit target-to-source behavior is covered separately below.
+Grouped public-update target-to-source/target-dirty, list formulas, remaining
+non-number random scheduling, imported/owned contexts, real random generation,
+random call counts, secondary dependency invalidation, and full dirty-list
+scheduler parity remain follow-up `#12` slices.
+
+Current #12 update: graph formula random symbol-list-index group explicit target-to-source
+Grouped graph-owned `DataConverterFormula` random functions now cover explicit
+`advance_data_context` target-to-source scheduling for
+`DataConverterGroup<OperationValue, Formula(random)>` default-context
+symbol-list-index sources feeding number targets. Rust preserves the unchanged
+symbol-list-index source when grouped reverse conversion produces a number,
+marks the bind dirty for same-pass source-to-target reapplication, and matches
+C++ target reports for `randomModeValue` values `0`, `1`, and `2`, including
+the grouped reverse operation-value scale visible in main-`ToSource` target
+values. The contract is
+`docs/prototypes/data-binding-graph-formula-random-symbol-list-index-group-target-to-source-runtime-contract.md`.
+Grouped public-update target-to-source/target-dirty, list formulas, remaining
 non-number random scheduling, imported/owned contexts, real random generation,
 random call counts, secondary dependency invalidation, and full dirty-list
 scheduler parity remain follow-up `#12` slices.

@@ -44,8 +44,11 @@ evaluation, after the symbol-list-index source has been cast to `float`.
 - Grouped symbol-list-index `RandomMode::always` source-to-target scheduling
   is covered separately by
   `data-binding-graph-formula-random-symbol-list-index-group-non-default-runtime-contract.md`.
-- Grouped target-to-source, grouped target-dirty, list, and non-symbol
-  non-number random formula scheduling.
+- Grouped symbol-list-index explicit target-to-source scheduling is covered
+  separately by
+  `data-binding-graph-formula-random-symbol-list-index-group-target-to-source-runtime-contract.md`.
+- Grouped public-update target-to-source, grouped target-dirty, list, and
+  non-symbol non-number random formula scheduling.
 - Formula parent-source binding, source dependents, and add-dirt behavior.
 - External, imported, and owned contexts for this converter/source
   combination.

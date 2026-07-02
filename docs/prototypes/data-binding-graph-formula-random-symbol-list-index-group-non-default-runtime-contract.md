@@ -31,7 +31,9 @@ symbol-list-index source mutation.
 
 - Grouped symbol-list-index default-mode source-to-target behavior, covered by
   `data-binding-graph-formula-random-symbol-list-index-group-runtime-contract.md`.
-- Grouped symbol-list-index target-to-source, public-update, and target-dirty
+- Grouped symbol-list-index explicit target-to-source scheduling is covered by
+  `data-binding-graph-formula-random-symbol-list-index-group-target-to-source-runtime-contract.md`.
+- Grouped symbol-list-index public-update target-to-source and target-dirty
   scheduling.
 - Direct symbol-list-index random formula behavior, covered by the direct
   symbol-list-index random contracts.

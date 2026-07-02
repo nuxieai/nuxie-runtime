@@ -41,7 +41,9 @@ formula binds.
 - Grouped symbol-list-index `RandomMode::always` and
   `RandomMode::sourceChange` source-to-target scheduling is covered by
   `data-binding-graph-formula-random-symbol-list-index-group-non-default-runtime-contract.md`.
-- Grouped symbol-list-index target-to-source, public-update, and target-dirty
+- Grouped symbol-list-index explicit target-to-source scheduling is covered by
+  `data-binding-graph-formula-random-symbol-list-index-group-target-to-source-runtime-contract.md`.
+- Grouped symbol-list-index public-update target-to-source and target-dirty
   scheduling.
 - List formula random scheduling and non-number fallback random scheduling.
 - Stateful grouped converters mixed with symbol-list-index random formulas.

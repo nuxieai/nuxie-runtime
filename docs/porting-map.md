@@ -4974,6 +4974,19 @@ Default view-model pointer source mutation, relative/parent/nested lookup,
 listener-owned data binding, nested artboard propagation, and full dirty-list
 scheduler parity remain follow-up `#12` slices.
 
+Current #12 update: graph formula default view-model pointer source relink
+Direct graph-owned `DataConverterFormula` view-model pointer sources now cover
+post-bind default-context root pointer relink by formula data-bind index. The
+existing default view-model pointer relink path already fans out to every
+matching same-path graph view-model source node, so the formula fallback
+number target and direct view-model observer both refresh after
+`StateMachineInstance::relink_default_view_model_view_model_source_for_data_bind`.
+The contract is
+`docs/prototypes/data-binding-graph-formula-default-viewmodel-relink-runtime-contract.md`.
+Relative/parent/nested lookup, listener-owned data binding, nested artboard
+propagation, and full dirty-list scheduler parity remain follow-up `#12`
+slices.
+
 Current #12 update: non-scripting `ScriptedDataConverter` now participates in
 the runtime data-bind graph as inherited C++ base converter pass-through. A
 main-`ToTarget | TwoWay` number bind with a direct scripted converter applies

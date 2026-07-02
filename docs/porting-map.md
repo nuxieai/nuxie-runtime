@@ -3278,8 +3278,25 @@ advancing. The contract is
 `docs/prototypes/data-binding-graph-formula-random-source-change-runtime-contract.md`.
 Real Rust random generation, C++ probe random seeding/queueing,
 grouped/list/non-number `RandomMode::sourceChange` scheduling, secondary
-converter dependency invalidation, random call counts, imported/owned
-contexts, and full dirty-list scheduler parity remain follow-up `#12` slices.
+converter dependency invalidation, broader random call-count coverage,
+imported/owned contexts, and full dirty-list scheduler parity remain follow-up
+`#12` slices.
+
+Current #12 update: graph formula random call-count introspection
+Direct graph-owned `DataConverterFormula` random functions now expose Rust's
+host-supplied random-stream call count through
+`StateMachineInstance::data_bind_formula_random_call_count`. Default-context
+number source-to-target probes cover default, always, and source-change random
+modes, including the cache reuse and source-change cache-clear cases. The
+existing list formula fallback probe also proves that random tokens on list
+sources do not consume random values because C++ returns the numeric fallback
+before evaluating formula tokens. The contract is
+`docs/prototypes/data-binding-graph-formula-random-call-count-runtime-contract.md`.
+Probe-visible C++ `RandomProvider::totalCalls`, real RNG generation/seeding,
+grouped converters, target-to-source scheduling, public update scheduling,
+target-dirty scheduling, imported/owned contexts, secondary dependency
+invalidation, and full dirty-list scheduler parity remain follow-up `#12`
+slices.
 
 Current #12 update: graph formula random source-change mode explicit target-to-source
 Direct graph-owned `DataConverterFormula` random functions now cover explicit

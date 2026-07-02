@@ -54,8 +54,10 @@ non-number, non-symbol-list-index inputs.
   `data-binding-graph-formula-random-list-fallback-main-to-target-two-way-target-dirty-runtime-contract.md`.
 - Broader target-to-source propagation.
 - Formula parent-source binding, source dependents, and add-dirt behavior.
-- A real Rust random generator, C++ random seeding/queueing, or random
-  call-count parity.
+- A real Rust random generator or C++ random seeding/queueing.
+- Broader random call-count parity. The random-token zero-pull
+  source-to-target list fallback case is covered by
+  `data-binding-graph-formula-random-call-count-runtime-contract.md`.
 - External, imported, and owned contexts for this converter/source
   combination.
 - Relative-path, parent-path, nested-path, listener-owned, and update-queue
@@ -67,6 +69,7 @@ non-number, non-symbol-list-index inputs.
   list-valued source node instead of leaving the target at its imported default.
 - `FormulaTokenInput` writes C++'s fallback `0.0` to the number target.
 - `FunctionType::random` output tokens are skipped for the list source.
+- Skipped random tokens do not consume the host-supplied Rust random stream.
 - Random modes `0`, `1`, and `2` all preserve the same fallback behavior.
 - Existing list-to-length, non-number formula fallback, and formula-random
   probes continue to pass.

@@ -3089,6 +3089,7 @@ struct RuntimeImportedViewModelOverrideKey {
 struct RuntimeDataBindGraphFormulaRandomSource {
     values: Vec<f32>,
     next_index: usize,
+    call_count: usize,
 }
 
 impl RuntimeDataBindGraphFormulaRandomSource {
@@ -3096,14 +3097,20 @@ impl RuntimeDataBindGraphFormulaRandomSource {
         self.values.clear();
         self.values.extend_from_slice(values);
         self.next_index = 0;
+        self.call_count = 0;
     }
 
     fn next_value(&mut self) -> f32 {
+        self.call_count += 1;
         let value = self.values.get(self.next_index).copied().unwrap_or(0.0);
         if self.next_index < self.values.len() {
             self.next_index += 1;
         }
         value
+    }
+
+    fn call_count(&self) -> usize {
+        self.call_count
     }
 }
 
@@ -9752,6 +9759,10 @@ impl RuntimeDataBindGraph {
         for source in &mut self.sources {
             source.reset_formula_random_state();
         }
+    }
+
+    fn formula_random_call_count(&self) -> usize {
+        self.formula_random_source.call_count()
     }
 
     fn data_context_present(&self) -> bool {
@@ -19529,6 +19540,10 @@ impl StateMachineInstance {
 
     pub fn set_data_bind_formula_random_values(&mut self, values: &[f32]) {
         self.data_bind_graph.set_formula_random_values(values);
+    }
+
+    pub fn data_bind_formula_random_call_count(&self) -> usize {
+        self.data_bind_graph.formula_random_call_count()
     }
 
     pub fn bind_view_model_instance_context(

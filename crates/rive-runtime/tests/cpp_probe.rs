@@ -17892,6 +17892,190 @@ fn state_machine_default_viewmodel_number_formula_random_function_source_change_
 }
 
 #[test]
+fn state_machine_default_viewmodel_number_formula_random_call_counts_match_cpp_source_semantics() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let bounds = [
+        FormulaFunctionArgument::Value(2.0),
+        FormulaFunctionArgument::Value(6.0),
+    ];
+    let cases = [
+        (
+            "default",
+            9100,
+            0,
+            None,
+            vec![
+                "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+                "0".to_owned(),
+                "--runtime-advance-state-machine".to_owned(),
+                "0".to_owned(),
+                "0".to_owned(),
+                "--runtime-advance-state-machine".to_owned(),
+                "0".to_owned(),
+                "1".to_owned(),
+            ],
+            vec![1, 1],
+        ),
+        (
+            "always",
+            9101,
+            1,
+            Some(1.0),
+            vec![
+                "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+                "0".to_owned(),
+                "--runtime-advance-state-machine".to_owned(),
+                "0".to_owned(),
+                "0".to_owned(),
+                "--runtime-set-default-view-model-source-number".to_owned(),
+                "0".to_owned(),
+                "0".to_owned(),
+                "1".to_owned(),
+                "--runtime-advance-state-machine".to_owned(),
+                "0".to_owned(),
+                "0".to_owned(),
+                "--runtime-advance-state-machine".to_owned(),
+                "0".to_owned(),
+                "1".to_owned(),
+            ],
+            vec![1, 2, 2],
+        ),
+        (
+            "source_change",
+            9102,
+            2,
+            Some(1.0),
+            vec![
+                "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+                "0".to_owned(),
+                "--runtime-advance-state-machine".to_owned(),
+                "0".to_owned(),
+                "0".to_owned(),
+                "--runtime-set-default-view-model-source-number".to_owned(),
+                "0".to_owned(),
+                "0".to_owned(),
+                "1".to_owned(),
+                "--runtime-advance-state-machine".to_owned(),
+                "0".to_owned(),
+                "0".to_owned(),
+                "--runtime-advance-state-machine".to_owned(),
+                "0".to_owned(),
+                "1".to_owned(),
+            ],
+            vec![1, 2, 2],
+        ),
+    ];
+
+    for (case_label, file_id, random_mode_value, source_mutation, args, expected_counts) in cases {
+        let label = format!(
+            "synthetic/runtime_state_machine_default_viewmodel_number_formula_random_call_count_{case_label}_cpp.riv"
+        );
+        let bytes =
+            synthetic_state_machine_default_viewmodel_number_formula_function_blend_state_with_flags_and_random_mode(
+                file_id,
+                0.0,
+                16,
+                &bounds,
+                0,
+                false,
+                random_mode_value,
+            );
+
+        let cpp = read_cpp_probe_bytes_with_args(&probe, &label, &bytes, &args);
+        let cpp_artboard = cpp
+            .artboards
+            .first()
+            .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+        let random_values = (0..expected_counts.len())
+            .map(|report_index| {
+                infer_formula_random_value_from_cpp_number_binding(
+                    cpp_artboard,
+                    report_index,
+                    0,
+                    2.0,
+                    6.0,
+                    &label,
+                )
+            })
+            .collect::<Vec<_>>();
+
+        let (_, mut rust) = read_rust_instance_from_bytes(&bytes, &label);
+        let mut state_machine = rust
+            .state_machine_instance(0)
+            .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+        assert!(
+            state_machine.bind_default_view_model_context(),
+            "{label} failed to bind default view-model context"
+        );
+        state_machine.set_data_bind_formula_random_values(&random_values);
+        assert_eq!(
+            state_machine.data_bind_formula_random_call_count(),
+            0,
+            "{label} call count should reset with supplied random values"
+        );
+
+        let mut rust_reports = Vec::new();
+        rust_reports.push((
+            rust.advance_state_machine_instance(&mut state_machine, 0.0),
+            state_machine.clone(),
+        ));
+        assert_eq!(
+            state_machine.data_bind_formula_random_call_count(),
+            expected_counts[0],
+            "{label} first advance random call count mismatch"
+        );
+        let second_elapsed = if source_mutation.is_some() { 0.0 } else { 1.0 };
+        if let Some(value) = source_mutation {
+            assert!(
+                state_machine.set_default_view_model_number_source_for_data_bind(0, value),
+                "{label} failed to mutate default view-model number source"
+            );
+        }
+        rust_reports.push((
+            rust.advance_state_machine_instance(&mut state_machine, second_elapsed),
+            state_machine.clone(),
+        ));
+        assert_eq!(
+            state_machine.data_bind_formula_random_call_count(),
+            expected_counts[1],
+            "{label} second advance random call count mismatch"
+        );
+        if expected_counts.len() > 2 {
+            rust_reports.push((
+                rust.advance_state_machine_instance(&mut state_machine, 1.0),
+                state_machine.clone(),
+            ));
+            assert_eq!(
+                state_machine.data_bind_formula_random_call_count(),
+                expected_counts[2],
+                "{label} third advance random call count mismatch"
+            );
+        }
+        let report = rust.update_components();
+
+        assert_eq!(
+            cpp_artboard.runtime_state_machine_advances.len(),
+            rust_reports.len(),
+            "{label} state-machine report count mismatch"
+        );
+        for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+            .runtime_state_machine_advances
+            .iter()
+            .zip(&rust_reports)
+        {
+            compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, &label);
+            compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, &label);
+        }
+        compare_cpp_runtime_update(&cpp, &rust, &report, &label);
+    }
+}
+
+#[test]
 fn state_machine_default_viewmodel_number_formula_random_function_group_matches_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
@@ -22511,6 +22695,11 @@ fn state_machine_default_viewmodel_list_formula_fallback_matches_cpp_probe() {
         if matches!(token_kind, FormulaFallbackTokenKind::RandomFunction { .. }) {
             state_machine.set_data_bind_formula_random_values(&[0.875, 0.625]);
         }
+        assert_eq!(
+            state_machine.data_bind_formula_random_call_count(),
+            0,
+            "{label} random call count should start at zero"
+        );
         let rust_reports = [
             (
                 rust.advance_state_machine_instance(&mut state_machine, 0.0),
@@ -22521,6 +22710,11 @@ fn state_machine_default_viewmodel_list_formula_fallback_matches_cpp_probe() {
                 state_machine.clone(),
             ),
         ];
+        assert_eq!(
+            state_machine.data_bind_formula_random_call_count(),
+            0,
+            "{label} list fallback should not evaluate random tokens"
+        );
         let report = rust.update_components();
 
         let cpp_artboard = cpp

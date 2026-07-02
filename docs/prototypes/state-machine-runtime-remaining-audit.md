@@ -1049,9 +1049,21 @@ slice.
   result. Public-update, explicit target-to-source, and deterministic/random
   target-dirty behavior are covered separately below; the first list-target
   behavior is covered separately below. Generated list items, imported/owned
-  contexts, real random generation, and random call-count parity remain
-  follow-up slices. The contract is
+  contexts, real random generation, and broader random call-count parity
+  remain follow-up slices. The contract is
   `docs/prototypes/data-binding-graph-formula-list-fallback-runtime-contract.md`.
+- `DataConverterFormula` random call-count source-to-target slice:
+  default-context number sources feeding number targets now expose Rust's
+  host-supplied random-stream pull count and cover default, always, and
+  source-change random modes. The list-source fallback probe also verifies
+  random tokens do not consume random values for non-number,
+  non-symbol-list-index formula inputs. Probe-visible C++
+  `RandomProvider::totalCalls`, real RNG generation/seeding, grouped
+  converters, target-to-source scheduling, public-update scheduling,
+  target-dirty scheduling, imported/owned contexts, secondary dependency
+  invalidation, and full dirty-list scheduler parity remain follow-up slices.
+  The contract is
+  `docs/prototypes/data-binding-graph-formula-random-call-count-runtime-contract.md`.
 - `DataConverterFormula` list fallback bindable-list target slice:
   default-context list sources feeding state-machine
   `BindablePropertyList.propertyValue` targets through a deterministic

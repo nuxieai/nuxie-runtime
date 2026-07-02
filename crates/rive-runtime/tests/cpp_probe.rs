@@ -27827,6 +27827,153 @@ fn state_machine_default_viewmodel_object_formula_fallbacks_explicit_target_to_s
 }
 
 #[test]
+fn state_machine_default_viewmodel_object_formula_random_fallbacks_explicit_target_to_source_match_cpp_probe()
+ {
+    const DATA_BIND_TO_SOURCE: u64 = 1 << 0;
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let cases = [
+        FormulaFallbackObjectSourceKind::Asset,
+        FormulaFallbackObjectSourceKind::Artboard,
+        FormulaFallbackObjectSourceKind::ViewModel,
+    ];
+
+    for (case_index, source_kind) in cases.iter().copied().enumerate() {
+        for random_mode_value in [0_u64, 1, 2] {
+            let label = format!(
+                "synthetic/runtime_state_machine_default_viewmodel_{}_formula_random_fallback_explicit_target_to_source_mode_{}_cpp.riv",
+                source_kind.label(),
+                random_mode_value
+            );
+            let bytes =
+                synthetic_state_machine_default_viewmodel_object_formula_fallback_blend_state_with_token_and_flags(
+                    9370 + (case_index as u64 * 3) + random_mode_value,
+                    source_kind,
+                    FormulaFallbackTokenKind::RandomFunction { random_mode_value },
+                    DATA_BIND_TO_SOURCE | DATA_BIND_TWO_WAY,
+                );
+            let args = [
+                "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+                "0".to_owned(),
+                "--runtime-advance-state-machine-data-context".to_owned(),
+                "0".to_owned(),
+                "--runtime-set-state-machine-bindable-number".to_owned(),
+                "0".to_owned(),
+                "0".to_owned(),
+                "0.4".to_owned(),
+                "--runtime-advance-state-machine-data-context".to_owned(),
+                "0".to_owned(),
+                "--runtime-advance-state-machine".to_owned(),
+                "0".to_owned(),
+                "0".to_owned(),
+                "--runtime-advance-state-machine".to_owned(),
+                "0".to_owned(),
+                "1".to_owned(),
+            ];
+
+            let seeded_random_values = [0.875_f32, 0.625, 0.25, 0.125];
+            let expected_counts = [0_usize, 1, 1, 1];
+            let probe_args = counted_runtime_random_probe_args(&seeded_random_values, &args);
+            let cpp = read_cpp_probe_bytes_with_args(&probe, &label, &bytes, &probe_args);
+            let (_, mut rust) = read_rust_instance_from_bytes(&bytes, &label);
+            let mut state_machine = rust
+                .state_machine_instance(0)
+                .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+            let mut rust_reports = Vec::new();
+            assert!(
+                state_machine.bind_default_view_model_context(),
+                "{label} failed to bind default view-model context"
+            );
+            state_machine.set_data_bind_formula_random_values(&seeded_random_values);
+            assert_formula_random_call_count(&state_machine, 0, &label, "after random reset");
+            assert!(
+                state_machine.advance_data_context(),
+                "{label} failed to advance initial data context"
+            );
+            assert_formula_random_call_count(
+                &state_machine,
+                0,
+                &label,
+                "after initial data-context advance",
+            );
+            rust_reports.push((false, state_machine.clone()));
+            assert!(
+                state_machine.set_bindable_number_for_data_bind(0, 0.4),
+                "{label} failed to mutate bindable number"
+            );
+            assert!(
+                state_machine.advance_data_context(),
+                "{label} failed to advance mutated data context"
+            );
+            assert_formula_random_call_count(
+                &state_machine,
+                1,
+                &label,
+                "after mutated data-context advance",
+            );
+            rust_reports.push((false, state_machine.clone()));
+            rust_reports.push((
+                rust.advance_state_machine_instance(&mut state_machine, 0.0),
+                state_machine.clone(),
+            ));
+            assert_formula_random_call_count(&state_machine, 1, &label, "after first reapply");
+            rust_reports.push((
+                rust.advance_state_machine_instance(&mut state_machine, 1.0),
+                state_machine.clone(),
+            ));
+            assert_formula_random_call_count(&state_machine, 1, &label, "after second reapply");
+            let report = rust.update_components();
+
+            let cpp_artboard = cpp
+                .artboards
+                .first()
+                .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+            assert_eq!(
+                cpp_artboard.runtime_state_machine_advances.len(),
+                rust_reports.len(),
+                "{label} state-machine report count mismatch"
+            );
+            for (index, (cpp_state_machine, (advanced, rust_state_machine))) in cpp_artboard
+                .runtime_state_machine_advances
+                .iter()
+                .zip(&rust_reports)
+                .enumerate()
+            {
+                let step_label = format!("{label} action {index}");
+                compare_state_machine_advance(
+                    cpp_state_machine,
+                    rust_state_machine,
+                    *advanced,
+                    &step_label,
+                );
+                compare_state_machine_number_binding(
+                    cpp_state_machine,
+                    rust_state_machine,
+                    0,
+                    &step_label,
+                );
+                assert_eq!(
+                    cpp_state_machine.random_total_calls, expected_counts[index],
+                    "{label} C++ random totalCalls mismatch at report {index}"
+                );
+                assert_eq!(
+                    cpp_state_machine.random_total_calls,
+                    rust_state_machine.data_bind_formula_random_call_count(),
+                    "{label} C++ and Rust random call count mismatch at report {index}"
+                );
+            }
+            compare_cpp_runtime_update(&cpp, &rust, &report, &label);
+        }
+    }
+}
+
+#[test]
 fn state_machine_default_viewmodel_object_formula_fallbacks_public_update_target_to_source_match_cpp_probe()
  {
     const DATA_BIND_TWO_WAY: u64 = 1 << 1;

@@ -40,7 +40,8 @@ one hidden host random value during explicit or public reverse reapplication.
   `set_data_bind_formula_random_values`.
 - Source-to-target non-number call counts, covered by
   `data-binding-graph-formula-random-non-number-fallback-call-count-runtime-contract.md`.
-- Enum, color, string, and trigger target-to-source call counts.
+- Enum, color, string, and trigger target-to-source call counts are covered by
+  `data-binding-graph-formula-random-remaining-fallbacks-target-to-source-call-count-runtime-contract.md`.
 - List fallback call counts, covered by
   `data-binding-graph-formula-random-list-fallback-call-count-runtime-contract.md`.
 - Symbol-list-index random formula call counts, covered by the direct and

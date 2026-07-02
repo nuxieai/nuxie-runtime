@@ -39,7 +39,10 @@ without pulling from the supplied formula random stream.
   parity with C++ `std::rand()`.
 - Queue-content parity beyond values supplied by
   `set_data_bind_formula_random_values`.
-- Boolean, enum, color, string, and trigger target-to-source call counts.
+- Boolean target-to-source call counts are covered by
+  `data-binding-graph-formula-random-boolean-fallback-target-to-source-call-count-runtime-contract.md`.
+- Enum, color, string, and trigger target-to-source call counts are covered by
+  `data-binding-graph-formula-random-remaining-fallbacks-target-to-source-call-count-runtime-contract.md`.
 - List fallback call counts, covered by
   `data-binding-graph-formula-random-list-fallback-call-count-runtime-contract.md`.
 - Symbol-list-index random formula call counts, covered by the direct and

@@ -43,9 +43,12 @@ formula converter's `randomModeValue`.
   the direct and grouped random contracts.
 - Boolean random fallback target-to-source behavior is covered separately by
   `data-binding-graph-formula-random-boolean-fallback-target-to-source-runtime-contract.md`.
+- Boolean random fallback target-dirty behavior is covered separately by
+  `data-binding-graph-formula-random-boolean-fallback-main-to-target-two-way-target-dirty-runtime-contract.md`.
 - Enum, color, string, and trigger random fallback target-to-source behavior
   is covered separately by
   `data-binding-graph-formula-random-remaining-fallbacks-target-to-source-runtime-contract.md`.
+- Enum, color, string, and trigger random fallback target-dirty behavior.
 - Target-to-source reverse conversion for other formula sources.
 - Formula parent-source binding, source dependents, and add-dirt behavior.
 - A real Rust random generator or C++ random seeding/queueing.

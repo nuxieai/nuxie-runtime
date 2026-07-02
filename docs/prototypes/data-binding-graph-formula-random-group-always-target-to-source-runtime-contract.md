@@ -1,15 +1,16 @@
-# Data Binding Graph Formula Random Group Always Runtime Contract
+# Data Binding Graph Formula Random Group Always Target-To-Source Runtime Contract
 
 ## Purpose
 
 Extend the host-supplied graph formula random slice to grouped
-`RandomMode::always` source-to-target behavior for default-context number
-binds.
+`RandomMode::always` explicit target-to-source scheduling for
+default-context number binds.
 
 This covers the C++ behavior where a `DataConverterFormula` random function
 inside `DataConverterGroup<OperationValue, Formula(random)>` has
-`randomModeValue == 1` and consumes a fresh random value on each formula
-evaluation instead of reusing the grouped formula state's cached value.
+`randomModeValue == 1` and consumes fresh random values for the explicit
+target-to-source source write, same-pass source-to-target reapplication, and
+later state-machine advancement.
 
 ## In Scope
 
@@ -23,24 +24,21 @@ evaluation instead of reusing the grouped formula state's cached value.
 - `DataConverterFormula.randomModeValue == 1`.
 - `StateMachineInstance::set_data_bind_formula_random_values` as the
   host-supplied graph formula random stream.
+- Explicit target-to-source scheduling through `advance_data_context`.
+- Source-to-target reapplication after the target-to-source source write.
 - Source-to-target state-machine advancement and C++ probe number reports.
 
 ## Out Of Scope
 
 - A real Rust random generator or parity with C++ `std::rand()`.
 - Probe CLI support for seeding or queuing C++ runtime random values.
-- Grouped source-to-target `RandomMode::sourceChange` scheduling is covered
-  separately by
-  `data-binding-graph-formula-random-group-source-change-runtime-contract.md`.
-- Grouped random call-count parity outside the observed grouped bind and
-  formula `addDirt` random-cache behavior.
-- Grouped explicit target-to-source `RandomMode::always` scheduling is covered
-  separately by
-  `data-binding-graph-formula-random-group-always-target-to-source-runtime-contract.md`.
-- Grouped public update and target-dirty scheduling for non-default random
-  modes.
+- Grouped public update target-to-source and grouped target-dirty
+  `RandomMode::always` scheduling.
+- Grouped `RandomMode::sourceChange` target-to-source/public-update/
+  target-dirty scheduling.
 - List formula, symbol-list-index, and non-number random formula scheduling.
 - Stateful grouped converters mixed with random formulas.
+- Random call-count parity outside the observed grouped bind.
 - External, imported, and owned contexts for this converter/source
   combination.
 - Relative-path, parent-path, nested-path, listener-owned, and update-queue
@@ -48,8 +46,10 @@ evaluation instead of reusing the grouped formula state's cached value.
 
 ## Completion Checks
 
-- A grouped formula random bind accepts `randomModeValue == 1`.
-- The first source-to-target advance consumes the first supplied random value.
-- A later source-to-target advance consumes the next supplied random value
-  instead of reusing the first one.
-- Existing default-mode grouped random formula tests still pass.
+- Explicit target-to-source conversion after a target mutation consumes the
+  first supplied random value for the source write.
+- Same-pass source-to-target reapplication consumes the next supplied random
+  value instead of reusing the source-write value.
+- Later source-to-target advances keep consuming fresh supplied random values.
+- Existing direct always, grouped default-mode, and grouped always
+  source-to-target random tests still pass.

@@ -3686,6 +3686,26 @@ fn synthetic_state_machine_default_viewmodel_number_formula_function_blend_state
     data_bind_flags: u64,
     add_direct_observer_bind: bool,
 ) -> Vec<u8> {
+    synthetic_state_machine_default_viewmodel_number_formula_function_blend_state_with_flags_and_random_mode(
+        file_id,
+        source_value,
+        function_type,
+        arguments,
+        data_bind_flags,
+        add_direct_observer_bind,
+        0,
+    )
+}
+
+fn synthetic_state_machine_default_viewmodel_number_formula_function_blend_state_with_flags_and_random_mode(
+    file_id: u64,
+    source_value: f32,
+    function_type: u64,
+    arguments: &[FormulaFunctionArgument],
+    data_bind_flags: u64,
+    add_direct_observer_bind: bool,
+    random_mode_value: u64,
+) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "ViewModel", |bytes| {
             push_string_property(bytes, "ViewModel", "name", "Root");
@@ -3707,7 +3727,16 @@ fn synthetic_state_machine_default_viewmodel_number_formula_function_blend_state
                 source_value,
             );
         });
-        push_object_with_properties(bytes, "DataConverterFormula", |_| {});
+        push_object_with_properties(bytes, "DataConverterFormula", |bytes| {
+            if random_mode_value != 0 {
+                push_uint_property(
+                    bytes,
+                    "DataConverterFormula",
+                    "randomModeValue",
+                    random_mode_value,
+                );
+            }
+        });
         push_object_with_properties(bytes, "FormulaTokenFunction", |bytes| {
             push_uint_property(bytes, "FormulaTokenFunction", "functionType", function_type);
         });
@@ -17173,6 +17202,86 @@ fn state_machine_default_viewmodel_number_formula_random_function_matches_cpp_pr
         "{label} failed to bind default view-model context"
     );
     state_machine.set_data_bind_formula_random_values(&[formula_random_value]);
+    let rust_reports = [
+        (
+            rust.advance_state_machine_instance(&mut state_machine, 0.0),
+            state_machine.clone(),
+        ),
+        (
+            rust.advance_state_machine_instance(&mut state_machine, 1.0),
+            state_machine.clone(),
+        ),
+    ];
+    let report = rust.update_components();
+
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+    {
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+        compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, label);
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn state_machine_default_viewmodel_number_formula_random_function_always_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_default_viewmodel_number_formula_random_function_always_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_number_formula_function_blend_state_with_flags_and_random_mode(
+            8804,
+            0.0,
+            16,
+            &[
+                FormulaFunctionArgument::Value(2.0),
+                FormulaFunctionArgument::Value(6.0),
+            ],
+            0,
+            false,
+            1,
+        );
+    let args = [
+        "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    let first_random =
+        infer_formula_random_value_from_cpp_number_binding(cpp_artboard, 0, 0, 2.0, 6.0, label);
+    let second_random =
+        infer_formula_random_value_from_cpp_number_binding(cpp_artboard, 1, 0, 2.0, 6.0, label);
+
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    assert!(
+        state_machine.bind_default_view_model_context(),
+        "{label} failed to bind default view-model context"
+    );
+    state_machine.set_data_bind_formula_random_values(&[first_random, second_random]);
     let rust_reports = [
         (
             rust.advance_state_machine_instance(&mut state_machine, 0.0),

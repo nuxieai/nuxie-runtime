@@ -3169,10 +3169,24 @@ formula converter like C++ default random mode, and the C++ probe derives the
 first draw from the C++ state-machine number-binding report before supplying it
 to Rust. The contract is
 `docs/prototypes/data-binding-graph-formula-random-function-runtime-contract.md`.
-Real Rust random generation, C++ probe random seeding/queueing, non-default
-random modes, cache invalidation, random call counts, list random formulas,
-imported/owned contexts, and full dirty-list scheduler parity remain follow-up
-`#12` slices.
+Real Rust random generation, C++ probe random seeding/queueing,
+`RandomMode::sourceChange`, broader `RandomMode::always` scheduling, cache
+invalidation, random call counts, list random formulas, imported/owned
+contexts, and full dirty-list scheduler parity remain follow-up `#12` slices.
+
+Current #12 update: graph formula random always mode source-to-target
+Direct graph-owned `DataConverterFormula` random functions now cover the first
+`RandomMode::always` slice for default-context number sources feeding number
+targets. Rust accepts `randomModeValue == 1` for direct formula random tokens,
+draws from the host-supplied graph formula random stream on each formula
+evaluation, and avoids the default-mode cached random reuse for this mode. The
+C++ probe derives two random draws from two state-machine number-binding
+reports and supplies both to Rust before advancing. The contract is
+`docs/prototypes/data-binding-graph-formula-random-always-runtime-contract.md`.
+Real Rust random generation, C++ probe random seeding/queueing,
+`RandomMode::sourceChange`, grouped/list/non-number `RandomMode::always`
+scheduling, cache invalidation, random call counts, imported/owned contexts,
+and full dirty-list scheduler parity remain follow-up `#12` slices.
 
 Current #12 update: graph formula random target-to-source
 Direct graph-owned `DataConverterFormula` random functions now reuse the

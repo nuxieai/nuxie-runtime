@@ -37,8 +37,12 @@ draw to Rust before advancing.
 
 - A real Rust random generator or parity with C++ `std::rand()`.
 - Probe CLI support for seeding or queuing C++ runtime random values.
-- `RandomMode::always`, `RandomMode::sourceChange`, random cache invalidation,
-  random call-count parity, and formula `addDirt` random-cache behavior.
+- Direct source-to-target `RandomMode::always` scheduling is covered
+  separately by
+  `data-binding-graph-formula-random-always-runtime-contract.md`;
+  `RandomMode::sourceChange`, random cache invalidation, random call-count
+  parity beyond the direct always-mode slice, and formula `addDirt`
+  random-cache behavior remain out of scope.
 - Direct number target-to-source/public-update scheduling is covered separately
   by
   `data-binding-graph-formula-random-target-to-source-runtime-contract.md`;
@@ -58,8 +62,9 @@ draw to Rust before advancing.
 
 - The runtime graph accepts a direct formula random function when
   `randomModeValue` is the default `0`.
-- The same graph rejects random functions with non-default `randomModeValue`
-  until cache semantics have their own contract.
+- The default-mode cached-random behavior remains unchanged after
+  `RandomMode::always` is admitted by
+  `data-binding-graph-formula-random-always-runtime-contract.md`.
 - A two-bound random formula writes the same target value as C++ when the Rust
   graph receives the same first random draw C++ used.
 - Later source-to-target evaluations reuse the cached random draw for the same

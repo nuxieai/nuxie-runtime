@@ -6403,9 +6403,11 @@ numeric operand would be observable, while C++ keeps the `0.0` operand
 fallback because the resolved secondary source is not a
 `ViewModelInstanceNumber`. The contract is
 `docs/prototypes/data-binding-graph-operation-viewmodel-non-number-context-recompute-runtime-contract.md`.
-Relative/name converter paths, mutation-driven recompute for non-number
-operands, broader dirty/update queues, listener-owned data binding, and
-nested artboard propagation remain follow-up `#12` slices.
+Imported symbol-list-index source mutation is covered by the later
+operation-viewmodel imported symbol mutation slice. Relative/name converter
+paths, owned-context source mutation APIs, broader dirty/update queues,
+listener-owned data binding, and nested artboard propagation remain follow-up
+`#12` slices.
 
 Current #12 update: direct `DataConverterOperationViewModel` operands now
 recompute for imported and owned runtime view-model contexts. Imported context
@@ -6460,10 +6462,10 @@ source path matches the converter operand path. This keeps a bound imported
 leaving the stored default operand intact for later default-context rebinding.
 The contract is
 `docs/prototypes/data-binding-graph-operation-viewmodel-imported-number-mutation-runtime-contract.md`.
-Relative/name converter paths, mutation-driven non-number secondary operand
-recompute, mutation-driven recompute for other converter families, broader
-dirty/update queues, listener-owned data binding, and nested artboard
-propagation remain follow-up `#12` slices.
+Relative/name converter paths, owned-context source mutation APIs,
+mutation-driven recompute for other converter families, broader dirty/update
+queues, listener-owned data binding, and nested artboard propagation remain
+follow-up `#12` slices.
 
 Current #12 update: imported runtime number source mutation now also refreshes
 `DataConverterOperationViewModel` secondary operands nested inside the grouped
@@ -6476,6 +6478,20 @@ Additional converter group orders beyond the observed
 `OperationViewModel, OperationValue` reverse-order slice, relative/name
 converter paths, broader dirty/update queues, listener-owned data binding, and
 nested artboard propagation remain follow-up `#12` slices.
+
+Current #12 update: imported runtime symbol-list-index source mutation now
+preserves the `DataConverterOperationViewModel` non-number secondary operand
+fallback for direct converters and for
+`DataConverterGroup<OperationValue, OperationViewModel>`. The fixture includes
+a separate symbol-list-index source bind so the mutation targets the converter
+operand path; C++ updates that ordinary source bind while keeping the
+operation-viewmodel operand at the `0.0` fallback. The contract is
+`docs/prototypes/data-binding-graph-operation-viewmodel-imported-symbol-mutation-runtime-contract.md`.
+Additional converter group orders beyond the observed
+`OperationViewModel, OperationValue` reverse-order slice, relative/name
+converter paths, owned-context source mutation APIs, mutation-driven recompute
+for other converter families, broader dirty/update queues, listener-owned data
+binding, and nested artboard propagation remain follow-up `#12` slices.
 
 ## #13: Nested Artboards And Hosts
 

@@ -3535,6 +3535,13 @@ slice.
   `DataConverterOperationViewModel` operands nested inside
   `DataConverterGroup<OperationValue, OperationViewModel>`. The contract is
   `docs/prototypes/data-binding-graph-operation-viewmodel-group-imported-number-mutation-runtime-contract.md`.
+- Operation-view-model imported symbol mutation slice:
+  mutating an already-bound imported symbol-list-index source that matches a
+  direct or grouped `DataConverterOperationViewModel` operand path now has
+  explicit fallback coverage. C++ updates the ordinary symbol-list-index bind
+  while keeping the operation-viewmodel operand at the `0.0` fallback. The
+  contract is
+  `docs/prototypes/data-binding-graph-operation-viewmodel-imported-symbol-mutation-runtime-contract.md`.
 
 ## Remaining Runtime Slices
 

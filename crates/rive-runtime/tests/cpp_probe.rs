@@ -4950,6 +4950,7 @@ fn synthetic_state_machine_default_viewmodel_number_operation_viewmodel_symbol_l
         grouped,
         2,
         None,
+        false,
     )
 }
 
@@ -4962,6 +4963,20 @@ fn synthetic_state_machine_imported_viewmodel_number_operation_viewmodel_symbol_
         grouped,
         0,
         Some(7),
+        false,
+    )
+}
+
+fn synthetic_state_machine_imported_viewmodel_number_operation_viewmodel_symbol_list_index_operand_mutation_blend_state(
+    file_id: u64,
+    grouped: bool,
+) -> Vec<u8> {
+    synthetic_state_machine_viewmodel_number_operation_viewmodel_symbol_list_index_operand_blend_state_with_options(
+        file_id,
+        grouped,
+        0,
+        Some(7),
+        true,
     )
 }
 
@@ -4974,6 +4989,7 @@ fn synthetic_state_machine_owned_viewmodel_number_operation_viewmodel_symbol_lis
         grouped,
         0,
         None,
+        false,
     )
 }
 
@@ -4982,6 +4998,7 @@ fn synthetic_state_machine_viewmodel_number_operation_viewmodel_symbol_list_inde
     grouped: bool,
     operation_view_model_type: u64,
     alternate_instance_symbol: Option<u64>,
+    include_symbol_bind: bool,
 ) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "ViewModel", |bytes| {
@@ -5096,6 +5113,9 @@ fn synthetic_state_machine_viewmodel_number_operation_viewmodel_symbol_list_inde
             Some(if grouped { 2 } else { 0 }),
             0,
         );
+        if include_symbol_bind {
+            push_bindable_integer_data_bind_context_with_flags(bytes, 0, &[0, 1], 0);
+        }
         push_object_with_properties(bytes, "BlendState1DViewModel", |_| {});
         push_blend_animation_1d(bytes, 0, 0.0);
         push_blend_animation_1d(bytes, 1, 2.0);
@@ -30511,6 +30531,201 @@ fn operation_viewmodel_group_owned_symbol_list_index_operand_fallback_matches_cp
     {
         compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
         compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, label);
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn operation_viewmodel_imported_symbol_list_index_source_mutation_fallback_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_imported_viewmodel_number_operation_viewmodel_symbol_source_mutation_cpp.riv";
+    let bytes =
+        synthetic_state_machine_imported_viewmodel_number_operation_viewmodel_symbol_list_index_operand_mutation_blend_state(
+            8727,
+            false,
+        );
+    let value = 11_u64;
+    let args = [
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-view-model-instance-source-symbol-list-index".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+        "1".to_owned(),
+        value.to_string(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    let mut imported_context = RuntimeImportedViewModelInstanceContext::new(&runtime, 0, 1)
+        .unwrap_or_else(|| panic!("missing imported view-model context for {label}"));
+
+    assert!(
+        state_machine.bind_imported_view_model_context(&runtime, &imported_context),
+        "{label} failed to bind imported view-model context"
+    );
+    let mut rust_reports = Vec::new();
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    assert!(
+        state_machine.set_imported_view_model_context_symbol_list_index_source_for_data_bind(
+            &mut imported_context,
+            1,
+            value
+        ),
+        "{label} failed to mutate imported secondary symbol-list-index source"
+    );
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 1.0),
+        state_machine.clone(),
+    ));
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+    {
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+        compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, label);
+        compare_state_machine_symbol_list_index_binding(
+            cpp_state_machine,
+            rust_state_machine,
+            1,
+            label,
+        );
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn operation_viewmodel_group_imported_symbol_list_index_source_mutation_fallback_matches_cpp_probe()
+{
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_imported_viewmodel_number_operation_viewmodel_group_symbol_source_mutation_cpp.riv";
+    let bytes =
+        synthetic_state_machine_imported_viewmodel_number_operation_viewmodel_symbol_list_index_operand_mutation_blend_state(
+            8729,
+            true,
+        );
+    let value = 11_u64;
+    let args = [
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-view-model-instance-source-symbol-list-index".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+        "1".to_owned(),
+        value.to_string(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    let mut imported_context = RuntimeImportedViewModelInstanceContext::new(&runtime, 0, 1)
+        .unwrap_or_else(|| panic!("missing imported view-model context for {label}"));
+
+    assert!(
+        state_machine.bind_imported_view_model_context(&runtime, &imported_context),
+        "{label} failed to bind imported view-model context"
+    );
+    let mut rust_reports = Vec::new();
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    assert!(
+        state_machine.set_imported_view_model_context_symbol_list_index_source_for_data_bind(
+            &mut imported_context,
+            1,
+            value
+        ),
+        "{label} failed to mutate imported secondary symbol-list-index source"
+    );
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 1.0),
+        state_machine.clone(),
+    ));
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+    {
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+        compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, label);
+        compare_state_machine_symbol_list_index_binding(
+            cpp_state_machine,
+            rust_state_machine,
+            1,
+            label,
+        );
     }
     compare_cpp_runtime_update(&cpp, &rust, &report, label);
 }

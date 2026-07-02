@@ -11217,7 +11217,7 @@ impl RuntimeDataBindGraph {
         else {
             return false;
         };
-        let Some(source) = self.sources.get_mut(source.0) else {
+        let Some(source) = self.sources.get(source.0) else {
             return false;
         };
         if !matches!(
@@ -11226,18 +11226,45 @@ impl RuntimeDataBindGraph {
         ) {
             return false;
         }
-        let source_changed = !matches!(
-            &source.value,
-            RuntimeDataBindGraphValue::List { item_count: current } if *current == item_count
-        );
         let path = source.path.clone();
         let context_changed = context.list_overrides.get(&path) != Some(&item_count);
+
+        let source_changed = self.sources.iter().any(|source| {
+            source.path == path
+                && matches!(
+                    &source.default_value,
+                    RuntimeDataBindGraphValue::List { .. }
+                )
+                && (!source.bound
+                    || !matches!(
+                        &source.value,
+                        RuntimeDataBindGraphValue::List { item_count: current } if *current == item_count
+                    ))
+        });
+
         if !source_changed && !context_changed {
             return false;
         }
 
-        source.value = RuntimeDataBindGraphValue::List { item_count };
-        source.bound = true;
+        for source in self.sources.iter_mut().filter(|source| {
+            source.path == path
+                && matches!(
+                    &source.default_value,
+                    RuntimeDataBindGraphValue::List { .. }
+                )
+        }) {
+            let changed = !source.bound
+                || !matches!(
+                    &source.value,
+                    RuntimeDataBindGraphValue::List { item_count: current } if *current == item_count
+                );
+            source.value = RuntimeDataBindGraphValue::List { item_count };
+            source.bound = true;
+            if changed {
+                source.reset_formula_random_state_for_source_change();
+            }
+        }
+
         context.list_overrides.insert(path, item_count);
         self.mark_default_view_model_bindings_dirty();
         true

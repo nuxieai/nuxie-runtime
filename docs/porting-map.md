@@ -3265,6 +3265,20 @@ generated list item identity, relative/parent/nested lookup, listener-owned
 data binding, nested artboard propagation, and full dirty-list scheduler parity
 remain follow-up `#12` slices.
 
+Current #12 update: deterministic formula list contexts
+Direct graph-owned `DataConverterFormula` fallback now covers list sources
+that are rebound through imported and owned runtime view-model contexts before
+normal state-machine advancement. The fixture also includes a same-path direct
+list observer, so imported-context list item-count mutation now fans out to
+every bound same-path list source node in the active graph before dirty
+reapplication. The contract is
+`docs/prototypes/data-binding-graph-formula-list-context-runtime-contract.md`.
+Generated list item identity beyond item-count parity, formula random
+functions, reverse propagation, public update, target-dirty scheduling,
+relative/parent/nested lookup, listener-owned data binding, nested artboard
+propagation, and full dirty-list scheduler parity remain follow-up `#12`
+slices.
+
 Current #12 update: first graph formula random function
 Direct graph-owned `DataConverterFormula` converters now admit the first
 `FunctionType::random` slice for default-context number sources feeding number

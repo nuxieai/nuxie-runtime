@@ -1077,6 +1077,17 @@ slice.
   nested lookup, listener-owned data binding, nested artboard propagation, and
   full dirty-list scheduler parity remain follow-up slices. The contract is
   `docs/prototypes/data-binding-graph-formula-trigger-context-runtime-contract.md`.
+- Deterministic `DataConverterFormula` imported/owned list-context slice:
+  imported and owned runtime view-model list contexts now feed rebound source
+  item counts into the direct formula fallback path before normal state-machine
+  advancement. The fixture includes a same-path direct list observer, so
+  imported-context list item-count mutation now fans out to every same-path
+  list source node in the active graph. Generated list item identity beyond
+  item-count parity, random formulas, reverse/public-update/target-dirty
+  scheduling, relative/parent/nested lookup, listener-owned data binding,
+  nested artboard propagation, and full dirty-list scheduler parity remain
+  follow-up slices. The contract is
+  `docs/prototypes/data-binding-graph-formula-list-context-runtime-contract.md`.
 - First `DataConverterFormula` non-number fallback public-update reverse
   slice: default-context boolean sources feeding main-`ToTarget | TwoWay`
   number targets now preserve the unchanged boolean source when reverse formula

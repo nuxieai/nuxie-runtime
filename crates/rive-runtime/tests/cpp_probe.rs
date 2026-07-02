@@ -5453,6 +5453,20 @@ fn synthetic_state_machine_default_viewmodel_list_formula_fallback_blend_state_w
     token_kind: FormulaFallbackTokenKind,
     data_bind_flags: u64,
 ) -> Vec<u8> {
+    synthetic_state_machine_default_viewmodel_list_formula_fallback_blend_state_with_token_flags_and_observer(
+        file_id,
+        token_kind,
+        data_bind_flags,
+        false,
+    )
+}
+
+fn synthetic_state_machine_default_viewmodel_list_formula_fallback_blend_state_with_token_flags_and_observer(
+    file_id: u64,
+    token_kind: FormulaFallbackTokenKind,
+    data_bind_flags: u64,
+    add_direct_observer_bind: bool,
+) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "ViewModel", |bytes| {
             push_string_property(bytes, "ViewModel", "name", "Root");
@@ -5495,6 +5509,9 @@ fn synthetic_state_machine_default_viewmodel_list_formula_fallback_blend_state_w
             Some(0),
             data_bind_flags,
         );
+        if add_direct_observer_bind {
+            push_bindable_list_data_bind_context_with_flags(bytes, &[0, 0], None, 0);
+        }
         push_object_with_properties(bytes, "BlendState1DViewModel", |_| {});
         push_blend_animation_1d(bytes, 0, 0.0);
         push_blend_animation_1d(bytes, 1, 1.0);
@@ -27899,6 +27916,183 @@ fn state_machine_owned_viewmodel_trigger_formula_context_matches_cpp_probe() {
             rust_state_machine.default_view_model_trigger_source_value_for_data_bind(0),
             Some(value),
             "{label} Rust owned formula trigger source mismatch"
+        );
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn state_machine_imported_viewmodel_list_formula_context_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_imported_viewmodel_list_formula_context_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_list_formula_fallback_blend_state_with_token_flags_and_observer(
+            8994,
+            FormulaFallbackTokenKind::Input,
+            0,
+            true,
+        );
+    let item_count = 5_usize;
+    let args = [
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-view-model-instance-source-list".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        item_count.to_string(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    let mut imported_context = RuntimeImportedViewModelInstanceContext::new(&runtime, 0, 0)
+        .unwrap_or_else(|| panic!("missing imported view-model context for {label}"));
+
+    assert!(
+        state_machine.bind_imported_view_model_context(&runtime, &imported_context),
+        "{label} failed to bind imported view-model context"
+    );
+    assert!(
+        state_machine.set_imported_view_model_context_list_source_item_count_for_data_bind(
+            &mut imported_context,
+            0,
+            item_count
+        ),
+        "{label} failed to mutate imported list source"
+    );
+    let rust_reports = [
+        (
+            rust.advance_state_machine_instance(&mut state_machine, 0.0),
+            state_machine.clone(),
+        ),
+        (
+            rust.advance_state_machine_instance(&mut state_machine, 1.0),
+            state_machine.clone(),
+        ),
+    ];
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+    {
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+        compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, label);
+        compare_state_machine_list_binding(cpp_state_machine, rust_state_machine, 1, label);
+        assert_eq!(
+            rust_state_machine.default_view_model_list_source_item_count_for_data_bind(0),
+            Some(item_count),
+            "{label} Rust imported formula list source mismatch"
+        );
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn state_machine_owned_viewmodel_list_formula_context_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_owned_viewmodel_list_formula_context_cpp.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_list_formula_fallback_blend_state_with_token_flags_and_observer(
+            8995,
+            FormulaFallbackTokenKind::Input,
+            0,
+            true,
+        );
+    let item_count = 5_usize;
+    let args = [
+        "--runtime-bind-owned-view-model-list-name-path-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "items".to_owned(),
+        item_count.to_string(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    let mut context = RuntimeOwnedViewModelInstance::new(&runtime, 0)
+        .unwrap_or_else(|| panic!("missing Rust owned view-model context for {label}"));
+
+    assert!(
+        context.set_list_item_count_by_property_name("items", item_count),
+        "{label} failed to mutate owned view-model list"
+    );
+    assert!(
+        state_machine.bind_owned_view_model_context(&context),
+        "{label} failed to bind owned view-model context"
+    );
+    let rust_reports = [
+        (
+            rust.advance_state_machine_instance(&mut state_machine, 0.0),
+            state_machine.clone(),
+        ),
+        (
+            rust.advance_state_machine_instance(&mut state_machine, 1.0),
+            state_machine.clone(),
+        ),
+    ];
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+    {
+        compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+        compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, label);
+        compare_state_machine_list_binding(cpp_state_machine, rust_state_machine, 1, label);
+        assert_eq!(
+            rust_state_machine.default_view_model_list_source_item_count_for_data_bind(0),
+            Some(item_count),
+            "{label} Rust owned formula list source mismatch"
         );
     }
     compare_cpp_runtime_update(&cpp, &rust, &report, label);

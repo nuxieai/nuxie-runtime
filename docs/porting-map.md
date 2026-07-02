@@ -5001,6 +5001,19 @@ object-source fallback permutations, relative/parent/nested lookup,
 listener-owned data binding, nested artboard propagation, and full dirty-list
 scheduler parity remain follow-up `#12` slices.
 
+Current #12 update: imported and owned object-source formula fallback random
+source-change mutation behavior now matches the default-context random-inert
+boundary. Post-bind imported/owned asset and artboard source mutation and
+view-model pointer relink with `DataConverterFormula`
+`FormulaTokenFunction(random)` fallback and `randomModeValue == 2` update the
+same-path object observer rows while keeping the runtime random provider call
+count at zero. The imported view-model pointer path keeps the existing explicit
+data-context advance. The contract is
+`docs/prototypes/data-binding-graph-formula-owned-imported-object-random-source-change-runtime-contract.md`.
+Grouped object-source fallback permutations, relative/parent/nested lookup,
+listener-owned data binding, nested artboard propagation, and full dirty-list
+scheduler parity remain follow-up `#12` slices.
+
 Current #12 update: non-scripting `ScriptedDataConverter` now participates in
 the runtime data-bind graph as inherited C++ base converter pass-through. A
 main-`ToTarget | TwoWay` number bind with a direct scripted converter applies

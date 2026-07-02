@@ -1074,6 +1074,16 @@ slice.
   target-dirty, list, remaining non-number `RandomMode::always`, real Rust
   random generation, C++ random seeding/queueing, cache invalidation, and call
   counts remain follow-up slices.
+- `DataConverterFormula` random always-mode target-dirty slice:
+  default-context number sources feeding number targets now execute
+  main-`ToTarget | TwoWay` target-dirty scheduling when `randomModeValue == 1`.
+  Rust consumes a host-supplied random value for the initial source-to-target
+  pass, preserves a manual target edit through explicit data-context
+  advancement, and consumes fresh values on later normal state-machine
+  advances, matching C++. Grouped target-to-source, grouped public-update,
+  grouped target-dirty, list, remaining non-number `RandomMode::always`, real
+  Rust random generation, C++ random seeding/queueing, cache invalidation, and
+  call counts remain follow-up slices.
 - `DataConverterFormula` random source-change source-to-target slice:
   default-context number sources feeding number targets now execute direct
   `FunctionType::random` output-queue tokens when `randomModeValue == 2`.

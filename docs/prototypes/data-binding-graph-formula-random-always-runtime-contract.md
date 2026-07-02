@@ -45,7 +45,9 @@ evaluation instead of reusing the default-mode cached value.
 - Direct public update target-to-source `RandomMode::always` scheduling is
   covered separately by
   `data-binding-graph-formula-random-always-public-update-target-to-source-runtime-contract.md`.
-- Target-dirty, list, and other non-number
+- Direct target-dirty `RandomMode::always` scheduling is covered separately by
+  `data-binding-graph-formula-random-always-target-dirty-runtime-contract.md`.
+- List and other non-number
   `RandomMode::always` scheduling.
 - External, imported, and owned contexts for this converter/source
   combination.

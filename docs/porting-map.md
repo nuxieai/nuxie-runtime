@@ -3238,6 +3238,19 @@ target-dirty, list, and remaining non-number `RandomMode::always` scheduling,
 broader cache invalidation, random call counts, imported/owned contexts, and
 full dirty-list scheduler parity remain follow-up `#12` slices.
 
+Current #12 update: graph formula random always mode target-dirty
+Direct graph-owned `DataConverterFormula` random functions now cover
+main-`ToTarget | TwoWay` target-dirty scheduling for default-context number
+binds when `randomModeValue == 1`. Rust consumes a host-supplied random value
+for the initial source-to-target pass, preserves a manual target edit through
+explicit data-context advancement, and consumes fresh values on later normal
+state-machine advances, matching C++. The contract is
+`docs/prototypes/data-binding-graph-formula-random-always-target-dirty-runtime-contract.md`.
+Grouped target-to-source, grouped public-update, grouped target-dirty, list,
+and remaining non-number `RandomMode::always` scheduling, broader cache
+invalidation, random call counts, imported/owned contexts, and full dirty-list
+scheduler parity remain follow-up `#12` slices.
+
 Current #12 update: graph formula random always mode public update target-to-source
 Direct graph-owned `DataConverterFormula` random functions now cover public
 `update_data_binds_apply_target_to_source` scheduling for main-`ToTarget |
@@ -3247,10 +3260,10 @@ pass, the public target-to-source source write, same-update source-to-target
 reapplication, and later state-machine advances, matching the C++ probe
 reports. The contract is
 `docs/prototypes/data-binding-graph-formula-random-always-public-update-target-to-source-runtime-contract.md`.
-Target-dirty, grouped target-to-source, grouped public-update, grouped
-target-dirty, list, and remaining non-number `RandomMode::always` scheduling,
-broader cache invalidation, random call counts, imported/owned contexts, and
-full dirty-list scheduler parity remain follow-up `#12` slices.
+Grouped target-to-source, grouped public-update, grouped target-dirty, list,
+and remaining non-number `RandomMode::always` scheduling, broader cache
+invalidation, random call counts, imported/owned contexts, and full dirty-list
+scheduler parity remain follow-up `#12` slices.
 
 Current #12 update: graph formula random source-change mode source-to-target
 Direct graph-owned `DataConverterFormula` random functions now cover the first

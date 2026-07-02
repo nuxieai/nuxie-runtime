@@ -35,8 +35,9 @@ source-to-target actions already compared against the C++ probe for
   parity with C++ `std::rand()`.
 - Queue-content parity beyond values supplied by
   `set_data_bind_formula_random_values`.
-- Direct explicit target-to-source, public-update, and target-dirty
-  symbol-list-index call counts.
+- Direct explicit target-to-source symbol-list-index call counts are covered by
+  `data-binding-graph-formula-random-symbol-list-index-target-to-source-call-count-runtime-contract.md`.
+- Direct public-update and target-dirty symbol-list-index call counts.
 - Grouped symbol-list-index call counts.
 - Number-source call counts, which are covered by the direct number call-count
   contracts.

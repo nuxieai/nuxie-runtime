@@ -33,7 +33,11 @@ because boolean values are neither number nor symbol-list-index inputs.
 - Asset, artboard, view-model pointer, and other non-number formula inputs.
 - `FormulaTokenFunction`, random formula values, and `randomModeValue`.
 - Formula parent-source binding, source dependents, and add-dirt behavior.
-- Reverse conversion and target-to-source propagation.
+- Public-update target-to-source propagation for this boolean fallback source
+  is covered separately by
+  `data-binding-graph-formula-boolean-fallback-public-update-target-to-source-runtime-contract.md`.
+- Explicit main-`ToSource` reverse conversion and broader target-to-source
+  propagation.
 - Formula converter groups beyond any composition already admitted by the
   generic graph group executor.
 - Number-to-list, generated-list, scripted, and live context-aware converters.

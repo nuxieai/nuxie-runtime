@@ -994,6 +994,15 @@ slice.
   write C++'s early fallback value `0.0`. A C++ probe uses a non-zero imported
   bindable target default to prove the fallback write is observable through an
   existing blend-state consumer.
+- First `DataConverterFormula` non-number fallback public-update reverse
+  slice: default-context boolean sources feeding main-`ToTarget | TwoWay`
+  number targets now preserve the unchanged boolean source when reverse formula
+  conversion produces a number, then reapply the unchanged source through the
+  formula fallback during public `updateDataBinds(true)`. Enum, color, string,
+  trigger, list, symbol-list-index, imported/owned contexts, random formulas,
+  and explicit main-`ToSource` fallback reverse behavior remain follow-up
+  slices. The contract is
+  `docs/prototypes/data-binding-graph-formula-boolean-fallback-public-update-target-to-source-runtime-contract.md`.
 - Remaining graph-represented `DataConverterFormula` non-number fallback
   slice: default-context enum, color, string, and trigger sources feeding
   number targets now enter the formula converter and write C++'s early fallback

@@ -13264,7 +13264,10 @@ impl RuntimeDataBindGraphSourceNode {
             (RuntimeDataBindGraphValue::Boolean(value), RuntimeDataBindGraphValue::Number(_))
                 if matches!(
                     self.converter.as_ref(),
-                    Some(RuntimeDataBindGraphConverter::ToNumber)
+                    Some(
+                        RuntimeDataBindGraphConverter::ToNumber
+                            | RuntimeDataBindGraphConverter::Formula { .. }
+                    )
                 ) =>
             {
                 Some(RuntimeDataBindGraphValue::Boolean(*value))

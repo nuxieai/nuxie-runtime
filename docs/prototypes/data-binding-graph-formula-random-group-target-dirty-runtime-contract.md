@@ -32,8 +32,12 @@ random value.
 
 - A real Rust random generator or parity with C++ `std::rand()`.
 - Probe CLI support for seeding or queuing C++ runtime random values.
-- `RandomMode::always`, `RandomMode::sourceChange`, random cache invalidation,
-  random call-count parity, and formula `addDirt` random-cache behavior.
+- `RandomMode::always` and `RandomMode::sourceChange` target-dirty scheduling
+  are covered separately by their grouped target-dirty contracts.
+- Grouped target-dirty host random call-count parity is covered separately by
+  `data-binding-graph-formula-random-group-target-dirty-call-count-runtime-contract.md`;
+  broader random cache invalidation and formula `addDirt` random-cache
+  behavior remain out of scope here.
 - Grouped explicit target-to-source scheduling is covered separately by
   `data-binding-graph-formula-random-group-target-to-source-runtime-contract.md`.
 - List formula, symbol-list-index, and non-number random formula scheduling.

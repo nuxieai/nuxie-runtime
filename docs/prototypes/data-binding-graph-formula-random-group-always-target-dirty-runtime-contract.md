@@ -8,8 +8,8 @@ default-context number binds.
 
 This covers the C++ behavior where the initial grouped source-to-target pass
 consumes a fresh random value, a manual target edit is preserved through
-explicit data-context advancement, and later normal state-machine advances
-consume fresh random values when reapplying the unchanged source.
+explicit data-context advancement, and the first later normal state-machine
+advance consumes a fresh random value when reapplying the unchanged source.
 
 ## In Scope
 
@@ -40,7 +40,8 @@ consume fresh random values when reapplying the unchanged source.
   target-dirty scheduling.
 - List formula, symbol-list-index, and non-number random formula scheduling.
 - Stateful grouped converters mixed with random formulas.
-- Random call-count parity outside the observed grouped bind.
+- Grouped target-dirty host random call-count parity is covered separately by
+  `data-binding-graph-formula-random-group-target-dirty-call-count-runtime-contract.md`.
 - External, imported, and owned contexts for this converter/source
   combination.
 - Relative-path, parent-path, nested-path, listener-owned, and update-queue
@@ -52,7 +53,9 @@ consume fresh random values when reapplying the unchanged source.
   value.
 - Explicit data-context advancement preserves the manual target edit without
   consuming another random value.
-- Later normal state-machine advances consume fresh supplied random values.
+- The first later normal state-machine advance consumes a fresh supplied
+  random value; the second later advance in this fixture does not reschedule
+  the grouped formula.
 - Existing direct always, grouped default-mode, grouped always source-to-target,
   grouped always explicit target-to-source, and grouped always public-update
   random tests still pass.

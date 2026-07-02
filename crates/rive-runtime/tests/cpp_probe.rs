@@ -20765,10 +20765,20 @@ fn state_machine_default_viewmodel_number_formula_random_function_group_main_to_
         "{label} failed to bind default view-model context"
     );
     state_machine.set_data_bind_formula_random_values(&[formula_random_value]);
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        0,
+        "{label} call count should reset with supplied random values"
+    );
     rust_reports.push((
         rust.advance_state_machine_instance(&mut state_machine, 0.0),
         state_machine.clone(),
     ));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        1,
+        "{label} initial advance should consume one grouped default-mode random"
+    );
     assert!(
         state_machine.set_bindable_number_for_data_bind(0, 4.46),
         "{label} failed to mutate bindable number"
@@ -20777,15 +20787,30 @@ fn state_machine_default_viewmodel_number_formula_random_function_group_main_to_
         state_machine.advance_data_context(),
         "{label} failed to advance mutated data context"
     );
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        1,
+        "{label} target-dirty preservation should reuse the grouped default-mode random"
+    );
     rust_reports.push((false, state_machine.clone()));
     rust_reports.push((
         rust.advance_state_machine_instance(&mut state_machine, 0.0),
         state_machine.clone(),
     ));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        1,
+        "{label} first later advance should reuse the grouped default-mode random"
+    );
     rust_reports.push((
         rust.advance_state_machine_instance(&mut state_machine, 1.0),
         state_machine.clone(),
     ));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        1,
+        "{label} second later advance should reuse the grouped default-mode random"
+    );
     let report = rust.update_components();
 
     assert_eq!(
@@ -20874,10 +20899,20 @@ fn state_machine_default_viewmodel_number_formula_random_function_group_always_m
         first_reapply_random,
         second_reapply_random,
     ]);
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        0,
+        "{label} call count should reset with supplied random values"
+    );
     rust_reports.push((
         rust.advance_state_machine_instance(&mut state_machine, 0.0),
         state_machine.clone(),
     ));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        1,
+        "{label} initial advance should consume one grouped always random"
+    );
     assert!(
         state_machine.set_bindable_number_for_data_bind(0, 4.46),
         "{label} failed to mutate bindable number"
@@ -20886,15 +20921,30 @@ fn state_machine_default_viewmodel_number_formula_random_function_group_always_m
         state_machine.advance_data_context(),
         "{label} failed to advance mutated data context"
     );
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        1,
+        "{label} target-dirty preservation should not reschedule the grouped always formula"
+    );
     rust_reports.push((false, state_machine.clone()));
     rust_reports.push((
         rust.advance_state_machine_instance(&mut state_machine, 0.0),
         state_machine.clone(),
     ));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        2,
+        "{label} first later advance should consume a fresh grouped always random"
+    );
     rust_reports.push((
         rust.advance_state_machine_instance(&mut state_machine, 1.0),
         state_machine.clone(),
     ));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        2,
+        "{label} second later advance should not reschedule the grouped always formula"
+    );
     let report = rust.update_components();
 
     assert_eq!(
@@ -20983,10 +21033,20 @@ fn state_machine_default_viewmodel_number_formula_random_function_group_source_c
         first_reapply_random,
         second_reapply_random,
     ]);
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        0,
+        "{label} call count should reset with supplied random values"
+    );
     rust_reports.push((
         rust.advance_state_machine_instance(&mut state_machine, 0.0),
         state_machine.clone(),
     ));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        1,
+        "{label} initial advance should consume one grouped source-change random"
+    );
     assert!(
         state_machine.set_bindable_number_for_data_bind(0, 4.46),
         "{label} failed to mutate bindable number"
@@ -20995,15 +21055,30 @@ fn state_machine_default_viewmodel_number_formula_random_function_group_source_c
         state_machine.advance_data_context(),
         "{label} failed to advance mutated data context"
     );
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        1,
+        "{label} target-dirty preservation should reuse the grouped source-change random"
+    );
     rust_reports.push((false, state_machine.clone()));
     rust_reports.push((
         rust.advance_state_machine_instance(&mut state_machine, 0.0),
         state_machine.clone(),
     ));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        1,
+        "{label} first later advance should reuse the grouped source-change random"
+    );
     rust_reports.push((
         rust.advance_state_machine_instance(&mut state_machine, 1.0),
         state_machine.clone(),
     ));
+    assert_eq!(
+        state_machine.data_bind_formula_random_call_count(),
+        1,
+        "{label} second later advance should reuse the grouped source-change random"
+    );
     let report = rust.update_components();
 
     assert_eq!(

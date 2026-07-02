@@ -40,7 +40,8 @@ host-stream pulls needed to match C++ probe number reports.
   `data-binding-graph-formula-random-group-target-to-source-call-count-runtime-contract.md`.
 - Grouped public-update target-to-source call counts are covered separately by
   `data-binding-graph-formula-random-group-public-update-call-count-runtime-contract.md`.
-- Grouped target-dirty call counts.
+- Grouped target-dirty call counts are covered separately by
+  `data-binding-graph-formula-random-group-target-dirty-call-count-runtime-contract.md`.
 - Direct call counts, which are covered by the direct call-count contracts.
 - List-source, symbol-list-index, and non-number random formula call counts.
 - Imported contexts, owned contexts, and secondary converter dependency

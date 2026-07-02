@@ -24505,6 +24505,16 @@ fn runtime_bindable_number_default_view_model_source(
                 RuntimeDataBindGraphValue::Trigger(value)
             } else if let Some(item_count) = file.view_model_instance_list_size_for_object(source) {
                 RuntimeDataBindGraphValue::List { item_count }
+            } else if source.type_name == "ViewModelInstanceAssetImage" {
+                RuntimeDataBindGraphValue::Asset(source.uint_property("propertyValue")?)
+            } else if source.type_name == "ViewModelInstanceArtboard" {
+                RuntimeDataBindGraphValue::Artboard(source.uint_property("propertyValue")?)
+            } else if let Some(reference) =
+                file.data_context_view_model_instance_for_instance(default_instance.object, &path)
+            {
+                RuntimeDataBindGraphValue::ViewModel(RuntimeViewModelPointer::Imported {
+                    object_id: reference.object.id,
+                })
             } else {
                 return None;
             }

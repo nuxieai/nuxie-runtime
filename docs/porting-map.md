@@ -4706,6 +4706,18 @@ cache invalidation, call counts, imported/owned contexts, real random
 generation, and full dirty-list scheduler parity remain follow-up `#12`
 slices.
 
+Current #12 update: graph formula object fallback
+Direct graph-owned `DataConverterFormula` now admits default-context asset,
+artboard, and view-model pointer sources feeding number targets through a
+deterministic `FormulaTokenInput` converter. Rust carries these object-like
+source values into the graph, lets the formula converter take C++'s non-number
+fallback branch, and writes `0.0` instead of skipping the bind. The contract is
+`docs/prototypes/data-binding-graph-formula-object-fallback-runtime-contract.md`.
+Random/function-token object fallbacks, reverse propagation, target-dirty
+scheduling, imported/owned contexts, source mutation APIs, relative/parent/
+nested lookup, listener-owned data binding, nested artboard propagation, and
+full dirty-list scheduler parity remain follow-up `#12` slices.
+
 Current #12 update: non-scripting `ScriptedDataConverter` now participates in
 the runtime data-bind graph as inherited C++ base converter pass-through. A
 main-`ToTarget | TwoWay` number bind with a direct scripted converter applies

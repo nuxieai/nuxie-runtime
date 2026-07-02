@@ -5717,6 +5717,102 @@ fn synthetic_state_machine_viewmodel_number_operation_viewmodel_asset_operand_bl
     })
 }
 
+fn synthetic_state_machine_owned_viewmodel_number_operation_viewmodel_artboard_operand_mutation_blend_state(
+    file_id: u64,
+    grouped: bool,
+) -> Vec<u8> {
+    synthetic_state_machine_viewmodel_number_operation_viewmodel_artboard_operand_blend_state_with_options(
+        file_id,
+        grouped,
+    )
+}
+
+fn synthetic_state_machine_viewmodel_number_operation_viewmodel_artboard_operand_blend_state_with_options(
+    file_id: u64,
+    grouped: bool,
+) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyNumber", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyNumber", "name", "amount");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyArtboard", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyArtboard", "name", "scene");
+        });
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceNumber", "viewModelPropertyId", 0);
+            push_f32_property(bytes, "ViewModelInstanceNumber", "propertyValue", 0.4);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceArtboard", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceArtboard", "viewModelPropertyId", 1);
+            push_uint_property(bytes, "ViewModelInstanceArtboard", "propertyValue", 1);
+        });
+        let operation_view_model_converter_id = if grouped { 1 } else { 0 };
+        if grouped {
+            push_object_with_properties(bytes, "DataConverterOperationValue", |bytes| {
+                push_uint_property(bytes, "DataConverterOperationValue", "operationType", 2);
+                push_f32_property(bytes, "DataConverterOperationValue", "operationValue", 2.0);
+            });
+        }
+        push_object_with_properties(bytes, "DataConverterOperationViewModel", |bytes| {
+            let mut source_path_ids = Vec::new();
+            push_var_uint(&mut source_path_ids, 0);
+            push_var_uint(&mut source_path_ids, 1);
+            push_uint_property(bytes, "DataConverterOperationViewModel", "operationType", 0);
+            push_bytes_property(
+                bytes,
+                "DataConverterOperationViewModel",
+                "sourcePathIds",
+                &source_path_ids,
+            );
+        });
+        if grouped {
+            push_object_with_properties(bytes, "DataConverterGroup", |_| {});
+            push_object_with_properties(bytes, "DataConverterGroupItem", |bytes| {
+                push_uint_property(bytes, "DataConverterGroupItem", "converterId", 0);
+            });
+            push_object_with_properties(bytes, "DataConverterGroupItem", |bytes| {
+                push_uint_property(
+                    bytes,
+                    "DataConverterGroupItem",
+                    "converterId",
+                    operation_view_model_converter_id,
+                );
+            });
+        }
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_bindable_number_data_bind_context_with_converter_and_flags(
+            bytes,
+            0.0,
+            &[0, 0],
+            Some(if grouped { 2 } else { 0 }),
+            0,
+        );
+        push_bindable_artboard_data_bind_context(bytes, 1, &[0, 1]);
+        push_object_with_properties(bytes, "BlendState1DViewModel", |_| {});
+        push_blend_animation_1d(bytes, 0, 0.0);
+        push_blend_animation_1d(bytes, 1, 2.0);
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
 fn synthetic_state_machine_viewmodel_number_operation_viewmodel_symbol_list_index_operand_blend_state_with_options(
     file_id: u64,
     grouped: bool,
@@ -33173,6 +33269,127 @@ fn operation_viewmodel_owned_asset_source_mutation_fallback_matches_cpp_probe() 
 }
 
 #[test]
+fn operation_viewmodel_owned_artboard_source_mutation_fallback_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_owned_viewmodel_number_operation_viewmodel_artboard_source_mutation_cpp.riv";
+    let bytes =
+        synthetic_state_machine_owned_viewmodel_number_operation_viewmodel_artboard_operand_mutation_blend_state(
+            9329,
+            false,
+        );
+    let amount = 0.4_f32;
+    let initial_artboard = 1_u64;
+    let artboard = 7_u64;
+    let args = [
+        "--runtime-bind-owned-view-model-number-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        amount.to_string(),
+        "--runtime-set-owned-view-model-source-artboard".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+        initial_artboard.to_string(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-owned-view-model-source-artboard".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+        artboard.to_string(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    let mut context = RuntimeOwnedViewModelInstance::new(&runtime, 0)
+        .unwrap_or_else(|| panic!("missing owned view-model context for {label}"));
+
+    assert!(
+        context.set_number_by_property_index(0, amount),
+        "{label} failed to set owned primary number"
+    );
+    assert!(
+        state_machine.bind_owned_view_model_context(&context),
+        "{label} failed to bind owned view-model context"
+    );
+    let mut rust_reports = Vec::new();
+    assert!(
+        state_machine.set_owned_view_model_context_artboard_source_for_data_bind(
+            &mut context,
+            1,
+            initial_artboard
+        ),
+        "{label} failed to set initial owned secondary artboard source"
+    );
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    assert!(
+        state_machine.set_owned_view_model_context_artboard_source_for_data_bind(
+            &mut context,
+            1,
+            artboard
+        ),
+        "{label} failed to mutate owned secondary artboard source"
+    );
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 1.0),
+        state_machine.clone(),
+    ));
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (step, (cpp_state_machine, (advanced, rust_state_machine))) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+        .enumerate()
+    {
+        let step_label = format!("{label} action {step}");
+        compare_state_machine_advance(
+            cpp_state_machine,
+            rust_state_machine,
+            *advanced,
+            &step_label,
+        );
+        compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, &step_label);
+        compare_state_machine_artboard_binding(
+            cpp_state_machine,
+            rust_state_machine,
+            1,
+            &step_label,
+        );
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
 fn operation_viewmodel_group_imported_symbol_list_index_source_mutation_fallback_matches_cpp_probe()
 {
     let Some(probe) = probe_path() else {
@@ -34123,6 +34340,127 @@ fn operation_viewmodel_group_owned_asset_source_mutation_fallback_matches_cpp_pr
         );
         compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, &step_label);
         compare_state_machine_asset_binding(cpp_state_machine, rust_state_machine, 1, &step_label);
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn operation_viewmodel_group_owned_artboard_source_mutation_fallback_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_owned_viewmodel_number_operation_viewmodel_group_artboard_source_mutation_cpp.riv";
+    let bytes =
+        synthetic_state_machine_owned_viewmodel_number_operation_viewmodel_artboard_operand_mutation_blend_state(
+            9330,
+            true,
+        );
+    let amount = 0.4_f32;
+    let initial_artboard = 1_u64;
+    let artboard = 7_u64;
+    let args = [
+        "--runtime-bind-owned-view-model-number-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        amount.to_string(),
+        "--runtime-set-owned-view-model-source-artboard".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+        initial_artboard.to_string(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-owned-view-model-source-artboard".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+        artboard.to_string(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    let mut context = RuntimeOwnedViewModelInstance::new(&runtime, 0)
+        .unwrap_or_else(|| panic!("missing owned view-model context for {label}"));
+
+    assert!(
+        context.set_number_by_property_index(0, amount),
+        "{label} failed to set owned primary number"
+    );
+    assert!(
+        state_machine.bind_owned_view_model_context(&context),
+        "{label} failed to bind owned view-model context"
+    );
+    let mut rust_reports = Vec::new();
+    assert!(
+        state_machine.set_owned_view_model_context_artboard_source_for_data_bind(
+            &mut context,
+            1,
+            initial_artboard
+        ),
+        "{label} failed to set initial grouped owned secondary artboard source"
+    );
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    assert!(
+        state_machine.set_owned_view_model_context_artboard_source_for_data_bind(
+            &mut context,
+            1,
+            artboard
+        ),
+        "{label} failed to mutate grouped owned secondary artboard source"
+    );
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 1.0),
+        state_machine.clone(),
+    ));
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (step, (cpp_state_machine, (advanced, rust_state_machine))) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+        .enumerate()
+    {
+        let step_label = format!("{label} action {step}");
+        compare_state_machine_advance(
+            cpp_state_machine,
+            rust_state_machine,
+            *advanced,
+            &step_label,
+        );
+        compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, &step_label);
+        compare_state_machine_artboard_binding(
+            cpp_state_machine,
+            rust_state_machine,
+            1,
+            &step_label,
+        );
     }
     compare_cpp_runtime_update(&cpp, &rust, &report, label);
 }

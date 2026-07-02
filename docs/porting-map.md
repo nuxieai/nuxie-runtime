@@ -6653,9 +6653,20 @@ and the C++ probe retains active owned contexts for
 updates, while the operation-viewmodel operand stays on C++'s `0.0` fallback.
 The contract is
 `docs/prototypes/data-binding-graph-operation-viewmodel-owned-asset-mutation-runtime-contract.md`.
+
+Current #12 update: owned runtime artboard source mutation now preserves the
+`DataConverterOperationViewModel` non-number secondary operand fallback for
+direct converters and for
+`DataConverterGroup<OperationValue, OperationViewModel>`. Rust exposes
+`StateMachineInstance::set_owned_view_model_context_artboard_source_for_data_bind`,
+and the C++ probe retains active owned contexts for
+`--runtime-set-owned-view-model-source-artboard`. The same-path artboard
+observer updates, while the operation-viewmodel operand stays on C++'s `0.0`
+fallback. The contract is
+`docs/prototypes/data-binding-graph-operation-viewmodel-owned-artboard-mutation-runtime-contract.md`.
 Longer and exotic converter group permutations, relative/name converter paths,
 owned-context source mutation APIs beyond root number, symbol-list-index,
-boolean, string, color, enum, trigger, list, and asset OperationViewModel operands,
+boolean, string, color, enum, trigger, list, asset, and artboard OperationViewModel operands,
 mutation-driven recompute for other converter families, broader dirty/update
 queues, listener-owned data binding, and nested artboard propagation remain
 follow-up `#12` slices.

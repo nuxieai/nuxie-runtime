@@ -3794,12 +3794,14 @@ symbol-list-index sources feeding number targets. Default and source-change
 modes consume one visible reapply draw because the symbol-list-index source is
 preserved rather than changed; always mode consumes two values during the
 explicit pass, including the hidden reverse-conversion draw, and later normal
-advances do not pull more values. The contract is
+advances do not pull more values. The C++ probe now seeds deterministic random
+values and reports per-action `randomTotalCalls`, so this slice compares the
+Rust host-stream count directly against the C++ total after every explicit
+target-to-source report. The contract is
 `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-target-to-source-call-count-runtime-contract.md`.
 Direct public-update, target-dirty, grouped symbol-list-index, list/non-number,
-imported/owned, real random generation, probe-visible C++
-`RandomProvider::totalCalls`, secondary dependency invalidation, and full
-dirty-list scheduler parity remain follow-up `#12` slices.
+imported/owned, real random generation, secondary dependency invalidation, and
+full dirty-list scheduler parity remain follow-up `#12` slices.
 
 Current #12 update: graph formula random symbol-list-index public-update call counts
 Direct graph-owned `DataConverterFormula` random functions now expose Rust's

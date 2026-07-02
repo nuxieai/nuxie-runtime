@@ -54,7 +54,10 @@ draw to Rust before advancing.
   `data-binding-graph-formula-random-group-runtime-contract.md`; grouped
   target-to-source/public-update/target-dirty scheduling and list formula
   scheduling remain out of scope.
-- Random formula behavior for symbol-list-index or non-number sources.
+- Symbol-list-index source-to-target random formula behavior is covered
+  separately by
+  `data-binding-graph-formula-random-symbol-list-index-runtime-contract.md`;
+  other non-number random formula sources remain out of scope.
 - External, imported, and owned contexts for this converter/source
   combination.
 - Relative-path, parent-path, nested-path, listener-owned, and update-queue

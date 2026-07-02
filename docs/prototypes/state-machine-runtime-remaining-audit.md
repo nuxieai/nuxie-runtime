@@ -1018,6 +1018,14 @@ slice.
   and caches the drawn value per formula converter like C++ default random
   mode. The C++ probe derives the first draw from the C++ number-binding report
   and supplies the same value to Rust before advancing.
+- `DataConverterFormula` random symbol-list-index source-to-target slice:
+  default-context symbol-list-index sources feeding number targets now execute
+  a direct `FunctionType::random` output-queue token when `randomModeValue` is
+  the default `0`. Rust casts the symbol-list-index source to `f32` before
+  formula evaluation, consumes the host-supplied default-mode random value, and
+  reuses the cached value on later state-machine advancement like C++. List
+  formulas, other non-number random formulas, non-default random modes,
+  imported/owned contexts, and real random generation remain follow-up slices.
 - `DataConverterFormula` random always-mode source-to-target slice:
   default-context number sources feeding number targets now execute direct
   `FunctionType::random` output-queue tokens when `randomModeValue == 1`.

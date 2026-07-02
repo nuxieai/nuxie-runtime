@@ -26,7 +26,10 @@ formula evaluator before writing number targets.
 
 ## Out Of Scope
 
-- `FormulaTokenFunction`, random formula values, and `randomModeValue`.
+- Deterministic `FormulaTokenFunction` support is covered separately by
+  `data-binding-graph-formula-functions-runtime-contract.md`; symbol-list-index
+  random formula support is covered separately by
+  `data-binding-graph-formula-random-symbol-list-index-runtime-contract.md`.
 - Non-number and non-symbol-list-index formula inputs.
 - Formula parent-source binding, source dependents, and add-dirt behavior.
 - Reverse conversion and target-to-source propagation.

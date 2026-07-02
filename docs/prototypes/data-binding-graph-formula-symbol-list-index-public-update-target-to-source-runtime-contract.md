@@ -40,7 +40,9 @@ the formula converter, restoring the number target to the formula value.
   public-update reverse behavior, covered separately by the fallback
   public-update contracts.
 - Asset, artboard, and view-model pointer formula fallback reverse behavior.
-- `FormulaTokenFunction`, random formula values, and `randomModeValue`.
+- `FormulaTokenFunction` with random formula values is covered separately by
+  `data-binding-graph-formula-random-symbol-list-index-target-to-source-runtime-contract.md`.
+- Other formula functions.
 - Formula converter groups.
 - Formula parent-source binding, source dependents, and general add-dirt
   behavior.

@@ -37,7 +37,11 @@ fallback. This remains true when the formula output queue contains
 - Enum, color, string, and trigger random fallback target-to-source behavior is
   covered separately by
   `data-binding-graph-formula-random-remaining-fallbacks-target-to-source-runtime-contract.md`.
-- List and symbol-list-index random formula target-to-source behavior.
+- List random formula target-to-source behavior is covered separately by
+  `data-binding-graph-formula-random-list-fallback-target-to-source-runtime-contract.md`.
+- Symbol-list-index random formula target-to-source behavior is covered
+  separately by
+  `data-binding-graph-formula-random-symbol-list-index-target-to-source-runtime-contract.md`.
 - Number-source random formula evaluation and scheduling, covered by the
   direct and grouped random contracts.
 - Asset, artboard, and view-model pointer formula fallback reverse behavior.

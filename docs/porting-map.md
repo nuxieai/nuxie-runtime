@@ -3502,10 +3502,10 @@ produces a number, then reapplies that unchanged source through the formula
 fallback so the number target returns to C++'s `0.0` fallback for
 `randomModeValue` values `0`, `1`, and `2`. The contract is
 `docs/prototypes/data-binding-graph-formula-random-boolean-fallback-target-to-source-runtime-contract.md`.
-Enum, color, string, and trigger target-to-source behavior is covered
-separately below. List, symbol-list-index, imported/owned contexts, real
-random generation, random call counts, secondary dependency invalidation, and
-full dirty-list scheduler parity remain follow-up `#12` slices.
+Enum, color, string, trigger, list, and symbol-list-index target-to-source
+behavior is covered separately below. Imported/owned contexts, real random
+generation, random call counts, secondary dependency invalidation, and full
+dirty-list scheduler parity remain follow-up `#12` slices.
 
 Current #12 update: graph formula random remaining fallbacks target-to-source
 Direct graph-owned `DataConverterFormula` random functions now cover explicit
@@ -3516,8 +3516,8 @@ formula conversion produces a number, then reapplies that unchanged source
 through the formula fallback so the number target returns to C++'s `0.0`
 fallback for `randomModeValue` values `0`, `1`, and `2`. The contract is
 `docs/prototypes/data-binding-graph-formula-random-remaining-fallbacks-target-to-source-runtime-contract.md`.
-List random target-to-source behavior is covered separately below.
-Symbol-list-index, imported/owned contexts, real random generation, random call
+List and symbol-list-index random target-to-source behavior is covered
+separately below. Imported/owned contexts, real random generation, random call
 counts, secondary dependency invalidation, and full dirty-list scheduler
 parity remain follow-up `#12` slices.
 
@@ -3530,9 +3530,24 @@ conversion produces a number, then reapplies that unchanged source through the
 formula fallback so the number target returns to C++'s `0.0` fallback for
 `randomModeValue` values `0`, `1`, and `2`. The contract is
 `docs/prototypes/data-binding-graph-formula-random-list-fallback-target-to-source-runtime-contract.md`.
-Symbol-list-index, imported/owned contexts, real random generation, random call
-counts, secondary dependency invalidation, and full dirty-list scheduler
-parity remain follow-up `#12` slices.
+Symbol-list-index random target-to-source behavior is covered separately
+below. Imported/owned contexts, real random generation, random call counts,
+secondary dependency invalidation, and full dirty-list scheduler parity remain
+follow-up `#12` slices.
+
+Current #12 update: graph formula random symbol-list-index target-to-source
+Direct graph-owned `DataConverterFormula` random functions now cover explicit
+`advanceDataContext()` and public `updateDataBinds(true)` target-to-source
+behavior for default-context symbol-list-index sources feeding number targets.
+Rust preserves the unchanged symbol-list-index source when random-function
+formula conversion produces a number, then reapplies that unchanged source
+through the random formula scheduling path for `randomModeValue` values `0`,
+`1`, and `2`. The contract is
+`docs/prototypes/data-binding-graph-formula-random-symbol-list-index-target-to-source-runtime-contract.md`.
+Target-dirty scheduling, grouped symbol-list-index random formulas,
+imported/owned contexts, real random generation, random call counts,
+secondary dependency invalidation, and full dirty-list scheduler parity remain
+follow-up `#12` slices.
 
 Current #12 update: graph formula list fallback
 Direct graph-owned `DataConverterFormula` now admits default-context list
@@ -3642,9 +3657,9 @@ formula converter so the number target returns to the C++ formula value. The
 contract is
 `docs/prototypes/data-binding-graph-formula-symbol-list-index-public-update-target-to-source-runtime-contract.md`.
 Explicit main-`ToSource` symbol-list-index behavior is covered separately
-below. Imported/owned contexts, random formula reverse behavior, secondary
-dependency invalidation, and full dirty-list scheduler parity remain follow-up
-`#12` slices.
+below, and random formula reverse behavior is covered separately above.
+Imported/owned contexts, secondary dependency invalidation, and full
+dirty-list scheduler parity remain follow-up `#12` slices.
 
 Current #12 update: graph formula symbol-list-index explicit target-to-source
 Direct graph-owned `DataConverterFormula` now covers explicit
@@ -3655,9 +3670,9 @@ conversion produces a number, then reapplies that unchanged source through the
 formula converter so the number target returns to the C++ formula value. The
 contract is
 `docs/prototypes/data-binding-graph-formula-symbol-list-index-explicit-target-to-source-runtime-contract.md`.
-Imported/owned contexts, random formula reverse behavior, secondary dependency
-invalidation, and full dirty-list scheduler parity remain follow-up `#12`
-slices.
+Random formula reverse behavior is covered separately above. Imported/owned
+contexts, secondary dependency invalidation, and full dirty-list scheduler
+parity remain follow-up `#12` slices.
 
 Current #12 update: graph formula random group public update target-to-source
 Grouped graph-owned `DataConverterFormula` random functions now cover public

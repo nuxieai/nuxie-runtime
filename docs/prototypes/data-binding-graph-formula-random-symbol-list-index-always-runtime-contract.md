@@ -32,8 +32,11 @@ evaluation, after the symbol-list-index source has been cast to `float`.
   `data-binding-graph-formula-random-symbol-list-index-source-change-runtime-contract.md`.
 - Broader random cache invalidation, random call-count parity, and formula
   `addDirt` random-cache behavior for symbol-list-index sources.
-- Target-to-source, public update, target-dirty, grouped, list, and non-symbol
-  non-number random formula scheduling.
+- Target-to-source symbol-list-index random formula scheduling is covered
+  separately by
+  `data-binding-graph-formula-random-symbol-list-index-target-to-source-runtime-contract.md`.
+- Target-dirty, grouped, list, and non-symbol non-number random formula
+  scheduling.
 - Formula parent-source binding, source dependents, and add-dirt behavior.
 - External, imported, and owned contexts for this converter/source
   combination.

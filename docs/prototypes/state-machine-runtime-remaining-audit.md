@@ -1110,25 +1110,28 @@ slice.
   a direct `FunctionType::random` output-queue token when `randomModeValue` is
   the default `0`. Rust casts the symbol-list-index source to `f32` before
   formula evaluation, consumes the host-supplied default-mode random value, and
-  reuses the cached value on later state-machine advancement like C++. List
-  formulas, other non-number random formulas, non-default random modes,
+  reuses the cached value on later state-machine advancement like C++.
+  Always-mode, source-change-mode, and target-to-source behavior are covered
+  separately below. List formulas, other non-number random formulas,
   imported/owned contexts, and real random generation remain follow-up slices.
 - `DataConverterFormula` random symbol-list-index always-mode source-to-target
   slice: default-context symbol-list-index sources feeding number targets now
   execute direct `FunctionType::random` output-queue tokens when
   `randomModeValue == 1`. Rust casts the symbol-list-index source to `f32`
   before formula evaluation and consumes a fresh host-supplied random value on
-  each source-to-target state-machine advancement like C++. List formulas,
-  other non-number random formulas, imported/owned contexts, and real random
-  generation remain follow-up slices.
+  each source-to-target state-machine advancement like C++. Target-to-source
+  behavior is covered separately below. List formulas, other non-number random
+  formulas, imported/owned contexts, and real random generation remain
+  follow-up slices.
 - `DataConverterFormula` random symbol-list-index source-change
   source-to-target slice: default-context symbol-list-index sources feeding
   number targets now execute direct `FunctionType::random` output-queue tokens
   when `randomModeValue == 2`. Rust casts the symbol-list-index source to
   `f32`, caches the host-supplied random like default mode, then clears that
-  formula cache when the bound default symbol-list-index source mutates. List
-  formulas, other non-number random formulas, imported/owned contexts, and
-  real random generation remain follow-up slices.
+  formula cache when the bound default symbol-list-index source mutates.
+  Target-to-source behavior is covered separately below. List formulas, other
+  non-number random formulas, imported/owned contexts, and real random
+  generation remain follow-up slices.
 - `DataConverterFormula` random non-number fallback slice: default-context
   boolean, enum, color, string, and trigger sources feeding number targets now
   prove C++'s early formula fallback for `FunctionType::random` output tokens.
@@ -1147,10 +1150,10 @@ slice.
   reapply that unchanged source through the formula fallback during explicit
   `advanceDataContext()` and public `updateDataBinds(true)`. Random modes
   `0`, `1`, and `2` all return the number target to C++'s `0.0` fallback even
-  when Rust receives non-zero supplied random values. Enum, color, string, and
-  trigger random target-to-source behavior is covered separately below; list,
-  symbol-list-index, imported/owned contexts, real random generation, and
-  random call-count parity remain follow-up slices. The contract is
+  when Rust receives non-zero supplied random values. Enum, color, string,
+  trigger, list, and symbol-list-index random target-to-source behavior is
+  covered separately below; imported/owned contexts, real random generation,
+  and random call-count parity remain follow-up slices. The contract is
   `docs/prototypes/data-binding-graph-formula-random-boolean-fallback-target-to-source-runtime-contract.md`.
 - `DataConverterFormula` remaining random fallback target-to-source slice:
   default-context enum, color, string, and trigger sources feeding
@@ -1160,8 +1163,8 @@ slice.
   fallback during explicit `advanceDataContext()` and public
   `updateDataBinds(true)`. Random modes `0`, `1`, and `2` all return the
   number target to C++'s `0.0` fallback even when Rust receives non-zero
-  supplied random values. List random target-to-source behavior is covered
-  separately below; symbol-list-index, imported/owned contexts, real random
+  supplied random values. List and symbol-list-index random target-to-source
+  behavior is covered separately below; imported/owned contexts, real random
   generation, and random call-count parity remain follow-up slices. The
   contract is
   `docs/prototypes/data-binding-graph-formula-random-remaining-fallbacks-target-to-source-runtime-contract.md`.
@@ -1172,10 +1175,24 @@ slice.
   reapply that unchanged source through the formula fallback during explicit
   `advanceDataContext()` and public `updateDataBinds(true)`. Random modes
   `0`, `1`, and `2` all return the number target to C++'s `0.0` fallback even
-  when Rust receives non-zero supplied random values. Symbol-list-index,
-  imported/owned contexts, real random generation, and random call-count parity
-  remain follow-up slices. The contract is
+  when Rust receives non-zero supplied random values. Symbol-list-index random
+  target-to-source behavior is covered separately below; imported/owned
+  contexts, real random generation, and random call-count parity remain
+  follow-up slices. The contract is
   `docs/prototypes/data-binding-graph-formula-random-list-fallback-target-to-source-runtime-contract.md`.
+- `DataConverterFormula` random symbol-list-index target-to-source slice:
+  default-context symbol-list-index sources feeding main-`ToSource | TwoWay`
+  and main-`ToTarget | TwoWay` number targets now preserve the unchanged
+  symbol-list-index source when random-function formula conversion produces a
+  number, then reapply that unchanged source through direct random formula
+  scheduling during explicit `advanceDataContext()` and public
+  `updateDataBinds(true)`. Random modes `0`, `1`, and `2` match the C++ probe
+  target reports; always mode consumes an unobserved target-to-source random
+  draw before the visible reapply value. Target-dirty scheduling, grouped
+  symbol-list-index random formulas, imported/owned contexts, real random
+  generation, and random call-count parity remain follow-up slices. The
+  contract is
+  `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-target-to-source-runtime-contract.md`.
 - `DataConverterFormula` random always-mode source-to-target slice:
   default-context number sources feeding number targets now execute direct
   `FunctionType::random` output-queue tokens when `randomModeValue == 1`.

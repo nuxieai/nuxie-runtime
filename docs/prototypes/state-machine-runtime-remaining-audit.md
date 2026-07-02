@@ -1060,10 +1060,9 @@ slice.
   explicit data-context advancement, and apply C++'s numeric fallback target
   value on later normal state-machine advancement. Formula random-function
   list targets are covered separately below. Generated list items,
-  public-update scheduling for formula list targets, target-to-source
-  scheduling beyond the deterministic explicit slice, imported/owned contexts,
-  real random generation, and random call-count parity remain follow-up
-  slices. The contract is
+  target-to-source scheduling beyond the deterministic explicit and
+  public-update slices, imported/owned contexts, real random generation, and
+  random call-count parity remain follow-up slices. The contract is
   `docs/prototypes/data-binding-graph-formula-list-fallback-bindable-list-target-runtime-contract.md`.
 - `DataConverterFormula` random list fallback bindable-list target slice:
   default-context list sources feeding state-machine
@@ -1083,11 +1082,22 @@ slice.
   `FormulaTokenInput` converter now preserve the edited list-target scalar
   during explicit `advanceDataContext()` target-to-source, keep reporting the
   imported source list size, and avoid reapplying the numeric formula fallback
-  during the same explicit pass. Public-update scheduling for formula list
-  targets, random formula list-target target-to-source, generated list items,
-  imported/owned contexts, real random generation, and random call-count
-  parity remain follow-up slices. The contract is
+  during the same explicit pass. The deterministic public-update list-target
+  reverse path is covered separately below. Random formula list-target
+  target-to-source, generated list items, imported/owned contexts, real random
+  generation, and random call-count parity remain follow-up slices. The
+  contract is
   `docs/prototypes/data-binding-graph-formula-list-fallback-bindable-list-explicit-target-to-source-runtime-contract.md`.
+- `DataConverterFormula` list fallback bindable-list public-update
+  target-to-source slice: default-context list sources feeding state-machine
+  `BindablePropertyList.propertyValue` targets through a deterministic
+  `FormulaTokenInput` converter now keep reporting the imported source list
+  size during public `updateDataBinds(true)` target-to-source and reapply the
+  numeric formula fallback to the list target during the same public update,
+  matching C++. Random formula list-target target-to-source, generated list
+  items, imported/owned contexts, real random generation, and random
+  call-count parity remain follow-up slices. The contract is
+  `docs/prototypes/data-binding-graph-formula-list-fallback-bindable-list-public-update-target-to-source-runtime-contract.md`.
 - `DataConverterFormula` list fallback public-update reverse slice:
   default-context list sources feeding main-`ToTarget | TwoWay` number targets
   now preserve the unchanged imported list source when reverse formula
@@ -1095,11 +1105,11 @@ slice.
   the formula fallback during public `updateDataBinds(true)`. The first
   deterministic formula list target and deterministic explicit formula
   list-target target-to-source behavior are covered separately above.
-  Generated list items, formula list-target public-update scheduling,
-  list-target target-to-source scheduling beyond that deterministic explicit
-  slice, imported/owned contexts, and random formulas remain follow-up slices.
-  Explicit main-`ToSource` behavior for number targets and symbol-list-index
-  public-update reverse behavior are covered separately below. The contract is
+  Generated list items, list-target target-to-source scheduling beyond the
+  deterministic explicit/public-update slices, imported/owned contexts, and
+  random formulas remain follow-up slices. Explicit main-`ToSource` behavior
+  for number targets and symbol-list-index public-update reverse behavior are
+  covered separately below. The contract is
   `docs/prototypes/data-binding-graph-formula-list-fallback-public-update-target-to-source-runtime-contract.md`.
 - `DataConverterFormula` list fallback explicit target-to-source slice:
   default-context list sources feeding main-`ToSource | TwoWay` number targets

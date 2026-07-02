@@ -1000,6 +1000,18 @@ slice.
   now cast to `f32` before entering the deterministic formula evaluator. A C++
   probe covers the symbol-list-index formula path through an existing
   blend-state consumer.
+- Deterministic `DataConverterFormula` imported/owned symbol-list-index
+  context slice: imported and owned runtime view-model symbol-list-index
+  contexts now feed rebound source values into the direct formula converter
+  path before normal state-machine advancement. Rust casts the rebound source
+  to `f32`, matches the formula number target against C++, and asserts the
+  rebound symbol-list-index source remains visible through the graph. Formula
+  random functions, boolean/enum/color/string/trigger/list formula contexts,
+  reverse/public-update/target-dirty scheduling, generated list item identity,
+  relative/parent/nested lookup, listener-owned data binding, nested artboard
+  propagation, and full dirty-list scheduler parity remain follow-up slices.
+  The contract is
+  `docs/prototypes/data-binding-graph-formula-symbol-list-index-context-runtime-contract.md`.
 - First `DataConverterFormula` non-number fallback slice: default-context
   boolean sources feeding number targets now enter the formula converter and
   write C++'s early fallback value `0.0`. A C++ probe uses a non-zero imported

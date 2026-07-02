@@ -3176,6 +3176,20 @@ relative/parent/nested lookup, listener-owned data binding, nested artboard
 propagation, and full dirty-list scheduler parity remain follow-up `#12`
 slices.
 
+Current #12 update: deterministic formula symbol-list-index contexts
+Direct graph-owned `DataConverterFormula` converters now cover
+symbol-list-index sources that are rebound through imported and owned runtime
+view-model contexts before normal state-machine advancement. Rust casts the
+rebound symbol-list-index value to `f32` before formula evaluation, matching
+the default-context formula path. The contract is
+`docs/prototypes/data-binding-graph-formula-symbol-list-index-context-runtime-contract.md`.
+Formula random functions, boolean/enum/color/string/trigger/list formula
+contexts, reverse propagation, public update, target-dirty scheduling,
+imported-context sharing beyond existing scalar sharing probes, generated list
+item identity, relative/parent/nested lookup, listener-owned data binding,
+nested artboard propagation, and full dirty-list scheduler parity remain
+follow-up `#12` slices.
+
 Current #12 update: first graph formula random function
 Direct graph-owned `DataConverterFormula` converters now admit the first
 `FunctionType::random` slice for default-context number sources feeding number

@@ -49,6 +49,7 @@ defines({ '_RIVE_INTERNAL_' })
 
 files({
     '../main.cpp',
+    '../testing_random_provider.cpp',
     rive_runtime .. '/utils/no_op_factory.cpp',
 })
 

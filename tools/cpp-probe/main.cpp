@@ -21,6 +21,13 @@
 #include <unordered_map>
 #include <vector>
 
+namespace rive_probe
+{
+void clearRandomProvider();
+void addRandomProviderValue(float value);
+size_t randomProviderTotalCalls();
+} // namespace rive_probe
+
 #define protected public
 #include "rive/component.hpp"
 #undef protected
@@ -554,6 +561,7 @@ struct RuntimeStateMachineAdvanceReport
     bool advanced;
     size_t currentAnimationCount;
     size_t changedStateCount;
+    size_t randomTotalCalls;
     std::vector<RuntimeStateMachineCurrentAnimationReport> currentAnimations;
     std::vector<RuntimeStateMachineReportedEventReport> reportedEvents;
     std::vector<RuntimeStateMachineViewModelTriggerReport> viewModelTriggers;
@@ -631,6 +639,8 @@ struct ProbeOptions
     std::vector<RuntimeAnimationApplication> runtimeAnimationApplications;
     std::vector<RuntimeAnimationAdvance> runtimeAnimationAdvances;
     std::vector<RuntimeStateMachineAction> runtimeStateMachineActions;
+    bool runtimeRandomProviderReset = false;
+    std::vector<float> runtimeRandomProviderValues;
     bool completeViewModelProperties = false;
     bool dataContextLookups = false;
 };
@@ -5773,6 +5783,7 @@ apply_runtime_state_machine_advances(rive::File* file,
         report.advanced = advanced;
         report.currentAnimationCount = stateMachine->currentAnimationCount();
         report.changedStateCount = stateMachine->stateChangedCount();
+        report.randomTotalCalls = rive_probe::randomProviderTotalCalls();
         for (size_t i = 0; i < report.currentAnimationCount; ++i)
         {
             auto animation = stateMachine->currentAnimationByIndex(i);
@@ -5854,6 +5865,7 @@ void write_runtime_state_machine_advance_reports(
         out << ",\"currentAnimationCount\":"
             << report.currentAnimationCount;
         out << ",\"changedStateCount\":" << report.changedStateCount;
+        out << ",\"randomTotalCalls\":" << report.randomTotalCalls;
         out << ",\"reportedEventCount\":" << report.reportedEvents.size();
         out << ",\"currentAnimations\":[";
         for (size_t j = 0; j < report.currentAnimations.size(); ++j)
@@ -12309,6 +12321,24 @@ int main(int argc, const char* argv[])
             continue;
         }
 
+        if (is_arg(argv[i], "--runtime-random-reset"))
+        {
+            options.runtimeRandomProviderReset = true;
+            continue;
+        }
+
+        if (is_arg(argv[i], "--runtime-random-value"))
+        {
+            if (i + 1 >= argc)
+            {
+                std::cerr << "--runtime-random-value requires value\n";
+                return 2;
+            }
+            options.runtimeRandomProviderValues.push_back(
+                std::strtof(argv[++i], nullptr));
+            continue;
+        }
+
         if (is_arg(argv[i], "--instance-artboards"))
         {
             options.instanceArtboards = true;
@@ -15106,11 +15136,22 @@ int main(int argc, const char* argv[])
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-deep-viewmodel-state-machine-context stateMachineIndex viewModelIndex rootPropertyIndex middlePropertyIndex leafPropertyIndex value\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-imported-intermediate-viewmodel-state-machine-context stateMachineIndex viewModelIndex rootPropertyIndex childInstanceIndex nestedPropertyIndex value\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-deep-imported-intermediate-viewmodel-state-machine-context stateMachineIndex viewModelIndex rootPropertyIndex childInstanceIndex middlePropertyIndex leafPropertyIndex value\n";
+        std::cerr << "additional runtime flag: --runtime-random-reset\n";
+        std::cerr << "additional runtime flag: --runtime-random-value value\n";
         return 2;
     }
 
     try
     {
+        if (options.runtimeRandomProviderReset)
+        {
+            rive_probe::clearRandomProvider();
+        }
+        for (float value : options.runtimeRandomProviderValues)
+        {
+            rive_probe::addRandomProviderValue(value);
+        }
+
         rive::ImportResult result = rive::ImportResult::success;
         auto file = open_file(filename, &result);
         if (file == nullptr || result != rive::ImportResult::success)

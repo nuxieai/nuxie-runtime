@@ -18009,6 +18009,8 @@ fn state_machine_default_viewmodel_number_formula_random_call_counts_match_cpp_s
         ),
     ];
 
+    let seeded_random_values = [0.25_f32, 0.75, 0.5];
+
     for (case_label, file_id, random_mode_value, source_mutation, args, expected_counts) in cases {
         let label = format!(
             "synthetic/runtime_state_machine_default_viewmodel_number_formula_random_call_count_{case_label}_cpp.riv"
@@ -18024,7 +18026,14 @@ fn state_machine_default_viewmodel_number_formula_random_call_counts_match_cpp_s
                 random_mode_value,
             );
 
-        let cpp = read_cpp_probe_bytes_with_args(&probe, &label, &bytes, &args);
+        let mut probe_args = vec!["--runtime-random-reset".to_owned()];
+        for value in seeded_random_values {
+            probe_args.push("--runtime-random-value".to_owned());
+            probe_args.push(value.to_string());
+        }
+        probe_args.extend(args);
+
+        let cpp = read_cpp_probe_bytes_with_args(&probe, &label, &bytes, &probe_args);
         let cpp_artboard = cpp
             .artboards
             .first()
@@ -18102,13 +18111,23 @@ fn state_machine_default_viewmodel_number_formula_random_call_counts_match_cpp_s
             rust_reports.len(),
             "{label} state-machine report count mismatch"
         );
-        for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+        for (report_index, (cpp_state_machine, (advanced, rust_state_machine))) in cpp_artboard
             .runtime_state_machine_advances
             .iter()
             .zip(&rust_reports)
+            .enumerate()
         {
             compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, &label);
             compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, &label);
+            assert_eq!(
+                cpp_state_machine.random_total_calls, expected_counts[report_index],
+                "{label} C++ random totalCalls mismatch at report {report_index}"
+            );
+            assert_eq!(
+                cpp_state_machine.random_total_calls,
+                rust_state_machine.data_bind_formula_random_call_count(),
+                "{label} C++ and Rust random call count mismatch at report {report_index}"
+            );
         }
         compare_cpp_runtime_update(&cpp, &rust, &report, &label);
     }
@@ -58830,6 +58849,8 @@ struct CppRuntimeStateMachineAdvance {
     changed_state_count: usize,
     #[serde(default, rename = "reportedEventCount")]
     reported_event_count: usize,
+    #[serde(default, rename = "randomTotalCalls")]
+    random_total_calls: usize,
     #[serde(rename = "currentAnimations")]
     current_animations: Vec<CppRuntimeStateMachineCurrentAnimation>,
     #[serde(default, rename = "reportedEvents")]

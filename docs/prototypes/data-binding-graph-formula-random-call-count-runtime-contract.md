@@ -5,8 +5,10 @@
 Pin Rust's graph formula random-source accounting to the C++ call sites that
 pull random values during `DataConverterFormula` runtime evaluation.
 
-C++ counts calls at `RandomProvider::generateRandomFloat()`. In the Rust port,
-the equivalent observable for the host-supplied test stream is
+C++ counts calls at `RandomProvider::generateRandomFloat()`. The C++ probe now
+exposes that as per-action `runtimeStateMachineAdvances[].randomTotalCalls`
+when tests opt into its counted deterministic provider. In the Rust port, the
+equivalent observable for the host-supplied test stream is
 `StateMachineInstance::data_bind_formula_random_call_count()`, which counts
 every pull from `StateMachineInstance::set_data_bind_formula_random_values`.
 
@@ -23,15 +25,19 @@ every pull from `StateMachineInstance::set_data_bind_formula_random_values`.
 - Source-to-target state-machine advancement.
 - Source-change cache clearing through
   `set_default_view_model_number_source_for_data_bind`.
+- C++ probe `--runtime-random-reset` and repeated `--runtime-random-value`
+  inputs for deterministic call-count comparison.
 - List-source formula fallback cases proving non-number, non-symbol-list-index
   inputs do not evaluate random tokens.
 - C++ probe comparisons for the observable binding values around those call
-  count assertions.
+  count assertions, including `randomTotalCalls` for the default-context
+  number source-to-target fixtures.
 
 ## Out Of Scope
 
-- Probe-visible C++ `RandomProvider::totalCalls()`. The current C++ probe links
-  the non-`TESTING` runtime build, where that API is not available.
+- Upstream C++ `TESTING` builds or direct use of
+  `RandomProvider::totalCalls()` outside the probe-owned counted provider
+  shim.
 - A real Rust random generator, random seeding, platform RNG behavior, or
   parity with C++ `std::rand()`.
 - Queue-content parity beyond values supplied by
@@ -59,6 +65,9 @@ every pull from `StateMachineInstance::set_data_bind_formula_random_values`.
   evaluation.
 - Source-change random mode consumes once initially, consumes again after the
   source changes, and then reuses the refreshed cache.
+- The C++ probe's `randomTotalCalls` reports match the expected C++ source
+  semantics and Rust's host-stream call count for the default-context number
+  source-to-target fixtures.
 - List-source formula fallback with random tokens consumes zero random values
   because C++ returns the numeric fallback before evaluating formula tokens.
 - The same fixtures continue to match C++ probe binding values.

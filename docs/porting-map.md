@@ -3301,18 +3301,20 @@ imported/owned contexts, and full dirty-list scheduler parity remain follow-up
 Current #12 update: graph formula random call-count introspection
 Direct graph-owned `DataConverterFormula` random functions now expose Rust's
 host-supplied random-stream call count through
-`StateMachineInstance::data_bind_formula_random_call_count`. Default-context
-number source-to-target probes cover default, always, and source-change random
-modes, including the cache reuse and source-change cache-clear cases. The
-existing list formula fallback probe also proves that random tokens on list
-sources do not consume random values because C++ returns the numeric fallback
-before evaluating formula tokens. The contract is
+`StateMachineInstance::data_bind_formula_random_call_count`. The C++ probe now
+has an opt-in counted deterministic `RandomProvider` shim, exposed as
+`runtimeStateMachineAdvances[].randomTotalCalls`, so the default-context number
+source-to-target probes compare Rust counts directly against C++ call totals
+for default, always, and source-change random modes. The existing list formula
+fallback probe also proves that random tokens on list sources do not consume
+random values because C++ returns the numeric fallback before evaluating
+formula tokens. The contract is
 `docs/prototypes/data-binding-graph-formula-random-call-count-runtime-contract.md`.
-Probe-visible C++ `RandomProvider::totalCalls`, real RNG generation/seeding,
-grouped converters, target-dirty scheduling, imported/owned contexts,
-secondary dependency invalidation, and full dirty-list scheduler parity remain
-follow-up `#12` slices. Direct explicit target-to-source and public-update
-call-count coverage is tracked separately below.
+Real RNG generation/seeding, grouped converters, target-dirty scheduling,
+imported/owned contexts, secondary dependency invalidation, and full dirty-list
+scheduler parity remain follow-up `#12` slices. Direct explicit
+target-to-source and public-update call-count coverage is tracked separately
+below and can now use the probe-visible total-call field.
 
 Current #12 update: graph formula random source-change mode explicit target-to-source
 Direct graph-owned `DataConverterFormula` random functions now cover explicit

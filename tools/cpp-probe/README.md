@@ -31,6 +31,8 @@ Useful probe switches:
 - `--property-values` emits `CoreRegistry` getter-backed property values for file-level objects and artboard-local object slots.
 - `--file-property-values` emits those getter-backed values only for file-level objects: file assets, view models, view-model properties/instances, data enums, and enum values.
 - `--no-advance` skips the `Artboard::advance(0)` call before dumping artboard state, which is useful when comparing import-time member values instead of graph-updated values.
+- `--runtime-random-reset` opts runtime state-machine probes into the counted deterministic `RandomProvider` shim and resets its call count.
+- `--runtime-random-value value` queues one deterministic random value for the counted provider; repeat the flag to seed multiple draws. Without these runtime random flags, the probe preserves C++ `std::rand()` behavior.
 
 Run the Rust comparison harnesses:
 

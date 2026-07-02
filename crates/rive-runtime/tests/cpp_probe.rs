@@ -17429,8 +17429,9 @@ fn state_machine_imported_viewmodel_number_formula_context_matches_cpp_probe() {
     };
 
     let label = "synthetic/runtime_state_machine_imported_viewmodel_number_formula_context_cpp.riv";
-    let bytes =
-        synthetic_state_machine_default_viewmodel_number_formula_blend_state(8732, 1.0, 2, 0.5);
+    let bytes = synthetic_state_machine_default_viewmodel_number_formula_blend_state_with_flags(
+        8732, 1.0, 2, 0.5, 0, true,
+    );
     let value = 0.25_f32;
     let args = [
         "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
@@ -17499,6 +17500,7 @@ fn state_machine_imported_viewmodel_number_formula_context_matches_cpp_probe() {
     {
         compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
         compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, label);
+        compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 1, label);
     }
     compare_cpp_runtime_update(&cpp, &rust, &report, label);
 }
@@ -17511,8 +17513,9 @@ fn state_machine_owned_viewmodel_number_formula_context_matches_cpp_probe() {
     };
 
     let label = "synthetic/runtime_state_machine_owned_viewmodel_number_formula_context_cpp.riv";
-    let bytes =
-        synthetic_state_machine_default_viewmodel_number_formula_blend_state(8733, 1.0, 2, 0.5);
+    let bytes = synthetic_state_machine_default_viewmodel_number_formula_blend_state_with_flags(
+        8733, 1.0, 2, 0.5, 0, true,
+    );
     let value = 0.25_f32;
     let args = [
         "--runtime-bind-owned-view-model-number-state-machine-context".to_owned(),
@@ -17572,6 +17575,7 @@ fn state_machine_owned_viewmodel_number_formula_context_matches_cpp_probe() {
     {
         compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
         compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, label);
+        compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 1, label);
     }
     compare_cpp_runtime_update(&cpp, &rust, &report, label);
 }

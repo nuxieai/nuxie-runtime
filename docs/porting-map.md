@@ -3176,6 +3176,19 @@ relative/parent/nested lookup, listener-owned data binding, nested artboard
 propagation, and full dirty-list scheduler parity remain follow-up `#12`
 slices.
 
+Current #12 update: deterministic formula number context fanout
+Direct graph-owned `DataConverterFormula` number contexts now include a
+same-path direct number observer. Imported-context number mutation fans out to
+every bound same-path number source node in the active graph before dirty
+reapplication, and owned-context binding refreshes both the formula source and
+observer source. The contract is
+`docs/prototypes/data-binding-graph-formula-number-context-fanout-runtime-contract.md`.
+Symbol-list-index same-path formula context fanout, formula random functions,
+reverse propagation, public update, target-dirty scheduling,
+relative/parent/nested lookup, listener-owned data binding, nested artboard
+propagation, and full dirty-list scheduler parity remain follow-up `#12`
+slices.
+
 Current #12 update: deterministic formula symbol-list-index contexts
 Direct graph-owned `DataConverterFormula` converters now cover
 symbol-list-index sources that are rebound through imported and owned runtime

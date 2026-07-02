@@ -995,6 +995,15 @@ slice.
   data binding, nested artboard propagation, and full dirty-list scheduler
   parity remain follow-up slices. The contract is
   `docs/prototypes/data-binding-graph-formula-number-context-runtime-contract.md`.
+- Deterministic `DataConverterFormula` number-context fanout slice: imported
+  runtime view-model number mutation now fans out to every same-path number
+  source node in the bound graph, and the imported/owned number formula
+  context probes include a same-path direct number observer. Symbol-list-index
+  same-path formula context fanout, random formulas,
+  reverse/public-update/target-dirty scheduling, relative/parent/nested lookup,
+  listener-owned data binding, nested artboard propagation, and full
+  dirty-list scheduler parity remain follow-up slices. The contract is
+  `docs/prototypes/data-binding-graph-formula-number-context-fanout-runtime-contract.md`.
 - Second deterministic `DataConverterFormula` graph-owned converter execution
   slice: default-context symbol-list-index sources feeding number targets are
   now cast to `f32` before entering the deterministic formula evaluator. A C++

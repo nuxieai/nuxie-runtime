@@ -10712,21 +10712,39 @@ impl RuntimeDataBindGraph {
         else {
             return false;
         };
-        let Some(source) = self.sources.get_mut(source.0) else {
+        let Some(source) = self.sources.get(source.0) else {
             return false;
         };
         if !matches!(&source.default_value, RuntimeDataBindGraphValue::Number(_)) {
             return false;
         }
-        let source_changed = !matches!(&source.value, RuntimeDataBindGraphValue::Number(current) if *current == value);
         let path = source.path.clone();
         let context_changed = context.number_overrides.get(&path) != Some(&value);
+
+        let source_changed = self.sources.iter().any(|source| {
+            source.path == path
+                && matches!(source.default_value, RuntimeDataBindGraphValue::Number(_))
+                && (!source.bound
+                    || !matches!(&source.value, RuntimeDataBindGraphValue::Number(current) if *current == value))
+        });
+
         if !source_changed && !context_changed {
             return false;
         }
 
-        source.value = RuntimeDataBindGraphValue::Number(value);
-        source.bound = true;
+        for source in self.sources.iter_mut().filter(|source| {
+            source.path == path
+                && matches!(source.default_value, RuntimeDataBindGraphValue::Number(_))
+        }) {
+            let changed = !source.bound
+                || !matches!(&source.value, RuntimeDataBindGraphValue::Number(current) if *current == value);
+            source.value = RuntimeDataBindGraphValue::Number(value);
+            source.bound = true;
+            if changed {
+                source.reset_formula_random_state_for_source_change();
+            }
+        }
+
         context.number_overrides.insert(path, value);
         self.mark_default_view_model_bindings_dirty();
         true

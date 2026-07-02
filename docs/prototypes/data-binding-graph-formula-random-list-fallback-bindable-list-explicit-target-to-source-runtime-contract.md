@@ -43,7 +43,9 @@ and the edited list-target scalar is preserved for `randomModeValue` values
 - Public `updateDataBinds(true)` target-to-source behavior for random-function
   formula list targets, covered by
   `data-binding-graph-formula-random-list-fallback-bindable-list-public-update-target-to-source-runtime-contract.md`.
-- Random-function target-dirty scheduling for formula list targets.
+- Main-`ToTarget | TwoWay` target-dirty scheduling for random-function formula
+  list targets, covered by
+  `data-binding-graph-formula-random-list-fallback-bindable-list-main-to-target-two-way-target-dirty-runtime-contract.md`.
 - `DataConverterNumberToList`, which is covered by the existing bindable-list
   and number-to-list contracts.
 - Generated list item creation, generated item identity, item-level binding,

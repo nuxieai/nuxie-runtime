@@ -1,8 +1,8 @@
-# Data Binding Graph Formula List Fallback Bindable-List Main-To-Target Two-Way Target Dirty Runtime Contract
+# Data Binding Graph Formula Random List Fallback Bindable-List Main-To-Target Two-Way Target Dirty Runtime Contract
 
 ## Purpose
 
-Pin main-`ToTarget | TwoWay` target-dirty behavior for deterministic
+Pin main-`ToTarget | TwoWay` target-dirty behavior for random-function
 `DataConverterFormula` list fallback sources feeding
 `BindablePropertyList.propertyValue` targets.
 
@@ -10,7 +10,8 @@ C++ does not immediately write a manually edited scalar list-target value back
 to the `ViewModelInstanceList` source. The manual target edit survives
 explicit `advanceDataContext()`, and the next normal state-machine advance
 reapplies source-to-target conversion, writing the formula numeric fallback to
-the list target.
+the list target. For this list fallback shape, supplied random values do not
+change the observable result.
 
 ## In Scope
 
@@ -19,8 +20,9 @@ the list target.
 - `ViewModelInstanceList` sources with imported `ViewModelInstanceListItem`
   children.
 - `BindablePropertyList.propertyValue` state-machine targets.
-- Direct `DataConverterFormula` with a single deterministic
-  `FormulaTokenInput` output token.
+- Direct `DataConverterFormula` with a `FormulaTokenFunction` output token.
+- `FunctionType::random` and `DataConverterFormula.randomModeValue` values
+  `0`, `1`, and `2`.
 - Main-`ToTarget | TwoWay` data-bind flags, without the `ToSource` direction
   flag.
 - Initial source-to-target flushing through a normal state-machine advance.
@@ -36,15 +38,16 @@ the list target.
 
 ## Out Of Scope
 
-- Source-to-target list-target fallback behavior, covered by
-  `data-binding-graph-formula-list-fallback-bindable-list-target-runtime-contract.md`.
-- Explicit target-to-source behavior, covered by
-  `data-binding-graph-formula-list-fallback-bindable-list-explicit-target-to-source-runtime-contract.md`.
-- Public `updateDataBinds(true)` target-to-source behavior, covered by
-  `data-binding-graph-formula-list-fallback-bindable-list-public-update-target-to-source-runtime-contract.md`.
-- Main-`ToTarget | TwoWay` target-dirty behavior for random-function formula
-  list targets, covered by
-  `data-binding-graph-formula-random-list-fallback-bindable-list-main-to-target-two-way-target-dirty-runtime-contract.md`.
+- Deterministic `FormulaTokenInput` target-dirty behavior, covered by
+  `data-binding-graph-formula-list-fallback-bindable-list-main-to-target-two-way-target-dirty-runtime-contract.md`.
+- Source-to-target random-function list-target fallback behavior, covered by
+  `data-binding-graph-formula-random-list-fallback-bindable-list-target-runtime-contract.md`.
+- Explicit target-to-source behavior for random-function formula list targets,
+  covered by
+  `data-binding-graph-formula-random-list-fallback-bindable-list-explicit-target-to-source-runtime-contract.md`.
+- Public-update target-to-source behavior for random-function formula list
+  targets, covered by
+  `data-binding-graph-formula-random-list-fallback-bindable-list-public-update-target-to-source-runtime-contract.md`.
 - `DataConverterNumberToList`, which is covered by the existing bindable-list
   and number-to-list contracts.
 - Generated list item creation, generated item identity, item-level binding,
@@ -56,13 +59,15 @@ the list target.
 
 ## Completion Checks
 
-- The initial normal state-machine advance applies the formula fallback scalar
-  to `BindablePropertyList.propertyValue`.
+- The initial normal state-machine advance applies the random-function formula
+  fallback scalar to `BindablePropertyList.propertyValue`.
 - A manual edit to the list target is preserved through explicit
   data-context advancement.
 - A later normal state-machine advance reapplies the formula fallback scalar
   to the list target.
 - Rust reports the same unchanged source list size as C++ throughout the
   sequence.
-- Existing deterministic formula list-target source-to-target and reverse
+- Random modes `0`, `1`, and `2` match C++ even when Rust is supplied non-zero
+  random values.
+- Existing random-function formula list-target source-to-target and reverse
   probes continue to pass.

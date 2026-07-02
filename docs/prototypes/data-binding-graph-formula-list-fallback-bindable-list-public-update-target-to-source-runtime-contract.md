@@ -46,7 +46,9 @@ the target scalar becomes the formula fallback value.
 - Main-`ToTarget | TwoWay` target-dirty scheduling for deterministic formula
   list targets is covered separately by
   `data-binding-graph-formula-list-fallback-bindable-list-main-to-target-two-way-target-dirty-runtime-contract.md`.
-- Remaining random target-dirty scheduling for formula list targets.
+- Main-`ToTarget | TwoWay` target-dirty scheduling for random-function formula
+  list targets is covered separately by
+  `data-binding-graph-formula-random-list-fallback-bindable-list-main-to-target-two-way-target-dirty-runtime-contract.md`.
 - `DataConverterNumberToList`, which is covered by the existing bindable-list
   and number-to-list contracts.
 - Generated list item creation, generated item identity, item-level binding,

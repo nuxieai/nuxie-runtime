@@ -3487,6 +3487,12 @@ slice.
   missing, non-number, and manifest-name source paths is unchanged. The
   contract is
   `docs/prototypes/data-binding-graph-operation-viewmodel-runtime-data-context-operand-contract.md`.
+- Operation-view-model non-number operand fallback slice:
+  direct and grouped `DataConverterOperationViewModel` default-context
+  secondary operands now have explicit symbol-list-index fallback coverage.
+  C++ only stores `ViewModelInstanceNumber` secondary sources, so non-number
+  secondary values use the `0.0` operand fallback. The contract is
+  `docs/prototypes/data-binding-graph-operation-viewmodel-non-number-operand-runtime-contract.md`.
 - Operation-view-model context recompute slice:
   direct `DataConverterOperationViewModel` number operands now refresh when
   imported or owned runtime view-model contexts are bound, while default

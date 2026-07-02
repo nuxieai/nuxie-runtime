@@ -1924,6 +1924,17 @@ slice.
   target-to-source/public-update/target-dirty behavior, list paths,
   imported/owned contexts, secondary dependency invalidation, and real random
   generation remain follow-up slices.
+- `DataConverterFormula` random group non-number explicit target-to-source
+  slice: default-context boolean, enum, color, string, and trigger sources
+  feeding number targets through a main-`ToSource | TwoWay`
+  `DataConverterGroup<OperationValue, Formula(random)>` now preserve the
+  non-number source when grouped number conversion produces a number. Rust then
+  performs the same immediate source-to-target reapply that C++ reports for
+  `randomModeValue` values `0`, `1`, and `2`. C++ and Rust random call counts
+  match at `[1, 1, 1]` for default, always, and source-change explicit
+  target-to-source schedules. Grouped non-number public-update/target-dirty
+  behavior, list paths, imported/owned contexts, secondary dependency
+  invalidation, and real random generation remain follow-up slices.
 - `DataConverterFormula` random group source-change target-to-source slice:
   default-context number sources feeding number targets through a
   main-`ToSource | TwoWay` `DataConverterGroup<OperationValue,

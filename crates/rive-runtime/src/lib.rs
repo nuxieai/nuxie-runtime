@@ -13325,53 +13325,36 @@ impl RuntimeDataBindGraphSourceNode {
                 Some(RuntimeDataBindGraphValue::Number(value))
             }
             (RuntimeDataBindGraphValue::Boolean(value), RuntimeDataBindGraphValue::Number(_))
-                if matches!(
-                    self.converter.as_ref(),
-                    Some(
-                        RuntimeDataBindGraphConverter::ToNumber
-                            | RuntimeDataBindGraphConverter::Formula { .. }
-                    )
+                if self.converter.as_ref().is_some_and(
+                    runtime_data_bind_graph_converter_preserves_non_trigger_non_number_source_on_number_target_apply,
                 ) =>
             {
                 Some(RuntimeDataBindGraphValue::Boolean(*value))
             }
             (RuntimeDataBindGraphValue::String(value), RuntimeDataBindGraphValue::Number(_))
-                if matches!(
-                    self.converter.as_ref(),
-                    Some(
-                        RuntimeDataBindGraphConverter::ToNumber
-                            | RuntimeDataBindGraphConverter::Formula { .. }
-                    )
+                if self.converter.as_ref().is_some_and(
+                    runtime_data_bind_graph_converter_preserves_non_trigger_non_number_source_on_number_target_apply,
                 ) =>
             {
                 Some(RuntimeDataBindGraphValue::String(value.clone()))
             }
             (RuntimeDataBindGraphValue::Color(value), RuntimeDataBindGraphValue::Number(_))
-                if matches!(
-                    self.converter.as_ref(),
-                    Some(
-                        RuntimeDataBindGraphConverter::ToNumber
-                            | RuntimeDataBindGraphConverter::Formula { .. }
-                    )
+                if self.converter.as_ref().is_some_and(
+                    runtime_data_bind_graph_converter_preserves_non_trigger_non_number_source_on_number_target_apply,
                 ) =>
             {
                 Some(RuntimeDataBindGraphValue::Color(*value))
             }
             (RuntimeDataBindGraphValue::Enum(value), RuntimeDataBindGraphValue::Number(_))
-                if matches!(
-                    self.converter.as_ref(),
-                    Some(
-                        RuntimeDataBindGraphConverter::ToNumber
-                            | RuntimeDataBindGraphConverter::Formula { .. }
-                    )
+                if self.converter.as_ref().is_some_and(
+                    runtime_data_bind_graph_converter_preserves_non_trigger_non_number_source_on_number_target_apply,
                 ) =>
             {
                 Some(RuntimeDataBindGraphValue::Enum(*value))
             }
             (RuntimeDataBindGraphValue::Trigger(value), RuntimeDataBindGraphValue::Number(_))
-                if matches!(
-                    self.converter.as_ref(),
-                    Some(RuntimeDataBindGraphConverter::Formula { .. })
+                if self.converter.as_ref().is_some_and(
+                    runtime_data_bind_graph_converter_preserves_trigger_source_on_number_target_apply,
                 ) =>
             {
                 Some(RuntimeDataBindGraphValue::Trigger(*value))
@@ -13917,6 +13900,30 @@ fn runtime_data_bind_graph_converter_preserves_symbol_list_index_source_on_numbe
         RuntimeDataBindGraphConverter::ToNumber | RuntimeDataBindGraphConverter::Formula { .. }
     ) || (matches!(converter, RuntimeDataBindGraphConverter::Group(_))
         && runtime_data_bind_graph_converter_accepts_symbol_list_index_number_source(converter))
+}
+
+fn runtime_data_bind_graph_converter_preserves_non_trigger_non_number_source_on_number_target_apply(
+    converter: &RuntimeDataBindGraphConverter,
+) -> bool {
+    matches!(
+        converter,
+        RuntimeDataBindGraphConverter::ToNumber | RuntimeDataBindGraphConverter::Formula { .. }
+    ) || matches!(
+        converter,
+        RuntimeDataBindGraphConverter::Group(converters)
+            if runtime_data_bind_graph_group_operation_formula_accepts_non_number_source(converters)
+    )
+}
+
+fn runtime_data_bind_graph_converter_preserves_trigger_source_on_number_target_apply(
+    converter: &RuntimeDataBindGraphConverter,
+) -> bool {
+    matches!(converter, RuntimeDataBindGraphConverter::Formula { .. })
+        || matches!(
+            converter,
+            RuntimeDataBindGraphConverter::Group(converters)
+                if runtime_data_bind_graph_group_operation_formula_accepts_non_number_source(converters)
+        )
 }
 
 fn runtime_data_bind_graph_group_operation_formula_accepts_non_number_source(

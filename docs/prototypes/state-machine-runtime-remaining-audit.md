@@ -1251,11 +1251,17 @@ slice.
   for number targets and state-machine `BindablePropertyList.propertyValue`
   targets. Source-to-target and target-dirty list fallback paths stay at zero,
   bindable-list targets stay at zero, and number-target explicit/public
-  reverse reapplication consumes one hidden pull before matching the same C++
-  probe observable fallback values for `randomModeValue` values `0`, `1`, and
-  `2`. Probe-visible C++ `RandomProvider::totalCalls`, imported/owned
-  contexts, real random generation, secondary dependency invalidation, and
-  full dirty-list scheduler parity remain follow-up slices. The contract is
+  reverse reapplication also stays at zero before matching the same C++ probe
+  observable fallback values for `randomModeValue` values `0`, `1`, and `2`.
+  Rust short-circuits direct formula conversion for preserved list sources
+  during number target-to-source application so it does not pull a host random
+  value that C++ never requests. The C++ probe now installs the counted random
+  provider with `--runtime-random-reset` and repeated
+  `--runtime-random-value` arguments, then compares each
+  `RandomProvider::totalCalls()` report against the matching Rust
+  state-machine clone. Imported/owned contexts, real random generation,
+  secondary dependency invalidation, and full dirty-list scheduler parity
+  remain follow-up slices. The contract is
   `docs/prototypes/data-binding-graph-formula-random-list-fallback-call-count-runtime-contract.md`.
 - `DataConverterFormula` list fallback public-update reverse slice:
   default-context list sources feeding main-`ToTarget | TwoWay` number targets

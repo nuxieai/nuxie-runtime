@@ -10,7 +10,7 @@ input shape. Rust mirrors the existing C++ probe-matched list fallback
 fixtures while pinning the host-supplied random stream side effect:
 source-to-target and target-dirty list fallback do not pull from the stream,
 bindable-list targets do not pull from the stream, and number-target reverse
-reapplication consumes one hidden pull before landing on the same observable
+reapplication also avoids pulling before landing on the same observable
 fallback value.
 
 ## In Scope
@@ -31,13 +31,14 @@ fallback value.
   list fallback C++ probe fixtures.
 - `StateMachineInstance::data_bind_formula_random_call_count()` as the Rust
   observable for pulls from the host-supplied formula random stream.
+- C++ probe `RandomProvider::totalCalls()` reports for the same seeded random
+  streams via `--runtime-random-reset` and repeated `--runtime-random-value`
+  arguments.
 - C++ probe comparisons for the same fixture values around the call-count
   assertions.
 
 ## Out Of Scope
 
-- Probe-visible C++ `RandomProvider::totalCalls()`. The current C++ probe links
-  the non-`TESTING` runtime build, where that API is not available.
 - A real Rust random generator, random seeding, platform RNG behavior, or
   parity with C++ `std::rand()`.
 - Queue-content parity beyond values supplied by
@@ -60,14 +61,17 @@ fallback value.
   zero.
 - Source-to-target list fallback for random modes `0`, `1`, and `2` leaves the
   call count at zero.
-- Explicit target-to-source list fallback for number targets consumes one
-  hidden pull during the mutated data-context pass and reuses that count
-  through later normal advances.
-- Public target-to-source list fallback for number targets consumes one hidden
-  pull during `updateDataBinds(true)` and reuses that count through later
-  normal advances.
+- Explicit target-to-source list fallback for number targets leaves the call
+  count at zero during the mutated data-context pass and through later normal
+  advances.
+- Public target-to-source list fallback for number targets leaves the call
+  count at zero during `updateDataBinds(true)` and through later normal
+  advances.
 - Explicit and public target-to-source list fallback for bindable-list targets
   leaves the call count at zero.
 - Target-dirty list fallback for number and bindable-list targets leaves the
   call count at zero through preservation and later normal advancement.
+- Every covered report compares C++ `RandomProvider::totalCalls()` against the
+  corresponding Rust state-machine clone's
+  `data_bind_formula_random_call_count()`.
 - The same fixtures continue to match C++ probe binding values.

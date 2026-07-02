@@ -13274,6 +13274,15 @@ impl RuntimeDataBindGraphSourceNode {
         if !self.bound || !self.applies_target_to_source() {
             return None;
         }
+        if let (
+            RuntimeDataBindGraphValue::List { item_count },
+            Some(RuntimeDataBindGraphConverter::Formula { .. }),
+        ) = (&self.value, self.converter.as_ref())
+        {
+            return Some(RuntimeDataBindGraphValue::List {
+                item_count: *item_count,
+            });
+        }
         let converted = match self.converter.as_ref() {
             None => RuntimeDataBindGraphValue::Number(value),
             Some(converter) if self.is_main_to_source() => {

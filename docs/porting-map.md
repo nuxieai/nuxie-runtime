@@ -4178,12 +4178,18 @@ random-stream call count for default-context list sources flowing through
 `FunctionType::random` fallback tokens. Source-to-target and target-dirty
 list fallback paths keep the count at zero, bindable-list targets keep the
 count at zero, and number-target explicit/public reverse reapplication
-consumes one hidden pull before landing on the same C++ probe observable
-fallback values. The contract is
+also keeps the count at zero before landing on the same C++ probe observable
+fallback values. Rust short-circuits direct formula conversion for preserved
+list sources during number target-to-source application so it does not pull a
+host random value that C++ never requests. The C++ probe now installs the
+counted random provider with `--runtime-random-reset` and repeated
+`--runtime-random-value` arguments, then compares each
+`RandomProvider::totalCalls()` report against the matching Rust state-machine
+clone. The contract is
 `docs/prototypes/data-binding-graph-formula-random-list-fallback-call-count-runtime-contract.md`.
-Probe-visible C++ `RandomProvider::totalCalls`, imported/owned contexts, real
-random generation, secondary dependency invalidation, and full dirty-list
-scheduler parity remain follow-up `#12` slices.
+Imported/owned contexts, real random generation, secondary dependency
+invalidation, and full dirty-list scheduler parity remain follow-up `#12`
+slices.
 
 Current #12 update: graph formula boolean fallback public update target-to-source
 Direct graph-owned `DataConverterFormula` now covers public

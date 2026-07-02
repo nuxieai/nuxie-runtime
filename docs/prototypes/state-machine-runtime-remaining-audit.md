@@ -1368,6 +1368,19 @@ slice.
   Target-to-source and target-dirty behavior are covered separately below.
   List formulas, other non-number random formulas, imported/owned contexts,
   and real random generation remain follow-up slices.
+- `DataConverterFormula` random symbol-list-index call-count source-to-target
+  slice: default-context symbol-list-index sources feeding number targets now
+  expose Rust's host-supplied random-stream pull count for direct
+  source-to-target formula evaluation. Default, always, and source-change
+  random modes cover cache reuse, a fresh always-mode pull on a
+  source-mutation-scheduled second formula evaluation, and source-change cache
+  clearing after
+  `set_default_view_model_symbol_list_index_source_for_data_bind`. Direct
+  explicit target-to-source, public-update, target-dirty, grouped
+  symbol-list-index, list/non-number, imported/owned, real random generation,
+  and probe-visible C++ `RandomProvider::totalCalls` behavior remain follow-up
+  slices. The contract is
+  `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-call-count-runtime-contract.md`.
 - `DataConverterFormula` random non-number fallback slice: default-context
   boolean, enum, color, string, and trigger sources feeding number targets now
   prove C++'s early formula fallback for `FunctionType::random` output tokens.

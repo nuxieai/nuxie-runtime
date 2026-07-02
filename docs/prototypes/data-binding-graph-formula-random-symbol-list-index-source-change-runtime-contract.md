@@ -30,8 +30,10 @@ fresh random value on the next formula evaluation.
 
 - A real Rust random generator or parity with C++ `std::rand()`.
 - Probe CLI support for seeding or queuing C++ runtime random values.
-- Random call-count parity and formula `addDirt` random-cache behavior for
-  symbol-list-index sources.
+- Direct source-to-target random call counts for symbol-list-index sources are
+  covered separately by
+  `data-binding-graph-formula-random-symbol-list-index-call-count-runtime-contract.md`.
+- Formula `addDirt` random-cache behavior for symbol-list-index sources.
 - Target-to-source symbol-list-index random formula scheduling is covered
   separately by
   `data-binding-graph-formula-random-symbol-list-index-target-to-source-runtime-contract.md`.

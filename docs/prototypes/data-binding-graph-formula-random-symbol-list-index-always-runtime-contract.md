@@ -30,8 +30,11 @@ evaluation, after the symbol-list-index source has been cast to `float`.
 - Direct source-to-target `RandomMode::sourceChange` scheduling is covered
   separately by
   `data-binding-graph-formula-random-symbol-list-index-source-change-runtime-contract.md`.
-- Broader random cache invalidation, random call-count parity, and formula
-  `addDirt` random-cache behavior for symbol-list-index sources.
+- Direct source-to-target random call counts for symbol-list-index sources are
+  covered separately by
+  `data-binding-graph-formula-random-symbol-list-index-call-count-runtime-contract.md`.
+- Broader random cache invalidation and formula `addDirt` random-cache
+  behavior for symbol-list-index sources.
 - Target-to-source symbol-list-index random formula scheduling is covered
   separately by
   `data-binding-graph-formula-random-symbol-list-index-target-to-source-runtime-contract.md`.

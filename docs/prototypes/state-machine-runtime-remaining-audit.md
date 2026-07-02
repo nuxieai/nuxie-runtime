@@ -3658,6 +3658,13 @@ slice.
   This uses the existing owned boolean mutation command rather than admitting
   non-number operation-viewmodel operands. The contract is
   `docs/prototypes/data-binding-graph-operation-viewmodel-owned-boolean-mutation-runtime-contract.md`.
+- Operation-view-model owned string mutation slice:
+  mutating an already-bound owned string source by state-machine data-bind
+  index now updates the ordinary string bind while direct and grouped
+  `DataConverterOperationViewModel` operands keep the C++ `0.0` fallback.
+  This uses the existing owned string mutation command rather than admitting
+  non-number operation-viewmodel operands. The contract is
+  `docs/prototypes/data-binding-graph-operation-viewmodel-owned-string-mutation-runtime-contract.md`.
 
 ## Remaining Runtime Slices
 
@@ -3713,9 +3720,9 @@ slice.
   file-backed lookup report, remaining converter name paths beyond the direct
   and grouped
   `DataConverterOperationViewModel` unsupported boundaries, owned-context
-  source mutation APIs beyond root number, symbol-list-index, and boolean
-  OperationViewModel operands, relative paths, parent paths, and nested source
-  kinds beyond the default-context number, boolean, string, color, enum,
+  source mutation APIs beyond root number, symbol-list-index, boolean, and
+  string OperationViewModel operands, relative paths, parent paths, and nested
+  source kinds beyond the default-context number, boolean, string, color, enum,
   symbol-list-index, asset, artboard, trigger, list, and view-model slices.
 - Nested artboard and nested animation/state-machine remapping.
 - Custom/scripted interpolators beyond transition timing and scripted listener

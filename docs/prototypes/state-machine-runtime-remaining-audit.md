@@ -1021,6 +1021,15 @@ slice.
   propagation, and full dirty-list scheduler parity remain follow-up slices.
   The contract is
   `docs/prototypes/data-binding-graph-formula-symbol-list-index-context-runtime-contract.md`.
+- Deterministic `DataConverterFormula` symbol-list-index context fanout slice:
+  imported runtime view-model symbol-list-index mutation now fans out to every
+  same-path symbol-list-index source node in the bound graph, and the
+  imported/owned symbol-list-index formula context probes include a same-path
+  direct integer observer. Random formulas,
+  reverse/public-update/target-dirty scheduling, relative/parent/nested lookup,
+  listener-owned data binding, nested artboard propagation, and full
+  dirty-list scheduler parity remain follow-up slices. The contract is
+  `docs/prototypes/data-binding-graph-formula-symbol-list-index-context-fanout-runtime-contract.md`.
 - First `DataConverterFormula` non-number fallback slice: default-context
   boolean sources feeding number targets now enter the formula converter and
   write C++'s early fallback value `0.0`. A C++ probe uses a non-zero imported

@@ -3941,13 +3941,14 @@ fn synthetic_state_machine_default_viewmodel_symbol_list_index_formula_blend_sta
     file_id: u64,
 ) -> Vec<u8> {
     synthetic_state_machine_default_viewmodel_symbol_list_index_formula_blend_state_with_flags(
-        file_id, 0,
+        file_id, 0, false,
     )
 }
 
 fn synthetic_state_machine_default_viewmodel_symbol_list_index_formula_blend_state_with_flags(
     file_id: u64,
     data_bind_flags: u64,
+    add_direct_observer_bind: bool,
 ) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "ViewModel", |bytes| {
@@ -4001,6 +4002,9 @@ fn synthetic_state_machine_default_viewmodel_symbol_list_index_formula_blend_sta
             Some(0),
             data_bind_flags,
         );
+        if add_direct_observer_bind {
+            push_bindable_integer_data_bind_context_with_flags(bytes, 0, &[0, 0], 0);
+        }
         push_object_with_properties(bytes, "BlendState1DViewModel", |_| {});
         push_blend_animation_1d(bytes, 0, 0.0);
         push_blend_animation_1d(bytes, 1, 1.0);
@@ -23505,7 +23509,9 @@ fn state_machine_imported_viewmodel_symbol_list_index_formula_context_matches_cp
 
     let label = "synthetic/runtime_state_machine_imported_viewmodel_symbol_list_index_formula_context_cpp.riv";
     let bytes =
-        synthetic_state_machine_default_viewmodel_symbol_list_index_formula_blend_state(8734);
+        synthetic_state_machine_default_viewmodel_symbol_list_index_formula_blend_state_with_flags(
+            8734, 0, true,
+        );
     let value = 9_u64;
     let args = [
         "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
@@ -23574,6 +23580,12 @@ fn state_machine_imported_viewmodel_symbol_list_index_formula_context_matches_cp
     {
         compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
         compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, label);
+        compare_state_machine_symbol_list_index_binding(
+            cpp_state_machine,
+            rust_state_machine,
+            1,
+            label,
+        );
         assert_eq!(
             rust_state_machine.default_view_model_symbol_list_index_source_value_for_data_bind(0),
             Some(value),
@@ -23593,7 +23605,9 @@ fn state_machine_owned_viewmodel_symbol_list_index_formula_context_matches_cpp_p
     let label =
         "synthetic/runtime_state_machine_owned_viewmodel_symbol_list_index_formula_context_cpp.riv";
     let bytes =
-        synthetic_state_machine_default_viewmodel_symbol_list_index_formula_blend_state(8735);
+        synthetic_state_machine_default_viewmodel_symbol_list_index_formula_blend_state_with_flags(
+            8735, 0, true,
+        );
     let value = 9_u64;
     let args = [
         "--runtime-bind-owned-view-model-symbol-list-index-state-machine-context".to_owned(),
@@ -23653,6 +23667,12 @@ fn state_machine_owned_viewmodel_symbol_list_index_formula_context_matches_cpp_p
     {
         compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
         compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, label);
+        compare_state_machine_symbol_list_index_binding(
+            cpp_state_machine,
+            rust_state_machine,
+            1,
+            label,
+        );
         assert_eq!(
             rust_state_machine.default_view_model_symbol_list_index_source_value_for_data_bind(0),
             Some(value),
@@ -23677,6 +23697,7 @@ fn state_machine_default_viewmodel_symbol_list_index_formula_public_update_targe
         synthetic_state_machine_default_viewmodel_symbol_list_index_formula_blend_state_with_flags(
             8633,
             DATA_BIND_TWO_WAY,
+            false,
         );
     let args = [
         "--runtime-bind-default-view-model-state-machine-context".to_owned(),
@@ -23768,6 +23789,7 @@ fn state_machine_default_viewmodel_symbol_list_index_formula_explicit_target_to_
         synthetic_state_machine_default_viewmodel_symbol_list_index_formula_blend_state_with_flags(
             8905,
             DATA_BIND_TO_SOURCE | DATA_BIND_TWO_WAY,
+            false,
         );
     let args = [
         "--runtime-bind-default-view-model-state-machine-context".to_owned(),
@@ -23858,6 +23880,7 @@ fn state_machine_default_viewmodel_symbol_list_index_formula_main_to_target_two_
         synthetic_state_machine_default_viewmodel_symbol_list_index_formula_blend_state_with_flags(
             8983,
             DATA_BIND_TWO_WAY,
+            false,
         );
     let args = [
         "--runtime-bind-default-view-model-state-machine-context".to_owned(),

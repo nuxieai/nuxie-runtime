@@ -3203,6 +3203,19 @@ item identity, relative/parent/nested lookup, listener-owned data binding,
 nested artboard propagation, and full dirty-list scheduler parity remain
 follow-up `#12` slices.
 
+Current #12 update: deterministic formula symbol-list-index context fanout
+Direct graph-owned `DataConverterFormula` symbol-list-index contexts now
+include a same-path direct integer observer. Imported-context
+symbol-list-index mutation fans out to every bound same-path
+symbol-list-index source node in the active graph before dirty reapplication,
+and owned-context binding refreshes both the formula source and observer
+source. The contract is
+`docs/prototypes/data-binding-graph-formula-symbol-list-index-context-fanout-runtime-contract.md`.
+Formula random functions, reverse propagation, public update,
+target-dirty scheduling, relative/parent/nested lookup, listener-owned data
+binding, nested artboard propagation, and full dirty-list scheduler parity
+remain follow-up `#12` slices.
+
 Current #12 update: deterministic formula boolean contexts
 Direct graph-owned `DataConverterFormula` fallback now covers boolean sources
 that are rebound through imported and owned runtime view-model contexts before

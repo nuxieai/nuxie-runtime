@@ -31,11 +31,14 @@ main-`ToSource | TwoWay` symbol-list-index binds that use
   formula evaluation in these fixtures.
 - C++ probe comparisons for the observable binding values around those Rust
   call-count assertions.
+- C++ probe `--runtime-random-reset`, repeated `--runtime-random-value`, and
+  per-action `runtimeStateMachineAdvances[].randomTotalCalls` comparisons.
 
 ## Out Of Scope
 
-- Probe-visible C++ `RandomProvider::totalCalls()`. The current C++ probe links
-  the non-`TESTING` runtime build, where that API is not available.
+- Upstream C++ `TESTING` builds or direct use of
+  `RandomProvider::totalCalls()` outside the probe-owned counted provider
+  shim.
 - A real Rust random generator, random seeding, platform RNG behavior, or
   parity with C++ `std::rand()`.
 - Queue-content parity beyond values supplied by
@@ -69,5 +72,8 @@ main-`ToSource | TwoWay` symbol-list-index binds that use
 - Source-change random mode consumes one value during explicit grouped
   target-to-source reapplication and reuses it because the symbol-list-index
   source is preserved rather than changed.
+- The C++ probe's `randomTotalCalls` reports match the expected C++ source
+  semantics and Rust's host-stream call count for every grouped explicit
+  target-to-source report.
 - The same grouped symbol-list-index fixtures continue to match C++ probe
   binding values.

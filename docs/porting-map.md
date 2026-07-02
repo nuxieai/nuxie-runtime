@@ -3933,13 +3933,15 @@ target-to-source scheduling through
 symbol-list-index sources feeding number targets. Default and source-change
 modes consume one visible reapply draw because the symbol-list-index source is
 preserved rather than changed; always mode consumes two values during the
-explicit pass, including the hidden grouped reverse-conversion draw. The
-contract is
+explicit pass, including the hidden grouped reverse-conversion draw. The C++
+probe now seeds deterministic random values and reports per-action
+`randomTotalCalls`, so this slice compares the Rust host-stream count directly
+against the C++ total after every grouped explicit target-to-source report.
+The contract is
 `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-group-target-to-source-call-count-runtime-contract.md`.
 List/non-number paths, imported/owned contexts, real random generation,
-probe-visible C++ `RandomProvider::totalCalls`, secondary dependency
-invalidation, and full dirty-list scheduler parity remain follow-up `#12`
-slices.
+secondary dependency invalidation, and full dirty-list scheduler parity remain
+follow-up `#12` slices.
 
 Current #12 update: graph formula random symbol-list-index group public-update target-to-source
 Grouped graph-owned `DataConverterFormula` random functions now cover public

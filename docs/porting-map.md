@@ -3650,13 +3650,12 @@ those non-number, non-symbol-list-index sources before evaluating formula
 tokens, so `FunctionType::random` is ignored for `randomModeValue` values `0`,
 `1`, and `2`. The contract is
 `docs/prototypes/data-binding-graph-formula-random-non-number-fallback-runtime-contract.md`.
-List formulas, target-to-source reverse conversion for the remaining
-non-number formula sources, imported/owned contexts, real random generation,
-enum/color/string/trigger target-dirty behavior, secondary dependency
-invalidation, and full dirty-list scheduler parity remain follow-up `#12`
-slices. Boolean target-to-source and target-dirty behavior are covered
-separately below. Source-to-target and target-to-source call counts are
-covered separately below.
+List formulas, imported/owned contexts, real random generation, secondary
+dependency invalidation, and full dirty-list scheduler parity remain
+follow-up `#12` slices. Boolean target-to-source and target-dirty behavior
+are covered separately below. Enum/color/string/trigger target-to-source and
+target-dirty behavior are covered separately below. Source-to-target and
+target-to-source call counts are covered separately below.
 
 Current #12 update: graph formula random non-number source-to-target call counts
 Direct graph-owned `DataConverterFormula` random functions now cover Rust's
@@ -3681,8 +3680,8 @@ fallback so the number target returns to C++'s `0.0` fallback for
 `randomModeValue` values `0`, `1`, and `2`. The contract is
 `docs/prototypes/data-binding-graph-formula-random-boolean-fallback-target-to-source-runtime-contract.md`.
 Enum, color, string, trigger, list, and symbol-list-index target-to-source
-behavior is covered separately below. Imported/owned contexts, real random
-generation, enum/color/string/trigger target-dirty behavior, secondary
+behavior plus enum/color/string/trigger target-dirty behavior are covered
+separately below. Imported/owned contexts, real random generation, secondary
 dependency invalidation, and full dirty-list scheduler parity remain
 follow-up `#12` slices. Boolean target-to-source call counts are covered
 separately below.
@@ -3695,10 +3694,9 @@ consume one hidden pull during reverse reapplication, then reuse that count
 through later normal advances for `randomModeValue` values `0`, `1`, and `2`,
 matching the C++ probe observable fallback values. The contract is
 `docs/prototypes/data-binding-graph-formula-random-boolean-fallback-target-to-source-call-count-runtime-contract.md`.
-Probe-visible C++ `RandomProvider::totalCalls`, enum/color/string/trigger
-target-dirty behavior, imported/owned contexts, real random generation,
-secondary dependency invalidation, and full dirty-list scheduler parity remain
-follow-up `#12` slices.
+Probe-visible C++ `RandomProvider::totalCalls`, imported/owned contexts, real
+random generation, secondary dependency invalidation, and full dirty-list
+scheduler parity remain follow-up `#12` slices.
 
 Current #12 update: graph formula random boolean fallback target-dirty
 Direct graph-owned `DataConverterFormula` random functions now cover
@@ -3709,9 +3707,26 @@ unchanged, reapplies C++'s numeric formula fallback on later normal
 state-machine advancement, and keeps the host-supplied random-stream call
 count at zero for `randomModeValue` values `0`, `1`, and `2`. The contract is
 `docs/prototypes/data-binding-graph-formula-random-boolean-fallback-main-to-target-two-way-target-dirty-runtime-contract.md`.
-Enum/color/string/trigger target-dirty behavior, imported/owned contexts,
-real random generation, secondary dependency invalidation, and full
-dirty-list scheduler parity remain follow-up `#12` slices.
+Enum/color/string/trigger target-dirty behavior is covered separately below.
+Imported/owned contexts, real random generation, secondary dependency
+invalidation, and full dirty-list scheduler parity remain follow-up `#12`
+slices.
+
+Current #12 update: graph formula random remaining fallbacks target-dirty
+Direct graph-owned `DataConverterFormula` random functions now cover
+main-`ToTarget | TwoWay` target-dirty behavior for default-context enum,
+color, string, and trigger sources feeding number targets. Rust preserves the
+manually edited number target during explicit data-context advancement, keeps
+enum/color/string sources unchanged, reapplies C++'s numeric formula fallback
+on later normal state-machine advancement, and keeps the host-supplied
+random-stream call count at zero for `randomModeValue` values `0`, `1`, and
+`2`. Trigger source count/reset behavior is outside this mixed-source
+number-target contract because the C++ probe does not expose trigger bindings
+for this bind shape. The contract is
+`docs/prototypes/data-binding-graph-formula-random-remaining-fallbacks-main-to-target-two-way-target-dirty-runtime-contract.md`.
+Imported/owned contexts, real random generation, secondary dependency
+invalidation, and full dirty-list scheduler parity remain follow-up `#12`
+slices.
 
 Current #12 update: graph formula random remaining fallbacks target-to-source
 Direct graph-owned `DataConverterFormula` random functions now cover explicit

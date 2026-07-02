@@ -44,6 +44,9 @@ for `randomModeValue` values `0`, `1`, and `2`.
 - Symbol-list-index random formula target-to-source behavior is covered
   separately by
   `data-binding-graph-formula-random-symbol-list-index-target-to-source-runtime-contract.md`.
+- Enum, color, string, and trigger random fallback target-dirty behavior is
+  covered separately by
+  `data-binding-graph-formula-random-remaining-fallbacks-main-to-target-two-way-target-dirty-runtime-contract.md`.
 - Number-source random formula evaluation and scheduling, covered by the
   direct and grouped random contracts.
 - Asset, artboard, and view-model pointer formula fallback reverse behavior.

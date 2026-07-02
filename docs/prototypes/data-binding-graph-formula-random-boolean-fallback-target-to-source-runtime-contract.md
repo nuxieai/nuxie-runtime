@@ -46,6 +46,9 @@ fallback. This remains true when the formula output queue contains
   direct and grouped random contracts.
 - Boolean random fallback target-dirty behavior is covered by
   `data-binding-graph-formula-random-boolean-fallback-main-to-target-two-way-target-dirty-runtime-contract.md`.
+- Enum, color, string, and trigger random fallback target-dirty behavior is
+  covered by
+  `data-binding-graph-formula-random-remaining-fallbacks-main-to-target-two-way-target-dirty-runtime-contract.md`.
 - Asset, artboard, and view-model pointer formula fallback reverse behavior.
 - Formula converter groups for non-number fallback sources.
 - Formula parent-source binding, source dependents, and general add-dirt

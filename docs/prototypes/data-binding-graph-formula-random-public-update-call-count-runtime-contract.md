@@ -41,9 +41,11 @@ main-`ToTarget | TwoWay` number binds.
   `data-binding-graph-formula-random-target-to-source-call-count-runtime-contract.md`.
 - Target-dirty call counts are covered by
   `data-binding-graph-formula-random-target-dirty-call-count-runtime-contract.md`.
-- Grouped converters, list sources, symbol-list-index sources, non-number
-  fallback sources, imported contexts, owned contexts, secondary converter
-  dependency invalidation, and full dirty-list scheduler parity.
+- Grouped public-update target-to-source call counts are covered separately by
+  `data-binding-graph-formula-random-group-public-update-call-count-runtime-contract.md`.
+- List sources, symbol-list-index sources, non-number fallback sources,
+  imported contexts, owned contexts, secondary converter dependency
+  invalidation, and full dirty-list scheduler parity.
 
 ## Completion Checks
 

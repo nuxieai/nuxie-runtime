@@ -1059,12 +1059,12 @@ slice.
   random tokens do not consume random values for non-number,
   non-symbol-list-index formula inputs. Probe-visible C++
   `RandomProvider::totalCalls`, real RNG generation/seeding, grouped
-  public-update/target-dirty call counts, imported/owned contexts, secondary
-  dependency invalidation, and full dirty-list scheduler parity remain
-  follow-up slices. Direct explicit target-to-source, public-update, and
-  target-dirty call counts are covered separately below. Grouped
-  source-to-target and explicit target-to-source call counts are covered
-  separately below. The contract is
+  target-dirty call counts, imported/owned contexts, secondary dependency
+  invalidation, and full dirty-list scheduler parity remain follow-up slices.
+  Direct explicit target-to-source, public-update, and target-dirty call counts
+  are covered separately below. Grouped source-to-target, explicit
+  target-to-source, and public-update call counts are covered separately below.
+  The contract is
   `docs/prototypes/data-binding-graph-formula-random-call-count-runtime-contract.md`.
 - `DataConverterFormula` random grouped call-count source-to-target slice:
   default-context number sources feeding number targets through
@@ -1072,10 +1072,10 @@ slice.
   host-supplied random-stream pull count and cover default, always, and
   source-change random modes. Probe-visible C++
   `RandomProvider::totalCalls`, real RNG generation/seeding, grouped
-  public-update/target-dirty call counts, list and non-number paths,
-  imported/owned contexts, secondary dependency invalidation, and full
-  dirty-list scheduler parity remain follow-up slices. Grouped explicit
-  target-to-source call counts are covered separately below. The contract is
+  target-dirty call counts, list and non-number paths, imported/owned
+  contexts, secondary dependency invalidation, and full dirty-list scheduler
+  parity remain follow-up slices. Grouped explicit target-to-source and
+  public-update call counts are covered separately below. The contract is
   `docs/prototypes/data-binding-graph-formula-random-group-call-count-runtime-contract.md`.
 - `DataConverterFormula` random call-count explicit target-to-source slice:
   default-context number sources feeding number targets now expose
@@ -1093,21 +1093,31 @@ slice.
   host-supplied random-stream pull counts for explicit
   `advance_data_context` target-to-source scheduling in default, always, and
   source-change random modes. Probe-visible C++ `RandomProvider::totalCalls`,
-  real RNG generation/seeding, grouped public-update/target-dirty call counts,
-  list and non-number paths, imported/owned contexts, secondary dependency
-  invalidation, and full dirty-list scheduler parity remain follow-up slices.
-  The contract is
+  real RNG generation/seeding, grouped target-dirty call counts, list and
+  non-number paths, imported/owned contexts, secondary dependency invalidation,
+  and full dirty-list scheduler parity remain follow-up slices. Grouped
+  public-update call counts are covered separately below. The contract is
   `docs/prototypes/data-binding-graph-formula-random-group-target-to-source-call-count-runtime-contract.md`.
 - `DataConverterFormula` random call-count public-update slice:
   default-context number sources feeding number targets now expose
   host-supplied random-stream pull counts for public
   `update_data_binds_apply_target_to_source` scheduling in default, always,
-  and source-change random modes. Grouped/list/non-number paths,
-  imported/owned contexts, secondary dependency invalidation, real RNG
-  generation/seeding, and full dirty-list scheduler parity remain follow-up
-  slices. Target-dirty call counts are covered separately below. The contract
-  is
+  and source-change random modes. Grouped public-update call counts are covered
+  separately below. List/non-number paths, imported/owned contexts, secondary
+  dependency invalidation, real RNG generation/seeding, and full dirty-list
+  scheduler parity remain follow-up slices. Target-dirty call counts are
+  covered separately below. The contract is
   `docs/prototypes/data-binding-graph-formula-random-public-update-call-count-runtime-contract.md`.
+- `DataConverterFormula` random grouped call-count public-update slice:
+  default-context number sources feeding number targets through
+  `DataConverterGroup<OperationValue, Formula(random)>` now expose
+  host-supplied random-stream pull counts for public
+  `update_data_binds_apply_target_to_source` scheduling in default, always,
+  and source-change random modes. Probe-visible C++ `RandomProvider::totalCalls`,
+  real RNG generation/seeding, grouped target-dirty call counts, list and
+  non-number paths, imported/owned contexts, secondary dependency invalidation,
+  and full dirty-list scheduler parity remain follow-up slices. The contract is
+  `docs/prototypes/data-binding-graph-formula-random-group-public-update-call-count-runtime-contract.md`.
 - `DataConverterFormula` random call-count target-dirty slice:
   default-context number sources feeding number targets now expose
   host-supplied random-stream pull counts for main-`ToTarget | TwoWay`
@@ -1640,11 +1650,12 @@ slice.
   Formula(random)>` now apply public target mutations through reverse group
   order when `randomModeValue == 1`. Rust consumes fresh host-supplied random
   values for initial source-to-target application, the public target-to-source
-  source write, same-update source-to-target reapplication, and later
-  state-machine advances, matching C++. Grouped target-dirty, source-change
-  grouped target-to-source/public-update/target-dirty, list formulas,
-  non-number, cache invalidation, call counts, imported/owned contexts, and
-  real random generation remain follow-up slices.
+  source write, and same-update source-to-target reapplication. Later normal
+  state-machine advances in this fixture do not reschedule the grouped formula
+  without another source or target mutation. Grouped target-dirty,
+  source-change grouped target-dirty, list formulas, non-number, cache
+  invalidation, call counts, imported/owned contexts, and real random
+  generation remain follow-up slices.
 - `DataConverterFormula` random group always-mode target-dirty slice:
   default-context number sources feeding number targets through a
   main-`ToTarget | TwoWay` `DataConverterGroup<OperationValue,

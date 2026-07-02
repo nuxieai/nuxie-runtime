@@ -9,8 +9,9 @@ number binds.
 This covers the C++ behavior where a `DataConverterFormula` random function
 inside `DataConverterGroup<OperationValue, Formula(random)>` has
 `randomModeValue == 1` and consumes fresh random values across the initial
-source-to-target pass, public target-to-source source write, same-update
-source-to-target reapplication, and later state-machine advancement.
+source-to-target pass, public target-to-source source write, and same-update
+source-to-target reapplication. Later normal advances in this fixture do not
+reschedule the grouped formula.
 
 ## In Scope
 
@@ -44,7 +45,8 @@ source-to-target reapplication, and later state-machine advancement.
   target-dirty scheduling.
 - List formula, symbol-list-index, and non-number random formula scheduling.
 - Stateful grouped converters mixed with random formulas.
-- Random call-count parity outside the observed grouped bind.
+- Grouped public-update host random call-count parity is covered separately by
+  `data-binding-graph-formula-random-group-public-update-call-count-runtime-contract.md`.
 - External, imported, and owned contexts for this converter/source
   combination.
 - Relative-path, parent-path, nested-path, listener-owned, and update-queue
@@ -58,6 +60,7 @@ source-to-target reapplication, and later state-machine advancement.
   supplied random value for the source write.
 - Same-update source-to-target reapplication consumes another supplied random
   value instead of reusing the source-write value.
-- Later source-to-target advances keep consuming fresh supplied random values.
+- Later source-to-target advances in this fixture do not reschedule the
+  grouped formula without another source or target mutation.
 - Existing direct always, grouped default-mode, grouped always source-to-target,
   and grouped always explicit target-to-source random tests still pass.

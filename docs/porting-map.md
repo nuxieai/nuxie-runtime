@@ -3160,6 +3160,22 @@ parity, imported/owned contexts, pending add/remove behavior, re-entry
 protection, relative/parent/nested lookup, listener-owned data binding, and
 nested artboard propagation remain follow-up `#12` slices.
 
+Current #12 update: deterministic formula number contexts
+Direct graph-owned `DataConverterFormula` converters now cover number sources
+that are rebound through imported and owned runtime view-model contexts before
+normal state-machine advancement. The imported-context probe binds a
+file-backed `ViewModelInstance`, mutates the bound number source, and proves
+the formula target uses that rebound source. The owned-context probe creates a
+runtime-owned view-model instance, mutates its number property before binding,
+and proves the same formula conversion path matches C++. The contract is
+`docs/prototypes/data-binding-graph-formula-number-context-runtime-contract.md`.
+Formula random functions, symbol-list-index and non-number formula contexts,
+reverse propagation, public update, target-dirty scheduling, imported-context
+sharing beyond existing scalar sharing probes, generated list item identity,
+relative/parent/nested lookup, listener-owned data binding, nested artboard
+propagation, and full dirty-list scheduler parity remain follow-up `#12`
+slices.
+
 Current #12 update: first graph formula random function
 Direct graph-owned `DataConverterFormula` converters now admit the first
 `FunctionType::random` slice for default-context number sources feeding number

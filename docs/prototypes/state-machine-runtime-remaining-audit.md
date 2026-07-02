@@ -984,6 +984,17 @@ slice.
   including C++ stack collapse and arithmetic operation behavior. A C++ probe
   covers deterministic formula operations through an existing blend-state
   consumer.
+- Deterministic `DataConverterFormula` imported/owned number-context slice:
+  imported and owned runtime view-model number contexts now feed rebound
+  source values into the same direct formula converter path before normal
+  state-machine advancement. The imported probe mutates the bound
+  file-backed context source; the owned probe mutates a runtime-owned number
+  property before binding. Formula random functions, symbol-list-index and
+  non-number formula contexts, reverse/public-update/target-dirty scheduling,
+  generated list item identity, relative/parent/nested lookup, listener-owned
+  data binding, nested artboard propagation, and full dirty-list scheduler
+  parity remain follow-up slices. The contract is
+  `docs/prototypes/data-binding-graph-formula-number-context-runtime-contract.md`.
 - Second deterministic `DataConverterFormula` graph-owned converter execution
   slice: default-context symbol-list-index sources feeding number targets are
   now cast to `f32` before entering the deterministic formula evaluator. A C++

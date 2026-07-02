@@ -38,6 +38,9 @@ source-to-target evaluation.
 - Direct explicit target-to-source `RandomMode::always` scheduling is covered
   separately by
   `data-binding-graph-formula-random-always-target-to-source-runtime-contract.md`.
+- Direct public update target-to-source `RandomMode::always` scheduling is
+  covered separately by
+  `data-binding-graph-formula-random-always-public-update-target-to-source-runtime-contract.md`.
 - `RandomMode::sourceChange`, random cache invalidation, random call-count
   parity, and formula `addDirt` random-cache behavior.
 - Grouped source-to-target scheduling is covered separately by

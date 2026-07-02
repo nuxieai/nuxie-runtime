@@ -3233,10 +3233,24 @@ consumes one host-supplied random value for the target-to-source source write,
 another for same-bind source-to-target reapplication, and fresh values on later
 state-machine advances, matching the C++ probe reports. The contract is
 `docs/prototypes/data-binding-graph-formula-random-always-target-to-source-runtime-contract.md`.
-Public update, target-dirty, grouped target-to-source, grouped public-update,
-grouped target-dirty, list, and remaining non-number `RandomMode::always`
-scheduling, broader cache invalidation, random call counts, imported/owned
-contexts, and full dirty-list scheduler parity remain follow-up `#12` slices.
+Target-dirty, grouped target-to-source, grouped public-update, grouped
+target-dirty, list, and remaining non-number `RandomMode::always` scheduling,
+broader cache invalidation, random call counts, imported/owned contexts, and
+full dirty-list scheduler parity remain follow-up `#12` slices.
+
+Current #12 update: graph formula random always mode public update target-to-source
+Direct graph-owned `DataConverterFormula` random functions now cover public
+`update_data_binds_apply_target_to_source` scheduling for main-`ToTarget |
+TwoWay` default-context number binds when `randomModeValue == 1`. Rust
+consumes fresh host-supplied random values for the initial source-to-target
+pass, the public target-to-source source write, same-update source-to-target
+reapplication, and later state-machine advances, matching the C++ probe
+reports. The contract is
+`docs/prototypes/data-binding-graph-formula-random-always-public-update-target-to-source-runtime-contract.md`.
+Target-dirty, grouped target-to-source, grouped public-update, grouped
+target-dirty, list, and remaining non-number `RandomMode::always` scheduling,
+broader cache invalidation, random call counts, imported/owned contexts, and
+full dirty-list scheduler parity remain follow-up `#12` slices.
 
 Current #12 update: graph formula random source-change mode source-to-target
 Direct graph-owned `DataConverterFormula` random functions now cover the first

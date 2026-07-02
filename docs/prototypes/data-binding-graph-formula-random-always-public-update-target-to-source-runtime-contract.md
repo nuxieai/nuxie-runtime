@@ -1,15 +1,16 @@
-# Data Binding Graph Formula Random Always Target-To-Source Runtime Contract
+# Data Binding Graph Formula Random Always Public Update Target-To-Source Runtime Contract
 
 ## Purpose
 
 Extend the host-supplied graph formula random slice to direct
-`RandomMode::always` explicit target-to-source scheduling for default-context
+`RandomMode::always` public target-to-source scheduling for default-context
 number binds.
 
 This covers the C++ behavior where a `DataConverterFormula` random function
-with `randomModeValue == 1` consumes a fresh random value for the explicit
-target-to-source source write, then consumes fresh values for the same-bind
-source-to-target reapplication and later state-machine advancement.
+with `randomModeValue == 1` consumes fresh random values across the initial
+source-to-target pass, public `updateDataBinds(true)` target-to-source source
+write, same-update source-to-target reapplication, and later state-machine
+advancement.
 
 ## In Scope
 
@@ -22,16 +23,16 @@ source-to-target reapplication and later state-machine advancement.
 - `DataConverterFormula.randomModeValue == 1`.
 - `StateMachineInstance::set_data_bind_formula_random_values` as the
   host-supplied graph formula random stream.
-- Explicit target-to-source scheduling through `advance_data_context`.
+- Public target-to-source scheduling through
+  `update_data_binds_apply_target_to_source`.
 - Source-to-target state-machine advancement and C++ probe number reports.
 
 ## Out Of Scope
 
 - A real Rust random generator or parity with C++ `std::rand()`.
 - Probe CLI support for seeding or queuing C++ runtime random values.
-- Direct public update target-to-source `RandomMode::always` scheduling is
-  covered separately by
-  `data-binding-graph-formula-random-always-public-update-target-to-source-runtime-contract.md`.
+- Explicit target-to-source scheduling is covered separately by
+  `data-binding-graph-formula-random-always-target-to-source-runtime-contract.md`.
 - Target-dirty, grouped, list, symbol-list-index, and non-number
   `RandomMode::always` target-to-source scheduling.
 - `RandomMode::sourceChange`, random cache invalidation, random call-count
@@ -44,10 +45,12 @@ source-to-target reapplication and later state-machine advancement.
 
 ## Completion Checks
 
-- Explicit target-to-source conversion after a target mutation consumes the
-  first supplied random value for the source write.
-- Same-bind source-to-target reapplication consumes the next supplied random
-  value instead of reusing the first one.
+- The initial source-to-target advance consumes the first supplied random
+  value.
+- Public target-to-source conversion after a target mutation consumes the next
+  supplied random value for the source write.
+- Same-update source-to-target reapplication consumes another supplied random
+  value instead of reusing the source-write value.
 - Later source-to-target advances keep consuming fresh supplied random values.
-- Existing default-mode and source-to-target always-mode random tests still
-  pass.
+- Existing default-mode and explicit target-to-source always-mode random tests
+  still pass.

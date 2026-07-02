@@ -1058,11 +1058,22 @@ slice.
   scheduling when `randomModeValue == 1`. Rust consumes a fresh host-supplied
   random value for the source write, another for same-bind source-to-target
   reapplication, and fresh values on later state-machine advances, matching
-  the C++ probe reports. Public update, target-dirty, grouped
-  target-to-source, grouped public-update, grouped target-dirty, list,
-  remaining non-number `RandomMode::always`, real Rust random generation, C++
-  random seeding/queueing, cache invalidation, and call counts remain follow-up
+  the C++ probe reports. Target-dirty, grouped target-to-source, grouped
+  public-update, grouped target-dirty, list, remaining non-number
+  `RandomMode::always`, real Rust random generation, C++ random
+  seeding/queueing, cache invalidation, and call counts remain follow-up
   slices.
+- `DataConverterFormula` random always-mode public update target-to-source
+  slice: default-context number sources feeding number targets now execute
+  main-`ToTarget | TwoWay` public `update_data_binds_apply_target_to_source`
+  scheduling when `randomModeValue == 1`. Rust consumes fresh host-supplied
+  random values for the initial source-to-target pass, the public
+  target-to-source source write, same-update source-to-target reapplication,
+  and later state-machine advances, matching the C++ probe reports.
+  Target-dirty, grouped target-to-source, grouped public-update, grouped
+  target-dirty, list, remaining non-number `RandomMode::always`, real Rust
+  random generation, C++ random seeding/queueing, cache invalidation, and call
+  counts remain follow-up slices.
 - `DataConverterFormula` random source-change source-to-target slice:
   default-context number sources feeding number targets now execute direct
   `FunctionType::random` output-queue tokens when `randomModeValue == 2`.

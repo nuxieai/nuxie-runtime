@@ -4730,6 +4730,18 @@ mutation APIs, relative/parent/nested lookup, listener-owned data binding,
 nested artboard propagation, and full dirty-list scheduler parity remain
 follow-up `#12` slices.
 
+Current #12 update: graph formula random object fallback
+Direct graph-owned `DataConverterFormula` object-like sources now cover
+`FunctionType::random` output tokens with `randomModeValue` values `0`, `1`,
+and `2`. Rust and C++ both take the early non-number fallback branch, write
+`0.0` to the number target, and report zero random-provider calls. The contract
+is
+`docs/prototypes/data-binding-graph-formula-random-object-fallback-runtime-contract.md`.
+Random object fallback scheduling, imported/owned contexts, source mutation
+APIs, relative/parent/nested lookup, listener-owned data binding, nested
+artboard propagation, and full dirty-list scheduler parity remain follow-up
+`#12` slices.
+
 Current #12 update: non-scripting `ScriptedDataConverter` now participates in
 the runtime data-bind graph as inherited C++ base converter pass-through. A
 main-`ToTarget | TwoWay` number bind with a direct scripted converter applies

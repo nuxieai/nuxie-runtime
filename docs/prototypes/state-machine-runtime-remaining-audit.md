@@ -1041,6 +1041,18 @@ slice.
   artboard propagation, and full dirty-list scheduler parity remain follow-up
   slices. The contract is
   `docs/prototypes/data-binding-graph-formula-enum-context-runtime-contract.md`.
+- Deterministic `DataConverterFormula` imported/owned color-context slice:
+  imported and owned runtime view-model color contexts now feed rebound source
+  values into the direct formula fallback path before normal state-machine
+  advancement. The fixture includes a same-path direct color observer, so
+  imported-context color mutation now fans out to every same-path color source
+  node in the active graph. String/trigger and list formula contexts,
+  same-path imported fanout for non-boolean/non-enum/non-color source kinds,
+  random formulas, reverse/public-update/target-dirty scheduling, generated
+  list item identity, relative/parent/nested lookup, listener-owned data
+  binding, nested artboard propagation, and full dirty-list scheduler parity
+  remain follow-up slices. The contract is
+  `docs/prototypes/data-binding-graph-formula-color-context-runtime-contract.md`.
 - First `DataConverterFormula` non-number fallback public-update reverse
   slice: default-context boolean sources feeding main-`ToTarget | TwoWay`
   number targets now preserve the unchanged boolean source when reverse formula

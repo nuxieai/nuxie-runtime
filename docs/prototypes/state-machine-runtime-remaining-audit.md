@@ -1182,6 +1182,18 @@ slice.
   nested artboard propagation, and full dirty-list scheduler parity remain
   follow-up slices. The contract is
   `docs/prototypes/data-binding-graph-formula-list-context-runtime-contract.md`.
+- Deterministic `DataConverterFormula` owned list mutation slice: post-bind
+  owned root list item-count mutation by state-machine data-bind index now
+  refreshes the direct formula fallback number target and a same-path direct
+  list observer. The Rust runtime exposes
+  `set_owned_view_model_context_list_source_item_count_for_data_bind`, and the
+  C++ probe retains active owned list contexts plus
+  `--runtime-set-owned-view-model-source-list` for parity comparison.
+  Generated list item identity beyond item-count parity, random formulas,
+  reverse/public-update/target-dirty scheduling, relative/parent/nested
+  lookup, listener-owned data binding, nested artboard propagation, and full
+  dirty-list scheduler parity remain follow-up slices. The contract is
+  `docs/prototypes/data-binding-graph-formula-owned-list-mutation-runtime-contract.md`.
 - First `DataConverterFormula` non-number fallback public-update reverse
   slice: default-context boolean sources feeding main-`ToTarget | TwoWay`
   number targets now preserve the unchanged boolean source when reverse formula

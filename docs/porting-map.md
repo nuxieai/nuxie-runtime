@@ -3349,12 +3349,11 @@ The C++ probe now retains active owned trigger contexts and exposes
 `--runtime-set-owned-view-model-source-trigger` for this comparison. The
 contract is
 `docs/prototypes/data-binding-graph-formula-owned-trigger-mutation-runtime-contract.md`.
-List formula contexts, imported same-path fanout for
-non-boolean/non-enum/non-color/non-string/non-trigger source kinds, formula
-random functions, reverse propagation, public update, target-dirty scheduling,
-generated list item identity, relative/parent/nested lookup, listener-owned
-data binding, nested artboard propagation, and full dirty-list scheduler parity
-remain follow-up `#12` slices.
+List owned mutation, formula random functions, reverse propagation, public
+update, target-dirty scheduling, generated list item identity,
+relative/parent/nested lookup, listener-owned data binding, nested artboard
+propagation, and full dirty-list scheduler parity remain follow-up `#12`
+slices.
 
 Current #12 update: deterministic formula list contexts
 Direct graph-owned `DataConverterFormula` fallback now covers list sources
@@ -3364,6 +3363,17 @@ list observer, so imported-context list item-count mutation now fans out to
 every bound same-path list source node in the active graph before dirty
 reapplication. The contract is
 `docs/prototypes/data-binding-graph-formula-list-context-runtime-contract.md`.
+
+Current #12 update: deterministic formula owned list source mutation
+Direct graph-owned `DataConverterFormula` list fallback now covers post-bind
+owned root list item-count mutation by state-machine data-bind index. The
+same-path direct list observer and formula fallback number target both refresh
+after
+`StateMachineInstance::set_owned_view_model_context_list_source_item_count_for_data_bind`.
+The C++ probe now retains active owned list contexts and exposes
+`--runtime-set-owned-view-model-source-list` for this comparison. The contract
+is
+`docs/prototypes/data-binding-graph-formula-owned-list-mutation-runtime-contract.md`.
 Generated list item identity beyond item-count parity, formula random
 functions, reverse propagation, public update, target-dirty scheduling,
 relative/parent/nested lookup, listener-owned data binding, nested artboard

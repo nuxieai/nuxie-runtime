@@ -43,7 +43,8 @@ formula path.
 - Grouped symbol-list-index default-mode source-to-target scheduling is
   covered separately by
   `data-binding-graph-formula-random-symbol-list-index-group-runtime-contract.md`.
-- Grouped symbol-list-index target-dirty scheduling.
+- Grouped symbol-list-index target-dirty scheduling is covered separately by
+  `data-binding-graph-formula-random-symbol-list-index-group-target-dirty-runtime-contract.md`.
 - List formula random scheduling and non-number fallback random scheduling.
 - A real Rust random generator or parity with C++ `std::rand()`.
 - Probe CLI support for seeding or queuing C++ runtime random values.

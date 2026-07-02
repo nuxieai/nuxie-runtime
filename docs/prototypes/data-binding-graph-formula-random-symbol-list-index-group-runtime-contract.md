@@ -46,7 +46,8 @@ formula binds.
 - Grouped symbol-list-index public-update target-to-source scheduling is
   covered by
   `data-binding-graph-formula-random-symbol-list-index-group-public-update-target-to-source-runtime-contract.md`.
-- Grouped symbol-list-index target-dirty scheduling.
+- Grouped symbol-list-index target-dirty scheduling is covered by
+  `data-binding-graph-formula-random-symbol-list-index-group-target-dirty-runtime-contract.md`.
 - List formula random scheduling and non-number fallback random scheduling.
 - Stateful grouped converters mixed with symbol-list-index random formulas.
 - A real Rust random generator or parity with C++ `std::rand()`.

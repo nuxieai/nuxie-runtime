@@ -3544,10 +3544,24 @@ formula conversion produces a number, then reapplies that unchanged source
 through the random formula scheduling path for `randomModeValue` values `0`,
 `1`, and `2`. The contract is
 `docs/prototypes/data-binding-graph-formula-random-symbol-list-index-target-to-source-runtime-contract.md`.
-Target-dirty scheduling, grouped symbol-list-index random formulas,
-imported/owned contexts, real random generation, random call counts,
-secondary dependency invalidation, and full dirty-list scheduler parity remain
-follow-up `#12` slices.
+Target-dirty scheduling is covered separately below. Grouped symbol-list-index
+random formulas, imported/owned contexts, real random generation, random call
+counts, secondary dependency invalidation, and full dirty-list scheduler
+parity remain follow-up `#12` slices.
+
+Current #12 update: graph formula random symbol-list-index target-dirty
+Direct graph-owned `DataConverterFormula` random functions now cover
+main-`ToTarget | TwoWay` target-dirty scheduling for default-context
+symbol-list-index sources feeding number targets. Rust consumes or caches the
+host-supplied random value during initial source-to-target application,
+preserves a manual number target edit through explicit data-context
+advancement, then reapplies the unchanged symbol-list-index source through the
+random formula path on later normal advances for `randomModeValue` values `0`,
+`1`, and `2`. The contract is
+`docs/prototypes/data-binding-graph-formula-random-symbol-list-index-target-dirty-runtime-contract.md`.
+Grouped symbol-list-index random formulas, imported/owned contexts, real
+random generation, random call counts, secondary dependency invalidation, and
+full dirty-list scheduler parity remain follow-up `#12` slices.
 
 Current #12 update: graph formula list fallback
 Direct graph-owned `DataConverterFormula` now admits default-context list

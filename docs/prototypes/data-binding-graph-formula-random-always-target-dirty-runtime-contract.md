@@ -33,8 +33,10 @@ values when reapplying the unchanged source.
   `data-binding-graph-formula-random-always-target-to-source-runtime-contract.md`
   and
   `data-binding-graph-formula-random-always-public-update-target-to-source-runtime-contract.md`.
-- Grouped, list, symbol-list-index, and non-number `RandomMode::always`
-  target-dirty scheduling.
+- Symbol-list-index `RandomMode::always` target-dirty scheduling is covered
+  separately by
+  `data-binding-graph-formula-random-symbol-list-index-target-dirty-runtime-contract.md`.
+- Grouped, list, and non-number `RandomMode::always` target-dirty scheduling.
 - `RandomMode::sourceChange`, random cache invalidation, random call-count
   parity outside the observed direct bind, and formula `addDirt`
   random-cache behavior.

@@ -21032,6 +21032,138 @@ fn state_machine_default_viewmodel_symbol_list_index_formula_random_function_pub
 }
 
 #[test]
+fn state_machine_default_viewmodel_symbol_list_index_formula_random_function_main_to_target_two_way_target_dirty_matches_cpp_probe()
+ {
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    for random_mode_value in [0_u64, 1, 2] {
+        let label = format!(
+            "synthetic/runtime_state_machine_default_viewmodel_symbol_list_index_formula_random_target_dirty_mode_{}_cpp.riv",
+            random_mode_value
+        );
+        let bytes =
+            synthetic_state_machine_default_viewmodel_symbol_list_index_formula_function_blend_state_with_flags_and_random_mode(
+                8948 + random_mode_value,
+                16,
+                &[
+                    FormulaFunctionArgument::Value(2.0),
+                    FormulaFunctionArgument::Value(6.0),
+                ],
+                DATA_BIND_TWO_WAY,
+                random_mode_value,
+            );
+        let args = [
+            "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+            "0".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "--runtime-set-state-machine-bindable-number".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "4.46".to_owned(),
+            "--runtime-advance-state-machine-data-context".to_owned(),
+            "0".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "1".to_owned(),
+        ];
+
+        let cpp = read_cpp_probe_bytes_with_args(&probe, &label, &bytes, &args);
+        let cpp_artboard = cpp
+            .artboards
+            .first()
+            .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+        let initial_random = infer_formula_random_value_from_cpp_number_binding(
+            cpp_artboard,
+            0,
+            0,
+            2.0,
+            6.0,
+            &label,
+        );
+        let formula_random_values = if random_mode_value == 1 {
+            let first_reapply_random = infer_formula_random_value_from_cpp_number_binding(
+                cpp_artboard,
+                2,
+                0,
+                2.0,
+                6.0,
+                &label,
+            );
+            let second_reapply_random = infer_formula_random_value_from_cpp_number_binding(
+                cpp_artboard,
+                3,
+                0,
+                2.0,
+                6.0,
+                &label,
+            );
+            vec![initial_random, first_reapply_random, second_reapply_random]
+        } else {
+            vec![initial_random]
+        };
+
+        let (_, mut rust) = read_rust_instance_from_bytes(&bytes, &label);
+        let mut state_machine = rust
+            .state_machine_instance(0)
+            .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+        let mut rust_reports = Vec::new();
+        assert!(
+            state_machine.bind_default_view_model_context(),
+            "{label} failed to bind default view-model context"
+        );
+        state_machine.set_data_bind_formula_random_values(&formula_random_values);
+        rust_reports.push((
+            rust.advance_state_machine_instance(&mut state_machine, 0.0),
+            state_machine.clone(),
+        ));
+        assert!(
+            state_machine.set_bindable_number_for_data_bind(0, 4.46),
+            "{label} failed to mutate bindable number"
+        );
+        assert!(
+            state_machine.advance_data_context(),
+            "{label} failed to advance mutated data context"
+        );
+        rust_reports.push((false, state_machine.clone()));
+        rust_reports.push((
+            rust.advance_state_machine_instance(&mut state_machine, 0.0),
+            state_machine.clone(),
+        ));
+        rust_reports.push((
+            rust.advance_state_machine_instance(&mut state_machine, 1.0),
+            state_machine.clone(),
+        ));
+        let report = rust.update_components();
+
+        assert_eq!(
+            cpp_artboard.runtime_state_machine_advances.len(),
+            rust_reports.len(),
+            "{label} state-machine report count mismatch"
+        );
+        for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+            .runtime_state_machine_advances
+            .iter()
+            .zip(&rust_reports)
+        {
+            compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, &label);
+            compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, &label);
+        }
+        compare_cpp_runtime_update(&cpp, &rust, &report, &label);
+    }
+}
+
+#[test]
 fn state_machine_default_viewmodel_boolean_formula_fallback_matches_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");

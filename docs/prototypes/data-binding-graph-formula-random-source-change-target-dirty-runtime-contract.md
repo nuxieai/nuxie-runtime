@@ -34,8 +34,11 @@ not change.
   `data-binding-graph-formula-random-source-change-target-to-source-runtime-contract.md`.
 - Public update target-to-source scheduling is covered separately by
   `data-binding-graph-formula-random-source-change-public-update-target-to-source-runtime-contract.md`.
-- Grouped, list, symbol-list-index, and non-number `RandomMode::sourceChange`
-  target-dirty scheduling.
+- Symbol-list-index `RandomMode::sourceChange` target-dirty scheduling is
+  covered separately by
+  `data-binding-graph-formula-random-symbol-list-index-target-dirty-runtime-contract.md`.
+- Grouped, list, and non-number `RandomMode::sourceChange` target-dirty
+  scheduling.
 - Converter dependency invalidation for secondary source paths, including
   `DataConverterOperationViewModel` dependencies.
 - Random call-count parity outside the observed direct bind.

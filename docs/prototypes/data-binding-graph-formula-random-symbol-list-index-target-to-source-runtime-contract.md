@@ -45,7 +45,9 @@ through the same random formula scheduling path.
   `data-binding-graph-formula-random-symbol-list-index-always-runtime-contract.md`,
   and
   `data-binding-graph-formula-random-symbol-list-index-source-change-runtime-contract.md`.
-- Target-dirty scheduling for symbol-list-index random formula binds.
+- Target-dirty scheduling for symbol-list-index random formula binds is
+  covered separately by
+  `data-binding-graph-formula-random-symbol-list-index-target-dirty-runtime-contract.md`.
 - Grouped symbol-list-index random formula scheduling.
 - List formula random scheduling and non-number fallback random scheduling.
 - A real Rust random generator or parity with C++ `std::rand()`.

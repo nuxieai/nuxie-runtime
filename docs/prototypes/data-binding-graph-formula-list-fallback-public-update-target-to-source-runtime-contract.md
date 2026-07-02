@@ -44,7 +44,9 @@ fallback, restoring the number target to `0.0`.
   separately by
   `data-binding-graph-formula-symbol-list-index-public-update-target-to-source-runtime-contract.md`.
 - Asset, artboard, and view-model pointer formula fallback reverse behavior.
-- `FormulaTokenFunction`, random formula values, and `randomModeValue`.
+- `FormulaTokenFunction` with random formula values is covered separately by
+  `data-binding-graph-formula-random-list-fallback-target-to-source-runtime-contract.md`.
+- Other formula functions.
 - Formula converter groups.
 - Formula parent-source binding, source dependents, and general add-dirt
   behavior.

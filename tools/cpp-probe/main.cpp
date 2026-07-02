@@ -369,6 +369,7 @@ enum class RuntimeStateMachineActionKind
     SetViewModelInstanceSourceEnumByName,
     SetViewModelInstanceSourceSymbolListIndex,
     SetViewModelInstanceSourceSymbolListIndexByName,
+    SetOwnedViewModelSourceSymbolListIndex,
     SetViewModelInstanceSourceAsset,
     SetViewModelInstanceSourceAssetByName,
     SetViewModelInstanceSourceArtboard,
@@ -2883,6 +2884,32 @@ apply_runtime_state_machine_advances(rive::File* file,
             continue;
         }
         if (action.kind == RuntimeStateMachineActionKind::
+                               SetOwnedViewModelSourceSymbolListIndex)
+        {
+            auto sourceStateMachine = stateMachine->stateMachine();
+            auto dataBind =
+                sourceStateMachine == nullptr
+                    ? nullptr
+                    : sourceStateMachine->dataBind(action.dataBindIndex);
+            auto viewModelInstance =
+                activeOwnedViewModelInstances[action.stateMachineIndex];
+            if (dataBind != nullptr &&
+                dataBind->is<rive::DataBindContext>() &&
+                viewModelInstance != nullptr)
+            {
+                rive::DataContext context(viewModelInstance);
+                auto source = context.getViewModelProperty(
+                    dataBind->as<rive::DataBindContext>()->sourcePathIds());
+                if (source != nullptr &&
+                    source->is<rive::ViewModelInstanceSymbolListIndex>())
+                {
+                    source->as<rive::ViewModelInstanceSymbolListIndex>()
+                        ->propertyValue(action.uintValue);
+                }
+            }
+            continue;
+        }
+        if (action.kind == RuntimeStateMachineActionKind::
                                SetViewModelInstanceSourceSymbolListIndexByName)
         {
             auto viewModel =
@@ -4942,6 +4969,8 @@ apply_runtime_state_machine_advances(rive::File* file,
                         ->propertyValue(action.uintValue);
                 }
                 stateMachine->bindViewModelInstance(viewModelInstance);
+                activeOwnedViewModelInstances[action.stateMachineIndex] =
+                    viewModelInstance;
             }
             continue;
         }
@@ -13644,6 +13673,33 @@ int main(int argc, const char* argv[])
             continue;
         }
 
+        if (is_arg(argv[i],
+                   "--runtime-set-owned-view-model-source-symbol-list-index"))
+        {
+            if (i + 3 >= argc)
+            {
+                std::cerr << "--runtime-set-owned-view-model-source-symbol-list-index requires stateMachineIndex dataBindIndex value\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::
+                SetOwnedViewModelSourceSymbolListIndex;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.viewModelIndex = 0;
+            action.viewModelInstanceIndex = 0;
+            action.inputIndex = 0;
+            action.dataBindIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            action.uintValue =
+                static_cast<uint32_t>(std::strtoull(argv[++i], nullptr, 10));
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
         if (is_arg(
                 argv[i],
                 "--runtime-set-view-model-instance-source-symbol-list-index-by-name"))
@@ -15187,6 +15243,7 @@ int main(int argc, const char* argv[])
         std::cerr << "additional runtime flag: --runtime-set-view-model-instance-source-enum stateMachineIndex viewModelIndex instanceIndex dataBindIndex value\n";
         std::cerr << "additional runtime flag: --runtime-set-view-model-instance-source-enum-by-name stateMachineIndex viewModelIndex instanceIndex propertyName value\n";
         std::cerr << "additional runtime flag: --runtime-set-view-model-instance-source-symbol-list-index stateMachineIndex viewModelIndex instanceIndex dataBindIndex value\n";
+        std::cerr << "additional runtime flag: --runtime-set-owned-view-model-source-symbol-list-index stateMachineIndex dataBindIndex value\n";
         std::cerr << "additional runtime flag: --runtime-set-view-model-instance-source-asset stateMachineIndex viewModelIndex instanceIndex dataBindIndex value\n";
         std::cerr << "additional runtime flag: --runtime-set-view-model-instance-source-artboard stateMachineIndex viewModelIndex instanceIndex dataBindIndex value\n";
         std::cerr << "additional runtime flag: --runtime-set-view-model-instance-source-trigger stateMachineIndex viewModelIndex instanceIndex dataBindIndex value\n";

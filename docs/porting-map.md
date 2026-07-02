@@ -6510,11 +6510,20 @@ context is already bound. Rust exposes
 and the C++ probe retains the active owned number context for
 `--runtime-set-owned-view-model-source-number`. The contract is
 `docs/prototypes/data-binding-graph-operation-viewmodel-owned-number-mutation-runtime-contract.md`.
+
+Current #12 update: owned runtime symbol-list-index source mutation now
+preserves the `DataConverterOperationViewModel` non-number secondary operand
+fallback for direct converters and for
+`DataConverterGroup<OperationValue, OperationViewModel>`. Rust exposes
+`StateMachineInstance::set_owned_view_model_context_symbol_list_index_source_for_data_bind`,
+and the C++ probe retains active owned contexts for
+`--runtime-set-owned-view-model-source-symbol-list-index`. The contract is
+`docs/prototypes/data-binding-graph-operation-viewmodel-owned-symbol-mutation-runtime-contract.md`.
 Longer and exotic converter group permutations, relative/name converter paths,
-owned-context source mutation APIs beyond root number OperationViewModel
-operands, mutation-driven recompute for other converter families, broader
-dirty/update queues, listener-owned data binding, and nested artboard
-propagation remain follow-up `#12` slices.
+owned-context source mutation APIs beyond root number and symbol-list-index
+OperationViewModel operands, mutation-driven recompute for other converter
+families, broader dirty/update queues, listener-owned data binding, and nested
+artboard propagation remain follow-up `#12` slices.
 
 ## #13: Nested Artboards And Hosts
 

@@ -5011,6 +5011,19 @@ fn synthetic_state_machine_owned_viewmodel_number_operation_viewmodel_symbol_lis
     )
 }
 
+fn synthetic_state_machine_owned_viewmodel_number_operation_viewmodel_symbol_list_index_operand_mutation_blend_state(
+    file_id: u64,
+    grouped: bool,
+) -> Vec<u8> {
+    synthetic_state_machine_viewmodel_number_operation_viewmodel_symbol_list_index_operand_blend_state_with_options(
+        file_id,
+        grouped,
+        0,
+        None,
+        true,
+    )
+}
+
 fn synthetic_state_machine_viewmodel_number_operation_viewmodel_symbol_list_index_operand_blend_state_with_options(
     file_id: u64,
     grouped: bool,
@@ -30751,6 +30764,114 @@ fn operation_viewmodel_imported_symbol_list_index_source_mutation_fallback_match
 }
 
 #[test]
+fn operation_viewmodel_owned_symbol_list_index_source_mutation_fallback_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_owned_viewmodel_number_operation_viewmodel_symbol_source_mutation_cpp.riv";
+    let bytes =
+        synthetic_state_machine_owned_viewmodel_number_operation_viewmodel_symbol_list_index_operand_mutation_blend_state(
+            9305,
+            false,
+        );
+    let amount = 0.4_f32;
+    let symbol = 11_u64;
+    let args = [
+        "--runtime-bind-owned-view-model-number-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        amount.to_string(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-owned-view-model-source-symbol-list-index".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+        symbol.to_string(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    let mut context = RuntimeOwnedViewModelInstance::new(&runtime, 0)
+        .unwrap_or_else(|| panic!("missing owned view-model context for {label}"));
+
+    assert!(
+        context.set_number_by_property_index(0, amount),
+        "{label} failed to set owned primary number"
+    );
+    assert!(
+        state_machine.bind_owned_view_model_context(&context),
+        "{label} failed to bind owned view-model context"
+    );
+    let mut rust_reports = Vec::new();
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    assert!(
+        state_machine.set_owned_view_model_context_symbol_list_index_source_for_data_bind(
+            &mut context,
+            1,
+            symbol
+        ),
+        "{label} failed to mutate owned secondary symbol-list-index source"
+    );
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 1.0),
+        state_machine.clone(),
+    ));
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (step, (cpp_state_machine, (advanced, rust_state_machine))) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+        .enumerate()
+    {
+        let step_label = format!("{label} action {step}");
+        compare_state_machine_advance(
+            cpp_state_machine,
+            rust_state_machine,
+            *advanced,
+            &step_label,
+        );
+        compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, &step_label);
+        compare_state_machine_symbol_list_index_binding(
+            cpp_state_machine,
+            rust_state_machine,
+            1,
+            &step_label,
+        );
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
 fn operation_viewmodel_group_imported_symbol_list_index_source_mutation_fallback_matches_cpp_probe()
 {
     let Some(probe) = probe_path() else {
@@ -30843,6 +30964,114 @@ fn operation_viewmodel_group_imported_symbol_list_index_source_mutation_fallback
             rust_state_machine,
             1,
             label,
+        );
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn operation_viewmodel_group_owned_symbol_list_index_source_mutation_fallback_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_owned_viewmodel_number_operation_viewmodel_group_symbol_source_mutation_cpp.riv";
+    let bytes =
+        synthetic_state_machine_owned_viewmodel_number_operation_viewmodel_symbol_list_index_operand_mutation_blend_state(
+            9306,
+            true,
+        );
+    let amount = 0.4_f32;
+    let symbol = 11_u64;
+    let args = [
+        "--runtime-bind-owned-view-model-number-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        amount.to_string(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-owned-view-model-source-symbol-list-index".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+        symbol.to_string(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+    ];
+
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    let mut context = RuntimeOwnedViewModelInstance::new(&runtime, 0)
+        .unwrap_or_else(|| panic!("missing owned view-model context for {label}"));
+
+    assert!(
+        context.set_number_by_property_index(0, amount),
+        "{label} failed to set owned primary number"
+    );
+    assert!(
+        state_machine.bind_owned_view_model_context(&context),
+        "{label} failed to bind owned view-model context"
+    );
+    let mut rust_reports = Vec::new();
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    assert!(
+        state_machine.set_owned_view_model_context_symbol_list_index_source_for_data_bind(
+            &mut context,
+            1,
+            symbol
+        ),
+        "{label} failed to mutate grouped secondary owned symbol-list-index source"
+    );
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 1.0),
+        state_machine.clone(),
+    ));
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len(),
+        "{label} state-machine report count mismatch"
+    );
+    for (step, (cpp_state_machine, (advanced, rust_state_machine))) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+        .enumerate()
+    {
+        let step_label = format!("{label} action {step}");
+        compare_state_machine_advance(
+            cpp_state_machine,
+            rust_state_machine,
+            *advanced,
+            &step_label,
+        );
+        compare_state_machine_number_binding(cpp_state_machine, rust_state_machine, 0, &step_label);
+        compare_state_machine_symbol_list_index_binding(
+            cpp_state_machine,
+            rust_state_machine,
+            1,
+            &step_label,
         );
     }
     compare_cpp_runtime_update(&cpp, &rust, &report, label);

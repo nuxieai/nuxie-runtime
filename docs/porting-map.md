@@ -3220,9 +3220,23 @@ C++ probe derives two random draws from two state-machine number-binding
 reports and supplies both to Rust before advancing. The contract is
 `docs/prototypes/data-binding-graph-formula-random-always-runtime-contract.md`.
 Real Rust random generation, C++ probe random seeding/queueing,
-grouped/list/non-number `RandomMode::always` scheduling, broader cache
-invalidation, random call counts, imported/owned contexts, and full dirty-list
-scheduler parity remain follow-up `#12` slices.
+public update, target-dirty, grouped target-to-source, grouped public-update,
+grouped target-dirty, list, and remaining non-number `RandomMode::always`
+scheduling, broader cache invalidation, random call counts, imported/owned
+contexts, and full dirty-list scheduler parity remain follow-up `#12` slices.
+
+Current #12 update: graph formula random always mode explicit target-to-source
+Direct graph-owned `DataConverterFormula` random functions now cover explicit
+`advance_data_context` target-to-source scheduling for main-`ToSource |
+TwoWay` default-context number binds when `randomModeValue == 1`. Rust
+consumes one host-supplied random value for the target-to-source source write,
+another for same-bind source-to-target reapplication, and fresh values on later
+state-machine advances, matching the C++ probe reports. The contract is
+`docs/prototypes/data-binding-graph-formula-random-always-target-to-source-runtime-contract.md`.
+Public update, target-dirty, grouped target-to-source, grouped public-update,
+grouped target-dirty, list, and remaining non-number `RandomMode::always`
+scheduling, broader cache invalidation, random call counts, imported/owned
+contexts, and full dirty-list scheduler parity remain follow-up `#12` slices.
 
 Current #12 update: graph formula random source-change mode source-to-target
 Direct graph-owned `DataConverterFormula` random functions now cover the first

@@ -1052,6 +1052,17 @@ slice.
   scheduling, real Rust random generation, C++ random seeding/queueing, cache
   invalidation, call counts, list scheduling, and non-number random formulas
   remain outside the graph until fuller random-source state contracts exist.
+- `DataConverterFormula` random always-mode explicit target-to-source slice:
+  default-context number sources feeding number targets now execute
+  main-`ToSource | TwoWay` explicit `advance_data_context` target-to-source
+  scheduling when `randomModeValue == 1`. Rust consumes a fresh host-supplied
+  random value for the source write, another for same-bind source-to-target
+  reapplication, and fresh values on later state-machine advances, matching
+  the C++ probe reports. Public update, target-dirty, grouped
+  target-to-source, grouped public-update, grouped target-dirty, list,
+  remaining non-number `RandomMode::always`, real Rust random generation, C++
+  random seeding/queueing, cache invalidation, and call counts remain follow-up
+  slices.
 - `DataConverterFormula` random source-change source-to-target slice:
   default-context number sources feeding number targets now execute direct
   `FunctionType::random` output-queue tokens when `randomModeValue == 2`.

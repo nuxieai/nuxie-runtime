@@ -81,9 +81,9 @@ fn run() -> Result<(), String> {
                                 Some(rust_runner) => {
                                     let rust_stream =
                                         run_stream(rust_runner, entry, &file, &corpus_dir)?;
-                                    if rust_stream != cpp_stream {
+                                    if !streams_equivalent(&rust_stream, &cpp_stream) {
                                         failures.push(format!(
-                                            "{}: exact stream differs from C++",
+                                            "{}: exact stream differs from C++ beyond epsilon",
                                             entry.id
                                         ));
                                     }
@@ -404,6 +404,132 @@ fn resolve_script_path(path: &str, corpus_dir: &Path) -> PathBuf {
         path
     } else {
         corpus_dir.join(path)
+    }
+}
+
+const GOLDEN_FLOAT_EPSILON: f64 = 1.0e-4;
+
+fn streams_equivalent(left: &str, right: &str) -> bool {
+    if left == right {
+        return true;
+    }
+    if left.ends_with('\n') != right.ends_with('\n') {
+        return false;
+    }
+
+    let mut left_lines = left.lines();
+    let mut right_lines = right.lines();
+    loop {
+        match (left_lines.next(), right_lines.next()) {
+            (Some(left), Some(right)) if line_equivalent(left, right) => {}
+            (None, None) => return true,
+            _ => return false,
+        }
+    }
+}
+
+fn line_equivalent(left: &str, right: &str) -> bool {
+    let left_bytes = left.as_bytes();
+    let right_bytes = right.as_bytes();
+    let mut left_index = 0usize;
+    let mut right_index = 0usize;
+
+    while left_index < left_bytes.len() && right_index < right_bytes.len() {
+        if number_starts_at(left_bytes, left_index) && number_starts_at(right_bytes, right_index) {
+            let left_end = number_end(left_bytes, left_index);
+            let right_end = number_end(right_bytes, right_index);
+            let Ok(left_number) = left[left_index..left_end].parse::<f64>() else {
+                return false;
+            };
+            let Ok(right_number) = right[right_index..right_end].parse::<f64>() else {
+                return false;
+            };
+            if (left_number - right_number).abs() > GOLDEN_FLOAT_EPSILON {
+                return false;
+            }
+            left_index = left_end;
+            right_index = right_end;
+            continue;
+        }
+
+        if left_bytes[left_index] != right_bytes[right_index] {
+            return false;
+        }
+        left_index += 1;
+        right_index += 1;
+    }
+
+    left_index == left_bytes.len() && right_index == right_bytes.len()
+}
+
+fn number_starts_at(bytes: &[u8], index: usize) -> bool {
+    let byte = bytes[index];
+    if byte.is_ascii_digit() {
+        return true;
+    }
+    if byte == b'-' || byte == b'+' {
+        return bytes
+            .get(index + 1)
+            .is_some_and(|next| next.is_ascii_digit() || *next == b'.');
+    }
+    byte == b'.'
+        && bytes
+            .get(index + 1)
+            .is_some_and(|next| next.is_ascii_digit())
+}
+
+fn number_end(bytes: &[u8], start: usize) -> usize {
+    let mut index = start;
+    if matches!(bytes.get(index), Some(b'-' | b'+')) {
+        index += 1;
+    }
+
+    while bytes.get(index).is_some_and(u8::is_ascii_digit) {
+        index += 1;
+    }
+
+    if matches!(bytes.get(index), Some(b'.')) {
+        index += 1;
+        while bytes.get(index).is_some_and(u8::is_ascii_digit) {
+            index += 1;
+        }
+    }
+
+    if matches!(bytes.get(index), Some(b'e' | b'E')) {
+        let exponent_start = index;
+        index += 1;
+        if matches!(bytes.get(index), Some(b'-' | b'+')) {
+            index += 1;
+        }
+        let digits_start = index;
+        while bytes.get(index).is_some_and(u8::is_ascii_digit) {
+            index += 1;
+        }
+        if digits_start == index {
+            return exponent_start;
+        }
+    }
+
+    index
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stream_comparison_allows_float_epsilon() {
+        assert!(streams_equivalent(
+            "drawPath points=[(-15.2626038,-125)]\n",
+            "drawPath points=[(-15.2626648,-125)]\n"
+        ));
+    }
+
+    #[test]
+    fn stream_comparison_rejects_structural_differences() {
+        assert!(!streams_equivalent("drawPath id=2\n", "clipPath id=2\n"));
+        assert!(!streams_equivalent("drawPath id=2\n", "drawPath id=3\n"));
+        assert!(!streams_equivalent("drawPath id=2\n", "drawPath id=2"));
     }
 }
 

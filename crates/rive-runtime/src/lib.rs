@@ -27,6 +27,7 @@ pub struct ArtboardInstance {
     height: f32,
     origin_x: f32,
     origin_y: f32,
+    clip: bool,
     slots: Vec<InstanceSlot>,
     components: Vec<RuntimeComponent>,
     component_by_local: BTreeMap<usize, usize>,
@@ -105,6 +106,7 @@ impl ArtboardInstance {
             height: dimensions.height,
             origin_x: dimensions.origin_x,
             origin_y: dimensions.origin_y,
+            clip: dimensions.clip,
             slots,
             components,
             component_by_local,
@@ -310,12 +312,17 @@ impl ArtboardInstance {
         paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
     ) -> Result<()> {
         renderer.save();
-        let mut clip = runtime_make_path(
-            factory,
-            &runtime_rect_commands(0.0, 0.0, self.width, self.height),
-            RenderFillRule::Clockwise,
-        );
-        renderer.clip_path(clip.as_ref());
+        let mut clip = if self.clip {
+            let clip = runtime_make_path(
+                factory,
+                &runtime_rect_commands(0.0, 0.0, self.width, self.height),
+                RenderFillRule::Clockwise,
+            );
+            renderer.clip_path(clip.as_ref());
+            Some(clip)
+        } else {
+            None
+        };
         renderer.transform(self.artboard_origin_transform());
 
         if let Some(background) = graph
@@ -359,7 +366,9 @@ impl ArtboardInstance {
 
         renderer.restore();
         // Keep the clip path alive until after the renderer has consumed it.
-        clip.rewind();
+        if let Some(clip) = clip.as_mut() {
+            clip.rewind();
+        }
         Ok(())
     }
 
@@ -1172,7 +1181,7 @@ fn preallocate_artboard_render_paint_batch(
         .shape_paint_containers
         .iter()
         .flat_map(|container| container.paints.iter())
-        .filter(|paint| !paint.effects.is_empty())
+        .filter(|paint| runtime_paint_has_empty_trim_effect(paint))
     {
         preallocate_render_paint(paint.global_id, factory, &mut paints, &mut allocated);
     }
@@ -1186,6 +1195,13 @@ fn preallocate_artboard_render_paint_batch(
         }
     }
     paints
+}
+
+fn runtime_paint_has_empty_trim_effect(paint: &ShapePaintNode) -> bool {
+    paint.effects.iter().any(|effect| {
+        effect.type_name == "TrimPath"
+            && effect.trim_start.unwrap_or(0.0) == effect.trim_end.unwrap_or(0.0)
+    })
 }
 
 fn preallocate_render_paint(
@@ -2036,31 +2052,32 @@ fn runtime_trim_path_line_effect_commands(
     if !matches!(mode, 1 | 2) {
         return None;
     }
-    let contour = LineContour::from_commands(source)?;
-    let total_length = contour.length();
-    if total_length == 0.0 {
+    let contours = TrimContour::from_commands(source);
+    if contours.is_empty() {
         return Some(Vec::new());
     }
 
     let render_offset = positive_unit_mod(effect.trim_offset.unwrap_or(0.0));
-    let mut start_length = total_length * (effect.trim_start.unwrap_or(0.0) + render_offset);
-    let mut end_length = total_length * (effect.trim_end.unwrap_or(0.0) + render_offset);
-    if end_length < start_length {
-        std::mem::swap(&mut start_length, &mut end_length);
+    let trim_start = effect.trim_start.unwrap_or(0.0);
+    let trim_end = effect.trim_end.unwrap_or(0.0);
+    let close_shape = paint.paint_type == ShapePaintKind::Fill;
+    match mode {
+        1 => Some(trim_path_sequential(
+            &contours,
+            trim_start,
+            trim_end,
+            render_offset,
+            close_shape,
+        )),
+        2 => Some(trim_path_synchronized(
+            &contours,
+            trim_start,
+            trim_end,
+            render_offset,
+            close_shape,
+        )),
+        _ => None,
     }
-    if start_length > total_length {
-        start_length -= total_length;
-        end_length -= total_length;
-    }
-    if end_length > total_length {
-        return None;
-    }
-
-    let mut commands = contour.segment_commands(start_length, end_length)?;
-    if paint.paint_type == ShapePaintKind::Fill || (contour.is_closed && start_length == 0.0) {
-        commands.push(RuntimePathCommand::Close);
-    }
-    Some(commands)
 }
 
 fn positive_unit_mod(value: f32) -> f32 {
@@ -2068,103 +2085,490 @@ fn positive_unit_mod(value: f32) -> f32 {
 }
 
 #[derive(Debug, Clone)]
-struct LineContour {
-    points: Vec<(f32, f32)>,
+struct TrimContour {
+    segments: Vec<TrimMeasuredSegment>,
+    length: f32,
     is_closed: bool,
 }
 
-impl LineContour {
-    fn from_commands(commands: &[RuntimePathCommand]) -> Option<Self> {
-        let mut points = Vec::new();
-        let mut saw_move = false;
+#[derive(Debug, Clone)]
+struct TrimMeasuredSegment {
+    original_index: usize,
+    kind: TrimSegmentKind,
+    distance: f32,
+    t: f32,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum TrimSegmentKind {
+    Line {
+        from: (f32, f32),
+        to: (f32, f32),
+    },
+    Cubic {
+        p0: (f32, f32),
+        p1: (f32, f32),
+        p2: (f32, f32),
+        p3: (f32, f32),
+    },
+}
+
+impl TrimContour {
+    fn from_commands(commands: &[RuntimePathCommand]) -> Vec<Self> {
+        let mut contours = Vec::new();
+        let mut raw_segments = Vec::<TrimSegmentKind>::new();
+        let mut start = None::<(f32, f32)>;
+        let mut current = None::<(f32, f32)>;
         let mut is_closed = false;
+
+        let finish_contour = |contours: &mut Vec<Self>,
+                              raw_segments: &mut Vec<TrimSegmentKind>,
+                              is_closed: &mut bool| {
+            if let Some(contour) = Self::from_raw_segments(raw_segments, *is_closed) {
+                contours.push(contour);
+            }
+            raw_segments.clear();
+            *is_closed = false;
+        };
+
         for command in commands {
             match *command {
                 RuntimePathCommand::Move { x, y } => {
-                    if saw_move {
-                        return None;
+                    if !raw_segments.is_empty() {
+                        finish_contour(&mut contours, &mut raw_segments, &mut is_closed);
                     }
-                    saw_move = true;
-                    points.push((x, y));
+                    start = Some((x, y));
+                    current = Some((x, y));
                 }
                 RuntimePathCommand::Line { x, y } => {
-                    if !saw_move || is_closed {
-                        return None;
+                    let Some(from) = current else {
+                        continue;
+                    };
+                    let to = (x, y);
+                    if distance_squared(from, to) > 0.0 {
+                        raw_segments.push(TrimSegmentKind::Line { from, to });
                     }
-                    points.push((x, y));
+                    current = Some(to);
+                }
+                RuntimePathCommand::Cubic {
+                    x1,
+                    y1,
+                    x2,
+                    y2,
+                    x3,
+                    y3,
+                } => {
+                    let Some(p0) = current else {
+                        continue;
+                    };
+                    let p1 = (x1, y1);
+                    let p2 = (x2, y2);
+                    let p3 = (x3, y3);
+                    raw_segments.push(TrimSegmentKind::Cubic { p0, p1, p2, p3 });
+                    current = Some(p3);
                 }
                 RuntimePathCommand::Close => {
-                    if !saw_move || is_closed {
-                        return None;
+                    if let (Some(from), Some(to)) = (current, start) {
+                        if distance_squared(from, to) > 0.0 {
+                            raw_segments.push(TrimSegmentKind::Line { from, to });
+                        }
+                        current = Some(to);
                     }
                     is_closed = true;
                 }
-                RuntimePathCommand::Cubic { .. } => return None,
             }
         }
-        (points.len() >= 2).then_some(Self { points, is_closed })
+
+        if !raw_segments.is_empty() {
+            finish_contour(&mut contours, &mut raw_segments, &mut is_closed);
+        }
+        contours
     }
 
-    fn length(&self) -> f32 {
-        self.points
-            .windows(2)
-            .map(|points| distance(points[0], points[1]))
-            .sum()
+    fn from_raw_segments(raw_segments: &[TrimSegmentKind], is_closed: bool) -> Option<Self> {
+        let mut segments = Vec::new();
+        let mut distance_so_far = 0.0;
+
+        for (original_index, segment) in raw_segments.iter().copied().enumerate() {
+            match segment {
+                TrimSegmentKind::Line { from, to } => {
+                    let length = distance(from, to);
+                    if length == 0.0 {
+                        continue;
+                    }
+                    distance_so_far += length;
+                    segments.push(TrimMeasuredSegment {
+                        original_index,
+                        kind: segment,
+                        distance: distance_so_far,
+                        t: 1.0,
+                    });
+                }
+                TrimSegmentKind::Cubic { p0, p1, p2, p3 } => {
+                    let segment_count = cubic_measure_segment_count([p0, p1, p2, p3]);
+                    if segment_count == 0 {
+                        continue;
+                    }
+                    let dt = 1.0 / segment_count as f32;
+                    let mut t = dt;
+                    let mut previous = p0;
+                    for _ in 1..segment_count {
+                        let next = eval_cubic([p0, p1, p2, p3], t);
+                        distance_so_far += distance(previous, next);
+                        segments.push(TrimMeasuredSegment {
+                            original_index,
+                            kind: segment,
+                            distance: distance_so_far,
+                            t: trim_contour_dot30_t(t),
+                        });
+                        previous = next;
+                        t += dt;
+                    }
+                    distance_so_far += distance(previous, p3);
+                    segments.push(TrimMeasuredSegment {
+                        original_index,
+                        kind: segment,
+                        distance: distance_so_far,
+                        t: 1.0,
+                    });
+                }
+            }
+        }
+
+        (distance_so_far > 0.0 && !segments.is_empty()).then_some(Self {
+            segments,
+            length: distance_so_far,
+            is_closed,
+        })
     }
 
-    fn segment_commands(&self, start: f32, end: f32) -> Option<Vec<RuntimePathCommand>> {
-        if end <= start {
-            return Some(Vec::new());
+    fn get_segment(
+        &self,
+        mut start_distance: f32,
+        mut end_distance: f32,
+        commands: &mut Vec<RuntimePathCommand>,
+        start_with_move: bool,
+    ) {
+        start_distance = start_distance.max(0.0);
+        end_distance = end_distance.min(self.length);
+        if start_distance >= end_distance {
+            return;
         }
 
-        let mut commands = Vec::new();
-        let mut walked = 0.0;
-        let mut started = false;
-        for points in self.points.windows(2) {
-            let from = points[0];
-            let to = points[1];
-            let segment_length = distance(from, to);
-            let segment_start = walked;
-            let segment_end = walked + segment_length;
-            walked = segment_end;
+        let mut start_index = self.find_segment(start_distance);
+        let end_index = self.find_segment(end_distance);
+        let mut start_t = self.compute_t(start_index, start_distance);
+        let end_t = self.compute_t(end_index, end_distance);
 
-            if segment_length == 0.0 || end <= segment_start || start >= segment_end {
-                continue;
-            }
-
-            let clipped_start = start.max(segment_start);
-            let clipped_end = end.min(segment_end);
-            let start_t = (clipped_start - segment_start) / segment_length;
-            let end_t = (clipped_end - segment_start) / segment_length;
-            let start_point = lerp_point(from, to, start_t);
-            let end_point = lerp_point(from, to, end_t);
-            if !started {
-                commands.push(RuntimePathCommand::Move {
-                    x: start_point.0,
-                    y: start_point.1,
-                });
-                started = true;
-            } else if last_command_point(&commands) != Some(start_point) {
-                commands.push(RuntimePathCommand::Line {
-                    x: start_point.0,
-                    y: start_point.1,
-                });
-            }
-            commands.push(RuntimePathCommand::Line {
-                x: end_point.0,
-                y: end_point.1,
-            });
+        if 1.0 - start_t < TRIM_CONTOUR_EPSILON && start_index < end_index {
+            start_index += 1;
+            start_t = 0.0;
         }
-        Some(commands)
+
+        let start = &self.segments[start_index];
+        let end = &self.segments[end_index];
+        if start.original_index == end.original_index {
+            start
+                .kind
+                .extract(commands, start_t, end_t, start_with_move);
+            return;
+        }
+
+        start.kind.extract(commands, start_t, 1.0, start_with_move);
+
+        let mut original_index = start.original_index + 1;
+        while original_index < end.original_index {
+            if let Some(segment) = self.first_segment_for_original(original_index) {
+                segment.kind.extract_full(commands);
+            }
+            original_index += 1;
+        }
+
+        end.kind.extract(commands, 0.0, end_t, false);
+    }
+
+    fn find_segment(&self, distance: f32) -> usize {
+        self.segments
+            .iter()
+            .position(|segment| segment.distance >= distance)
+            .unwrap_or_else(|| self.segments.len() - 1)
+    }
+
+    fn compute_t(&self, index: usize, distance: f32) -> f32 {
+        let segment = &self.segments[index];
+        let mut previous_distance = 0.0;
+        let mut previous_t = 0.0;
+        if index > 0 {
+            let previous = &self.segments[index - 1];
+            previous_distance = previous.distance;
+            if previous.original_index == segment.original_index {
+                previous_t = previous.t;
+            }
+        }
+
+        let denominator = segment.distance - previous_distance;
+        if denominator == 0.0 {
+            return previous_t;
+        }
+        let ratio = (distance - previous_distance) / denominator;
+        (previous_t + (segment.t - previous_t) * ratio).clamp(previous_t, segment.t)
+    }
+
+    fn first_segment_for_original(&self, original_index: usize) -> Option<&TrimMeasuredSegment> {
+        self.segments
+            .iter()
+            .find(|segment| segment.original_index == original_index)
     }
 }
 
-fn last_command_point(commands: &[RuntimePathCommand]) -> Option<(f32, f32)> {
-    match commands.last()? {
-        RuntimePathCommand::Move { x, y } | RuntimePathCommand::Line { x, y } => Some((*x, *y)),
-        RuntimePathCommand::Cubic { x3, y3, .. } => Some((*x3, *y3)),
-        RuntimePathCommand::Close => None,
+impl TrimSegmentKind {
+    fn extract(
+        self,
+        commands: &mut Vec<RuntimePathCommand>,
+        start_t: f32,
+        end_t: f32,
+        move_to: bool,
+    ) {
+        match self {
+            Self::Line { from, to } => {
+                let start = lerp_point(from, to, start_t);
+                let end = lerp_point(from, to, end_t);
+                if move_to {
+                    commands.push(RuntimePathCommand::Move {
+                        x: start.0,
+                        y: start.1,
+                    });
+                }
+                commands.push(RuntimePathCommand::Line { x: end.0, y: end.1 });
+            }
+            Self::Cubic { p0, p1, p2, p3 } => {
+                let [start, control_1, control_2, end] =
+                    cubic_extract([p0, p1, p2, p3], start_t, end_t);
+                if move_to {
+                    commands.push(RuntimePathCommand::Move {
+                        x: start.0,
+                        y: start.1,
+                    });
+                }
+                commands.push(RuntimePathCommand::Cubic {
+                    x1: control_1.0,
+                    y1: control_1.1,
+                    x2: control_2.0,
+                    y2: control_2.1,
+                    x3: end.0,
+                    y3: end.1,
+                });
+            }
+        }
     }
+
+    fn extract_full(self, commands: &mut Vec<RuntimePathCommand>) {
+        match self {
+            Self::Line { to, .. } => commands.push(RuntimePathCommand::Line { x: to.0, y: to.1 }),
+            Self::Cubic { p1, p2, p3, .. } => commands.push(RuntimePathCommand::Cubic {
+                x1: p1.0,
+                y1: p1.1,
+                x2: p2.0,
+                y2: p2.1,
+                x3: p3.0,
+                y3: p3.1,
+            }),
+        }
+    }
+}
+
+fn trim_path_sequential(
+    contours: &[TrimContour],
+    trim_start: f32,
+    trim_end: f32,
+    render_offset: f32,
+    close_shape: bool,
+) -> Vec<RuntimePathCommand> {
+    let total_length = contours.iter().map(|contour| contour.length).sum::<f32>();
+    if total_length == 0.0 {
+        return Vec::new();
+    }
+
+    let mut start_length = total_length * (trim_start + render_offset);
+    let mut end_length = total_length * (trim_end + render_offset);
+    if end_length < start_length {
+        std::mem::swap(&mut start_length, &mut end_length);
+    }
+    if start_length > total_length {
+        start_length -= total_length;
+        end_length -= total_length;
+    }
+
+    let mut indices = Vec::new();
+    let mut lengths = Vec::new();
+    let mut contour_index = 0usize;
+    while end_length > 0.0 {
+        let current_index = contour_index % contours.len();
+        let contour = &contours[current_index];
+        if start_length < contour.length {
+            indices.push(current_index);
+            lengths.push(start_length);
+            lengths.push(end_length);
+            end_length -= contour.length;
+            start_length = 0.0;
+        } else {
+            start_length -= contour.length;
+            end_length -= contour.length;
+        }
+        contour_index += 1;
+    }
+
+    let mut commands = Vec::new();
+    let mut starting_index = 0isize;
+    let mut index_count = 0usize;
+    let mut previous_contour_index = None::<usize>;
+    while index_count < indices.len() {
+        let index = starting_index.rem_euclid(indices.len() as isize) as usize;
+        let contour_index = indices[index];
+        let contour = &contours[contour_index];
+        let length_index = index * 2;
+        let start_length = lengths[length_index];
+        let end_length = lengths[length_index + 1];
+        contour.get_segment(
+            start_length,
+            end_length,
+            &mut commands,
+            previous_contour_index != Some(contour_index) || !contour.is_closed,
+        );
+        if (start_length == 0.0 && end_length - start_length >= contour.length && contour.is_closed)
+            || close_shape
+        {
+            commands.push(RuntimePathCommand::Close);
+        }
+        previous_contour_index = Some(contour_index);
+        index_count += 1;
+        starting_index -= 1;
+    }
+    commands
+}
+
+fn trim_path_synchronized(
+    contours: &[TrimContour],
+    trim_start: f32,
+    trim_end: f32,
+    render_offset: f32,
+    close_shape: bool,
+) -> Vec<RuntimePathCommand> {
+    let mut commands = Vec::new();
+    for contour in contours {
+        let mut start_length = contour.length * (trim_start + render_offset);
+        let mut end_length = contour.length * (trim_end + render_offset);
+        if end_length < start_length {
+            std::mem::swap(&mut start_length, &mut end_length);
+        }
+
+        if start_length >= contour.length {
+            start_length -= contour.length;
+            end_length -= contour.length;
+        }
+        contour.get_segment(start_length, end_length, &mut commands, true);
+        while end_length > contour.length {
+            start_length = 0.0;
+            end_length -= contour.length;
+            contour.get_segment(start_length, end_length, &mut commands, !contour.is_closed);
+        }
+
+        if (trim_start == 0.0 && trim_end == 1.0 && contour.is_closed) || close_shape {
+            commands.push(RuntimePathCommand::Close);
+        }
+    }
+    commands
+}
+
+const TRIM_CONTOUR_EPSILON: f32 = 1.0 / 4096.0;
+const TRIM_CONTOUR_INV_TOLERANCE: f32 = 2.0;
+const TRIM_CONTOUR_MAX_SEGMENTS: u32 = 100;
+const TRIM_CONTOUR_DOT30_SCALE: f32 = (1u32 << 30) as f32;
+const TRIM_CONTOUR_MAX_DOT30: u32 = (1u32 << 30) - 1;
+const TRIM_CONTOUR_INV_MAX_DOT30: f32 = 1.0 / TRIM_CONTOUR_MAX_DOT30 as f32;
+
+fn trim_contour_dot30_t(t: f32) -> f32 {
+    ((t * TRIM_CONTOUR_DOT30_SCALE) as u32) as f32 * TRIM_CONTOUR_INV_MAX_DOT30
+}
+
+fn cubic_measure_segment_count(points: [(f32, f32); 4]) -> u32 {
+    wangs_cubic(points, TRIM_CONTOUR_INV_TOLERANCE)
+        .ceil()
+        .ceil()
+        .min(TRIM_CONTOUR_MAX_SEGMENTS as f32) as u32
+}
+
+fn wangs_cubic(points: [(f32, f32); 4], precision: f32) -> f32 {
+    let first = vector_length_squared((
+        points[0].0 - 2.0 * points[1].0 + points[2].0,
+        points[0].1 - 2.0 * points[1].1 + points[2].1,
+    ));
+    let second = vector_length_squared((
+        points[1].0 - 2.0 * points[2].0 + points[3].0,
+        points[1].1 - 2.0 * points[2].1 + points[3].1,
+    ));
+    let length_term_pow2 = 9.0 * 4.0 / 64.0 * precision * precision;
+    (first.max(second) * length_term_pow2).sqrt().sqrt()
+}
+
+fn eval_cubic(points: [(f32, f32); 4], t: f32) -> (f32, f32) {
+    let a = (
+        points[3].0 + 3.0 * (points[1].0 - points[2].0) - points[0].0,
+        points[3].1 + 3.0 * (points[1].1 - points[2].1) - points[0].1,
+    );
+    let b = (
+        3.0 * (points[2].0 - 2.0 * points[1].0 + points[0].0),
+        3.0 * (points[2].1 - 2.0 * points[1].1 + points[0].1),
+    );
+    let c = (
+        3.0 * (points[1].0 - points[0].0),
+        3.0 * (points[1].1 - points[0].1),
+    );
+    (
+        ((a.0 * t + b.0) * t + c.0) * t + points[0].0,
+        ((a.1 * t + b.1) * t + c.1) * t + points[0].1,
+    )
+}
+
+fn cubic_extract(points: [(f32, f32); 4], start_t: f32, end_t: f32) -> [(f32, f32); 4] {
+    if start_t == 0.0 && end_t == 1.0 {
+        points
+    } else if start_t == 0.0 {
+        let chopped = cubic_subdivide(points, end_t);
+        [chopped[0], chopped[1], chopped[2], chopped[3]]
+    } else if end_t == 1.0 {
+        let chopped = cubic_subdivide(points, start_t);
+        [chopped[3], chopped[4], chopped[5], chopped[6]]
+    } else {
+        let chopped = cubic_subdivide(points, end_t);
+        let chopped_again = cubic_subdivide(
+            [chopped[0], chopped[1], chopped[2], chopped[3]],
+            start_t / end_t,
+        );
+        [
+            chopped_again[3],
+            chopped_again[4],
+            chopped_again[5],
+            chopped_again[6],
+        ]
+    }
+}
+
+fn cubic_subdivide(points: [(f32, f32); 4], t: f32) -> [(f32, f32); 7] {
+    let ab = lerp_point(points[0], points[1], t);
+    let bc = lerp_point(points[1], points[2], t);
+    let cd = lerp_point(points[2], points[3], t);
+    let abc = lerp_point(ab, bc, t);
+    let bcd = lerp_point(bc, cd, t);
+    [
+        points[0],
+        ab,
+        abc,
+        lerp_point(abc, bcd, t),
+        bcd,
+        cd,
+        points[3],
+    ]
 }
 
 fn distance(from: (f32, f32), to: (f32, f32)) -> f32 {
@@ -2173,7 +2577,21 @@ fn distance(from: (f32, f32), to: (f32, f32)) -> f32 {
     (x * x + y * y).sqrt()
 }
 
+fn distance_squared(from: (f32, f32), to: (f32, f32)) -> f32 {
+    vector_length_squared((to.0 - from.0, to.1 - from.1))
+}
+
+fn vector_length_squared(vector: (f32, f32)) -> f32 {
+    vector.0 * vector.0 + vector.1 * vector.1
+}
+
 fn lerp_point(from: (f32, f32), to: (f32, f32), t: f32) -> (f32, f32) {
+    if t == 0.0 {
+        return from;
+    }
+    if t == 1.0 {
+        return to;
+    }
     (from.0 + (to.0 - from.0) * t, from.1 + (to.1 - from.1) * t)
 }
 
@@ -19666,6 +20084,7 @@ struct RuntimeArtboardDimensions {
     height: f32,
     origin_x: f32,
     origin_y: f32,
+    clip: bool,
 }
 
 impl RuntimeArtboardDimensions {
@@ -19682,11 +20101,15 @@ impl RuntimeArtboardDimensions {
         let origin_y = object
             .and_then(|object| object.double_property("originY"))
             .unwrap_or(0.0);
+        let clip = object
+            .and_then(|object| object.bool_property("clip"))
+            .unwrap_or(true);
         Self {
             width,
             height,
             origin_x,
             origin_y,
+            clip,
         }
     }
 }
@@ -27324,6 +27747,7 @@ mod tests {
             height: 0.0,
             origin_x: 0.0,
             origin_y: 0.0,
+            clip: true,
             slots: components
                 .iter()
                 .enumerate()

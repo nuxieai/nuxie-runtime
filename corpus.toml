@@ -1931,7 +1931,7 @@ features = ["type-key:16:PointsPath", "type-key:18:SolidColor", "type-key:1:Artb
 id = "trim_path"
 path = "tests/unit_tests/assets/trim_path.riv"
 samples = [0.0]
-status = "not-yet"
+status = "exact"
 features = ["type-key:16:PointsPath", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:24:Stroke", "type-key:31:LinearAnimation", "type-key:35:CubicMirroredVertex", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:47:TrimPath", "type-key:51:Polygon", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:5:StraightVertex", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle"]
 
 [[file]]

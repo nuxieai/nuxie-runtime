@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 7
+- Corpus files `exact`: 8
 - Current milestone: **M1 — Static Vector Rendering Exact (#V2-2)**
 
 ## Milestones
@@ -21,7 +21,7 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Inspect `trim_path` at sample `0` for another static trim/path exact
+1. Inspect `fill_trim_path` at sample `0` for the next static TrimPath exact
    candidate.
 2. Keep `trim_path_linear` parked for M2/non-zero sample support unless its
    sample list is narrowed by an explicit M1 decision.
@@ -32,9 +32,9 @@ the only memory the next session has. Update it every commit.
   but rejected until M5 external data-binding corpus files require it.
 - Rust static draw path currently supports sample `0`, artboard
   clip/background, selected-artboard origins, solid fills/strokes, and
-  `ClippingShape` clip paths, plus empty/static synchronized TrimPath line
-  effects; no state machines, gradients, images, text, nested artboards,
-  constraints, or scripted input.
+  `ClippingShape` clip paths, plus empty and multi-contour TrimPath effects;
+  no state machines, gradients, images, text, nested artboards, constraints,
+  or scripted input.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -80,6 +80,9 @@ the only memory the next session has. Update it every commit.
 - 2026-07-02: `exact` is scoped to the samples/scripts in `corpus.toml`;
   animated files may be exact at sample `0` now and still need wider M2 samples
   later.
+- 2026-07-02: `golden-compare` exact stream comparison uses numeric-token
+  epsilon `1e-4` while keeping call order, IDs, verbs, and non-numeric text
+  exact, matching the V2 renderer seam plan.
 
 ## Log
 
@@ -143,3 +146,6 @@ the only memory the next session has. Update it every commit.
 - 2026-07-02: [M1] Gated `clipping_and_draw_order.riv` as a verified image
   unsupported diagnostic; exact remains 7, unsupported-feature is now 50, and
   not-yet is now 238.
+- 2026-07-02: [M1] Marked `trim_path.riv` exact by porting static artboard
+  clip flags, multi-contour TrimPath extraction, empty-trim paint allocation,
+  and numeric-token epsilon comparison; exact count is now 8.

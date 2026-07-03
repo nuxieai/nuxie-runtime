@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 64
+- Corpus files `exact`: 66
 - Current milestone: **M2 — Animated Playback Exact + Real Object Model (#V2-3)**
 
 ## Milestones
@@ -154,15 +154,10 @@ the only memory the next session has. Update it every commit.
 - `number_to_list_nested_children.riv` is parked for M6 layout component paint
   drawing; `pause_nested_artboard.riv` is parked for nested-artboard support.
 - `oneshotblend.riv` is parked for M2 1D blend/default state-machine
-  application at sample `0`; `opaque_hit_test.riv` is parked for M2
-  frame-0 state-machine/keyframe color application.
+  application at sample `0`.
 - `pointer_events_nested_artboards_in_solos.riv`, `pointer_exit.riv`, and
   `recursive_data_bind.riv` are parked for nested-artboard support;
   `rebind_with_nested_viewmodel.riv` is parked for text support.
-- `quantize_test.riv` is parked for M2 quantized `LinearAnimation`
-  application: C++ applies the frame-0 keyed transform through the default
-  scene, moving the ellipse to `x=0`, while static Rust still draws the
-  imported transform.
 - `relative_data_binding.riv` and `rewards_demo.riv` are parked for
   nested-artboard support; `replace_vm_instance.riv` is parked for text
   support; `reset_phase.riv` is parked for M6 layout component paint drawing;
@@ -651,3 +646,9 @@ the only memory the next session has. Update it every commit.
   `fill_trim_path.riv`; `make golden-compare` reports `exact=64`,
   `diverges=0`, `unsupported-feature=224`, `not-yet=7`, and
   `cargo test --workspace` passes.
+- 2026-07-03: [M2] Rechecked remaining M2 `not-yet` sample-0 files after the
+  live keyed-property/state-machine work and promoted `opaque_hit_test.riv`
+  and `quantize_test.riv` after direct C++/Rust stream comparisons matched.
+  `make golden-compare` reports `exact=66`, `diverges=0`,
+  `unsupported-feature=224`, `not-yet=5`, and `cargo test --workspace`
+  passes.

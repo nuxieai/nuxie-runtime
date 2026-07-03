@@ -27,8 +27,8 @@ the only memory the next session has. Update it every commit.
    Component dirt/runtime transform state live in
    `crates/rive-runtime/src/components.rs`, and the linear animation runtime
    model now lives in `crates/rive-runtime/src/animation.rs`.
-   `StateMachineReportedEvent` now seeds
-   `crates/rive-runtime/src/state_machine.rs`; next extract another
+   `StateMachineReportedEvent` and the state-machine input runtime model now
+   seed `crates/rive-runtime/src/state_machine.rs`; next extract another
    self-contained state-machine surface whose imports are cheap to untangle.
 2. Add handle-source world-space math and nested-remap dependent advancement
    to the joystick path when a corpus diff reaches those cases.
@@ -738,3 +738,10 @@ the only memory the next session has. Update it every commit.
   count remains 66; `make golden-compare` reports `exact=66`, `diverges=0`,
   `unsupported-feature=224`, `not-yet=5`, and `cargo test --workspace`
   passes.
+- 2026-07-03: [M2] Moved `RuntimeStateMachineInput`,
+  `StateMachineInputKind`, and `StateMachineInputInstance` into
+  `crates/rive-runtime/src/state_machine.rs`, keeping `StateMachineInputValue`
+  private behind crate-visible constructors and preserving the public input
+  accessors. Exact count remains 66; `make golden-compare` reports `exact=66`,
+  `diverges=0`, `unsupported-feature=224`, `not-yet=5`, and
+  `cargo test --workspace` passes.

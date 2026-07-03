@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 49
+- Corpus files `exact`: 50
 - Current milestone: **M1 — Static Vector Rendering Exact (#V2-2)**
 
 ## Milestones
@@ -22,9 +22,9 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
-   start with `pointer_events_nested_artboards_in_solos`, `pointer_exit`,
-   `quantize_test`, `rapid_pointer_events`, `rebind_with_nested_viewmodel`,
-   and `recursive_data_bind`; promote exact sample-0 matches or add
+   start with `relative_data_binding`, `remove_from_list`,
+   `replace_vm_instance`, `reset_phase`, `reuse_path_in_effect`, and
+   `rewards_demo`; promote exact sample-0 matches or add
    verified unsupported diagnostics for later-phase first diffs.
 2. `joystick_flag_test` is parked for M2: its sample-0 first diff is joystick
    application/default state-machine behavior, while Rust still draws the
@@ -168,6 +168,13 @@ the only memory the next session has. Update it every commit.
   is raw-exact at sample `0`, but its manifest includes sample `0.1`, so it
   remains parked until M2 non-zero sample support or an explicit sample-scope
   split.
+- `pointer_events_nested_artboards_in_solos.riv`, `pointer_exit.riv`, and
+  `recursive_data_bind.riv` are parked for nested-artboard support;
+  `rebind_with_nested_viewmodel.riv` is parked for text support.
+- `quantize_test.riv` is parked for M2 quantized `LinearAnimation`
+  application: C++ applies the frame-0 keyed transform through the default
+  scene, moving the ellipse to `x=0`, while static Rust still draws the
+  imported transform.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -488,3 +495,9 @@ the only memory the next session has. Update it every commit.
   `opaque_hit_test.riv`, and `pointer_events.riv` for M2 state-machine or
   non-zero-sample support; exact remains 49, unsupported-feature is now 185,
   and not-yet is now 61.
+- 2026-07-02: [M1] Promoted `rapid_pointer_events.riv` as sample-0 exact,
+  gated `pointer_events_nested_artboards_in_solos.riv`, `pointer_exit.riv`,
+  `rebind_with_nested_viewmodel.riv`, and `recursive_data_bind.riv` with
+  verified nested-artboard/text diagnostics, and parked `quantize_test.riv`
+  for M2 quantized animation application; exact count is now 50,
+  unsupported-feature is now 189, and not-yet is now 56.

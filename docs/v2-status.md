@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 46
+- Corpus files `exact`: 48
 - Current milestone: **M1 — Static Vector Rendering Exact (#V2-2)**
 
 ## Milestones
@@ -22,10 +22,10 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
-   start with `listener_action_inputs`, `listener_view_model`, `local_bounds`,
-   `lock_icon_demo`, `looping_timeline_events`, and
-   `magic_alley_db_reduced_export`; promote exact sample-0 matches or add verified
-   unsupported diagnostics for later-phase first diffs.
+   start with `modifier_test`, `modifier_to_run`, `multitouch`,
+   `multitouch_enter`, `n_slice_triangle`, and
+   `nested_artboard_quantize_and_speed`; promote exact sample-0 matches or add
+   verified unsupported diagnostics for later-phase first diffs.
 2. `joystick_flag_test` is parked for M2: its sample-0 first diff is joystick
    application/default state-machine behavior, while Rust still draws the
    imported static state.
@@ -147,6 +147,10 @@ the only memory the next session has. Update it every commit.
   `list_index_script_access.riv` is parked for text support; `list_items.riv`
   and `list_to_length_test.riv` are parked for M6 layout component paint
   drawing.
+- `listener_action_inputs.riv` is parked for scripted transition condition
+  support; `listener_view_model.riv` is parked for text support;
+  `local_bounds.riv` is parked for image support; and
+  `magic_alley_db_reduced_export.riv` is parked for nested-artboard support.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -430,3 +434,9 @@ the only memory the next session has. Update it every commit.
   `list_to_length_test.riv` with verified nested-artboard/text/layout
   diagnostics; exact count is now 46, unsupported-feature is now 167, and
   not-yet is now 82.
+- 2026-07-02: [M1] Promoted `lock_icon_demo.riv` and
+  `looping_timeline_events.riv` as sample-0 exact, and gated
+  `listener_action_inputs.riv`, `listener_view_model.riv`, `local_bounds.riv`,
+  and `magic_alley_db_reduced_export.riv` with verified scripted-condition,
+  text, image, and nested-artboard diagnostics; exact count is now 48,
+  unsupported-feature is now 171, and not-yet is now 76.

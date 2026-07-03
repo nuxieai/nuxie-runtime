@@ -348,3 +348,72 @@ impl StateMachineInputInstance {
         }
     }
 }
+
+#[derive(Debug, Clone)]
+pub(crate) struct StateMachineViewModelTriggerInstance {
+    global_id: u32,
+    view_model_property_id: u32,
+    value: u64,
+    changed: bool,
+    used_layers: Vec<usize>,
+}
+
+impl StateMachineViewModelTriggerInstance {
+    pub(crate) fn new(global_id: u32, view_model_property_id: u32, value: u64) -> Self {
+        Self {
+            global_id,
+            view_model_property_id,
+            value,
+            changed: false,
+            used_layers: Vec::new(),
+        }
+    }
+
+    pub(crate) fn global_id(&self) -> u32 {
+        self.global_id
+    }
+
+    pub(crate) fn increment(&mut self) {
+        self.value = self.value.saturating_add(1);
+        self.changed = true;
+    }
+
+    pub(crate) fn set_value(&mut self, value: u64) -> bool {
+        if self.value == value {
+            return false;
+        }
+        self.value = value;
+        self.changed = true;
+        true
+    }
+
+    pub(crate) fn replace_value(&mut self, value: u64) {
+        self.value = value;
+        self.changed = false;
+        self.used_layers.clear();
+    }
+
+    pub(crate) fn reset(&mut self) {
+        self.value = 0;
+        self.changed = false;
+        self.used_layers.clear();
+    }
+
+    pub(crate) fn is_fireable_for_layer(&self, layer_index: usize) -> bool {
+        self.changed && !self.used_layers.contains(&layer_index)
+    }
+
+    pub(crate) fn use_in_layer(&mut self, layer_index: usize) {
+        if !self.used_layers.contains(&layer_index) {
+            self.used_layers.push(layer_index);
+        }
+    }
+
+    pub(crate) fn value(&self) -> u64 {
+        self.value
+    }
+
+    pub(crate) fn view_model_property_id(&self) -> u32 {
+        self.view_model_property_id
+    }
+}

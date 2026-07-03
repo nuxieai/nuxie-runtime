@@ -38,7 +38,8 @@ pub use components::{
 };
 use objects::InstanceObjectArena;
 use state_machine::{
-    RuntimeScheduledListenerAction, StateMachineFireOccurrence, perform_scheduled_listener_actions,
+    RuntimeScheduledListenerAction, StateMachineFireOccurrence,
+    StateMachineViewModelTriggerInstance, perform_scheduled_listener_actions,
 };
 pub use state_machine::{
     RuntimeStateMachineInput, StateMachineInputInstance, StateMachineInputKind,
@@ -18398,7 +18399,7 @@ fn perform_state_machine_fire_actions(
                 if let Some(target_global_id) = target_global_id {
                     if let Some(trigger) = view_model_triggers
                         .iter_mut()
-                        .find(|trigger| trigger.global_id == *target_global_id)
+                        .find(|trigger| trigger.global_id() == *target_global_id)
                     {
                         trigger.increment();
                     }
@@ -19569,7 +19570,7 @@ impl RuntimeTransitionCondition {
                 };
                 view_model_triggers
                     .iter()
-                    .find(|trigger| trigger.global_id == trigger_global_id)
+                    .find(|trigger| trigger.global_id() == trigger_global_id)
                     .is_some_and(|trigger| trigger.is_fireable_for_layer(layer_index))
             }
             Self::ViewModelPointer {
@@ -19782,7 +19783,7 @@ impl RuntimeTransitionCondition {
                 };
                 if let Some(trigger) = view_model_triggers
                     .iter_mut()
-                    .find(|trigger| trigger.global_id == trigger_global_id)
+                    .find(|trigger| trigger.global_id() == trigger_global_id)
                 {
                     trigger.use_in_layer(layer_index);
                 }
@@ -20388,7 +20389,13 @@ impl StateMachineInstance {
         let view_model_triggers = state_machine
             .view_model_triggers
             .iter()
-            .map(StateMachineViewModelTriggerInstance::new)
+            .map(|trigger| {
+                StateMachineViewModelTriggerInstance::new(
+                    trigger.global_id,
+                    trigger.view_model_property_id,
+                    trigger.value,
+                )
+            })
             .collect::<Vec<_>>();
         let default_view_model_triggers = view_model_triggers.clone();
         let layers = state_machine
@@ -21545,7 +21552,7 @@ impl StateMachineInstance {
         if let Some(trigger) = self
             .default_view_model_triggers
             .iter_mut()
-            .find(|trigger| trigger.global_id == trigger_global_id)
+            .find(|trigger| trigger.global_id() == trigger_global_id)
         {
             trigger.set_value(value);
         }
@@ -21555,7 +21562,7 @@ impl StateMachineInstance {
             && let Some(trigger) = self
                 .view_model_triggers
                 .iter_mut()
-                .find(|trigger| trigger.global_id == trigger_global_id)
+                .find(|trigger| trigger.global_id() == trigger_global_id)
         {
             trigger.set_value(value);
         }
@@ -21569,7 +21576,7 @@ impl StateMachineInstance {
         if let Some(trigger) = self
             .default_view_model_triggers
             .iter_mut()
-            .find(|trigger| trigger.view_model_property_id == view_model_property_id)
+            .find(|trigger| trigger.view_model_property_id() == view_model_property_id)
         {
             trigger.set_value(value);
         }
@@ -21579,7 +21586,7 @@ impl StateMachineInstance {
             && let Some(trigger) = self
                 .view_model_triggers
                 .iter_mut()
-                .find(|trigger| trigger.view_model_property_id == view_model_property_id)
+                .find(|trigger| trigger.view_model_property_id() == view_model_property_id)
         {
             trigger.set_value(value);
         }
@@ -22313,14 +22320,14 @@ impl StateMachineInstance {
             if let Some(trigger) = self
                 .default_view_model_triggers
                 .iter_mut()
-                .find(|trigger| trigger.view_model_property_id == trigger_property_id)
+                .find(|trigger| trigger.view_model_property_id() == trigger_property_id)
             {
                 trigger.set_value(value);
             }
             if let Some(trigger) = self
                 .view_model_triggers
                 .iter_mut()
-                .find(|trigger| trigger.view_model_property_id == trigger_property_id)
+                .find(|trigger| trigger.view_model_property_id() == trigger_property_id)
             {
                 trigger.set_value(value);
             }
@@ -22338,7 +22345,7 @@ impl StateMachineInstance {
         }) && let Some(trigger) = self
             .view_model_triggers
             .iter_mut()
-            .find(|trigger| trigger.global_id == trigger_global_id)
+            .find(|trigger| trigger.global_id() == trigger_global_id)
         {
             trigger.set_value(value);
         }
@@ -22720,7 +22727,7 @@ impl StateMachineInstance {
 
         let mut active = self.default_view_model_triggers.clone();
         for trigger in &mut active {
-            let path = [view_model_path_id, trigger.view_model_property_id];
+            let path = [view_model_path_id, trigger.view_model_property_id()];
             let value = context
                 .and_then(|context| context.trigger_overrides.get(path.as_slice()).copied())
                 .or_else(|| {
@@ -22741,7 +22748,7 @@ impl StateMachineInstance {
     fn bind_active_owned_view_model_triggers(&mut self, context: &RuntimeOwnedViewModelInstance) {
         let mut active = self.default_view_model_triggers.clone();
         for trigger in &mut active {
-            let value = usize::try_from(trigger.view_model_property_id)
+            let value = usize::try_from(trigger.view_model_property_id())
                 .ok()
                 .and_then(|property_index| context.trigger_value_by_property_index(property_index));
             if let Some(value) = value {
@@ -22765,7 +22772,7 @@ impl StateMachineInstance {
             if let Some(active_trigger) = self
                 .view_model_triggers
                 .iter()
-                .find(|trigger| trigger.global_id == default_trigger.global_id)
+                .find(|trigger| trigger.global_id() == default_trigger.global_id())
             {
                 *default_trigger = active_trigger.clone();
             }
@@ -23239,71 +23246,6 @@ fn bindable_boolean_value(
         .iter()
         .find(|bindable_boolean| bindable_boolean.global_id == global_id)
         .map(|bindable_boolean| bindable_boolean.value)
-}
-
-#[derive(Debug, Clone)]
-struct StateMachineViewModelTriggerInstance {
-    global_id: u32,
-    view_model_property_id: u32,
-    value: u64,
-    changed: bool,
-    used_layers: Vec<usize>,
-}
-
-impl StateMachineViewModelTriggerInstance {
-    fn new(trigger: &RuntimeViewModelTrigger) -> Self {
-        Self {
-            global_id: trigger.global_id,
-            view_model_property_id: trigger.view_model_property_id,
-            value: trigger.value,
-            changed: false,
-            used_layers: Vec::new(),
-        }
-    }
-
-    fn increment(&mut self) {
-        self.value = self.value.saturating_add(1);
-        self.changed = true;
-    }
-
-    fn set_value(&mut self, value: u64) -> bool {
-        if self.value == value {
-            return false;
-        }
-        self.value = value;
-        self.changed = true;
-        true
-    }
-
-    fn replace_value(&mut self, value: u64) {
-        self.value = value;
-        self.changed = false;
-        self.used_layers.clear();
-    }
-
-    fn reset(&mut self) {
-        self.value = 0;
-        self.changed = false;
-        self.used_layers.clear();
-    }
-
-    fn is_fireable_for_layer(&self, layer_index: usize) -> bool {
-        self.changed && !self.used_layers.contains(&layer_index)
-    }
-
-    fn use_in_layer(&mut self, layer_index: usize) {
-        if !self.used_layers.contains(&layer_index) {
-            self.used_layers.push(layer_index);
-        }
-    }
-
-    fn value(&self) -> u64 {
-        self.value
-    }
-
-    fn view_model_property_id(&self) -> u32 {
-        self.view_model_property_id
-    }
 }
 
 #[derive(Debug, Clone)]

@@ -42,6 +42,29 @@ fn run() -> Result<(), String> {
                     entry.id,
                     entry.features.join(", ")
                 );
+                if let Some(feature) = entry.rust_runner_unsupported_feature() {
+                    match &options.rust_runner {
+                        Some(rust_runner) => {
+                            let file = resolve_asset_path(&entry.path, &options.rive_runtime_dir);
+                            match run_unsupported_diagnostic(
+                                rust_runner,
+                                entry,
+                                &file,
+                                &corpus_dir,
+                            ) {
+                                Ok(()) => println!(
+                                    "[unsupported-feature] {}: rust diagnostic ok ({feature})",
+                                    entry.id
+                                ),
+                                Err(error) => failures.push(format!("{}: {error}", entry.id)),
+                            }
+                        }
+                        None => failures.push(format!(
+                            "{}: unsupported feature {feature} requires --rust-runner to verify diagnostic",
+                            entry.id
+                        )),
+                    }
+                }
             }
             Status::NotYet | Status::Diverges | Status::Exact => {
                 let file = resolve_asset_path(&entry.path, &options.rive_runtime_dir);
@@ -211,6 +234,12 @@ impl CorpusEntry {
             }
         }
         Ok(())
+    }
+
+    fn rust_runner_unsupported_feature(&self) -> Option<&str> {
+        self.features
+            .iter()
+            .find_map(|feature| feature.strip_prefix("rust-runner-unsupported:"))
     }
 }
 
@@ -384,21 +413,7 @@ fn run_stream(
     file: &Path,
     corpus_dir: &Path,
 ) -> Result<String, String> {
-    let mut command = Command::new(runner);
-    command.arg("--file").arg(file);
-    if let Some(artboard) = &entry.artboard {
-        command.arg("--artboard").arg(artboard);
-    }
-    if let Some(state_machine) = &entry.state_machine {
-        command.arg("--state-machine").arg(state_machine);
-    }
-    command.arg("--samples").arg(samples_csv(&entry.samples));
-    if let Some(input_script) = &entry.input_script {
-        command
-            .arg("--input-script")
-            .arg(resolve_script_path(input_script, corpus_dir));
-    }
-
+    let mut command = stream_command(runner, entry, file, corpus_dir);
     let output = command
         .output()
         .map_err(|error| format!("failed to run {}: {error}", runner.display()))?;
@@ -420,6 +435,53 @@ fn run_stream(
         ));
     }
     Ok(stdout)
+}
+
+fn run_unsupported_diagnostic(
+    runner: &Path,
+    entry: &CorpusEntry,
+    file: &Path,
+    corpus_dir: &Path,
+) -> Result<(), String> {
+    let mut command = stream_command(runner, entry, file, corpus_dir);
+    let output = command
+        .output()
+        .map_err(|error| format!("failed to run {}: {error}", runner.display()))?;
+    if output.status.success() {
+        return Err(format!(
+            "{} succeeded; expected unsupported diagnostic",
+            runner.display()
+        ));
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !stderr.contains("unsupported:") {
+        return Err(format!(
+            "{} did not emit an unsupported diagnostic\n{}",
+            runner.display(),
+            stderr
+        ));
+    }
+
+    Ok(())
+}
+
+fn stream_command(runner: &Path, entry: &CorpusEntry, file: &Path, corpus_dir: &Path) -> Command {
+    let mut command = Command::new(runner);
+    command.arg("--file").arg(file);
+    if let Some(artboard) = &entry.artboard {
+        command.arg("--artboard").arg(artboard);
+    }
+    if let Some(state_machine) = &entry.state_machine {
+        command.arg("--state-machine").arg(state_machine);
+    }
+    command.arg("--samples").arg(samples_csv(&entry.samples));
+    if let Some(input_script) = &entry.input_script {
+        command
+            .arg("--input-script")
+            .arg(resolve_script_path(input_script, corpus_dir));
+    }
+    command
 }
 
 fn samples_csv(samples: &[f32]) -> String {

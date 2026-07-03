@@ -321,8 +321,8 @@ features = ["type-key:138:CubicValueInterpolator", "type-key:18:SolidColor", "ty
 id = "custom_image_name"
 path = "tests/unit_tests/assets/custom_image_name.riv"
 samples = [0.0]
-status = "not-yet"
-features = ["type-key:100:Image", "type-key:105:ImageAsset", "type-key:106:FileAssetContents", "type-key:1:Artboard", "type-key:23:Backboard"]
+status = "unsupported-feature"
+features = ["type-key:100:Image", "type-key:105:ImageAsset", "type-key:106:FileAssetContents", "type-key:1:Artboard", "type-key:23:Backboard", "rust-runner-unsupported:images"]
 
 [[file]]
 id = "custom_property_enum"
@@ -916,8 +916,8 @@ features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill",
 id = "library_export_test"
 path = "tests/unit_tests/assets/library_export_test.riv"
 samples = [0.0]
-status = "not-yet"
-features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:92:NestedArtboard"]
+status = "unsupported-feature"
+features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:92:NestedArtboard", "rust-runner-unsupported:nested-artboards"]
 
 [[file]]
 id = "library_view_model_test"
@@ -1084,8 +1084,8 @@ features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill",
 id = "nested_artboard_opacity"
 path = "tests/unit_tests/assets/nested_artboard_opacity.riv"
 samples = [0.0]
-status = "not-yet"
-features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:92:NestedArtboard"]
+status = "unsupported-feature"
+features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:92:NestedArtboard", "rust-runner-unsupported:nested-artboards"]
 
 [[file]]
 id = "nested_artboard_quantize_and_speed"

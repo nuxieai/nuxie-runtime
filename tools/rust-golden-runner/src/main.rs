@@ -33,6 +33,7 @@ fn run() -> Result<String> {
     let runtime = read_runtime_file(&bytes).context("failed to import runtime file")?;
     let graph = GraphFile::from_runtime_file(&runtime).context("failed to build graph")?;
     let (artboard_index, artboard) = select_artboard(&graph, options.artboard.as_deref())?;
+    ensure_static_draw_supported(artboard)?;
     let mut instance = ArtboardInstance::from_graph(&runtime, artboard)
         .context("failed to instantiate artboard")?;
     instance.update_components();
@@ -156,6 +157,28 @@ fn select_artboard<'a>(
             .map(|artboard| (0, artboard))
             .context("missing default artboard")
     }
+}
+
+fn ensure_static_draw_supported(artboard: &ArtboardGraph) -> Result<()> {
+    if let Some(nested) = artboard.nested_artboards.first() {
+        bail!(
+            "unsupported: nested artboards in Rust golden runner ({})",
+            nested.type_name
+        );
+    }
+
+    if let Some(image) = artboard
+        .local_objects
+        .iter()
+        .find(|object| object.type_name == Some("Image"))
+    {
+        bail!(
+            "unsupported: images in Rust golden runner (global {})",
+            image.global_id
+        );
+    }
+
+    Ok(())
 }
 
 fn frame_dimension(value: f32) -> u32 {

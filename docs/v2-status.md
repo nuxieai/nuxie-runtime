@@ -21,12 +21,14 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Run an M1 gating pass over the lowest-feature `not-yet` entries and move
-   clear later-phase families out of the M1 queue with explicit unsupported
-   diagnostics, starting with `nested_artboard_opacity`, `library_export_test`,
-   and `custom_image_name`.
-2. If that scan reveals a remaining M1 static-vector fixture, port the
-   referenced C++ shape/paint file and drive that corpus entry to `exact`.
+1. Continue the M1 gating pass at the new lowest-feature frontier:
+   `library_with_image`, `double_library_with_image`,
+   `library_export_state_machine_test`, and
+   `library_export_animation_test`. Use `rust-runner-unsupported:*` tags only
+   when `golden-compare` verifies an explicit Rust unsupported diagnostic.
+2. After the nested/image frontier is gated, inspect `long_name` and the
+   low-feature constraint files to decide whether M1 has remaining static
+   vector work or should move to its FFI viewer demo / M2 handoff.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -75,6 +77,9 @@ the only memory the next session has. Update it every commit.
 - 2026-07-02: Effect-bearing selected-artboard paints preallocate before the
   remaining local paint order, matching C++ clone paint IDs for `trim.riv`
   without regressing `dependency_test.riv` or `shapetest.riv`.
+- 2026-07-02: Corpus features prefixed `rust-runner-unsupported:` are verified
+  by `golden-compare` when `--rust-runner` is supplied; use them when a
+  later-phase feature would otherwise be silently omitted by Rust rendering.
 
 ## Log
 
@@ -112,3 +117,7 @@ the only memory the next session has. Update it every commit.
   path and swaps the paint IDs.
 - 2026-07-02: [M1] Marked `trim.riv` exact by preserving empty TrimPath
   effects and effect-bearing paint allocation order; exact count is now 4.
+- 2026-07-02: [M1] Gated `custom_image_name.riv`,
+  `library_export_test.riv`, and `nested_artboard_opacity.riv` as verified
+  Rust unsupported diagnostics for images/nested artboards; exact remains 4,
+  unsupported-feature is now 40, and not-yet is now 251.

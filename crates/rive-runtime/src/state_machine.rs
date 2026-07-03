@@ -1,3 +1,5 @@
+use rive_binary::{RuntimeFile, RuntimeObject};
+
 #[derive(Debug, Clone)]
 pub struct RuntimeStateMachineInput {
     pub global_id: u32,
@@ -95,6 +97,98 @@ impl StateMachineFireOccurrence {
             Self::AtEnd => 1,
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum RuntimeStateMachineFireAction {
+    Event {
+        occurs_value: u64,
+        event: StateMachineReportedEvent,
+    },
+    Trigger {
+        occurs_value: u64,
+        target_global_id: Option<u32>,
+    },
+}
+
+impl RuntimeStateMachineFireAction {
+    pub(crate) fn from_imported(
+        file: &RuntimeFile,
+        action: &rive_binary::RuntimeStateMachineFireAction<'_>,
+    ) -> Option<Self> {
+        let occurs_value = action.object.uint_property("occursValue").unwrap_or(0);
+        match action.object.type_name {
+            "StateMachineFireEvent" => {
+                let event = action.event?;
+                Some(Self::Event {
+                    occurs_value,
+                    event: StateMachineReportedEvent {
+                        event_local_index: action.event_local_index?,
+                        event_core_type: u32::from(event.type_key),
+                        name: event.string_property("name").map(ToOwned::to_owned),
+                        seconds_delay: 0.0,
+                    },
+                })
+            }
+            "StateMachineFireTrigger" => Some(Self::Trigger {
+                occurs_value,
+                target_global_id: runtime_fire_trigger_target_global(file, action.object),
+            }),
+            _ => None,
+        }
+    }
+}
+
+pub(crate) fn perform_state_machine_fire_actions(
+    fire_actions: &[RuntimeStateMachineFireAction],
+    occurrence: StateMachineFireOccurrence,
+    data_context_view_model_bound: bool,
+    view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
+    reported_events: &mut Vec<StateMachineReportedEvent>,
+) {
+    for action in fire_actions {
+        match action {
+            RuntimeStateMachineFireAction::Event {
+                occurs_value,
+                event,
+            } if *occurs_value == occurrence.value() => {
+                reported_events.push(event.clone());
+            }
+            RuntimeStateMachineFireAction::Trigger {
+                occurs_value,
+                target_global_id,
+            } if *occurs_value == occurrence.value() && data_context_view_model_bound => {
+                if let Some(target_global_id) = target_global_id {
+                    if let Some(trigger) = view_model_triggers
+                        .iter_mut()
+                        .find(|trigger| trigger.global_id() == *target_global_id)
+                    {
+                        trigger.increment();
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn runtime_fire_trigger_target_global(file: &RuntimeFile, object: &RuntimeObject) -> Option<u32> {
+    let data_bind_path = file.data_bind_path_for_referencer_object(object)?;
+    let is_relative = data_bind_path
+        .object
+        .and_then(|path_object| path_object.bool_property("isRelative"))
+        .or_else(|| object.bool_property("isDataBindPathRelative"))
+        .unwrap_or(false);
+    if is_relative {
+        return None;
+    }
+    let default_instance = file.view_model_default_instance(0)?;
+    let target = file.data_context_view_model_property_for_instance(
+        default_instance.object,
+        &data_bind_path.resolved_path_ids,
+    )?;
+    file.view_model_instance_trigger_count_for_object(target)?;
+    Some(target.id)
 }
 
 #[derive(Debug, Clone)]

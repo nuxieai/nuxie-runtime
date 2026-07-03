@@ -22,9 +22,8 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
-   start with `scripted_property_image`, `scroll_snap`, `scroll_test`,
-   `scroll_threshold`, `shared_viewmodel_instance`, and
-   `spotify_kids_app_icon`;
+   start with `spotify_kids_demo`, `stacked_path_effects`, `superbowl`,
+   `test_modifier_run`, `text_follow_path_shape_length`, and `text_input`;
    promote exact sample-0 matches or add
    verified unsupported diagnostics for later-phase first diffs.
 2. `joystick_flag_test` is parked for M2: its sample-0 first diff is joystick
@@ -184,6 +183,10 @@ the only memory the next session has. Update it every commit.
   `runtime_nested_text_runs.riv`, `scripted_data_context.riv`, and
   `scripted_listener_context.riv` are parked for nested-artboard support; and
   `saturation.riv` is parked for text support.
+- `scripted_property_image.riv` is parked for image support;
+  `scroll_snap.riv` and `spotify_kids_app_icon.riv` are parked for text
+  support; and `scroll_test.riv`, `scroll_threshold.riv`, and
+  `shared_viewmodel_instance.riv` are parked for nested-artboard support.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -521,3 +524,8 @@ the only memory the next session has. Update it every commit.
   `scripted_data_context.riv`, and `scripted_listener_context.riv` with
   verified gradient/nested-artboard/text diagnostics; exact remains 51,
   unsupported-feature is now 200, and not-yet is now 44.
+- 2026-07-02: [M1] Gated `scripted_property_image.riv`,
+  `scroll_snap.riv`, `scroll_test.riv`, `scroll_threshold.riv`,
+  `shared_viewmodel_instance.riv`, and `spotify_kids_app_icon.riv` with
+  verified image/text/nested-artboard diagnostics; exact remains 51,
+  unsupported-feature is now 206, and not-yet is now 38.

@@ -33,7 +33,7 @@ the only memory the next session has. Update it every commit.
    state, transition conditions, transition interpolators, transition
    timing/allowance model, blend-state import data, imported layer/state
    model, live blend-state instances, state-machine layer advancement, and
-   state-machine bindable instances/helpers seed
+   state-machine bindable instances/helpers/import builders seed
    `crates/rive-runtime/src/state_machine.rs` and its submodules.
 2. Add handle-source world-space math and nested-remap dependent advancement
    to the joystick path when a corpus diff reaches those cases.
@@ -807,3 +807,11 @@ the only memory the next session has. Update it every commit.
   `make golden-compare` reports `exact=70`, `exact-segments=137`,
   `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
   `cargo test --workspace` passes.
+- 2026-07-03: [M2] Moved the state-machine bindable import builders and
+  default view-model trigger builder out of `lib.rs` and into
+  `crates/rive-runtime/src/state_machine/bindables.rs`, keeping the
+  data-bind graph/converter helpers in `lib.rs` for the remaining
+  `StateMachineInstance` data-context orchestration. Exact segments remain
+  137 across 70 exact files; `make golden-compare` reports `exact=70`,
+  `exact-segments=137`, `diverges=0`, `unsupported-feature=225`,
+  `not-yet=0`, and `cargo test --workspace` passes.

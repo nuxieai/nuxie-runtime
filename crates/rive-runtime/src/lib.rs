@@ -48,8 +48,8 @@ use state_machine::{
     runtime_state_machine_input,
 };
 pub use state_machine::{
-    RuntimeStateMachineInput, StateMachineInputInstance, StateMachineInputKind,
-    StateMachineReportedEvent,
+    RuntimeLayerState, RuntimeStateMachineInput, RuntimeStateMachineLayer,
+    StateMachineInputInstance, StateMachineInputKind, StateMachineReportedEvent,
 };
 
 #[derive(Debug, Clone)]
@@ -17959,67 +17959,6 @@ impl RuntimeDataBindGraphTargetsMut<'_> {
             }
             _ => {}
         }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct RuntimeStateMachineLayer {
-    pub global_id: u32,
-    pub name: Option<String>,
-    pub states: Vec<RuntimeLayerState>,
-    entry_state_index: Option<usize>,
-    any_state_index: Option<usize>,
-}
-
-#[derive(Debug, Clone)]
-pub struct RuntimeLayerState {
-    pub global_id: Option<u32>,
-    pub type_name: Option<&'static str>,
-    animation_index: Option<usize>,
-    blend_state_1d: Option<RuntimeBlendState1D>,
-    blend_state_direct: Option<RuntimeBlendStateDirect>,
-    speed: f32,
-    flags: u64,
-    fire_actions: Vec<RuntimeStateMachineFireAction>,
-    listener_actions: Vec<RuntimeScheduledListenerAction>,
-    transitions: Vec<RuntimeStateTransition>,
-}
-
-impl RuntimeLayerState {
-    const RANDOM: u64 = 1 << 0;
-
-    fn uses_random_transition_selection(&self) -> bool {
-        self.flags & Self::RANDOM == Self::RANDOM
-    }
-
-    fn perform_fire_actions(
-        &self,
-        occurrence: StateMachineFireOccurrence,
-        data_context_view_model_bound: bool,
-        view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
-        reported_events: &mut Vec<StateMachineReportedEvent>,
-    ) {
-        perform_state_machine_fire_actions(
-            &self.fire_actions,
-            occurrence,
-            data_context_view_model_bound,
-            view_model_triggers,
-            reported_events,
-        );
-    }
-
-    fn perform_listener_actions(
-        &self,
-        occurrence: StateMachineFireOccurrence,
-        inputs: &mut [StateMachineInputInstance],
-        reported_events: &mut Vec<StateMachineReportedEvent>,
-    ) -> bool {
-        perform_scheduled_listener_actions(
-            &self.listener_actions,
-            occurrence,
-            inputs,
-            reported_events,
-        )
     }
 }
 

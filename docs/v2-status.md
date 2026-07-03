@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 23
+- Corpus files `exact`: 26
 - Current milestone: **M1 — Static Vector Rendering Exact (#V2-2)**
 
 ## Milestones
@@ -22,11 +22,10 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
-   start with `scripted_string`, `viewmodel_runtime_file`,
-   `databind_external_artboard_main`, `viewmodel_image_reset`,
-   `clear_viewmodel_list`, and `databind_external_artboard_child`; promote
-   exact sample-0 matches or add verified unsupported diagnostics for
-   later-phase first diffs.
+   start with `component_list_hit_order`, `component_list_1`,
+   `component_list_2`, `bindable_artboard_child`, `custom_property_enum`, and
+   `text_input_event`; promote exact sample-0 matches or add verified
+   unsupported diagnostics for later-phase first diffs.
 2. `solo_test` and `solos_collapse_tests` are parked for M2: C++ applies
    frame-0 `KeyFrameId` values through the default state machine/animation,
    overriding imported `Solo.activeComponentId`; Rust has no
@@ -62,6 +61,10 @@ the only memory the next session has. Update it every commit.
 - `scripted_color.riv` is parked for M5 at sample `0`: C++ binds the default
   `ViewModelPropertyColor` through `DataBindContext` to a `SolidColor`, while
   static Rust still draws the imported color.
+- `databind_external_artboard_main.riv`, `databind_external_artboard_child.riv`,
+  and `viewmodel_image_reset.riv` are parked for nested-artboard, text, and
+  image support respectively; their sample-0 first diffs are covered by the
+  existing Rust runner diagnostics.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -222,3 +225,9 @@ the only memory the next session has. Update it every commit.
   `scripted_graph.riv` as sample-0 exact, and gated `scripted_color.riv` as a
   verified data-binding-color unsupported diagnostic; exact count is now 23,
   unsupported-feature is now 69, and not-yet is now 203.
+- 2026-07-02: [M1] Promoted `scripted_string.riv`,
+  `viewmodel_runtime_file.riv`, and `clear_viewmodel_list.riv` as sample-0
+  exact, and gated `databind_external_artboard_main.riv`,
+  `databind_external_artboard_child.riv`, and `viewmodel_image_reset.riv` with
+  existing nested-artboard/text/image diagnostics; exact count is now 26,
+  unsupported-feature is now 72, and not-yet is now 197.

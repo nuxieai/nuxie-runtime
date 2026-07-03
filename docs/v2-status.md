@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 10
+- Corpus files `exact`: 13
 - Current milestone: **M1 — Static Vector Rendering Exact (#V2-2)**
 
 ## Milestones
@@ -21,9 +21,9 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Inspect `blend_test` at sample `0`; first divergence is the `source` scene
-   marker, so check whether stream content is otherwise exact before deciding
-   marker fix vs M2 parking.
+1. Inspect `fix_rectangle` at sample `0`; first known divergence is
+   `fillRule=2` vs `fillRule=0`, so decide whether Rust is missing a static
+   rectangle/shape fill-rule import or a C++ draw-time normalization.
 2. Keep `fill_trim_path` and `trim_path_linear` parked for M2 keyframe and
    non-zero sample support.
 
@@ -91,6 +91,11 @@ the only memory the next session has. Update it every commit.
   `ShapePaintMutator` object order, not Fill/Stroke object order and not draw
   order; Rust preallocates by mutator owner first, then falls back to any
   unallocated Fill/Stroke.
+- 2026-07-02: Rust golden runner scene markers follow C++
+  `defaultStateMachine()` selection by checking whether
+  `defaultStateMachineId` was serialized on the selected artboard and treating
+  the value as a state-machine index; schema default values alone do not
+  select a state machine.
 
 ## Log
 
@@ -161,3 +166,6 @@ the only memory the next session has. Update it every commit.
   at sample `0`, generalized instance paint preallocation to C++
   `ShapePaintMutator` order, and parked `fill_trim_path.riv` for M2 keyframe
   application; exact count is now 10.
+- 2026-07-02: [M1] Marked `blend_test.riv`,
+  `multiple_state_machines.riv`, and `stroke_name_test.riv` exact at sample
+  `0` by matching C++ static-scene marker selection; exact count is now 13.

@@ -48,11 +48,16 @@ fn run() -> Result<String> {
     let width = artboard_object.double_property("width").unwrap_or(0.0);
     let height = artboard_object.double_property("height").unwrap_or(0.0);
     let artboard_name = artboard.name.clone().unwrap_or_default();
-    let scene_name = artboard
-        .state_machines
-        .iter()
-        .find(|state_machine| state_machine.global_id.is_some())
-        .and_then(|state_machine| state_machine.name.as_deref())
+    let scene_name = artboard_object
+        .property("defaultStateMachineId")
+        .and_then(|_| artboard_object.uint_property("defaultStateMachineId"))
+        .and_then(|default_state_machine_index| {
+            let default_state_machine_index = usize::try_from(default_state_machine_index).ok()?;
+            artboard
+                .state_machines
+                .get(default_state_machine_index)
+                .and_then(|state_machine| state_machine.name.as_deref())
+        })
         .unwrap_or(&artboard_name);
 
     factory.source(&options.file.to_string_lossy(), &artboard_name, scene_name);

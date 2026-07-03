@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 195 across 70 exact files
+- Exact segments (file × sample): 196 across 70 exact files
 - Parked breakdown (from `make golden-compare`): M3=21 M4=83 M5=8 M6=72 gated=5 harness=36
 - Current milestone: **M2 — Animated Playback Exact + Real Object Model (#V2-3)**
 
@@ -335,3 +335,10 @@ the only memory the next session has. Update it every commit.
   `exact=70`, `exact-segments=195`, `diverges=0`,
   `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
   passes.
+- 2026-07-03: [M2] Widened `stateful_list_props.riv` from samples `0` and
+  `0.25` to samples `0`, `0.25`, and `0.5`, keeping the passive text/layout,
+  view-model, and list-property render path exact while leaving those runtime
+  behaviors in M6/M5/M4 scope. Exact segments are now 196 across 70 exact
+  files; `make golden-compare` reports `exact=70`,
+  `exact-segments=196`, `diverges=0`, `unsupported-feature=225`,
+  `not-yet=0`, and `cargo test --workspace` passes.

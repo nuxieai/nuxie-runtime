@@ -1,57 +1,35 @@
-#include "rive_renderer_ffi.h"
+#include "rive_renderer_ffi_private.hpp"
 
 #include "render_context_null.hpp"
 #include "rive/math/raw_path.hpp"
-#include "rive/renderer.hpp"
-#include "rive/renderer/render_context.hpp"
-#include "rive/renderer/render_target.hpp"
 #include "rive/renderer/rive_renderer.hpp"
-#include "rive/span.hpp"
 
 #include <algorithm>
-#include <memory>
-#include <vector>
 
-struct rive_ffi_context
+namespace
 {
-    std::unique_ptr<rive::gpu::RenderContext> context;
-    rive::rcp<rive::gpu::RenderTarget> target;
-    std::unique_ptr<rive::Renderer> renderer;
-    uint32_t width = 0;
-    uint32_t height = 0;
-    uint64_t drawCount = 0;
-};
-
-struct rive_ffi_renderer
+class rive_ffi_null_context : public rive_ffi_context
 {
-    rive_ffi_context* context;
+public:
+    bool ensureTarget(uint32_t nextWidth, uint32_t nextHeight) override
+    {
+        if (context == nullptr)
+        {
+            return false;
+        }
+        if (target != nullptr && width == nextWidth && height == nextHeight)
+        {
+            return true;
+        }
+        width = nextWidth;
+        height = nextHeight;
+        target = context->static_impl_cast<RenderContextNULL>()->makeRenderTarget(
+            width,
+            height);
+        return target != nullptr;
+    }
 };
-
-struct rive_ffi_render_shader
-{
-    rive::rcp<rive::RenderShader> shader;
-};
-
-struct rive_ffi_render_path
-{
-    rive::rcp<rive::RenderPath> path;
-};
-
-struct rive_ffi_render_paint
-{
-    rive::rcp<rive::RenderPaint> paint;
-};
-
-struct rive_ffi_render_image
-{
-    rive::rcp<rive::RenderImage> image;
-};
-
-struct rive_ffi_render_buffer
-{
-    rive::rcp<rive::RenderBuffer> buffer;
-    std::vector<uint8_t> shadow;
-};
+} // namespace
 
 static rive::Mat2D to_mat2d(rive_ffi_mat2d matrix)
 {
@@ -139,14 +117,22 @@ static rive::RawPath to_raw_path(const uint8_t* verbs,
 extern "C" rive_ffi_context* rive_ffi_context_make_null(uint32_t width,
                                                         uint32_t height)
 {
-    auto* ctx = new rive_ffi_context;
+    auto* ctx = new rive_ffi_null_context;
     ctx->context = RenderContextNULL::MakeContext();
-    ctx->width = width;
-    ctx->height = height;
-    ctx->target = ctx->context->static_impl_cast<RenderContextNULL>()
-                      ->makeRenderTarget(width, height);
+    if (!ctx->ensureTarget(width, height))
+    {
+        delete ctx;
+        return nullptr;
+    }
     return ctx;
 }
+
+#if !defined(__APPLE__) || !defined(RIVE_FFI_HAS_METAL)
+extern "C" rive_ffi_context* rive_ffi_context_make_metal(uint32_t, uint32_t)
+{
+    return nullptr;
+}
+#endif
 
 extern "C" void rive_ffi_context_delete(rive_ffi_context* ctx) { delete ctx; }
 
@@ -159,12 +145,9 @@ extern "C" int rive_ffi_context_begin_frame(rive_ffi_context* ctx,
     {
         return 0;
     }
-    if (ctx->target == nullptr || ctx->width != width || ctx->height != height)
+    if (!ctx->ensureTarget(width, height))
     {
-        ctx->width = width;
-        ctx->height = height;
-        ctx->target = ctx->context->static_impl_cast<RenderContextNULL>()
-                          ->makeRenderTarget(width, height);
+        return 0;
     }
 
     rive::gpu::RenderContext::FrameDescriptor desc;
@@ -186,7 +169,20 @@ extern "C" void rive_ffi_context_end_frame(rive_ffi_context* ctx)
     ctx->renderer.reset();
     rive::gpu::RenderContext::FlushResources resources;
     resources.renderTarget = ctx->target.get();
+    ctx->beforeFlush(resources);
     ctx->context->flush(resources);
+    ctx->afterFlush();
+}
+
+extern "C" size_t rive_ffi_context_read_pixels(rive_ffi_context* ctx,
+                                               uint8_t* out,
+                                               size_t len)
+{
+    if (ctx == nullptr || out == nullptr)
+    {
+        return 0;
+    }
+    return ctx->readPixels(out, len);
 }
 
 extern "C" uint64_t rive_ffi_context_draw_count(const rive_ffi_context* ctx)

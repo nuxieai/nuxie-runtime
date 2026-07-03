@@ -27,12 +27,14 @@ typedef struct rive_ffi_mat2d
 } rive_ffi_mat2d;
 
 rive_ffi_context* rive_ffi_context_make_null(uint32_t width, uint32_t height);
+rive_ffi_context* rive_ffi_context_make_metal(uint32_t width, uint32_t height);
 void rive_ffi_context_delete(rive_ffi_context*);
 int rive_ffi_context_begin_frame(rive_ffi_context*,
                                  uint32_t width,
                                  uint32_t height,
                                  uint32_t clear_color);
 void rive_ffi_context_end_frame(rive_ffi_context*);
+size_t rive_ffi_context_read_pixels(rive_ffi_context*, uint8_t* out, size_t len);
 uint64_t rive_ffi_context_draw_count(const rive_ffi_context*);
 rive_ffi_renderer* rive_ffi_context_renderer(rive_ffi_context*);
 void rive_ffi_renderer_delete(rive_ffi_renderer*);

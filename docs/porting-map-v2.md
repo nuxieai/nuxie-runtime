@@ -83,8 +83,9 @@ Target: days 1–3
    `corpus.toml` manifest generated with `riv-inspect` type-key scans.
 6. **`rive-renderer-ffi` (parallel, low risk).** A second `Renderer` impl
    forwarding the trait through a C ABI into the real Rive Renderer, plus a
-   minimal demo viewer window. This is the permanent production seam; building
-   it now validates the ABI early.
+   minimal demo viewer window or offscreen pixel target. This is the permanent
+   production seam; building it now validates the ABI early. M1 landed this as
+   a macOS Metal offscreen readback demo before moving on to M2.
 
 ### Exit Criteria
 

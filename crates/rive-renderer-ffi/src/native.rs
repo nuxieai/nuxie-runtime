@@ -14,6 +14,7 @@ pub enum NativeRendererError {
     CreateContext,
     BeginFrame,
     MissingRenderer,
+    ReadPixels { expected: usize, actual: usize },
 }
 
 impl fmt::Display for NativeRendererError {
@@ -22,6 +23,10 @@ impl fmt::Display for NativeRendererError {
             Self::CreateContext => write!(f, "failed to create native renderer context"),
             Self::BeginFrame => write!(f, "failed to begin native renderer frame"),
             Self::MissingRenderer => write!(f, "native renderer frame is not open"),
+            Self::ReadPixels { expected, actual } => write!(
+                f,
+                "native renderer returned {actual} pixel bytes, expected {expected}"
+            ),
         }
     }
 }
@@ -37,6 +42,17 @@ pub struct FfiFactory {
 impl FfiFactory {
     pub fn new_null(width: u32, height: u32) -> Result<Self, NativeRendererError> {
         let context = unsafe { ffi::rive_ffi_context_make_null(width, height) };
+        let context = NonNull::new(context).ok_or(NativeRendererError::CreateContext)?;
+        Ok(Self {
+            context: Rc::new(ContextHandle(context)),
+            width,
+            height,
+        })
+    }
+
+    #[cfg(target_os = "macos")]
+    pub fn new_metal(width: u32, height: u32) -> Result<Self, NativeRendererError> {
+        let context = unsafe { ffi::rive_ffi_context_make_metal(width, height) };
         let context = NonNull::new(context).ok_or(NativeRendererError::CreateContext)?;
         Ok(Self {
             context: Rc::new(ContextHandle(context)),
@@ -64,6 +80,24 @@ impl FfiFactory {
             renderer,
             ended: false,
         })
+    }
+
+    pub fn read_pixels(&self) -> Result<Vec<u8>, NativeRendererError> {
+        let expected = (self.width as usize)
+            .saturating_mul(self.height as usize)
+            .saturating_mul(4);
+        let mut pixels = vec![0; expected];
+        let actual = unsafe {
+            ffi::rive_ffi_context_read_pixels(
+                self.context.as_ptr(),
+                pixels.as_mut_ptr(),
+                pixels.len(),
+            )
+        };
+        if actual != expected {
+            return Err(NativeRendererError::ReadPixels { expected, actual });
+        }
+        Ok(pixels)
     }
 }
 
@@ -628,6 +662,7 @@ mod ffi {
 
     unsafe extern "C" {
         pub fn rive_ffi_context_make_null(width: u32, height: u32) -> *mut Context;
+        pub fn rive_ffi_context_make_metal(width: u32, height: u32) -> *mut Context;
         pub fn rive_ffi_context_delete(context: *mut Context);
         pub fn rive_ffi_context_begin_frame(
             context: *mut Context,
@@ -636,6 +671,11 @@ mod ffi {
             clear_color: u32,
         ) -> i32;
         pub fn rive_ffi_context_end_frame(context: *mut Context);
+        pub fn rive_ffi_context_read_pixels(
+            context: *mut Context,
+            out: *mut u8,
+            len: usize,
+        ) -> usize;
         pub fn rive_ffi_context_draw_count(context: *mut Context) -> u64;
         pub fn rive_ffi_context_renderer(context: *mut Context) -> *mut Renderer;
         pub fn rive_ffi_renderer_delete(renderer: *mut Renderer);

@@ -6,12 +6,12 @@ the only memory the next session has. Update it every commit.
 ## Metric
 
 - Corpus files `exact`: 54
-- Current milestone: **M1 — Static Vector Rendering Exact (#V2-2)**
+- Current milestone: **M2 — Animated Playback Exact + Real Object Model (#V2-3)**
 
 ## Milestones
 
 - [x] M0: Golden diff harness + corpus manifest + one exact file
-- [ ] M1: Static vector corpus files exact at advance(0); FFI viewer demo
+- [x] M1: Static vector corpus files exact at advance(0); FFI viewer demo
 - [ ] M2: Animated playback exact at sampled times; real object model landed; lib.rs modularized
 - [ ] M3: Interactive files exact under scripted pointer input
 - [ ] M4: Nested artboards/lists exact
@@ -21,12 +21,12 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Finish the M1 FFI viewer demo by adding a visible/offscreen Metal target to
-   `rive-renderer-ffi`: the Apple Metal Toolchain is installed, the C++
-   `librive_pls_renderer.a` + decoder/text/layout dependency archives build
-   and link, and `ffi_null_draw` still proves real-file import/draw through the
-   native bridge. Next slice: port enough of the C++ `TestingWindow`/Metal
-   texture path to expose non-empty pixels or a window frame from Rust.
+1. Start M2 with the real object model tracer bullet before adding
+   file-specific animation fixes: generate or wire concrete runtime object
+   storage plus setter/getter dispatch from `rive-schema`, give
+   `ArtboardInstance` a cloned object arena instead of property overlays, and
+   keep the static renderer exact count at 54 while landing the first tiny
+   keyframe-driven property through that path.
 2. `joystick_flag_test` is parked for M2: its sample-0 first diff is joystick
    application/default state-machine behavior, while Rust still draws the
    imported static state.
@@ -618,3 +618,13 @@ the only memory the next session has. Update it every commit.
   `ffi_null_draw`, `make golden-compare`, and `cargo test --workspace` pass;
   exact remains 54. Remaining M1 FFI demo work is the actual Metal
   offscreen/window pixel target.
+- 2026-07-03: [M1] Ported the C++ `TestingWindowMetalTexture` offscreen target
+  pattern into `rive-renderer-ffi`: macOS native mode now has a Metal context,
+  BGRA8 render target texture, external-command-buffer flush, and RGBA pixel
+  readback from Rust. `ffi_metal_draw` imports `dependency_test.riv`, draws 3
+  calls at `800x800`, reads `640000` nonzero pixels
+  (`checksum=9119d6210ebbef10`), and `ffi_null_draw` still passes. Verified
+  `rive-renderer-ffi --features native`, `make golden-compare`
+  (`exact=54`, `diverges=0`, `unsupported-feature=224`, `not-yet=17`), and
+  `cargo test --workspace`; M1 is complete and the active milestone moves to
+  M2.

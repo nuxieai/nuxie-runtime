@@ -48,4 +48,29 @@ mod native_tests {
 
         assert_eq!(frame.end(), 1);
     }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn metal_context_produces_non_empty_pixels() {
+        let Ok(mut factory) = FfiFactory::new_metal(64, 64) else {
+            eprintln!("skipping Metal pixel test because the native Metal context is unavailable");
+            return;
+        };
+        let mut raw_path = RawPath::new();
+        raw_path.move_to(4.0, 4.0);
+        raw_path.line_to(60.0, 4.0);
+        raw_path.line_to(60.0, 60.0);
+        raw_path.close();
+        let path = factory.make_render_path(raw_path, FillRule::NonZero);
+        let mut paint = factory.make_render_paint();
+        paint.style(RenderPaintStyle::Fill);
+        paint.color(0xff00ff00);
+
+        let mut frame = factory.begin_frame(0x00000000).expect("native frame");
+        frame.draw_path(path.as_ref(), paint.as_ref());
+        assert_eq!(frame.end(), 1);
+
+        let pixels = factory.read_pixels().expect("Metal pixel readback");
+        assert!(pixels.iter().any(|byte| *byte != 0));
+    }
 }

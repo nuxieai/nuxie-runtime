@@ -14,6 +14,11 @@ name = "ffi_null_draw"
 path = "examples/ffi_null_draw.rs"
 required-features = ["native"]
 
+[[example]]
+name = "ffi_metal_draw"
+path = "examples/ffi_metal_draw.rs"
+required-features = ["native"]
+
 [dependencies]
 rive-render-api = { path = "../rive-render-api" }
 

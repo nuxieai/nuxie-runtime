@@ -4,11 +4,17 @@ use std::path::PathBuf;
 fn main() {
     println!("cargo:rerun-if-changed=cpp/rive_renderer_ffi.cpp");
     println!("cargo:rerun-if-changed=cpp/rive_renderer_ffi.h");
+    println!("cargo:rerun-if-changed=cpp/rive_renderer_ffi_private.hpp");
+    println!("cargo:rerun-if-changed=cpp/rive_renderer_ffi_metal.mm");
     println!("cargo:rerun-if-env-changed=RIVE_RUNTIME_DIR");
 
     if env::var_os("CARGO_FEATURE_NATIVE").is_none() {
         return;
     }
+
+    let target_is_macos = env::var("CARGO_CFG_TARGET_OS")
+        .map(|target_os| target_os == "macos")
+        .unwrap_or(false);
 
     let runtime_dir = env::var("RIVE_RUNTIME_DIR")
         .map(PathBuf::from)
@@ -35,6 +41,7 @@ fn main() {
         .join(&profile)
         .join("librive_pls_renderer.a");
     println!("cargo:rerun-if-changed={}", renderer_lib.display());
+    let has_metal_backend = target_is_macos && renderer_lib.exists();
 
     let renderer_static_libs = [
         ("rive_pls_renderer", renderer_lib.clone()),
@@ -114,9 +121,16 @@ fn main() {
         if profile == "debug" {
             build.define("DEBUG", None);
         }
-        if cfg!(target_os = "macos") {
+        if target_is_macos {
             build.define("RIVE_MACOSX", None);
         }
+    }
+
+    if has_metal_backend {
+        build
+            .file("cpp/rive_renderer_ffi_metal.mm")
+            .define("RIVE_FFI_HAS_METAL", None)
+            .flag_if_supported("-fobjc-arc");
     }
 
     if !renderer_lib.exists() {
@@ -195,10 +209,11 @@ fn main() {
         }
     }
 
-    if cfg!(target_os = "macos") {
+    if target_is_macos {
         println!("cargo:rustc-link-lib=framework=Metal");
         println!("cargo:rustc-link-lib=framework=QuartzCore");
         println!("cargo:rustc-link-lib=framework=Cocoa");
+        println!("cargo:rustc-link-lib=framework=Foundation");
         println!("cargo:rustc-link-lib=framework=IOKit");
     }
 }

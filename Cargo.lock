@@ -96,6 +96,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust-golden-runner"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "rive-binary",
+ "rive-graph",
+ "rive-render-api",
+ "rive-runtime",
+]
+
+[[package]]
 name = "serde"
 version = "1.0.228"
 source = "registry+https://github.com/rust-lang/crates.io-index"

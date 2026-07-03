@@ -1,0 +1,13 @@
+[package]
+name = "rust-golden-runner"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+anyhow = "1"
+rive-binary = { path = "../../crates/rive-binary" }
+rive-graph = { path = "../../crates/rive-graph" }
+rive-render-api = { path = "../../crates/rive-render-api" }
+rive-runtime = { path = "../../crates/rive-runtime" }

@@ -12,7 +12,7 @@ features = ["type:Artboard", "type:Backboard", "type:Fill", "type:LinearAnimatio
 id = "dependency_test"
 path = "tests/unit_tests/assets/dependency_test.riv"
 samples = [0.0]
-status = "not-yet"
+status = "exact"
 features = ["type:Artboard", "type:Backboard", "type:Fill", "type:LinearAnimation", "type:Node", "type:PointsPath", "type:Shape", "type:SolidColor", "type:StraightVertex", "type:Stroke"]
 
 [[file]]

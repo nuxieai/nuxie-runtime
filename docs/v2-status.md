@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 0
+- Corpus files `exact`: 1
 - Current milestone: **M0 — Golden Harness And Renderer Seam (#V2-1)**
 
 ## Milestones
@@ -21,14 +21,18 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. First exact file: a trivial static rectangle fixture, end to end.
-2. Expand `corpus.toml` from the initial seed to the full
+1. Expand `corpus.toml` from the initial seed to the full
    `tests/unit_tests/assets` set with type-key tags from `riv-inspect`.
+2. Move the narrow static solid-shape Rust runner path toward `rive-runtime`
+   renderer-trait integration for the next static vector corpus files.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
 - Golden runner view-model mutation scripts; `--view-model-script` is reserved
   but rejected until M5 external data-binding corpus files require it.
+- Rust golden runner currently supports static sample `0`, artboard
+  clip/background, solid fills/strokes, and no state machines, gradients,
+  images, text, nested artboards, or scripted input.
 
 ## Decisions
 
@@ -42,6 +46,9 @@ the only memory the next session has. Update it every commit.
 - 2026-07-02: `golden-compare` validates the C++ stream for `not-yet` entries
   and refuses `exact` entries unless a Rust runner is supplied, keeping the
   exact count honest while the Rust draw path is still absent.
+- 2026-07-02: First exact file is `dependency_test.riv`; the Rust runner
+  preallocates source + instance render paints to mirror C++ import/clone
+  paint lifetimes before drawing.
 
 ## Log
 
@@ -57,3 +64,5 @@ the only memory the next session has. Update it every commit.
   present.
 - 2026-07-02: [M0] Added `corpus.toml` with 8 seeded C++ unit-test assets,
   `tools/golden-compare`, and `make golden-compare`; exact count is now 0.
+- 2026-07-02: [M0] Added `tools/rust-golden-runner` for a narrow static
+  solid-shape path and marked `dependency_test` exact; exact count is now 1.

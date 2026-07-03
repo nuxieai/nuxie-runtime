@@ -22,8 +22,9 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
-   start with `rocket`, `runtime_nested_inputs`, `runtime_nested_text_runs`,
-   `saturation`, `scripted_data_context`, and `scripted_listener_context`;
+   start with `scripted_property_image`, `scroll_snap`, `scroll_test`,
+   `scroll_threshold`, `shared_viewmodel_instance`, and
+   `spotify_kids_app_icon`;
    promote exact sample-0 matches or add
    verified unsupported diagnostics for later-phase first diffs.
 2. `joystick_flag_test` is parked for M2: its sample-0 first diff is joystick
@@ -179,6 +180,10 @@ the only memory the next session has. Update it every commit.
   nested-artboard support; `replace_vm_instance.riv` is parked for text
   support; `reset_phase.riv` is parked for M6 layout component paint drawing;
   and `reuse_path_in_effect.riv` is parked for scripted path-effect support.
+- `rocket.riv` is parked for gradient rendering; `runtime_nested_inputs.riv`,
+  `runtime_nested_text_runs.riv`, `scripted_data_context.riv`, and
+  `scripted_listener_context.riv` are parked for nested-artboard support; and
+  `saturation.riv` is parked for text support.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -511,3 +516,8 @@ the only memory the next session has. Update it every commit.
   `reuse_path_in_effect.riv`, and `rewards_demo.riv` with verified
   nested-artboard/text/layout/scripted-path diagnostics; exact count is now
   51, unsupported-feature is now 194, and not-yet is now 50.
+- 2026-07-02: [M1] Gated `rocket.riv`, `runtime_nested_inputs.riv`,
+  `runtime_nested_text_runs.riv`, `saturation.riv`,
+  `scripted_data_context.riv`, and `scripted_listener_context.riv` with
+  verified gradient/nested-artboard/text diagnostics; exact remains 51,
+  unsupported-feature is now 200, and not-yet is now 44.

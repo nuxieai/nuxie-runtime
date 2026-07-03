@@ -1273,7 +1273,7 @@ features = ["type-key:106:FileAssetContents", "type-key:114:StateMachineListener
 [[file]]
 id = "off_road_car"
 path = "tests/unit_tests/assets/off_road_car.riv"
-samples = [0.0, 0.25]
+samples = [0.0, 0.25, 0.5]
 status = "exact"
 features = ["type-key:16:PointsPath", "type-key:17:RadialGradient", "type-key:18:SolidColor", "type-key:19:GradientStop", "type-key:1:Artboard", "type-key:20:Fill", "type-key:22:LinearGradient", "type-key:23:Backboard", "type-key:24:Stroke", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:28:CubicEaseInterpolator", "type-key:2:Node", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:35:CubicMirroredVertex", "type-key:3:Shape", "type-key:41:RootBone", "type-key:42:ClippingShape", "type-key:43:Skin", "type-key:44:Tendon", "type-key:45:Weight", "type-key:46:CubicWeight", "type-key:4:Ellipse", "type-key:5:StraightVertex", "type-key:6:CubicDetachedVertex", "type-key:7:Rectangle"]
 

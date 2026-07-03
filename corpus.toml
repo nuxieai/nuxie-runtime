@@ -62,7 +62,7 @@ features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill",
 id = "artboardclipping"
 path = "tests/unit_tests/assets/artboardclipping.riv"
 samples = [0.0]
-status = "not-yet"
+status = "exact"
 features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard"]
 
 [[file]]

@@ -25,6 +25,8 @@ use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 pub struct ArtboardInstance {
     width: f32,
     height: f32,
+    origin_x: f32,
+    origin_y: f32,
     slots: Vec<InstanceSlot>,
     components: Vec<RuntimeComponent>,
     component_by_local: BTreeMap<usize, usize>,
@@ -101,6 +103,8 @@ impl ArtboardInstance {
         Ok(Self {
             width: dimensions.width,
             height: dimensions.height,
+            origin_x: dimensions.origin_x,
+            origin_y: dimensions.origin_y,
             slots,
             components,
             component_by_local,
@@ -312,7 +316,7 @@ impl ArtboardInstance {
             RenderFillRule::Clockwise,
         );
         renderer.clip_path(clip.as_ref());
-        renderer.transform(RenderMat2D::IDENTITY);
+        renderer.transform(self.artboard_origin_transform());
 
         if let Some(background) = graph
             .shape_paint_containers
@@ -324,6 +328,8 @@ impl ArtboardInstance {
                 background,
                 self.width,
                 self.height,
+                self.origin_x,
+                self.origin_y,
                 factory,
                 renderer,
                 paint_by_global,
@@ -352,6 +358,17 @@ impl ArtboardInstance {
         // Keep the clip path alive until after the renderer has consumed it.
         clip.rewind();
         Ok(())
+    }
+
+    fn artboard_origin_transform(&self) -> RenderMat2D {
+        RenderMat2D([
+            1.0,
+            0.0,
+            0.0,
+            1.0,
+            self.width * self.origin_x,
+            self.height * self.origin_y,
+        ])
     }
 
     fn runtime_will_draw(&self, drawable: &SortedDrawableNode) -> bool {
@@ -1069,10 +1086,11 @@ pub enum RuntimePathCommand {
 
 pub fn preallocate_render_paints(
     runtime: &RuntimeFile,
+    graph: &ArtboardGraph,
     factory: &mut dyn RenderFactory,
 ) -> BTreeMap<u32, Box<dyn RenderPaint>> {
     let _source_artboard_paints = preallocate_render_paint_batch(runtime, factory);
-    preallocate_render_paint_batch(runtime, factory)
+    preallocate_artboard_render_paint_batch(runtime, graph, factory)
 }
 
 fn preallocate_render_paint_batch(
@@ -1088,25 +1106,37 @@ fn preallocate_render_paint_batch(
     paints
 }
 
+fn preallocate_artboard_render_paint_batch(
+    runtime: &RuntimeFile,
+    graph: &ArtboardGraph,
+    factory: &mut dyn RenderFactory,
+) -> BTreeMap<u32, Box<dyn RenderPaint>> {
+    let mut paints = BTreeMap::new();
+    for local_object in &graph.local_objects {
+        let Some(object) = runtime.object(local_object.global_id as usize) else {
+            continue;
+        };
+        if matches!(object.type_name, "Fill" | "Stroke") {
+            paints.insert(object.id, factory.make_render_paint());
+        }
+    }
+    paints
+}
+
 fn runtime_draw_background(
     runtime: &RuntimeFile,
     container: &ShapePaintContainerNode,
     width: f32,
     height: f32,
+    origin_x: f32,
+    origin_y: f32,
     factory: &mut dyn RenderFactory,
     renderer: &mut dyn Renderer,
     paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
 ) -> Result<()> {
-    let commands = vec![
-        RuntimePathCommand::Move { x: -0.0, y: -0.0 },
-        RuntimePathCommand::Line { x: width, y: -0.0 },
-        RuntimePathCommand::Line {
-            x: width,
-            y: height,
-        },
-        RuntimePathCommand::Line { x: -0.0, y: height },
-        RuntimePathCommand::Close,
-    ];
+    let left = -origin_x * width;
+    let top = -origin_y * height;
+    let commands = runtime_rect_commands(left, top, left + width, top + height);
     for paint in &container.paints {
         let object = runtime
             .object(paint.global_id as usize)
@@ -19482,6 +19512,8 @@ impl TransitionConditionOp {
 struct RuntimeArtboardDimensions {
     width: f32,
     height: f32,
+    origin_x: f32,
+    origin_y: f32,
 }
 
 impl RuntimeArtboardDimensions {
@@ -19492,7 +19524,18 @@ impl RuntimeArtboardDimensions {
         let height = object
             .and_then(|object| object.double_property("height"))
             .unwrap_or(0.0);
-        Self { width, height }
+        let origin_x = object
+            .and_then(|object| object.double_property("originX"))
+            .unwrap_or(0.0);
+        let origin_y = object
+            .and_then(|object| object.double_property("originY"))
+            .unwrap_or(0.0);
+        Self {
+            width,
+            height,
+            origin_x,
+            origin_y,
+        }
     }
 }
 
@@ -27127,6 +27170,8 @@ mod tests {
         ArtboardInstance {
             width: 0.0,
             height: 0.0,
+            origin_x: 0.0,
+            origin_y: 0.0,
             slots: components
                 .iter()
                 .enumerate()

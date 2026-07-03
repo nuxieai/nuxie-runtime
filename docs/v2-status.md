@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 1
+- Corpus files `exact`: 2
 - Current milestone: **M1 — Static Vector Rendering Exact (#V2-2)**
 
 ## Milestones
@@ -30,9 +30,9 @@ the only memory the next session has. Update it every commit.
 
 - Golden runner view-model mutation scripts; `--view-model-script` is reserved
   but rejected until M5 external data-binding corpus files require it.
-- Rust golden runner currently supports static sample `0`, artboard
-  clip/background, solid fills/strokes, and no state machines, gradients,
-  images, text, nested artboards, or scripted input.
+- Rust static draw path currently supports sample `0`, artboard
+  clip/background, selected-artboard origins, solid fills/strokes, and no
+  state machines, gradients, images, text, nested artboards, or scripted input.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -63,6 +63,9 @@ the only memory the next session has. Update it every commit.
 - 2026-07-02: `rive-runtime` owns static draw emission through
   `rive-render-api`; `rust-golden-runner` now only orchestrates import,
   artboard selection, stream markers, and recording output.
+- 2026-07-02: Static rendering applies artboard origin as a top-level draw
+  transform and preallocates clone render paints only for the selected
+  artboard, matching C++ multi-artboard import/draw behavior.
 
 ## Log
 
@@ -89,3 +92,6 @@ the only memory the next session has. Update it every commit.
 - 2026-07-02: [M1] Moved the narrow static solid-shape renderer path from
   `rust-golden-runner` into `rive-runtime`; exact remains 1 and
   `make golden-compare` passes.
+- 2026-07-02: [M1] Marked `artboardclipping.riv` exact by porting artboard
+  origin transforms and selected-artboard paint allocation; exact count is now
+  2.

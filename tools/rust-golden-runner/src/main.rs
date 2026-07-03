@@ -38,7 +38,7 @@ fn run() -> Result<String> {
     instance.update_components();
 
     let mut factory = RecordingFactory::new();
-    let mut paint_by_global = preallocate_render_paints(&runtime, &mut factory);
+    let mut paint_by_global = preallocate_render_paints(&runtime, artboard, &mut factory);
     let mut renderer = factory.make_renderer();
 
     let artboard_object = runtime

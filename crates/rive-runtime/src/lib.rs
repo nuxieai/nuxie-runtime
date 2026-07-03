@@ -28635,7 +28635,7 @@ impl RuntimeComponent {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rive_binary::{RuntimeProperty, read_runtime_file};
+    use rive_binary::{BytesValue, FieldValue, RuntimeProperty, read_runtime_file};
     use rive_graph::GraphFile;
 
     fn synthetic_instance(
@@ -28912,6 +28912,41 @@ mod tests {
 
         assert!(source.properties.is_empty());
         assert_eq!(arena.double_property(0, node_x_key), Some(42.0));
+    }
+
+    #[test]
+    fn instance_object_arena_reads_generated_defaults_and_imported_fields() {
+        let node_x_key = property_key_for_name("Node", "x").expect("Node.x key");
+        let artboard_clip_key = property_key_for_name("Artboard", "clip").expect("Artboard.clip");
+        let bytes_key =
+            property_key_for_name("FileAssetContents", "bytes").expect("FileAssetContents.bytes");
+        let arena = InstanceObjectArena::from_runtime_objects(vec![
+            Some(synthetic_runtime_object(
+                0,
+                "Node",
+                vec![RuntimeProperty {
+                    key: node_x_key,
+                    name: "x",
+                    owner: "Node",
+                    value: FieldValue::Double(7.5),
+                }],
+            )),
+            Some(synthetic_runtime_object(1, "Artboard", Vec::new())),
+            Some(synthetic_runtime_object(
+                2,
+                "FileAssetContents",
+                vec![RuntimeProperty {
+                    key: bytes_key,
+                    name: "bytes",
+                    owner: "FileAssetContents",
+                    value: FieldValue::Bytes(BytesValue::new(vec![1, 2, 3])),
+                }],
+            )),
+        ]);
+
+        assert_eq!(arena.double_property(0, node_x_key), Some(7.5));
+        assert_eq!(arena.bool_property(1, artboard_clip_key), Some(true));
+        assert_eq!(arena.string_property(2, bytes_key), Some(&[1, 2, 3][..]));
     }
 
     #[test]

@@ -12,6 +12,9 @@ rive-graph = { path = "../rive-graph" }
 rive-render-api = { path = "../rive-render-api" }
 rive-schema = { path = "../rive-schema" }
 
+[build-dependencies]
+rive-schema = { path = "../rive-schema" }
+
 [dev-dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

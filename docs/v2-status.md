@@ -21,12 +21,11 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue M2 real object model work by generating concrete object storage
-   for cloned artboard objects. The current `InstanceObjectArena` now owns
-   runtime-local `InstanceObject` property storage and validates writes against
-   generated CoreRegistry setter families, but storage is still generic
-   `objects.rs` `InstanceProperty`/`InstancePropertyValue` vectors rather than
-   generated per-type fields/setters.
+1. Continue M2 real object model work by making generated
+   `InstanceObjectStorage` the source of truth for component transform/state
+   fields. The arena now generates per-type cloned object structs and
+   property-key getter/setter dispatch at build time, but `RuntimeComponent`
+   still mirrors transform/runtime fields in separate structs.
 2. Add handle-source world-space math and nested-remap dependent advancement
    to the joystick path when a corpus diff reaches those cases.
 
@@ -681,3 +680,10 @@ the only memory the next session has. Update it every commit.
   `make golden-compare` reports `exact=66`, `diverges=0`,
   `unsupported-feature=224`, `not-yet=5`, and `cargo test --workspace`
   passes.
+- 2026-07-03: [M2] Added build-generated per-type
+  `InstanceObjectStorage` for cloned artboard objects, with schema-derived
+  typed fields, imported-property application, generated property-key
+  getters/setters, Artboard `clip` default handling, and encoded byte payload
+  storage. Exact count remains 66; `make golden-compare` reports `exact=66`,
+  `diverges=0`, `unsupported-feature=224`, `not-yet=5`, and
+  `cargo test --workspace` passes.

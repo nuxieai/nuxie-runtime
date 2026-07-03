@@ -21,8 +21,8 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Triage `clipping_and_draw_order`; gate image support if the verified
-   diagnostic fires before clipping/draw-order comparison.
+1. Inspect `trim_path` at sample `0` for another static trim/path exact
+   candidate.
 2. Keep `trim_path_linear` parked for M2/non-zero sample support unless its
    sample list is narrowed by an explicit M1 decision.
 
@@ -140,3 +140,6 @@ the only memory the next session has. Update it every commit.
 - 2026-07-02: [M1] Marked `circle_clips.riv` exact by porting static
   `ClippingShape` clip proxy drawing and reusing the artboard background path
   across paints; exact count is now 7.
+- 2026-07-02: [M1] Gated `clipping_and_draw_order.riv` as a verified image
+  unsupported diagnostic; exact remains 7, unsupported-feature is now 50, and
+  not-yet is now 238.

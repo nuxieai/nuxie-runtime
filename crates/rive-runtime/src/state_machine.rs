@@ -1,3 +1,4 @@
+use crate::animation::RuntimeInterpolator;
 use rive_binary::{RuntimeFile, RuntimeObject};
 
 #[derive(Debug, Clone)]
@@ -155,6 +156,58 @@ impl RuntimeStateMachineFireAction {
                 target_global_id: runtime_fire_trigger_target_global(file, action.object),
             }),
             _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum RuntimeTransitionInterpolator {
+    CubicEase {
+        x1: f32,
+        y1: f32,
+        x2: f32,
+        y2: f32,
+    },
+    Elastic {
+        amplitude: f32,
+        period: f32,
+        easing_value: u64,
+    },
+}
+
+impl RuntimeTransitionInterpolator {
+    pub(crate) fn from_object(object: &RuntimeObject) -> Option<Self> {
+        match object.type_name {
+            "CubicEaseInterpolator" => Some(Self::CubicEase {
+                x1: object.double_property("x1").unwrap_or(0.42),
+                y1: object.double_property("y1").unwrap_or(0.0),
+                x2: object.double_property("x2").unwrap_or(0.58),
+                y2: object.double_property("y2").unwrap_or(1.0),
+            }),
+            "ElasticInterpolator" => Some(Self::Elastic {
+                amplitude: object.double_property("amplitude").unwrap_or(1.0),
+                period: object.double_property("period").unwrap_or(1.0),
+                easing_value: object.uint_property("easingValue").unwrap_or(1),
+            }),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn transform(self, factor: f32) -> f32 {
+        match self {
+            Self::CubicEase { x1, y1, x2, y2 } => {
+                RuntimeInterpolator::CubicEase { x1, y1, x2, y2 }.transform(factor)
+            }
+            Self::Elastic {
+                amplitude,
+                period,
+                easing_value,
+            } => RuntimeInterpolator::Elastic {
+                amplitude,
+                period,
+                easing_value,
+            }
+            .transform(factor),
         }
     }
 }

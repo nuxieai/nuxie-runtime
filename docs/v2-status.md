@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 3
+- Corpus files `exact`: 4
 - Current milestone: **M1 — Static Vector Rendering Exact (#V2-2)**
 
 ## Milestones
@@ -21,19 +21,21 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Drive `trim.riv` from `diverges` to `exact` by porting the missing
-   `TrimPath` synchronized/static effect behavior.
-2. Match C++ selected-artboard render-paint allocation order for mixed
-   fill/stroke paints; `trim.riv` currently swaps the fill/stroke paint IDs.
+1. Run an M1 gating pass over the lowest-feature `not-yet` entries and move
+   clear later-phase families out of the M1 queue with explicit unsupported
+   diagnostics, starting with `nested_artboard_opacity`, `library_export_test`,
+   and `custom_image_name`.
+2. If that scan reveals a remaining M1 static-vector fixture, port the
+   referenced C++ shape/paint file and drive that corpus entry to `exact`.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
 - Golden runner view-model mutation scripts; `--view-model-script` is reserved
   but rejected until M5 external data-binding corpus files require it.
 - Rust static draw path currently supports sample `0`, artboard
-  clip/background, selected-artboard origins, solid fills/strokes, and no
-  state machines, gradients, images, text, trim paths, nested artboards, or
-  scripted input.
+  clip/background, selected-artboard origins, solid fills/strokes, and
+  empty/static synchronized TrimPath line effects; no state machines,
+  gradients, images, text, nested artboards, or scripted input.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -67,6 +69,12 @@ the only memory the next session has. Update it every commit.
 - 2026-07-02: Static rendering applies artboard origin as a top-level draw
   transform and preallocates clone render paints only for the selected
   artboard, matching C++ multi-artboard import/draw behavior.
+- 2026-07-02: Empty effect paths are distinct from no effect path;
+  `RuntimeShapePaintCommand` tracks whether a supported effect exists so C++
+  empty TrimPath output is preserved.
+- 2026-07-02: Effect-bearing selected-artboard paints preallocate before the
+  remaining local paint order, matching C++ clone paint IDs for `trim.riv`
+  without regressing `dependency_test.riv` or `shapetest.riv`.
 
 ## Log
 
@@ -102,3 +110,5 @@ the only memory the next session has. Update it every commit.
   empty synchronized trim path at sample 0 and allocates selected-artboard
   stroke/fill render paints in draw order, while Rust still emits the untrimmed
   path and swaps the paint IDs.
+- 2026-07-02: [M1] Marked `trim.riv` exact by preserving empty TrimPath
+  effects and effect-bearing paint allocation order; exact count is now 4.

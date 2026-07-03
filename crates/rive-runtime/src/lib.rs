@@ -1016,6 +1016,7 @@ pub struct RuntimeShapePaintCommand {
     pub feather_state: Option<RuntimeFeatherState>,
     pub path_commands: Vec<RuntimePathCommand>,
     pub effect_path_commands: Vec<RuntimePathCommand>,
+    pub has_effect_path: bool,
     pub needs_save_operation: bool,
 }
 
@@ -1112,15 +1113,37 @@ fn preallocate_artboard_render_paint_batch(
     factory: &mut dyn RenderFactory,
 ) -> BTreeMap<u32, Box<dyn RenderPaint>> {
     let mut paints = BTreeMap::new();
+    let mut allocated = BTreeSet::new();
+
+    for paint in graph
+        .shape_paint_containers
+        .iter()
+        .flat_map(|container| container.paints.iter())
+        .filter(|paint| !paint.effects.is_empty())
+    {
+        preallocate_render_paint(paint.global_id, factory, &mut paints, &mut allocated);
+    }
+
     for local_object in &graph.local_objects {
         let Some(object) = runtime.object(local_object.global_id as usize) else {
             continue;
         };
         if matches!(object.type_name, "Fill" | "Stroke") {
-            paints.insert(object.id, factory.make_render_paint());
+            preallocate_render_paint(object.id, factory, &mut paints, &mut allocated);
         }
     }
     paints
+}
+
+fn preallocate_render_paint(
+    global_id: u32,
+    factory: &mut dyn RenderFactory,
+    paints: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
+    allocated: &mut BTreeSet<u32>,
+) {
+    if allocated.insert(global_id) {
+        paints.insert(global_id, factory.make_render_paint());
+    }
 }
 
 fn runtime_draw_background(
@@ -1169,6 +1192,7 @@ fn runtime_draw_background(
             feather_state: None,
             path_commands: commands.clone(),
             effect_path_commands: Vec::new(),
+            has_effect_path: false,
             needs_save_operation: true,
         };
         runtime_configure_paint(
@@ -1224,10 +1248,10 @@ fn runtime_draw_command(
         let object = runtime
             .object(global_id as usize)
             .with_context(|| format!("missing paint global {global_id}"))?;
-        let path_commands = if paint.effect_path_commands.is_empty() {
-            &paint.path_commands
-        } else {
+        let path_commands = if paint.has_effect_path {
             &paint.effect_path_commands
+        } else {
+            &paint.path_commands
         };
         runtime_configure_paint(
             paint_by_global
@@ -1250,11 +1274,12 @@ fn runtime_draw_command(
             renderer.transform(runtime_render_mat(shape_world));
         }
         if path_cache[path_index].1.is_none() {
-            path_cache[path_index].1 = Some(runtime_make_path(
-                factory,
-                path_commands,
-                RenderFillRule::NonZero,
-            ));
+            let fill_rule = if paint.has_effect_path {
+                RenderFillRule::Clockwise
+            } else {
+                RenderFillRule::NonZero
+            };
+            path_cache[path_index].1 = Some(runtime_make_path(factory, path_commands, fill_rule));
         }
         let path = path_cache[path_index]
             .1
@@ -1435,6 +1460,7 @@ fn runtime_shape_paint_command(
         return None;
     }
     let effect_path_commands = runtime_effect_path_commands(paint, &path_commands);
+    let has_effect_path = effect_path_commands.is_some();
     Some(RuntimeShapePaintCommand {
         paint_local: paint.local_id,
         mutator_local: paint.mutator_local,
@@ -1448,7 +1474,8 @@ fn runtime_shape_paint_command(
         paint_state: runtime_shape_paint_state(artboard, paint, render_opacity),
         feather_state: runtime_feather_state(paint.feather.as_ref(), &path_commands, shape_world),
         path_commands,
-        effect_path_commands,
+        effect_path_commands: effect_path_commands.unwrap_or_default(),
+        has_effect_path,
         needs_save_operation,
     })
 }
@@ -1842,9 +1869,9 @@ fn command_points(command: &RuntimePathCommand) -> Vec<(f32, f32)> {
 fn runtime_effect_path_commands(
     paint: &ShapePaintNode,
     source: &[RuntimePathCommand],
-) -> Vec<RuntimePathCommand> {
+) -> Option<Vec<RuntimePathCommand>> {
     if paint.effects.is_empty() {
-        return Vec::new();
+        return None;
     }
 
     let mut current = source.to_vec();
@@ -1857,11 +1884,7 @@ fn runtime_effect_path_commands(
         has_supported_effect = true;
     }
 
-    if has_supported_effect {
-        current
-    } else {
-        Vec::new()
-    }
+    has_supported_effect.then_some(current)
 }
 
 fn runtime_stroke_effect_path_commands(

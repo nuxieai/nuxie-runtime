@@ -1924,7 +1924,7 @@ features = ["type-key:106:FileAssetContents", "type-key:114:StateMachineListener
 id = "trim"
 path = "tests/unit_tests/assets/trim.riv"
 samples = [0.0]
-status = "diverges"
+status = "exact"
 features = ["type-key:16:PointsPath", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:24:Stroke", "type-key:2:Node", "type-key:3:Shape", "type-key:47:TrimPath", "type-key:5:StraightVertex"]
 
 [[file]]

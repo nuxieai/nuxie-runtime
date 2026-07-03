@@ -21,23 +21,20 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Probe `zombie_skins` as the last unclassified `not-yet` M1 candidate:
-   promote it if sample `0` is exact, add a verified unsupported diagnostic,
-   or record the first diff if it belongs to a later milestone.
-2. Start M1 gradient rendering next. Port the C++ linear/radial gradient paint
+1. Start M1 gradient rendering next. Port the C++ linear/radial gradient paint
    update path into `rive-runtime`/`rive-render-api`, targeting gradient-only
    corpus demand such as `joel_signed`, `juice`, `off_road_car`, and `rocket`.
-3. `joystick_flag_test` is parked for M2: its sample-0 first diff is joystick
+2. `joystick_flag_test` is parked for M2: its sample-0 first diff is joystick
    application/default state-machine behavior, while Rust still draws the
    imported static state.
-4. `solo_test` and `solos_collapse_tests` are parked for M2: C++ applies
+3. `solo_test` and `solos_collapse_tests` are parked for M2: C++ applies
    frame-0 `KeyFrameId` values through the default state machine/animation,
    overriding imported `Solo.activeComponentId`; Rust has no
    state-machine/keyframe application yet.
-5. `clip_tests` is raw-exact at sample `0`, but its manifest includes sample
+4. `clip_tests` is raw-exact at sample `0`, but its manifest includes sample
    `0.25`; keep it parked until M2 non-zero sample support or an explicit
    sample-scope split.
-6. Keep `fill_trim_path` and `trim_path_linear` parked for M2 keyframe and
+5. Keep `fill_trim_path` and `trim_path_linear` parked for M2 keyframe and
    non-zero sample support.
 
 ## Backlog (unsupported features awaiting corpus demand)
@@ -96,7 +93,8 @@ the only memory the next session has. Update it every commit.
   parked for nested-artboard support, `virtualized_artboard_databound_children.riv`
   is parked for M6 layout component paint drawing, `walle.riv` and
   `viewmodel_based_condition.riv` are parked for image support, and
-  `word_joiner_test.riv` is parked for text support.
+  `word_joiner_test.riv` is parked for text support; `zombie_skins.riv` is
+  parked for nested-artboard support.
 - `artboard_list_map_rules.riv`, `artboard_list_overrides.riv`, and
   `component_list_child_origin.riv` are parked for M6 layout component paint
   drawing; `artboard_width_test.riv`, `transition_duration_bind_nested.riv`,
@@ -566,3 +564,6 @@ the only memory the next session has. Update it every commit.
   nested-artboard/text diagnostics; rechecked `cubic_value_test.riv` and
   `event_trigger_event.riv` as M2 stream divergences; exact remains 52,
   unsupported-feature is now 227, and not-yet is now 16.
+- 2026-07-02: [M1] Gated `zombie_skins.riv` with a verified nested-artboard
+  diagnostic; exact remains 52, unsupported-feature is now 228, and not-yet
+  is now 15. Next M1 implementation target is gradient rendering.

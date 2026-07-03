@@ -67,13 +67,6 @@ impl InstanceObjectArena {
     }
 
     #[cfg(test)]
-    pub(crate) fn empty_for_slots(len: usize) -> Self {
-        Self {
-            objects: vec![None; len],
-        }
-    }
-
-    #[cfg(test)]
     pub(crate) fn from_runtime_objects(objects: Vec<Option<RuntimeObject>>) -> Self {
         Self {
             objects: objects
@@ -147,6 +140,21 @@ impl InstanceObjectArena {
         let object = self.object(local_id)?;
         let (_, property) = runtime_property_metadata_by_name(object.type_key(), property_name)?;
         object.double_property(property.key.int)
+    }
+
+    pub(crate) fn set_double_property_by_name(
+        &mut self,
+        local_id: usize,
+        property_name: &str,
+        value: f32,
+    ) -> bool {
+        let Some(type_key) = self.object(local_id).map(InstanceObjectStorage::type_key) else {
+            return false;
+        };
+        let Some((_, property)) = runtime_property_metadata_by_name(type_key, property_name) else {
+            return false;
+        };
+        self.set_double_property(local_id, property.key.int, value)
     }
 
     pub(crate) fn set_double_property(

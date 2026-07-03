@@ -975,6 +975,20 @@ impl ArtboardInstance {
             return false;
         }
 
+        let property_name = property.property_name();
+        let requested_value = value;
+        let storage_changed =
+            self.objects
+                .set_double_property_by_name(local_id, property_name, requested_value);
+        let Some(value) = self
+            .objects
+            .double_property_by_name(local_id, property_name)
+        else {
+            return false;
+        };
+        if !storage_changed && value != requested_value {
+            return false;
+        }
         if !self.components[index]
             .transform
             .set_property(property, value)
@@ -999,9 +1013,12 @@ impl ArtboardInstance {
     }
 
     fn transform_property(&self, local_id: usize, property: TransformProperty) -> Option<f32> {
-        self.component(local_id)
-            .filter(|component| component.capabilities.transform)
-            .map(|component| component.transform.property(property))
+        let component = self
+            .component(local_id)
+            .filter(|component| component.capabilities.transform)?;
+        self.objects
+            .double_property_by_name(local_id, property.property_name())
+            .or_else(|| Some(component.transform.property(property)))
     }
 
     pub fn has_dirt(&self, dirt: ComponentDirt) -> bool {
@@ -27746,6 +27763,19 @@ pub enum TransformProperty {
     Opacity,
 }
 
+impl TransformProperty {
+    fn property_name(self) -> &'static str {
+        match self {
+            Self::X => "x",
+            Self::Y => "y",
+            Self::Rotation => "rotation",
+            Self::ScaleX => "scaleX",
+            Self::ScaleY => "scaleY",
+            Self::Opacity => "opacity",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default)]
 pub struct RuntimeComponentCapabilities {
     pub world_transform: bool,
@@ -28665,7 +28695,18 @@ mod tests {
                 component_index: Some(index),
             })
             .collect::<Vec<_>>();
-        let objects = InstanceObjectArena::empty_for_slots(slots.len());
+        let mut runtime_objects = vec![None; slots.len()];
+        for component in &components {
+            if component.local_id >= runtime_objects.len() {
+                runtime_objects.resize(component.local_id + 1, None);
+            }
+            runtime_objects[component.local_id] = Some(synthetic_runtime_object(
+                component.global_id,
+                component.type_name,
+                Vec::new(),
+            ));
+        }
+        let objects = InstanceObjectArena::from_runtime_objects(runtime_objects);
 
         ArtboardInstance {
             width: 0.0,
@@ -29076,6 +29117,7 @@ mod tests {
 
     #[test]
     fn transform_property_mutation_marks_instance_dirty() {
+        let node_x_key = property_key_for_name("Node", "x").expect("Node.x key");
         let mut component = synthetic_component(0, 0);
         component.dirt = ComponentDirt::NONE;
         let mut instance = synthetic_instance(vec![component], vec![0]);
@@ -29085,6 +29127,7 @@ mod tests {
         assert!(instance.set_transform_property(0, TransformProperty::X, 12.0));
         let component = instance.component(0).unwrap();
         assert_eq!(component.transform.x, 12.0);
+        assert_eq!(instance.double_property(0, node_x_key), Some(12.0));
         assert!(
             component
                 .dirt
@@ -29094,6 +29137,21 @@ mod tests {
         assert!(instance.did_change());
 
         assert!(!instance.set_transform_property(0, TransformProperty::X, 12.0));
+    }
+
+    #[test]
+    fn transform_property_mutation_writes_generated_storage_by_concrete_type() {
+        let node_x_key = property_key_for_name("Node", "x").expect("Node.x key");
+        let vertex_x_key = property_key_for_name("StraightVertex", "x").expect("StraightVertex.x");
+        let mut vertex = synthetic_component(0, 0);
+        vertex.type_name = "StraightVertex";
+        let mut instance = synthetic_instance(vec![vertex], vec![0]);
+
+        assert!(instance.set_transform_property(0, TransformProperty::X, 14.0));
+
+        assert_eq!(instance.component(0).unwrap().transform.x, 14.0);
+        assert_eq!(instance.double_property(0, vertex_x_key), Some(14.0));
+        assert_eq!(instance.double_property(0, node_x_key), None);
     }
 
     #[test]

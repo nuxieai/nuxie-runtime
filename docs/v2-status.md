@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 6
+- Corpus files `exact`: 7
 - Current milestone: **M1 — Static Vector Rendering Exact (#V2-2)**
 
 ## Milestones
@@ -21,8 +21,10 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Inspect `circle_clips` and `trim_path_linear` for the next exact candidate
-   or later-milestone boundary.
+1. Triage `clipping_and_draw_order`; gate image support if the verified
+   diagnostic fires before clipping/draw-order comparison.
+2. Keep `trim_path_linear` parked for M2/non-zero sample support unless its
+   sample list is narrowed by an explicit M1 decision.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -30,8 +32,9 @@ the only memory the next session has. Update it every commit.
   but rejected until M5 external data-binding corpus files require it.
 - Rust static draw path currently supports sample `0`, artboard
   clip/background, selected-artboard origins, solid fills/strokes, and
-  empty/static synchronized TrimPath line effects; no state machines,
-  gradients, images, text, nested artboards, constraints, or scripted input.
+  `ClippingShape` clip paths, plus empty/static synchronized TrimPath line
+  effects; no state machines, gradients, images, text, nested artboards,
+  constraints, or scripted input.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -134,3 +137,6 @@ the only memory the next session has. Update it every commit.
 - 2026-07-02: [M1] Gated `distance_constraint.riv` as a verified constraint
   unsupported diagnostic; exact remains 6, unsupported-feature is now 49, and
   not-yet is now 240.
+- 2026-07-02: [M1] Marked `circle_clips.riv` exact by porting static
+  `ClippingShape` clip proxy drawing and reusing the artboard background path
+  across paints; exact count is now 7.

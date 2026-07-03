@@ -146,7 +146,7 @@ features = ["type-key:100:Image", "type-key:105:ImageAsset", "type-key:106:FileA
 id = "circle_clips"
 path = "tests/unit_tests/assets/circle_clips.riv"
 samples = [0.0]
-status = "not-yet"
+status = "exact"
 features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:24:Stroke", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:42:ClippingShape", "type-key:4:Ellipse", "type-key:7:Rectangle"]
 
 [[file]]

@@ -341,16 +341,19 @@ impl ArtboardInstance {
             .iter()
             .map(|object| (object.local_id, object.global_id))
             .collect::<BTreeMap<_, _>>();
+        let mut clip_paths = Vec::<Box<dyn RenderPath>>::new();
 
         for command in self.draw_commands(graph) {
             runtime_draw_command(
                 runtime,
                 self,
+                graph,
                 &local_to_global,
                 command,
                 factory,
                 renderer,
                 paint_by_global,
+                &mut clip_paths,
             )?;
         }
 
@@ -589,6 +592,56 @@ impl ArtboardInstance {
                 transform,
                 weighted_context.as_ref(),
             ));
+        }
+
+        commands
+    }
+
+    fn runtime_clipping_shape_path_commands(
+        &self,
+        clipping_shape: &ClippingShapeNode,
+        graph: &ArtboardGraph,
+    ) -> Vec<RuntimePathCommand> {
+        let mut commands = Vec::new();
+        for shape_local in &clipping_shape.shape_locals {
+            let Some(composer) = graph
+                .path_composers
+                .iter()
+                .find(|composer| composer.shape_local == *shape_local)
+            else {
+                continue;
+            };
+
+            for path_ref in &composer.paths {
+                if !self.runtime_path_counts_for_clip(path_ref) {
+                    continue;
+                }
+                let Some(path) = graph
+                    .paths
+                    .iter()
+                    .find(|path| path.local_id == path_ref.local_id)
+                else {
+                    continue;
+                };
+                let Some(path_world) = self
+                    .component(path.local_id)
+                    .map(|component| component.transform.world_transform)
+                else {
+                    continue;
+                };
+                let weighted_context = self.runtime_weighted_path_context(path, graph);
+                let path_transform = if weighted_context.is_some() {
+                    Mat2D::IDENTITY
+                } else {
+                    path_world
+                };
+                commands.extend(path_commands(
+                    path,
+                    ShapePaintPathKind::World,
+                    path_transform,
+                    weighted_context.as_ref(),
+                ));
+            }
         }
 
         commands
@@ -1160,6 +1213,7 @@ fn runtime_draw_background(
     let left = -origin_x * width;
     let top = -origin_y * height;
     let commands = runtime_rect_commands(left, top, left + width, top + height);
+    let mut path = None::<Box<dyn RenderPath>>;
     for paint in &container.paints {
         let object = runtime
             .object(paint.global_id as usize)
@@ -1205,7 +1259,15 @@ fn runtime_draw_background(
         )?;
         renderer.save();
         renderer.transform(RenderMat2D::IDENTITY);
-        let path = runtime_make_path(factory, &commands, runtime_fill_rule_for_object(object));
+        if path.is_none() {
+            path = Some(runtime_make_path(
+                factory,
+                &commands,
+                runtime_fill_rule_for_object(object),
+            ));
+        }
+        let path = path.as_mut().expect("background path populated");
+        runtime_configure_fill_rule(path.as_mut(), object);
         renderer.draw_path(
             path.as_ref(),
             paint_by_global
@@ -1221,15 +1283,22 @@ fn runtime_draw_background(
 fn runtime_draw_command(
     runtime: &RuntimeFile,
     instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
     local_to_global: &BTreeMap<usize, u32>,
     command: RuntimeDrawCommand,
     factory: &mut dyn RenderFactory,
     renderer: &mut dyn Renderer,
     paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
+    clip_paths: &mut Vec<Box<dyn RenderPath>>,
 ) -> Result<()> {
     match command.kind {
-        RuntimeDrawCommandKind::ClipStart | RuntimeDrawCommandKind::ClipEnd => {
-            anyhow::bail!("unsupported: Rust runtime only supports artboard clipping")
+        RuntimeDrawCommandKind::ClipStart => {
+            runtime_draw_clip_start(instance, graph, command, factory, renderer, clip_paths);
+            return Ok(());
+        }
+        RuntimeDrawCommandKind::ClipEnd => {
+            runtime_draw_clip_end(graph, command, renderer);
+            return Ok(());
         }
         RuntimeDrawCommandKind::Draw => {}
     }
@@ -1301,6 +1370,62 @@ fn runtime_draw_command(
     Ok(())
 }
 
+fn runtime_draw_clip_start(
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    command: RuntimeDrawCommand,
+    factory: &mut dyn RenderFactory,
+    renderer: &mut dyn Renderer,
+    clip_paths: &mut Vec<Box<dyn RenderPath>>,
+) {
+    let Some(clipping_shape) = command
+        .clipping_shape_local
+        .and_then(|local_id| runtime_clipping_shape(graph, local_id))
+    else {
+        return;
+    };
+    if !clipping_shape.is_visible {
+        return;
+    }
+    if command.needs_save_operation {
+        renderer.save();
+    }
+    let path_commands = instance.runtime_clipping_shape_path_commands(clipping_shape, graph);
+    if path_commands.is_empty() {
+        return;
+    }
+    let path = runtime_make_path(
+        factory,
+        &path_commands,
+        runtime_fill_rule_for_value(clipping_shape.fill_rule),
+    );
+    renderer.clip_path(path.as_ref());
+    clip_paths.push(path);
+}
+
+fn runtime_draw_clip_end(
+    graph: &ArtboardGraph,
+    command: RuntimeDrawCommand,
+    renderer: &mut dyn Renderer,
+) {
+    let Some(clipping_shape) = command
+        .clipping_shape_local
+        .and_then(|local_id| runtime_clipping_shape(graph, local_id))
+    else {
+        return;
+    };
+    if clipping_shape.is_visible && command.needs_save_operation {
+        renderer.restore();
+    }
+}
+
+fn runtime_clipping_shape(graph: &ArtboardGraph, local_id: usize) -> Option<&ClippingShapeNode> {
+    graph
+        .clipping_shapes
+        .iter()
+        .find(|clipping_shape| clipping_shape.local_id == local_id)
+}
+
 fn runtime_cached_path_slot_index(
     cache: &mut Vec<(Vec<RuntimePathCommand>, Option<Box<dyn RenderPath>>)>,
     commands: &[RuntimePathCommand],
@@ -1358,7 +1483,11 @@ fn runtime_configure_fill_rule(path: &mut dyn RenderPath, object: &RuntimeObject
 }
 
 fn runtime_fill_rule_for_object(object: &RuntimeObject) -> RenderFillRule {
-    match object.uint_property("fillRule").unwrap_or(0) {
+    runtime_fill_rule_for_value(object.uint_property("fillRule").unwrap_or(0))
+}
+
+fn runtime_fill_rule_for_value(value: u64) -> RenderFillRule {
+    match value {
         1 => RenderFillRule::EvenOdd,
         2 => RenderFillRule::Clockwise,
         _ => RenderFillRule::NonZero,

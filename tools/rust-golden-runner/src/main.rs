@@ -185,6 +185,17 @@ fn ensure_static_draw_supported(artboard: &ArtboardGraph) -> Result<()> {
         );
     }
 
+    if let Some(text) = artboard
+        .local_objects
+        .iter()
+        .find(|object| object.type_name == Some("Text"))
+    {
+        bail!(
+            "unsupported: text in Rust golden runner (global {})",
+            text.global_id
+        );
+    }
+
     if let Some((constraint_type, global_id)) = artboard.local_objects.iter().find_map(|object| {
         let type_name = object.type_name?;
         type_name

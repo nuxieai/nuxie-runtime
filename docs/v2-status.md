@@ -21,10 +21,11 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Inspect `sorted_listeners` at sample `0`: Rust draws the same rectangle but
-   is missing a trailing C++ `save`/`restore` pair; decide whether this is M1
-   draw stack behavior or a harmless listener/state-machine artifact that
-   should park for M2/M3.
+1. Continue the M1 candidate sweep with the next runner-clean small fixtures:
+   start with `script_paths_opacity_test`, `script_paths_test`,
+   `scripted_boolean`, `scripted_color`, `scripted_enum`, and
+   `scripted_graph`; promote exact sample-0 matches or add a verified
+   unsupported diagnostic when a later-phase feature causes the first diff.
 2. `solo_test` and `solos_collapse_tests` are parked for M2: C++ applies
    frame-0 `KeyFrameId` values through the default state machine/animation,
    overriding imported `Solo.activeComponentId`; Rust has no
@@ -208,3 +209,7 @@ the only memory the next session has. Update it every commit.
   as verified Rust unsupported diagnostics, and parked `solos_collapse_tests`,
   `click_event`, and `sound` for M2 frame-0 keyframe application; exact count
   is now 18, unsupported-feature is now 66, and not-yet is now 211.
+- 2026-07-02: [M1] Gated `sorted_listeners.riv` as a verified text
+  unsupported diagnostic and `solid_affects_has_changed.riv` as a verified
+  nested-artboard unsupported diagnostic; exact remains 18, unsupported-feature
+  is now 68, and not-yet is now 209.

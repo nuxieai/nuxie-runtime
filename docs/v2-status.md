@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 95 across 70 exact files
+- Exact segments (file × sample): 96 across 70 exact files
 - Parked breakdown (from `make golden-compare`): M3=21 M4=83 M5=8 M6=72 gated=5 harness=36
 - Current milestone: **M2 — Animated Playback Exact + Real Object Model (#V2-3)**
 
@@ -461,3 +461,8 @@ the only memory the next session has. Update it every commit.
   stream exact. Exact segments are now 95 across 70 exact files; focused
   golden compare reports `exact=1`, `exact-segments=2`, `diverges=0`,
   `unsupported-feature=0`, `not-yet=0`.
+- 2026-07-03: [M2] Widened `circle_clips.riv` from sample `0` to samples `0`
+  and `0.25`, keeping its animated clipping playback stream exact. Exact
+  segments are now 96 across 70 exact files; focused golden compare reports
+  `exact=1`, `exact-segments=2`, `diverges=0`, `unsupported-feature=0`,
+  `not-yet=0`.

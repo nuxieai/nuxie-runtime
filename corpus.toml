@@ -1748,7 +1748,7 @@ features = ["type-key:106:FileAssetContents", "type-key:134:Text", "type-key:135
 [[file]]
 id = "stroke_name_test"
 path = "tests/unit_tests/assets/stroke_name_test.riv"
-samples = [0.0]
+samples = [0.0, 0.25]
 status = "exact"
 features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:24:Stroke", "type-key:2:Node", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:4:Ellipse", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:58:StateMachineTrigger", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:68:TransitionTriggerCondition"]
 

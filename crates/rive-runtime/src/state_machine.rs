@@ -6,22 +6,29 @@ use crate::{
     ArtboardInstance, RuntimeBindableArtboard, RuntimeBindableAsset, RuntimeBindableBoolean,
     RuntimeBindableColor, RuntimeBindableEnum, RuntimeBindableInteger, RuntimeBindableList,
     RuntimeBindableNumber, RuntimeBindableString, RuntimeBindableTrigger, RuntimeBindableViewModel,
-    RuntimeViewModelTrigger, StateMachineBindableArtboardInstance,
-    StateMachineBindableAssetInstance, StateMachineBindableBooleanInstance,
-    StateMachineBindableColorInstance, StateMachineBindableEnumInstance,
-    StateMachineBindableIntegerInstance, StateMachineBindableNumberInstance,
-    StateMachineBindableStringInstance, StateMachineBindableTriggerInstance,
-    StateMachineBindableViewModelInstance, artboard_index_for_graph, bindable_number_value,
-    runtime_bindable_artboards, runtime_bindable_assets, runtime_bindable_booleans,
-    runtime_bindable_colors, runtime_bindable_enums, runtime_bindable_integers,
-    runtime_bindable_lists, runtime_bindable_numbers, runtime_bindable_strings,
-    runtime_bindable_triggers, runtime_bindable_view_models, runtime_default_view_model_triggers,
+    RuntimeViewModelTrigger, artboard_index_for_graph, runtime_bindable_artboards,
+    runtime_bindable_assets, runtime_bindable_booleans, runtime_bindable_colors,
+    runtime_bindable_enums, runtime_bindable_integers, runtime_bindable_lists,
+    runtime_bindable_numbers, runtime_bindable_strings, runtime_bindable_triggers,
+    runtime_bindable_view_models, runtime_default_view_model_triggers,
 };
 use rive_binary::{RuntimeFile, RuntimeObject};
 use rive_graph::ArtboardGraph;
 use std::collections::BTreeMap;
 
+mod bindables;
 mod transition_conditions;
+pub(crate) use bindables::{
+    StateMachineBindableArtboardInstance, StateMachineBindableAssetInstance,
+    StateMachineBindableBooleanInstance, StateMachineBindableColorInstance,
+    StateMachineBindableEnumInstance, StateMachineBindableIntegerInstance,
+    StateMachineBindableListInstance, StateMachineBindableNumberInstance,
+    StateMachineBindableStringInstance, StateMachineBindableTriggerInstance,
+    StateMachineBindableViewModelInstance, bindable_artboard_value, bindable_asset_value,
+    bindable_boolean_value, bindable_color_value, bindable_enum_value, bindable_integer_value,
+    bindable_number_value, bindable_string_value, bindable_trigger_source_global_id,
+    bindable_trigger_value, bindable_view_model_value,
+};
 use transition_conditions::RuntimeTransitionCondition;
 
 #[derive(Debug, Clone)]

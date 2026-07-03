@@ -9,8 +9,19 @@ repository.workspace = true
 default = []
 native = []
 
+[[example]]
+name = "ffi_null_draw"
+path = "examples/ffi_null_draw.rs"
+required-features = ["native"]
+
 [dependencies]
 rive-render-api = { path = "../rive-render-api" }
+
+[dev-dependencies]
+anyhow = "1"
+rive-binary = { path = "../rive-binary" }
+rive-graph = { path = "../rive-graph" }
+rive-runtime = { path = "../rive-runtime" }
 
 [build-dependencies]
 cc = "1"

@@ -22,10 +22,11 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Finish the M1 FFI viewer demo by turning the new feature-gated
-   `rive-renderer-ffi` bridge from null-context smoke into a visible/offscreen
-   Metal target: build/link `librive_pls_renderer.a`, add the demo command that
-   imports a real `.riv`, draws it through `FfiFactory`/`FfiFrame`, and verifies
-   non-empty pixels or a window frame.
+   `rive-renderer-ffi` bridge from native null-context drawing into a
+   visible/offscreen Metal target: install/enable the Apple Metal Toolchain,
+   build/link `librive_pls_renderer.a`, swap the demo from draw-count proof to
+   non-empty pixels or a window frame, and keep the existing
+   `ffi_null_draw` real-file smoke passing.
 2. `joystick_flag_test` is parked for M2: its sample-0 first diff is joystick
    application/default state-machine behavior, while Rust still draws the
    imported static state.
@@ -258,6 +259,14 @@ the only memory the next session has. Update it every commit.
 - 2026-07-02: `golden-compare` exact stream comparison uses numeric-token
   epsilon `1e-4` while keeping call order, IDs, verbs, and non-numeric text
   exact, matching the V2 renderer seam plan.
+- 2026-07-03: `rive-renderer-ffi` native mode now has a local null-context
+  fallback that compiles the C++ renderer sources needed by
+  `RenderContextNULL` when `librive_pls_renderer.a` is absent; the
+  `ffi_null_draw` example imports `dependency_test.riv` and drew 3 calls
+  through `FfiFactory`/`FfiFrame` into C++ `RiveRenderer`. Full
+  visible/offscreen Metal remains blocked on the machine missing Apple's Metal
+  Toolchain while building the renderer archive (`xcodebuild
+  -downloadComponent MetalToolchain`).
 - 2026-07-02: Instance `RenderPaint` ID allocation follows C++ import-time
   `ShapePaintMutator` object order, not Fill/Stroke object order and not draw
   order; Rust preallocates by mutator owner first, then falls back to any
@@ -595,3 +604,9 @@ the only memory the next session has. Update it every commit.
   of native renderer artifacts, and the bridge currently syntax-checks against
   a `RenderContextNULL` smoke backend. Exact remains 54; next M1 work is the
   real Metal/window or offscreen-pixel demo target.
+- 2026-07-03: [M1] Made `rive-renderer-ffi --features native` link and run on
+  this machine by compiling the needed C++ renderer sources when
+  `librive_pls_renderer.a` is absent, added a native draw-count unit test, and
+  added `ffi_null_draw` as a real `.riv` import/draw smoke (`dependency_test`
+  draws 3 calls). Exact remains 54; full Metal/offscreen pixels remain blocked
+  on Apple's Metal Toolchain for the C++ renderer archive build.

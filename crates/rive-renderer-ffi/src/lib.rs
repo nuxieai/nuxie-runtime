@@ -24,3 +24,28 @@ mod tests {
         assert!(NATIVE_FEATURE_STATUS.contains("native"));
     }
 }
+
+#[cfg(all(test, feature = "native"))]
+mod native_tests {
+    use super::FfiFactory;
+    use rive_render_api::{Factory, FillRule, RawPath, RenderPaintStyle, Renderer};
+
+    #[test]
+    fn null_context_counts_drawn_path() {
+        let mut factory = FfiFactory::new_null(64, 64).expect("native context");
+        let mut raw_path = RawPath::new();
+        raw_path.move_to(4.0, 4.0);
+        raw_path.line_to(60.0, 4.0);
+        raw_path.line_to(60.0, 60.0);
+        raw_path.close();
+        let path = factory.make_render_path(raw_path, FillRule::NonZero);
+        let mut paint = factory.make_render_paint();
+        paint.style(RenderPaintStyle::Fill);
+        paint.color(0xff00ff00);
+
+        let mut frame = factory.begin_frame(0x00000000).expect("native frame");
+        frame.draw_path(path.as_ref(), paint.as_ref());
+
+        assert_eq!(frame.end(), 1);
+    }
+}

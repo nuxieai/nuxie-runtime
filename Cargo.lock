@@ -100,8 +100,12 @@ version = "0.1.0"
 name = "rive-renderer-ffi"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "cc",
+ "rive-binary",
+ "rive-graph",
  "rive-render-api",
+ "rive-runtime",
 ]
 
 [[package]]

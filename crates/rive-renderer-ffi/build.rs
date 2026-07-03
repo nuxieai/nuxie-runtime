@@ -14,21 +14,27 @@ fn main() {
         .unwrap_or_else(|_| PathBuf::from("/Users/levi/dev/oss/rive-runtime"));
 
     let profile = env::var("PROFILE").unwrap_or_else(|_| String::from("debug"));
-    let renderer_lib = runtime_dir
-        .join("renderer")
-        .join("out")
-        .join(&profile)
-        .join("librive_pls_renderer.a");
-    if !renderer_lib.exists() {
+    let root_lib_dir = runtime_dir.join("out").join(&profile);
+    let root_lib = root_lib_dir.join("librive.a");
+    if !root_lib.exists() {
         panic!(
-            "missing {}; build the C++ renderer first, e.g. `cd {}/renderer && premake5 gmake2 && make config={}`",
-            renderer_lib.display(),
+            "missing {}; build the C++ runtime first, e.g. `cd {} && premake5 gmake2 && make config={}`",
+            root_lib.display(),
             runtime_dir.display(),
             profile
         );
     }
 
-    cc::Build::new()
+    let renderer_out_dir = runtime_dir.join("renderer").join("out").join(&profile);
+    let generated_include_dir = renderer_out_dir.join("include");
+    let renderer_lib = runtime_dir
+        .join("renderer")
+        .join("out")
+        .join(&profile)
+        .join("librive_pls_renderer.a");
+
+    let mut build = cc::Build::new();
+    build
         .cpp(true)
         .std("c++17")
         .file("cpp/rive_renderer_ffi.cpp")
@@ -43,19 +49,55 @@ fn main() {
         .include(runtime_dir.join("tests/common"))
         .define("_RIVE_INTERNAL_", None)
         .define("TESTING", None)
-        .flag_if_supported("-Wno-shorten-64-to-32")
-        .compile("rive_renderer_ffi");
+        .flag_if_supported("-fno-rtti")
+        .flag_if_supported("-Wno-shorten-64-to-32");
+
+    if !renderer_lib.exists() {
+        if !generated_include_dir.exists() {
+            panic!(
+                "missing {} and {}; build the C++ renderer first, e.g. `cd {}/renderer && PATH=\"{}/build:$PATH\" build_rive.sh debug -- rive_pls_renderer`",
+                renderer_lib.display(),
+                generated_include_dir.display(),
+                runtime_dir.display(),
+                runtime_dir.display(),
+            );
+        }
+        println!(
+            "cargo:warning=missing {}; compiling the null renderer bridge from C++ renderer sources",
+            renderer_lib.display()
+        );
+        build.include(generated_include_dir).files(
+            [
+                "draw.cpp",
+                "gpu.cpp",
+                "gpu_resource.cpp",
+                "gr_triangulator.cpp",
+                "gradient.cpp",
+                "intersection_board.cpp",
+                "render_context.cpp",
+                "render_context_helper_impl.cpp",
+                "rive_render_factory.cpp",
+                "rive_render_image.cpp",
+                "rive_render_paint.cpp",
+                "rive_render_path.cpp",
+                "rive_renderer.cpp",
+                "sk_rectanizer_skyline.cpp",
+            ]
+            .map(|file| runtime_dir.join("renderer/src").join(file)),
+        );
+    }
+
+    build.compile("rive_renderer_ffi");
 
     println!(
         "cargo:rustc-link-search=native={}",
-        runtime_dir.join("renderer/out").join(&profile).display()
+        renderer_out_dir.display()
     );
-    println!(
-        "cargo:rustc-link-search=native={}",
-        runtime_dir.join("out").join(&profile).display()
-    );
+    println!("cargo:rustc-link-search=native={}", root_lib_dir.display());
     println!("cargo:rustc-link-lib=static=rive_renderer_ffi");
-    println!("cargo:rustc-link-lib=static=rive_pls_renderer");
+    if renderer_lib.exists() {
+        println!("cargo:rustc-link-lib=static=rive_pls_renderer");
+    }
     println!("cargo:rustc-link-lib=static=rive");
 
     if cfg!(target_os = "macos") {

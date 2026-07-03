@@ -1098,43 +1098,43 @@ features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill",
 id = "nested_event_test"
 path = "tests/unit_tests/assets/nested_event_test.riv"
 samples = [0.0]
-status = "not-yet"
-features = ["type-key:114:StateMachineListenerSingle", "type-key:117:ListenerBoolChange", "type-key:128:Event", "type-key:168:ListenerFireEvent", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:59:StateMachineBool", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:71:TransitionBoolCondition", "type-key:7:Rectangle", "type-key:92:NestedArtboard", "type-key:95:NestedStateMachine"]
+status = "unsupported-feature"
+features = ["type-key:114:StateMachineListenerSingle", "type-key:117:ListenerBoolChange", "type-key:128:Event", "type-key:168:ListenerFireEvent", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:59:StateMachineBool", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:71:TransitionBoolCondition", "type-key:7:Rectangle", "type-key:92:NestedArtboard", "type-key:95:NestedStateMachine", "rust-runner-unsupported:nested-artboards"]
 
 [[file]]
 id = "nested_events"
 path = "tests/unit_tests/assets/nested_events.riv"
 samples = [0.0]
-status = "not-yet"
-features = ["type-key:106:FileAssetContents", "type-key:114:StateMachineListenerSingle", "type-key:128:Event", "type-key:134:Text", "type-key:135:TextValueRun", "type-key:137:TextStylePaint", "type-key:141:FontAsset", "type-key:144:TextStyleAxis", "type-key:168:ListenerFireEvent", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:24:Stroke", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:433:ViewModelInstanceString", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:443:ViewModelPropertyString", "type-key:447:DataBindContext", "type-key:471:BindablePropertyString", "type-key:487:ListenerViewModelChange", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle", "type-key:92:NestedArtboard", "type-key:95:NestedStateMachine"]
+status = "unsupported-feature"
+features = ["type-key:106:FileAssetContents", "type-key:114:StateMachineListenerSingle", "type-key:128:Event", "type-key:134:Text", "type-key:135:TextValueRun", "type-key:137:TextStylePaint", "type-key:141:FontAsset", "type-key:144:TextStyleAxis", "type-key:168:ListenerFireEvent", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:24:Stroke", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:433:ViewModelInstanceString", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:443:ViewModelPropertyString", "type-key:447:DataBindContext", "type-key:471:BindablePropertyString", "type-key:487:ListenerViewModelChange", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle", "type-key:92:NestedArtboard", "type-key:95:NestedStateMachine", "rust-runner-unsupported:nested-artboards"]
 
 [[file]]
 id = "nested_hug"
 path = "tests/unit_tests/assets/nested_hug.riv"
 samples = [0.0]
-status = "not-yet"
-features = ["type-key:106:FileAssetContents", "type-key:114:StateMachineListenerSingle", "type-key:117:ListenerBoolChange", "type-key:123:NestedBool", "type-key:134:Text", "type-key:135:TextValueRun", "type-key:137:TextStylePaint", "type-key:141:FontAsset", "type-key:144:TextStyleAxis", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:2:Node", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:409:LayoutComponent", "type-key:420:LayoutComponentStyle", "type-key:427:ViewModelInstanceListItem", "type-key:431:ViewModelPropertyNumber", "type-key:434:ViewModelPropertyList", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:441:ViewModelInstanceList", "type-key:442:ViewModelInstanceNumber", "type-key:447:DataBindContext", "type-key:451:NestedArtboardLeaf", "type-key:53:StateMachine", "type-key:559:ArtboardComponentList", "type-key:57:StateMachineLayer", "type-key:59:StateMachineBool", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:71:TransitionBoolCondition", "type-key:92:NestedArtboard", "type-key:95:NestedStateMachine"]
+status = "unsupported-feature"
+features = ["type-key:106:FileAssetContents", "type-key:114:StateMachineListenerSingle", "type-key:117:ListenerBoolChange", "type-key:123:NestedBool", "type-key:134:Text", "type-key:135:TextValueRun", "type-key:137:TextStylePaint", "type-key:141:FontAsset", "type-key:144:TextStyleAxis", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:2:Node", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:409:LayoutComponent", "type-key:420:LayoutComponentStyle", "type-key:427:ViewModelInstanceListItem", "type-key:431:ViewModelPropertyNumber", "type-key:434:ViewModelPropertyList", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:441:ViewModelInstanceList", "type-key:442:ViewModelInstanceNumber", "type-key:447:DataBindContext", "type-key:451:NestedArtboardLeaf", "type-key:53:StateMachine", "type-key:559:ArtboardComponentList", "type-key:57:StateMachineLayer", "type-key:59:StateMachineBool", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:71:TransitionBoolCondition", "type-key:92:NestedArtboard", "type-key:95:NestedStateMachine", "rust-runner-unsupported:nested-artboards"]
 
 [[file]]
 id = "nested_needs_advance"
 path = "tests/unit_tests/assets/nested_needs_advance.riv"
 samples = [0.0]
-status = "not-yet"
-features = ["type-key:169:StateMachineFireEvent", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:23:Backboard", "type-key:24:Stroke", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:2:Node", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:47:TrimPath", "type-key:4:Ellipse", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:92:NestedArtboard", "type-key:95:NestedStateMachine"]
+status = "unsupported-feature"
+features = ["type-key:169:StateMachineFireEvent", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:23:Backboard", "type-key:24:Stroke", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:2:Node", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:47:TrimPath", "type-key:4:Ellipse", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:92:NestedArtboard", "type-key:95:NestedStateMachine", "rust-runner-unsupported:nested-artboards"]
 
 [[file]]
 id = "nested_solo"
 path = "tests/unit_tests/assets/nested_solo.riv"
 samples = [0.0]
-status = "not-yet"
+status = "exact"
 features = ["type-key:147:Solo", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:4:Ellipse", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition"]
 
 [[file]]
 id = "new_text"
 path = "tests/unit_tests/assets/new_text.riv"
 samples = [0.0]
-status = "not-yet"
-features = ["type-key:106:FileAssetContents", "type-key:134:Text", "type-key:135:TextValueRun", "type-key:137:TextStylePaint", "type-key:141:FontAsset", "type-key:142:KeyFrameString", "type-key:18:SolidColor", "type-key:19:GradientStop", "type-key:1:Artboard", "type-key:20:Fill", "type-key:22:LinearGradient", "type-key:23:Backboard", "type-key:24:Stroke", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:28:CubicEaseInterpolator", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:42:ClippingShape", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle"]
+status = "unsupported-feature"
+features = ["type-key:106:FileAssetContents", "type-key:134:Text", "type-key:135:TextValueRun", "type-key:137:TextStylePaint", "type-key:141:FontAsset", "type-key:142:KeyFrameString", "type-key:18:SolidColor", "type-key:19:GradientStop", "type-key:1:Artboard", "type-key:20:Fill", "type-key:22:LinearGradient", "type-key:23:Backboard", "type-key:24:Stroke", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:28:CubicEaseInterpolator", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:42:ClippingShape", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle", "rust-runner-unsupported:text"]
 
 [[file]]
 id = "number_to_list_nested_children"

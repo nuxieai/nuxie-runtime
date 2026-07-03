@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 48
+- Corpus files `exact`: 49
 - Current milestone: **M1 — Static Vector Rendering Exact (#V2-2)**
 
 ## Milestones
@@ -22,9 +22,9 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
-   start with `nested_event_test`, `nested_events`, `nested_hug`,
-   `nested_needs_advance`, `nested_solo`, and `new_text`; promote exact
-   sample-0 matches or add
+   start with `number_to_list_nested_children`, `off_road_car`,
+   `oneshotblend`, `opaque_hit_test`, `pause_nested_artboard`, and
+   `pointer_events`; promote exact sample-0 matches or add
    verified unsupported diagnostics for later-phase first diffs.
 2. `joystick_flag_test` is parked for M2: its sample-0 first diff is joystick
    application/default state-machine behavior, while Rust still draws the
@@ -156,6 +156,9 @@ the only memory the next session has. Update it every commit.
   `nested_artboard_quantize_and_speed.riv` are parked for nested-artboard
   support; `n_slice_triangle.riv` is parked for n-slice geometry/deformation
   support.
+- `nested_event_test.riv`, `nested_events.riv`, `nested_hug.riv`, and
+  `nested_needs_advance.riv` are parked for nested-artboard support;
+  `new_text.riv` is parked for text support.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -451,3 +454,8 @@ the only memory the next session has. Update it every commit.
   `nested_artboard_quantize_and_speed.riv` with verified text,
   nested-artboard, and n-slice diagnostics; exact remains 48,
   unsupported-feature is now 177, and not-yet is now 70.
+- 2026-07-02: [M1] Promoted `nested_solo.riv` as sample-0 exact, and gated
+  `nested_event_test.riv`, `nested_events.riv`, `nested_hug.riv`,
+  `nested_needs_advance.riv`, and `new_text.riv` with verified
+  nested-artboard/text diagnostics; exact count is now 49,
+  unsupported-feature is now 182, and not-yet is now 64.

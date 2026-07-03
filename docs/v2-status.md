@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 35
+- Corpus files `exact`: 37
 - Current milestone: **M1 — Static Vector Rendering Exact (#V2-2)**
 
 ## Milestones
@@ -22,10 +22,10 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
-   start with `state_machine_transition`, `state_transition_fire_trigger`,
-   `stateful_artboard_swap`, `stateful_list_props`, `stateful_multi_property`,
-   and `stateful_nested`; promote exact sample-0 matches or add verified
-   unsupported diagnostics for later-phase first diffs.
+   start with `tape`, `target_event`, `time_based_interpolation`,
+   `transition_artboard_condition_test`, `transition_duration_bind_list`, and
+   `two_bone_ik`; promote exact sample-0 matches or add verified unsupported
+   diagnostics for later-phase first diffs.
 2. `solo_test` and `solos_collapse_tests` are parked for M2: C++ applies
    frame-0 `KeyFrameId` values through the default state machine/animation,
    overriding imported `Solo.activeComponentId`; Rust has no
@@ -79,6 +79,9 @@ the only memory the next session has. Update it every commit.
   `transition_index_condition.riv` are parked for M6 layout component paint
   drawing; `complex_ik_dependency.riv` is parked for constraint support, and
   `stateful_source_switch.riv` is parked for nested-artboard support.
+- `state_transition_fire_trigger.riv`, `stateful_artboard_swap.riv`,
+  `stateful_multi_property.riv`, and `stateful_nested.riv` are parked for
+  nested-artboard support.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -269,3 +272,10 @@ the only memory the next session has. Update it every commit.
   `stateful_source_switch.riv` with verified layout/constraint/nested-artboard
   diagnostics; exact count is now 35, unsupported-feature is now 87, and
   not-yet is now 173.
+- 2026-07-02: [M1] Promoted `state_machine_transition.riv` and
+  `stateful_list_props.riv` as sample-0 exact by pruning empty
+  `ShapePaintPath` segments during runtime path composition, and gated
+  `state_transition_fire_trigger.riv`, `stateful_artboard_swap.riv`,
+  `stateful_multi_property.riv`, and `stateful_nested.riv` with verified
+  nested-artboard diagnostics; exact count is now 37, unsupported-feature is
+  now 91, and not-yet is now 167.

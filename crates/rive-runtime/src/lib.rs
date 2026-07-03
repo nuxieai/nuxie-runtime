@@ -596,12 +596,10 @@ impl ArtboardInstance {
                 }
             };
 
-            commands.extend(path_commands(
-                path,
-                path_kind,
-                transform,
-                weighted_context.as_ref(),
-            ));
+            let mut path_commands =
+                path_commands(path, path_kind, transform, weighted_context.as_ref());
+            prune_empty_path_segments(&mut path_commands);
+            commands.extend(path_commands);
         }
 
         commands
@@ -645,12 +643,14 @@ impl ArtboardInstance {
                 } else {
                     path_world
                 };
-                commands.extend(path_commands(
+                let mut path_commands = path_commands(
                     path,
                     ShapePaintPathKind::World,
                     path_transform,
                     weighted_context.as_ref(),
-                ));
+                );
+                prune_empty_path_segments(&mut path_commands);
+                commands.extend(path_commands);
             }
         }
 
@@ -1881,6 +1881,49 @@ fn path_commands_backwards(commands: &[RuntimePathCommand]) -> Vec<RuntimePathCo
     }
 
     raw_path_parts_to_commands(&reversed_verbs, &reversed_points)
+}
+
+// Coarsely translated from:
+// /Users/levi/dev/oss/rive-runtime/src/math/raw_path.cpp RawPath::pruneEmptySegments
+fn prune_empty_path_segments(commands: &mut Vec<RuntimePathCommand>) {
+    let mut pruned = Vec::with_capacity(commands.len());
+    let mut current = None::<(f32, f32)>;
+    for command in commands.drain(..) {
+        match command {
+            RuntimePathCommand::Move { x, y } => {
+                current = Some((x, y));
+                pruned.push(RuntimePathCommand::Move { x, y });
+            }
+            RuntimePathCommand::Line { x, y } => {
+                if current != Some((x, y)) {
+                    pruned.push(RuntimePathCommand::Line { x, y });
+                }
+                current = Some((x, y));
+            }
+            RuntimePathCommand::Cubic {
+                x1,
+                y1,
+                x2,
+                y2,
+                x3,
+                y3,
+            } => {
+                if current != Some((x1, y1)) || (x1, y1) != (x2, y2) || (x2, y2) != (x3, y3) {
+                    pruned.push(RuntimePathCommand::Cubic {
+                        x1,
+                        y1,
+                        x2,
+                        y2,
+                        x3,
+                        y3,
+                    });
+                }
+                current = Some((x3, y3));
+            }
+            RuntimePathCommand::Close => pruned.push(RuntimePathCommand::Close),
+        }
+    }
+    *commands = pruned;
 }
 
 fn raw_path_parts(commands: &[RuntimePathCommand]) -> (Vec<RawPathVerb>, Vec<(f32, f32)>) {

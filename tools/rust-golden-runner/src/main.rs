@@ -245,7 +245,8 @@ fn ensure_static_draw_supported(graph: &GraphFile, artboard: &ArtboardGraph) -> 
     if let Some(data_bind) = artboard.data_binds.iter().find(|data_bind| {
         data_bind.target_type_name == Some("Shape")
             && matches!(data_bind.property_key, 13 | 14)
-            && data_bind.converter_global.is_none()
+            && (data_bind.converter_global.is_none()
+                || data_bind.converter_type_name == Some("DataConverterGroup"))
     }) {
         bail!(
             "unsupported: data-binding-transform in Rust golden runner (data bind global {} target global {:?})",

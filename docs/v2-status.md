@@ -22,10 +22,10 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
-   start with `focusable_element`, `format_number_with_commas`,
-   `formula_random`, `hello_world`, `hit_test_nested`, and `hit_test_test`;
-   promote exact sample-0 matches or add verified unsupported diagnostics for
-   later-phase first diffs.
+   start with `hittest_collapsed_layouts`, `hosted_font_file`,
+   `hosted_image_file`, `hunter_x_demo`, `image_binding_with_listener`, and
+   `image_fit_alignment`; promote exact sample-0 matches or add verified
+   unsupported diagnostics for later-phase first diffs.
 2. `solo_test` and `solos_collapse_tests` are parked for M2: C++ applies
    frame-0 `KeyFrameId` values through the default state machine/animation,
    overriding imported `Solo.activeComponentId`; Rust has no
@@ -120,6 +120,10 @@ the only memory the next session has. Update it every commit.
   `feather_render_test.riv` is parked for image support;
   `fit_font_size_test.riv` is parked for text support; `focus_collapsing.riv`
   and `focus_traversal.riv` are parked for nested-artboard support.
+- `focusable_element.riv`, `hit_test_nested.riv`, and `hit_test_test.riv` are
+  parked for nested-artboard support; `format_number_with_commas.riv` and
+  `hello_world.riv` are parked for text support; `formula_random.riv` is
+  parked for M5 data-binding transform/formula application.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -367,3 +371,10 @@ the only memory the next session has. Update it every commit.
   image/text/nested-artboard diagnostics, and parked
   `event_trigger_event.riv` for M2 frame-0 color application; exact count is
   now 41, unsupported-feature is now 138, and not-yet is now 116.
+- 2026-07-02: [M1] Gated `focusable_element.riv`,
+  `format_number_with_commas.riv`, `formula_random.riv`, `hello_world.riv`,
+  `hit_test_nested.riv`, and `hit_test_test.riv` with verified
+  nested-artboard/text/data-binding diagnostics, and broadened the static
+  runner transform data-bind diagnostic to include converter-group-backed
+  Shape x/y bindings; exact remains 41, unsupported-feature is now 144, and
+  not-yet is now 110.

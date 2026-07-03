@@ -21,10 +21,10 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Move the narrow static solid-shape Rust runner path toward `rive-runtime`
-   renderer-trait integration for the next static vector corpus files.
-2. Pick the next simplest static no-animation corpus file and drive it from
+1. Pick the next simplest static no-animation corpus file and drive it from
    `not-yet` to `exact` through the renderer-trait path.
+2. Extend the runtime renderer path for the first missing static vector feature
+   exposed by that file.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -60,6 +60,9 @@ the only memory the next session has. Update it every commit.
 - 2026-07-02: CI pins the reference C++ runtime to
   `7c778d13c5d903b3b74eec1dd6bb68a811dea5f2` and builds root
   `premake5_v2.lua` debug libraries before running `make golden-compare`.
+- 2026-07-02: `rive-runtime` owns static draw emission through
+  `rive-render-api`; `rust-golden-runner` now only orchestrates import,
+  artboard selection, stream markers, and recording output.
 
 ## Log
 
@@ -83,3 +86,6 @@ the only memory the next session has. Update it every commit.
 - 2026-07-02: [M0] Added GitHub Actions CI for `make golden-compare` and
   `cargo test --workspace`; M0 is complete and the active milestone moves to
   M1.
+- 2026-07-02: [M1] Moved the narrow static solid-shape renderer path from
+  `rust-golden-runner` into `rive-runtime`; exact remains 1 and
+  `make golden-compare` passes.

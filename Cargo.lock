@@ -87,6 +87,7 @@ dependencies = [
  "anyhow",
  "rive-binary",
  "rive-graph",
+ "rive-render-api",
  "rive-schema",
  "serde",
  "serde_json",

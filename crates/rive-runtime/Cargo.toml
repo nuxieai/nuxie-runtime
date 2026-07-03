@@ -9,6 +9,7 @@ repository.workspace = true
 anyhow = "1"
 rive-binary = { path = "../rive-binary" }
 rive-graph = { path = "../rive-graph" }
+rive-render-api = { path = "../rive-render-api" }
 rive-schema = { path = "../rive-schema" }
 
 [dev-dependencies]

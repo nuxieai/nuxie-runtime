@@ -6,8 +6,13 @@ use rive_binary::{
 use rive_graph::{
     ArtboardGraph, ClippingShapeNode, ComponentNode, DrawableOrderKind, FeatherNode,
     GradientStopNode, ParametricPathNode, PathComposerNode, PathComposerPathNode, PathGeometryNode,
-    PathVertexNode, ShapePaintKind, ShapePaintNode, ShapePaintPathKind, ShapePaintStateNode,
-    SortedDrawableNode, StrokeEffectNode,
+    PathVertexNode, ShapePaintContainerNode, ShapePaintKind, ShapePaintNode, ShapePaintPathKind,
+    ShapePaintStateNode, SortedDrawableNode, StrokeEffectNode,
+};
+use rive_render_api::{
+    BlendMode as RenderBlendMode, Factory as RenderFactory, FillRule as RenderFillRule,
+    Mat2D as RenderMat2D, RenderPaint, RenderPaintStyle, RenderPath, Renderer,
+    StrokeCap as RenderStrokeCap, StrokeJoin as RenderStrokeJoin,
 };
 use rive_schema::{
     CoreRegistryFieldKind, FieldKind, core_registry_field_kind_by_property_key, definition_by_name,
@@ -290,6 +295,63 @@ impl ArtboardInstance {
         }
 
         commands
+    }
+
+    pub fn draw_static_artboard(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        factory: &mut dyn RenderFactory,
+        renderer: &mut dyn Renderer,
+        paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
+    ) -> Result<()> {
+        renderer.save();
+        let mut clip = runtime_make_path(
+            factory,
+            &runtime_rect_commands(0.0, 0.0, self.width, self.height),
+            RenderFillRule::Clockwise,
+        );
+        renderer.clip_path(clip.as_ref());
+        renderer.transform(RenderMat2D::IDENTITY);
+
+        if let Some(background) = graph
+            .shape_paint_containers
+            .iter()
+            .find(|container| container.local_id == 0)
+        {
+            runtime_draw_background(
+                runtime,
+                background,
+                self.width,
+                self.height,
+                factory,
+                renderer,
+                paint_by_global,
+            )?;
+        }
+
+        let local_to_global = graph
+            .local_objects
+            .iter()
+            .map(|object| (object.local_id, object.global_id))
+            .collect::<BTreeMap<_, _>>();
+
+        for command in self.draw_commands(graph) {
+            runtime_draw_command(
+                runtime,
+                self,
+                &local_to_global,
+                command,
+                factory,
+                renderer,
+                paint_by_global,
+            )?;
+        }
+
+        renderer.restore();
+        // Keep the clip path alive until after the renderer has consumed it.
+        clip.rewind();
+        Ok(())
     }
 
     fn runtime_will_draw(&self, drawable: &SortedDrawableNode) -> bool {
@@ -1003,6 +1065,331 @@ pub enum RuntimePathCommand {
         y3: f32,
     },
     Close,
+}
+
+pub fn preallocate_render_paints(
+    runtime: &RuntimeFile,
+    factory: &mut dyn RenderFactory,
+) -> BTreeMap<u32, Box<dyn RenderPaint>> {
+    let _source_artboard_paints = preallocate_render_paint_batch(runtime, factory);
+    preallocate_render_paint_batch(runtime, factory)
+}
+
+fn preallocate_render_paint_batch(
+    runtime: &RuntimeFile,
+    factory: &mut dyn RenderFactory,
+) -> BTreeMap<u32, Box<dyn RenderPaint>> {
+    let mut paints = BTreeMap::new();
+    for object in runtime.objects.iter().flatten() {
+        if matches!(object.type_name, "Fill" | "Stroke") {
+            paints.insert(object.id, factory.make_render_paint());
+        }
+    }
+    paints
+}
+
+fn runtime_draw_background(
+    runtime: &RuntimeFile,
+    container: &ShapePaintContainerNode,
+    width: f32,
+    height: f32,
+    factory: &mut dyn RenderFactory,
+    renderer: &mut dyn Renderer,
+    paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
+) -> Result<()> {
+    let commands = vec![
+        RuntimePathCommand::Move { x: -0.0, y: -0.0 },
+        RuntimePathCommand::Line { x: width, y: -0.0 },
+        RuntimePathCommand::Line {
+            x: width,
+            y: height,
+        },
+        RuntimePathCommand::Line { x: -0.0, y: height },
+        RuntimePathCommand::Close,
+    ];
+    for paint in &container.paints {
+        let object = runtime
+            .object(paint.global_id as usize)
+            .with_context(|| format!("missing paint global {}", paint.global_id))?;
+        let runtime_paint = RuntimeShapePaintCommand {
+            paint_local: paint.local_id,
+            mutator_local: paint.mutator_local,
+            paint_type: runtime_shape_paint_kind(paint.paint_type),
+            path_kind: RuntimeShapePaintPathKind::Local,
+            blend_mode_value: paint.blend_mode_value,
+            render_blend_mode_value: 3,
+            paint_state: paint.paint_state.clone().map(|state| match state {
+                ShapePaintStateNode::SolidColor { color } => RuntimeShapePaintState::SolidColor {
+                    color,
+                    render_color: color,
+                },
+                ShapePaintStateNode::LinearGradient { .. }
+                | ShapePaintStateNode::RadialGradient { .. } => {
+                    RuntimeShapePaintState::LinearGradient {
+                        start_x: 0.0,
+                        start_y: 0.0,
+                        end_x: 0.0,
+                        end_y: 0.0,
+                        opacity: 1.0,
+                        render_opacity: 1.0,
+                        stops: Vec::new(),
+                    }
+                }
+            }),
+            feather_state: None,
+            path_commands: commands.clone(),
+            effect_path_commands: Vec::new(),
+            needs_save_operation: true,
+        };
+        runtime_configure_paint(
+            paint_by_global
+                .get_mut(&paint.global_id)
+                .with_context(|| format!("missing render paint for global {}", paint.global_id))?
+                .as_mut(),
+            object,
+            &runtime_paint,
+        )?;
+        renderer.save();
+        renderer.transform(RenderMat2D::IDENTITY);
+        let path = runtime_make_path(factory, &commands, runtime_fill_rule_for_object(object));
+        renderer.draw_path(
+            path.as_ref(),
+            paint_by_global
+                .get(&paint.global_id)
+                .with_context(|| format!("missing render paint for global {}", paint.global_id))?
+                .as_ref(),
+        );
+        renderer.restore();
+    }
+    Ok(())
+}
+
+fn runtime_draw_command(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    local_to_global: &BTreeMap<usize, u32>,
+    command: RuntimeDrawCommand,
+    factory: &mut dyn RenderFactory,
+    renderer: &mut dyn Renderer,
+    paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
+) -> Result<()> {
+    match command.kind {
+        RuntimeDrawCommandKind::ClipStart | RuntimeDrawCommandKind::ClipEnd => {
+            anyhow::bail!("unsupported: Rust runtime only supports artboard clipping")
+        }
+        RuntimeDrawCommandKind::Draw => {}
+    }
+
+    let shape_world = command
+        .local_id
+        .and_then(|local_id| instance.component(local_id))
+        .map(|component| component.transform.world_transform)
+        .unwrap_or(Mat2D::IDENTITY);
+
+    let mut path_cache = Vec::<(Vec<RuntimePathCommand>, Option<Box<dyn RenderPath>>)>::new();
+    for paint in &command.shape_paints {
+        let global_id = *local_to_global
+            .get(&paint.paint_local)
+            .with_context(|| format!("missing paint local {}", paint.paint_local))?;
+        let object = runtime
+            .object(global_id as usize)
+            .with_context(|| format!("missing paint global {global_id}"))?;
+        let path_commands = if paint.effect_path_commands.is_empty() {
+            &paint.path_commands
+        } else {
+            &paint.effect_path_commands
+        };
+        runtime_configure_paint(
+            paint_by_global
+                .get_mut(&global_id)
+                .with_context(|| format!("missing render paint for global {global_id}"))?
+                .as_mut(),
+            object,
+            paint,
+        )?;
+        let path_index = runtime_cached_path_slot_index(&mut path_cache, path_commands);
+        let mut saved = !paint.needs_save_operation;
+        if matches!(
+            paint.path_kind,
+            RuntimeShapePaintPathKind::Local | RuntimeShapePaintPathKind::LocalClockwise
+        ) {
+            if !saved {
+                saved = true;
+                renderer.save();
+            }
+            renderer.transform(runtime_render_mat(shape_world));
+        }
+        if path_cache[path_index].1.is_none() {
+            path_cache[path_index].1 = Some(runtime_make_path(
+                factory,
+                path_commands,
+                RenderFillRule::NonZero,
+            ));
+        }
+        let path = path_cache[path_index]
+            .1
+            .as_mut()
+            .expect("path cache populated");
+        runtime_configure_fill_rule(path.as_mut(), object);
+        renderer.draw_path(
+            path.as_ref(),
+            paint_by_global
+                .get(&global_id)
+                .with_context(|| format!("missing render paint for global {global_id}"))?
+                .as_ref(),
+        );
+        if saved && paint.needs_save_operation {
+            renderer.restore();
+        }
+    }
+
+    Ok(())
+}
+
+fn runtime_cached_path_slot_index(
+    cache: &mut Vec<(Vec<RuntimePathCommand>, Option<Box<dyn RenderPath>>)>,
+    commands: &[RuntimePathCommand],
+) -> usize {
+    if let Some(index) = cache
+        .iter()
+        .position(|(candidate, _)| candidate.as_slice() == commands)
+    {
+        return index;
+    }
+    cache.push((commands.to_vec(), None));
+    cache.len() - 1
+}
+
+fn runtime_configure_paint(
+    render_paint: &mut dyn RenderPaint,
+    object: &RuntimeObject,
+    paint: &RuntimeShapePaintCommand,
+) -> Result<()> {
+    match paint.paint_type {
+        RuntimeShapePaintKind::Fill => {
+            render_paint.style(RenderPaintStyle::Fill);
+        }
+        RuntimeShapePaintKind::Stroke => {
+            render_paint.style(RenderPaintStyle::Stroke);
+            render_paint.thickness(object.double_property("thickness").unwrap_or(1.0));
+            render_paint.cap(runtime_stroke_cap(
+                object.uint_property("cap").unwrap_or(0),
+            )?);
+            render_paint.join(runtime_stroke_join(
+                object.uint_property("join").unwrap_or(0),
+            )?);
+        }
+        RuntimeShapePaintKind::Unknown => anyhow::bail!("unsupported: unknown shape paint"),
+    }
+    render_paint.shader(None);
+    render_paint.blend_mode(runtime_blend_mode(paint.render_blend_mode_value)?);
+    match paint.paint_state.as_ref() {
+        Some(RuntimeShapePaintState::SolidColor { render_color, .. }) => {
+            render_paint.color(*render_color);
+        }
+        Some(RuntimeShapePaintState::LinearGradient { .. })
+        | Some(RuntimeShapePaintState::RadialGradient { .. }) => {
+            anyhow::bail!("unsupported: gradients in Rust runtime")
+        }
+        None => {}
+    }
+    Ok(())
+}
+
+fn runtime_configure_fill_rule(path: &mut dyn RenderPath, object: &RuntimeObject) {
+    if object.type_name == "Fill" {
+        path.fill_rule(runtime_fill_rule_for_object(object));
+    }
+}
+
+fn runtime_fill_rule_for_object(object: &RuntimeObject) -> RenderFillRule {
+    match object.uint_property("fillRule").unwrap_or(0) {
+        1 => RenderFillRule::EvenOdd,
+        2 => RenderFillRule::Clockwise,
+        _ => RenderFillRule::NonZero,
+    }
+}
+
+fn runtime_make_path(
+    factory: &mut dyn RenderFactory,
+    commands: &[RuntimePathCommand],
+    fill_rule: RenderFillRule,
+) -> Box<dyn RenderPath> {
+    let mut path = factory.make_empty_render_path();
+    path.fill_rule(fill_rule);
+    for command in commands {
+        match *command {
+            RuntimePathCommand::Move { x, y } => path.move_to(x, y),
+            RuntimePathCommand::Line { x, y } => path.line_to(x, y),
+            RuntimePathCommand::Cubic {
+                x1,
+                y1,
+                x2,
+                y2,
+                x3,
+                y3,
+            } => path.cubic_to(x1, y1, x2, y2, x3, y3),
+            RuntimePathCommand::Close => path.close(),
+        }
+    }
+    path
+}
+
+fn runtime_rect_commands(left: f32, top: f32, right: f32, bottom: f32) -> Vec<RuntimePathCommand> {
+    vec![
+        RuntimePathCommand::Move { x: left, y: top },
+        RuntimePathCommand::Line { x: right, y: top },
+        RuntimePathCommand::Line {
+            x: right,
+            y: bottom,
+        },
+        RuntimePathCommand::Line { x: left, y: bottom },
+        RuntimePathCommand::Close,
+    ]
+}
+
+fn runtime_render_mat(mat: Mat2D) -> RenderMat2D {
+    RenderMat2D(mat.0)
+}
+
+fn runtime_blend_mode(value: u32) -> Result<RenderBlendMode> {
+    Ok(match value {
+        3 => RenderBlendMode::SrcOver,
+        14 => RenderBlendMode::Screen,
+        15 => RenderBlendMode::Overlay,
+        16 => RenderBlendMode::Darken,
+        17 => RenderBlendMode::Lighten,
+        18 => RenderBlendMode::ColorDodge,
+        19 => RenderBlendMode::ColorBurn,
+        20 => RenderBlendMode::HardLight,
+        21 => RenderBlendMode::SoftLight,
+        22 => RenderBlendMode::Difference,
+        23 => RenderBlendMode::Exclusion,
+        24 => RenderBlendMode::Multiply,
+        25 => RenderBlendMode::Hue,
+        26 => RenderBlendMode::Saturation,
+        27 => RenderBlendMode::Color,
+        28 => RenderBlendMode::Luminosity,
+        _ => anyhow::bail!("unsupported blend mode {value}"),
+    })
+}
+
+fn runtime_stroke_cap(value: u64) -> Result<RenderStrokeCap> {
+    Ok(match value {
+        0 => RenderStrokeCap::Butt,
+        1 => RenderStrokeCap::Round,
+        2 => RenderStrokeCap::Square,
+        _ => anyhow::bail!("unsupported stroke cap {value}"),
+    })
+}
+
+fn runtime_stroke_join(value: u64) -> Result<RenderStrokeJoin> {
+    Ok(match value {
+        0 => RenderStrokeJoin::Miter,
+        1 => RenderStrokeJoin::Round,
+        2 => RenderStrokeJoin::Bevel,
+        _ => anyhow::bail!("unsupported stroke join {value}"),
+    })
 }
 
 fn runtime_shape_paint_command(

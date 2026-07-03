@@ -23,9 +23,12 @@ the only memory the next session has. Update it every commit.
 
 1. Continue M2 real object model work by modularizing the remaining
    animation/state-machine surfaces out of `lib.rs` while keeping generated
-   `InstanceObjectStorage` as the authored-property source of truth. Component
-   dirt, runtime transform state, and `Mat2D` now live in
-   `crates/rive-runtime/src/components.rs`.
+   `InstanceObjectStorage` as the authored-property source of truth.
+   Component dirt/runtime transform state live in
+   `crates/rive-runtime/src/components.rs`, and `LinearAnimationInstance`
+   playback state now lives in `crates/rive-runtime/src/animation.rs`.
+   Next extract either the `RuntimeLinearAnimation`/keyframe model or a
+   self-contained state-machine surface whose imports are cheap to untangle.
 2. Add handle-source world-space math and nested-remap dependent advancement
    to the joystick path when a corpus diff reaches those cases.
 
@@ -712,5 +715,12 @@ the only memory the next session has. Update it every commit.
   `crates/rive-runtime/src/components.rs`, shrinking the monolithic runtime
   file while preserving the public re-exports used by probes and downstream
   crates. Exact count remains 66; `make golden-compare` reports `exact=66`,
+  `diverges=0`, `unsupported-feature=224`, `not-yet=5`, and
+  `cargo test --workspace` passes.
+- 2026-07-03: [M2] Extracted `LinearAnimationInstance` playback state and
+  loop-kind handling into `crates/rive-runtime/src/animation.rs`, preserving
+  the existing public re-export while leaving `lib.rs` with the remaining
+  linear-animation import/keyframe model and state-machine surfaces to peel
+  next. Exact count remains 66; `make golden-compare` reports `exact=66`,
   `diverges=0`, `unsupported-feature=224`, `not-yet=5`, and
   `cargo test --workspace` passes.

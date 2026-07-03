@@ -100,6 +100,7 @@ impl ArtboardInstance {
         let linear_animations = build_linear_animations(file, graph, &slots);
         let state_machines = build_state_machines(file, graph, &linear_animations);
         let artboard_list_bindings = build_artboard_list_bindings(file, graph);
+        apply_initial_solo_collapses(file, graph, &mut components, &component_by_local);
 
         Ok(Self {
             width: dimensions.width,
@@ -25012,6 +25013,86 @@ impl RuntimeComponent {
 
     pub fn is_collapsed(&self) -> bool {
         self.dirt.contains(ComponentDirt::COLLAPSED)
+    }
+}
+
+// Mirrors src/solo.cpp Solo::propagateCollapse for the imported static state.
+fn apply_initial_solo_collapses(
+    file: &RuntimeFile,
+    graph: &ArtboardGraph,
+    components: &mut [RuntimeComponent],
+    component_by_local: &BTreeMap<usize, usize>,
+) {
+    for solo in graph
+        .components
+        .iter()
+        .filter(|component| component.type_name == "Solo")
+    {
+        let solo_collapsed = component_by_local
+            .get(&solo.local_id)
+            .is_some_and(|index| components[*index].is_collapsed());
+        let artboard_index = artboard_index_for_graph(file, graph);
+        let active_local = file
+            .object(solo.global_id as usize)
+            .and_then(|object| object.uint_property("activeComponentId"))
+            .and_then(|id| usize::try_from(id).ok())
+            .and_then(|active_index| {
+                artboard_index.and_then(|artboard_index| {
+                    runtime_graph_local_for_cpp_artboard_local(
+                        file,
+                        graph,
+                        artboard_index,
+                        active_index,
+                    )
+                })
+            });
+
+        for child_local in &solo.children {
+            let collapsed = if runtime_solo_child_participates(graph, *child_local) {
+                solo_collapsed || Some(*child_local) != active_local
+            } else {
+                solo_collapsed
+            };
+            if let Some(index) = component_by_local.get(child_local).copied() {
+                set_runtime_component_collapsed(&mut components[index], collapsed);
+            }
+        }
+    }
+}
+
+fn runtime_solo_child_participates(graph: &ArtboardGraph, child_local: usize) -> bool {
+    let Some(child) = graph
+        .components
+        .iter()
+        .find(|component| component.local_id == child_local)
+    else {
+        return true;
+    };
+    let Some(definition) = definition_by_name(child.type_name) else {
+        return true;
+    };
+    !definition.is_a("Constraint") && !definition.is_a("ClippingShape")
+}
+
+fn runtime_graph_local_for_cpp_artboard_local(
+    file: &RuntimeFile,
+    graph: &ArtboardGraph,
+    artboard_index: usize,
+    local_index: usize,
+) -> Option<usize> {
+    let object = file.artboard_local_object(artboard_index, local_index)?;
+    graph
+        .local_objects
+        .iter()
+        .find(|local_object| local_object.global_id == object.id)
+        .map(|local_object| local_object.local_id)
+}
+
+fn set_runtime_component_collapsed(component: &mut RuntimeComponent, collapsed: bool) {
+    if collapsed {
+        component.dirt |= ComponentDirt::COLLAPSED;
+    } else {
+        component.dirt &= !ComponentDirt::COLLAPSED;
     }
 }
 

@@ -448,6 +448,18 @@ impl RuntimeFile {
         self.cpp_artboards().nth(index)
     }
 
+    pub fn artboard_local_object(
+        &self,
+        artboard_index: usize,
+        local_index: usize,
+    ) -> Option<&RuntimeObject> {
+        let range = self.cpp_artboard_range(artboard_index)?;
+        let mut slots = runtime_artboard_local_slots(&self.objects, &self.import_statuses, range);
+        validate_cpp_artboard_local_slots(&mut slots, &self.objects);
+        let file_index = slots.get(local_index).and_then(|slot| *slot)?;
+        self.object(file_index)
+    }
+
     pub fn default_artboard(&self) -> Option<&RuntimeObject> {
         self.artboard(0)
     }

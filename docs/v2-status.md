@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 14
+- Corpus files `exact`: 16
 - Current milestone: **M1 — Static Vector Rendering Exact (#V2-2)**
 
 ## Milestones
@@ -21,14 +21,17 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Inspect `solo_test` at sample `0`; Rust currently draws an additional shape
-   after the first red rectangle, so localize C++ solo/hidden visibility
-   handling before deciding whether this is M1 static visibility or later
-   animation state.
-2. `clip_tests` is raw-exact at sample `0`, but its manifest includes sample
+1. Inspect `solos_collapse_tests` at sample `0`: imported Solo collapse now
+   runs, but Rust still draws the red rectangle plus an empty collapsed path
+   while C++ draws the gray star; decide whether the remaining gap is M1
+   collapse/clip behavior or M2/M3 keyframe/constraint behavior.
+2. `solo_test` is parked for M2: C++ applies frame-0 `KeyFrameId` value `8`
+   through the default state machine/animation, overriding imported
+   `activeComponentId = 2`; Rust has no state-machine/keyframe application yet.
+3. `clip_tests` is raw-exact at sample `0`, but its manifest includes sample
    `0.25`; keep it parked until M2 non-zero sample support or an explicit
    sample-scope split.
-3. Keep `fill_trim_path` and `trim_path_linear` parked for M2 keyframe and
+4. Keep `fill_trim_path` and `trim_path_linear` parked for M2 keyframe and
    non-zero sample support.
 
 ## Backlog (unsupported features awaiting corpus demand)
@@ -43,6 +46,9 @@ the only memory the next session has. Update it every commit.
 - `fill_trim_path.riv` is parked for M2 even at sample `0`: C++ applies
   keyframes to TrimPath `offset`/`end` before drawing, so imported static
   values cannot match without animation application.
+- `solo_test.riv` is parked for M2 even at sample `0`: C++ applies the default
+  state machine's frame-0 keyframe to `Solo.activeComponentId`, so imported
+  static Solo collapse alone correctly selects the wrong child for the golden.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -104,6 +110,10 @@ the only memory the next session has. Update it every commit.
   `ShapePaintPath` fill rule `clockwise`; Fill paints still override the
   path fill rule immediately before draw, while Stroke paints preserve the
   composed path default.
+- 2026-07-02: Imported Solo collapse mirrors `src/solo.cpp` for static state:
+  constraints and clipping shapes inherit the Solo's collapse value, while
+  participating children collapse unless they match the imported
+  `activeComponentId` resolved through the artboard-local object table.
 
 ## Log
 
@@ -180,3 +190,8 @@ the only memory the next session has. Update it every commit.
 - 2026-07-02: [M1] Marked `fix_rectangle.riv` exact at sample `0` by matching
   C++ `ShapePaintPath` clockwise fill-rule defaults for stroked composed
   paths; exact count is now 14.
+- 2026-07-02: [M1] Marked `data_bind_solo.riv` and `hit_test_solos.riv`
+  exact at sample `0` by applying imported Solo collapse, gated
+  `follow_path_solos.riv` as a verified constraint unsupported diagnostic, and
+  parked `solo_test.riv` for M2 frame-0 keyframe application; exact count is
+  now 16.

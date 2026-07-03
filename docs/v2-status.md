@@ -21,8 +21,8 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Expand `corpus.toml` from the initial seed to the full
-   `tests/unit_tests/assets` set with type-key tags from `riv-inspect`.
+1. Add CI wiring for `make golden-compare` and `cargo test --workspace` so the
+   M0 golden harness exit criterion is enforceable.
 2. Move the narrow static solid-shape Rust runner path toward `rive-runtime`
    renderer-trait integration for the next static vector corpus files.
 
@@ -33,6 +33,11 @@ the only memory the next session has. Update it every commit.
 - Rust golden runner currently supports static sample `0`, artboard
   clip/background, solid fills/strokes, and no state machines, gradients,
   images, text, nested artboards, or scripted input.
+- Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
+  golden runner/importer can survive the FileAssetContents, scripting, and
+  data-viz crash paths it currently aborts on.
+- `solar-system.riv` is unsupported because Rust import rejects
+  `blendModeValue = 5` on Shape object 13.
 
 ## Decisions
 
@@ -49,6 +54,9 @@ the only memory the next session has. Update it every commit.
 - 2026-07-02: First exact file is `dependency_test.riv`; the Rust runner
   preallocates source + instance render paints to mirror C++ import/clone
   paint lifetimes before drawing.
+- 2026-07-02: `tools/golden-compare --bin generate-corpus` generates the
+  corpus manifest from the C++ unit-test assets, preserving exact/unsupported
+  annotations across regenerations.
 
 ## Log
 
@@ -66,3 +74,6 @@ the only memory the next session has. Update it every commit.
   `tools/golden-compare`, and `make golden-compare`; exact count is now 0.
 - 2026-07-02: [M0] Added `tools/rust-golden-runner` for a narrow static
   solid-shape path and marked `dependency_test` exact; exact count is now 1.
+- 2026-07-02: [M0] Expanded `corpus.toml` to all 295
+  `tests/unit_tests/assets`; `make golden-compare` passes with exact=1,
+  unsupported-feature=37, not-yet=257.

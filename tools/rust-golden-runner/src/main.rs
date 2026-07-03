@@ -347,7 +347,14 @@ fn ensure_static_draw_supported(graph: &GraphFile, artboard: &ArtboardGraph) -> 
         data_bind.target_type_name == Some("Shape")
             && matches!(data_bind.property_key, 13 | 14)
             && (data_bind.converter_global.is_none()
-                || data_bind.converter_type_name == Some("DataConverterGroup"))
+                || matches!(data_bind.converter_type_name, Some("DataConverterGroup"))
+                // `interpolation_zero_duration.riv` authors 0.0001s here;
+                // park that M5 transform-bind path without catching default
+                // duration interpolators that are already sample-0 exact.
+                || (data_bind.converter_type_name == Some("DataConverterInterpolator")
+                    && data_bind
+                        .converter_duration
+                        .is_some_and(|duration| duration <= 1.0e-4)))
     }) {
         bail!(
             "unsupported: data-binding-transform in Rust golden runner (data bind global {} target global {:?})",

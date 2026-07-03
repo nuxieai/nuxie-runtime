@@ -21,11 +21,10 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Classify the last sample-0 `not-yet` file,
-   `interpolation_zero_duration.riv`: either promote it if the stream is now
-   exact, or park it behind the existing M5 zero-duration data-binding
-   transform diagnostic so the manifest has no unexplained sample-0 `not-yet`
-   entries.
+1. Begin M2 sample widening: pick a small animated `exact` corpus file,
+   add the first non-zero sample in a focused corpus, and either keep it exact
+   by porting the first divergence or record the narrower blocker if it crosses
+   into a later milestone.
 2. Continue M2 real object model work by modularizing the remaining
    animation/state-machine surfaces out of `lib.rs` while keeping generated
    `InstanceObjectStorage` as the authored-property source of truth, but only
@@ -135,7 +134,8 @@ the only memory the next session has. Update it every commit.
   `in_band_asset.riv` are parked for image support; `interactive_scrolling.riv`
   and `interpolate_to_end.riv` are parked for nested-artboard support;
   `interpolation_zero_duration.riv` is parked for M5 zero-duration
-  data-binding interpolator transform application.
+  data-binding interpolator transform application with a verified
+  `data-binding-transform` Rust runner diagnostic.
 - `jellyfish_test.riv` is parked for image support; `joel_v3.riv` is parked
   for text support.
 - `keyboard_listener.riv` is parked for text support; `library.riv` is parked
@@ -783,3 +783,8 @@ the only memory the next session has. Update it every commit.
   preserving axis-aligned cancellation for `juice.riv`. Promoted `rocket.riv`
   to exact; `make golden-compare` reports `exact=70`, `diverges=0`,
   `unsupported-feature=224`, `not-yet=1`, and `cargo test --workspace` passes.
+- 2026-07-03: [M2] Classified `interpolation_zero_duration.riv` under the M5
+  data-binding transform bucket by extending the Rust golden runner diagnostic
+  to interpolated shape transform binds. `make golden-compare` reports
+  `exact=70`, `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
+  `cargo test --workspace` passes.

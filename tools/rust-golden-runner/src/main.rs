@@ -74,6 +74,7 @@ fn run() -> Result<String> {
             artboard,
             &mut factory,
             &mut paint_by_global,
+            &mut path_cache,
         )?;
         factory.add_sample(*sample);
         instance.draw_prepared_static_artboard_with_path_cache(

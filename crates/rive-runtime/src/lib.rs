@@ -11,7 +11,7 @@ use rive_graph::{
 };
 use rive_render_api::{
     BlendMode as RenderBlendMode, Factory as RenderFactory, FillRule as RenderFillRule,
-    Mat2D as RenderMat2D, RenderPaint, RenderPaintStyle, RenderPath, Renderer,
+    Mat2D as RenderMat2D, RenderPaint, RenderPaintStyle, RenderPath, RenderShader, Renderer,
     StrokeCap as RenderStrokeCap, StrokeJoin as RenderStrokeJoin,
 };
 use rive_schema::{
@@ -344,8 +344,22 @@ impl ArtboardInstance {
         renderer: &mut dyn Renderer,
         paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
     ) -> Result<()> {
-        self.prepare_static_artboard_paints(runtime, graph, factory, paint_by_global)?;
-        self.draw_prepared_static_artboard(runtime, graph, factory, renderer, paint_by_global)
+        let mut render_cache = RuntimeRenderPathCache::default();
+        self.prepare_static_artboard_paints(
+            runtime,
+            graph,
+            factory,
+            paint_by_global,
+            &mut render_cache,
+        )?;
+        self.draw_prepared_static_artboard_with_path_cache(
+            runtime,
+            graph,
+            factory,
+            renderer,
+            paint_by_global,
+            &mut render_cache,
+        )
     }
 
     pub fn prepare_static_artboard_paints(
@@ -354,6 +368,7 @@ impl ArtboardInstance {
         graph: &ArtboardGraph,
         factory: &mut dyn RenderFactory,
         paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
+        render_cache: &mut RuntimeRenderPathCache,
     ) -> Result<()> {
         let mut paints_by_mutator =
             BTreeMap::<usize, Vec<(&ShapePaintContainerNode, &ShapePaintNode)>>::new();
@@ -397,6 +412,10 @@ impl ArtboardInstance {
                     .object(paint.global_id as usize)
                     .with_context(|| format!("missing paint global {}", paint.global_id))?;
                 let runtime_paint = runtime_prepare_gradient_paint_command(self, container, paint);
+                let mut gradient_resources = RuntimeGradientShaderResources {
+                    factory,
+                    shaders: &mut render_cache.gradient_shaders,
+                };
                 runtime_configure_paint(
                     paint_by_global
                         .get_mut(&paint.global_id)
@@ -406,7 +425,7 @@ impl ArtboardInstance {
                         .as_mut(),
                     object,
                     &runtime_paint,
-                    Some(factory),
+                    Some(&mut gradient_resources),
                 )?;
             }
         }
@@ -1416,6 +1435,17 @@ pub struct RuntimeRenderPathCache {
     background_paths: BTreeMap<usize, Box<dyn RenderPath>>,
     clip_paths: BTreeMap<usize, Box<dyn RenderPath>>,
     draw_paths: BTreeMap<RuntimeDrawPathCacheKey, Box<dyn RenderPath>>,
+    gradient_shaders: BTreeMap<u32, RuntimeGradientShaderCacheEntry>,
+}
+
+struct RuntimeGradientShaderCacheEntry {
+    state: RuntimeShapePaintState,
+    shader: Box<dyn RenderShader>,
+}
+
+struct RuntimeGradientShaderResources<'a> {
+    factory: &'a mut dyn RenderFactory,
+    shaders: &'a mut BTreeMap<u32, RuntimeGradientShaderCacheEntry>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -1846,7 +1876,7 @@ fn runtime_configure_paint(
     render_paint: &mut dyn RenderPaint,
     object: &RuntimeObject,
     paint: &RuntimeShapePaintCommand,
-    shader_factory: Option<&mut dyn RenderFactory>,
+    gradient_resources: Option<&mut RuntimeGradientShaderResources<'_>>,
 ) -> Result<()> {
     match paint.paint_type {
         RuntimeShapePaintKind::Fill => {
@@ -1870,18 +1900,22 @@ fn runtime_configure_paint(
             render_paint.shader(None);
             render_paint.color(*render_color);
         }
-        Some(RuntimeShapePaintState::LinearGradient {
-            start_x,
-            start_y,
-            end_x,
-            end_y,
-            stops,
-            ..
-        }) => {
-            if let Some(factory) = shader_factory {
+        Some(
+            state @ RuntimeShapePaintState::LinearGradient {
+                start_x,
+                start_y,
+                end_x,
+                end_y,
+                stops,
+                ..
+            },
+        ) => {
+            if let Some(resources) = gradient_resources {
                 runtime_configure_linear_gradient(
                     render_paint,
-                    factory,
+                    resources,
+                    object.id,
+                    state.clone(),
                     *start_x,
                     *start_y,
                     *end_x,
@@ -1890,18 +1924,22 @@ fn runtime_configure_paint(
                 );
             }
         }
-        Some(RuntimeShapePaintState::RadialGradient {
-            start_x,
-            start_y,
-            end_x,
-            end_y,
-            stops,
-            ..
-        }) => {
-            if let Some(factory) = shader_factory {
+        Some(
+            state @ RuntimeShapePaintState::RadialGradient {
+                start_x,
+                start_y,
+                end_x,
+                end_y,
+                stops,
+                ..
+            },
+        ) => {
+            if let Some(resources) = gradient_resources {
                 runtime_configure_radial_gradient(
                     render_paint,
-                    factory,
+                    resources,
+                    object.id,
+                    state.clone(),
                     *start_x,
                     *start_y,
                     *end_x,
@@ -1920,7 +1958,9 @@ fn runtime_configure_paint(
 // Ported from src/shapes/paint/linear_gradient.cpp and radial_gradient.cpp.
 fn runtime_configure_linear_gradient(
     render_paint: &mut dyn RenderPaint,
-    factory: &mut dyn RenderFactory,
+    resources: &mut RuntimeGradientShaderResources<'_>,
+    paint_global_id: u32,
+    state: RuntimeShapePaintState,
     start_x: f32,
     start_y: f32,
     end_x: f32,
@@ -1932,13 +1972,17 @@ fn runtime_configure_linear_gradient(
         .map(|stop| stop.render_color)
         .collect::<Vec<_>>();
     let positions = stops.iter().map(|stop| stop.position).collect::<Vec<_>>();
-    let shader = factory.make_linear_gradient(start_x, start_y, end_x, end_y, &colors, &positions);
-    render_paint.shader(Some(shader.as_ref()));
+    let shader = runtime_cached_gradient_shader(resources, paint_global_id, state, |factory| {
+        factory.make_linear_gradient(start_x, start_y, end_x, end_y, &colors, &positions)
+    });
+    render_paint.shader(Some(shader));
 }
 
 fn runtime_configure_radial_gradient(
     render_paint: &mut dyn RenderPaint,
-    factory: &mut dyn RenderFactory,
+    resources: &mut RuntimeGradientShaderResources<'_>,
+    paint_global_id: u32,
+    state: RuntimeShapePaintState,
     start_x: f32,
     start_y: f32,
     end_x: f32,
@@ -1953,8 +1997,35 @@ fn runtime_configure_radial_gradient(
     let dx = end_x - start_x;
     let dy = end_y - start_y;
     let radius = (dx * dx + dy * dy).sqrt();
-    let shader = factory.make_radial_gradient(start_x, start_y, radius, &colors, &positions);
-    render_paint.shader(Some(shader.as_ref()));
+    let shader = runtime_cached_gradient_shader(resources, paint_global_id, state, |factory| {
+        factory.make_radial_gradient(start_x, start_y, radius, &colors, &positions)
+    });
+    render_paint.shader(Some(shader));
+}
+
+fn runtime_cached_gradient_shader<'a>(
+    resources: &'a mut RuntimeGradientShaderResources<'_>,
+    paint_global_id: u32,
+    state: RuntimeShapePaintState,
+    create: impl FnOnce(&mut dyn RenderFactory) -> Box<dyn RenderShader>,
+) -> &'a dyn RenderShader {
+    let needs_shader = resources
+        .shaders
+        .get(&paint_global_id)
+        .is_none_or(|entry| entry.state != state);
+    if needs_shader {
+        let shader = create(resources.factory);
+        resources.shaders.insert(
+            paint_global_id,
+            RuntimeGradientShaderCacheEntry { state, shader },
+        );
+    }
+    resources
+        .shaders
+        .get(&paint_global_id)
+        .expect("gradient shader cache entry was inserted")
+        .shader
+        .as_ref()
 }
 
 fn runtime_configure_fill_rule(path: &mut dyn RenderPath, object: &RuntimeObject) {

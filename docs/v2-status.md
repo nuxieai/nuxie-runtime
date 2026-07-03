@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 102 across 70 exact files
+- Exact segments (file × sample): 103 across 70 exact files
 - Parked breakdown (from `make golden-compare`): M3=21 M4=83 M5=8 M6=72 gated=5 harness=36
 - Current milestone: **M2 — Animated Playback Exact + Real Object Model (#V2-3)**
 
@@ -51,10 +51,6 @@ the only memory the next session has. Update it every commit.
   DashPath/TrimPath output: C++ rotates/reorders the emitted path segments
   differently for the effected stroke paths. Promote after localizing the
   path-effect advance/composition semantics.
-- M2 sample widening: `juice.riv` remains pinned to sample `0`. A focused
-  `[0, 0.25]` probe diverges because Rust creates fresh linear-gradient
-  shader IDs between samples while C++ reuses the existing shader IDs; promote
-  after gradient shader lifetime/reuse matches C++ across multi-sample runs.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -566,3 +562,11 @@ the only memory the next session has. Update it every commit.
   a multi-sample gradient lifetime divergence: Rust emits new linear-gradient
   shader IDs before the second sample while C++ reuses the original shaders,
   so the file stays exact only at sample `0` until gradient reuse is ported.
+- 2026-07-03: [M2] Added a per-run gradient shader cache to the Rust render
+  resource cache so unchanged LinearGradient/RadialGradient paints reuse the
+  same shader objects across samples, matching C++ dirty-update lifetime.
+  Widened `juice.riv` from sample `0` to samples `0` and `0.25`; exact
+  segments are now 103 across 70 exact files; `make golden-compare` reports
+  `exact=70`, `exact-segments=103`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.

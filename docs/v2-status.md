@@ -836,3 +836,7 @@ the only memory the next session has. Update it every commit.
   samples `0` and `0.25`, keeping trigger-transition playback exact. Exact
   count remains 70; focused golden compare reports `exact=1`, `diverges=0`,
   `unsupported-feature=0`, `not-yet=0`.
+- 2026-07-03: [M2] Widened `solo_test.riv` from sample `0` to samples `0` and
+  `0.25`, keeping Solo active-child playback exact. Exact count remains 70;
+  focused golden compare reports `exact=1`, `diverges=0`,
+  `unsupported-feature=0`, `not-yet=0`.

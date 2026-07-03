@@ -1176,14 +1176,17 @@ fn preallocate_artboard_render_paint_batch(
 ) -> BTreeMap<u32, Box<dyn RenderPaint>> {
     let mut paints = BTreeMap::new();
     let mut allocated = BTreeSet::new();
-
-    for paint in graph
+    let paint_by_mutator = graph
         .shape_paint_containers
         .iter()
         .flat_map(|container| container.paints.iter())
-        .filter(|paint| runtime_paint_has_empty_trim_effect(paint))
-    {
-        preallocate_render_paint(paint.global_id, factory, &mut paints, &mut allocated);
+        .map(|paint| (paint.mutator_global, paint.global_id))
+        .collect::<BTreeMap<_, _>>();
+
+    for local_object in &graph.local_objects {
+        if let Some(paint_global_id) = paint_by_mutator.get(&Some(local_object.global_id)) {
+            preallocate_render_paint(*paint_global_id, factory, &mut paints, &mut allocated);
+        }
     }
 
     for local_object in &graph.local_objects {
@@ -1195,13 +1198,6 @@ fn preallocate_artboard_render_paint_batch(
         }
     }
     paints
-}
-
-fn runtime_paint_has_empty_trim_effect(paint: &ShapePaintNode) -> bool {
-    paint.effects.iter().any(|effect| {
-        effect.type_name == "TrimPath"
-            && effect.trim_start.unwrap_or(0.0) == effect.trim_end.unwrap_or(0.0)
-    })
 }
 
 fn preallocate_render_paint(

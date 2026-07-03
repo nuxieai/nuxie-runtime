@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 8
+- Corpus files `exact`: 10
 - Current milestone: **M1 — Static Vector Rendering Exact (#V2-2)**
 
 ## Milestones
@@ -21,10 +21,11 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Inspect `fill_trim_path` at sample `0` for the next static TrimPath exact
-   candidate.
-2. Keep `trim_path_linear` parked for M2/non-zero sample support unless its
-   sample list is narrowed by an explicit M1 decision.
+1. Inspect `blend_test` at sample `0`; first divergence is the `source` scene
+   marker, so check whether stream content is otherwise exact before deciding
+   marker fix vs M2 parking.
+2. Keep `fill_trim_path` and `trim_path_linear` parked for M2 keyframe and
+   non-zero sample support.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -35,6 +36,9 @@ the only memory the next session has. Update it every commit.
   `ClippingShape` clip paths, plus empty and multi-contour TrimPath effects;
   no state machines, gradients, images, text, nested artboards, constraints,
   or scripted input.
+- `fill_trim_path.riv` is parked for M2 even at sample `0`: C++ applies
+  keyframes to TrimPath `offset`/`end` before drawing, so imported static
+  values cannot match without animation application.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -83,6 +87,10 @@ the only memory the next session has. Update it every commit.
 - 2026-07-02: `golden-compare` exact stream comparison uses numeric-token
   epsilon `1e-4` while keeping call order, IDs, verbs, and non-numeric text
   exact, matching the V2 renderer seam plan.
+- 2026-07-02: Instance `RenderPaint` ID allocation follows C++ import-time
+  `ShapePaintMutator` object order, not Fill/Stroke object order and not draw
+  order; Rust preallocates by mutator owner first, then falls back to any
+  unallocated Fill/Stroke.
 
 ## Log
 
@@ -149,3 +157,7 @@ the only memory the next session has. Update it every commit.
 - 2026-07-02: [M1] Marked `trim_path.riv` exact by porting static artboard
   clip flags, multi-contour TrimPath extraction, empty-trim paint allocation,
   and numeric-token epsilon comparison; exact count is now 8.
+- 2026-07-02: [M1] Marked `draw_rule_cycle.riv` and `test_elastic.riv` exact
+  at sample `0`, generalized instance paint preallocation to C++
+  `ShapePaintMutator` order, and parked `fill_trim_path.riv` for M2 keyframe
+  application; exact count is now 10.

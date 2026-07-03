@@ -22,9 +22,9 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
-   start with `component_stateful`, `component_stateful_vm_instance`,
-   `component_stateful_vm_instance_2`, `computed_root_transform`,
-   `computed_values_test`, and `cubic_value_test`; promote exact sample-0
+   start with `custom_property_trigger`, `data_bind_test_cmdq`,
+   `data_binding_artboards_source_test`, `data_binding_images_test`,
+   `data_binding_test`, and `data_binding_test_3`; promote exact sample-0
    matches or add verified unsupported diagnostics for later-phase first diffs.
 2. `solo_test` and `solos_collapse_tests` are parked for M2: C++ applies
    frame-0 `KeyFrameId` values through the default state machine/animation,
@@ -100,6 +100,11 @@ the only memory the next session has. Update it every commit.
   sample-0 Rust diagnostic currently reaches nested artboards); `animated_clipping.riv`
   and `background_measure.riv` are parked for text support, and
   `component_list_virtualized.riv` is parked for M6 layout component paint drawing.
+- `component_stateful.riv`, `component_stateful_vm_instance.riv`,
+  `component_stateful_vm_instance_2.riv`, and `computed_values_test.riv` are parked
+  for nested-artboard support; `computed_root_transform.riv` is parked for M6
+  layout component paint drawing; `cubic_value_test.riv` is parked for M2
+  keyframe/interpolator application after its sample-0 transform diff.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -320,3 +325,9 @@ the only memory the next session has. Update it every commit.
   `component_list_virtualized.riv` with verified text/layout diagnostics, and
   left `advance_blend_mode.riv` parked for its non-zero sample; exact count is
   now 39, unsupported-feature is now 112, and not-yet is now 144.
+- 2026-07-02: [M1] Gated `component_stateful.riv`,
+  `component_stateful_vm_instance.riv`, `component_stateful_vm_instance_2.riv`,
+  `computed_root_transform.riv`, and `computed_values_test.riv` with verified
+  nested-artboard/layout diagnostics, and parked `cubic_value_test.riv` for M2
+  keyframe/interpolator application; exact remains 39, unsupported-feature is
+  now 117, and not-yet is now 139.

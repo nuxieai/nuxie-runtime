@@ -15,9 +15,9 @@ use rive_render_api::{
     StrokeCap as RenderStrokeCap, StrokeJoin as RenderStrokeJoin,
 };
 use rive_schema::{
-    CoreRegistryFieldKind, FieldKind, core_registry_field_kind_by_property_key,
-    core_registry_setter_field_kind_by_property_key, definition_by_name, definition_by_type_key,
-    is_callback_property_key, object_supports_property,
+    CoreRegistryFieldKind, FieldKind, StoredFieldInitializer,
+    core_registry_field_kind_by_property_key, core_registry_setter_field_kind_by_property_key,
+    definition_by_name, definition_by_type_key, is_callback_property_key, object_supports_property,
 };
 use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
@@ -1296,7 +1296,7 @@ pub struct InstanceSlot {
 
 #[derive(Debug, Clone)]
 struct InstanceObjectArena {
-    objects: Vec<Option<RuntimeObject>>,
+    objects: Vec<Option<InstanceObject>>,
 }
 
 impl InstanceObjectArena {
@@ -1306,7 +1306,9 @@ impl InstanceObjectArena {
             if slot.local_id >= objects.len() {
                 objects.resize(slot.local_id + 1, None);
             }
-            objects[slot.local_id] = file.object(slot.source_global_id as usize).cloned();
+            objects[slot.local_id] = file
+                .object(slot.source_global_id as usize)
+                .map(InstanceObject::from_runtime_object);
         }
         Self { objects }
     }
@@ -1318,22 +1320,22 @@ impl InstanceObjectArena {
         }
     }
 
-    fn object(&self, local_id: usize) -> Option<&RuntimeObject> {
+    fn object(&self, local_id: usize) -> Option<&InstanceObject> {
         self.objects.get(local_id)?.as_ref()
     }
 
-    fn object_mut(&mut self, local_id: usize) -> Option<&mut RuntimeObject> {
+    fn object_mut(&mut self, local_id: usize) -> Option<&mut InstanceObject> {
         self.objects.get_mut(local_id)?.as_mut()
     }
 
     fn property_kind(&self, local_id: usize, property_key: u16) -> Option<FieldKind> {
         let object = self.object(local_id)?;
-        runtime_object_field_kind_by_key(object, property_key)
+        object.field_kind(property_key)
     }
 
     fn color_property(&self, local_id: usize, property_key: u16) -> Option<u32> {
         self.object(local_id)
-            .and_then(|object| runtime_object_color_property_by_key(object, property_key))
+            .and_then(|object| object.color_property(property_key))
     }
 
     fn set_color_property(&mut self, local_id: usize, property_key: u16, value: u32) -> bool {
@@ -1342,7 +1344,7 @@ impl InstanceObjectArena {
 
     fn bool_property(&self, local_id: usize, property_key: u16) -> Option<bool> {
         self.object(local_id)
-            .and_then(|object| runtime_object_bool_property_by_key(object, property_key))
+            .and_then(|object| object.bool_property(property_key))
     }
 
     fn set_bool_property(&mut self, local_id: usize, property_key: u16, value: bool) -> bool {
@@ -1351,12 +1353,12 @@ impl InstanceObjectArena {
 
     fn uint_property(&self, local_id: usize, property_key: u16) -> Option<u64> {
         self.object(local_id)
-            .and_then(|object| runtime_object_uint_property_by_key(object, property_key))
+            .and_then(|object| object.uint_property(property_key))
     }
 
     fn double_property(&self, local_id: usize, property_key: u16) -> Option<f32> {
         self.object(local_id)
-            .and_then(|object| runtime_object_double_property_by_key(object, property_key))
+            .and_then(|object| object.double_property(property_key))
     }
 
     fn set_double_property(&mut self, local_id: usize, property_key: u16, value: f32) -> bool {
@@ -1369,7 +1371,7 @@ impl InstanceObjectArena {
 
     fn string_property(&self, local_id: usize, property_key: u16) -> Option<&[u8]> {
         self.object(local_id)
-            .and_then(|object| runtime_object_string_property_bytes_by_key(object, property_key))
+            .and_then(|object| object.string_property(property_key))
     }
 
     fn set_string_property(&mut self, local_id: usize, property_key: u16, value: Vec<u8>) -> bool {
@@ -1434,6 +1436,122 @@ impl InstanceObjectArena {
             value,
         });
         true
+    }
+}
+
+#[derive(Debug, Clone)]
+struct InstanceObject {
+    type_key: u16,
+    type_name: &'static str,
+    properties: Vec<RuntimeProperty>,
+}
+
+impl InstanceObject {
+    fn from_runtime_object(object: &RuntimeObject) -> Self {
+        Self {
+            type_key: object.type_key,
+            type_name: object.type_name,
+            properties: object.properties.clone(),
+        }
+    }
+
+    fn property_metadata(
+        &self,
+        property_key: u16,
+    ) -> Option<(&'static str, &'static rive_schema::Property)> {
+        runtime_property_metadata_by_key(self.type_key, property_key)
+    }
+
+    fn field_kind(&self, property_key: u16) -> Option<FieldKind> {
+        self.property_metadata(property_key)
+            .map(|(_, property)| property.runtime_type)
+    }
+
+    fn property(&self, property_key: u16) -> Option<&RuntimeProperty> {
+        let (_, property) = self.property_metadata(property_key)?;
+        self.properties
+            .iter()
+            .rev()
+            .find(|candidate| candidate.name == property.name)
+    }
+
+    fn stored_field_initializer(
+        &self,
+        property: &'static rive_schema::Property,
+    ) -> Option<StoredFieldInitializer> {
+        // C++ Artboard::Artboard overrides the inherited LayoutComponent
+        // default so artboards clip to their bounds unless serialized otherwise.
+        if self.type_name == "Artboard" && property.name == "clip" {
+            return Some(StoredFieldInitializer::Bool(true));
+        }
+        (*property).stored_field_initializer()
+    }
+
+    fn double_property(&self, property_key: u16) -> Option<f32> {
+        if let Some(property) = self.property(property_key) {
+            return property.value.as_double();
+        }
+
+        let (_, property) = self.property_metadata(property_key)?;
+        match self.stored_field_initializer(property)? {
+            StoredFieldInitializer::Double(value) => Some(value),
+            _ => None,
+        }
+    }
+
+    fn uint_property(&self, property_key: u16) -> Option<u64> {
+        if let Some(property) = self.property(property_key) {
+            return property.value.as_uint();
+        }
+
+        let (_, property) = self.property_metadata(property_key)?;
+        match self.stored_field_initializer(property)? {
+            StoredFieldInitializer::Uint(value) => Some(u64::from(value)),
+            _ => None,
+        }
+    }
+
+    fn bool_property(&self, property_key: u16) -> Option<bool> {
+        if let Some(property) = self.property(property_key) {
+            return property.value.as_bool();
+        }
+
+        let (_, property) = self.property_metadata(property_key)?;
+        match self.stored_field_initializer(property)? {
+            StoredFieldInitializer::Bool(value) => Some(value),
+            _ => None,
+        }
+    }
+
+    fn color_property(&self, property_key: u16) -> Option<u32> {
+        if let Some(property) = self.property(property_key) {
+            return property.value.as_color();
+        }
+
+        let (_, property) = self.property_metadata(property_key)?;
+        match self.stored_field_initializer(property)? {
+            StoredFieldInitializer::Color(value) => Some(value),
+            _ => None,
+        }
+    }
+
+    fn string_property(&self, property_key: u16) -> Option<&[u8]> {
+        let (_, property) = self.property_metadata(property_key)?;
+        match property.runtime_type {
+            FieldKind::String => {
+                if let Some(property) = self.property(property_key) {
+                    return property.value.as_string_bytes();
+                }
+                match self.stored_field_initializer(property)? {
+                    StoredFieldInitializer::String(value) => Some(value.as_bytes()),
+                    _ => None,
+                }
+            }
+            FieldKind::Bytes => self
+                .property(property_key)
+                .and_then(|property| property.value.as_bytes()),
+            _ => None,
+        }
     }
 }
 
@@ -29060,8 +29178,12 @@ mod tests {
             property_key_for_name("FileAssetContents", "bytes").expect("FileAssetContents.bytes");
         let mut arena = InstanceObjectArena {
             objects: vec![
-                Some(synthetic_runtime_object(0, "Node", Vec::new())),
-                Some(synthetic_runtime_object(1, "FileAssetContents", Vec::new())),
+                Some(InstanceObject::from_runtime_object(
+                    &synthetic_runtime_object(0, "Node", Vec::new()),
+                )),
+                Some(InstanceObject::from_runtime_object(
+                    &synthetic_runtime_object(1, "FileAssetContents", Vec::new()),
+                )),
             ],
         };
 
@@ -29073,6 +29195,22 @@ mod tests {
 
         assert!(!arena.set_string_property(1, bytes_key, vec![1, 2, 3]));
         assert_eq!(arena.string_property(1, bytes_key), None);
+    }
+
+    #[test]
+    fn instance_object_arena_keeps_mutable_properties_in_instance_storage() {
+        let node_x_key = property_key_for_name("Node", "x").expect("Node.x key");
+        let source = synthetic_runtime_object(0, "Node", Vec::new());
+        let mut arena = InstanceObjectArena {
+            objects: vec![Some(InstanceObject::from_runtime_object(&source))],
+        };
+
+        assert!(arena.set_double_property(0, node_x_key, 42.0));
+
+        assert!(source.properties.is_empty());
+        assert_eq!(arena.double_property(0, node_x_key), Some(42.0));
+        assert_eq!(arena.object(0).unwrap().type_name, "Node");
+        assert_eq!(arena.object(0).unwrap().type_key, source.type_key);
     }
 
     #[test]

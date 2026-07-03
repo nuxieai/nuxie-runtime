@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 44
+- Corpus files `exact`: 46
 - Current milestone: **M1 — Static Vector Rendering Exact (#V2-2)**
 
 ## Milestones
@@ -22,9 +22,9 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
-   start with `library_with_text_and_image`, `light_switch`,
-   `list_index_script_access`, `list_items`, `list_to_length_test`, and
-   `list_to_path`; promote exact sample-0 matches or add verified
+   start with `listener_action_inputs`, `listener_view_model`, `local_bounds`,
+   `lock_icon_demo`, `looping_timeline_events`, and
+   `magic_alley_db_reduced_export`; promote exact sample-0 matches or add verified
    unsupported diagnostics for later-phase first diffs.
 2. `joystick_flag_test` is parked for M2: its sample-0 first diff is joystick
    application/default state-machine behavior, while Rust still draws the
@@ -143,6 +143,10 @@ the only memory the next session has. Update it every commit.
 - `keyboard_listener.riv` is parked for text support; `library.riv` is parked
   for image support; `library_view_model_test.riv` and
   `library_vmtest_1_host.riv` are parked for nested-artboard support.
+- `library_with_text_and_image.riv` is parked for nested-artboard support;
+  `list_index_script_access.riv` is parked for text support; `list_items.riv`
+  and `list_to_length_test.riv` are parked for M6 layout component paint
+  drawing.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -420,3 +424,9 @@ the only memory the next session has. Update it every commit.
   `library_vmtest_1_host.riv` with verified text/image/nested-artboard
   diagnostics; exact count is now 44, unsupported-feature is now 163, and
   not-yet is now 88.
+- 2026-07-02: [M1] Promoted `light_switch.riv` and `list_to_path.riv` as
+  sample-0 exact, and gated `library_with_text_and_image.riv`,
+  `list_index_script_access.riv`, `list_items.riv`, and
+  `list_to_length_test.riv` with verified nested-artboard/text/layout
+  diagnostics; exact count is now 46, unsupported-feature is now 167, and
+  not-yet is now 82.

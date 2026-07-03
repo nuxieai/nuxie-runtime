@@ -4021,7 +4021,12 @@ fn vector_length(vector: (f32, f32)) -> f32 {
 }
 
 fn scale_and_add_point(point: (f32, f32), vector: (f32, f32), scale: f32) -> (f32, f32) {
-    (point.0 + vector.0 * scale, point.1 + vector.1 * scale)
+    // Mirrors C++ Vec2D::scaleAndAdd after compiler contraction; rounded
+    // midpoint pruning can depend on the one-ulp split this preserves.
+    (
+        vector.0.mul_add(scale, point.0),
+        vector.1.mul_add(scale, point.1),
+    )
 }
 
 fn compute_ideal_control_point_distance(

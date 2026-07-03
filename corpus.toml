@@ -867,7 +867,7 @@ features = ["type-key:148:Joystick", "type-key:18:SolidColor", "type-key:1:Artbo
 id = "juice"
 path = "tests/unit_tests/assets/juice.riv"
 samples = [0.0]
-status = "not-yet"
+status = "exact"
 features = ["type-key:16:PointsPath", "type-key:18:SolidColor", "type-key:19:GradientStop", "type-key:1:Artboard", "type-key:20:Fill", "type-key:22:LinearGradient", "type-key:23:Backboard", "type-key:24:Stroke", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:28:CubicEaseInterpolator", "type-key:2:Node", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:35:CubicMirroredVertex", "type-key:37:KeyFrameColor", "type-key:3:Shape", "type-key:5:StraightVertex", "type-key:6:CubicDetachedVertex"]
 
 [[file]]

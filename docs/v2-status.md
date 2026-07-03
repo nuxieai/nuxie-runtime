@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 68
+- Corpus files `exact`: 69
 - Current milestone: **M2 — Animated Playback Exact + Real Object Model (#V2-3)**
 
 ## Milestones
@@ -22,10 +22,10 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Stay on the exact-count path before more structural extraction: inspect the
-   remaining M2 sample-0 `not-yet` streams for `juice.riv` and `rocket.riv`
-   after keyed interpolator support. Both still fail the epsilon-aware stream
-   compare; identify the first non-epsilon geometry/transform difference and
-   port the corresponding C++ frame-0 animation/state-machine behavior.
+   remaining M2 sample-0 `rocket.riv` `not-yet` stream. Its first focused diff
+   is a rounded path numeric residual in path local 83 under shape local 82
+   after the local transform; localize whether this is path-local matrix
+   precision, rounded-rectangle generation, or runtime property application.
 2. Continue M2 real object model work by modularizing the remaining
    animation/state-machine surfaces out of `lib.rs` while keeping generated
    `InstanceObjectStorage` as the authored-property source of truth, but only
@@ -53,16 +53,16 @@ the only memory the next session has. Update it every commit.
   multi-contour TrimPath effects, DashPath stroke effects, and linear/radial
   gradient shader creation, default state-machine frame-0 application for
   color/bool/uint/string keyframes, Solo active-child refresh, and
-  before-update joystick animation application, and keyed double/color
+  before-update joystick animation application, keyed double/color
   interpolation for CubicEase/CubicValue/Elastic keyframe interpolators without
   custom handle-source world-space math or nested remap dependent advancement.
   Golden runner sample lists now advance by sorted absolute-time deltas and reuse render paths
   across samples;
   no images, text, nested artboards, constraints, or scripted input.
-- `juice.riv` and `rocket.riv` are parked for M2 at sample `0`: after gradient
-  shader creation matched C++, their first diffs traced to frame-0 keyed
-  transform/geometry application from default animations/state machines, while
-  Rust still draws imported static values.
+- `rocket.riv` is parked for M2 at sample `0`: after keyed interpolation and
+  rounded-corner midpoint parity, its first focused diff is a rounded path
+  numeric residual in path local 83 under shape local 82, roughly
+  `(3e-5, 1.22e-4)` after the local transform.
 - `scripted_color.riv` is parked for M5 at sample `0`: C++ binds the default
   `ViewModelPropertyColor` through `DataBindContext` to a `SolidColor`, while
   static Rust still draws the imported color.
@@ -777,3 +777,8 @@ the only memory the next session has. Update it every commit.
   `make golden-compare` reports `exact=68`, `diverges=0`,
   `unsupported-feature=224`, `not-yet=3`, and `cargo test --workspace`
   passes.
+- 2026-07-03: [M2] Matched C++ rounded-corner midpoint precision by using
+  fused `scaleAndAdd` math while keeping exact duplicate segment pruning.
+  Promoted `juice.riv` to exact; `make golden-compare` reports `exact=69`,
+  `diverges=0`, `unsupported-feature=224`, `not-yet=2`. Next M2 exact-count
+  target is the remaining `rocket.riv` rounded path residual.

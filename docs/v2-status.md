@@ -30,10 +30,10 @@ the only memory the next session has. Update it every commit.
    `crates/rive-runtime/src/components.rs`, the linear animation runtime model
    and import builder live in `crates/rive-runtime/src/animation.rs`, and
    state-machine inputs/events/listener/fire actions/view-model trigger runtime
-   state, transition interpolators, transition timing/allowance model,
-   blend-state import data, imported layer/state model, live blend-state
-   instances, and state-machine layer advancement seed
-   `crates/rive-runtime/src/state_machine.rs`.
+   state, transition conditions, transition interpolators, transition
+   timing/allowance model, blend-state import data, imported layer/state
+   model, live blend-state instances, and state-machine layer advancement seed
+   `crates/rive-runtime/src/state_machine.rs` and its submodules.
 2. Add handle-source world-space math and nested-remap dependent advancement
    to the joystick path when a corpus diff reaches those cases.
 3. Remaining exact entries pinned to sample `0` are static M1 holdovers:
@@ -789,3 +789,11 @@ the only memory the next session has. Update it every commit.
   `exact=70`, `exact-segments=137`, `diverges=0`,
   `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
   passes.
+- 2026-07-03: [M2] Moved `RuntimeTransitionCondition` and its
+  component/view-model comparand helpers out of `lib.rs` and into
+  `crates/rive-runtime/src/state_machine/transition_conditions.rs`, leaving
+  shared schema property-by-key helpers in the crate root for animation and
+  transition reuse. Exact segments remain 137 across 70 exact files;
+  `make golden-compare` reports `exact=70`, `exact-segments=137`,
+  `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
+  `cargo test --workspace` passes.

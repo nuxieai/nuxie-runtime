@@ -6,7 +6,7 @@ use crate::{
     ArtboardInstance, RuntimeBindableArtboard, RuntimeBindableAsset, RuntimeBindableBoolean,
     RuntimeBindableColor, RuntimeBindableEnum, RuntimeBindableInteger, RuntimeBindableList,
     RuntimeBindableNumber, RuntimeBindableString, RuntimeBindableTrigger, RuntimeBindableViewModel,
-    RuntimeTransitionCondition, RuntimeViewModelTrigger, StateMachineBindableArtboardInstance,
+    RuntimeViewModelTrigger, StateMachineBindableArtboardInstance,
     StateMachineBindableAssetInstance, StateMachineBindableBooleanInstance,
     StateMachineBindableColorInstance, StateMachineBindableEnumInstance,
     StateMachineBindableIntegerInstance, StateMachineBindableNumberInstance,
@@ -20,6 +20,9 @@ use crate::{
 use rive_binary::{RuntimeFile, RuntimeObject};
 use rive_graph::ArtboardGraph;
 use std::collections::BTreeMap;
+
+mod transition_conditions;
+use transition_conditions::RuntimeTransitionCondition;
 
 #[derive(Debug, Clone)]
 pub struct RuntimeStateMachineInput {
@@ -400,7 +403,7 @@ pub(crate) struct RuntimeStateTransition {
     pub(crate) flags: u64,
     pub(crate) random_weight: u64,
     pub(crate) condition_count: usize,
-    pub(crate) conditions: Vec<RuntimeTransitionCondition>,
+    conditions: Vec<RuntimeTransitionCondition>,
     pub(crate) fire_actions: Vec<RuntimeStateMachineFireAction>,
     pub(crate) listener_actions: Vec<RuntimeScheduledListenerAction>,
     pub(crate) interpolator: Option<RuntimeTransitionInterpolator>,

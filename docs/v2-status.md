@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 30
+- Corpus files `exact`: 31
 - Current milestone: **M1 — Static Vector Rendering Exact (#V2-2)**
 
 ## Milestones
@@ -22,11 +22,11 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
-   start with `scripted_transition_condition`,
-   `data_converter_interpolator_reset`, `stateful_keyed_trigger`,
-   `unbound_stateful_component`, `scripting_root_viewmodel`, and
-   `solos_with_nested_artboards`; promote exact sample-0 matches or add
-   verified unsupported diagnostics for later-phase first diffs.
+   start with `data_binding_test_2`, `zero_width_space_line_break`,
+   `bidirectional_precedence`, `collapsable_data_binding`,
+   `timeline_event_test`, and `component_based_conditions`; promote exact
+   sample-0 matches or add verified unsupported diagnostics for later-phase
+   first diffs.
 2. `solo_test` and `solos_collapse_tests` are parked for M2: C++ applies
    frame-0 `KeyFrameId` values through the default state machine/animation,
    overriding imported `Solo.activeComponentId`; Rust has no
@@ -69,6 +69,10 @@ the only memory the next session has. Update it every commit.
 - `component_list_1.riv` is parked for constraint support, and
   `custom_property_enum.riv` is parked for M5 custom-property enum data
   binding; both have verified Rust runner diagnostics.
+- `scripted_transition_condition.riv` is parked for scripting support;
+  `data_converter_interpolator_reset.riv` is parked for M5 color data binding;
+  `stateful_keyed_trigger.riv`, `unbound_stateful_component.riv`, and
+  `scripting_root_viewmodel.riv` are parked for nested-artboard support.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -241,3 +245,9 @@ the only memory the next session has. Update it every commit.
   plus `custom_property_enum.riv` with verified constraint/custom-property
   enum diagnostics; exact count is now 30, unsupported-feature is now 74, and
   not-yet is now 191.
+- 2026-07-02: [M1] Promoted `solos_with_nested_artboards.riv` as sample-0
+  exact, and gated `scripted_transition_condition.riv`,
+  `data_converter_interpolator_reset.riv`, `stateful_keyed_trigger.riv`,
+  `unbound_stateful_component.riv`, and `scripting_root_viewmodel.riv` with
+  verified scripted-transition/data-binding/nested-artboard diagnostics; exact
+  count is now 31, unsupported-feature is now 79, and not-yet is now 185.

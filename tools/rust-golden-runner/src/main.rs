@@ -220,6 +220,18 @@ fn ensure_static_draw_supported(artboard: &ArtboardGraph) -> Result<()> {
         );
     }
 
+    if let Some(scripted_object) = artboard
+        .state_machines
+        .iter()
+        .flat_map(|state_machine| &state_machine.scripted_objects)
+        .find(|scripted_object| scripted_object.type_name == "ScriptedTransitionCondition")
+    {
+        bail!(
+            "unsupported: scripted-transition-condition in Rust golden runner (global {})",
+            scripted_object.global_id
+        );
+    }
+
     if let Some((constraint_type, global_id)) = artboard.local_objects.iter().find_map(|object| {
         let type_name = object.type_name?;
         type_name

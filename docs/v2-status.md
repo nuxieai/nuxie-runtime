@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 53
+- Corpus files `exact`: 54
 - Current milestone: **M1 — Static Vector Rendering Exact (#V2-2)**
 
 ## Milestones
@@ -21,11 +21,9 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Localize `off_road_car.riv`: gradients match within epsilon, but the
-   first structural diff is a clipping path sequence where C++ emits
-   `clipPath` id `22` and Rust emits `makeEmptyRenderPath` id `25`. Check
-   whether this is unsupported active skin/deformer behavior before changing
-   clipping code.
+1. Finish the M1 FFI viewer demo: static vector corpus divergences are cleared
+   at sample `0`, so the remaining M1 exit criterion is a minimal viewer path
+   that draws real files through the renderer FFI from Rust.
 2. `joystick_flag_test` is parked for M2: its sample-0 first diff is joystick
    application/default state-machine behavior, while Rust still draws the
    imported static state.
@@ -41,9 +39,8 @@ the only memory the next session has. Update it every commit.
 
 ## Known Divergences
 
-- `off_road_car.riv`: gradients are no longer unsupported; first diff is M1
-  clipping/path sequencing, where Rust emits an empty render path before C++'s
-  clip path.
+- None currently tracked for M1; remaining non-exact files are parked with
+  later-milestone diagnostics or unsupported-feature gates.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -51,8 +48,9 @@ the only memory the next session has. Update it every commit.
   but rejected until M5 external data-binding corpus files require it.
 - Rust static draw path currently supports sample `0`, artboard
   clip/background, selected-artboard origins, solid fills/strokes, and
-  `ClippingShape` clip paths, plus empty and multi-contour TrimPath effects,
-  DashPath stroke effects, and linear/radial gradient shader creation;
+  `ClippingShape` clip paths, skinned `PointsPath` deformation, plus empty and
+  multi-contour TrimPath effects, DashPath stroke effects, and linear/radial
+  gradient shader creation;
   no state machines, images, text, nested artboards, constraints, or scripted
   input.
 - `fill_trim_path.riv` is parked for M2 even at sample `0`: C++ applies
@@ -585,3 +583,7 @@ the only memory the next session has. Update it every commit.
   to M2 frame-0 animation/keyframe application after inspecting their default
   animation graphs; exact remains 53, unsupported-feature remains 224,
   diverges is now 1, and not-yet is now 17.
+- 2026-07-02: [M1] Promoted `off_road_car.riv` as sample-0 exact by caching
+  `ClippingShape` render paths per clipping shape and matching C++ `Mat2D`
+  inverse/mapPoints/skinning float behavior; exact is now 54,
+  unsupported-feature remains 224, diverges is now 0, and not-yet remains 17.

@@ -2575,13 +2575,17 @@ fn invert_mat2d_or_identity(matrix: [f32; 6]) -> [f32; 6] {
         return [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
     }
 
+    // Ported from src/math/mat2d.cpp Mat2D::invert. C++ computes the
+    // reciprocal once and multiplies each coefficient; tiny skinning residuals
+    // in static goldens depend on that grouping.
+    let determinant = 1.0 / determinant;
     [
-        d / determinant,
-        -b / determinant,
-        -c / determinant,
-        a / determinant,
-        (c * f - d * e) / determinant,
-        (b * e - a * f) / determinant,
+        d * determinant,
+        -b * determinant,
+        -c * determinant,
+        a * determinant,
+        c.mul_add(f, -(d * e)) * determinant,
+        b.mul_add(e, -(a * f)) * determinant,
     ]
 }
 

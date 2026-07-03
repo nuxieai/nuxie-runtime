@@ -7909,6 +7909,14 @@ void write_skin(std::ostream& out,
         out << "null";
     }
 
+    out << ",\"worldTransform\":";
+    write_mat2d(out, rive::Mat2D(skin->xx(),
+                                 skin->xy(),
+                                 skin->yx(),
+                                 skin->yy(),
+                                 skin->tx(),
+                                 skin->ty()));
+
     out << ",\"tendons\":[";
     bool first = true;
     size_t tendonIndex = 0;
@@ -7946,6 +7954,27 @@ void write_skin(std::ostream& out,
         else
         {
             out << tendon->bone()->coreType();
+        }
+        out << ",\"inverseBind\":";
+        write_mat2d(out, tendon->inverseBind());
+        out << ",\"boneWorld\":";
+        if (tendon->bone() == nullptr)
+        {
+            out << "null";
+        }
+        else
+        {
+            write_mat2d(out, tendon->bone()->worldTransform());
+        }
+        out << ",\"boneTransform\":";
+        if (tendon->bone() == nullptr)
+        {
+            out << "null";
+        }
+        else
+        {
+            write_mat2d(out, tendon->bone()->worldTransform() *
+                                 tendon->inverseBind());
         }
         out << '}';
     }

@@ -18,7 +18,7 @@ use rive_schema::{
     CoreRegistryFieldKind, FieldKind, core_registry_field_kind_by_property_key, definition_by_name,
     definition_by_type_key, is_callback_property_key, object_supports_property,
 };
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 
 #[derive(Debug, Clone)]
@@ -428,7 +428,7 @@ impl ArtboardInstance {
             .iter()
             .map(|object| (object.local_id, object.global_id))
             .collect::<BTreeMap<_, _>>();
-        let mut clip_paths = Vec::<Box<dyn RenderPath>>::new();
+        let mut clip_paths = BTreeMap::<usize, Box<dyn RenderPath>>::new();
 
         for command in self.draw_commands(graph) {
             runtime_draw_command(
@@ -1406,7 +1406,7 @@ fn runtime_draw_command(
     factory: &mut dyn RenderFactory,
     renderer: &mut dyn Renderer,
     paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
-    clip_paths: &mut Vec<Box<dyn RenderPath>>,
+    clip_paths: &mut BTreeMap<usize, Box<dyn RenderPath>>,
 ) -> Result<()> {
     match command.kind {
         RuntimeDrawCommandKind::ClipStart => {
@@ -1493,7 +1493,7 @@ fn runtime_draw_clip_start(
     command: RuntimeDrawCommand,
     factory: &mut dyn RenderFactory,
     renderer: &mut dyn Renderer,
-    clip_paths: &mut Vec<Box<dyn RenderPath>>,
+    clip_paths: &mut BTreeMap<usize, Box<dyn RenderPath>>,
 ) {
     let Some(clipping_shape) = command
         .clipping_shape_local
@@ -1511,13 +1511,17 @@ fn runtime_draw_clip_start(
     if path_commands.is_empty() {
         return;
     }
-    let path = runtime_make_path(
-        factory,
-        &path_commands,
-        runtime_fill_rule_for_value(clipping_shape.fill_rule),
-    );
+    // Ported from src/shapes/clipping_shape.cpp: each ClippingShape owns a
+    // cached clip path, so repeated clip-start proxies reuse the same RenderPath.
+    let path = match clip_paths.entry(clipping_shape.local_id) {
+        Entry::Occupied(entry) => entry.into_mut(),
+        Entry::Vacant(entry) => entry.insert(runtime_make_path(
+            factory,
+            &path_commands,
+            runtime_fill_rule_for_value(clipping_shape.fill_rule),
+        )),
+    };
     renderer.clip_path(path.as_ref());
-    clip_paths.push(path);
 }
 
 fn runtime_draw_clip_end(
@@ -3697,12 +3701,12 @@ fn cross_point(left: (f32, f32), right: (f32, f32)) -> f32 {
 }
 
 fn push_move(commands: &mut Vec<RuntimePathCommand>, transform: Mat2D, point: (f32, f32)) {
-    let (x, y) = transform.transform_point(point.0, point.1);
+    let (x, y) = transform.map_point(point.0, point.1);
     commands.push(RuntimePathCommand::Move { x, y });
 }
 
 fn push_line(commands: &mut Vec<RuntimePathCommand>, transform: Mat2D, point: (f32, f32)) {
-    let (x, y) = transform.transform_point(point.0, point.1);
+    let (x, y) = transform.map_point(point.0, point.1);
     commands.push(RuntimePathCommand::Line { x, y });
 }
 
@@ -3713,9 +3717,9 @@ fn push_cubic(
     point2: (f32, f32),
     point3: (f32, f32),
 ) {
-    let (x1, y1) = transform.transform_point(point1.0, point1.1);
-    let (x2, y2) = transform.transform_point(point2.0, point2.1);
-    let (x3, y3) = transform.transform_point(point3.0, point3.1);
+    let (x1, y1) = transform.map_point(point1.0, point1.1);
+    let (x2, y2) = transform.map_point(point2.0, point2.1);
+    let (x3, y3) = transform.map_point(point3.0, point3.1);
     commands.push(RuntimePathCommand::Cubic {
         x1,
         y1,
@@ -27450,13 +27454,14 @@ impl Mat2D {
         }
 
         let [a, b, c, d, e, f] = self.0;
+        let determinant = 1.0 / determinant;
         Self([
-            d / determinant,
-            -b / determinant,
-            -c / determinant,
-            a / determinant,
-            (c * f - d * e) / determinant,
-            (b * e - a * f) / determinant,
+            d * determinant,
+            -b * determinant,
+            -c * determinant,
+            a * determinant,
+            c.mul_add(f, -(d * e)) * determinant,
+            b.mul_add(e, -(a * f)) * determinant,
         ])
     }
 
@@ -27465,6 +27470,17 @@ impl Mat2D {
             self.0[0] * x + self.0[2] * y + self.0[4],
             self.0[1] * x + self.0[3] * y + self.0[5],
         )
+    }
+
+    pub fn map_point(self, x: f32, y: f32) -> (f32, f32) {
+        let [a, b, c, d, e, f] = self.0;
+        // Ported from src/math/mat2d.cpp Mat2D::mapPoints. The grouping matters
+        // for cancellation-heavy local path composition.
+        if b == 0.0 && c == 0.0 {
+            (a * x + e, d * y + f)
+        } else {
+            (a * x + (c * y + e), d * y + (b * x + f))
+        }
     }
 
     pub fn transform_direction(self, x: f32, y: f32) -> (f32, f32) {

@@ -22,11 +22,18 @@ pixel metric. Never start Phase R on your own initiative.
 
 ## The one metric
 
-The project health number is the count of corpus files with status `exact` in
-`corpus.toml` (until #V2-1 lands, the metric is "days until the golden harness
-exists"). Every session must either raise this number, unblock the current
-milestone's exit criteria, or fix a regression. There is no fourth category of
-valid work.
+The project health number is `exact-segments` from `make golden-compare`: the
+sum of verified (file × sample) segments across `exact` corpus entries. Both
+promoting a file to exact and widening an exact file's sample list move it;
+neither alone is privileged. Every session must either raise this number,
+unblock the current milestone's exit criteria, or fix a regression. There is
+no fourth category of valid work.
+
+Gated entries carry `milestone = "M3|M4|M5|M6|gated|harness"` in
+`corpus.toml` (preserved by `generate-corpus`; the summary prints a
+parked-by-milestone breakdown). When you gate a file, set its milestone tag;
+when a milestone opens, its work-list is `grep -B6 'milestone = "MN"'
+corpus.toml`, not backlog prose.
 
 ## Session loop
 
@@ -42,9 +49,12 @@ valid work.
 4. **Verify.** Run `make golden-compare` and the frozen test suite
    (`cargo test --workspace`). The exact count is a ratchet: if your change
    regressed any `exact` file, fix or revert before anything else.
-5. **Record.** Update `corpus.toml` statuses, update `docs/v2-status.md`
-   (metric, milestone checkboxes, Next queue, one-line log entry), and commit
-   with the milestone tag in the message, e.g. `[M2] Port joystick apply`.
+5. **Record.** Update `corpus.toml` statuses (and `milestone` tags for gated
+   entries), update `docs/v2-status.md` (metric, milestone checkboxes, Next
+   queue, one-line log entry), and commit with the milestone tag in the
+   message, e.g. `[M2] Port joystick apply`. When a milestone completes, move
+   its log entries to `docs/v2-log-archive.md` — the status file stays small
+   because every session pays to read it.
 6. **Continue or hand off.** If context budget allows, loop to step 2.
    Otherwise end with the status file current — the next session must be able
    to resume from it alone.

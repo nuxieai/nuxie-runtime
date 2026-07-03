@@ -31,10 +31,22 @@ fn run() -> Result<(), String> {
         .unwrap_or_else(|| PathBuf::from("."));
 
     let mut counts = BTreeMap::<Status, usize>::new();
+    let mut exact_segments = 0usize;
+    let mut parked_by_milestone = BTreeMap::<String, usize>::new();
     let mut failures = Vec::new();
 
     for entry in &corpus {
         *counts.entry(entry.status).or_default() += 1;
+        if entry.status == Status::Exact {
+            exact_segments += entry.samples.len();
+        }
+        if entry.status == Status::UnsupportedFeature {
+            let bucket = entry
+                .milestone
+                .clone()
+                .unwrap_or_else(|| "untagged".to_owned());
+            *parked_by_milestone.entry(bucket).or_default() += 1;
+        }
         match entry.status {
             Status::UnsupportedFeature => {
                 println!(
@@ -103,9 +115,10 @@ fn run() -> Result<(), String> {
 
     let exact = counts.get(&Status::Exact).copied().unwrap_or(0);
     println!(
-        "golden-compare summary: entries={} exact={} diverges={} unsupported-feature={} not-yet={}",
+        "golden-compare summary: entries={} exact={} exact-segments={} diverges={} unsupported-feature={} not-yet={}",
         corpus.len(),
         exact,
+        exact_segments,
         counts.get(&Status::Diverges).copied().unwrap_or(0),
         counts
             .get(&Status::UnsupportedFeature)
@@ -113,6 +126,14 @@ fn run() -> Result<(), String> {
             .unwrap_or(0),
         counts.get(&Status::NotYet).copied().unwrap_or(0),
     );
+    if !parked_by_milestone.is_empty() {
+        let breakdown = parked_by_milestone
+            .iter()
+            .map(|(milestone, count)| format!("{milestone}={count}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        println!("golden-compare parked: {breakdown}");
+    }
 
     if failures.is_empty() {
         Ok(())
@@ -198,6 +219,7 @@ struct CorpusEntry {
     input_script: Option<String>,
     samples: Vec<f32>,
     status: Status,
+    milestone: Option<String>,
     features: Vec<String>,
 }
 
@@ -211,6 +233,7 @@ impl CorpusEntry {
             input_script: None,
             samples: vec![0.0],
             status: Status::NotYet,
+            milestone: None,
             features: Vec::new(),
         }
     }
@@ -312,6 +335,7 @@ fn parse_corpus(path: &Path) -> Result<Vec<CorpusEntry>, String> {
             "input_script" => entry.input_script = Some(parse_string(value, line_number)?),
             "samples" => entry.samples = parse_float_array(value, line_number)?,
             "status" => entry.status = Status::parse(&parse_string(value, line_number)?)?,
+            "milestone" => entry.milestone = Some(parse_string(value, line_number)?),
             "features" => entry.features = parse_string_array(value, line_number)?,
             other => return Err(format!("line {line_number}: unknown key {other}")),
         }

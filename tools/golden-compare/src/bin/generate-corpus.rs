@@ -91,6 +91,9 @@ fn run() -> Result<()> {
             .unwrap_or_else(|| vec!["0.0".to_owned()]);
         output.push_str(&format!("samples = [{}]\n", samples.join(", ")));
         output.push_str(&format!("status = {}\n", quoted(&status)));
+        if let Some(milestone) = previous.and_then(|entry| entry.milestone.as_ref()) {
+            output.push_str(&format!("milestone = {}\n", quoted(milestone)));
+        }
         output.push_str("features = [");
         for (index, feature) in features.iter().enumerate() {
             if index != 0 {
@@ -171,6 +174,7 @@ struct ExistingEntry {
     input_script: Option<String>,
     samples: Vec<String>,
     status: String,
+    milestone: Option<String>,
     features: Vec<String>,
 }
 
@@ -205,6 +209,7 @@ fn parse_existing(path: &Path) -> Result<BTreeMap<String, ExistingEntry>> {
             "input_script" => entry.input_script = Some(parse_string(value)?),
             "samples" => entry.samples = parse_array(value).unwrap_or_default(),
             "status" => entry.status = parse_string(value)?,
+            "milestone" => entry.milestone = Some(parse_string(value)?),
             "features" => entry.features = parse_string_array(value).unwrap_or_default(),
             _ => {}
         }

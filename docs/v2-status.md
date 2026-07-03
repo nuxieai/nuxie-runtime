@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 96 across 70 exact files
+- Exact segments (file × sample): 97 across 70 exact files
 - Parked breakdown (from `make golden-compare`): M3=21 M4=83 M5=8 M6=72 gated=5 harness=36
 - Current milestone: **M2 — Animated Playback Exact + Real Object Model (#V2-3)**
 
@@ -22,7 +22,12 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue M2 real object model work by modularizing the remaining
+1. Continue M2 sample widening after the state-machine modularization queue
+   moved several slices: pick the next small animated `exact` corpus file still
+   pinned to sample `0`, add the first non-zero sample in a focused corpus,
+   and either keep it exact by porting the first divergence or record the
+   narrower blocker if it crosses into a later milestone.
+2. Continue M2 real object model work by modularizing the remaining
    animation/state-machine surfaces out of `lib.rs` while keeping generated
    `InstanceObjectStorage` as the authored-property source of truth, but only
    when it unblocks a corpus diff or removes risky coupling. Component
@@ -34,11 +39,6 @@ the only memory the next session has. Update it every commit.
    blend-state import data, imported layer/state model, live blend-state
    instances, and state-machine layer advancement seed
    `crates/rive-runtime/src/state_machine.rs`.
-2. Resume M2 sample widening after the object-model/modularization queue moves:
-   pick the next small animated `exact` corpus file still pinned to sample `0`,
-   add the first non-zero sample in a focused corpus, and either keep it exact
-   by porting the first divergence or record the narrower blocker if it crosses
-   into a later milestone.
 3. Add handle-source world-space math and nested-remap dependent advancement
    to the joystick path when a corpus diff reaches those cases.
 
@@ -513,3 +513,10 @@ the only memory the next session has. Update it every commit.
   files; `make golden-compare` reports `exact=70`, `exact-segments=96`,
   `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
   `cargo test --workspace` passes.
+- 2026-07-03: [M2] Tripwire check after repeated state-machine
+  modularization commits pivoted the queue back to metric-moving sample
+  widening. Widened `long_name.riv` from sample `0` to samples `0` and
+  `0.25`, keeping its simple animated stream exact. Exact segments are now
+  97 across 70 exact files; `make golden-compare` reports `exact=70`,
+  `exact-segments=97`, `diverges=0`, `unsupported-feature=225`,
+  `not-yet=0`, and `cargo test --workspace` passes.

@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 13
+- Corpus files `exact`: 14
 - Current milestone: **M1 — Static Vector Rendering Exact (#V2-2)**
 
 ## Milestones
@@ -21,10 +21,14 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Inspect `fix_rectangle` at sample `0`; first known divergence is
-   `fillRule=2` vs `fillRule=0`, so decide whether Rust is missing a static
-   rectangle/shape fill-rule import or a C++ draw-time normalization.
-2. Keep `fill_trim_path` and `trim_path_linear` parked for M2 keyframe and
+1. Inspect `solo_test` at sample `0`; Rust currently draws an additional shape
+   after the first red rectangle, so localize C++ solo/hidden visibility
+   handling before deciding whether this is M1 static visibility or later
+   animation state.
+2. `clip_tests` is raw-exact at sample `0`, but its manifest includes sample
+   `0.25`; keep it parked until M2 non-zero sample support or an explicit
+   sample-scope split.
+3. Keep `fill_trim_path` and `trim_path_linear` parked for M2 keyframe and
    non-zero sample support.
 
 ## Backlog (unsupported features awaiting corpus demand)
@@ -96,6 +100,10 @@ the only memory the next session has. Update it every commit.
   `defaultStateMachineId` was serialized on the selected artboard and treating
   the value as a state-machine index; schema default values alone do not
   select a state machine.
+- 2026-07-02: Runtime composed shape paths default to C++
+  `ShapePaintPath` fill rule `clockwise`; Fill paints still override the
+  path fill rule immediately before draw, while Stroke paints preserve the
+  composed path default.
 
 ## Log
 
@@ -169,3 +177,6 @@ the only memory the next session has. Update it every commit.
 - 2026-07-02: [M1] Marked `blend_test.riv`,
   `multiple_state_machines.riv`, and `stroke_name_test.riv` exact at sample
   `0` by matching C++ static-scene marker selection; exact count is now 13.
+- 2026-07-02: [M1] Marked `fix_rectangle.riv` exact at sample `0` by matching
+  C++ `ShapePaintPath` clockwise fill-rule defaults for stroked composed
+  paths; exact count is now 14.

@@ -1355,12 +1355,11 @@ fn runtime_draw_command(
             renderer.transform(runtime_render_mat(shape_world));
         }
         if path_cache[path_index].1.is_none() {
-            let fill_rule = if paint.has_effect_path {
-                RenderFillRule::Clockwise
-            } else {
-                RenderFillRule::NonZero
-            };
-            path_cache[path_index].1 = Some(runtime_make_path(factory, path_commands, fill_rule));
+            path_cache[path_index].1 = Some(runtime_make_path(
+                factory,
+                path_commands,
+                RenderFillRule::Clockwise,
+            ));
         }
         let path = path_cache[path_index]
             .1

@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 51
+- Corpus files `exact`: 52
 - Current milestone: **M1 — Static Vector Rendering Exact (#V2-2)**
 
 ## Milestones
@@ -22,8 +22,9 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
-   start with `spotify_kids_demo`, `stacked_path_effects`, `superbowl`,
-   `test_modifier_run`, `text_follow_path_shape_length`, and `text_input`;
+   start with `text_listener_simpler`, `text_opacity_modifier`,
+   `text_stroke_test`, `text_vertical_trim_test`, `transition_actions`, and
+   `vertical_align_ellipsis`;
    promote exact sample-0 matches or add
    verified unsupported diagnostics for later-phase first diffs.
 2. `joystick_flag_test` is parked for M2: its sample-0 first diff is joystick
@@ -45,7 +46,8 @@ the only memory the next session has. Update it every commit.
   but rejected until M5 external data-binding corpus files require it.
 - Rust static draw path currently supports sample `0`, artboard
   clip/background, selected-artboard origins, solid fills/strokes, and
-  `ClippingShape` clip paths, plus empty and multi-contour TrimPath effects;
+  `ClippingShape` clip paths, plus empty and multi-contour TrimPath effects
+  and DashPath stroke effects;
   no state machines, gradients, images, text, nested artboards, constraints,
   or scripted input.
 - `fill_trim_path.riv` is parked for M2 even at sample `0`: C++ applies
@@ -187,6 +189,10 @@ the only memory the next session has. Update it every commit.
   `scroll_snap.riv` and `spotify_kids_app_icon.riv` are parked for text
   support; and `scroll_test.riv`, `scroll_threshold.riv`, and
   `shared_viewmodel_instance.riv` are parked for nested-artboard support.
+- `spotify_kids_demo.riv` is parked for image support; `superbowl.riv` and
+  `text_input.riv` are parked for nested-artboard support; and
+  `test_modifier_run.riv` and `text_follow_path_shape_length.riv` are parked
+  for text support.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -529,3 +535,9 @@ the only memory the next session has. Update it every commit.
   `shared_viewmodel_instance.riv`, and `spotify_kids_app_icon.riv` with
   verified image/text/nested-artboard diagnostics; exact remains 51,
   unsupported-feature is now 206, and not-yet is now 38.
+- 2026-07-02: [M1] Ported DashPath stroke effects and promoted
+  `stacked_path_effects.riv` as sample-0 exact; gated
+  `spotify_kids_demo.riv`, `superbowl.riv`, `test_modifier_run.riv`,
+  `text_follow_path_shape_length.riv`, and `text_input.riv` with verified
+  image/nested-artboard/text diagnostics; exact count is now 52,
+  unsupported-feature is now 211, and not-yet is now 32.

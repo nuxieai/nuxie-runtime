@@ -4,7 +4,7 @@ use rive_binary::{
     RuntimeViewModelInstanceReference,
 };
 use rive_graph::{
-    ArtboardGraph, ClippingShapeNode, ComponentNode, DrawableOrderKind, FeatherNode,
+    ArtboardGraph, ClippingShapeNode, ComponentNode, DashNode, DrawableOrderKind, FeatherNode,
     GradientStopNode, ParametricPathNode, PathComposerNode, PathComposerPathNode, PathGeometryNode,
     PathVertexNode, ShapePaintContainerNode, ShapePaintKind, ShapePaintNode, ShapePaintPathKind,
     ShapePaintStateNode, SortedDrawableNode, StrokeEffectNode,
@@ -2077,9 +2077,119 @@ fn runtime_stroke_effect_path_commands(
     source: &[RuntimePathCommand],
 ) -> Option<Vec<RuntimePathCommand>> {
     match effect.type_name {
+        "DashPath" => runtime_dash_path_effect_commands(effect, paint, source),
         "TrimPath" => runtime_trim_path_line_effect_commands(effect, paint, source),
         _ => None,
     }
+}
+
+fn runtime_dash_path_effect_commands(
+    effect: &StrokeEffectNode,
+    paint: &ShapePaintNode,
+    source: &[RuntimePathCommand],
+) -> Option<Vec<RuntimePathCommand>> {
+    let offset = effect.dash_offset?;
+    let offset_is_percentage = effect.dash_offset_is_percentage?;
+    if paint.paint_type == ShapePaintKind::Fill {
+        return Some(source.to_vec());
+    }
+
+    Some(dash_path_apply_dash(
+        source,
+        offset,
+        offset_is_percentage,
+        &effect.dashes,
+    ))
+}
+
+fn dash_path_apply_dash(
+    source: &[RuntimePathCommand],
+    offset: f32,
+    offset_is_percentage: bool,
+    dashes: &[DashNode],
+) -> Vec<RuntimePathCommand> {
+    let path_measure = RuntimePathMeasure::from_commands(source);
+    if path_measure.length <= 0.0
+        || !dashes.iter().any(|dash| {
+            dash_normalized_length(
+                dash.length,
+                dash.length_is_percentage,
+                path_measure.length,
+                false,
+            ) > 0.0
+        })
+    {
+        return Vec::new();
+    }
+
+    let mut commands = Vec::new();
+    let mut dash_index = 0usize;
+    let mut dashed = 0.0;
+    let mut distance =
+        dash_normalized_length(offset, offset_is_percentage, path_measure.length, true);
+    let mut draw = true;
+
+    while dashed < path_measure.length {
+        let dash = &dashes[dash_index % dashes.len()];
+        dash_index += 1;
+
+        let mut dash_length = dash_normalized_length(
+            dash.length,
+            dash.length_is_percentage,
+            path_measure.length,
+            false,
+        );
+        if dash_length > path_measure.length {
+            dash_length = path_measure.length;
+        }
+
+        let mut end_length = distance + dash_length;
+        if end_length > path_measure.length {
+            end_length -= path_measure.length;
+            if draw {
+                if distance < path_measure.length {
+                    path_measure.get_segment(distance, path_measure.length, &mut commands, true);
+                    path_measure.get_segment(
+                        0.0,
+                        end_length,
+                        &mut commands,
+                        !path_measure.is_closed(),
+                    );
+                } else {
+                    path_measure.get_segment(0.0, end_length, &mut commands, true);
+                }
+            }
+
+            distance = end_length - dash_length;
+        } else if draw {
+            path_measure.get_segment(distance, end_length, &mut commands, true);
+        }
+
+        distance += dash_length;
+        dashed += dash_length;
+        draw = !draw;
+    }
+
+    commands
+}
+
+fn dash_normalized_length(
+    value: f32,
+    is_percentage: bool,
+    contour_length: f32,
+    wraps: bool,
+) -> f32 {
+    let mut p = value;
+    if wraps {
+        let right = if is_percentage { 1.0 } else { contour_length };
+        if right != 0.0 {
+            p = value % right;
+            if p < 0.0 {
+                p += right;
+            }
+        }
+    }
+    if is_percentage { p * contour_length } else { p }
 }
 
 fn runtime_trim_path_line_effect_commands(
@@ -2128,6 +2238,12 @@ struct TrimContour {
     segments: Vec<TrimMeasuredSegment>,
     length: f32,
     is_closed: bool,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimePathMeasure {
+    contours: Vec<TrimContour>,
+    length: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -2357,6 +2473,61 @@ impl TrimContour {
         self.segments
             .iter()
             .find(|segment| segment.original_index == original_index)
+    }
+}
+
+impl RuntimePathMeasure {
+    fn from_commands(commands: &[RuntimePathCommand]) -> Self {
+        let contours = TrimContour::from_commands(commands);
+        let length = contours.iter().map(|contour| contour.length).sum();
+        Self { contours, length }
+    }
+
+    fn get_segment(
+        &self,
+        start_distance: f32,
+        end_distance: f32,
+        commands: &mut Vec<RuntimePathCommand>,
+        start_with_move: bool,
+    ) {
+        if self.contours.is_empty() {
+            return;
+        }
+
+        let start_distance = start_distance.clamp(0.0, self.length);
+        let end_distance = end_distance.clamp(0.0, self.length);
+        if start_distance >= end_distance {
+            return;
+        }
+
+        let mut current_distance = 0.0;
+        let mut is_first_segment = true;
+        for contour in &self.contours {
+            let contour_length = contour.length;
+            let contour_start = current_distance;
+            let contour_end = current_distance + contour_length;
+
+            if contour_end > start_distance && contour_start < end_distance {
+                let local_start = (start_distance - contour_start).max(0.0);
+                let local_end = (end_distance - contour_start).min(contour_length);
+                contour.get_segment(
+                    local_start,
+                    local_end,
+                    commands,
+                    !is_first_segment || start_with_move,
+                );
+                is_first_segment = false;
+            }
+
+            current_distance += contour_length;
+            if current_distance >= end_distance {
+                break;
+            }
+        }
+    }
+
+    fn is_closed(&self) -> bool {
+        self.contours.len() == 1 && self.contours[0].is_closed
     }
 }
 

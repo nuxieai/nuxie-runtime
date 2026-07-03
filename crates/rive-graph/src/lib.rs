@@ -738,9 +738,20 @@ pub struct StrokeEffectNode {
     pub trim_end: Option<f32>,
     pub trim_offset: Option<f32>,
     pub trim_mode_value: Option<u32>,
+    pub dash_offset: Option<f32>,
+    pub dash_offset_is_percentage: Option<bool>,
+    pub dashes: Vec<DashNode>,
     pub target_group_effect_local: Option<usize>,
     pub target_group_effect_global: Option<u32>,
     pub target_group_effect_type_name: Option<&'static str>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DashNode {
+    pub local_id: usize,
+    pub global_id: u32,
+    pub length: f32,
+    pub length_is_percentage: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -2459,6 +2470,16 @@ fn shape_paint_containers(
                                         } else {
                                             None
                                         },
+                                        dash_offset: dash_path_double(&effect.object, "offset"),
+                                        dash_offset_is_percentage: dash_path_bool(
+                                            &effect.object,
+                                            "offsetIsPercentage",
+                                        ),
+                                        dashes: dash_path_dashes(
+                                            file,
+                                            local_objects,
+                                            effect.local_id,
+                                        ),
                                         target_group_effect_local: effect
                                             .target_group_effect_local_id,
                                         target_group_effect_global: effect
@@ -2493,6 +2514,47 @@ fn trim_path_double(object: &RuntimeObject, property: &str) -> Option<f32> {
     } else {
         None
     }
+}
+
+fn dash_path_double(object: &RuntimeObject, property: &str) -> Option<f32> {
+    if object.type_name == "DashPath" {
+        Some(object.double_property(property).unwrap_or(0.0))
+    } else {
+        None
+    }
+}
+
+fn dash_path_bool(object: &RuntimeObject, property: &str) -> Option<bool> {
+    if object.type_name == "DashPath" {
+        Some(object.bool_property(property).unwrap_or(false))
+    } else {
+        None
+    }
+}
+
+fn dash_path_dashes(
+    file: &RuntimeFile,
+    local_objects: &[LocalObject],
+    dash_path_local: usize,
+) -> Vec<DashNode> {
+    local_objects
+        .iter()
+        .filter_map(|local_object| {
+            let object = file.object(local_object.global_id as usize)?;
+            if object.type_name != "Dash"
+                || object_parent_id(object) != Some(dash_path_local as u64)
+            {
+                return None;
+            }
+
+            Some(DashNode {
+                local_id: local_object.local_id,
+                global_id: local_object.global_id,
+                length: object.double_property("length").unwrap_or(0.0),
+                length_is_percentage: object.bool_property("lengthIsPercentage").unwrap_or(false),
+            })
+        })
+        .collect()
 }
 
 fn mat2d_property_array(object: &RuntimeObject) -> [f32; 6] {

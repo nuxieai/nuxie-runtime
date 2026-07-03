@@ -22,9 +22,9 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
-   start with `number_to_list_nested_children`, `off_road_car`,
-   `oneshotblend`, `opaque_hit_test`, `pause_nested_artboard`, and
-   `pointer_events`; promote exact sample-0 matches or add
+   start with `pointer_events_nested_artboards_in_solos`, `pointer_exit`,
+   `quantize_test`, `rapid_pointer_events`, `rebind_with_nested_viewmodel`,
+   and `recursive_data_bind`; promote exact sample-0 matches or add
    verified unsupported diagnostics for later-phase first diffs.
 2. `joystick_flag_test` is parked for M2: its sample-0 first diff is joystick
    application/default state-machine behavior, while Rust still draws the
@@ -159,6 +159,15 @@ the only memory the next session has. Update it every commit.
 - `nested_event_test.riv`, `nested_events.riv`, `nested_hug.riv`, and
   `nested_needs_advance.riv` are parked for nested-artboard support;
   `new_text.riv` is parked for text support.
+- `number_to_list_nested_children.riv` is parked for M6 layout component paint
+  drawing; `off_road_car.riv` is parked for gradient rendering; and
+  `pause_nested_artboard.riv` is parked for nested-artboard support.
+- `oneshotblend.riv` is parked for M2 1D blend/default state-machine
+  application at sample `0`; `opaque_hit_test.riv` is parked for M2
+  frame-0 state-machine/keyframe color application; `pointer_events.riv`
+  is raw-exact at sample `0`, but its manifest includes sample `0.1`, so it
+  remains parked until M2 non-zero sample support or an explicit sample-scope
+  split.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -473,3 +482,9 @@ the only memory the next session has. Update it every commit.
   `nested_needs_advance.riv`, and `new_text.riv` with verified
   nested-artboard/text diagnostics; exact count is now 49,
   unsupported-feature is now 182, and not-yet is now 64.
+- 2026-07-02: [M1] Gated `number_to_list_nested_children.riv`,
+  `off_road_car.riv`, and `pause_nested_artboard.riv` with verified
+  layout/gradient/nested-artboard diagnostics, and parked `oneshotblend.riv`,
+  `opaque_hit_test.riv`, and `pointer_events.riv` for M2 state-machine or
+  non-zero-sample support; exact remains 49, unsupported-feature is now 185,
+  and not-yet is now 61.

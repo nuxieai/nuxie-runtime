@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 40
+- Corpus files `exact`: 41
 - Current milestone: **M1 — Static Vector Rendering Exact (#V2-2)**
 
 ## Milestones
@@ -22,10 +22,10 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
-   start with `event_trigger_event`, `events_on_states`,
-   `feather_render_test`, `fit_font_size_test`, `focus_collapsing`, and
-   `focus_traversal`; promote exact sample-0 matches or add verified
-   unsupported diagnostics for later-phase first diffs.
+   start with `focusable_element`, `format_number_with_commas`,
+   `formula_random`, `hello_world`, `hit_test_nested`, and `hit_test_test`;
+   promote exact sample-0 matches or add verified unsupported diagnostics for
+   later-phase first diffs.
 2. `solo_test` and `solos_collapse_tests` are parked for M2: C++ applies
    frame-0 `KeyFrameId` values through the default state machine/animation,
    overriding imported `Solo.activeComponentId`; Rust has no
@@ -116,6 +116,10 @@ the only memory the next session has. Update it every commit.
 - `double_line.riv` and `ellipsis.riv` are parked for text support;
   `drag_event.riv`, `echo_show_demo.riv`, and `entry.riv` are parked for
   nested-artboard support.
+- `event_trigger_event.riv` is parked for M2 frame-0 color application;
+  `feather_render_test.riv` is parked for image support;
+  `fit_font_size_test.riv` is parked for text support; `focus_collapsing.riv`
+  and `focus_traversal.riv` are parked for nested-artboard support.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -357,3 +361,9 @@ the only memory the next session has. Update it every commit.
   `ellipsis.riv`, and `entry.riv` with verified text/nested-artboard
   diagnostics; exact count is now 40, unsupported-feature is now 134, and
   not-yet is now 121.
+- 2026-07-02: [M1] Promoted `events_on_states.riv` as sample-0 exact, gated
+  `feather_render_test.riv`, `fit_font_size_test.riv`,
+  `focus_collapsing.riv`, and `focus_traversal.riv` with verified
+  image/text/nested-artboard diagnostics, and parked
+  `event_trigger_event.riv` for M2 frame-0 color application; exact count is
+  now 41, unsupported-feature is now 138, and not-yet is now 116.

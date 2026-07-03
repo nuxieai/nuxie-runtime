@@ -1,7 +1,8 @@
 # V2 Log Archive
 
-Completed-milestone log entries moved out of `docs/v2-status.md` to keep the
-per-session working file small. Newest milestone last; entries are verbatim.
+Historical log entries moved out of `docs/v2-status.md` to keep the
+per-session working file small. Completed milestones and rolled-off active
+milestone entries are kept verbatim here. Newest milestone last.
 
 ## M0 + M1 (completed 2026-07-03)
 
@@ -333,3 +334,655 @@ per-session working file small. Newest milestone last; entries are verbatim.
   (`exact=54`, `diverges=0`, `unsupported-feature=224`, `not-yet=17`), and
   `cargo test --workspace`; M1 is complete and the active milestone moves to
   M2.
+
+## M2 active log rolloff (archived 2026-07-03)
+
+- 2026-07-03: [M2] Added the first real-object-model tracer: `ArtboardInstance`
+  now owns a cloned object arena built from imported slots, and schema-keyed
+  color/bool/uint/string animation getters/setters mutate cloned
+  `RuntimeObject` properties instead of side overlay maps. Verified
+  `make golden-compare` (`exact=54`, `diverges=0`,
+  `unsupported-feature=224`, `not-yet=17`) and `cargo test --workspace`;
+  next M2 work is replacing the generic arena internals with generated
+  concrete object storage and generated setter/getter dispatch.
+
+- 2026-07-03: [M2] Mirrored C++ golden default-scene startup in the Rust golden
+  runner by selecting the serialized default state machine and advancing it at
+  sample `0` before draw. Promoted `click_event.riv`,
+  `event_trigger_event.riv`, and `sound.riv` as exact after direct stream
+  comparisons; `make golden-compare` reports `exact=57`, `diverges=0`,
+  `unsupported-feature=224`, `not-yet=14`. `solo_test` and
+  `solos_collapse_tests` still differ in Solo active-child refresh after
+  frame-0 `KeyFrameId`.
+
+- 2026-07-03: [M2] Ported the first generated-setter side effect into the
+  runtime object arena path: `Solo.activeComponentId` uint/id writes now
+  re-run C++ `Solo::propagateCollapse` using instantiated Solo child metadata.
+  Promoted `solo_test.riv` and `solos_collapse_tests.riv` after direct stream
+  comparisons; expected `make golden-compare` summary is `exact=59`,
+  `diverges=0`, `unsupported-feature=224`, `not-yet=12`.
+
+- 2026-07-03: [M2] Ported the sample-0 C++ `Joystick::apply`/artboard
+  `updatePass` path for joysticks that can apply before update. The Rust
+  golden runner now calls `ArtboardInstance::update_pass()`, and
+  `joystick_flag_test.riv` stream-matches C++ alongside the existing
+  `joystick_nested_remap.riv` exact check; expected `make golden-compare`
+  summary is `exact=60`, `diverges=0`, `unsupported-feature=224`,
+  `not-yet=11`.
+
+- 2026-07-03: [M2] Ported C++ golden-runner absolute sample advancement into
+  the Rust runner and added a scene-long render path cache so artboard clips,
+  backgrounds, clipping shapes, and draw paths retain C++ path ids across
+  emitted samples. Promoted `clip_tests.riv` and `pointer_events.riv` after
+  direct stream comparisons; `make golden-compare` reports
+  `exact=62`, `diverges=0`, `unsupported-feature=224`, `not-yet=9`.
+
+- 2026-07-03: [M2] Added live double-property animation writes for cloned
+  runtime objects and made TrimPath effects read live `start`/`end`/`offset`
+  and `modeValue` from the instance. Also ported clockwise fill path reversal
+  instead of dropping reversed local-clockwise paths. Promoted
+  `trim_path_linear.riv`; `make golden-compare` reports `exact=63`,
+  `diverges=0`, `unsupported-feature=224`, `not-yet=8`, and
+  `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Fixed keyed-property metadata lookup to use the imported
+  `KeyedObject.objectId` slot rather than the remapped runtime-local id,
+  allowing frame-0 `KeyFrameDouble` writes to reach TrimPath effects whose
+  local ids diverge from C++ artboard-local ids. Promoted
+  `fill_trim_path.riv`; `make golden-compare` reports `exact=64`,
+  `diverges=0`, `unsupported-feature=224`, `not-yet=7`, and
+  `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Rechecked remaining M2 `not-yet` sample-0 files after the
+  live keyed-property/state-machine work and promoted `opaque_hit_test.riv`
+  and `quantize_test.riv` after direct C++/Rust stream comparisons matched.
+  `make golden-compare` reports `exact=66`, `diverges=0`,
+  `unsupported-feature=224`, `not-yet=5`, and `cargo test --workspace`
+  passes.
+
+- 2026-07-03: [M2] Started the real object model replacement by routing cloned
+  object arena writes through generated CoreRegistry setter-family metadata,
+  rejecting wrong-family and non-setter/encoded property writes before
+  mutating the `RuntimeObject` property bag. Exact count remains 66;
+  `make golden-compare` reports `exact=66`, `diverges=0`,
+  `unsupported-feature=224`, `not-yet=5`, and `cargo test --workspace`
+  passes.
+
+- 2026-07-03: [M2] Split cloned artboard object mutation off
+  `RuntimeObject` by introducing runtime-local `InstanceObject` storage in
+  `InstanceObjectArena`; reads still honor schema stored-field defaults and
+  writes still validate generated setter families. Exact count remains 66;
+  `make golden-compare` reports `exact=66`, `diverges=0`,
+  `unsupported-feature=224`, `not-yet=5`, and `cargo test --workspace`
+  passes.
+
+- 2026-07-03: [M2] Moved arena mutation storage from imported
+  `RuntimeProperty`/`FieldValue` objects into runtime-owned
+  `InstanceProperty`/`InstancePropertyValue`, keeping binary import values as
+  clone-time input only. Exact count remains 66; `make golden-compare`
+  reports `exact=66`, `diverges=0`, `unsupported-feature=224`, `not-yet=5`,
+  and `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Extracted `InstanceObjectArena` and runtime-local instance
+  property storage into `crates/rive-runtime/src/objects.rs`, leaving
+  `lib.rs` to call the arena through the same typed accessors while the next
+  generated-storage pass has a focused module target. Exact count remains 66;
+  `make golden-compare` reports `exact=66`, `diverges=0`,
+  `unsupported-feature=224`, `not-yet=5`, and `cargo test --workspace`
+  passes.
+
+- 2026-07-03: [M2] Added build-generated per-type
+  `InstanceObjectStorage` for cloned artboard objects, with schema-derived
+  typed fields, imported-property application, generated property-key
+  getters/setters, Artboard `clip` default handling, and encoded byte payload
+  storage. Exact count remains 66; `make golden-compare` reports `exact=66`,
+  `diverges=0`, `unsupported-feature=224`, `not-yet=5`, and
+  `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Made clone-time `RuntimeComponent` transform
+  initialization read from generated `InstanceObjectStorage` through
+  concrete object property-name lookup, so imported Node/vertex transform
+  fields flow through the cloned arena before component state. Exact count
+  remains 66; `make golden-compare` reports `exact=66`, `diverges=0`,
+  `unsupported-feature=224`, `not-yet=5`, and `cargo test --workspace`
+  passes.
+
+- 2026-07-03: [M2] Routed live transform mutation through generated
+  `InstanceObjectStorage` by concrete object property name before syncing the
+  `RuntimeComponent` mirror, and updated runtime tests to carry generated
+  synthetic Node/vertex storage. Exact count remains 66; `make golden-compare`
+  reports `exact=66`, `diverges=0`, `unsupported-feature=224`, `not-yet=5`,
+  and `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Removed authored x/y/rotation/scale/opacity mirrors from
+  `TransformRuntimeState`; transform update and render-opacity update now read
+  generated `InstanceObjectStorage` through `ArtboardInstance` transform
+  accessors, leaving `RuntimeComponent` with only derived local/world/render
+  transform state. Exact count remains 66; `make golden-compare` reports
+  `exact=66`, `diverges=0`, `unsupported-feature=224`, `not-yet=5`, and
+  `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Extracted component dirt bits, runtime component transform
+  state, `Mat2D`, and component update methods into
+  `crates/rive-runtime/src/components.rs`, shrinking the monolithic runtime
+  file while preserving the public re-exports used by probes and downstream
+  crates. Exact count remains 66; `make golden-compare` reports `exact=66`,
+  `diverges=0`, `unsupported-feature=224`, `not-yet=5`, and
+  `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Extracted `LinearAnimationInstance` playback state and
+  loop-kind handling into `crates/rive-runtime/src/animation.rs`, preserving
+  the existing public re-export while leaving `lib.rs` with the remaining
+  linear-animation import/keyframe model and state-machine surfaces to peel
+  next. Exact count remains 66; `make golden-compare` reports `exact=66`,
+  `diverges=0`, `unsupported-feature=224`, `not-yet=5`, and
+  `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Moved `RuntimeLinearAnimation`, keyed objects/properties,
+  keyframe structs, and keyframe sampling helpers into
+  `crates/rive-runtime/src/animation.rs`, keeping the import-time builder in
+  `lib.rs` and preserving public re-exports for the runtime probe surface.
+  Exact count remains 66; `make golden-compare` reports `exact=66`,
+  `diverges=0`, `unsupported-feature=224`, `not-yet=5`, and
+  `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Seeded `crates/rive-runtime/src/state_machine.rs` with
+  `StateMachineReportedEvent`, preserving the public re-export while moving a
+  shared animation/state-machine event report surface out of `lib.rs`. Exact
+  count remains 66; `make golden-compare` reports `exact=66`, `diverges=0`,
+  `unsupported-feature=224`, `not-yet=5`, and `cargo test --workspace`
+  passes.
+
+- 2026-07-03: [M2] Moved `RuntimeStateMachineInput`,
+  `StateMachineInputKind`, and `StateMachineInputInstance` into
+  `crates/rive-runtime/src/state_machine.rs`, keeping `StateMachineInputValue`
+  private behind crate-visible constructors and preserving the public input
+  accessors. Exact count remains 66; `make golden-compare` reports `exact=66`,
+  `diverges=0`, `unsupported-feature=224`, `not-yet=5`, and
+  `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Moved scheduled listener actions and the shared
+  `StateMachineFireOccurrence` timing enum into
+  `crates/rive-runtime/src/state_machine.rs`, keeping listener import and input
+  mutation beside the state-machine input runtime model while leaving
+  view-model trigger fire actions in `lib.rs` until their bindable trigger
+  dependencies are extracted. Exact count remains 66; `make golden-compare`
+  reports `exact=66`, `diverges=0`, `unsupported-feature=224`, `not-yet=5`,
+  and `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Moved `StateMachineViewModelTriggerInstance` into
+  `crates/rive-runtime/src/state_machine.rs`, keeping imported
+  `RuntimeViewModelTrigger` data in `lib.rs` and routing default/imported/owned
+  trigger binding through crate-visible accessors. Exact count remains 66;
+  `make golden-compare` reports `exact=66`, `diverges=0`,
+  `unsupported-feature=224`, `not-yet=5`, and `cargo test --workspace`
+  passes.
+
+- 2026-07-03: [M2] Moved `RuntimeStateMachineFireAction`,
+  `perform_state_machine_fire_actions`, and fire-trigger target resolution into
+  `crates/rive-runtime/src/state_machine.rs`, now that view-model trigger
+  runtime state lives there. Exact count remains 66; `make golden-compare`
+  reports `exact=66`, `diverges=0`, `unsupported-feature=224`, `not-yet=5`,
+  and `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Ported keyed-frame interpolator application for linear
+  animation sampling by resolving artboard-local `KeyFrameInterpolator`
+  objects into the runtime animation model and applying CubicEase,
+  CubicValue, and Elastic behavior for double/color keyframes. Promoted
+  `cubic_value_test.riv` and `oneshotblend.riv` to exact;
+  `make golden-compare` reports `exact=68`, `diverges=0`,
+  `unsupported-feature=224`, `not-yet=3`, and `cargo test --workspace`
+  passes.
+
+- 2026-07-03: [M2] Matched C++ rounded-corner midpoint precision by using
+  fused `scaleAndAdd` math while keeping exact duplicate segment pruning.
+  Promoted `juice.riv` to exact; `make golden-compare` reports `exact=69`,
+  `diverges=0`, `unsupported-feature=224`, `not-yet=2`. Next M2 exact-count
+  target is the remaining `rocket.riv` rounded path residual.
+
+- 2026-07-03: [M2] Matched rotated local path cancellation for `rocket.riv` by
+  using fused path-local composition for visibly rotated/skewed matrices while
+  preserving axis-aligned cancellation for `juice.riv`. Promoted `rocket.riv`
+  to exact; `make golden-compare` reports `exact=70`, `diverges=0`,
+  `unsupported-feature=224`, `not-yet=1`, and `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Classified `interpolation_zero_duration.riv` under the M5
+  data-binding transform bucket by extending the Rust golden runner diagnostic
+  to interpolated shape transform binds. `make golden-compare` reports
+  `exact=70`, `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
+  `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Widened `cubic_value_test.riv` from sample `0` to samples
+  `0` and `0.25`, keeping its CubicValue/CubicEase animated stream exact.
+  Exact count remains 70; focused golden compare reports `exact=1`,
+  `diverges=0`, `unsupported-feature=0`, `not-yet=0`.
+
+- 2026-07-03: [M2] Widened `looping_timeline_events.riv` from sample `0` to
+  samples `0` and `0.25`, keeping its callback/event timeline stream exact.
+  Exact count remains 70; focused golden compare reports `exact=1`,
+  `diverges=0`, `unsupported-feature=0`, `not-yet=0`.
+
+- 2026-07-03: [M2] Widened `test_elastic.riv` from sample `0` to samples `0`
+  and `0.25`, keeping ElasticInterpolator animated playback exact. Exact
+  count remains 70; focused golden compare reports `exact=1`, `diverges=0`,
+  `unsupported-feature=0`, `not-yet=0`.
+
+- 2026-07-03: [M2] Widened `quantize_test.riv` from sample `0` to samples `0`
+  and `0.25`, keeping its quantized animated stream exact. Exact count remains
+  70; focused golden compare reports `exact=1`, `diverges=0`,
+  `unsupported-feature=0`, `not-yet=0`.
+
+- 2026-07-03: [M2] Widened `timeline_event_test.riv` from sample `0` to
+  samples `0` and `0.25`, keeping callback/event timeline playback exact.
+  Exact count remains 70; focused golden compare reports `exact=1`,
+  `diverges=0`, `unsupported-feature=0`, `not-yet=0`.
+
+- 2026-07-03: [M2] Widened `scripted_string.riv` from sample `0` to samples
+  `0` and `0.25`, keeping its view-model string/state-machine playback stream
+  exact. Exact count remains 70; focused golden compare reports `exact=1`,
+  `diverges=0`, `unsupported-feature=0`, `not-yet=0`.
+
+- 2026-07-03: [M2] Widened `multiple_state_machines.riv` from sample `0` to
+  samples `0` and `0.25`, keeping multi-state-machine sample playback exact.
+  Exact count remains 70; focused golden compare reports `exact=1`,
+  `diverges=0`, `unsupported-feature=0`, `not-yet=0`.
+
+- 2026-07-03: [M2] Widened `settler.riv` from sample `0` to samples `0` and
+  `0.25`, keeping its CubicEase animated playback stream exact. Exact count
+  remains 70; focused golden compare reports `exact=1`, `diverges=0`,
+  `unsupported-feature=0`, `not-yet=0`.
+
+- 2026-07-03: [M2] Widened `scripted_boolean.riv` from sample `0` to samples
+  `0` and `0.25`, keeping its view-model boolean/state-machine playback stream
+  exact. Exact count remains 70; focused golden compare reports `exact=1`,
+  `diverges=0`, `unsupported-feature=0`, `not-yet=0`.
+
+- 2026-07-03: [M2] Widened `oneshotblend.riv` from sample `0` to samples `0`
+  and `0.25`, keeping its one-shot blend-state playback stream exact. Exact
+  count remains 70; focused golden compare reports `exact=1`, `diverges=0`,
+  `unsupported-feature=0`, `not-yet=0`.
+
+- 2026-07-03: [M2] Widened `stroke_name_test.riv` from sample `0` to samples
+  `0` and `0.25`, keeping its stroked state-machine playback stream exact.
+  Exact count remains 70; focused golden compare reports `exact=1`,
+  `diverges=0`, `unsupported-feature=0`, `not-yet=0`.
+
+- 2026-07-03: [M2] Widened `state_machine_triggers.riv` from sample `0` to
+  samples `0` and `0.25`, keeping trigger-transition playback exact. Exact
+  count remains 70; focused golden compare reports `exact=1`, `diverges=0`,
+  `unsupported-feature=0`, `not-yet=0`.
+
+- 2026-07-03: [M2] Widened `solo_test.riv` from sample `0` to samples `0` and
+  `0.25`, keeping Solo active-child playback exact. Exact count remains 70;
+  focused golden compare reports `exact=1`, `diverges=0`,
+  `unsupported-feature=0`, `not-yet=0`.
+
+- 2026-07-03: [M2] Widened `dependency_test.riv` from sample `0` to samples
+  `0` and `0.25`, keeping its animated dependency playback stream exact. Exact
+  count remains 70; focused golden compare reports `exact=1`, `diverges=0`,
+  `unsupported-feature=0`, `not-yet=0`.
+
+- 2026-07-03: [M2] Widened `light_switch.riv` from sample `0` to samples `0`
+  and `0.25`, keeping bool-transition state-machine playback exact. Exact
+  count remains 70; focused golden compare reports `exact=1`, `diverges=0`,
+  `unsupported-feature=0`, `not-yet=0`.
+
+- 2026-07-03: [M2] Widened `two_artboards.riv` from sample `0` to samples `0`
+  and `0.25`, keeping multi-artboard animated playback exact. Exact count
+  remains 70; focused golden compare reports `exact=1`, `diverges=0`,
+  `unsupported-feature=0`, `not-yet=0`.
+
+- 2026-07-03: [M2] Widened `event_on_listener.riv` from sample `0` to samples
+  `0` and `0.25`, keeping listener-event state-machine playback exact. Exact
+  count remains 70; focused golden compare reports `exact=1`, `diverges=0`,
+  `unsupported-feature=0`, `not-yet=0`.
+
+- 2026-07-03: [M2] Widened `events_on_states.riv` from sample `0` to samples
+  `0` and `0.25`, keeping state-machine fire-event playback exact. Exact count
+  remains 70; focused golden compare reports `exact=1`, `diverges=0`,
+  `unsupported-feature=0`, `not-yet=0`.
+
+- 2026-07-03: [M2] Widened `joystick_flag_test.riv` from sample `0` to samples
+  `0` and `0.25`, keeping joystick/state-machine flag playback exact. Exact
+  count remains 70; focused golden compare reports `exact=1`, `diverges=0`,
+  `unsupported-feature=0`, `not-yet=0`.
+
+- 2026-07-03: [M2] Widened `blend_test.riv` from sample `0` to samples `0`
+  and `0.25`, keeping direct/1D blend-state playback exact. Exact count
+  remains 70; focused golden compare reports `exact=1`, `diverges=0`,
+  `unsupported-feature=0`, `not-yet=0`.
+
+- 2026-07-03: [M2] Tripwire fired: repeated sample-widening commits kept the
+  project at `exact=70`, so the queue now pivots back to the M2 real object
+  model/modularization work before harvesting more sample-only coverage.
+
+- 2026-07-03: [M2] Modularized solo collapse runtime into `components.rs` and
+  joystick runtime metadata into `animation.rs`, keeping authored-property
+  mutation routed through `InstanceObjectArena`. Exact count remains 70;
+  `make golden-compare` reports `diverges=0`, `not-yet=0`, and
+  `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Moved `InstanceSlot` into `objects.rs` with
+  `InstanceObjectArena` and moved the self-contained state-machine input
+  importer into `state_machine.rs`. Exact count remains 70; `make
+  golden-compare` reports `diverges=0`, `not-yet=0`, and
+  `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Moved the linear animation import builder and its private
+  keyframe/import helpers into `animation.rs`, leaving shared property lookups
+  in `lib.rs` for the state-machine/data-binding code still parked there.
+  Exact count remains 70; `make golden-compare` reports `exact=70`,
+  `diverges=0`, `not-yet=0`, and `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Widened `animation_reset_cases.riv` from sample `0` to
+  samples `0` and `0.25`, keeping its reset/blend-state playback stream exact.
+  Exact segments are now 94 across 70 exact files; focused golden compare
+  reports `exact=1`, `exact-segments=2`, `diverges=0`,
+  `unsupported-feature=0`, `not-yet=0`.
+
+- 2026-07-03: [M2] Widened `bindable_artboard_child.riv` from sample `0` to
+  samples `0` and `0.25`, keeping its bindable artboard/state-machine playback
+  stream exact. Exact segments are now 95 across 70 exact files; focused
+  golden compare reports `exact=1`, `exact-segments=2`, `diverges=0`,
+  `unsupported-feature=0`, `not-yet=0`.
+
+- 2026-07-03: [M2] Widened `circle_clips.riv` from sample `0` to samples `0`
+  and `0.25`, keeping its animated clipping playback stream exact. Exact
+  segments are now 96 across 70 exact files; focused golden compare reports
+  `exact=1`, `exact-segments=2`, `diverges=0`, `unsupported-feature=0`,
+  `not-yet=0`.
+
+- 2026-07-03: [M2] Moved state-machine transition interpolators into
+  `crates/rive-runtime/src/state_machine.rs` and removed the duplicate
+  cubic/elastic helper copy from `lib.rs`, reusing the animation interpolator
+  math instead. Exact segments remain 96 across 70 exact files; `make
+  golden-compare` reports `exact=70`, `exact-segments=96`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+
+- 2026-07-03: [M2] Moved state-machine blend-state import/runtime model data
+  (`RuntimeBlendState1D`, `RuntimeBlendStateDirect`, and direct blend source
+  metadata) into `crates/rive-runtime/src/state_machine.rs`, leaving only the
+  live artboard-applying blend instances in `lib.rs`. Exact segments remain
+  96 across 70 exact files; `make golden-compare` reports `exact=70`,
+  `exact-segments=96`, `diverges=0`, `unsupported-feature=225`,
+  `not-yet=0`, and `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Moved live state-machine blend-state instances
+  (`BlendState1DInstance` and `BlendStateDirectInstance` advance/mix/apply
+  runtime) into `crates/rive-runtime/src/state_machine.rs` beside the imported
+  blend-state model, leaving `lib.rs` with layer orchestration. Exact segments
+  remain 96 across 70 exact files; `make golden-compare` reports `exact=70`,
+  `exact-segments=96`, `diverges=0`, `unsupported-feature=225`,
+  `not-yet=0`, and `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Moved `StateMachineLayerInstance` and transition animation
+  reset/apply runtime into `crates/rive-runtime/src/state_machine.rs`, leaving
+  `StateMachineInstance` in `lib.rs` to orchestrate data binding and layers
+  through crate-visible accessors. Exact segments remain 96 across 70 exact
+  files; `make golden-compare` reports `exact=70`, `exact-segments=96`,
+  `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
+  `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Moved imported `RuntimeStateMachineLayer` and
+  `RuntimeLayerState` model types into
+  `crates/rive-runtime/src/state_machine.rs`, preserving their public
+  crate-root exports while keeping construction in the existing import
+  builder. Exact segments remain 96 across 70 exact files; `make
+  golden-compare` reports `exact=70`, `exact-segments=96`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+
+- 2026-07-03: [M2] Moved `RuntimeStateTransition`, transition timing,
+  exit-time allowance, and transition fire/listener action dispatch into
+  `crates/rive-runtime/src/state_machine.rs` beside the layer runtime that
+  consumes it; transition conditions remain in `lib.rs` with their component
+  and data-binding comparand helpers. Exact segments remain 96 across 70 exact
+  files; `make golden-compare` reports `exact=70`, `exact-segments=96`,
+  `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
+  `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Tripwire check after repeated state-machine
+  modularization commits pivoted the queue back to metric-moving sample
+  widening. Widened `long_name.riv` from sample `0` to samples `0` and
+  `0.25`, keeping its simple animated stream exact. Exact segments are now
+  97 across 70 exact files; `make golden-compare` reports `exact=70`,
+  `exact-segments=97`, `diverges=0`, `unsupported-feature=225`,
+  `not-yet=0`, and `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Widened `fix_rectangle.riv` from sample `0` to samples
+  `0` and `0.25`, keeping its animated path/color stream exact. Exact
+  segments are now 98 across 70 exact files; `make golden-compare` reports
+  `exact=70`, `exact-segments=98`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+
+- 2026-07-03: [M2] Widened `draw_rule_cycle.riv` from sample `0` to samples
+  `0` and `0.25`, keeping its draw-rule/keyframe stream exact. Exact
+  segments are now 99 across 70 exact files; `make golden-compare` reports
+  `exact=70`, `exact-segments=99`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+
+- 2026-07-03: [M2] Widened `trim_path.riv` from sample `0` to samples `0`
+  and `0.25`, keeping its animated TrimPath stream exact. Exact segments are
+  now 100 across 70 exact files; `make golden-compare` reports `exact=70`,
+  `exact-segments=100`, `diverges=0`, `unsupported-feature=225`,
+  `not-yet=0`, and `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Widened `nested_solo.riv` from sample `0` to samples `0`
+  and `0.25`, keeping its Solo/state-machine playback stream exact. Exact
+  segments are now 101 across 70 exact files; `make golden-compare` reports
+  `exact=70`, `exact-segments=101`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+
+- 2026-07-03: [M2] Widened `fill_trim_path.riv` from sample `0` to samples
+  `0` and `0.25`, keeping its animated Fill/TrimPath stream exact. Exact
+  segments are now 102 across 70 exact files; `make golden-compare` reports
+  `exact=70`, `exact-segments=102`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+
+- 2026-07-03: [M2] Focused `[0, 0.25]` promotion probe for
+  `stacked_path_effects.riv` found a narrow animated stacked DashPath/TrimPath
+  divergence at `0.25`; the file stays exact only at sample `0` until that M2
+  path-effect composition gap is ported.
+
+- 2026-07-03: [M2] Focused `[0, 0.25]` promotion probe for `juice.riv` found
+  a multi-sample gradient lifetime divergence: Rust emits new linear-gradient
+  shader IDs before the second sample while C++ reuses the original shaders,
+  so the file stays exact only at sample `0` until gradient reuse is ported.
+
+- 2026-07-03: [M2] Added a per-run gradient shader cache to the Rust render
+  resource cache so unchanged LinearGradient/RadialGradient paints reuse the
+  same shader objects across samples, matching C++ dirty-update lifetime.
+  Widened `juice.riv` from sample `0` to samples `0` and `0.25`; exact
+  segments are now 103 across 70 exact files; `make golden-compare` reports
+  `exact=70`, `exact-segments=103`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+
+- 2026-07-03: [M2] Widened `scripted_enum.riv` from sample `0` to samples
+  `0` and `0.25`, keeping its enum view-model/state-machine playback stream
+  exact. Exact segments are now 104 across 70 exact files; `make
+  golden-compare` reports `exact=70`, `exact-segments=104`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+
+- 2026-07-03: [M2] Widened `library_data_enum_test.riv` from sample `0` to
+  samples `0` and `0.25`, keeping its library enum view-model/data-bind
+  playback stream exact. Exact segments are now 105 across 70 exact files;
+  `make golden-compare` reports `exact=70`, `exact-segments=105`,
+  `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
+  `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Widened `viewmodel_runtime_file.riv` from sample `0` to
+  samples `0` and `0.25`, keeping its mixed view-model/state-machine playback
+  stream exact. Exact segments are now 106 across 70 exact files; `make
+  golden-compare` reports `exact=70`, `exact-segments=106`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+
+- 2026-07-03: [M2] Widened `joystick_nested_remap.riv` from sample `0` to
+  samples `0` and `0.25`, keeping its joystick/nested-remap playback stream
+  exact. Exact segments are now 107 across 70 exact files; `make
+  golden-compare` reports `exact=70`, `exact-segments=107`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+
+- 2026-07-03: [M2] Widened `scripted_graph.riv` from sample `0` to samples
+  `0` and `0.25`, keeping its view-model list/state-machine playback stream
+  exact. Exact segments are now 108 across 70 exact files; `make
+  golden-compare` reports `exact=70`, `exact-segments=108`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+
+- 2026-07-03: [M2] Widened `rapid_pointer_events.riv` from sample `0` to
+  samples `0` and `0.25`, keeping its passive listener/view-model state
+  playback stream exact before M3 scripted input. Exact segments are now 109
+  across 70 exact files; `make golden-compare` reports `exact=70`,
+  `exact-segments=109`, `diverges=0`, `unsupported-feature=225`,
+  `not-yet=0`, and `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Widened `text_input_event.riv` from sample `0` to samples
+  `0` and `0.25`, keeping its passive keyboard/text-listener playback stream
+  exact before M3/M6 scripted input and text work. Exact segments are now 110
+  across 70 exact files; `make golden-compare` reports `exact=70`,
+  `exact-segments=110`, `diverges=0`, `unsupported-feature=225`,
+  `not-yet=0`, and `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Widened `hit_test_solos.riv` from sample `0` to samples
+  `0` and `0.25`, keeping its passive Solo/listener playback stream exact
+  before M3 hit-test input. Exact segments are now 111 across 70 exact files;
+  `make golden-compare` reports `exact=70`, `exact-segments=111`,
+  `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
+  `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Widened `list_to_path.riv` from sample `0` to samples `0`
+  and `0.25`, keeping its passive list-path/view-model playback stream exact
+  before M5 external data-binding work. Exact segments are now 112 across 70
+  exact files; `make golden-compare` reports `exact=70`,
+  `exact-segments=112`, `diverges=0`, `unsupported-feature=225`,
+  `not-yet=0`, and `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Widened `solos_with_nested_artboards.riv` from sample `0`
+  to samples `0` and `0.25`, keeping its passive Solo/nested-artboard
+  playback stream exact before M4 nested advancement work. Exact segments are
+  now 113 across 70 exact files; `make golden-compare` reports `exact=70`,
+  `exact-segments=113`, `diverges=0`, `unsupported-feature=225`,
+  `not-yet=0`, and `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Widened `click_event.riv` from sample `0` to samples `0`
+  and `0.25`, keeping its passive click-listener/event playback stream exact
+  before M3 scripted input. Exact segments are now 114 across 70 exact files;
+  `make golden-compare` reports `exact=70`, `exact-segments=114`,
+  `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
+  `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Widened `component_list_hit_order.riv` from sample `0` to
+  samples `0` and `0.25`, keeping its passive component-list/listener
+  playback stream exact before M3/M4 scripted input and component-list work.
+  Exact segments are now 115 across 70 exact files; `make golden-compare`
+  reports `exact=70`, `exact-segments=115`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+
+- 2026-07-03: [M2] Widened `event_trigger_event.riv` from sample `0` to
+  samples `0` and `0.25`, keeping its passive trigger-event/view-model
+  playback stream exact before M3 scripted input and M5 external binding.
+  Exact segments are now 116 across 70 exact files; `make golden-compare`
+  reports `exact=70`, `exact-segments=116`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+
+- 2026-07-03: [M2] Widened `opaque_hit_test.riv` from sample `0` to samples
+  `0` and `0.25`, keeping its passive nested-artboard/listener playback
+  stream exact before M3 scripted hit-test input and M4 nested advancement.
+  Exact segments are now 117 across 70 exact files; `make golden-compare`
+  reports `exact=70`, `exact-segments=117`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+
+- 2026-07-03: [M2] Widened `keyboard_event_to_script.riv` from sample `0` to
+  samples `0` and `0.25`, keeping its passive scripted-drawable/state-machine
+  playback stream exact before M3 keyboard input and M6 scripting work. Exact
+  segments are now 118 across 70 exact files; `make golden-compare` reports
+  `exact=70`, `exact-segments=118`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+
+- 2026-07-03: [M2] Widened `clear_viewmodel_list.riv` from sample `0` to
+  samples `0` and `0.25`, keeping its passive view-model/list state-machine
+  playback stream exact before M5 external data-binding work. Exact segments
+  are now 119 across 70 exact files; `make golden-compare` reports
+  `exact=70`, `exact-segments=119`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+
+- 2026-07-03: [M2] Widened `component_based_conditions.riv` from sample `0`
+  to samples `0` and `0.25`, keeping component-comparator state-machine
+  playback exact before M5 external data-binding mutation work. Exact segments
+  are now 120 across 70 exact files; `make golden-compare` reports
+  `exact=70`, `exact-segments=120`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+
+- 2026-07-03: [M2] Widened `component_list_2.riv` from sample `0` to samples
+  `0` and `0.25`, keeping passive component-list/listener playback exact
+  before M3 scripted input and M4/M6 list/layout work. Exact segments are now
+  121 across 70 exact files; `make golden-compare` reports `exact=70`,
+  `exact-segments=121`, `diverges=0`, `unsupported-feature=225`,
+  `not-yet=0`, and `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Widened `component_list_grouped.riv` from sample `0` to
+  samples `0` and `0.25`, keeping passive grouped component-list playback
+  exact before M3 scripted input and M4/M6 list/layout work. Exact segments
+  are now 122 across 70 exact files; `make golden-compare` reports
+  `exact=70`, `exact-segments=122`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+
+- 2026-07-03: [M2] Widened `data_bind_solo.riv` from sample `0` to samples
+  `0` and `0.25`, keeping passive data-bind/Solo playback exact before M5
+  external view-model mutation work. Exact segments are now 123 across 70
+  exact files; `make golden-compare` reports `exact=70`,
+  `exact-segments=123`, `diverges=0`, `unsupported-feature=225`,
+  `not-yet=0`, and `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Widened `data_binding_test_2.riv` from sample `0` to
+  samples `0` and `0.25`, keeping passive data-converter/state-machine
+  playback exact before M5 external binding mutation work. Exact segments are
+  now 124 across 70 exact files; `make golden-compare` reports `exact=70`,
+  `exact-segments=124`, `diverges=0`, `unsupported-feature=225`,
+  `not-yet=0`, and `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Widened `lock_icon_demo.riv` from sample `0` to samples
+  `0` and `0.25`, keeping passive lock-icon TrimPath/state-machine playback
+  exact before M3 scripted input and later interaction work. Exact segments
+  are now 125 across 70 exact files; `make golden-compare` reports
+  `exact=70`, `exact-segments=125`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+
+- 2026-07-03: [M2] Widened `state_machine_transition.riv` from sample `0` to
+  samples `0` and `0.25`, keeping passive listener-trigger/bool
+  state-machine transition playback exact before M3 scripted input. Exact
+  segments are now 126 across 70 exact files; `make golden-compare` reports
+  `exact=70`, `exact-segments=126`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+
+- 2026-07-03: [M2] Widened `solos_collapse_tests.riv` from sample `0` to
+  samples `0` and `0.25`, keeping animated Solo active-child/collapse
+  playback exact before M3 constraints/input work. Exact segments are now 127
+  across 70 exact files; `make golden-compare` reports `exact=70`,
+  `exact-segments=127`, `diverges=0`, `unsupported-feature=225`,
+  `not-yet=0`, and `cargo test --workspace` passes.
+
+- 2026-07-03: [M2] Widened `rocket.riv` from sample `0` to samples `0` and
+  `0.25`, keeping its rounded-path/draw-rule animated playback stream exact.
+  Exact segments are now 128 across 70 exact files; `make golden-compare`
+  reports `exact=70`, `exact-segments=128`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.

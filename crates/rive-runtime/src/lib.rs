@@ -39,10 +39,11 @@ pub use components::{
     TransformRuntimeState, UpdateComponentsReport,
 };
 use objects::InstanceObjectArena;
+pub use objects::InstanceSlot;
 use state_machine::{
     RuntimeScheduledListenerAction, RuntimeStateMachineFireAction, StateMachineFireOccurrence,
     StateMachineViewModelTriggerInstance, perform_scheduled_listener_actions,
-    perform_state_machine_fire_actions,
+    perform_state_machine_fire_actions, runtime_state_machine_input,
 };
 pub use state_machine::{
     RuntimeStateMachineInput, StateMachineInputInstance, StateMachineInputKind,
@@ -1328,15 +1329,6 @@ impl ArtboardInstance {
         }
         changed
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct InstanceSlot {
-    pub local_id: usize,
-    pub source_global_id: u32,
-    pub type_name: Option<&'static str>,
-    pub name: Option<String>,
-    pub component_index: Option<usize>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26154,24 +26146,6 @@ fn runtime_default_view_model_triggers(file: &RuntimeFile) -> Vec<RuntimeViewMod
             })
         })
         .collect()
-}
-
-fn runtime_state_machine_input(object: &RuntimeObject) -> Option<RuntimeStateMachineInput> {
-    let name = object.string_property("name").map(ToOwned::to_owned);
-    match object.type_name {
-        "StateMachineBool" => Some(RuntimeStateMachineInput::new_bool(
-            object.id,
-            name,
-            object.bool_property("value").unwrap_or(false),
-        )),
-        "StateMachineNumber" => Some(RuntimeStateMachineInput::new_number(
-            object.id,
-            name,
-            object.double_property("value").unwrap_or(0.0),
-        )),
-        "StateMachineTrigger" => Some(RuntimeStateMachineInput::new_trigger(object.id, name)),
-        _ => return None,
-    }
 }
 
 fn artboard_index_for_graph(file: &RuntimeFile, graph: &ArtboardGraph) -> Option<usize> {

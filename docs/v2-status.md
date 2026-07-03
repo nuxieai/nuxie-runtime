@@ -877,3 +877,8 @@ the only memory the next session has. Update it every commit.
   mutation routed through `InstanceObjectArena`. Exact count remains 70;
   `make golden-compare` reports `diverges=0`, `not-yet=0`, and
   `cargo test --workspace` passes.
+- 2026-07-03: [M2] Moved `InstanceSlot` into `objects.rs` with
+  `InstanceObjectArena` and moved the self-contained state-machine input
+  importer into `state_machine.rs`. Exact count remains 70; `make
+  golden-compare` reports `diverges=0`, `not-yet=0`, and
+  `cargo test --workspace` passes.

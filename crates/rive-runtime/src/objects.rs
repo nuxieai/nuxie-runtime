@@ -1,4 +1,3 @@
-use crate::InstanceSlot;
 #[cfg(test)]
 use rive_binary::RuntimeObject;
 use rive_binary::{FieldValue, RuntimeFile, StringValue};
@@ -12,6 +11,15 @@ mod generated_objects {
 }
 
 use generated_objects::InstanceObjectStorage;
+
+#[derive(Debug, Clone)]
+pub struct InstanceSlot {
+    pub local_id: usize,
+    pub source_global_id: u32,
+    pub type_name: Option<&'static str>,
+    pub name: Option<String>,
+    pub component_index: Option<usize>,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct InstanceString {

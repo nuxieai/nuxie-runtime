@@ -40,6 +40,26 @@ impl RuntimeStateMachineInput {
     }
 }
 
+pub(crate) fn runtime_state_machine_input(
+    object: &RuntimeObject,
+) -> Option<RuntimeStateMachineInput> {
+    let name = object.string_property("name").map(ToOwned::to_owned);
+    match object.type_name {
+        "StateMachineBool" => Some(RuntimeStateMachineInput::new_bool(
+            object.id,
+            name,
+            object.bool_property("value").unwrap_or(false),
+        )),
+        "StateMachineNumber" => Some(RuntimeStateMachineInput::new_number(
+            object.id,
+            name,
+            object.double_property("value").unwrap_or(0.0),
+        )),
+        "StateMachineTrigger" => Some(RuntimeStateMachineInput::new_trigger(object.id, name)),
+        _ => None,
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StateMachineInputKind {
     Bool,

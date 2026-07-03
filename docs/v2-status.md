@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 37
+- Corpus files `exact`: 39
 - Current milestone: **M1 — Static Vector Rendering Exact (#V2-2)**
 
 ## Milestones
@@ -22,10 +22,10 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
-   start with `advance_blend_mode`, `animated_clipping`,
-   `animation_reset_cases`, `background_measure`, `component_list_grouped`,
-   and `component_list_virtualized`; promote exact sample-0 matches or add
-   verified unsupported diagnostics for later-phase first diffs.
+   start with `component_stateful`, `component_stateful_vm_instance`,
+   `component_stateful_vm_instance_2`, `computed_root_transform`,
+   `computed_values_test`, and `cubic_value_test`; promote exact sample-0
+   matches or add verified unsupported diagnostics for later-phase first diffs.
 2. `solo_test` and `solos_collapse_tests` are parked for M2: C++ applies
    frame-0 `KeyFrameId` values through the default state machine/animation,
    overriding imported `Solo.activeComponentId`; Rust has no
@@ -96,6 +96,10 @@ the only memory the next session has. Update it every commit.
   `component_list_child_origin.riv` are parked for M6 layout component paint
   drawing; `artboard_width_test.riv`, `transition_duration_bind_nested.riv`,
   and `trigger_fires_single_change.riv` are parked for nested-artboard support.
+- `advance_blend_mode.riv` remains parked for M2 non-zero sample support (its
+  sample-0 Rust diagnostic currently reaches nested artboards); `animated_clipping.riv`
+  and `background_measure.riv` are parked for text support, and
+  `component_list_virtualized.riv` is parked for M6 layout component paint drawing.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -310,3 +314,9 @@ the only memory the next session has. Update it every commit.
   `trigger_fires_single_change.riv` with verified layout/nested-artboard
   diagnostics; exact remains 37, unsupported-feature is now 109, and not-yet
   is now 149.
+- 2026-07-02: [M1] Promoted `animation_reset_cases.riv` and
+  `component_list_grouped.riv` as sample-0 exact, gated
+  `animated_clipping.riv`, `background_measure.riv`, and
+  `component_list_virtualized.riv` with verified text/layout diagnostics, and
+  left `advance_blend_mode.riv` parked for its non-zero sample; exact count is
+  now 39, unsupported-feature is now 112, and not-yet is now 144.

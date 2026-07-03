@@ -1398,7 +1398,7 @@ impl InstanceObjectArena {
         let Some(type_key) = self.object(local_id).map(|object| object.type_key) else {
             return false;
         };
-        let Some((owner, property)) = runtime_property_metadata_by_key(type_key, property_key)
+        let Some((_owner, property)) = runtime_property_metadata_by_key(type_key, property_key)
         else {
             return false;
         };
@@ -1416,12 +1416,11 @@ impl InstanceObjectArena {
         let Some(object) = self.object_mut(local_id) else {
             return false;
         };
-        if let Some(existing) = object
-            .properties
-            .iter_mut()
-            .rev()
-            .find(|property| property.key == property_key)
-        {
+        let Some(value) = InstancePropertyValue::from_field_value(value) else {
+            return false;
+        };
+
+        if let Some(existing) = object.property_mut_by_exact_key(property_key) {
             if existing.value == value {
                 return false;
             }
@@ -1429,10 +1428,9 @@ impl InstanceObjectArena {
             return true;
         }
 
-        object.properties.push(RuntimeProperty {
+        object.properties.push(InstanceProperty {
             key: property_key,
             name: property.name,
-            owner,
             value,
         });
         true
@@ -1443,7 +1441,7 @@ impl InstanceObjectArena {
 struct InstanceObject {
     type_key: u16,
     type_name: &'static str,
-    properties: Vec<RuntimeProperty>,
+    properties: Vec<InstanceProperty>,
 }
 
 impl InstanceObject {
@@ -1451,7 +1449,11 @@ impl InstanceObject {
         Self {
             type_key: object.type_key,
             type_name: object.type_name,
-            properties: object.properties.clone(),
+            properties: object
+                .properties
+                .iter()
+                .map(InstanceProperty::from_runtime_property)
+                .collect(),
         }
     }
 
@@ -1467,12 +1469,19 @@ impl InstanceObject {
             .map(|(_, property)| property.runtime_type)
     }
 
-    fn property(&self, property_key: u16) -> Option<&RuntimeProperty> {
+    fn property(&self, property_key: u16) -> Option<&InstanceProperty> {
         let (_, property) = self.property_metadata(property_key)?;
         self.properties
             .iter()
             .rev()
             .find(|candidate| candidate.name == property.name)
+    }
+
+    fn property_mut_by_exact_key(&mut self, property_key: u16) -> Option<&mut InstanceProperty> {
+        self.properties
+            .iter_mut()
+            .rev()
+            .find(|property| property.key == property_key)
     }
 
     fn stored_field_initializer(
@@ -1550,6 +1559,93 @@ impl InstanceObject {
             FieldKind::Bytes => self
                 .property(property_key)
                 .and_then(|property| property.value.as_bytes()),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct InstanceProperty {
+    key: u16,
+    name: &'static str,
+    value: InstancePropertyValue,
+}
+
+impl InstanceProperty {
+    fn from_runtime_property(property: &RuntimeProperty) -> Self {
+        Self {
+            key: property.key,
+            name: property.name,
+            value: InstancePropertyValue::from_field_value(property.value.clone())
+                .expect("runtime properties never store callback values"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum InstancePropertyValue {
+    Bool(bool),
+    Bytes(Vec<u8>),
+    Color(u32),
+    Double(f32),
+    String { value: Option<String>, raw: Vec<u8> },
+    Uint(u64),
+}
+
+impl InstancePropertyValue {
+    fn from_field_value(value: FieldValue) -> Option<Self> {
+        match value {
+            FieldValue::Bool(value) => Some(Self::Bool(value)),
+            FieldValue::Bytes(value) => Some(Self::Bytes(value.raw)),
+            FieldValue::Callback => None,
+            FieldValue::Color(value) => Some(Self::Color(value)),
+            FieldValue::Double(value) => Some(Self::Double(value)),
+            FieldValue::String(value) => Some(Self::String {
+                value: value.value,
+                raw: value.raw,
+            }),
+            FieldValue::Uint(value) => Some(Self::Uint(value)),
+        }
+    }
+
+    fn as_double(&self) -> Option<f32> {
+        match self {
+            Self::Double(value) => Some(*value),
+            _ => None,
+        }
+    }
+
+    fn as_uint(&self) -> Option<u64> {
+        match self {
+            Self::Uint(value) => Some(*value),
+            _ => None,
+        }
+    }
+
+    fn as_bool(&self) -> Option<bool> {
+        match self {
+            Self::Bool(value) => Some(*value),
+            _ => None,
+        }
+    }
+
+    fn as_color(&self) -> Option<u32> {
+        match self {
+            Self::Color(value) => Some(*value),
+            _ => None,
+        }
+    }
+
+    fn as_string_bytes(&self) -> Option<&[u8]> {
+        match self {
+            Self::String { raw, .. } => Some(raw.as_slice()),
+            _ => None,
+        }
+    }
+
+    fn as_bytes(&self) -> Option<&[u8]> {
+        match self {
+            Self::Bytes(value) => Some(value.as_slice()),
             _ => None,
         }
     }

@@ -24,8 +24,9 @@ the only memory the next session has. Update it every commit.
 1. Continue M2 real object model work by generating concrete object storage
    for cloned artboard objects. The current `InstanceObjectArena` now owns
    runtime-local `InstanceObject` property storage and validates writes against
-   generated CoreRegistry setter families, but storage is still a generic
-   `Vec<RuntimeProperty>` rather than generated per-type fields/setters.
+   generated CoreRegistry setter families, but storage is still generic
+   `InstanceProperty`/`InstancePropertyValue` vectors rather than generated
+   per-type fields/setters.
 2. Add handle-source world-space math and nested-remap dependent advancement
    to the joystick path when a corpus diff reaches those cases.
 
@@ -667,3 +668,9 @@ the only memory the next session has. Update it every commit.
   `make golden-compare` reports `exact=66`, `diverges=0`,
   `unsupported-feature=224`, `not-yet=5`, and `cargo test --workspace`
   passes.
+- 2026-07-03: [M2] Moved arena mutation storage from imported
+  `RuntimeProperty`/`FieldValue` objects into runtime-owned
+  `InstanceProperty`/`InstancePropertyValue`, keeping binary import values as
+  clone-time input only. Exact count remains 66; `make golden-compare`
+  reports `exact=66`, `diverges=0`, `unsupported-feature=224`, `not-yet=5`,
+  and `cargo test --workspace` passes.

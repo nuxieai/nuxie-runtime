@@ -4,6 +4,7 @@ use std::path::PathBuf;
 fn main() {
     println!("cargo:rerun-if-changed=cpp/rive_renderer_ffi.cpp");
     println!("cargo:rerun-if-changed=cpp/rive_renderer_ffi.h");
+    println!("cargo:rerun-if-env-changed=RIVE_RUNTIME_DIR");
 
     if env::var_os("CARGO_FEATURE_NATIVE").is_none() {
         return;
@@ -16,6 +17,7 @@ fn main() {
     let profile = env::var("PROFILE").unwrap_or_else(|_| String::from("debug"));
     let root_lib_dir = runtime_dir.join("out").join(&profile);
     let root_lib = root_lib_dir.join("librive.a");
+    println!("cargo:rerun-if-changed={}", root_lib.display());
     if !root_lib.exists() {
         panic!(
             "missing {}; build the C++ runtime first, e.g. `cd {} && premake5 gmake2 && make config={}`",
@@ -32,6 +34,25 @@ fn main() {
         .join("out")
         .join(&profile)
         .join("librive_pls_renderer.a");
+    println!("cargo:rerun-if-changed={}", renderer_lib.display());
+
+    let renderer_static_libs = [
+        ("rive_pls_renderer", renderer_lib.clone()),
+        ("rive_decoders", renderer_out_dir.join("librive_decoders.a")),
+        ("libwebp", renderer_out_dir.join("liblibwebp.a")),
+        ("libpng", renderer_out_dir.join("liblibpng.a")),
+        ("zlib", renderer_out_dir.join("libzlib.a")),
+        ("libjpeg", renderer_out_dir.join("liblibjpeg.a")),
+        ("rive_harfbuzz", renderer_out_dir.join("librive_harfbuzz.a")),
+        (
+            "rive_sheenbidi",
+            renderer_out_dir.join("librive_sheenbidi.a"),
+        ),
+        ("rive_yoga", renderer_out_dir.join("librive_yoga.a")),
+    ];
+    for (_, archive) in &renderer_static_libs {
+        println!("cargo:rerun-if-changed={}", archive.display());
+    }
 
     let mut build = cc::Build::new();
     build
@@ -40,7 +61,29 @@ fn main() {
         .file("cpp/rive_renderer_ffi.cpp")
         .file(runtime_dir.join("tests/common/render_context_null.cpp"))
         .include("cpp")
+        .include(runtime_dir.join("dependencies"))
+        .include(
+            runtime_dir
+                .join("dependencies")
+                .join("rive-app_harfbuzz_rive_13.1.1/src"),
+        )
+        .include(
+            runtime_dir
+                .join("dependencies")
+                .join("Tehreer_SheenBidi_v2.6/Headers"),
+        )
+        .include(
+            runtime_dir
+                .join("dependencies")
+                .join("rive-app_miniaudio_rive_changes_5"),
+        )
+        .include(
+            runtime_dir
+                .join("dependencies")
+                .join("rive-app_yoga_rive_changes_v2_0_1_2"),
+        )
         .include(runtime_dir.join("include"))
+        .include(runtime_dir.join("renderer/dependencies"))
         .include(runtime_dir.join("renderer/include"))
         .include(runtime_dir.join("renderer/src"))
         .include(runtime_dir.join("renderer/glad"))
@@ -49,8 +92,32 @@ fn main() {
         .include(runtime_dir.join("tests/common"))
         .define("_RIVE_INTERNAL_", None)
         .define("TESTING", None)
+        .flag_if_supported("-fno-exceptions")
         .flag_if_supported("-fno-rtti")
         .flag_if_supported("-Wno-shorten-64-to-32");
+
+    if renderer_lib.exists() {
+        for define in [
+            "RIVE_DESKTOP_GL",
+            "RIVE_ORE",
+            "ORE_BACKEND_METAL",
+            "ORE_BACKEND_GL",
+            "WITH_RIVE_TEXT",
+            "RIVE_CANVAS",
+            "WITH_RIVE_LAYOUT",
+            "RIVE_DECODERS",
+            "RIVE_KTX2",
+        ] {
+            build.define(define, None);
+        }
+        build.define("YOGA_EXPORT", Some(""));
+        if profile == "debug" {
+            build.define("DEBUG", None);
+        }
+        if cfg!(target_os = "macos") {
+            build.define("RIVE_MACOSX", None);
+        }
+    }
 
     if !renderer_lib.exists() {
         if !generated_include_dir.exists() {
@@ -85,6 +152,20 @@ fn main() {
             ]
             .map(|file| runtime_dir.join("renderer/src").join(file)),
         );
+    } else {
+        let missing_archives = renderer_static_libs
+            .iter()
+            .filter_map(|(_, archive)| (!archive.exists()).then(|| archive.display().to_string()))
+            .collect::<Vec<_>>();
+        if !missing_archives.is_empty() {
+            panic!(
+                "missing renderer dependency archives:\n{}\nbuild them with `cd {}/renderer && PATH=\"{}/build:$PATH\" build_rive.sh {} -- rive_decoders libpng zlib libjpeg libwebp rive_harfbuzz rive_sheenbidi rive_yoga`",
+                missing_archives.join("\n"),
+                runtime_dir.display(),
+                runtime_dir.display(),
+                profile,
+            );
+        }
     }
 
     build.compile("rive_renderer_ffi");
@@ -96,9 +177,23 @@ fn main() {
     println!("cargo:rustc-link-search=native={}", root_lib_dir.display());
     println!("cargo:rustc-link-lib=static=rive_renderer_ffi");
     if renderer_lib.exists() {
-        println!("cargo:rustc-link-lib=static=rive_pls_renderer");
+        for lib in [
+            "rive_pls_renderer",
+            "rive_decoders",
+            "libwebp",
+            "libpng",
+            "zlib",
+            "libjpeg",
+        ] {
+            println!("cargo:rustc-link-lib=static={lib}");
+        }
     }
     println!("cargo:rustc-link-lib=static=rive");
+    if renderer_lib.exists() {
+        for lib in ["rive_harfbuzz", "rive_sheenbidi", "rive_yoga"] {
+            println!("cargo:rustc-link-lib=static={lib}");
+        }
+    }
 
     if cfg!(target_os = "macos") {
         println!("cargo:rustc-link-lib=framework=Metal");

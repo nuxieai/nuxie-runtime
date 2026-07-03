@@ -21,12 +21,12 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Finish the M1 FFI viewer demo by turning the new feature-gated
-   `rive-renderer-ffi` bridge from native null-context drawing into a
-   visible/offscreen Metal target: install/enable the Apple Metal Toolchain,
-   build/link `librive_pls_renderer.a`, swap the demo from draw-count proof to
-   non-empty pixels or a window frame, and keep the existing
-   `ffi_null_draw` real-file smoke passing.
+1. Finish the M1 FFI viewer demo by adding a visible/offscreen Metal target to
+   `rive-renderer-ffi`: the Apple Metal Toolchain is installed, the C++
+   `librive_pls_renderer.a` + decoder/text/layout dependency archives build
+   and link, and `ffi_null_draw` still proves real-file import/draw through the
+   native bridge. Next slice: port enough of the C++ `TestingWindow`/Metal
+   texture path to expose non-empty pixels or a window frame from Rust.
 2. `joystick_flag_test` is parked for M2: its sample-0 first diff is joystick
    application/default state-machine behavior, while Rust still draws the
    imported static state.
@@ -610,3 +610,11 @@ the only memory the next session has. Update it every commit.
   added `ffi_null_draw` as a real `.riv` import/draw smoke (`dependency_test`
   draws 3 calls). Exact remains 54; full Metal/offscreen pixels remain blocked
   on Apple's Metal Toolchain for the C++ renderer archive build.
+- 2026-07-03: [M1] Installed the Apple Metal Toolchain, built the C++
+  `librive_pls_renderer.a` and dependency archives, and taught
+  `rive-renderer-ffi` to link the prebuilt archive set with matching
+  canvas/text/layout/decoder feature defines so the null backend's vtable
+  matches the archive ABI. `rive-renderer-ffi --features native`,
+  `ffi_null_draw`, `make golden-compare`, and `cargo test --workspace` pass;
+  exact remains 54. Remaining M1 FFI demo work is the actual Metal
+  offscreen/window pixel target.

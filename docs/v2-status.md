@@ -22,9 +22,9 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
-   start with `trigger_based_listeners`,
-   `virtualized_artboard_databound_children`, `walle`, `word_joiner_test`,
-   `viewmodel_based_condition`, and `transition_self_comparator_test`;
+   start with `artboard_list_map_rules`, `artboard_list_overrides`,
+   `artboard_width_test`, `component_list_child_origin`,
+   `transition_duration_bind_nested`, and `trigger_fires_single_change`;
    promote exact sample-0 matches or add verified unsupported diagnostics for
    later-phase first diffs.
 2. `solo_test` and `solos_collapse_tests` are parked for M2: C++ applies
@@ -88,6 +88,11 @@ the only memory the next session has. Update it every commit.
   support, `time_based_interpolation.riv` is parked for M5 data-binding color,
   `transition_duration_bind_list.riv` is parked for M6 layout component paint
   drawing, and `two_bone_ik.riv` is parked for constraint support.
+- `trigger_based_listeners.riv` and `transition_self_comparator_test.riv` are
+  parked for nested-artboard support, `virtualized_artboard_databound_children.riv`
+  is parked for M6 layout component paint drawing, `walle.riv` and
+  `viewmodel_based_condition.riv` are parked for image support, and
+  `word_joiner_test.riv` is parked for text support.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -290,3 +295,9 @@ the only memory the next session has. Update it every commit.
   `transition_duration_bind_list.riv`, and `two_bone_ik.riv` with verified
   image/nested-artboard/data-binding/layout/constraint diagnostics; exact
   remains 37, unsupported-feature is now 97, and not-yet is now 161.
+- 2026-07-02: [M1] Added an import-time image-asset diagnostic and gated
+  `trigger_based_listeners.riv`, `virtualized_artboard_databound_children.riv`,
+  `walle.riv`, `word_joiner_test.riv`, `viewmodel_based_condition.riv`, and
+  `transition_self_comparator_test.riv` with verified nested-artboard, layout,
+  image, and text diagnostics; exact remains 37, unsupported-feature is now
+  103, and not-yet is now 155.

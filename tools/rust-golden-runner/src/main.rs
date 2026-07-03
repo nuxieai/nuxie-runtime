@@ -33,7 +33,7 @@ fn run() -> Result<String> {
     let runtime = read_runtime_file(&bytes).context("failed to import runtime file")?;
     let graph = GraphFile::from_runtime_file(&runtime).context("failed to build graph")?;
     let (artboard_index, artboard) = select_artboard(&graph, options.artboard.as_deref())?;
-    ensure_static_draw_supported(artboard)?;
+    ensure_static_draw_supported(&graph, artboard)?;
     let mut instance = ArtboardInstance::from_graph(&runtime, artboard)
         .context("failed to instantiate artboard")?;
     instance.update_components();
@@ -166,7 +166,7 @@ fn select_artboard<'a>(
     }
 }
 
-fn ensure_static_draw_supported(artboard: &ArtboardGraph) -> Result<()> {
+fn ensure_static_draw_supported(graph: &GraphFile, artboard: &ArtboardGraph) -> Result<()> {
     if let Some(nested) = artboard.nested_artboards.first() {
         bail!(
             "unsupported: nested artboards in Rust golden runner ({})",
@@ -182,6 +182,17 @@ fn ensure_static_draw_supported(artboard: &ArtboardGraph) -> Result<()> {
         bail!(
             "unsupported: images in Rust golden runner (global {})",
             image.global_id
+        );
+    }
+
+    if let Some(asset) = graph
+        .file_assets
+        .iter()
+        .find(|asset| asset.type_name == "ImageAsset")
+    {
+        bail!(
+            "unsupported: images in Rust golden runner (asset global {})",
+            asset.global_id
         );
     }
 

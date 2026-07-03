@@ -71,6 +71,9 @@ pub struct ArtboardInstance {
     update_order: Vec<usize>,
     linear_animations: Vec<RuntimeLinearAnimation>,
     state_machines: Vec<RuntimeStateMachine>,
+    artboard_data_bind_values: BTreeMap<Vec<u32>, RuntimeDataBindGraphValue>,
+    artboard_custom_property_bindings: Vec<RuntimeArtboardCustomPropertyBindingInstance>,
+    artboard_solo_bindings: Vec<RuntimeArtboardSoloBindingInstance>,
     artboard_list_bindings: Vec<RuntimeArtboardListBindingInstance>,
     dirt: ComponentDirt,
     dirt_depth: usize,
@@ -135,6 +138,10 @@ impl ArtboardInstance {
         let linear_animations = build_linear_animations(file, graph, &slots);
         let joysticks = build_runtime_joysticks(graph, &linear_animations);
         let state_machines = build_state_machines(file, graph, &linear_animations);
+        let artboard_data_bind_values = build_artboard_default_view_model_values(file, graph);
+        let artboard_custom_property_bindings =
+            build_artboard_custom_property_bindings(file, graph);
+        let artboard_solo_bindings = build_artboard_solo_bindings(file, graph);
         let artboard_list_bindings = build_artboard_list_bindings(file, graph);
         apply_initial_solo_collapses(&objects, &solos, &mut components, &component_by_local);
 
@@ -154,6 +161,9 @@ impl ArtboardInstance {
             update_order,
             linear_animations,
             state_machines,
+            artboard_data_bind_values,
+            artboard_custom_property_bindings,
+            artboard_solo_bindings,
             artboard_list_bindings,
             dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,
@@ -202,6 +212,27 @@ impl ArtboardInstance {
         };
 
         let mut changed = false;
+        let paths = self
+            .artboard_custom_property_bindings
+            .iter()
+            .map(|binding| binding.path.clone())
+            .chain(
+                self.artboard_solo_bindings
+                    .iter()
+                    .map(|binding| binding.path.clone()),
+            )
+            .collect::<Vec<_>>();
+        for path in paths {
+            let Some(value) =
+                runtime_default_view_model_value_for_path(file, default_instance.object, &path)
+            else {
+                continue;
+            };
+            if self.artboard_data_bind_values.get(&path) != Some(&value) {
+                self.artboard_data_bind_values.insert(path, value);
+                changed = true;
+            }
+        }
         for binding in &mut self.artboard_list_bindings {
             let Some(source_value) = binding.default_value.resolve_from_view_model_instance(
                 file,
@@ -237,6 +268,9 @@ impl ArtboardInstance {
 
     pub fn advance_artboard_data_binds(&mut self) -> bool {
         let mut changed = false;
+        for binding in self.artboard_custom_property_bindings.clone() {
+            changed |= self.update_artboard_custom_property_binding(&binding);
+        }
         for binding in &mut self.artboard_list_bindings {
             let target_value = match binding.converter.as_ref() {
                 Some(converter) => {
@@ -253,7 +287,58 @@ impl ArtboardInstance {
                 changed = true;
             }
         }
+        changed |= self.apply_artboard_solo_bindings();
         changed
+    }
+
+    fn update_artboard_custom_property_binding(
+        &mut self,
+        binding: &RuntimeArtboardCustomPropertyBindingInstance,
+    ) -> bool {
+        let value = match binding.value_kind {
+            RuntimeArtboardDataBindValueKind::Number => self
+                .double_property(binding.target_local_id, binding.property_key)
+                .map(RuntimeDataBindGraphValue::Number),
+            RuntimeArtboardDataBindValueKind::String => self
+                .string_property(binding.target_local_id, binding.property_key)
+                .map(|value| RuntimeDataBindGraphValue::String(value.to_vec())),
+        };
+        let Some(value) = value else {
+            return false;
+        };
+        if self.artboard_data_bind_values.get(&binding.path) == Some(&value) {
+            return false;
+        }
+        self.artboard_data_bind_values
+            .insert(binding.path.clone(), value);
+        true
+    }
+
+    fn apply_artboard_solo_bindings(&mut self) -> bool {
+        let mut changed = false;
+        for binding in self.artboard_solo_bindings.clone() {
+            let Some(value) = self.artboard_data_bind_values.get(&binding.path).cloned() else {
+                continue;
+            };
+            changed |= self.apply_artboard_solo_binding_value(&binding, &value);
+        }
+        changed
+    }
+
+    fn apply_artboard_solo_binding_value(
+        &mut self,
+        binding: &RuntimeArtboardSoloBindingInstance,
+        value: &RuntimeDataBindGraphValue,
+    ) -> bool {
+        match value {
+            RuntimeDataBindGraphValue::Number(value) => {
+                self.set_solo_active_child_by_index(binding.target_local_id, *value)
+            }
+            RuntimeDataBindGraphValue::String(value) => {
+                self.set_solo_active_child_by_name(binding.target_local_id, value)
+            }
+            _ => false,
+        }
     }
 
     pub fn artboard_list_binding_source_list_size_for_data_bind(
@@ -536,6 +621,13 @@ impl ArtboardInstance {
             DrawableOrderKind::ClipStartProxy | DrawableOrderKind::ClipEndProxy => true,
             DrawableOrderKind::Drawable | DrawableOrderKind::LayoutProxy => {
                 if drawable.is_hidden {
+                    return false;
+                }
+                if drawable
+                    .local_id
+                    .and_then(|local_id| self.component(local_id))
+                    .is_some_and(RuntimeComponent::is_collapsed)
+                {
                     return false;
                 }
 
@@ -1323,6 +1415,64 @@ impl ArtboardInstance {
         self.propagate_solo_collapse(local_id)
     }
 
+    fn set_solo_active_child_by_index(&mut self, solo_local_id: usize, value: f32) -> bool {
+        let rounded = value.round();
+        if rounded < 0.0 || !rounded.is_finite() {
+            return false;
+        }
+        let Some(solo) = self
+            .solos
+            .iter()
+            .find(|solo| solo.local_id == solo_local_id)
+            .cloned()
+        else {
+            return false;
+        };
+        let Some(child) = solo.children.get(rounded as usize) else {
+            return false;
+        };
+        self.set_solo_active_child(&solo, child.local_id)
+    }
+
+    fn set_solo_active_child_by_name(&mut self, solo_local_id: usize, value: &[u8]) -> bool {
+        let Some(solo) = self
+            .solos
+            .iter()
+            .find(|solo| solo.local_id == solo_local_id)
+            .cloned()
+        else {
+            return false;
+        };
+        let Some(child) = solo.children.iter().find(|child| {
+            self.slot(child.local_id)
+                .and_then(|slot| slot.name.as_deref())
+                .is_some_and(|name| name.as_bytes() == value)
+        }) else {
+            return false;
+        };
+        self.set_solo_active_child(&solo, child.local_id)
+    }
+
+    fn set_solo_active_child(&mut self, solo: &RuntimeSolo, child_local_id: usize) -> bool {
+        let Some(cpp_local_id) =
+            solo.runtime_local_by_cpp_local
+                .iter()
+                .find_map(|(cpp_local_id, runtime_local_id)| {
+                    (*runtime_local_id == child_local_id).then_some(*cpp_local_id)
+                })
+        else {
+            return false;
+        };
+        let Ok(cpp_local_id) = u64::try_from(cpp_local_id) else {
+            return false;
+        };
+        self.set_uint_property(
+            solo.local_id,
+            solo.active_component_property_key,
+            cpp_local_id,
+        )
+    }
+
     fn propagate_solo_collapse(&mut self, solo_local_id: usize) -> bool {
         let Some(solo) = self
             .solos
@@ -1348,7 +1498,38 @@ impl ArtboardInstance {
             } else {
                 solo_collapsed
             };
-            changed |= self.collapse_component(child.local_id, collapsed);
+            changed |= self.collapse_component_tree(child.local_id, collapsed);
+        }
+        changed
+    }
+
+    fn collapse_component_tree(&mut self, local_id: usize, collapsed: bool) -> bool {
+        self.collapse_component_tree_with_ancestor(local_id, collapsed, false)
+    }
+
+    fn collapse_component_tree_with_ancestor(
+        &mut self,
+        local_id: usize,
+        collapsed: bool,
+        ancestor_changed: bool,
+    ) -> bool {
+        let changed_here = self.collapse_component(local_id, collapsed);
+        let mut changed = changed_here;
+        if ancestor_changed && !collapsed {
+            changed |= self.add_dirt(local_id, ComponentDirt::FILTHY, false);
+        }
+        let children = self
+            .components
+            .iter()
+            .filter(|component| component.parent_local == Some(local_id))
+            .map(|component| component.local_id)
+            .collect::<Vec<_>>();
+        for child in children {
+            changed |= self.collapse_component_tree_with_ancestor(
+                child,
+                collapsed,
+                ancestor_changed || changed_here,
+            );
         }
         changed
     }
@@ -5926,6 +6107,26 @@ struct RuntimeDataBindGraphTargetNode {
 }
 
 #[derive(Debug, Clone)]
+struct RuntimeArtboardCustomPropertyBindingInstance {
+    target_local_id: usize,
+    property_key: u16,
+    path: Vec<u32>,
+    value_kind: RuntimeArtboardDataBindValueKind,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeArtboardSoloBindingInstance {
+    target_local_id: usize,
+    path: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeArtboardDataBindValueKind {
+    Number,
+    String,
+}
+
+#[derive(Debug, Clone)]
 struct RuntimeArtboardListBindingInstance {
     data_bind_index: usize,
     target_local_id: usize,
@@ -5953,7 +6154,7 @@ enum RuntimeDataBindGraphTarget {
     ViewModel { global_id: u32 },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 enum RuntimeDataBindGraphValue {
     Number(f32),
     Boolean(bool),
@@ -20457,6 +20658,128 @@ fn build_artboard_list_bindings(
         .collect()
 }
 
+fn build_artboard_default_view_model_values(
+    file: &RuntimeFile,
+    graph: &ArtboardGraph,
+) -> BTreeMap<Vec<u32>, RuntimeDataBindGraphValue> {
+    let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
+        return BTreeMap::new();
+    };
+    let Some(default_instance) = file.view_model_default_instance(0) else {
+        return BTreeMap::new();
+    };
+
+    let mut values = BTreeMap::new();
+    for data_bind in file.artboard_data_binds(artboard_index) {
+        let Some(path) = file.data_bind_context_source_path_ids_for_object(data_bind.object) else {
+            continue;
+        };
+        let Some(value) =
+            runtime_default_view_model_value_for_path(file, default_instance.object, &path)
+        else {
+            continue;
+        };
+        values.entry(path).or_insert(value);
+    }
+    values
+}
+
+fn build_artboard_custom_property_bindings(
+    file: &RuntimeFile,
+    graph: &ArtboardGraph,
+) -> Vec<RuntimeArtboardCustomPropertyBindingInstance> {
+    let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
+        return Vec::new();
+    };
+
+    file.artboard_data_binds(artboard_index)
+        .into_iter()
+        .filter_map(|data_bind| {
+            if !data_bind_flags_apply_target_to_source(
+                data_bind.object.uint_property("flags").unwrap_or(0),
+            ) {
+                return None;
+            }
+            let target = data_bind.target?;
+            let target_local_id = data_bind.target_local_id?;
+            let property_key =
+                u16::try_from(data_bind.object.uint_property("propertyKey")?).ok()?;
+            let value_kind = match target.type_name {
+                "CustomPropertyNumber"
+                    if property_key_for_name("CustomPropertyNumber", "propertyValue")
+                        == Some(property_key) =>
+                {
+                    RuntimeArtboardDataBindValueKind::Number
+                }
+                "CustomPropertyString"
+                    if property_key_for_name("CustomPropertyString", "propertyValue")
+                        == Some(property_key) =>
+                {
+                    RuntimeArtboardDataBindValueKind::String
+                }
+                _ => return None,
+            };
+            Some(RuntimeArtboardCustomPropertyBindingInstance {
+                target_local_id,
+                property_key,
+                path: file.data_bind_context_source_path_ids_for_object(data_bind.object)?,
+                value_kind,
+            })
+        })
+        .collect()
+}
+
+fn build_artboard_solo_bindings(
+    file: &RuntimeFile,
+    graph: &ArtboardGraph,
+) -> Vec<RuntimeArtboardSoloBindingInstance> {
+    let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
+        return Vec::new();
+    };
+    let Some(active_component_id_key) = solo_active_component_id_property_key() else {
+        return Vec::new();
+    };
+
+    file.artboard_data_binds(artboard_index)
+        .into_iter()
+        .filter_map(|data_bind| {
+            if !data_bind_flags_apply_source_to_target(
+                data_bind.object.uint_property("flags").unwrap_or(0),
+            ) {
+                return None;
+            }
+            let target = data_bind.target?;
+            if target.type_name != "Solo" {
+                return None;
+            }
+            if u16::try_from(data_bind.object.uint_property("propertyKey")?).ok()?
+                != active_component_id_key
+            {
+                return None;
+            }
+            Some(RuntimeArtboardSoloBindingInstance {
+                target_local_id: data_bind.target_local_id?,
+                path: file.data_bind_context_source_path_ids_for_object(data_bind.object)?,
+            })
+        })
+        .collect()
+}
+
+fn runtime_default_view_model_value_for_path(
+    file: &RuntimeFile,
+    default_instance: &RuntimeObject,
+    path: &[u32],
+) -> Option<RuntimeDataBindGraphValue> {
+    let source = file.data_context_view_model_property_for_instance(default_instance, path)?;
+    if let Some(value) = file.view_model_instance_number_value_for_object(source) {
+        return Some(RuntimeDataBindGraphValue::Number(value));
+    }
+    if let Some(value) = file.view_model_instance_string_value_bytes_for_object(source) {
+        return Some(RuntimeDataBindGraphValue::String(value.to_vec()));
+    }
+    None
+}
+
 fn runtime_data_bind_graph_converter(
     file: &RuntimeFile,
     data_bind: &RuntimeObject,
@@ -21491,6 +21814,9 @@ mod tests {
             update_order,
             linear_animations: Vec::new(),
             state_machines: Vec::new(),
+            artboard_data_bind_values: BTreeMap::new(),
+            artboard_custom_property_bindings: Vec::new(),
+            artboard_solo_bindings: Vec::new(),
             artboard_list_bindings: Vec::new(),
             dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,

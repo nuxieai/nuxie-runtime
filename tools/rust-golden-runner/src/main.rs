@@ -45,6 +45,11 @@ fn run() -> Result<String> {
                 .with_context(|| format!("failed to instantiate state machine index {index}"))
         })
         .transpose()?;
+    instance.bind_default_view_model_artboard_list_context(&runtime);
+    if let Some(state_machine) = state_machine.as_mut() {
+        state_machine.bind_default_view_model_context();
+        state_machine.advance_data_context();
+    }
 
     let mut factory = RecordingFactory::new();
     let mut paint_by_global = preallocate_render_paints(&runtime, artboard, &mut factory);
@@ -155,6 +160,7 @@ fn advance_scene_to(
     if let Some(state_machine) = state_machine {
         instance.advance_state_machine_instance(state_machine, elapsed_seconds);
     }
+    instance.advance_artboard_data_binds();
     instance.update_pass();
     *current_seconds = target_seconds;
     Ok(())

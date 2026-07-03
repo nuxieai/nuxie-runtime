@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 54
+- Corpus files `exact`: 57
 - Current milestone: **M2 — Animated Playback Exact + Real Object Model (#V2-3)**
 
 ## Milestones
@@ -23,20 +23,16 @@ the only memory the next session has. Update it every commit.
 
 1. Continue M2 real object model work by replacing the generic cloned
    `RuntimeObject` arena tracer with generated concrete object storage plus
-   schema-generated setter/getter dispatch for the first animated property
-   family, then use that path to move one M2 `not-yet` corpus file toward
-   `exact`.
+   schema-generated uint/id setter dispatch, then use that path to fix the
+   remaining Solo active-child refresh diff in `solo_test` or
+   `solos_collapse_tests`.
 2. `joystick_flag_test` is parked for M2: its sample-0 first diff is joystick
    application/default state-machine behavior, while Rust still draws the
    imported static state.
-3. `solo_test` and `solos_collapse_tests` are parked for M2: C++ applies
-   frame-0 `KeyFrameId` values through the default state machine/animation,
-   overriding imported `Solo.activeComponentId`; Rust has no
-   state-machine/keyframe application yet.
-4. `clip_tests` is raw-exact at sample `0`, but its manifest includes sample
+3. `clip_tests` is raw-exact at sample `0`, but its manifest includes sample
    `0.25`; keep it parked until M2 non-zero sample support or an explicit
    sample-scope split.
-5. Keep `fill_trim_path` and `trim_path_linear` parked for M2 keyframe and
+4. Keep `fill_trim_path` and `trim_path_linear` parked for M2 keyframe and
    non-zero sample support.
 
 ## Known Divergences
@@ -65,9 +61,6 @@ the only memory the next session has. Update it every commit.
   artboard imports `Solo.activeComponentId = 3`, but the default timeline has a
   frame-0 `KeyFrameId` for property `296` that switches it to local `6`, so C++
   draws the gray star while static Rust import draws the red rectangle.
-- `click_event.riv` and `sound.riv` are parked for M2 at sample `0`: C++ applies
-  frame-0 `KeyFrameColor` values through the selected/default state machine,
-  while Rust still draws imported static solid colors.
 - `juice.riv` and `rocket.riv` are parked for M2 at sample `0`: after gradient
   shader creation matched C++, their first diffs traced to frame-0 keyed
   transform/geometry application from default animations/state machines, while
@@ -134,8 +127,7 @@ the only memory the next session has. Update it every commit.
 - `double_line.riv` and `ellipsis.riv` are parked for text support;
   `drag_event.riv`, `echo_show_demo.riv`, and `entry.riv` are parked for
   nested-artboard support.
-- `event_trigger_event.riv` is parked for M2 frame-0 color application;
-  `feather_render_test.riv` is parked for image support;
+- `feather_render_test.riv` is parked for image support;
   `fit_font_size_test.riv` is parked for text support; `focus_collapsing.riv`
   and `focus_traversal.riv` are parked for nested-artboard support.
 - `focusable_element.riv`, `hit_test_nested.riv`, and `hit_test_test.riv` are
@@ -635,3 +627,11 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=224`, `not-yet=17`) and `cargo test --workspace`;
   next M2 work is replacing the generic arena internals with generated
   concrete object storage and generated setter/getter dispatch.
+- 2026-07-03: [M2] Mirrored C++ golden default-scene startup in the Rust golden
+  runner by selecting the serialized default state machine and advancing it at
+  sample `0` before draw. Promoted `click_event.riv`,
+  `event_trigger_event.riv`, and `sound.riv` as exact after direct stream
+  comparisons; `make golden-compare` reports `exact=57`, `diverges=0`,
+  `unsupported-feature=224`, `not-yet=14`. `solo_test` and
+  `solos_collapse_tests` still differ in Solo active-child refresh after
+  frame-0 `KeyFrameId`.

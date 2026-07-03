@@ -1,8 +1,8 @@
 use anyhow::{Context, Result, bail};
-use rive_binary::read_runtime_file;
+use rive_binary::{RuntimeFile, read_runtime_file};
 use rive_graph::{ArtboardGraph, GraphFile};
 use rive_render_api::RecordingFactory;
-use rive_runtime::{ArtboardInstance, preallocate_render_paints};
+use rive_runtime::{ArtboardInstance, StateMachineInstance, preallocate_render_paints};
 use std::env;
 use std::path::PathBuf;
 
@@ -18,9 +18,6 @@ fn main() {
 
 fn run() -> Result<String> {
     let options = Options::parse(env::args().skip(1).collect())?;
-    if options.state_machine.is_some() {
-        bail!("unsupported: Rust golden runner does not advance state machines yet");
-    }
     if options.input_script.is_some() {
         bail!("unsupported: Rust golden runner does not replay input scripts yet");
     }
@@ -36,7 +33,20 @@ fn run() -> Result<String> {
     ensure_static_draw_supported(&graph, artboard)?;
     let mut instance = ArtboardInstance::from_graph(&runtime, artboard)
         .context("failed to instantiate artboard")?;
-    instance.update_components();
+    let scene = select_scene(
+        &runtime,
+        artboard_index,
+        artboard,
+        options.state_machine.as_deref(),
+    )?;
+    let mut state_machine = scene
+        .state_machine_index
+        .map(|index| {
+            instance
+                .state_machine_instance(index)
+                .with_context(|| format!("failed to instantiate state machine index {index}"))
+        })
+        .transpose()?;
 
     let mut factory = RecordingFactory::new();
     let mut paint_by_global = preallocate_render_paints(&runtime, artboard, &mut factory);
@@ -48,22 +58,12 @@ fn run() -> Result<String> {
     let width = artboard_object.double_property("width").unwrap_or(0.0);
     let height = artboard_object.double_property("height").unwrap_or(0.0);
     let artboard_name = artboard.name.clone().unwrap_or_default();
-    let scene_name = artboard_object
-        .property("defaultStateMachineId")
-        .and_then(|_| artboard_object.uint_property("defaultStateMachineId"))
-        .and_then(|default_state_machine_index| {
-            let default_state_machine_index = usize::try_from(default_state_machine_index).ok()?;
-            artboard
-                .state_machines
-                .get(default_state_machine_index)
-                .and_then(|state_machine| state_machine.name.as_deref())
-        })
-        .unwrap_or(&artboard_name);
 
-    factory.source(&options.file.to_string_lossy(), &artboard_name, scene_name);
+    factory.source(&options.file.to_string_lossy(), &artboard_name, &scene.name);
     factory.frame_size(frame_dimension(width), frame_dimension(height));
 
     for sample in &options.samples {
+        advance_scene(&mut instance, state_machine.as_mut(), *sample);
         instance.prepare_static_artboard_paints(
             &runtime,
             artboard,
@@ -82,6 +82,68 @@ fn run() -> Result<String> {
     }
 
     Ok(factory.stream())
+}
+
+#[derive(Debug)]
+struct SelectedScene {
+    name: String,
+    state_machine_index: Option<usize>,
+}
+
+fn select_scene(
+    runtime: &RuntimeFile,
+    artboard_index: usize,
+    artboard: &ArtboardGraph,
+    state_machine_name: Option<&str>,
+) -> Result<SelectedScene> {
+    let artboard_name = artboard.name.clone().unwrap_or_default();
+    if let Some(name) = state_machine_name {
+        let index = artboard
+            .state_machines
+            .iter()
+            .position(|state_machine| state_machine.name.as_deref() == Some(name))
+            .with_context(|| format!("missing state machine {name}"))?;
+        return Ok(SelectedScene {
+            name: name.to_owned(),
+            state_machine_index: Some(index),
+        });
+    }
+
+    let Some(default_state_machine_index) = runtime
+        .artboard(artboard_index)
+        .and_then(|artboard| {
+            artboard
+                .property("defaultStateMachineId")
+                .and_then(|_| artboard.uint_property("defaultStateMachineId"))
+        })
+        .and_then(|index| usize::try_from(index).ok())
+        .filter(|index| artboard.state_machines.get(*index).is_some())
+    else {
+        return Ok(SelectedScene {
+            name: artboard_name,
+            state_machine_index: None,
+        });
+    };
+
+    let name = artboard.state_machines[default_state_machine_index]
+        .name
+        .clone()
+        .unwrap_or_else(|| artboard_name);
+    Ok(SelectedScene {
+        name,
+        state_machine_index: Some(default_state_machine_index),
+    })
+}
+
+fn advance_scene(
+    instance: &mut ArtboardInstance,
+    state_machine: Option<&mut StateMachineInstance>,
+    elapsed_seconds: f32,
+) {
+    if let Some(state_machine) = state_machine {
+        instance.advance_state_machine_instance(state_machine, elapsed_seconds);
+    }
+    instance.update_components();
 }
 
 #[derive(Debug)]

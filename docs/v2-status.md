@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 39
+- Corpus files `exact`: 40
 - Current milestone: **M1 — Static Vector Rendering Exact (#V2-2)**
 
 ## Milestones
@@ -22,9 +22,10 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
-   start with `double_line`, `drag_event`, `echo_show_demo`, `ellipsis`,
-   `entry`, and `event_on_listener`; promote exact sample-0
-   matches or add verified unsupported diagnostics for later-phase first diffs.
+   start with `event_trigger_event`, `events_on_states`,
+   `feather_render_test`, `fit_font_size_test`, `focus_collapsing`, and
+   `focus_traversal`; promote exact sample-0 matches or add verified
+   unsupported diagnostics for later-phase first diffs.
 2. `solo_test` and `solos_collapse_tests` are parked for M2: C++ applies
    frame-0 `KeyFrameId` values through the default state machine/animation,
    overriding imported `Solo.activeComponentId`; Rust has no
@@ -112,6 +113,9 @@ the only memory the next session has. Update it every commit.
   `db_health_tracker.riv`, and `death_knight.riv` are parked for nested-artboard
   support; `data_converter_to_number.riv` and `databind_solo_to_enum.riv` are
   parked for text support.
+- `double_line.riv` and `ellipsis.riv` are parked for text support;
+  `drag_event.riv`, `echo_show_demo.riv`, and `entry.riv` are parked for
+  nested-artboard support.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -348,3 +352,8 @@ the only memory the next session has. Update it every commit.
   `databind_solo_to_enum.riv`, `db_health_tracker.riv`, and `death_knight.riv`
   with verified nested-artboard/text diagnostics; exact remains 39,
   unsupported-feature is now 129, and not-yet is now 127.
+- 2026-07-02: [M1] Promoted `event_on_listener.riv` as sample-0 exact and
+  gated `double_line.riv`, `drag_event.riv`, `echo_show_demo.riv`,
+  `ellipsis.riv`, and `entry.riv` with verified text/nested-artboard
+  diagnostics; exact count is now 40, unsupported-feature is now 134, and
+  not-yet is now 121.

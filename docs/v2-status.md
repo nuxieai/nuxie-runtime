@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 60
+- Corpus files `exact`: 62
 - Current milestone: **M2 — Animated Playback Exact + Real Object Model (#V2-3)**
 
 ## Milestones
@@ -21,15 +21,15 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Add non-zero sample support to the Rust golden runner/runtime scene advance
-   loop, using sample deltas rather than treating each timestamp as an
-   independent elapsed value; first target is `clip_tests` sample `0.25`.
+1. Port the remaining C++ TrimPath contour/endpoint math needed for
+   `fill_trim_path` and `trim_path_linear`; `trim_path_linear` is now down to
+   a tiny endpoint delta after render-path cache reuse.
 2. Continue M2 real object model work by replacing the generic cloned
    `RuntimeObject` arena tracer with generated concrete object storage plus
    schema-generated setter side effects beyond the hand-ported Solo uint/id
    path.
-3. Keep `fill_trim_path` and `trim_path_linear` parked for M2 keyframe and
-   non-zero sample support.
+3. Add handle-source world-space math and nested-remap dependent advancement
+   to the joystick path when a corpus diff reaches those cases.
 
 ## Known Divergences
 
@@ -40,19 +40,20 @@ the only memory the next session has. Update it every commit.
 
 - Golden runner view-model mutation scripts; `--view-model-script` is reserved
   but rejected until M5 external data-binding corpus files require it.
-- Rust golden draw path currently supports sample `0`, artboard
-  clip/background, selected-artboard origins, solid fills/strokes, and
+- Rust golden draw path currently supports sorted absolute-time samples,
+  artboard clip/background, selected-artboard origins, solid fills/strokes, and
   `ClippingShape` clip paths, skinned `PointsPath` deformation, plus empty and
   multi-contour TrimPath effects, DashPath stroke effects, and linear/radial
   gradient shader creation, default state-machine frame-0 application for
   color/bool/uint/string keyframes, Solo active-child refresh, and
   before-update joystick animation application without custom handle-source
-  world-space math or nested remap dependent advancement;
-  no non-zero samples, images, text, nested artboards, constraints, or scripted
-  input.
-- `fill_trim_path.riv` is parked for M2 even at sample `0`: C++ applies
-  keyframes to TrimPath `offset`/`end` before drawing, so imported static
-  values cannot match without animation application.
+  world-space math or nested remap dependent advancement. Golden runner sample
+  lists now advance by sorted absolute-time deltas and reuse render paths
+  across samples;
+  no images, text, nested artboards, constraints, or scripted input.
+- `fill_trim_path.riv` and `trim_path_linear.riv` are parked for remaining
+  M2 TrimPath contour/endpoint parity; `trim_path_linear` currently differs by
+  only the final endpoint float values at samples `0` and `0.25`.
 - `juice.riv` and `rocket.riv` are parked for M2 at sample `0`: after gradient
   shader creation matched C++, their first diffs traced to frame-0 keyed
   transform/geometry application from default animations/state machines, while
@@ -136,8 +137,7 @@ the only memory the next session has. Update it every commit.
   `interpolation_zero_duration.riv` is parked for M5 zero-duration
   data-binding interpolator transform application.
 - `jellyfish_test.riv` is parked for image support; `joel_v3.riv` is parked
-  for text support; `joystick_flag_test.riv` is parked for M2 joystick
-  application/default state-machine behavior.
+  for text support.
 - `keyboard_listener.riv` is parked for text support; `library.riv` is parked
   for image support; `library_view_model_test.riv` and
   `library_vmtest_1_host.riv` are parked for nested-artboard support.
@@ -161,10 +161,7 @@ the only memory the next session has. Update it every commit.
   drawing; `pause_nested_artboard.riv` is parked for nested-artboard support.
 - `oneshotblend.riv` is parked for M2 1D blend/default state-machine
   application at sample `0`; `opaque_hit_test.riv` is parked for M2
-  frame-0 state-machine/keyframe color application; `pointer_events.riv`
-  is raw-exact at sample `0`, but its manifest includes sample `0.1`, so it
-  remains parked until M2 non-zero sample support or an explicit sample-scope
-  split.
+  frame-0 state-machine/keyframe color application.
 - `pointer_events_nested_artboards_in_solos.riv`, `pointer_exit.riv`, and
   `recursive_data_bind.riv` are parked for nested-artboard support;
   `rebind_with_nested_viewmodel.riv` is parked for text support.
@@ -640,3 +637,9 @@ the only memory the next session has. Update it every commit.
   `joystick_nested_remap.riv` exact check; expected `make golden-compare`
   summary is `exact=60`, `diverges=0`, `unsupported-feature=224`,
   `not-yet=11`.
+- 2026-07-03: [M2] Ported C++ golden-runner absolute sample advancement into
+  the Rust runner and added a scene-long render path cache so artboard clips,
+  backgrounds, clipping shapes, and draw paths retain C++ path ids across
+  emitted samples. Promoted `clip_tests.riv` and `pointer_events.riv` after
+  direct stream comparisons; `make golden-compare` reports
+  `exact=62`, `diverges=0`, `unsupported-feature=224`, `not-yet=9`.

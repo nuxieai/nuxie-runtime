@@ -393,18 +393,35 @@ impl ArtboardInstance {
         renderer: &mut dyn Renderer,
         paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
     ) -> Result<()> {
+        let mut path_cache = RuntimeRenderPathCache::default();
+        self.draw_prepared_static_artboard_with_path_cache(
+            runtime,
+            graph,
+            factory,
+            renderer,
+            paint_by_global,
+            &mut path_cache,
+        )
+    }
+
+    pub fn draw_prepared_static_artboard_with_path_cache(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        factory: &mut dyn RenderFactory,
+        renderer: &mut dyn Renderer,
+        paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
+        path_cache: &mut RuntimeRenderPathCache,
+    ) -> Result<()> {
         renderer.save();
-        let mut clip = if self.clip {
-            let clip = runtime_make_path(
+        if self.clip {
+            let clip = path_cache.artboard_clip_path(
                 factory,
                 &runtime_rect_commands(0.0, 0.0, self.width, self.height),
                 RenderFillRule::Clockwise,
             );
             renderer.clip_path(clip.as_ref());
-            Some(clip)
-        } else {
-            None
-        };
+        }
         renderer.transform(self.artboard_origin_transform());
 
         if let Some(background) = graph
@@ -423,6 +440,7 @@ impl ArtboardInstance {
                 factory,
                 renderer,
                 paint_by_global,
+                path_cache,
             )?;
         }
 
@@ -431,7 +449,6 @@ impl ArtboardInstance {
             .iter()
             .map(|object| (object.local_id, object.global_id))
             .collect::<BTreeMap<_, _>>();
-        let mut clip_paths = BTreeMap::<usize, Box<dyn RenderPath>>::new();
 
         for command in self.draw_commands(graph) {
             runtime_draw_command(
@@ -443,15 +460,11 @@ impl ArtboardInstance {
                 factory,
                 renderer,
                 paint_by_global,
-                &mut clip_paths,
+                path_cache,
             )?;
         }
 
         renderer.restore();
-        // Keep the clip path alive until after the renderer has consumed it.
-        if let Some(clip) = clip.as_mut() {
-            clip.rewind();
-        }
         Ok(())
     }
 
@@ -1480,6 +1493,78 @@ pub struct RuntimeGradientStop {
     pub position: f32,
 }
 
+#[derive(Default)]
+pub struct RuntimeRenderPathCache {
+    artboard_clip: Option<Box<dyn RenderPath>>,
+    background_paths: BTreeMap<usize, Box<dyn RenderPath>>,
+    clip_paths: BTreeMap<usize, Box<dyn RenderPath>>,
+    draw_paths: BTreeMap<RuntimeDrawPathCacheKey, Box<dyn RenderPath>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct RuntimeDrawPathCacheKey {
+    local_id: Option<usize>,
+    path_index: usize,
+}
+
+impl RuntimeRenderPathCache {
+    fn artboard_clip_path(
+        &mut self,
+        factory: &mut dyn RenderFactory,
+        commands: &[RuntimePathCommand],
+        fill_rule: RenderFillRule,
+    ) -> &mut Box<dyn RenderPath> {
+        runtime_cached_render_path(&mut self.artboard_clip, factory, commands, fill_rule)
+    }
+
+    fn clipping_shape_path(
+        &mut self,
+        local_id: usize,
+        factory: &mut dyn RenderFactory,
+        commands: &[RuntimePathCommand],
+        fill_rule: RenderFillRule,
+    ) -> &mut Box<dyn RenderPath> {
+        let path = match self.clip_paths.entry(local_id) {
+            Entry::Occupied(entry) => entry.into_mut(),
+            Entry::Vacant(entry) => entry.insert(runtime_make_path(factory, commands, fill_rule)),
+        };
+        runtime_rebuild_path(path.as_mut(), commands, fill_rule);
+        path
+    }
+
+    fn background_path(
+        &mut self,
+        local_id: usize,
+        factory: &mut dyn RenderFactory,
+        commands: &[RuntimePathCommand],
+        fill_rule: RenderFillRule,
+    ) -> &mut Box<dyn RenderPath> {
+        let path = match self.background_paths.entry(local_id) {
+            Entry::Occupied(entry) => entry.into_mut(),
+            Entry::Vacant(entry) => entry.insert(runtime_make_path(factory, commands, fill_rule)),
+        };
+        runtime_rebuild_path(path.as_mut(), commands, fill_rule);
+        path
+    }
+
+    fn draw_path(
+        &mut self,
+        key: RuntimeDrawPathCacheKey,
+        factory: &mut dyn RenderFactory,
+        commands: &[RuntimePathCommand],
+        fill_rule: RenderFillRule,
+    ) -> &mut Box<dyn RenderPath> {
+        match self.draw_paths.entry(key) {
+            Entry::Occupied(entry) => {
+                let path = entry.into_mut();
+                runtime_rebuild_path_preserving_fill_rule(path.as_mut(), commands);
+                path
+            }
+            Entry::Vacant(entry) => entry.insert(runtime_make_path(factory, commands, fill_rule)),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct RuntimeFeatherState {
     pub feather_local: usize,
@@ -1587,11 +1672,11 @@ fn runtime_draw_background(
     factory: &mut dyn RenderFactory,
     renderer: &mut dyn Renderer,
     paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
+    path_cache: &mut RuntimeRenderPathCache,
 ) -> Result<()> {
     let left = -origin_x * width;
     let top = -origin_y * height;
     let commands = runtime_rect_commands(left, top, left + width, top + height);
-    let mut path = None::<Box<dyn RenderPath>>;
     for paint in &container.paints {
         let object = runtime
             .object(paint.global_id as usize)
@@ -1609,14 +1694,12 @@ fn runtime_draw_background(
         )?;
         renderer.save();
         renderer.transform(RenderMat2D::IDENTITY);
-        if path.is_none() {
-            path = Some(runtime_make_path(
-                factory,
-                &commands,
-                runtime_fill_rule_for_object(object),
-            ));
-        }
-        let path = path.as_mut().expect("background path populated");
+        let path = path_cache.background_path(
+            container.local_id,
+            factory,
+            &commands,
+            runtime_fill_rule_for_object(object),
+        );
         runtime_configure_fill_rule(path.as_mut(), object);
         renderer.draw_path(
             path.as_ref(),
@@ -1691,11 +1774,11 @@ fn runtime_draw_command(
     factory: &mut dyn RenderFactory,
     renderer: &mut dyn Renderer,
     paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
-    clip_paths: &mut BTreeMap<usize, Box<dyn RenderPath>>,
+    path_cache: &mut RuntimeRenderPathCache,
 ) -> Result<()> {
     match command.kind {
         RuntimeDrawCommandKind::ClipStart => {
-            runtime_draw_clip_start(instance, graph, command, factory, renderer, clip_paths);
+            runtime_draw_clip_start(instance, graph, command, factory, renderer, path_cache);
             return Ok(());
         }
         RuntimeDrawCommandKind::ClipEnd => {
@@ -1711,7 +1794,7 @@ fn runtime_draw_command(
         .map(|component| component.transform.world_transform)
         .unwrap_or(Mat2D::IDENTITY);
 
-    let mut path_cache = Vec::<(Vec<RuntimePathCommand>, Option<Box<dyn RenderPath>>)>::new();
+    let mut draw_path_slots = Vec::<Vec<RuntimePathCommand>>::new();
     for paint in &command.shape_paints {
         let global_id = *local_to_global
             .get(&paint.paint_local)
@@ -1733,7 +1816,7 @@ fn runtime_draw_command(
             paint,
             None,
         )?;
-        let path_index = runtime_cached_path_slot_index(&mut path_cache, path_commands);
+        let path_index = runtime_cached_path_slot_index(&mut draw_path_slots, path_commands);
         let mut saved = !paint.needs_save_operation;
         if matches!(
             paint.path_kind,
@@ -1745,17 +1828,15 @@ fn runtime_draw_command(
             }
             renderer.transform(runtime_render_mat(shape_world));
         }
-        if path_cache[path_index].1.is_none() {
-            path_cache[path_index].1 = Some(runtime_make_path(
-                factory,
-                path_commands,
-                RenderFillRule::Clockwise,
-            ));
-        }
-        let path = path_cache[path_index]
-            .1
-            .as_mut()
-            .expect("path cache populated");
+        let path = path_cache.draw_path(
+            RuntimeDrawPathCacheKey {
+                local_id: command.local_id,
+                path_index,
+            },
+            factory,
+            path_commands,
+            RenderFillRule::Clockwise,
+        );
         runtime_configure_fill_rule(path.as_mut(), object);
         renderer.draw_path(
             path.as_ref(),
@@ -1778,7 +1859,7 @@ fn runtime_draw_clip_start(
     command: RuntimeDrawCommand,
     factory: &mut dyn RenderFactory,
     renderer: &mut dyn Renderer,
-    clip_paths: &mut BTreeMap<usize, Box<dyn RenderPath>>,
+    path_cache: &mut RuntimeRenderPathCache,
 ) {
     let Some(clipping_shape) = command
         .clipping_shape_local
@@ -1798,14 +1879,12 @@ fn runtime_draw_clip_start(
     }
     // Ported from src/shapes/clipping_shape.cpp: each ClippingShape owns a
     // cached clip path, so repeated clip-start proxies reuse the same RenderPath.
-    let path = match clip_paths.entry(clipping_shape.local_id) {
-        Entry::Occupied(entry) => entry.into_mut(),
-        Entry::Vacant(entry) => entry.insert(runtime_make_path(
-            factory,
-            &path_commands,
-            runtime_fill_rule_for_value(clipping_shape.fill_rule),
-        )),
-    };
+    let path = path_cache.clipping_shape_path(
+        clipping_shape.local_id,
+        factory,
+        &path_commands,
+        runtime_fill_rule_for_value(clipping_shape.fill_rule),
+    );
     renderer.clip_path(path.as_ref());
 }
 
@@ -1833,16 +1912,16 @@ fn runtime_clipping_shape(graph: &ArtboardGraph, local_id: usize) -> Option<&Cli
 }
 
 fn runtime_cached_path_slot_index(
-    cache: &mut Vec<(Vec<RuntimePathCommand>, Option<Box<dyn RenderPath>>)>,
+    cache: &mut Vec<Vec<RuntimePathCommand>>,
     commands: &[RuntimePathCommand],
 ) -> usize {
     if let Some(index) = cache
         .iter()
-        .position(|(candidate, _)| candidate.as_slice() == commands)
+        .position(|candidate| candidate.as_slice() == commands)
     {
         return index;
     }
-    cache.push((commands.to_vec(), None));
+    cache.push(commands.to_vec());
     cache.len() - 1
 }
 
@@ -1985,7 +2064,43 @@ fn runtime_make_path(
     fill_rule: RenderFillRule,
 ) -> Box<dyn RenderPath> {
     let mut path = factory.make_empty_render_path();
+    runtime_rebuild_path(path.as_mut(), commands, fill_rule);
+    path
+}
+
+fn runtime_cached_render_path<'a>(
+    slot: &'a mut Option<Box<dyn RenderPath>>,
+    factory: &mut dyn RenderFactory,
+    commands: &[RuntimePathCommand],
+    fill_rule: RenderFillRule,
+) -> &'a mut Box<dyn RenderPath> {
+    let path = match slot {
+        Some(path) => path,
+        None => slot.insert(runtime_make_path(factory, commands, fill_rule)),
+    };
+    runtime_rebuild_path(path.as_mut(), commands, fill_rule);
+    path
+}
+
+fn runtime_rebuild_path(
+    path: &mut dyn RenderPath,
+    commands: &[RuntimePathCommand],
+    fill_rule: RenderFillRule,
+) {
+    path.rewind();
     path.fill_rule(fill_rule);
+    runtime_append_path_commands(path, commands);
+}
+
+fn runtime_rebuild_path_preserving_fill_rule(
+    path: &mut dyn RenderPath,
+    commands: &[RuntimePathCommand],
+) {
+    path.rewind();
+    runtime_append_path_commands(path, commands);
+}
+
+fn runtime_append_path_commands(path: &mut dyn RenderPath, commands: &[RuntimePathCommand]) {
     for command in commands {
         match *command {
             RuntimePathCommand::Move { x, y } => path.move_to(x, y),
@@ -2001,7 +2116,6 @@ fn runtime_make_path(
             RuntimePathCommand::Close => path.close(),
         }
     }
-    path
 }
 
 fn runtime_rect_commands(left: f32, top: f32, right: f32, bottom: f32) -> Vec<RuntimePathCommand> {

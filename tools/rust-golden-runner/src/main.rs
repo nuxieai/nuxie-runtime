@@ -2,7 +2,9 @@ use anyhow::{Context, Result, bail};
 use rive_binary::{RuntimeFile, read_runtime_file};
 use rive_graph::{ArtboardGraph, GraphFile};
 use rive_render_api::RecordingFactory;
-use rive_runtime::{ArtboardInstance, StateMachineInstance, preallocate_render_paints};
+use rive_runtime::{
+    ArtboardInstance, RuntimeRenderPathCache, StateMachineInstance, preallocate_render_paints,
+};
 use std::env;
 use std::path::PathBuf;
 
@@ -21,10 +23,6 @@ fn run() -> Result<String> {
     if options.input_script.is_some() {
         bail!("unsupported: Rust golden runner does not replay input scripts yet");
     }
-    if options.samples.iter().any(|sample| *sample != 0.0) {
-        bail!("unsupported: Rust golden runner only supports sample 0");
-    }
-
     let bytes = std::fs::read(&options.file)
         .with_context(|| format!("failed to read {}", options.file.display()))?;
     let runtime = read_runtime_file(&bytes).context("failed to import runtime file")?;
@@ -50,6 +48,7 @@ fn run() -> Result<String> {
 
     let mut factory = RecordingFactory::new();
     let mut paint_by_global = preallocate_render_paints(&runtime, artboard, &mut factory);
+    let mut path_cache = RuntimeRenderPathCache::default();
     let mut renderer = factory.make_renderer();
 
     let artboard_object = runtime
@@ -62,8 +61,14 @@ fn run() -> Result<String> {
     factory.source(&options.file.to_string_lossy(), &artboard_name, &scene.name);
     factory.frame_size(frame_dimension(width), frame_dimension(height));
 
+    let mut current_seconds = 0.0;
     for sample in &options.samples {
-        advance_scene(&mut instance, state_machine.as_mut(), *sample);
+        advance_scene_to(
+            &mut instance,
+            state_machine.as_mut(),
+            *sample,
+            &mut current_seconds,
+        )?;
         instance.prepare_static_artboard_paints(
             &runtime,
             artboard,
@@ -71,12 +76,13 @@ fn run() -> Result<String> {
             &mut paint_by_global,
         )?;
         factory.add_sample(*sample);
-        instance.draw_prepared_static_artboard(
+        instance.draw_prepared_static_artboard_with_path_cache(
             &runtime,
             artboard,
             &mut factory,
             &mut renderer,
             &mut paint_by_global,
+            &mut path_cache,
         )?;
         factory.add_frame();
     }
@@ -135,15 +141,22 @@ fn select_scene(
     })
 }
 
-fn advance_scene(
+fn advance_scene_to(
     instance: &mut ArtboardInstance,
     state_machine: Option<&mut StateMachineInstance>,
-    elapsed_seconds: f32,
-) {
+    target_seconds: f32,
+    current_seconds: &mut f32,
+) -> Result<()> {
+    if target_seconds < *current_seconds {
+        bail!("cannot move timeline backwards");
+    }
+    let elapsed_seconds = (target_seconds - *current_seconds).max(0.0);
     if let Some(state_machine) = state_machine {
         instance.advance_state_machine_instance(state_machine, elapsed_seconds);
     }
     instance.update_pass();
+    *current_seconds = target_seconds;
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -204,14 +217,23 @@ impl Options {
 }
 
 fn parse_samples(value: &str) -> Result<Vec<f32>> {
-    value
+    let samples = value
         .split(',')
         .map(|part| {
             part.trim()
                 .parse::<f32>()
                 .with_context(|| format!("invalid sample {}", part.trim()))
         })
-        .collect()
+        .collect::<Result<Vec<_>>>()?;
+    if samples.is_empty() {
+        bail!("--samples must include at least one sample");
+    }
+    for pair in samples.windows(2) {
+        if pair[1] < pair[0] {
+            bail!("samples must be sorted");
+        }
+    }
+    Ok(samples)
 }
 
 fn select_artboard<'a>(

@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 63
+- Corpus files `exact`: 64
 - Current milestone: **M2 — Animated Playback Exact + Real Object Model (#V2-3)**
 
 ## Milestones
@@ -21,14 +21,11 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Localize the remaining compound-fill TrimPath mismatch in
-   `fill_trim_path`; live TrimPath double-keyframe plumbing is in place, and
-   `trim_path_linear` now compares exact under the golden epsilon.
-2. Continue M2 real object model work by replacing the generic cloned
+1. Continue M2 real object model work by replacing the generic cloned
    `RuntimeObject` arena tracer with generated concrete object storage plus
    schema-generated setter side effects beyond the hand-ported Solo uint/id
    path.
-3. Add handle-source world-space math and nested-remap dependent advancement
+2. Add handle-source world-space math and nested-remap dependent advancement
    to the joystick path when a corpus diff reaches those cases.
 
 ## Known Divergences
@@ -51,9 +48,6 @@ the only memory the next session has. Update it every commit.
   lists now advance by sorted absolute-time deltas and reuse render paths
   across samples;
   no images, text, nested artboards, constraints, or scripted input.
-- `fill_trim_path.riv` is parked for remaining M2 compound-fill TrimPath
-  parity; live TrimPath double-keyframe plumbing is in place, but the first
-  diff still assigns trim segments to the wrong fill contours.
 - `juice.riv` and `rocket.riv` are parked for M2 at sample `0`: after gradient
   shader creation matched C++, their first diffs traced to frame-0 keyed
   transform/geometry application from default animations/state machines, while
@@ -649,4 +643,11 @@ the only memory the next session has. Update it every commit.
   instead of dropping reversed local-clockwise paths. Promoted
   `trim_path_linear.riv`; `make golden-compare` reports `exact=63`,
   `diverges=0`, `unsupported-feature=224`, `not-yet=8`, and
+  `cargo test --workspace` passes.
+- 2026-07-03: [M2] Fixed keyed-property metadata lookup to use the imported
+  `KeyedObject.objectId` slot rather than the remapped runtime-local id,
+  allowing frame-0 `KeyFrameDouble` writes to reach TrimPath effects whose
+  local ids diverge from C++ artboard-local ids. Promoted
+  `fill_trim_path.riv`; `make golden-compare` reports `exact=64`,
+  `diverges=0`, `unsupported-feature=224`, `not-yet=7`, and
   `cargo test --workspace` passes.

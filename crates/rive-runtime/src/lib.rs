@@ -26154,10 +26154,11 @@ fn build_linear_animations(
                 current_keyed_property = None;
                 continue;
             };
-            let target_local_id =
-                animations[animation_index].keyed_objects[keyed_object_index].target_local_id;
+            let keyed_object = &animations[animation_index].keyed_objects[keyed_object_index];
+            let object_id = keyed_object.object_id;
+            let target_local_id = keyed_object.target_local_id;
             let Some(target) = slots
-                .get(target_local_id)
+                .get(object_id)
                 .and_then(|slot| file.object(slot.source_global_id as usize))
             else {
                 current_keyed_property = None;

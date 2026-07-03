@@ -1014,7 +1014,7 @@ features = ["type-key:114:StateMachineListenerSingle", "type-key:117:ListenerBoo
 id = "long_name"
 path = "tests/unit_tests/assets/long_name.riv"
 samples = [0.0]
-status = "not-yet"
+status = "exact"
 features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:7:Rectangle"]
 
 [[file]]

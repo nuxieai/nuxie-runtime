@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 4
+- Corpus files `exact`: 5
 - Current milestone: **M1 — Static Vector Rendering Exact (#V2-2)**
 
 ## Milestones
@@ -21,12 +21,12 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Triage `long_name` by comparing Rust and C++ streams at sample `0`; if the
-   current static renderer is exact, mark it `exact`, otherwise record whether
-   the `LinearAnimation` tag puts it in M2.
-2. Triage the low-feature constraint files (`scale_constraint`,
+1. Triage the low-feature constraint files (`scale_constraint`,
    `translation_constraint`, `transform_constraint`, `rotation_constraint`) as
    M3 blockers or M1 static-vector divergences.
+2. Then inspect `distance_constraint`, `two_artboards`, and
+   `trim_path_linear` to choose the next exact candidate or later-milestone
+   gate.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -78,6 +78,9 @@ the only memory the next session has. Update it every commit.
 - 2026-07-02: Corpus features prefixed `rust-runner-unsupported:` are verified
   by `golden-compare` when `--rust-runner` is supplied; use them when a
   later-phase feature would otherwise be silently omitted by Rust rendering.
+- 2026-07-02: `exact` is scoped to the samples/scripts in `corpus.toml`;
+  animated files may be exact at sample `0` now and still need wider M2 samples
+  later.
 
 ## Log
 
@@ -124,3 +127,5 @@ the only memory the next session has. Update it every commit.
   and `library_export_animation_test.riv` as verified nested-artboard
   unsupported diagnostics; exact remains 4, unsupported-feature is now 44, and
   not-yet is now 247.
+- 2026-07-02: [M1] Marked `long_name.riv` exact at sample `0`; exact count is
+  now 5.

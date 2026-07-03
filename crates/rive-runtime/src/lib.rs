@@ -23,6 +23,7 @@ use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 mod animation;
 mod components;
 mod objects;
+mod state_machine;
 
 use animation::AnimationLoop;
 pub use animation::{
@@ -36,6 +37,7 @@ pub use components::{
     TransformRuntimeState, UpdateComponentsReport,
 };
 use objects::InstanceObjectArena;
+pub use state_machine::StateMachineReportedEvent;
 
 #[derive(Debug, Clone)]
 pub struct ArtboardInstance {
@@ -20461,32 +20463,6 @@ pub struct StateMachineInstance {
     changed_state_count: usize,
     needs_advance: bool,
     data_bind_graph: RuntimeDataBindGraph,
-}
-
-#[derive(Debug, Clone)]
-pub struct StateMachineReportedEvent {
-    event_local_index: usize,
-    event_core_type: u32,
-    name: Option<String>,
-    seconds_delay: f32,
-}
-
-impl StateMachineReportedEvent {
-    pub fn event_local_index(&self) -> usize {
-        self.event_local_index
-    }
-
-    pub fn event_core_type(&self) -> u32 {
-        self.event_core_type
-    }
-
-    pub fn name(&self) -> Option<&str> {
-        self.name.as_deref()
-    }
-
-    pub fn seconds_delay(&self) -> f32 {
-        self.seconds_delay
-    }
 }
 
 impl StateMachineInstance {

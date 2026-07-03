@@ -21,9 +21,11 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Finish the M1 FFI viewer demo: static vector corpus divergences are cleared
-   at sample `0`, so the remaining M1 exit criterion is a minimal viewer path
-   that draws real files through the renderer FFI from Rust.
+1. Finish the M1 FFI viewer demo by turning the new feature-gated
+   `rive-renderer-ffi` bridge from null-context smoke into a visible/offscreen
+   Metal target: build/link `librive_pls_renderer.a`, add the demo command that
+   imports a real `.riv`, draws it through `FfiFactory`/`FfiFrame`, and verifies
+   non-empty pixels or a window frame.
 2. `joystick_flag_test` is parked for M2: its sample-0 first diff is joystick
    application/default state-machine behavior, while Rust still draws the
    imported static state.
@@ -587,3 +589,9 @@ the only memory the next session has. Update it every commit.
   `ClippingShape` render paths per clipping shape and matching C++ `Mat2D`
   inverse/mapPoints/skinning float behavior; exact is now 54,
   unsupported-feature remains 224, diverges is now 0, and not-yet remains 17.
+- 2026-07-03: [M1] Added the feature-gated `rive-renderer-ffi` crate with a
+  Rust `Factory`/`Renderer` wrapper and C ABI bridge over C++
+  `RiveRenderFactory`/`RiveRenderer`; default workspace tests stay independent
+  of native renderer artifacts, and the bridge currently syntax-checks against
+  a `RenderContextNULL` smoke backend. Exact remains 54; next M1 work is the
+  real Metal/window or offscreen-pixel demo target.

@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 34
+- Corpus files `exact`: 35
 - Current milestone: **M1 — Static Vector Rendering Exact (#V2-2)**
 
 ## Milestones
@@ -22,11 +22,10 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
-   start with `state_machine_triggers`, `viewmodel_from_context`,
-   `viewmodel_list_trigger`, `transition_index_condition`,
-   `complex_ik_dependency`, and `stateful_source_switch`; promote exact
-   sample-0 matches or add verified unsupported diagnostics for later-phase
-   first diffs.
+   start with `state_machine_transition`, `state_transition_fire_trigger`,
+   `stateful_artboard_swap`, `stateful_list_props`, `stateful_multi_property`,
+   and `stateful_nested`; promote exact sample-0 matches or add verified
+   unsupported diagnostics for later-phase first diffs.
 2. `solo_test` and `solos_collapse_tests` are parked for M2: C++ applies
    frame-0 `KeyFrameId` values through the default state machine/animation,
    overriding imported `Solo.activeComponentId`; Rust has no
@@ -76,6 +75,10 @@ the only memory the next session has. Update it every commit.
 - `bidirectional_precedence.riv` and `collapsable_data_binding.riv` are parked
   for M5 data-binding transform/color application; `zero_width_space_line_break.riv`
   is parked for text support.
+- `viewmodel_from_context.riv`, `viewmodel_list_trigger.riv`, and
+  `transition_index_condition.riv` are parked for M6 layout component paint
+  drawing; `complex_ik_dependency.riv` is parked for constraint support, and
+  `stateful_source_switch.riv` is parked for nested-artboard support.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -260,3 +263,9 @@ the only memory the next session has. Update it every commit.
   `bidirectional_precedence.riv`, and `collapsable_data_binding.riv` with
   verified text/data-binding diagnostics; exact count is now 34,
   unsupported-feature is now 82, and not-yet is now 179.
+- 2026-07-02: [M1] Promoted `state_machine_triggers.riv` as sample-0 exact,
+  and gated `viewmodel_from_context.riv`, `viewmodel_list_trigger.riv`,
+  `transition_index_condition.riv`, `complex_ik_dependency.riv`, and
+  `stateful_source_switch.riv` with verified layout/constraint/nested-artboard
+  diagnostics; exact count is now 35, unsupported-feature is now 87, and
+  not-yet is now 173.

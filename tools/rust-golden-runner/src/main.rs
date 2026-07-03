@@ -196,6 +196,17 @@ fn ensure_static_draw_supported(artboard: &ArtboardGraph) -> Result<()> {
         );
     }
 
+    if let Some(container) = artboard
+        .shape_paint_containers
+        .iter()
+        .find(|container| container.type_name == "LayoutComponent" && !container.paints.is_empty())
+    {
+        bail!(
+            "unsupported: layout-component-paint in Rust golden runner (global {})",
+            container.global_id
+        );
+    }
+
     if let Some(data_bind) = artboard
         .data_binds
         .iter()

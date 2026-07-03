@@ -21,22 +21,23 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
-   start with `bullet_man`, `car_widgets_v01`, `collapse_data_binds`,
-   `collapsing_elements`, `cubic_value_test`, and `event_trigger_event`;
-   promote exact sample-0 matches or add
-   verified unsupported diagnostics for later-phase first diffs.
-2. `joystick_flag_test` is parked for M2: its sample-0 first diff is joystick
+1. Probe `zombie_skins` as the last unclassified `not-yet` M1 candidate:
+   promote it if sample `0` is exact, add a verified unsupported diagnostic,
+   or record the first diff if it belongs to a later milestone.
+2. Start M1 gradient rendering next. Port the C++ linear/radial gradient paint
+   update path into `rive-runtime`/`rive-render-api`, targeting gradient-only
+   corpus demand such as `joel_signed`, `juice`, `off_road_car`, and `rocket`.
+3. `joystick_flag_test` is parked for M2: its sample-0 first diff is joystick
    application/default state-machine behavior, while Rust still draws the
    imported static state.
-3. `solo_test` and `solos_collapse_tests` are parked for M2: C++ applies
+4. `solo_test` and `solos_collapse_tests` are parked for M2: C++ applies
    frame-0 `KeyFrameId` values through the default state machine/animation,
    overriding imported `Solo.activeComponentId`; Rust has no
    state-machine/keyframe application yet.
-4. `clip_tests` is raw-exact at sample `0`, but its manifest includes sample
+5. `clip_tests` is raw-exact at sample `0`, but its manifest includes sample
    `0.25`; keep it parked until M2 non-zero sample support or an explicit
    sample-scope split.
-5. Keep `fill_trim_path` and `trim_path_linear` parked for M2 keyframe and
+6. Keep `fill_trim_path` and `trim_path_linear` parked for M2 keyframe and
    non-zero sample support.
 
 ## Backlog (unsupported features awaiting corpus demand)
@@ -104,6 +105,9 @@ the only memory the next session has. Update it every commit.
   sample-0 Rust diagnostic currently reaches nested artboards); `animated_clipping.riv`
   and `background_measure.riv` are parked for text support, and
   `component_list_virtualized.riv` is parked for M6 layout component paint drawing.
+- `bullet_man.riv`, `car_widgets_v01.riv`, and `collapsing_elements.riv` are
+  parked for nested-artboard support; `collapse_data_binds.riv` is parked for
+  text support.
 - `component_stateful.riv`, `component_stateful_vm_instance.riv`,
   `component_stateful_vm_instance_2.riv`, and `computed_values_test.riv` are parked
   for nested-artboard support; `computed_root_transform.riv` is parked for M6
@@ -557,3 +561,8 @@ the only memory the next session has. Update it every commit.
   `bindable_artboard_nesty.riv` with verified nested-artboard/image
   diagnostics; exact remains 52, unsupported-feature is now 223, and not-yet
   is now 20.
+- 2026-07-02: [M1] Gated `bullet_man.riv`, `car_widgets_v01.riv`,
+  `collapse_data_binds.riv`, and `collapsing_elements.riv` with verified
+  nested-artboard/text diagnostics; rechecked `cubic_value_test.riv` and
+  `event_trigger_event.riv` as M2 stream divergences; exact remains 52,
+  unsupported-feature is now 227, and not-yet is now 16.

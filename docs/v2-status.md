@@ -21,10 +21,10 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Pick the next simplest static no-animation corpus file and drive it from
-   `not-yet` to `exact` through the renderer-trait path.
-2. Extend the runtime renderer path for the first missing static vector feature
-   exposed by that file.
+1. Drive `trim.riv` from `diverges` to `exact` by porting the missing
+   `TrimPath` synchronized/static effect behavior.
+2. Match C++ selected-artboard render-paint allocation order for mixed
+   fill/stroke paints; `trim.riv` currently swaps the fill/stroke paint IDs.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -32,7 +32,8 @@ the only memory the next session has. Update it every commit.
   but rejected until M5 external data-binding corpus files require it.
 - Rust static draw path currently supports sample `0`, artboard
   clip/background, selected-artboard origins, solid fills/strokes, and no
-  state machines, gradients, images, text, nested artboards, or scripted input.
+  state machines, gradients, images, text, trim paths, nested artboards, or
+  scripted input.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -97,3 +98,7 @@ the only memory the next session has. Update it every commit.
   2.
 - 2026-07-02: [M1] Marked `shapetest.riv` exact through the runtime renderer
   path; exact count is now 3.
+- 2026-07-02: [M1] Triaged `trim.riv` as the next M1 divergence: C++ emits an
+  empty synchronized trim path at sample 0 and allocates selected-artboard
+  stroke/fill render paints in draw order, while Rust still emits the untrimmed
+  path and swaps the paint IDs.

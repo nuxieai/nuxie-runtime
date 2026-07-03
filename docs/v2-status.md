@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 103 across 70 exact files
+- Exact segments (file × sample): 104 across 70 exact files
 - Parked breakdown (from `make golden-compare`): M3=21 M4=83 M5=8 M6=72 gated=5 harness=36
 - Current milestone: **M2 — Animated Playback Exact + Real Object Model (#V2-3)**
 
@@ -568,5 +568,11 @@ the only memory the next session has. Update it every commit.
   Widened `juice.riv` from sample `0` to samples `0` and `0.25`; exact
   segments are now 103 across 70 exact files; `make golden-compare` reports
   `exact=70`, `exact-segments=103`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+- 2026-07-03: [M2] Widened `scripted_enum.riv` from sample `0` to samples
+  `0` and `0.25`, keeping its enum view-model/state-machine playback stream
+  exact. Exact segments are now 104 across 70 exact files; `make
+  golden-compare` reports `exact=70`, `exact-segments=104`, `diverges=0`,
   `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
   passes.

@@ -4,3 +4,8 @@
 /tools/cpp-probe/build/linux/
 /tools/cpp-probe/build/macosx/
 /tools/cpp-probe/build/windows/
+/tools/golden-runner/build/Makefile
+/tools/golden-runner/build/*.make
+/tools/golden-runner/build/linux/
+/tools/golden-runner/build/macosx/
+/tools/golden-runner/build/windows/

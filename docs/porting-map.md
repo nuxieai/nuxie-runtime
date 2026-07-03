@@ -1,5 +1,10 @@
 # Rive Rust Porting Map
 
+> **Superseded by `docs/porting-map-v2.md`.** This V1 map is the historical
+> record; its shipped artifacts and contract tests remain in force, but new
+> work follows the V2 ground rules (port code not behaviors, golden-frame
+> verification, corpus-driven priority, no new contract docs).
+
 Working directory: `/Users/levi/dev/rive-rust`
 
 Reference runtime: `/Users/levi/dev/oss/rive-runtime`

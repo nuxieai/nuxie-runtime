@@ -22,9 +22,9 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
-   start with `custom_property_trigger`, `data_bind_test_cmdq`,
-   `data_binding_artboards_source_test`, `data_binding_images_test`,
-   `data_binding_test`, and `data_binding_test_3`; promote exact sample-0
+   start with `data_binding_test_triggers`, `data_converter_to_number`,
+   `databind_artboard`, `databind_solo_to_enum`, `db_health_tracker`, and
+   `death_knight`; promote exact sample-0
    matches or add verified unsupported diagnostics for later-phase first diffs.
 2. `solo_test` and `solos_collapse_tests` are parked for M2: C++ applies
    frame-0 `KeyFrameId` values through the default state machine/animation,
@@ -105,6 +105,10 @@ the only memory the next session has. Update it every commit.
   for nested-artboard support; `computed_root_transform.riv` is parked for M6
   layout component paint drawing; `cubic_value_test.riv` is parked for M2
   keyframe/interpolator application after its sample-0 transform diff.
+- `custom_property_trigger.riv`, `data_binding_images_test.riv`, and
+  `data_binding_test_3.riv` are parked for nested-artboard support;
+  `data_bind_test_cmdq.riv`, `data_binding_artboards_source_test.riv`, and
+  `data_binding_test.riv` are parked for text support.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -331,3 +335,8 @@ the only memory the next session has. Update it every commit.
   nested-artboard/layout diagnostics, and parked `cubic_value_test.riv` for M2
   keyframe/interpolator application; exact remains 39, unsupported-feature is
   now 117, and not-yet is now 139.
+- 2026-07-02: [M1] Gated `custom_property_trigger.riv`,
+  `data_bind_test_cmdq.riv`, `data_binding_artboards_source_test.riv`,
+  `data_binding_images_test.riv`, `data_binding_test.riv`, and
+  `data_binding_test_3.riv` with verified nested-artboard/text diagnostics;
+  exact remains 39, unsupported-feature is now 123, and not-yet is now 133.

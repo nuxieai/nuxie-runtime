@@ -37,6 +37,9 @@ pub use components::{
     TransformRuntimeState, UpdateComponentsReport,
 };
 use objects::InstanceObjectArena;
+use state_machine::{
+    RuntimeScheduledListenerAction, StateMachineFireOccurrence, perform_scheduled_listener_actions,
+};
 pub use state_machine::{
     RuntimeStateMachineInput, StateMachineInputInstance, StateMachineInputKind,
     StateMachineReportedEvent,
@@ -18345,74 +18348,6 @@ enum RuntimeStateMachineFireAction {
     },
 }
 
-#[derive(Debug, Clone)]
-enum RuntimeScheduledListenerAction {
-    FireEvent {
-        flags: u64,
-        event: StateMachineReportedEvent,
-    },
-    BoolChange {
-        flags: u64,
-        input_index: usize,
-        value: u64,
-    },
-    NumberChange {
-        flags: u64,
-        input_index: usize,
-        value: f32,
-    },
-    TriggerChange {
-        flags: u64,
-        input_index: usize,
-    },
-}
-
-impl RuntimeScheduledListenerAction {
-    fn from_imported(action: &rive_binary::RuntimeListenerAction<'_>) -> Option<Self> {
-        let flags = action.object.uint_property("flags").unwrap_or(0);
-        match action.object.type_name {
-            "ListenerFireEvent" => {
-                let event = action.event?;
-                Some(Self::FireEvent {
-                    flags,
-                    event: StateMachineReportedEvent {
-                        event_local_index: action.event_local_index?,
-                        event_core_type: u32::from(event.type_key),
-                        name: event.string_property("name").map(ToOwned::to_owned),
-                        seconds_delay: 0.0,
-                    },
-                })
-            }
-            "ListenerBoolChange" => Some(Self::BoolChange {
-                flags,
-                input_index: listener_action_input_index(action)?,
-                value: action.object.uint_property("value").unwrap_or(1),
-            }),
-            "ListenerNumberChange" => Some(Self::NumberChange {
-                flags,
-                input_index: listener_action_input_index(action)?,
-                value: action.object.double_property("value").unwrap_or(0.0),
-            }),
-            "ListenerTriggerChange" => Some(Self::TriggerChange {
-                flags,
-                input_index: listener_action_input_index(action)?,
-            }),
-            _ => None,
-        }
-    }
-}
-
-fn listener_action_input_index(action: &rive_binary::RuntimeListenerAction<'_>) -> Option<usize> {
-    if action
-        .object
-        .uint_property("nestedInputId")
-        .is_some_and(|nested_input_id| nested_input_id != u64::from(u32::MAX))
-    {
-        return None;
-    }
-    usize::try_from(action.object.uint_property("inputId")?).ok()
-}
-
 impl RuntimeStateMachineFireAction {
     fn from_imported(
         file: &RuntimeFile,
@@ -18437,21 +18372,6 @@ impl RuntimeStateMachineFireAction {
                 target_global_id: runtime_fire_trigger_target_global(file, action.object),
             }),
             _ => None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum StateMachineFireOccurrence {
-    AtStart,
-    AtEnd,
-}
-
-impl StateMachineFireOccurrence {
-    fn value(self) -> u64 {
-        match self {
-            Self::AtStart => 0,
-            Self::AtEnd => 1,
         }
     }
 }
@@ -18506,51 +18426,6 @@ fn runtime_fire_trigger_target_global(file: &RuntimeFile, object: &RuntimeObject
     )?;
     file.view_model_instance_trigger_count_for_object(target)?;
     Some(target.id)
-}
-
-fn perform_scheduled_listener_actions(
-    listener_actions: &[RuntimeScheduledListenerAction],
-    occurrence: StateMachineFireOccurrence,
-    inputs: &mut [StateMachineInputInstance],
-    reported_events: &mut Vec<StateMachineReportedEvent>,
-) -> bool {
-    let mut changed_input = false;
-    for action in listener_actions {
-        let flags = match action {
-            RuntimeScheduledListenerAction::FireEvent { flags, .. }
-            | RuntimeScheduledListenerAction::BoolChange { flags, .. }
-            | RuntimeScheduledListenerAction::NumberChange { flags, .. }
-            | RuntimeScheduledListenerAction::TriggerChange { flags, .. } => *flags,
-        };
-        if flags & 1 != occurrence.value() {
-            continue;
-        }
-        match action {
-            RuntimeScheduledListenerAction::FireEvent { event, .. } => {
-                reported_events.push(event.clone());
-            }
-            RuntimeScheduledListenerAction::BoolChange {
-                input_index, value, ..
-            } => {
-                if let Some(input) = inputs.get_mut(*input_index) {
-                    changed_input |= input.apply_listener_bool_change(*value);
-                }
-            }
-            RuntimeScheduledListenerAction::NumberChange {
-                input_index, value, ..
-            } => {
-                if let Some(input) = inputs.get_mut(*input_index) {
-                    changed_input |= input.set_number(*value);
-                }
-            }
-            RuntimeScheduledListenerAction::TriggerChange { input_index, .. } => {
-                if let Some(input) = inputs.get_mut(*input_index) {
-                    changed_input |= input.fire_trigger();
-                }
-            }
-        }
-    }
-    changed_input
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

@@ -21,12 +21,11 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Triage the low-feature constraint files (`scale_constraint`,
-   `translation_constraint`, `transform_constraint`, `rotation_constraint`) as
-   M3 blockers or M1 static-vector divergences.
-2. Then inspect `distance_constraint`, `two_artboards`, and
-   `trim_path_linear` to choose the next exact candidate or later-milestone
-   gate.
+1. Triage `two_artboards` by comparing Rust and C++ streams at sample `0`;
+   mark it `exact` if the current static renderer matches.
+2. Gate `distance_constraint` with the verified constraint diagnostic, then
+   inspect `circle_clips` and `trim_path_linear` for the next exact candidate
+   or later-milestone boundary.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -35,7 +34,7 @@ the only memory the next session has. Update it every commit.
 - Rust static draw path currently supports sample `0`, artboard
   clip/background, selected-artboard origins, solid fills/strokes, and
   empty/static synchronized TrimPath line effects; no state machines,
-  gradients, images, text, nested artboards, or scripted input.
+  gradients, images, text, nested artboards, constraints, or scripted input.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -129,3 +128,7 @@ the only memory the next session has. Update it every commit.
   not-yet is now 247.
 - 2026-07-02: [M1] Marked `long_name.riv` exact at sample `0`; exact count is
   now 5.
+- 2026-07-02: [M1] Gated `scale_constraint.riv`,
+  `translation_constraint.riv`, `transform_constraint.riv`, and
+  `rotation_constraint.riv` as verified constraint unsupported diagnostics;
+  exact remains 5, unsupported-feature is now 48, and not-yet is now 242.

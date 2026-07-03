@@ -1294,8 +1294,8 @@ features = ["type-key:16:PointsPath", "type-key:17:RadialGradient", "type-key:18
 id = "rotation_constraint"
 path = "tests/unit_tests/assets/rotation_constraint.riv"
 samples = [0.0]
-status = "not-yet"
-features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:2:Node", "type-key:3:Shape", "type-key:7:Rectangle", "type-key:89:RotationConstraint"]
+status = "unsupported-feature"
+features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:2:Node", "type-key:3:Shape", "type-key:7:Rectangle", "type-key:89:RotationConstraint", "rust-runner-unsupported:constraints"]
 
 [[file]]
 id = "runtime_nested_inputs"
@@ -1322,8 +1322,8 @@ features = ["type-key:106:FileAssetContents", "type-key:134:Text", "type-key:135
 id = "scale_constraint"
 path = "tests/unit_tests/assets/scale_constraint.riv"
 samples = [0.0]
-status = "not-yet"
-features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:2:Node", "type-key:3:Shape", "type-key:7:Rectangle", "type-key:88:ScaleConstraint"]
+status = "unsupported-feature"
+features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:2:Node", "type-key:3:Shape", "type-key:7:Rectangle", "type-key:88:ScaleConstraint", "rust-runner-unsupported:constraints"]
 
 [[file]]
 id = "script_affects_has_changed"
@@ -1854,8 +1854,8 @@ features = ["type-key:128:Event", "type-key:171:KeyFrameCallback", "type-key:18:
 id = "transform_constraint"
 path = "tests/unit_tests/assets/transform_constraint.riv"
 samples = [0.0]
-status = "not-yet"
-features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:2:Node", "type-key:3:Shape", "type-key:7:Rectangle", "type-key:83:TransformConstraint"]
+status = "unsupported-feature"
+features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:2:Node", "type-key:3:Shape", "type-key:7:Rectangle", "type-key:83:TransformConstraint", "rust-runner-unsupported:constraints"]
 
 [[file]]
 id = "transition_actions"
@@ -1903,8 +1903,8 @@ features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill",
 id = "translation_constraint"
 path = "tests/unit_tests/assets/translation_constraint.riv"
 samples = [0.0]
-status = "not-yet"
-features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:2:Node", "type-key:3:Shape", "type-key:7:Rectangle", "type-key:87:TranslationConstraint"]
+status = "unsupported-feature"
+features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:2:Node", "type-key:3:Shape", "type-key:7:Rectangle", "type-key:87:TranslationConstraint", "rust-runner-unsupported:constraints"]
 
 [[file]]
 id = "trigger_based_listeners"

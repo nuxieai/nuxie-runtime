@@ -178,6 +178,17 @@ fn ensure_static_draw_supported(artboard: &ArtboardGraph) -> Result<()> {
         );
     }
 
+    if let Some((constraint_type, global_id)) = artboard.local_objects.iter().find_map(|object| {
+        let type_name = object.type_name?;
+        type_name
+            .ends_with("Constraint")
+            .then_some((type_name, object.global_id))
+    }) {
+        bail!(
+            "unsupported: constraints in Rust golden runner ({constraint_type} global {global_id})"
+        );
+    }
+
     Ok(())
 }
 

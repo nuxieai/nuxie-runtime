@@ -51,6 +51,10 @@ the only memory the next session has. Update it every commit.
   DashPath/TrimPath output: C++ rotates/reorders the emitted path segments
   differently for the effected stroke paths. Promote after localizing the
   path-effect advance/composition semantics.
+- M2 sample widening: `juice.riv` remains pinned to sample `0`. A focused
+  `[0, 0.25]` probe diverges because Rust creates fresh linear-gradient
+  shader IDs between samples while C++ reuses the existing shader IDs; promote
+  after gradient shader lifetime/reuse matches C++ across multi-sample runs.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -558,3 +562,7 @@ the only memory the next session has. Update it every commit.
   `stacked_path_effects.riv` found a narrow animated stacked DashPath/TrimPath
   divergence at `0.25`; the file stays exact only at sample `0` until that M2
   path-effect composition gap is ported.
+- 2026-07-03: [M2] Focused `[0, 0.25]` promotion probe for `juice.riv` found
+  a multi-sample gradient lifetime divergence: Rust emits new linear-gradient
+  shader IDs before the second sample while C++ reuses the original shaders,
+  so the file stays exact only at sample `0` until gradient reuse is ported.

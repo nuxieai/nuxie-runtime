@@ -25,8 +25,8 @@ the only memory the next session has. Update it every commit.
    for cloned artboard objects. The current `InstanceObjectArena` now owns
    runtime-local `InstanceObject` property storage and validates writes against
    generated CoreRegistry setter families, but storage is still generic
-   `InstanceProperty`/`InstancePropertyValue` vectors rather than generated
-   per-type fields/setters.
+   `objects.rs` `InstanceProperty`/`InstancePropertyValue` vectors rather than
+   generated per-type fields/setters.
 2. Add handle-source world-space math and nested-remap dependent advancement
    to the joystick path when a corpus diff reaches those cases.
 
@@ -674,3 +674,10 @@ the only memory the next session has. Update it every commit.
   clone-time input only. Exact count remains 66; `make golden-compare`
   reports `exact=66`, `diverges=0`, `unsupported-feature=224`, `not-yet=5`,
   and `cargo test --workspace` passes.
+- 2026-07-03: [M2] Extracted `InstanceObjectArena` and runtime-local instance
+  property storage into `crates/rive-runtime/src/objects.rs`, leaving
+  `lib.rs` to call the arena through the same typed accessors while the next
+  generated-storage pass has a focused module target. Exact count remains 66;
+  `make golden-compare` reports `exact=66`, `diverges=0`,
+  `unsupported-feature=224`, `not-yet=5`, and `cargo test --workspace`
+  passes.

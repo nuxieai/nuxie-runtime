@@ -22,11 +22,10 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
-   start with `artboard_list_map_rules`, `artboard_list_overrides`,
-   `artboard_width_test`, `component_list_child_origin`,
-   `transition_duration_bind_nested`, and `trigger_fires_single_change`;
-   promote exact sample-0 matches or add verified unsupported diagnostics for
-   later-phase first diffs.
+   start with `advance_blend_mode`, `animated_clipping`,
+   `animation_reset_cases`, `background_measure`, `component_list_grouped`,
+   and `component_list_virtualized`; promote exact sample-0 matches or add
+   verified unsupported diagnostics for later-phase first diffs.
 2. `solo_test` and `solos_collapse_tests` are parked for M2: C++ applies
    frame-0 `KeyFrameId` values through the default state machine/animation,
    overriding imported `Solo.activeComponentId`; Rust has no
@@ -93,6 +92,10 @@ the only memory the next session has. Update it every commit.
   is parked for M6 layout component paint drawing, `walle.riv` and
   `viewmodel_based_condition.riv` are parked for image support, and
   `word_joiner_test.riv` is parked for text support.
+- `artboard_list_map_rules.riv`, `artboard_list_overrides.riv`, and
+  `component_list_child_origin.riv` are parked for M6 layout component paint
+  drawing; `artboard_width_test.riv`, `transition_duration_bind_nested.riv`,
+  and `trigger_fires_single_change.riv` are parked for nested-artboard support.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -301,3 +304,9 @@ the only memory the next session has. Update it every commit.
   `transition_self_comparator_test.riv` with verified nested-artboard, layout,
   image, and text diagnostics; exact remains 37, unsupported-feature is now
   103, and not-yet is now 155.
+- 2026-07-02: [M1] Gated `artboard_list_map_rules.riv`,
+  `artboard_list_overrides.riv`, `artboard_width_test.riv`,
+  `component_list_child_origin.riv`, `transition_duration_bind_nested.riv`, and
+  `trigger_fires_single_change.riv` with verified layout/nested-artboard
+  diagnostics; exact remains 37, unsupported-feature is now 109, and not-yet
+  is now 149.

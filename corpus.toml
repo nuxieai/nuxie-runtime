@@ -1153,7 +1153,7 @@ features = ["type-key:16:PointsPath", "type-key:17:RadialGradient", "type-key:18
 [[file]]
 id = "oneshotblend"
 path = "tests/unit_tests/assets/oneshotblend.riv"
-samples = [0.0]
+samples = [0.0, 0.25]
 status = "exact"
 features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:53:StateMachine", "type-key:56:StateMachineNumber", "type-key:57:StateMachineLayer", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:75:BlendAnimation1D", "type-key:76:BlendState1DInput", "type-key:7:Rectangle", "type-key:8:Triangle"]
 

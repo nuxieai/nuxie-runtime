@@ -22,10 +22,11 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
-   start with `tape`, `target_event`, `time_based_interpolation`,
-   `transition_artboard_condition_test`, `transition_duration_bind_list`, and
-   `two_bone_ik`; promote exact sample-0 matches or add verified unsupported
-   diagnostics for later-phase first diffs.
+   start with `trigger_based_listeners`,
+   `virtualized_artboard_databound_children`, `walle`, `word_joiner_test`,
+   `viewmodel_based_condition`, and `transition_self_comparator_test`;
+   promote exact sample-0 matches or add verified unsupported diagnostics for
+   later-phase first diffs.
 2. `solo_test` and `solos_collapse_tests` are parked for M2: C++ applies
    frame-0 `KeyFrameId` values through the default state machine/animation,
    overriding imported `Solo.activeComponentId`; Rust has no
@@ -82,6 +83,11 @@ the only memory the next session has. Update it every commit.
 - `state_transition_fire_trigger.riv`, `stateful_artboard_swap.riv`,
   `stateful_multi_property.riv`, and `stateful_nested.riv` are parked for
   nested-artboard support.
+- `tape.riv` is parked for image support, `target_event.riv` and
+  `transition_artboard_condition_test.riv` are parked for nested-artboard
+  support, `time_based_interpolation.riv` is parked for M5 data-binding color,
+  `transition_duration_bind_list.riv` is parked for M6 layout component paint
+  drawing, and `two_bone_ik.riv` is parked for constraint support.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -279,3 +285,8 @@ the only memory the next session has. Update it every commit.
   `stateful_multi_property.riv`, and `stateful_nested.riv` with verified
   nested-artboard diagnostics; exact count is now 37, unsupported-feature is
   now 91, and not-yet is now 167.
+- 2026-07-02: [M1] Gated `tape.riv`, `target_event.riv`,
+  `time_based_interpolation.riv`, `transition_artboard_condition_test.riv`,
+  `transition_duration_bind_list.riv`, and `two_bone_ik.riv` with verified
+  image/nested-artboard/data-binding/layout/constraint diagnostics; exact
+  remains 37, unsupported-feature is now 97, and not-yet is now 161.

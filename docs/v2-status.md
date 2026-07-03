@@ -21,11 +21,7 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue M2 sample widening: pick the next small animated `exact` corpus
-   file still pinned to sample `0`, add the first non-zero sample in a focused
-   corpus, and either keep it exact by porting the first divergence or record
-   the narrower blocker if it crosses into a later milestone.
-2. Continue M2 real object model work by modularizing the remaining
+1. Continue M2 real object model work by modularizing the remaining
    animation/state-machine surfaces out of `lib.rs` while keeping generated
    `InstanceObjectStorage` as the authored-property source of truth, but only
    when it unblocks a corpus diff or removes risky coupling. Component
@@ -34,6 +30,11 @@ the only memory the next session has. Update it every commit.
    lives in `crates/rive-runtime/src/animation.rs`, and
    state-machine inputs/events/listener/fire actions/view-model trigger runtime
    state seed `crates/rive-runtime/src/state_machine.rs`.
+2. Resume M2 sample widening after the object-model/modularization queue moves:
+   pick the next small animated `exact` corpus file still pinned to sample `0`,
+   add the first non-zero sample in a focused corpus, and either keep it exact
+   by porting the first divergence or record the narrower blocker if it crosses
+   into a later milestone.
 3. Add handle-source world-space math and nested-remap dependent advancement
    to the joystick path when a corpus diff reaches those cases.
 
@@ -868,3 +869,6 @@ the only memory the next session has. Update it every commit.
   and `0.25`, keeping direct/1D blend-state playback exact. Exact count
   remains 70; focused golden compare reports `exact=1`, `diverges=0`,
   `unsupported-feature=0`, `not-yet=0`.
+- 2026-07-03: [M2] Tripwire fired: repeated sample-widening commits kept the
+  project at `exact=70`, so the queue now pivots back to the M2 real object
+  model/modularization work before harvesting more sample-only coverage.

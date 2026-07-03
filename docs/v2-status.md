@@ -872,3 +872,8 @@ the only memory the next session has. Update it every commit.
 - 2026-07-03: [M2] Tripwire fired: repeated sample-widening commits kept the
   project at `exact=70`, so the queue now pivots back to the M2 real object
   model/modularization work before harvesting more sample-only coverage.
+- 2026-07-03: [M2] Modularized solo collapse runtime into `components.rs` and
+  joystick runtime metadata into `animation.rs`, keeping authored-property
+  mutation routed through `InstanceObjectArena`. Exact count remains 70;
+  `make golden-compare` reports `diverges=0`, `not-yet=0`, and
+  `cargo test --workspace` passes.

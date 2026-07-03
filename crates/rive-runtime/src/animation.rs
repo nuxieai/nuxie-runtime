@@ -2,6 +2,7 @@ use crate::{
     ArtboardInstance, StateMachineReportedEvent, TransformProperty, color_lerp, mix_value,
 };
 use rive_binary::RuntimeObject;
+use rive_graph::ArtboardGraph;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum RuntimeInterpolator {
@@ -22,6 +23,38 @@ pub(crate) enum RuntimeInterpolator {
         period: f32,
         easing_value: u64,
     },
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeJoystick {
+    pub(crate) local_id: usize,
+    pub(crate) can_apply_before_update: bool,
+    pub(crate) x_animation_index: Option<usize>,
+    pub(crate) y_animation_index: Option<usize>,
+}
+
+pub(crate) fn build_runtime_joysticks(
+    graph: &ArtboardGraph,
+    linear_animations: &[RuntimeLinearAnimation],
+) -> Vec<RuntimeJoystick> {
+    graph
+        .joysticks
+        .iter()
+        .map(|joystick| RuntimeJoystick {
+            local_id: joystick.local_id,
+            can_apply_before_update: joystick.can_apply_before_update,
+            x_animation_index: joystick.x_animation_global.and_then(|global_id| {
+                linear_animations
+                    .iter()
+                    .position(|animation| animation.global_id == global_id)
+            }),
+            y_animation_index: joystick.y_animation_global.and_then(|global_id| {
+                linear_animations
+                    .iter()
+                    .position(|animation| animation.global_id == global_id)
+            }),
+        })
+        .collect()
 }
 
 impl RuntimeInterpolator {

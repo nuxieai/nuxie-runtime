@@ -25,13 +25,15 @@ mod components;
 mod objects;
 mod state_machine;
 
-use animation::{AnimationLoop, RuntimeInterpolator};
+use animation::{AnimationLoop, RuntimeInterpolator, RuntimeJoystick, build_runtime_joysticks};
 pub use animation::{
     LinearAnimationInstance, RuntimeKeyFrameBool, RuntimeKeyFrameCallback, RuntimeKeyFrameColor,
     RuntimeKeyFrameDouble, RuntimeKeyFrameString, RuntimeKeyFrameUint, RuntimeKeyedObject,
     RuntimeKeyedProperty, RuntimeLinearAnimation,
 };
-use components::AuthoredTransform;
+use components::{
+    AuthoredTransform, RuntimeSolo, apply_initial_solo_collapses, build_runtime_solos,
+};
 pub use components::{
     ComponentDirt, Mat2D, RuntimeComponent, RuntimeComponentCapabilities, TransformProperty,
     TransformRuntimeState, UpdateComponentsReport,
@@ -1326,28 +1328,6 @@ impl ArtboardInstance {
         }
         changed
     }
-}
-
-#[derive(Debug, Clone)]
-struct RuntimeSolo {
-    local_id: usize,
-    active_component_property_key: u16,
-    runtime_local_by_cpp_local: BTreeMap<usize, usize>,
-    children: Vec<RuntimeSoloChild>,
-}
-
-#[derive(Debug, Clone, Copy)]
-struct RuntimeSoloChild {
-    local_id: usize,
-    participates: bool,
-}
-
-#[derive(Debug, Clone)]
-struct RuntimeJoystick {
-    local_id: usize,
-    can_apply_before_update: bool,
-    x_animation_index: Option<usize>,
-    y_animation_index: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -24459,136 +24439,6 @@ struct BlendAnimationDirectInstance {
     source: RuntimeDirectBlendSource,
     animation: LinearAnimationInstance,
     mix: f32,
-}
-
-fn build_runtime_solos(file: &RuntimeFile, graph: &ArtboardGraph) -> Vec<RuntimeSolo> {
-    let Some(active_component_property_key) = solo_active_component_id_property_key() else {
-        return Vec::new();
-    };
-    let runtime_local_by_cpp_local = artboard_index_for_graph(file, graph)
-        .map(|artboard_index| runtime_local_by_cpp_artboard_local(file, graph, artboard_index))
-        .unwrap_or_default();
-
-    graph
-        .components
-        .iter()
-        .filter(|component| component.type_name == "Solo")
-        .map(|solo| RuntimeSolo {
-            local_id: solo.local_id,
-            active_component_property_key,
-            runtime_local_by_cpp_local: runtime_local_by_cpp_local.clone(),
-            children: solo
-                .children
-                .iter()
-                .map(|child_local| RuntimeSoloChild {
-                    local_id: *child_local,
-                    participates: runtime_solo_child_participates(graph, *child_local),
-                })
-                .collect(),
-        })
-        .collect()
-}
-
-fn build_runtime_joysticks(
-    graph: &ArtboardGraph,
-    linear_animations: &[RuntimeLinearAnimation],
-) -> Vec<RuntimeJoystick> {
-    graph
-        .joysticks
-        .iter()
-        .map(|joystick| RuntimeJoystick {
-            local_id: joystick.local_id,
-            can_apply_before_update: joystick.can_apply_before_update,
-            x_animation_index: joystick.x_animation_global.and_then(|global_id| {
-                linear_animations
-                    .iter()
-                    .position(|animation| animation.global_id == global_id)
-            }),
-            y_animation_index: joystick.y_animation_global.and_then(|global_id| {
-                linear_animations
-                    .iter()
-                    .position(|animation| animation.global_id == global_id)
-            }),
-        })
-        .collect()
-}
-
-// Mirrors src/solo.cpp Solo::propagateCollapse for the imported static state.
-fn apply_initial_solo_collapses(
-    objects: &InstanceObjectArena,
-    solos: &[RuntimeSolo],
-    components: &mut [RuntimeComponent],
-    component_by_local: &BTreeMap<usize, usize>,
-) {
-    for solo in solos {
-        let solo_collapsed = component_by_local
-            .get(&solo.local_id)
-            .is_some_and(|index| components[*index].is_collapsed());
-        let active_local = objects
-            .uint_property(solo.local_id, solo.active_component_property_key)
-            .and_then(|id| usize::try_from(id).ok())
-            .and_then(|active_index| solo.runtime_local_by_cpp_local.get(&active_index).copied());
-
-        for child_local in &solo.children {
-            let collapsed = if child_local.participates {
-                solo_collapsed || Some(child_local.local_id) != active_local
-            } else {
-                solo_collapsed
-            };
-            if let Some(index) = component_by_local.get(&child_local.local_id).copied() {
-                set_runtime_component_collapsed(&mut components[index], collapsed);
-            }
-        }
-    }
-}
-
-fn runtime_solo_child_participates(graph: &ArtboardGraph, child_local: usize) -> bool {
-    let Some(child) = graph
-        .components
-        .iter()
-        .find(|component| component.local_id == child_local)
-    else {
-        return true;
-    };
-    let Some(definition) = definition_by_name(child.type_name) else {
-        return true;
-    };
-    !definition.is_a("Constraint") && !definition.is_a("ClippingShape")
-}
-
-fn runtime_graph_local_for_cpp_artboard_local(
-    file: &RuntimeFile,
-    graph: &ArtboardGraph,
-    artboard_index: usize,
-    local_index: usize,
-) -> Option<usize> {
-    let object = file.artboard_local_object(artboard_index, local_index)?;
-    graph
-        .local_objects
-        .iter()
-        .find(|local_object| local_object.global_id == object.id)
-        .map(|local_object| local_object.local_id)
-}
-
-fn runtime_local_by_cpp_artboard_local(
-    file: &RuntimeFile,
-    graph: &ArtboardGraph,
-    artboard_index: usize,
-) -> BTreeMap<usize, usize> {
-    (0..graph.local_objects.len())
-        .filter_map(|local_index| {
-            runtime_graph_local_for_cpp_artboard_local(file, graph, artboard_index, local_index)
-                .map(|runtime_local| (local_index, runtime_local))
-        })
-        .collect()
-}
-
-fn set_runtime_component_collapsed(component: &mut RuntimeComponent, collapsed: bool) {
-    if collapsed {
-        component.dirt |= ComponentDirt::COLLAPSED;
-    } else {
-        component.dirt &= !ComponentDirt::COLLAPSED;
-    }
 }
 
 fn callback_event_for_keyed_property(

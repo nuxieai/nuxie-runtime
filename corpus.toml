@@ -1,0 +1,58 @@
+# Golden corpus manifest for the V2 end-to-end render stream ratchet.
+# Paths are relative to RIVE_RUNTIME_DIR unless absolute.
+
+[[file]]
+id = "trim_path_linear"
+path = "tests/unit_tests/assets/trim_path_linear.riv"
+samples = [0.0, 0.25]
+status = "not-yet"
+features = ["type:Artboard", "type:Backboard", "type:Fill", "type:LinearAnimation", "type:PointsPath", "type:Shape", "type:SolidColor", "type:StraightVertex", "type:Stroke", "type:TrimPath"]
+
+[[file]]
+id = "dependency_test"
+path = "tests/unit_tests/assets/dependency_test.riv"
+samples = [0.0]
+status = "not-yet"
+features = ["type:Artboard", "type:Backboard", "type:Fill", "type:LinearAnimation", "type:Node", "type:PointsPath", "type:Shape", "type:SolidColor", "type:StraightVertex", "type:Stroke"]
+
+[[file]]
+id = "advance_blend_mode"
+path = "tests/unit_tests/assets/advance_blend_mode.riv"
+samples = [0.0, 0.25]
+status = "not-yet"
+features = ["type:AnimationState", "type:AnyState", "type:Artboard", "type:Backboard", "type:BindablePropertyNumber", "type:BlendAnimationDirect", "type:BlendStateDirect", "type:BlendStateTransition", "type:DataBindContext", "type:EntryState", "type:ExitState", "type:Fill", "type:KeyFrameColor", "type:KeyedObject", "type:KeyedProperty", "type:LayoutComponentStyle", "type:LinearAnimation", "type:NestedArtboard", "type:NestedNumber", "type:NestedStateMachine", "type:Rectangle", "type:Shape", "type:SolidColor", "type:StateMachine", "type:StateMachineLayer", "type:StateMachineNumber", "type:StateTransition", "type:ViewModel", "type:ViewModelInstance", "type:ViewModelInstanceNumber", "type:ViewModelPropertyNumber"]
+
+[[file]]
+id = "clip_tests"
+path = "tests/unit_tests/assets/clip_tests.riv"
+samples = [0.0, 0.25]
+status = "not-yet"
+features = ["type:AnimationState", "type:AnyState", "type:Artboard", "type:Backboard", "type:ClippingShape", "type:Ellipse", "type:EntryState", "type:ExitState", "type:Fill", "type:LinearAnimation", "type:Rectangle", "type:Shape", "type:SolidColor", "type:StateMachine", "type:StateMachineLayer", "type:StateTransition"]
+
+[[file]]
+id = "pointer_events"
+path = "tests/unit_tests/assets/pointer_events.riv"
+samples = [0.0, 0.1]
+status = "not-yet"
+features = ["type:AnimationState", "type:AnyState", "type:Artboard", "type:Backboard", "type:EntryState", "type:ExitState", "type:Fill", "type:LayoutComponentStyle", "type:LinearAnimation", "type:ListenerBoolChange", "type:Rectangle", "type:Shape", "type:SolidColor", "type:StateMachine", "type:StateMachineBool", "type:StateMachineLayer", "type:StateMachineListenerSingle", "type:StateTransition"]
+
+[[file]]
+id = "runtime_nested_inputs"
+path = "tests/unit_tests/assets/runtime_nested_inputs.riv"
+samples = [0.0, 0.25]
+status = "not-yet"
+features = ["type:AnimationState", "type:AnyState", "type:Artboard", "type:Backboard", "type:Ellipse", "type:EntryState", "type:ExitState", "type:Fill", "type:KeyFrameColor", "type:KeyedObject", "type:KeyedProperty", "type:LayoutComponentStyle", "type:LinearAnimation", "type:ListenerBoolChange", "type:NestedArtboard", "type:NestedBool", "type:NestedNumber", "type:NestedStateMachine", "type:NestedTrigger", "type:Shape", "type:SolidColor", "type:StateMachine", "type:StateMachineBool", "type:StateMachineLayer", "type:StateMachineListenerSingle", "type:StateMachineNumber", "type:StateMachineTrigger", "type:StateTransition", "type:TransitionBoolCondition"]
+
+[[file]]
+id = "component_list_1"
+path = "tests/unit_tests/assets/component_list_1.riv"
+samples = [0.0]
+status = "not-yet"
+features = ["type:AnimationState", "type:AnyState", "type:Artboard", "type:ArtboardComponentList", "type:Backboard", "type:DataBindContext", "type:ElasticScrollPhysics", "type:EntryState", "type:ExitState", "type:FileAssetContents", "type:Fill", "type:FontAsset", "type:KeyFrameColor", "type:KeyedObject", "type:KeyedProperty", "type:LayoutComponent", "type:LayoutComponentStyle", "type:LinearAnimation", "type:ListenerBoolChange", "type:ScrollConstraint", "type:SolidColor", "type:StateMachine", "type:StateMachineBool", "type:StateMachineLayer", "type:StateMachineListenerSingle", "type:StateTransition", "type:Text", "type:TextStyleAxis", "type:TextStylePaint", "type:TextValueRun", "type:TransitionBoolCondition", "type:ViewModel", "type:ViewModelInstance", "type:ViewModelInstanceList", "type:ViewModelInstanceListItem", "type:ViewModelInstanceString", "type:ViewModelPropertyList", "type:ViewModelPropertyString"]
+
+[[file]]
+id = "data_binding_test"
+path = "tests/unit_tests/assets/data_binding_test.riv"
+samples = [0.0]
+status = "not-yet"
+features = ["type:AnimationState", "type:AnyState", "type:Artboard", "type:Backboard", "type:BindablePropertyEnum", "type:BindablePropertyTrigger", "type:CustomPropertyNumber", "type:DataBindContext", "type:DataConverterFormula", "type:DataConverterGroup", "type:DataConverterGroupItem", "type:DataConverterOperationValue", "type:DataConverterStringTrim", "type:DataConverterSystemDegsToRads", "type:DataConverterToString", "type:DataEnumCustom", "type:DataEnumValue", "type:EntryState", "type:ExitState", "type:FileAssetContents", "type:Fill", "type:FollowPathConstraint", "type:FontAsset", "type:ForegroundLayoutDrawable", "type:FormulaTokenArgumentSeparator", "type:FormulaTokenFunction", "type:FormulaTokenInput", "type:FormulaTokenOperation", "type:FormulaTokenParenthesisClose", "type:FormulaTokenParenthesisOpen", "type:FormulaTokenValue", "type:KeyFrameColor", "type:KeyFrameDouble", "type:KeyedObject", "type:KeyedProperty", "type:LayoutComponent", "type:LayoutComponentStyle", "type:LinearAnimation", "type:PointsPath", "type:Rectangle", "type:Shape", "type:SolidColor", "type:StateMachine", "type:StateMachineLayer", "type:StateTransition", "type:StraightVertex", "type:Stroke", "type:Text", "type:TextStyleAxis", "type:TextStylePaint", "type:TextValueRun", "type:TransitionPropertyViewModelComparator", "type:TransitionValueEnumComparator", "type:TransitionValueTriggerComparator", "type:TransitionViewModelCondition", "type:ViewModel", "type:ViewModelInstance", "type:ViewModelInstanceBoolean", "type:ViewModelInstanceColor", "type:ViewModelInstanceEnum", "type:ViewModelInstanceNumber", "type:ViewModelInstanceString", "type:ViewModelInstanceTrigger", "type:ViewModelPropertyBoolean", "type:ViewModelPropertyColor", "type:ViewModelPropertyEnumCustom", "type:ViewModelPropertyNumber", "type:ViewModelPropertyString", "type:ViewModelPropertyTrigger"]

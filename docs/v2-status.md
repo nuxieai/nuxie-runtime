@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: n/a (golden harness not yet built)
+- Corpus files `exact`: 0
 - Current milestone: **M0 — Golden Harness And Renderer Seam (#V2-1)**
 
 ## Milestones
@@ -21,8 +21,9 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. `make golden-compare` + `corpus.toml` seeded from `tests/unit_tests/assets` with type-key tags from `riv-inspect`.
-2. First exact file: a trivial static rectangle fixture, end to end.
+1. First exact file: a trivial static rectangle fixture, end to end.
+2. Expand `corpus.toml` from the initial seed to the full
+   `tests/unit_tests/assets` set with type-key tags from `riv-inspect`.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -38,6 +39,9 @@ the only memory the next session has. Update it every commit.
   sample segments from that stream.
 - 2026-07-02: `rive-render-api` owns the renderer seam; `rive-runtime` should
   drive those traits when static drawing moves from reports to real rendering.
+- 2026-07-02: `golden-compare` validates the C++ stream for `not-yet` entries
+  and refuses `exact` entries unless a Rust runner is supplied, keeping the
+  exact count honest while the Rust draw path is still absent.
 
 ## Log
 
@@ -51,3 +55,5 @@ the only memory the next session has. Update it every commit.
   renderer/factory/resource traits and a recording serializer whose smoke
   output matches the C++ golden runner stream; `make golden-compare` still not
   present.
+- 2026-07-02: [M0] Added `corpus.toml` with 8 seeded C++ unit-test assets,
+  `tools/golden-compare`, and `make golden-compare`; exact count is now 0.

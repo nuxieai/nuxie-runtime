@@ -5,6 +5,7 @@ members = [
     "crates/rive-render-api",
     "crates/rive-runtime",
     "crates/rive-schema",
+    "tools/golden-compare",
     "tools/rive-codegen",
 ]
 resolver = "3"

@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use rive_binary::{
-    RuntimeFile, RuntimeImportStatus, RuntimeObject, RuntimeViewModel, RuntimeViewModelInstance,
-    RuntimeViewModelInstanceReference,
+    BytesValue, FieldValue, RuntimeFile, RuntimeImportStatus, RuntimeObject, RuntimeProperty,
+    RuntimeViewModel, RuntimeViewModelInstance, RuntimeViewModelInstanceReference, StringValue,
 };
 use rive_graph::{
     ArtboardGraph, ClippingShapeNode, ComponentNode, DashNode, DrawableOrderKind, FeatherNode,
@@ -29,12 +29,9 @@ pub struct ArtboardInstance {
     origin_y: f32,
     clip: bool,
     slots: Vec<InstanceSlot>,
+    objects: InstanceObjectArena,
     components: Vec<RuntimeComponent>,
     component_by_local: BTreeMap<usize, usize>,
-    color_properties: BTreeMap<(usize, u16), u32>,
-    bool_properties: BTreeMap<(usize, u16), bool>,
-    uint_properties: BTreeMap<(usize, u16), u64>,
-    string_properties: BTreeMap<(usize, u16), Vec<u8>>,
     update_order: Vec<usize>,
     linear_animations: Vec<RuntimeLinearAnimation>,
     state_machines: Vec<RuntimeStateMachine>,
@@ -66,6 +63,7 @@ impl ArtboardInstance {
                 component_index: None,
             });
         }
+        let objects = InstanceObjectArena::from_slots(file, &slots);
 
         let mut component_by_local = BTreeMap::new();
         let mut components = Vec::new();
@@ -109,12 +107,9 @@ impl ArtboardInstance {
             origin_y: dimensions.origin_y,
             clip: dimensions.clip,
             slots,
+            objects,
             components,
             component_by_local,
-            color_properties: BTreeMap::new(),
-            bool_properties: BTreeMap::new(),
-            uint_properties: BTreeMap::new(),
-            string_properties: BTreeMap::new(),
             update_order,
             linear_animations,
             state_machines,
@@ -789,59 +784,61 @@ impl ArtboardInstance {
     }
 
     fn color_property(&self, local_id: usize, property_key: u16) -> Option<u32> {
-        self.color_properties
-            .get(&(local_id, property_key))
-            .copied()
+        self.objects.color_property(local_id, property_key)
     }
 
     fn set_color_property(&mut self, local_id: usize, property_key: u16, value: u32) -> bool {
-        if self.color_property(local_id, property_key) == Some(value) {
+        if !self
+            .objects
+            .set_color_property(local_id, property_key, value)
+        {
             return false;
         }
-        self.color_properties
-            .insert((local_id, property_key), value);
         self.did_change = true;
         true
     }
 
     fn bool_property(&self, local_id: usize, property_key: u16) -> Option<bool> {
-        self.bool_properties.get(&(local_id, property_key)).copied()
+        self.objects.bool_property(local_id, property_key)
     }
 
     fn set_bool_property(&mut self, local_id: usize, property_key: u16, value: bool) -> bool {
-        if self.bool_property(local_id, property_key) == Some(value) {
+        if !self
+            .objects
+            .set_bool_property(local_id, property_key, value)
+        {
             return false;
         }
-        self.bool_properties.insert((local_id, property_key), value);
         self.did_change = true;
         true
     }
 
     fn uint_property(&self, local_id: usize, property_key: u16) -> Option<u64> {
-        self.uint_properties.get(&(local_id, property_key)).copied()
+        self.objects.uint_property(local_id, property_key)
     }
 
     fn set_uint_property(&mut self, local_id: usize, property_key: u16, value: u64) -> bool {
-        if self.uint_property(local_id, property_key) == Some(value) {
+        if !self
+            .objects
+            .set_uint_property(local_id, property_key, value)
+        {
             return false;
         }
-        self.uint_properties.insert((local_id, property_key), value);
         self.did_change = true;
         true
     }
 
     fn string_property(&self, local_id: usize, property_key: u16) -> Option<&[u8]> {
-        self.string_properties
-            .get(&(local_id, property_key))
-            .map(Vec::as_slice)
+        self.objects.string_property(local_id, property_key)
     }
 
     fn set_string_property(&mut self, local_id: usize, property_key: u16, value: Vec<u8>) -> bool {
-        if self.string_property(local_id, property_key) == Some(value.as_slice()) {
+        if !self
+            .objects
+            .set_string_property(local_id, property_key, value)
+        {
             return false;
         }
-        self.string_properties
-            .insert((local_id, property_key), value);
         self.did_change = true;
         true
     }
@@ -1114,6 +1111,133 @@ pub struct InstanceSlot {
     pub type_name: Option<&'static str>,
     pub name: Option<String>,
     pub component_index: Option<usize>,
+}
+
+#[derive(Debug, Clone)]
+struct InstanceObjectArena {
+    objects: Vec<Option<RuntimeObject>>,
+}
+
+impl InstanceObjectArena {
+    fn from_slots(file: &RuntimeFile, slots: &[InstanceSlot]) -> Self {
+        let mut objects = vec![None; slots.len()];
+        for slot in slots {
+            if slot.local_id >= objects.len() {
+                objects.resize(slot.local_id + 1, None);
+            }
+            objects[slot.local_id] = file.object(slot.source_global_id as usize).cloned();
+        }
+        Self { objects }
+    }
+
+    #[cfg(test)]
+    fn empty_for_slots(len: usize) -> Self {
+        Self {
+            objects: vec![None; len],
+        }
+    }
+
+    fn object(&self, local_id: usize) -> Option<&RuntimeObject> {
+        self.objects.get(local_id)?.as_ref()
+    }
+
+    fn object_mut(&mut self, local_id: usize) -> Option<&mut RuntimeObject> {
+        self.objects.get_mut(local_id)?.as_mut()
+    }
+
+    fn property_kind(&self, local_id: usize, property_key: u16) -> Option<FieldKind> {
+        let object = self.object(local_id)?;
+        runtime_object_field_kind_by_key(object, property_key)
+    }
+
+    fn color_property(&self, local_id: usize, property_key: u16) -> Option<u32> {
+        self.object(local_id)
+            .and_then(|object| runtime_object_color_property_by_key(object, property_key))
+    }
+
+    fn set_color_property(&mut self, local_id: usize, property_key: u16, value: u32) -> bool {
+        self.set_property_value(local_id, property_key, FieldValue::Color(value))
+    }
+
+    fn bool_property(&self, local_id: usize, property_key: u16) -> Option<bool> {
+        self.object(local_id)
+            .and_then(|object| runtime_object_bool_property_by_key(object, property_key))
+    }
+
+    fn set_bool_property(&mut self, local_id: usize, property_key: u16, value: bool) -> bool {
+        self.set_property_value(local_id, property_key, FieldValue::Bool(value))
+    }
+
+    fn uint_property(&self, local_id: usize, property_key: u16) -> Option<u64> {
+        self.object(local_id)
+            .and_then(|object| runtime_object_uint_property_by_key(object, property_key))
+    }
+
+    fn set_uint_property(&mut self, local_id: usize, property_key: u16, value: u64) -> bool {
+        self.set_property_value(local_id, property_key, FieldValue::Uint(value))
+    }
+
+    fn string_property(&self, local_id: usize, property_key: u16) -> Option<&[u8]> {
+        self.object(local_id)
+            .and_then(|object| runtime_object_string_property_bytes_by_key(object, property_key))
+    }
+
+    fn set_string_property(&mut self, local_id: usize, property_key: u16, value: Vec<u8>) -> bool {
+        let Some(kind) = self.property_kind(local_id, property_key) else {
+            return false;
+        };
+        let value = match kind {
+            FieldKind::String => FieldValue::String(StringValue {
+                value: String::from_utf8(value.clone()).ok(),
+                raw: value,
+            }),
+            FieldKind::Bytes => FieldValue::Bytes(BytesValue::new(value)),
+            _ => return false,
+        };
+        self.set_property_value(local_id, property_key, value)
+    }
+
+    fn set_property_value(
+        &mut self,
+        local_id: usize,
+        property_key: u16,
+        value: FieldValue,
+    ) -> bool {
+        let Some(type_key) = self.object(local_id).map(|object| object.type_key) else {
+            return false;
+        };
+        let Some((owner, property)) = runtime_property_metadata_by_key(type_key, property_key)
+        else {
+            return false;
+        };
+        if !field_value_matches_kind(&value, property.runtime_type) {
+            return false;
+        }
+
+        let Some(object) = self.object_mut(local_id) else {
+            return false;
+        };
+        if let Some(existing) = object
+            .properties
+            .iter_mut()
+            .rev()
+            .find(|property| property.key == property_key)
+        {
+            if existing.value == value {
+                return false;
+            }
+            existing.value = value;
+            return true;
+        }
+
+        object.properties.push(RuntimeProperty {
+            key: property_key,
+            name: property.name,
+            owner,
+            value,
+        });
+        true
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20346,6 +20470,37 @@ fn runtime_property_name_by_key(object: &RuntimeObject, property_key: u16) -> Op
         .map(|property| property.name)
 }
 
+fn runtime_property_metadata_by_key(
+    type_key: u16,
+    property_key: u16,
+) -> Option<(&'static str, &'static rive_schema::Property)> {
+    let definition = definition_by_type_key(type_key)?;
+    definition
+        .property_by_key(property_key)
+        .map(|property| (definition.name, property))
+        .or_else(|| {
+            definition.ancestors.iter().find_map(|ancestor| {
+                let definition = definition_by_name(ancestor)?;
+                definition
+                    .property_by_key(property_key)
+                    .map(|property| (*ancestor, property))
+            })
+        })
+}
+
+fn field_value_matches_kind(value: &FieldValue, kind: FieldKind) -> bool {
+    matches!(
+        (value, kind),
+        (FieldValue::Bool(_), FieldKind::Bool)
+            | (FieldValue::Bytes(_), FieldKind::Bytes)
+            | (FieldValue::Callback, FieldKind::Callback)
+            | (FieldValue::Color(_), FieldKind::Color)
+            | (FieldValue::Double(_), FieldKind::Double)
+            | (FieldValue::String(_), FieldKind::String)
+            | (FieldValue::Uint(_), FieldKind::Uint)
+    )
+}
+
 fn runtime_object_field_kind_by_key(
     object: &RuntimeObject,
     property_key: u16,
@@ -20375,15 +20530,18 @@ fn runtime_object_string_property_by_key(
     object: &RuntimeObject,
     property_key: u16,
 ) -> Option<Vec<u8>> {
+    runtime_object_string_property_bytes_by_key(object, property_key).map(|value| value.to_vec())
+}
+
+fn runtime_object_string_property_bytes_by_key(
+    object: &RuntimeObject,
+    property_key: u16,
+) -> Option<&[u8]> {
     let property =
         definition_by_type_key(object.type_key)?.property_by_key_in_hierarchy(property_key)?;
     match property.runtime_type {
-        FieldKind::String => object
-            .string_property_bytes(property.name)
-            .map(|value| value.to_vec()),
-        FieldKind::Bytes => object
-            .bytes_property(property.name)
-            .map(|value| value.to_vec()),
+        FieldKind::String => object.string_property_bytes(property.name),
+        FieldKind::Bytes => object.bytes_property(property.name),
         _ => None,
     }
 }
@@ -28232,29 +28390,29 @@ mod tests {
             .map(|(index, component)| (component.local_id, index))
             .collect::<BTreeMap<_, _>>();
 
+        let slots = components
+            .iter()
+            .enumerate()
+            .map(|(index, component)| InstanceSlot {
+                local_id: component.local_id,
+                source_global_id: component.global_id,
+                type_name: Some(component.type_name),
+                name: None,
+                component_index: Some(index),
+            })
+            .collect::<Vec<_>>();
+        let objects = InstanceObjectArena::empty_for_slots(slots.len());
+
         ArtboardInstance {
             width: 0.0,
             height: 0.0,
             origin_x: 0.0,
             origin_y: 0.0,
             clip: true,
-            slots: components
-                .iter()
-                .enumerate()
-                .map(|(index, component)| InstanceSlot {
-                    local_id: component.local_id,
-                    source_global_id: component.global_id,
-                    type_name: Some(component.type_name),
-                    name: None,
-                    component_index: Some(index),
-                })
-                .collect(),
+            slots,
+            objects,
             components,
             component_by_local,
-            color_properties: BTreeMap::new(),
-            bool_properties: BTreeMap::new(),
-            uint_properties: BTreeMap::new(),
-            string_properties: BTreeMap::new(),
             update_order,
             linear_animations: Vec::new(),
             state_machines: Vec::new(),

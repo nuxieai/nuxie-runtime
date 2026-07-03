@@ -21,12 +21,11 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Start M2 with the real object model tracer bullet before adding
-   file-specific animation fixes: generate or wire concrete runtime object
-   storage plus setter/getter dispatch from `rive-schema`, give
-   `ArtboardInstance` a cloned object arena instead of property overlays, and
-   keep the static renderer exact count at 54 while landing the first tiny
-   keyframe-driven property through that path.
+1. Continue M2 real object model work by replacing the generic cloned
+   `RuntimeObject` arena tracer with generated concrete object storage plus
+   schema-generated setter/getter dispatch for the first animated property
+   family, then use that path to move one M2 `not-yet` corpus file toward
+   `exact`.
 2. `joystick_flag_test` is parked for M2: its sample-0 first diff is joystick
    application/default state-machine behavior, while Rust still draws the
    imported static state.
@@ -628,3 +627,11 @@ the only memory the next session has. Update it every commit.
   (`exact=54`, `diverges=0`, `unsupported-feature=224`, `not-yet=17`), and
   `cargo test --workspace`; M1 is complete and the active milestone moves to
   M2.
+- 2026-07-03: [M2] Added the first real-object-model tracer: `ArtboardInstance`
+  now owns a cloned object arena built from imported slots, and schema-keyed
+  color/bool/uint/string animation getters/setters mutate cloned
+  `RuntimeObject` properties instead of side overlay maps. Verified
+  `make golden-compare` (`exact=54`, `diverges=0`,
+  `unsupported-feature=224`, `not-yet=17`) and `cargo test --workspace`;
+  next M2 work is replacing the generic arena internals with generated
+  concrete object storage and generated setter/getter dispatch.

@@ -21,8 +21,7 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Gate `distance_constraint` with the verified constraint diagnostic.
-2. Inspect `circle_clips` and `trim_path_linear` for the next exact candidate
+1. Inspect `circle_clips` and `trim_path_linear` for the next exact candidate
    or later-milestone boundary.
 
 ## Backlog (unsupported features awaiting corpus demand)
@@ -132,3 +131,6 @@ the only memory the next session has. Update it every commit.
   exact remains 5, unsupported-feature is now 48, and not-yet is now 242.
 - 2026-07-02: [M1] Marked `two_artboards.riv` exact at sample `0`; exact
   count is now 6.
+- 2026-07-02: [M1] Gated `distance_constraint.riv` as a verified constraint
+  unsupported diagnostic; exact remains 6, unsupported-feature is now 49, and
+  not-yet is now 240.

@@ -32,6 +32,7 @@ pub struct ArtboardInstance {
     objects: InstanceObjectArena,
     components: Vec<RuntimeComponent>,
     component_by_local: BTreeMap<usize, usize>,
+    solos: Vec<RuntimeSolo>,
     update_order: Vec<usize>,
     linear_animations: Vec<RuntimeLinearAnimation>,
     state_machines: Vec<RuntimeStateMachine>,
@@ -95,10 +96,11 @@ impl ArtboardInstance {
             .into_iter()
             .map(|(_, local_id)| local_id)
             .collect::<Vec<_>>();
+        let solos = build_runtime_solos(file, graph);
         let linear_animations = build_linear_animations(file, graph, &slots);
         let state_machines = build_state_machines(file, graph, &linear_animations);
         let artboard_list_bindings = build_artboard_list_bindings(file, graph);
-        apply_initial_solo_collapses(file, graph, &mut components, &component_by_local);
+        apply_initial_solo_collapses(&objects, &solos, &mut components, &component_by_local);
 
         Ok(Self {
             width: dimensions.width,
@@ -110,6 +112,7 @@ impl ArtboardInstance {
             objects,
             components,
             component_by_local,
+            solos,
             update_order,
             linear_animations,
             state_machines,
@@ -825,6 +828,7 @@ impl ArtboardInstance {
             return false;
         }
         self.did_change = true;
+        self.apply_uint_property_changed(local_id, property_key);
         true
     }
 
@@ -1018,6 +1022,7 @@ impl ArtboardInstance {
             self.components[index].dirt &= !ComponentDirt::COLLAPSED;
         }
         self.on_component_dirty(local_id);
+        self.apply_component_collapse_changed(local_id);
         true
     }
 
@@ -1102,6 +1107,61 @@ impl ArtboardInstance {
             self.components[component_index].update_render_opacity(parent_opacity);
         }
     }
+
+    fn apply_uint_property_changed(&mut self, local_id: usize, property_key: u16) -> bool {
+        if solo_active_component_id_property_key() != Some(property_key) {
+            return false;
+        }
+        self.propagate_solo_collapse(local_id)
+    }
+
+    fn apply_component_collapse_changed(&mut self, local_id: usize) -> bool {
+        self.propagate_solo_collapse(local_id)
+    }
+
+    fn propagate_solo_collapse(&mut self, solo_local_id: usize) -> bool {
+        let Some(solo) = self
+            .solos
+            .iter()
+            .find(|solo| solo.local_id == solo_local_id)
+            .cloned()
+        else {
+            return false;
+        };
+
+        let solo_collapsed = self
+            .component(solo.local_id)
+            .is_some_and(RuntimeComponent::is_collapsed);
+        let active_local = self
+            .uint_property(solo.local_id, solo.active_component_property_key)
+            .and_then(|id| usize::try_from(id).ok())
+            .and_then(|id| solo.runtime_local_by_cpp_local.get(&id).copied());
+
+        let mut changed = false;
+        for child in solo.children {
+            let collapsed = if child.participates {
+                solo_collapsed || Some(child.local_id) != active_local
+            } else {
+                solo_collapsed
+            };
+            changed |= self.collapse_component(child.local_id, collapsed);
+        }
+        changed
+    }
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeSolo {
+    local_id: usize,
+    active_component_property_key: u16,
+    runtime_local_by_cpp_local: BTreeMap<usize, usize>,
+    children: Vec<RuntimeSoloChild>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RuntimeSoloChild {
+    local_id: usize,
+    participates: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -25576,44 +25636,57 @@ impl RuntimeComponent {
     }
 }
 
-// Mirrors src/solo.cpp Solo::propagateCollapse for the imported static state.
-fn apply_initial_solo_collapses(
-    file: &RuntimeFile,
-    graph: &ArtboardGraph,
-    components: &mut [RuntimeComponent],
-    component_by_local: &BTreeMap<usize, usize>,
-) {
-    for solo in graph
+fn build_runtime_solos(file: &RuntimeFile, graph: &ArtboardGraph) -> Vec<RuntimeSolo> {
+    let Some(active_component_property_key) = solo_active_component_id_property_key() else {
+        return Vec::new();
+    };
+    let runtime_local_by_cpp_local = artboard_index_for_graph(file, graph)
+        .map(|artboard_index| runtime_local_by_cpp_artboard_local(file, graph, artboard_index))
+        .unwrap_or_default();
+
+    graph
         .components
         .iter()
         .filter(|component| component.type_name == "Solo")
-    {
+        .map(|solo| RuntimeSolo {
+            local_id: solo.local_id,
+            active_component_property_key,
+            runtime_local_by_cpp_local: runtime_local_by_cpp_local.clone(),
+            children: solo
+                .children
+                .iter()
+                .map(|child_local| RuntimeSoloChild {
+                    local_id: *child_local,
+                    participates: runtime_solo_child_participates(graph, *child_local),
+                })
+                .collect(),
+        })
+        .collect()
+}
+
+// Mirrors src/solo.cpp Solo::propagateCollapse for the imported static state.
+fn apply_initial_solo_collapses(
+    objects: &InstanceObjectArena,
+    solos: &[RuntimeSolo],
+    components: &mut [RuntimeComponent],
+    component_by_local: &BTreeMap<usize, usize>,
+) {
+    for solo in solos {
         let solo_collapsed = component_by_local
             .get(&solo.local_id)
             .is_some_and(|index| components[*index].is_collapsed());
-        let artboard_index = artboard_index_for_graph(file, graph);
-        let active_local = file
-            .object(solo.global_id as usize)
-            .and_then(|object| object.uint_property("activeComponentId"))
+        let active_local = objects
+            .uint_property(solo.local_id, solo.active_component_property_key)
             .and_then(|id| usize::try_from(id).ok())
-            .and_then(|active_index| {
-                artboard_index.and_then(|artboard_index| {
-                    runtime_graph_local_for_cpp_artboard_local(
-                        file,
-                        graph,
-                        artboard_index,
-                        active_index,
-                    )
-                })
-            });
+            .and_then(|active_index| solo.runtime_local_by_cpp_local.get(&active_index).copied());
 
         for child_local in &solo.children {
-            let collapsed = if runtime_solo_child_participates(graph, *child_local) {
-                solo_collapsed || Some(*child_local) != active_local
+            let collapsed = if child_local.participates {
+                solo_collapsed || Some(child_local.local_id) != active_local
             } else {
                 solo_collapsed
             };
-            if let Some(index) = component_by_local.get(child_local).copied() {
+            if let Some(index) = component_by_local.get(&child_local.local_id).copied() {
                 set_runtime_component_collapsed(&mut components[index], collapsed);
             }
         }
@@ -25646,6 +25719,19 @@ fn runtime_graph_local_for_cpp_artboard_local(
         .iter()
         .find(|local_object| local_object.global_id == object.id)
         .map(|local_object| local_object.local_id)
+}
+
+fn runtime_local_by_cpp_artboard_local(
+    file: &RuntimeFile,
+    graph: &ArtboardGraph,
+    artboard_index: usize,
+) -> BTreeMap<usize, usize> {
+    (0..graph.local_objects.len())
+        .filter_map(|local_index| {
+            runtime_graph_local_for_cpp_artboard_local(file, graph, artboard_index, local_index)
+                .map(|runtime_local| (local_index, runtime_local))
+        })
+        .collect()
 }
 
 fn set_runtime_component_collapsed(component: &mut RuntimeComponent, collapsed: bool) {
@@ -27440,6 +27526,10 @@ fn shape_paint_is_visible_property_key() -> Option<u16> {
     property_key_for_name("ShapePaint", "isVisible")
 }
 
+fn solo_active_component_id_property_key() -> Option<u16> {
+    property_key_for_name("Solo", "activeComponentId")
+}
+
 fn property_key_for_name(type_name: &str, property_name: &str) -> Option<u16> {
     let definition = definition_by_name(type_name)?;
     if let Some(property) = definition
@@ -28413,6 +28503,7 @@ mod tests {
             objects,
             components,
             component_by_local,
+            solos: Vec::new(),
             update_order,
             linear_animations: Vec::new(),
             state_machines: Vec::new(),

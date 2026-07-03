@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 57
+- Corpus files `exact`: 59
 - Current milestone: **M2 — Animated Playback Exact + Real Object Model (#V2-3)**
 
 ## Milestones
@@ -21,14 +21,13 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue M2 real object model work by replacing the generic cloned
+1. Port C++ `Joystick::apply`/artboard advance ordering enough for
+   `joystick_flag_test` sample `0`; current first diff is joystick-driven
+   transform positions after default state-machine startup.
+2. Continue M2 real object model work by replacing the generic cloned
    `RuntimeObject` arena tracer with generated concrete object storage plus
-   schema-generated uint/id setter dispatch, then use that path to fix the
-   remaining Solo active-child refresh diff in `solo_test` or
-   `solos_collapse_tests`.
-2. `joystick_flag_test` is parked for M2: its sample-0 first diff is joystick
-   application/default state-machine behavior, while Rust still draws the
-   imported static state.
+   schema-generated setter side effects beyond the hand-ported Solo uint/id
+   path.
 3. `clip_tests` is raw-exact at sample `0`, but its manifest includes sample
    `0.25`; keep it parked until M2 non-zero sample support or an explicit
    sample-scope split.
@@ -44,23 +43,17 @@ the only memory the next session has. Update it every commit.
 
 - Golden runner view-model mutation scripts; `--view-model-script` is reserved
   but rejected until M5 external data-binding corpus files require it.
-- Rust static draw path currently supports sample `0`, artboard
+- Rust golden draw path currently supports sample `0`, artboard
   clip/background, selected-artboard origins, solid fills/strokes, and
   `ClippingShape` clip paths, skinned `PointsPath` deformation, plus empty and
   multi-contour TrimPath effects, DashPath stroke effects, and linear/radial
-  gradient shader creation;
-  no state machines, images, text, nested artboards, constraints, or scripted
+  gradient shader creation, default state-machine frame-0 application for
+  color/bool/uint/string keyframes, and Solo active-child refresh;
+  no non-zero samples, images, text, nested artboards, constraints, or scripted
   input.
 - `fill_trim_path.riv` is parked for M2 even at sample `0`: C++ applies
   keyframes to TrimPath `offset`/`end` before drawing, so imported static
   values cannot match without animation application.
-- `solo_test.riv` is parked for M2 even at sample `0`: C++ applies the default
-  state machine's frame-0 keyframe to `Solo.activeComponentId`, so imported
-  static Solo collapse alone correctly selects the wrong child for the golden.
-- `solos_collapse_tests.riv` is parked for M2 even at sample `0`: the first
-  artboard imports `Solo.activeComponentId = 3`, but the default timeline has a
-  frame-0 `KeyFrameId` for property `296` that switches it to local `6`, so C++
-  draws the gray star while static Rust import draws the red rectangle.
 - `juice.riv` and `rocket.riv` are parked for M2 at sample `0`: after gradient
   shader creation matched C++, their first diffs traced to frame-0 keyed
   transform/geometry application from default animations/state machines, while
@@ -635,3 +628,9 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=224`, `not-yet=14`. `solo_test` and
   `solos_collapse_tests` still differ in Solo active-child refresh after
   frame-0 `KeyFrameId`.
+- 2026-07-03: [M2] Ported the first generated-setter side effect into the
+  runtime object arena path: `Solo.activeComponentId` uint/id writes now
+  re-run C++ `Solo::propagateCollapse` using instantiated Solo child metadata.
+  Promoted `solo_test.riv` and `solos_collapse_tests.riv` after direct stream
+  comparisons; expected `make golden-compare` summary is `exact=59`,
+  `diverges=0`, `unsupported-feature=224`, `not-yet=12`.

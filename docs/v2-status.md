@@ -22,12 +22,7 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue M2 sample widening after the state-machine modularization queue
-   moved several slices: pick the next small animated `exact` corpus file still
-   pinned to sample `0`, add the first non-zero sample in a focused corpus,
-   and either keep it exact by porting the first divergence or record the
-   narrower blocker if it crosses into a later milestone.
-2. Continue M2 real object model work by modularizing the remaining
+1. Continue M2 real object model work by modularizing the remaining
    animation/state-machine surfaces out of `lib.rs` while keeping generated
    `InstanceObjectStorage` as the authored-property source of truth, but only
    when it unblocks a corpus diff or removes risky coupling. Component
@@ -39,8 +34,11 @@ the only memory the next session has. Update it every commit.
    blend-state import data, imported layer/state model, live blend-state
    instances, and state-machine layer advancement seed
    `crates/rive-runtime/src/state_machine.rs`.
-3. Add handle-source world-space math and nested-remap dependent advancement
+2. Add handle-source world-space math and nested-remap dependent advancement
    to the joystick path when a corpus diff reaches those cases.
+3. Remaining exact entries pinned to sample `0` are static M1 holdovers:
+   `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
+   them for M2 unless a related refactor needs a cheap draw-regression check.
 
 ## Known Divergences
 
@@ -781,5 +779,13 @@ the only memory the next session has. Update it every commit.
   render stream exact before M3 constraints/input and later data-binding work.
   Exact segments are now 137 across 70 exact files; `make golden-compare`
   reports `exact=70`, `exact-segments=137`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+- 2026-07-03: [M2] Moved `RuntimeStateMachine` and the
+  `build_state_machines` import builder out of `lib.rs` and into
+  `state_machine.rs`, keeping the public crate-root re-export unchanged while
+  shrinking the remaining state-machine surface in the monolith. Exact
+  segments remain 137 across 70 exact files; `make golden-compare` reports
+  `exact=70`, `exact-segments=137`, `diverges=0`,
   `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
   passes.

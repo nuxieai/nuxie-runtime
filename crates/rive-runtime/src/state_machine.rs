@@ -3,14 +3,22 @@ use crate::animation::{
 };
 use crate::components::TransformProperty;
 use crate::{
-    ArtboardInstance, RuntimeTransitionCondition, StateMachineBindableArtboardInstance,
+    ArtboardInstance, RuntimeBindableArtboard, RuntimeBindableAsset, RuntimeBindableBoolean,
+    RuntimeBindableColor, RuntimeBindableEnum, RuntimeBindableInteger, RuntimeBindableList,
+    RuntimeBindableNumber, RuntimeBindableString, RuntimeBindableTrigger, RuntimeBindableViewModel,
+    RuntimeTransitionCondition, RuntimeViewModelTrigger, StateMachineBindableArtboardInstance,
     StateMachineBindableAssetInstance, StateMachineBindableBooleanInstance,
     StateMachineBindableColorInstance, StateMachineBindableEnumInstance,
     StateMachineBindableIntegerInstance, StateMachineBindableNumberInstance,
     StateMachineBindableStringInstance, StateMachineBindableTriggerInstance,
-    StateMachineBindableViewModelInstance, bindable_number_value,
+    StateMachineBindableViewModelInstance, artboard_index_for_graph, bindable_number_value,
+    runtime_bindable_artboards, runtime_bindable_assets, runtime_bindable_booleans,
+    runtime_bindable_colors, runtime_bindable_enums, runtime_bindable_integers,
+    runtime_bindable_lists, runtime_bindable_numbers, runtime_bindable_strings,
+    runtime_bindable_triggers, runtime_bindable_view_models, runtime_default_view_model_triggers,
 };
 use rive_binary::{RuntimeFile, RuntimeObject};
+use rive_graph::ArtboardGraph;
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
@@ -71,6 +79,211 @@ pub(crate) fn runtime_state_machine_input(
         "StateMachineTrigger" => Some(RuntimeStateMachineInput::new_trigger(object.id, name)),
         _ => None,
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct RuntimeStateMachine {
+    pub global_id: u32,
+    pub name: Option<String>,
+    pub inputs: Vec<RuntimeStateMachineInput>,
+    pub layers: Vec<RuntimeStateMachineLayer>,
+    pub(crate) bindable_numbers: Vec<RuntimeBindableNumber>,
+    pub(crate) bindable_integers: Vec<RuntimeBindableInteger>,
+    pub(crate) bindable_colors: Vec<RuntimeBindableColor>,
+    pub(crate) bindable_strings: Vec<RuntimeBindableString>,
+    pub(crate) bindable_enums: Vec<RuntimeBindableEnum>,
+    pub(crate) bindable_assets: Vec<RuntimeBindableAsset>,
+    pub(crate) bindable_artboards: Vec<RuntimeBindableArtboard>,
+    pub(crate) bindable_lists: Vec<RuntimeBindableList>,
+    pub(crate) bindable_triggers: Vec<RuntimeBindableTrigger>,
+    pub(crate) bindable_view_models: Vec<RuntimeBindableViewModel>,
+    pub(crate) bindable_booleans: Vec<RuntimeBindableBoolean>,
+    pub(crate) view_model_triggers: Vec<RuntimeViewModelTrigger>,
+}
+
+pub(crate) fn build_state_machines(
+    file: &RuntimeFile,
+    graph: &ArtboardGraph,
+    linear_animations: &[RuntimeLinearAnimation],
+) -> Vec<RuntimeStateMachine> {
+    let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
+        return Vec::new();
+    };
+    let animation_index_by_global = linear_animations
+        .iter()
+        .enumerate()
+        .map(|(index, animation)| (animation.global_id, index))
+        .collect::<BTreeMap<_, _>>();
+
+    file.artboard_state_machine_graphs(artboard_index)
+        .into_iter()
+        .map(|state_machine| {
+            let bindable_numbers = runtime_bindable_numbers(file, &state_machine);
+            let bindable_integers = runtime_bindable_integers(file, &state_machine);
+            let bindable_colors = runtime_bindable_colors(file, &state_machine);
+            let bindable_strings = runtime_bindable_strings(file, &state_machine);
+            let bindable_enums = runtime_bindable_enums(file, &state_machine);
+            let bindable_assets = runtime_bindable_assets(file, &state_machine);
+            let bindable_artboards = runtime_bindable_artboards(file, &state_machine);
+            let bindable_lists = runtime_bindable_lists(file, &state_machine);
+            let bindable_triggers = runtime_bindable_triggers(file, &state_machine);
+            let bindable_view_models = runtime_bindable_view_models(file, &state_machine);
+            let bindable_booleans = runtime_bindable_booleans(file, &state_machine);
+            let view_model_triggers = runtime_default_view_model_triggers(file);
+            RuntimeStateMachine {
+                global_id: state_machine.object.id,
+                name: state_machine
+                    .object
+                    .string_property("name")
+                    .map(ToOwned::to_owned),
+                inputs: state_machine
+                    .inputs
+                    .into_iter()
+                    .filter_map(runtime_state_machine_input)
+                    .collect(),
+                bindable_numbers,
+                bindable_integers,
+                bindable_colors,
+                bindable_strings,
+                bindable_enums,
+                bindable_assets,
+                bindable_artboards,
+                bindable_lists,
+                bindable_triggers,
+                bindable_view_models,
+                bindable_booleans,
+                view_model_triggers,
+                layers: state_machine
+                    .layers
+                    .into_iter()
+                    .map(|layer| {
+                        let states = layer
+                            .states
+                            .into_iter()
+                            .map(|state| {
+                                let animation_index = state.animation.and_then(|animation| {
+                                    animation_index_by_global.get(&animation.id).copied()
+                                });
+                                let blend_state_1d = RuntimeBlendState1D::from_imported(
+                                    file,
+                                    &state,
+                                    &animation_index_by_global,
+                                );
+                                let blend_state_direct = RuntimeBlendStateDirect::from_imported(
+                                    file,
+                                    &state,
+                                    &animation_index_by_global,
+                                );
+                                RuntimeLayerState {
+                                    global_id: state.object.map(|object| object.id),
+                                    type_name: state.object.map(|object| object.type_name),
+                                    animation_index,
+                                    blend_state_1d,
+                                    blend_state_direct,
+                                    speed: state
+                                        .object
+                                        .and_then(|object| object.double_property("speed"))
+                                        .unwrap_or(1.0),
+                                    flags: state
+                                        .object
+                                        .and_then(|object| object.uint_property("flags"))
+                                        .unwrap_or(0),
+                                    fire_actions: state
+                                        .fire_actions
+                                        .iter()
+                                        .filter_map(|action| {
+                                            RuntimeStateMachineFireAction::from_imported(
+                                                file, action,
+                                            )
+                                        })
+                                        .collect(),
+                                    listener_actions: state
+                                        .listener_actions
+                                        .iter()
+                                        .filter_map(RuntimeScheduledListenerAction::from_imported)
+                                        .collect(),
+                                    transitions: state
+                                        .transitions
+                                        .into_iter()
+                                        .map(|transition| {
+                                            let interpolator = transition.interpolator.and_then(
+                                                RuntimeTransitionInterpolator::from_object,
+                                            );
+                                            RuntimeStateTransition {
+                                                state_to_index: transition.state_to_index,
+                                                exit_blend_animation_index: transition
+                                                    .exit_blend_animation_index,
+                                                duration: transition
+                                                    .object
+                                                    .uint_property("duration")
+                                                    .unwrap_or(0),
+                                                exit_time: transition
+                                                    .object
+                                                    .uint_property("exitTime")
+                                                    .unwrap_or(0),
+                                                flags: transition
+                                                    .object
+                                                    .uint_property("flags")
+                                                    .unwrap_or(0),
+                                                random_weight: transition
+                                                    .object
+                                                    .uint_property("randomWeight")
+                                                    .unwrap_or(1),
+                                                condition_count: transition.conditions.len(),
+                                                conditions: transition
+                                                    .conditions
+                                                    .iter()
+                                                    .filter_map(|condition| {
+                                                        RuntimeTransitionCondition::from_object(
+                                                            file, graph, condition,
+                                                        )
+                                                    })
+                                                    .collect(),
+                                                fire_actions: transition
+                                                    .fire_actions
+                                                    .iter()
+                                                    .filter_map(|action| {
+                                                        RuntimeStateMachineFireAction::from_imported(
+                                                            file, action,
+                                                        )
+                                                    })
+                                                    .collect(),
+                                                listener_actions: transition
+                                                    .listener_actions
+                                                    .iter()
+                                                    .filter_map(
+                                                        RuntimeScheduledListenerAction::from_imported,
+                                                    )
+                                                    .collect(),
+                                                interpolator,
+                                                has_unsupported_interpolator: transition
+                                                    .interpolator
+                                                    .is_some()
+                                                    && interpolator.is_none(),
+                                            }
+                                        })
+                                        .collect(),
+                                }
+                            })
+                            .collect::<Vec<_>>();
+                        let entry_state_index = states
+                            .iter()
+                            .position(|state| state.type_name == Some("EntryState"));
+                        let any_state_index = states
+                            .iter()
+                            .position(|state| state.type_name == Some("AnyState"));
+                        RuntimeStateMachineLayer {
+                            global_id: layer.object.id,
+                            name: layer.object.string_property("name").map(ToOwned::to_owned),
+                            states,
+                            entry_state_index,
+                            any_state_index,
+                        }
+                    })
+                    .collect(),
+            }
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

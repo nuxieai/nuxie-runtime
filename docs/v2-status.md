@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 41
+- Corpus files `exact`: 42
 - Current milestone: **M1 — Static Vector Rendering Exact (#V2-2)**
 
 ## Milestones
@@ -22,18 +22,21 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
-   start with `jellyfish_test`, `joel_signed`, `joel_v3`,
-   `joystick_flag_test`, `joystick_nested_remap`, and `juice`; promote exact
-   sample-0 matches or add verified unsupported diagnostics for later-phase
-   first diffs.
-2. `solo_test` and `solos_collapse_tests` are parked for M2: C++ applies
+   start with `keyboard_event_to_script`, `keyboard_listener`, `library`,
+   `library_data_enum_test`, `library_view_model_test`, and
+   `library_vmtest_1_host`; promote exact sample-0 matches or add verified
+   unsupported diagnostics for later-phase first diffs.
+2. `joystick_flag_test` is parked for M2: its sample-0 first diff is joystick
+   application/default state-machine behavior, while Rust still draws the
+   imported static state.
+3. `solo_test` and `solos_collapse_tests` are parked for M2: C++ applies
    frame-0 `KeyFrameId` values through the default state machine/animation,
    overriding imported `Solo.activeComponentId`; Rust has no
    state-machine/keyframe application yet.
-3. `clip_tests` is raw-exact at sample `0`, but its manifest includes sample
+4. `clip_tests` is raw-exact at sample `0`, but its manifest includes sample
    `0.25`; keep it parked until M2 non-zero sample support or an explicit
    sample-scope split.
-4. Keep `fill_trim_path` and `trim_path_linear` parked for M2 keyframe and
+5. Keep `fill_trim_path` and `trim_path_linear` parked for M2 keyframe and
    non-zero sample support.
 
 ## Backlog (unsupported features awaiting corpus demand)
@@ -133,6 +136,10 @@ the only memory the next session has. Update it every commit.
   and `interpolate_to_end.riv` are parked for nested-artboard support;
   `interpolation_zero_duration.riv` is parked for M5 zero-duration
   data-binding interpolator transform application.
+- `jellyfish_test.riv` is parked for image support; `joel_signed.riv` and
+  `juice.riv` are parked for gradient rendering; `joel_v3.riv` is parked for
+  text support; `joystick_flag_test.riv` is parked for M2 joystick
+  application/default state-machine behavior.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -399,3 +406,8 @@ the only memory the next session has. Update it every commit.
   `interpolation_zero_duration.riv` for M5 zero-duration data-binding
   interpolator transform application; exact remains 41, unsupported-feature is
   now 155, and not-yet is now 99.
+- 2026-07-02: [M1] Promoted `joystick_nested_remap.riv` as sample-0 exact,
+  gated `jellyfish_test.riv`, `joel_signed.riv`, `joel_v3.riv`, and
+  `juice.riv` with verified image/gradient/text diagnostics, and parked
+  `joystick_flag_test.riv` for M2 joystick application; exact count is now 42,
+  unsupported-feature is now 159, and not-yet is now 94.

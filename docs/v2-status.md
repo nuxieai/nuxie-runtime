@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 130 across 70 exact files
+- Exact segments (file × sample): 131 across 70 exact files
 - Parked breakdown (from `make golden-compare`): M3=21 M4=83 M5=8 M6=72 gated=5 harness=36
 - Current milestone: **M2 — Animated Playback Exact + Real Object Model (#V2-3)**
 
@@ -741,3 +741,9 @@ the only memory the next session has. Update it every commit.
   across 70 exact files; `make golden-compare` reports `exact=70`,
   `exact-segments=130`, `diverges=0`, `unsupported-feature=225`,
   `not-yet=0`, and `cargo test --workspace` passes.
+- 2026-07-03: [M2] Widened `script_paths_test.riv` from sample `0` to samples
+  `0` and `0.25`, keeping its scripted-drawable/keyed-double playback stream
+  exact before M6 scripting work. Exact segments are now 131 across 70 exact
+  files; `make golden-compare` reports `exact=70`, `exact-segments=131`,
+  `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
+  `cargo test --workspace` passes.

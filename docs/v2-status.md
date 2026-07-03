@@ -22,9 +22,8 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
-   start with `data_binding_test_triggers`, `data_converter_to_number`,
-   `databind_artboard`, `databind_solo_to_enum`, `db_health_tracker`, and
-   `death_knight`; promote exact sample-0
+   start with `double_line`, `drag_event`, `echo_show_demo`, `ellipsis`,
+   `entry`, and `event_on_listener`; promote exact sample-0
    matches or add verified unsupported diagnostics for later-phase first diffs.
 2. `solo_test` and `solos_collapse_tests` are parked for M2: C++ applies
    frame-0 `KeyFrameId` values through the default state machine/animation,
@@ -109,6 +108,10 @@ the only memory the next session has. Update it every commit.
   `data_binding_test_3.riv` are parked for nested-artboard support;
   `data_bind_test_cmdq.riv`, `data_binding_artboards_source_test.riv`, and
   `data_binding_test.riv` are parked for text support.
+- `data_binding_test_triggers.riv`, `databind_artboard.riv`,
+  `db_health_tracker.riv`, and `death_knight.riv` are parked for nested-artboard
+  support; `data_converter_to_number.riv` and `databind_solo_to_enum.riv` are
+  parked for text support.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -340,3 +343,8 @@ the only memory the next session has. Update it every commit.
   `data_binding_images_test.riv`, `data_binding_test.riv`, and
   `data_binding_test_3.riv` with verified nested-artboard/text diagnostics;
   exact remains 39, unsupported-feature is now 123, and not-yet is now 133.
+- 2026-07-02: [M1] Gated `data_binding_test_triggers.riv`,
+  `data_converter_to_number.riv`, `databind_artboard.riv`,
+  `databind_solo_to_enum.riv`, `db_health_tracker.riv`, and `death_knight.riv`
+  with verified nested-artboard/text diagnostics; exact remains 39,
+  unsupported-feature is now 129, and not-yet is now 127.

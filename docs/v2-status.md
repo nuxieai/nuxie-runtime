@@ -22,9 +22,8 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
-   start with `text_listener_simpler`, `text_opacity_modifier`,
-   `text_stroke_test`, `text_vertical_trim_test`, `transition_actions`, and
-   `vertical_align_ellipsis`;
+   start with `advance_blend_mode`, `ai_assitant`, `align_target`,
+   `bad_skin`, `bankcard`, and `bindable_artboard_nesty`;
    promote exact sample-0 matches or add
    verified unsupported diagnostics for later-phase first diffs.
 2. `joystick_flag_test` is parked for M2: its sample-0 first diff is joystick
@@ -193,6 +192,10 @@ the only memory the next session has. Update it every commit.
   `text_input.riv` are parked for nested-artboard support; and
   `test_modifier_run.riv` and `text_follow_path_shape_length.riv` are parked
   for text support.
+- `text_listener_simpler.riv`, `text_opacity_modifier.riv`,
+  `text_stroke_test.riv`, `text_vertical_trim_test.riv`,
+  `transition_actions.riv`, and `vertical_align_ellipsis.riv` are parked for
+  text support.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -541,3 +544,8 @@ the only memory the next session has. Update it every commit.
   `text_follow_path_shape_length.riv`, and `text_input.riv` with verified
   image/nested-artboard/text diagnostics; exact count is now 52,
   unsupported-feature is now 211, and not-yet is now 32.
+- 2026-07-02: [M1] Gated `text_listener_simpler.riv`,
+  `text_opacity_modifier.riv`, `text_stroke_test.riv`,
+  `text_vertical_trim_test.riv`, `transition_actions.riv`, and
+  `vertical_align_ellipsis.riv` with verified text diagnostics; exact remains
+  52, unsupported-feature is now 217, and not-yet is now 26.

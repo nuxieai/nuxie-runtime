@@ -22,20 +22,17 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue M2 real object model work by modularizing the remaining
-   animation/state-machine surfaces out of `lib.rs` while keeping generated
-   `InstanceObjectStorage` as the authored-property source of truth, but only
-   when it unblocks a corpus diff or removes risky coupling. Component
-   dirt/runtime transform state live in
-   `crates/rive-runtime/src/components.rs`, the linear animation runtime model
-   and import builder live in `crates/rive-runtime/src/animation.rs`, and
-   state-machine inputs/events/listener/fire actions/view-model trigger runtime
-   state, transition conditions, transition interpolators, transition
-   timing/allowance model, blend-state import data, imported layer/state
-   model, live blend-state instances, state-machine layer advancement, and
-   state-machine bindable import/runtime models, instances, helpers, and
-   builders seed `crates/rive-runtime/src/state_machine.rs` and its
-   submodules.
+1. Continue M2 real object model work by modularizing the remaining runtime
+   surfaces out of `lib.rs` while keeping generated `InstanceObjectStorage` as
+   the authored-property source of truth, but only when it unblocks a corpus
+   diff or removes risky coupling. Component dirt/runtime transform state live
+   in `crates/rive-runtime/src/components.rs`, the linear animation runtime
+   model and import builder live in `crates/rive-runtime/src/animation.rs`,
+   and state-machine import data, bindables, transition conditions, layer
+   advancement, and `StateMachineInstance` orchestration live under
+   `crates/rive-runtime/src/state_machine/`. Remaining root coupling is mostly
+   the data-bind graph/default-view-model bridge and artboard-level data-bind
+   helpers; move those only with a corpus diff or a clear M2 coupling payoff.
 2. Add handle-source world-space math and nested-remap dependent advancement
    to the joystick path when a corpus diff reaches those cases.
 3. Remaining exact entries pinned to sample `0` are static M1 holdovers:
@@ -358,3 +355,12 @@ the only memory the next session has. Update it every commit.
   150 across 70 exact files; `make golden-compare` reports `exact=70`,
   `exact-segments=150`, `diverges=0`, `unsupported-feature=225`, `not-yet=0`,
   and `cargo test --workspace` passes.
+- 2026-07-03: [M2] Moved `StateMachineInstance` orchestration out of
+  `lib.rs` and into `crates/rive-runtime/src/state_machine/instance.rs`,
+  leaving the artboard root to construct/advance instances through
+  crate-visible methods while the remaining data-bind graph stays in the root
+  until a corpus diff or clear M2 coupling payoff justifies moving it. Exact
+  segments remain 150 across 70 exact files; `make golden-compare` reports
+  `exact=70`, `exact-segments=150`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.

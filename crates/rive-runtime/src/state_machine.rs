@@ -8,6 +8,7 @@ use rive_graph::ArtboardGraph;
 use std::collections::BTreeMap;
 
 mod bindables;
+mod instance;
 mod transition_conditions;
 pub(crate) use bindables::{
     RuntimeBindableArtboard, RuntimeBindableAsset, RuntimeBindableBoolean, RuntimeBindableColor,
@@ -27,6 +28,7 @@ pub(crate) use bindables::{
     runtime_bindable_lists, runtime_bindable_numbers, runtime_bindable_strings,
     runtime_bindable_triggers, runtime_bindable_view_models, runtime_default_view_model_triggers,
 };
+pub use instance::StateMachineInstance;
 use transition_conditions::RuntimeTransitionCondition;
 
 #[derive(Debug, Clone)]

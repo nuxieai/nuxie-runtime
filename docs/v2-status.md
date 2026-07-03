@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 142 across 70 exact files
+- Exact segments (file × sample): 143 across 70 exact files
 - Parked breakdown (from `make golden-compare`): M3=21 M4=83 M5=8 M6=72 gated=5 harness=36
 - Current milestone: **M2 — Animated Playback Exact + Real Object Model (#V2-3)**
 
@@ -857,5 +857,11 @@ the only memory the next session has. Update it every commit.
   view-model/list playback stream exact before later M4/M5 list and data-bind
   work. Exact segments are now 142 across 70 exact files;
   `make golden-compare` reports `exact=70`, `exact-segments=142`,
+  `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
+  `cargo test --workspace` passes.
+- 2026-07-03: [M2] Widened `click_event.riv` from samples `0` and `0.25` to
+  samples `0`, `0.25`, and `0.5`, keeping its default state-machine/event
+  playback stream exact. Exact segments are now 143 across 70 exact files;
+  `make golden-compare` reports `exact=70`, `exact-segments=143`,
   `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
   `cargo test --workspace` passes.

@@ -6,11 +6,11 @@ the only memory the next session has. Update it every commit.
 ## Metric
 
 - Corpus files `exact`: 1
-- Current milestone: **M0 — Golden Harness And Renderer Seam (#V2-1)**
+- Current milestone: **M1 — Static Vector Rendering Exact (#V2-2)**
 
 ## Milestones
 
-- [ ] M0: Golden diff harness + corpus manifest + one exact file
+- [x] M0: Golden diff harness + corpus manifest + one exact file
 - [ ] M1: Static vector corpus files exact at advance(0); FFI viewer demo
 - [ ] M2: Animated playback exact at sampled times; real object model landed; lib.rs modularized
 - [ ] M3: Interactive files exact under scripted pointer input
@@ -21,10 +21,10 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Add CI wiring for `make golden-compare` and `cargo test --workspace` so the
-   M0 golden harness exit criterion is enforceable.
-2. Move the narrow static solid-shape Rust runner path toward `rive-runtime`
+1. Move the narrow static solid-shape Rust runner path toward `rive-runtime`
    renderer-trait integration for the next static vector corpus files.
+2. Pick the next simplest static no-animation corpus file and drive it from
+   `not-yet` to `exact` through the renderer-trait path.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -57,6 +57,9 @@ the only memory the next session has. Update it every commit.
 - 2026-07-02: `tools/golden-compare --bin generate-corpus` generates the
   corpus manifest from the C++ unit-test assets, preserving exact/unsupported
   annotations across regenerations.
+- 2026-07-02: CI pins the reference C++ runtime to
+  `7c778d13c5d903b3b74eec1dd6bb68a811dea5f2` and builds root
+  `premake5_v2.lua` debug libraries before running `make golden-compare`.
 
 ## Log
 
@@ -77,3 +80,6 @@ the only memory the next session has. Update it every commit.
 - 2026-07-02: [M0] Expanded `corpus.toml` to all 295
   `tests/unit_tests/assets`; `make golden-compare` passes with exact=1,
   unsupported-feature=37, not-yet=257.
+- 2026-07-02: [M0] Added GitHub Actions CI for `make golden-compare` and
+  `cargo test --workspace`; M0 is complete and the active milestone moves to
+  M1.

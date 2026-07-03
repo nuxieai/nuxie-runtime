@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  RIVE_RUNTIME_REF: 7c778d13c5d903b3b74eec1dd6bb68a811dea5f2
+  RIVE_RUNTIME_DIR: ${{ github.workspace }}/rive-runtime
+  RIVE_PREMAKE_TAG: v5.0.0-beta7
+
+jobs:
+  v2-golden:
+    name: V2 golden compare
+    runs-on: macos-14
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout rive-rust
+        uses: actions/checkout@v4
+        with:
+          path: rive-rust
+
+      - name: Checkout reference rive-runtime
+        uses: actions/checkout@v4
+        with:
+          repository: rive-app/rive-runtime
+          ref: ${{ env.RIVE_RUNTIME_REF }}
+          path: rive-runtime
+
+      - name: Install Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+
+      - name: Build reference Rive runtime
+        working-directory: ${{ env.RIVE_RUNTIME_DIR }}
+        run: |
+          RIVE_PREMAKE_ARGS="--file=premake5_v2.lua --with_rive_text --with_rive_layout" build/build_rive.sh debug
+          echo "${RIVE_RUNTIME_DIR}/build/dependencies/premake-core/bin/${RIVE_PREMAKE_TAG}_release" >> "${GITHUB_PATH}"
+
+      - name: Run golden compare
+        working-directory: ${{ github.workspace }}/rive-rust
+        run: make golden-compare
+
+      - name: Run Rust workspace tests
+        working-directory: ${{ github.workspace }}/rive-rust
+        run: cargo test --workspace

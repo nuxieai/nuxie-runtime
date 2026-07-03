@@ -46,6 +46,11 @@ the only memory the next session has. Update it every commit.
 
 - None currently tracked for M1; remaining non-exact files are parked with
   later-milestone diagnostics or unsupported-feature gates.
+- M2 sample widening: `stacked_path_effects.riv` remains pinned to sample `0`.
+  A focused `[0, 0.25]` probe diverges at `0.25` on stacked animated
+  DashPath/TrimPath output: C++ rotates/reorders the emitted path segments
+  differently for the effected stroke paths. Promote after localizing the
+  path-effect advance/composition semantics.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -549,3 +554,7 @@ the only memory the next session has. Update it every commit.
   `exact=70`, `exact-segments=102`, `diverges=0`,
   `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
   passes.
+- 2026-07-03: [M2] Focused `[0, 0.25]` promotion probe for
+  `stacked_path_effects.riv` found a narrow animated stacked DashPath/TrimPath
+  divergence at `0.25`; the file stays exact only at sample `0` until that M2
+  path-effect composition gap is ported.

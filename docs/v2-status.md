@@ -22,10 +22,10 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
-   start with `image_fit_alignment_2`, `image_fit_alignment_3`,
-   `in_band_asset`, `interactive_scrolling`, `interpolate_to_end`, and
-   `interpolation_zero_duration`; promote exact sample-0 matches or add
-   verified unsupported diagnostics for later-phase first diffs.
+   start with `jellyfish_test`, `joel_signed`, `joel_v3`,
+   `joystick_flag_test`, `joystick_nested_remap`, and `juice`; promote exact
+   sample-0 matches or add verified unsupported diagnostics for later-phase
+   first diffs.
 2. `solo_test` and `solos_collapse_tests` are parked for M2: C++ applies
    frame-0 `KeyFrameId` values through the default state machine/animation,
    overriding imported `Solo.activeComponentId`; Rust has no
@@ -128,6 +128,11 @@ the only memory the next session has. Update it every commit.
   text support; `hosted_image_file.riv`, `image_binding_with_listener.riv`,
   and `image_fit_alignment.riv` are parked for image support;
   `hunter_x_demo.riv` is parked for nested-artboard support.
+- `image_fit_alignment_2.riv`, `image_fit_alignment_3.riv`, and
+  `in_band_asset.riv` are parked for image support; `interactive_scrolling.riv`
+  and `interpolate_to_end.riv` are parked for nested-artboard support;
+  `interpolation_zero_duration.riv` is parked for M5 zero-duration
+  data-binding interpolator transform application.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -387,3 +392,10 @@ the only memory the next session has. Update it every commit.
   `image_binding_with_listener.riv`, and `image_fit_alignment.riv` with
   verified text/image/nested-artboard diagnostics; exact remains 41,
   unsupported-feature is now 150, and not-yet is now 104.
+- 2026-07-02: [M1] Gated `image_fit_alignment_2.riv`,
+  `image_fit_alignment_3.riv`, `in_band_asset.riv`,
+  `interactive_scrolling.riv`, and `interpolate_to_end.riv` with verified
+  image/nested-artboard diagnostics, and parked
+  `interpolation_zero_duration.riv` for M5 zero-duration data-binding
+  interpolator transform application; exact remains 41, unsupported-feature is
+  now 155, and not-yet is now 99.

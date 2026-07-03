@@ -21,21 +21,28 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Golden runner CLI: `(file, artboard, state machine, samples, input script)` → one stream per sample.
-2. `crates/rive-render-api`: `Renderer`/`Factory`/`RenderPath`/`RenderPaint`/`RenderImage` traits + matching Rust serializer.
-3. `make golden-compare` + `corpus.toml` seeded from `tests/unit_tests/assets` with type-key tags from `riv-inspect`.
-4. First exact file: a trivial static rectangle fixture, end to end.
+1. `crates/rive-render-api`: `Renderer`/`Factory`/`RenderPath`/`RenderPaint`/`RenderImage` traits + matching Rust serializer.
+2. `make golden-compare` + `corpus.toml` seeded from `tests/unit_tests/assets` with type-key tags from `riv-inspect`.
+3. First exact file: a trivial static rectangle fixture, end to end.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
-- (none yet)
+- Golden runner view-model mutation scripts; `--view-model-script` is reserved
+  but rejected until M5 external data-binding corpus files require it.
 
 ## Decisions
 
 - 2026-07-02: V2 map adopted (`docs/porting-map-v2.md`); V1 map superseded, its contract suite frozen as regression floor.
 - 2026-07-02: Golden runner records decoded image payloads by size/hash for the first renderer slice; real decoded dimensions are deferred until `rive_decoders` is wired into the CLI harness build.
+- 2026-07-02: Golden runner emits one accumulated stream per run with
+  `source`, `input`, `sample`, and `frame` markers; `golden-compare` will split
+  sample segments from that stream.
 
 ## Log
 
 - 2026-07-02: V2 plan, `/goal` command, and this status file created. No V2 code yet.
 - 2026-07-02: [M0] Added `tools/golden-runner` RecordingRenderer/Factory scaffold, smoke binary, and `make golden-runner`; `make golden-compare` still not present.
+- 2026-07-02: [M0] Golden runner CLI now imports real `.riv` files, selects
+  artboards/state machines, advances sampled timelines, replays pointer input
+  scripts, and emits recording streams; `make golden-compare` still not
+  present.

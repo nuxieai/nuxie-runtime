@@ -83,6 +83,15 @@ public:
         rive::Span<const uint8_t>) override;
 
     std::unique_ptr<rive::Renderer> makeRenderer();
+    void source(const std::string& file,
+                const std::string& artboard,
+                const std::string& scene);
+    void addSample(float seconds);
+    void addInputEvent(const std::string& kind,
+                       float seconds,
+                       float x,
+                       float y,
+                       int pointerId);
     void addFrame();
     void frameSize(uint32_t width, uint32_t height);
     std::string stream() const;

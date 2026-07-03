@@ -51,6 +51,38 @@ std::string colorToString(rive::ColorInt color)
     return out.str();
 }
 
+std::string quotedString(const std::string& value)
+{
+    std::ostringstream out;
+    out << '"';
+    for (char ch : value)
+    {
+        switch (ch)
+        {
+            case '\\':
+                out << "\\\\";
+                break;
+            case '"':
+                out << "\\\"";
+                break;
+            case '\n':
+                out << "\\n";
+                break;
+            case '\r':
+                out << "\\r";
+                break;
+            case '\t':
+                out << "\\t";
+                break;
+            default:
+                out << ch;
+                break;
+        }
+    }
+    out << '"';
+    return out.str();
+}
+
 std::string samplerToString(rive::ImageSampler sampler)
 {
     std::ostringstream out;
@@ -531,6 +563,35 @@ rive::rcp<rive::RenderImage> RecordingFactory::decodeImage(
 std::unique_ptr<rive::Renderer> RecordingFactory::makeRenderer()
 {
     return std::make_unique<RecordingRenderer>(&m_stream);
+}
+
+void RecordingFactory::source(const std::string& file,
+                              const std::string& artboard,
+                              const std::string& scene)
+{
+    std::ostringstream out;
+    out << "source file=" << quotedString(file)
+        << " artboard=" << quotedString(artboard)
+        << " scene=" << quotedString(scene);
+    m_stream.line(out.str());
+}
+
+void RecordingFactory::addSample(float seconds)
+{
+    m_stream.line("sample seconds=" + floatToString(seconds));
+}
+
+void RecordingFactory::addInputEvent(const std::string& kind,
+                                     float seconds,
+                                     float x,
+                                     float y,
+                                     int pointerId)
+{
+    std::ostringstream out;
+    out << "input kind=" << kind << " seconds=" << floatToString(seconds)
+        << " position=(" << floatToString(x) << ',' << floatToString(y)
+        << ") pointerId=" << pointerId;
+    m_stream.line(out.str());
 }
 
 void RecordingFactory::addFrame() { m_stream.line("frame"); }

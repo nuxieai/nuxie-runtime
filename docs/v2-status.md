@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 59
+- Corpus files `exact`: 60
 - Current milestone: **M2 — Animated Playback Exact + Real Object Model (#V2-3)**
 
 ## Milestones
@@ -21,17 +21,14 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Port C++ `Joystick::apply`/artboard advance ordering enough for
-   `joystick_flag_test` sample `0`; current first diff is joystick-driven
-   transform positions after default state-machine startup.
+1. Add non-zero sample support to the Rust golden runner/runtime scene advance
+   loop, using sample deltas rather than treating each timestamp as an
+   independent elapsed value; first target is `clip_tests` sample `0.25`.
 2. Continue M2 real object model work by replacing the generic cloned
    `RuntimeObject` arena tracer with generated concrete object storage plus
    schema-generated setter side effects beyond the hand-ported Solo uint/id
    path.
-3. `clip_tests` is raw-exact at sample `0`, but its manifest includes sample
-   `0.25`; keep it parked until M2 non-zero sample support or an explicit
-   sample-scope split.
-4. Keep `fill_trim_path` and `trim_path_linear` parked for M2 keyframe and
+3. Keep `fill_trim_path` and `trim_path_linear` parked for M2 keyframe and
    non-zero sample support.
 
 ## Known Divergences
@@ -48,7 +45,9 @@ the only memory the next session has. Update it every commit.
   `ClippingShape` clip paths, skinned `PointsPath` deformation, plus empty and
   multi-contour TrimPath effects, DashPath stroke effects, and linear/radial
   gradient shader creation, default state-machine frame-0 application for
-  color/bool/uint/string keyframes, and Solo active-child refresh;
+  color/bool/uint/string keyframes, Solo active-child refresh, and
+  before-update joystick animation application without custom handle-source
+  world-space math or nested remap dependent advancement;
   no non-zero samples, images, text, nested artboards, constraints, or scripted
   input.
 - `fill_trim_path.riv` is parked for M2 even at sample `0`: C++ applies
@@ -634,3 +633,10 @@ the only memory the next session has. Update it every commit.
   Promoted `solo_test.riv` and `solos_collapse_tests.riv` after direct stream
   comparisons; expected `make golden-compare` summary is `exact=59`,
   `diverges=0`, `unsupported-feature=224`, `not-yet=12`.
+- 2026-07-03: [M2] Ported the sample-0 C++ `Joystick::apply`/artboard
+  `updatePass` path for joysticks that can apply before update. The Rust
+  golden runner now calls `ArtboardInstance::update_pass()`, and
+  `joystick_flag_test.riv` stream-matches C++ alongside the existing
+  `joystick_nested_remap.riv` exact check; expected `make golden-compare`
+  summary is `exact=60`, `diverges=0`, `unsupported-feature=224`,
+  `not-yet=11`.

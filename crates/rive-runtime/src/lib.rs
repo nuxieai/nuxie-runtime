@@ -33,6 +33,8 @@ pub struct ArtboardInstance {
     components: Vec<RuntimeComponent>,
     component_by_local: BTreeMap<usize, usize>,
     solos: Vec<RuntimeSolo>,
+    joysticks: Vec<RuntimeJoystick>,
+    joysticks_apply_before_update: bool,
     update_order: Vec<usize>,
     linear_animations: Vec<RuntimeLinearAnimation>,
     state_machines: Vec<RuntimeStateMachine>,
@@ -98,6 +100,7 @@ impl ArtboardInstance {
             .collect::<Vec<_>>();
         let solos = build_runtime_solos(file, graph);
         let linear_animations = build_linear_animations(file, graph, &slots);
+        let joysticks = build_runtime_joysticks(graph, &linear_animations);
         let state_machines = build_state_machines(file, graph, &linear_animations);
         let artboard_list_bindings = build_artboard_list_bindings(file, graph);
         apply_initial_solo_collapses(&objects, &solos, &mut components, &component_by_local);
@@ -113,6 +116,8 @@ impl ArtboardInstance {
             components,
             component_by_local,
             solos,
+            joysticks,
+            joysticks_apply_before_update: graph.joysticks_apply_before_update,
             update_order,
             linear_animations,
             state_machines,
@@ -820,6 +825,10 @@ impl ArtboardInstance {
         self.objects.uint_property(local_id, property_key)
     }
 
+    fn double_property(&self, local_id: usize, property_key: u16) -> Option<f32> {
+        self.objects.double_property(local_id, property_key)
+    }
+
     fn set_uint_property(&mut self, local_id: usize, property_key: u16, value: u64) -> bool {
         if !self
             .objects
@@ -1030,6 +1039,29 @@ impl ArtboardInstance {
         self.update_components_with_hook(|_, _, _| {})
     }
 
+    pub fn update_pass(&mut self) -> bool {
+        let mut did_update = false;
+        if self.joysticks_apply_before_update {
+            did_update |= self.apply_joysticks(true);
+        }
+        if self.update_components().did_update {
+            did_update = true;
+        }
+        if !self.joysticks_apply_before_update {
+            let joysticks = self.joysticks.clone();
+            for joystick in joysticks {
+                if !joystick.can_apply_before_update && self.update_components().did_update {
+                    did_update = true;
+                }
+                did_update |= self.apply_joystick(&joystick);
+            }
+            if self.update_components().did_update {
+                did_update = true;
+            }
+        }
+        did_update
+    }
+
     pub fn update_components_with_hook<F>(&mut self, mut hook: F) -> UpdateComponentsReport
     where
         F: FnMut(&mut Self, usize, ComponentDirt),
@@ -1108,6 +1140,62 @@ impl ArtboardInstance {
         }
     }
 
+    fn apply_joysticks(&mut self, can_apply_before_update: bool) -> bool {
+        let joysticks = self.joysticks.clone();
+        joysticks
+            .iter()
+            .filter(|joystick| joystick.can_apply_before_update == can_apply_before_update)
+            .fold(false, |changed, joystick| {
+                changed | self.apply_joystick(joystick)
+            })
+    }
+
+    fn apply_joystick(&mut self, joystick: &RuntimeJoystick) -> bool {
+        let mut changed = false;
+        if let Some(animation_index) = joystick.x_animation_index {
+            if let Some(seconds) =
+                self.joystick_axis_seconds(joystick.local_id, animation_index, true)
+            {
+                changed |= self.apply_linear_animation(animation_index, seconds, 1.0);
+            }
+        }
+        if let Some(animation_index) = joystick.y_animation_index {
+            if let Some(seconds) =
+                self.joystick_axis_seconds(joystick.local_id, animation_index, false)
+            {
+                changed |= self.apply_linear_animation(animation_index, seconds, 1.0);
+            }
+        }
+        changed
+    }
+
+    fn joystick_axis_seconds(
+        &self,
+        local_id: usize,
+        animation_index: usize,
+        is_x_axis: bool,
+    ) -> Option<f32> {
+        let animation = self.linear_animation(animation_index)?;
+        let axis_key = if is_x_axis {
+            joystick_x_property_key()
+        } else {
+            joystick_y_property_key()
+        }?;
+        let flag = if is_x_axis {
+            JOYSTICK_FLAG_INVERT_X
+        } else {
+            JOYSTICK_FLAG_INVERT_Y
+        };
+        let mut axis = self.double_property(local_id, axis_key).unwrap_or(0.0);
+        let flags = joystick_flags_property_key()
+            .and_then(|key| self.uint_property(local_id, key))
+            .unwrap_or(0);
+        if flags & flag != 0 {
+            axis = -axis;
+        }
+        Some(((axis + 1.0) / 2.0) * animation.duration_seconds())
+    }
+
     fn apply_uint_property_changed(&mut self, local_id: usize, property_key: u16) -> bool {
         if solo_active_component_id_property_key() != Some(property_key) {
             return false;
@@ -1162,6 +1250,14 @@ struct RuntimeSolo {
 struct RuntimeSoloChild {
     local_id: usize,
     participates: bool,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeJoystick {
+    local_id: usize,
+    can_apply_before_update: bool,
+    x_animation_index: Option<usize>,
+    y_animation_index: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -1231,6 +1327,11 @@ impl InstanceObjectArena {
     fn uint_property(&self, local_id: usize, property_key: u16) -> Option<u64> {
         self.object(local_id)
             .and_then(|object| runtime_object_uint_property_by_key(object, property_key))
+    }
+
+    fn double_property(&self, local_id: usize, property_key: u16) -> Option<f32> {
+        self.object(local_id)
+            .and_then(|object| runtime_object_double_property_by_key(object, property_key))
     }
 
     fn set_uint_property(&mut self, local_id: usize, property_key: u16, value: u64) -> bool {
@@ -25664,6 +25765,30 @@ fn build_runtime_solos(file: &RuntimeFile, graph: &ArtboardGraph) -> Vec<Runtime
         .collect()
 }
 
+fn build_runtime_joysticks(
+    graph: &ArtboardGraph,
+    linear_animations: &[RuntimeLinearAnimation],
+) -> Vec<RuntimeJoystick> {
+    graph
+        .joysticks
+        .iter()
+        .map(|joystick| RuntimeJoystick {
+            local_id: joystick.local_id,
+            can_apply_before_update: joystick.can_apply_before_update,
+            x_animation_index: joystick.x_animation_global.and_then(|global_id| {
+                linear_animations
+                    .iter()
+                    .position(|animation| animation.global_id == global_id)
+            }),
+            y_animation_index: joystick.y_animation_global.and_then(|global_id| {
+                linear_animations
+                    .iter()
+                    .position(|animation| animation.global_id == global_id)
+            }),
+        })
+        .collect()
+}
+
 // Mirrors src/solo.cpp Solo::propagateCollapse for the imported static state.
 fn apply_initial_solo_collapses(
     objects: &InstanceObjectArena,
@@ -27530,6 +27655,21 @@ fn solo_active_component_id_property_key() -> Option<u16> {
     property_key_for_name("Solo", "activeComponentId")
 }
 
+const JOYSTICK_FLAG_INVERT_X: u64 = 1 << 0;
+const JOYSTICK_FLAG_INVERT_Y: u64 = 1 << 1;
+
+fn joystick_x_property_key() -> Option<u16> {
+    property_key_for_name("Joystick", "x")
+}
+
+fn joystick_y_property_key() -> Option<u16> {
+    property_key_for_name("Joystick", "y")
+}
+
+fn joystick_flags_property_key() -> Option<u16> {
+    property_key_for_name("Joystick", "joystickFlags")
+}
+
 fn property_key_for_name(type_name: &str, property_name: &str) -> Option<u16> {
     let definition = definition_by_name(type_name)?;
     if let Some(property) = definition
@@ -28504,6 +28644,8 @@ mod tests {
             components,
             component_by_local,
             solos: Vec::new(),
+            joysticks: Vec::new(),
+            joysticks_apply_before_update: true,
             update_order,
             linear_animations: Vec::new(),
             state_machines: Vec::new(),

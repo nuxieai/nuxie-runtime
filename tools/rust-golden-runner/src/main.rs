@@ -143,7 +143,7 @@ fn advance_scene(
     if let Some(state_machine) = state_machine {
         instance.advance_state_machine_instance(state_machine, elapsed_seconds);
     }
-    instance.update_components();
+    instance.update_pass();
 }
 
 #[derive(Debug)]

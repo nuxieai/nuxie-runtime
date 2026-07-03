@@ -22,8 +22,8 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
-   start with `advance_blend_mode`, `ai_assitant`, `align_target`,
-   `bad_skin`, `bankcard`, and `bindable_artboard_nesty`;
+   start with `bullet_man`, `car_widgets_v01`, `collapse_data_binds`,
+   `collapsing_elements`, `cubic_value_test`, and `event_trigger_event`;
    promote exact sample-0 matches or add
    verified unsupported diagnostics for later-phase first diffs.
 2. `joystick_flag_test` is parked for M2: its sample-0 first diff is joystick
@@ -196,6 +196,9 @@ the only memory the next session has. Update it every commit.
   `text_stroke_test.riv`, `text_vertical_trim_test.riv`,
   `transition_actions.riv`, and `vertical_align_ellipsis.riv` are parked for
   text support.
+- `advance_blend_mode.riv`, `ai_assitant.riv`, `align_target.riv`,
+  `bankcard.riv`, and `bindable_artboard_nesty.riv` are parked for
+  nested-artboard support; `bad_skin.riv` is parked for image support.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -549,3 +552,8 @@ the only memory the next session has. Update it every commit.
   `text_vertical_trim_test.riv`, `transition_actions.riv`, and
   `vertical_align_ellipsis.riv` with verified text diagnostics; exact remains
   52, unsupported-feature is now 217, and not-yet is now 26.
+- 2026-07-02: [M1] Gated `advance_blend_mode.riv`,
+  `ai_assitant.riv`, `align_target.riv`, `bad_skin.riv`, `bankcard.riv`, and
+  `bindable_artboard_nesty.riv` with verified nested-artboard/image
+  diagnostics; exact remains 52, unsupported-feature is now 223, and not-yet
+  is now 20.

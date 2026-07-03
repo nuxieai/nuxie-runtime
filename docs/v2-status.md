@@ -21,10 +21,10 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Begin M2 sample widening: pick a small animated `exact` corpus file,
-   add the first non-zero sample in a focused corpus, and either keep it exact
-   by porting the first divergence or record the narrower blocker if it crosses
-   into a later milestone.
+1. Continue M2 sample widening: pick the next small animated `exact` corpus
+   file still pinned to sample `0`, add the first non-zero sample in a focused
+   corpus, and either keep it exact by porting the first divergence or record
+   the narrower blocker if it crosses into a later milestone.
 2. Continue M2 real object model work by modularizing the remaining
    animation/state-machine surfaces out of `lib.rs` while keeping generated
    `InstanceObjectStorage` as the authored-property source of truth, but only
@@ -788,3 +788,7 @@ the only memory the next session has. Update it every commit.
   to interpolated shape transform binds. `make golden-compare` reports
   `exact=70`, `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
   `cargo test --workspace` passes.
+- 2026-07-03: [M2] Widened `cubic_value_test.riv` from sample `0` to samples
+  `0` and `0.25`, keeping its CubicValue/CubicEase animated stream exact.
+  Exact count remains 70; focused golden compare reports `exact=1`,
+  `diverges=0`, `unsupported-feature=0`, `not-yet=0`.

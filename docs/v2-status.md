@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 133 across 70 exact files
+- Exact segments (file × sample): 134 across 70 exact files
 - Parked breakdown (from `make golden-compare`): M3=21 M4=83 M5=8 M6=72 gated=5 harness=36
 - Current milestone: **M2 — Animated Playback Exact + Real Object Model (#V2-3)**
 
@@ -44,13 +44,8 @@ the only memory the next session has. Update it every commit.
 
 ## Known Divergences
 
-- None currently tracked for M1; remaining non-exact files are parked with
+- None currently tracked for M1/M2; remaining non-exact files are parked with
   later-milestone diagnostics or unsupported-feature gates.
-- M2 sample widening: `stacked_path_effects.riv` remains pinned to sample `0`.
-  A focused `[0, 0.25]` probe diverges at `0.25` on stacked animated
-  DashPath/TrimPath output: C++ rotates/reorders the emitted path segments
-  differently for the effected stroke paths. Promote after localizing the
-  path-effect advance/composition semantics.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -759,3 +754,11 @@ the only memory the next session has. Update it every commit.
   across 70 exact files; `make golden-compare` reports `exact=70`,
   `exact-segments=133`, `diverges=0`, `unsupported-feature=225`,
   `not-yet=0`, and `cargo test --workspace` passes.
+- 2026-07-03: [M2] Ported live DashPath/Dash path-effect property reads so
+  animated `DashPath.offset` and `Dash.length` come from cloned instance
+  storage during draw, matching C++'s live effect objects. Widened
+  `stacked_path_effects.riv` from sample `0` to samples `0` and `0.25`;
+  exact segments are now 134 across 70 exact files; `make golden-compare`
+  reports `exact=70`, `exact-segments=134`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.

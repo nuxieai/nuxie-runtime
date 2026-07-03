@@ -2663,24 +2663,34 @@ fn runtime_stroke_effect_path_commands(
     source: &[RuntimePathCommand],
 ) -> Option<Vec<RuntimePathCommand>> {
     match effect.type_name {
-        "DashPath" => runtime_dash_path_effect_commands(effect, paint, source),
+        "DashPath" => runtime_dash_path_effect_commands(artboard, effect, paint, source),
         "TrimPath" => runtime_trim_path_line_effect_commands(artboard, effect, paint, source),
         _ => None,
     }
 }
 
+// Coarsely translated from:
+// /Users/levi/dev/oss/rive-runtime/src/shapes/paint/dash_path.cpp DashPath::updateEffect
+// and PathDasher::applyDash.
 fn runtime_dash_path_effect_commands(
+    artboard: &ArtboardInstance,
     effect: &StrokeEffectNode,
     paint: &ShapePaintNode,
     source: &[RuntimePathCommand],
 ) -> Option<Vec<RuntimePathCommand>> {
-    let offset = effect.dash_offset?;
-    let offset_is_percentage = effect.dash_offset_is_percentage?;
+    let offset = runtime_dash_path_double_property(artboard, effect, "offset", effect.dash_offset)?;
+    let offset_is_percentage = runtime_dash_path_bool_property(
+        artboard,
+        effect,
+        "offsetIsPercentage",
+        effect.dash_offset_is_percentage,
+    )?;
     if paint.paint_type == ShapePaintKind::Fill {
         return Some(source.to_vec());
     }
 
     Some(dash_path_apply_dash(
+        artboard,
         source,
         offset,
         offset_is_percentage,
@@ -2688,7 +2698,30 @@ fn runtime_dash_path_effect_commands(
     ))
 }
 
+fn runtime_dash_path_double_property(
+    artboard: &ArtboardInstance,
+    effect: &StrokeEffectNode,
+    property_name: &str,
+    fallback: Option<f32>,
+) -> Option<f32> {
+    property_key_for_name("DashPath", property_name)
+        .and_then(|key| artboard.double_property(effect.local_id, key))
+        .or(fallback)
+}
+
+fn runtime_dash_path_bool_property(
+    artboard: &ArtboardInstance,
+    effect: &StrokeEffectNode,
+    property_name: &str,
+    fallback: Option<bool>,
+) -> Option<bool> {
+    property_key_for_name("DashPath", property_name)
+        .and_then(|key| artboard.bool_property(effect.local_id, key))
+        .or(fallback)
+}
+
 fn dash_path_apply_dash(
+    artboard: &ArtboardInstance,
     source: &[RuntimePathCommand],
     offset: f32,
     offset_is_percentage: bool,
@@ -2698,8 +2731,8 @@ fn dash_path_apply_dash(
     if path_measure.length <= 0.0
         || !dashes.iter().any(|dash| {
             dash_normalized_length(
-                dash.length,
-                dash.length_is_percentage,
+                runtime_dash_length(artboard, dash),
+                runtime_dash_length_is_percentage(artboard, dash),
                 path_measure.length,
                 false,
             ) > 0.0
@@ -2720,8 +2753,8 @@ fn dash_path_apply_dash(
         dash_index += 1;
 
         let mut dash_length = dash_normalized_length(
-            dash.length,
-            dash.length_is_percentage,
+            runtime_dash_length(artboard, dash),
+            runtime_dash_length_is_percentage(artboard, dash),
             path_measure.length,
             false,
         );
@@ -2757,6 +2790,18 @@ fn dash_path_apply_dash(
     }
 
     commands
+}
+
+fn runtime_dash_length(artboard: &ArtboardInstance, dash: &DashNode) -> f32 {
+    property_key_for_name("Dash", "length")
+        .and_then(|key| artboard.double_property(dash.local_id, key))
+        .unwrap_or(dash.length)
+}
+
+fn runtime_dash_length_is_percentage(artboard: &ArtboardInstance, dash: &DashNode) -> bool {
+    property_key_for_name("Dash", "lengthIsPercentage")
+        .and_then(|key| artboard.bool_property(dash.local_id, key))
+        .unwrap_or(dash.length_is_percentage)
 }
 
 fn dash_normalized_length(

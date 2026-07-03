@@ -21,12 +21,11 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue M2 real object model work by pushing the next runtime-authored
-   component fields through generated storage and modularizing `lib.rs` around
-   the instance object, animation, and state-machine surfaces. Authored
-   transform x/y/rotation/scale/opacity values now live only in
-   `InstanceObjectStorage`; `TransformRuntimeState` only carries derived
-   local/world/render transform state.
+1. Continue M2 real object model work by modularizing the remaining
+   animation/state-machine surfaces out of `lib.rs` while keeping generated
+   `InstanceObjectStorage` as the authored-property source of truth. Component
+   dirt, runtime transform state, and `Mat2D` now live in
+   `crates/rive-runtime/src/components.rs`.
 2. Add handle-source world-space math and nested-remap dependent advancement
    to the joystick path when a corpus diff reaches those cases.
 
@@ -707,4 +706,11 @@ the only memory the next session has. Update it every commit.
   accessors, leaving `RuntimeComponent` with only derived local/world/render
   transform state. Exact count remains 66; `make golden-compare` reports
   `exact=66`, `diverges=0`, `unsupported-feature=224`, `not-yet=5`, and
+  `cargo test --workspace` passes.
+- 2026-07-03: [M2] Extracted component dirt bits, runtime component transform
+  state, `Mat2D`, and component update methods into
+  `crates/rive-runtime/src/components.rs`, shrinking the monolithic runtime
+  file while preserving the public re-exports used by probes and downstream
+  crates. Exact count remains 66; `make golden-compare` reports `exact=66`,
+  `diverges=0`, `unsupported-feature=224`, `not-yet=5`, and
   `cargo test --workspace` passes.

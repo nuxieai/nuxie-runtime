@@ -21,37 +21,29 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Fix the smallest remaining M1 rendering divergence: `rocket.riv` now gets
-   matching gradient shader creation, but its first diff is drawPath id `6`
-   with y coordinates off by about `0.000122`; compare the C++ path/shape math
-   for that object, then rerun it as exact.
-2. Then localize `juice.riv`: gradients match, but the first diff is drawPath
-   id `17` with x coordinates off by about `0.00049`.
-3. Then localize `off_road_car.riv`: gradients match within epsilon, but the
+1. Localize `off_road_car.riv`: gradients match within epsilon, but the
    first structural diff is a clipping path sequence where C++ emits
-   `clipPath` id `22` and Rust emits `makeEmptyRenderPath` id `25`.
-4. `joystick_flag_test` is parked for M2: its sample-0 first diff is joystick
+   `clipPath` id `22` and Rust emits `makeEmptyRenderPath` id `25`. Check
+   whether this is unsupported active skin/deformer behavior before changing
+   clipping code.
+2. `joystick_flag_test` is parked for M2: its sample-0 first diff is joystick
    application/default state-machine behavior, while Rust still draws the
    imported static state.
-5. `solo_test` and `solos_collapse_tests` are parked for M2: C++ applies
+3. `solo_test` and `solos_collapse_tests` are parked for M2: C++ applies
    frame-0 `KeyFrameId` values through the default state machine/animation,
    overriding imported `Solo.activeComponentId`; Rust has no
    state-machine/keyframe application yet.
-6. `clip_tests` is raw-exact at sample `0`, but its manifest includes sample
+4. `clip_tests` is raw-exact at sample `0`, but its manifest includes sample
    `0.25`; keep it parked until M2 non-zero sample support or an explicit
    sample-scope split.
-7. Keep `fill_trim_path` and `trim_path_linear` parked for M2 keyframe and
+5. Keep `fill_trim_path` and `trim_path_linear` parked for M2 keyframe and
    non-zero sample support.
 
 ## Known Divergences
 
-- `juice.riv`: gradients are no longer unsupported; first diff is M1 path
-  coordinate drift in drawPath id `17` after matching shader creation.
 - `off_road_car.riv`: gradients are no longer unsupported; first diff is M1
   clipping/path sequencing, where Rust emits an empty render path before C++'s
   clip path.
-- `rocket.riv`: gradients are no longer unsupported; first diff is M1 path
-  coordinate drift in drawPath id `6`.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -76,6 +68,10 @@ the only memory the next session has. Update it every commit.
 - `click_event.riv` and `sound.riv` are parked for M2 at sample `0`: C++ applies
   frame-0 `KeyFrameColor` values through the selected/default state machine,
   while Rust still draws imported static solid colors.
+- `juice.riv` and `rocket.riv` are parked for M2 at sample `0`: after gradient
+  shader creation matched C++, their first diffs traced to frame-0 keyed
+  transform/geometry application from default animations/state machines, while
+  Rust still draws imported static values.
 - `scripted_color.riv` is parked for M5 at sample `0`: C++ binds the default
   `ViewModelPropertyColor` through `DataBindContext` to a `SolidColor`, while
   static Rust still draws the imported color.
@@ -585,3 +581,7 @@ the only memory the next session has. Update it every commit.
   `juice.riv`, `off_road_car.riv`, and `rocket.riv` as concrete M1
   divergences after matching shader creation; exact is now 53,
   unsupported-feature is now 224, diverges is now 3, and not-yet remains 15.
+- 2026-07-02: [M1] Corrected `juice.riv` and `rocket.riv` from M1 divergences
+  to M2 frame-0 animation/keyframe application after inspecting their default
+  animation graphs; exact remains 53, unsupported-feature remains 224,
+  diverges is now 1, and not-yet is now 17.

@@ -64,8 +64,14 @@ fn run() -> Result<String> {
     factory.frame_size(frame_dimension(width), frame_dimension(height));
 
     for sample in &options.samples {
+        instance.prepare_static_artboard_paints(
+            &runtime,
+            artboard,
+            &mut factory,
+            &mut paint_by_global,
+        )?;
         factory.add_sample(*sample);
-        instance.draw_static_artboard(
+        instance.draw_prepared_static_artboard(
             &runtime,
             artboard,
             &mut factory,

@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 52
+- Corpus files `exact`: 53
 - Current milestone: **M1 — Static Vector Rendering Exact (#V2-2)**
 
 ## Milestones
@@ -21,21 +21,37 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Start M1 gradient rendering next. Port the C++ linear/radial gradient paint
-   update path into `rive-runtime`/`rive-render-api`, targeting gradient-only
-   corpus demand such as `joel_signed`, `juice`, `off_road_car`, and `rocket`.
-2. `joystick_flag_test` is parked for M2: its sample-0 first diff is joystick
+1. Fix the smallest remaining M1 rendering divergence: `rocket.riv` now gets
+   matching gradient shader creation, but its first diff is drawPath id `6`
+   with y coordinates off by about `0.000122`; compare the C++ path/shape math
+   for that object, then rerun it as exact.
+2. Then localize `juice.riv`: gradients match, but the first diff is drawPath
+   id `17` with x coordinates off by about `0.00049`.
+3. Then localize `off_road_car.riv`: gradients match within epsilon, but the
+   first structural diff is a clipping path sequence where C++ emits
+   `clipPath` id `22` and Rust emits `makeEmptyRenderPath` id `25`.
+4. `joystick_flag_test` is parked for M2: its sample-0 first diff is joystick
    application/default state-machine behavior, while Rust still draws the
    imported static state.
-3. `solo_test` and `solos_collapse_tests` are parked for M2: C++ applies
+5. `solo_test` and `solos_collapse_tests` are parked for M2: C++ applies
    frame-0 `KeyFrameId` values through the default state machine/animation,
    overriding imported `Solo.activeComponentId`; Rust has no
    state-machine/keyframe application yet.
-4. `clip_tests` is raw-exact at sample `0`, but its manifest includes sample
+6. `clip_tests` is raw-exact at sample `0`, but its manifest includes sample
    `0.25`; keep it parked until M2 non-zero sample support or an explicit
    sample-scope split.
-5. Keep `fill_trim_path` and `trim_path_linear` parked for M2 keyframe and
+7. Keep `fill_trim_path` and `trim_path_linear` parked for M2 keyframe and
    non-zero sample support.
+
+## Known Divergences
+
+- `juice.riv`: gradients are no longer unsupported; first diff is M1 path
+  coordinate drift in drawPath id `17` after matching shader creation.
+- `off_road_car.riv`: gradients are no longer unsupported; first diff is M1
+  clipping/path sequencing, where Rust emits an empty render path before C++'s
+  clip path.
+- `rocket.riv`: gradients are no longer unsupported; first diff is M1 path
+  coordinate drift in drawPath id `6`.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -43,10 +59,10 @@ the only memory the next session has. Update it every commit.
   but rejected until M5 external data-binding corpus files require it.
 - Rust static draw path currently supports sample `0`, artboard
   clip/background, selected-artboard origins, solid fills/strokes, and
-  `ClippingShape` clip paths, plus empty and multi-contour TrimPath effects
-  and DashPath stroke effects;
-  no state machines, gradients, images, text, nested artboards, constraints,
-  or scripted input.
+  `ClippingShape` clip paths, plus empty and multi-contour TrimPath effects,
+  DashPath stroke effects, and linear/radial gradient shader creation;
+  no state machines, images, text, nested artboards, constraints, or scripted
+  input.
 - `fill_trim_path.riv` is parked for M2 even at sample `0`: C++ applies
   keyframes to TrimPath `offset`/`end` before drawing, so imported static
   values cannot match without animation application.
@@ -139,9 +155,8 @@ the only memory the next session has. Update it every commit.
   and `interpolate_to_end.riv` are parked for nested-artboard support;
   `interpolation_zero_duration.riv` is parked for M5 zero-duration
   data-binding interpolator transform application.
-- `jellyfish_test.riv` is parked for image support; `joel_signed.riv` and
-  `juice.riv` are parked for gradient rendering; `joel_v3.riv` is parked for
-  text support; `joystick_flag_test.riv` is parked for M2 joystick
+- `jellyfish_test.riv` is parked for image support; `joel_v3.riv` is parked
+  for text support; `joystick_flag_test.riv` is parked for M2 joystick
   application/default state-machine behavior.
 - `keyboard_listener.riv` is parked for text support; `library.riv` is parked
   for image support; `library_view_model_test.riv` and
@@ -163,8 +178,7 @@ the only memory the next session has. Update it every commit.
   `nested_needs_advance.riv` are parked for nested-artboard support;
   `new_text.riv` is parked for text support.
 - `number_to_list_nested_children.riv` is parked for M6 layout component paint
-  drawing; `off_road_car.riv` is parked for gradient rendering; and
-  `pause_nested_artboard.riv` is parked for nested-artboard support.
+  drawing; `pause_nested_artboard.riv` is parked for nested-artboard support.
 - `oneshotblend.riv` is parked for M2 1D blend/default state-machine
   application at sample `0`; `opaque_hit_test.riv` is parked for M2
   frame-0 state-machine/keyframe color application; `pointer_events.riv`
@@ -182,10 +196,9 @@ the only memory the next session has. Update it every commit.
   nested-artboard support; `replace_vm_instance.riv` is parked for text
   support; `reset_phase.riv` is parked for M6 layout component paint drawing;
   and `reuse_path_in_effect.riv` is parked for scripted path-effect support.
-- `rocket.riv` is parked for gradient rendering; `runtime_nested_inputs.riv`,
-  `runtime_nested_text_runs.riv`, `scripted_data_context.riv`, and
-  `scripted_listener_context.riv` are parked for nested-artboard support; and
-  `saturation.riv` is parked for text support.
+- `runtime_nested_inputs.riv`, `runtime_nested_text_runs.riv`,
+  `scripted_data_context.riv`, and `scripted_listener_context.riv` are parked
+  for nested-artboard support; `saturation.riv` is parked for text support.
 - `scripted_property_image.riv` is parked for image support;
   `scroll_snap.riv` and `spotify_kids_app_icon.riv` are parked for text
   support; and `scroll_test.riv`, `scroll_threshold.riv`, and
@@ -567,3 +580,8 @@ the only memory the next session has. Update it every commit.
 - 2026-07-02: [M1] Gated `zombie_skins.riv` with a verified nested-artboard
   diagnostic; exact remains 52, unsupported-feature is now 228, and not-yet
   is now 15. Next M1 implementation target is gradient rendering.
+- 2026-07-02: [M1] Ported static linear/radial gradient shader creation in
+  dependency order, promoted `joel_signed.riv` as exact, and reclassified
+  `juice.riv`, `off_road_car.riv`, and `rocket.riv` as concrete M1
+  divergences after matching shader creation; exact is now 53,
+  unsupported-feature is now 224, diverges is now 3, and not-yet remains 15.

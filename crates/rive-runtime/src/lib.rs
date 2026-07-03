@@ -312,6 +312,84 @@ impl ArtboardInstance {
         renderer: &mut dyn Renderer,
         paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
     ) -> Result<()> {
+        self.prepare_static_artboard_paints(runtime, graph, factory, paint_by_global)?;
+        self.draw_prepared_static_artboard(runtime, graph, factory, renderer, paint_by_global)
+    }
+
+    pub fn prepare_static_artboard_paints(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        factory: &mut dyn RenderFactory,
+        paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
+    ) -> Result<()> {
+        let mut paints_by_mutator =
+            BTreeMap::<usize, Vec<(&ShapePaintContainerNode, &ShapePaintNode)>>::new();
+        for container in &graph.shape_paint_containers {
+            for paint in &container.paints {
+                if !matches!(
+                    paint.paint_state,
+                    Some(
+                        ShapePaintStateNode::LinearGradient { .. }
+                            | ShapePaintStateNode::RadialGradient { .. }
+                    )
+                ) {
+                    continue;
+                }
+                if let Some(mutator_local) = paint.mutator_local {
+                    paints_by_mutator
+                        .entry(mutator_local)
+                        .or_default()
+                        .push((container, paint));
+                }
+            }
+        }
+
+        let mut prepared = BTreeSet::new();
+        // C++ Artboard::advance updates gradient mutators in dependency order before
+        // drawing, and the recording factory observes shader creation there.
+        for local_id in graph
+            .dependency_order
+            .iter()
+            .copied()
+            .chain(graph.local_objects.iter().map(|object| object.local_id))
+        {
+            let Some(paints) = paints_by_mutator.get(&local_id) else {
+                continue;
+            };
+            for (container, paint) in paints {
+                if !prepared.insert(paint.global_id) {
+                    continue;
+                }
+                let object = runtime
+                    .object(paint.global_id as usize)
+                    .with_context(|| format!("missing paint global {}", paint.global_id))?;
+                let runtime_paint = runtime_prepare_gradient_paint_command(self, container, paint);
+                runtime_configure_paint(
+                    paint_by_global
+                        .get_mut(&paint.global_id)
+                        .with_context(|| {
+                            format!("missing render paint for global {}", paint.global_id)
+                        })?
+                        .as_mut(),
+                    object,
+                    &runtime_paint,
+                    Some(factory),
+                )?;
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn draw_prepared_static_artboard(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        factory: &mut dyn RenderFactory,
+        renderer: &mut dyn Renderer,
+        paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
+    ) -> Result<()> {
         renderer.save();
         let mut clip = if self.clip {
             let clip = runtime_make_path(
@@ -333,6 +411,7 @@ impl ArtboardInstance {
         {
             runtime_draw_background(
                 runtime,
+                self,
                 background,
                 self.width,
                 self.height,
@@ -1214,6 +1293,7 @@ fn preallocate_render_paint(
 
 fn runtime_draw_background(
     runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
     container: &ShapePaintContainerNode,
     width: f32,
     height: f32,
@@ -1231,37 +1311,8 @@ fn runtime_draw_background(
         let object = runtime
             .object(paint.global_id as usize)
             .with_context(|| format!("missing paint global {}", paint.global_id))?;
-        let runtime_paint = RuntimeShapePaintCommand {
-            paint_local: paint.local_id,
-            mutator_local: paint.mutator_local,
-            paint_type: runtime_shape_paint_kind(paint.paint_type),
-            path_kind: RuntimeShapePaintPathKind::Local,
-            blend_mode_value: paint.blend_mode_value,
-            render_blend_mode_value: 3,
-            paint_state: paint.paint_state.clone().map(|state| match state {
-                ShapePaintStateNode::SolidColor { color } => RuntimeShapePaintState::SolidColor {
-                    color,
-                    render_color: color,
-                },
-                ShapePaintStateNode::LinearGradient { .. }
-                | ShapePaintStateNode::RadialGradient { .. } => {
-                    RuntimeShapePaintState::LinearGradient {
-                        start_x: 0.0,
-                        start_y: 0.0,
-                        end_x: 0.0,
-                        end_y: 0.0,
-                        opacity: 1.0,
-                        render_opacity: 1.0,
-                        stops: Vec::new(),
-                    }
-                }
-            }),
-            feather_state: None,
-            path_commands: commands.clone(),
-            effect_path_commands: Vec::new(),
-            has_effect_path: false,
-            needs_save_operation: true,
-        };
+        let runtime_paint =
+            runtime_background_shape_paint_command(instance, paint, commands.clone());
         runtime_configure_paint(
             paint_by_global
                 .get_mut(&paint.global_id)
@@ -1269,6 +1320,7 @@ fn runtime_draw_background(
                 .as_mut(),
             object,
             &runtime_paint,
+            None,
         )?;
         renderer.save();
         renderer.transform(RenderMat2D::IDENTITY);
@@ -1291,6 +1343,58 @@ fn runtime_draw_background(
         renderer.restore();
     }
     Ok(())
+}
+
+fn runtime_background_shape_paint_command(
+    instance: &ArtboardInstance,
+    paint: &ShapePaintNode,
+    path_commands: Vec<RuntimePathCommand>,
+) -> RuntimeShapePaintCommand {
+    RuntimeShapePaintCommand {
+        paint_local: paint.local_id,
+        mutator_local: paint.mutator_local,
+        paint_type: runtime_shape_paint_kind(paint.paint_type),
+        path_kind: RuntimeShapePaintPathKind::Local,
+        blend_mode_value: paint.blend_mode_value,
+        render_blend_mode_value: 3,
+        paint_state: runtime_shape_paint_state(instance, paint, 1.0),
+        feather_state: None,
+        path_commands,
+        effect_path_commands: Vec::new(),
+        has_effect_path: false,
+        needs_save_operation: true,
+    }
+}
+
+fn runtime_prepare_gradient_paint_command(
+    instance: &ArtboardInstance,
+    container: &ShapePaintContainerNode,
+    paint: &ShapePaintNode,
+) -> RuntimeShapePaintCommand {
+    let render_opacity = instance
+        .component(container.local_id)
+        .map(|component| component.transform.render_opacity)
+        .unwrap_or(1.0);
+    RuntimeShapePaintCommand {
+        paint_local: paint.local_id,
+        mutator_local: paint.mutator_local,
+        paint_type: runtime_shape_paint_kind(paint.paint_type),
+        path_kind: paint
+            .path_kind
+            .and_then(runtime_shape_paint_path_kind)
+            .unwrap_or(RuntimeShapePaintPathKind::Local),
+        blend_mode_value: paint.blend_mode_value,
+        render_blend_mode_value: runtime_shape_paint_blend_mode_value(
+            paint.blend_mode_value,
+            container.blend_mode_value,
+        ),
+        paint_state: runtime_shape_paint_state(instance, paint, render_opacity),
+        feather_state: None,
+        path_commands: Vec::new(),
+        effect_path_commands: Vec::new(),
+        has_effect_path: false,
+        needs_save_operation: false,
+    }
 }
 
 fn runtime_draw_command(
@@ -1342,6 +1446,7 @@ fn runtime_draw_command(
                 .as_mut(),
             object,
             paint,
+            None,
         )?;
         let path_index = runtime_cached_path_slot_index(&mut path_cache, path_commands);
         let mut saved = !paint.needs_save_operation;
@@ -1456,6 +1561,7 @@ fn runtime_configure_paint(
     render_paint: &mut dyn RenderPaint,
     object: &RuntimeObject,
     paint: &RuntimeShapePaintCommand,
+    shader_factory: Option<&mut dyn RenderFactory>,
 ) -> Result<()> {
     match paint.paint_type {
         RuntimeShapePaintKind::Fill => {
@@ -1473,19 +1579,97 @@ fn runtime_configure_paint(
         }
         RuntimeShapePaintKind::Unknown => anyhow::bail!("unsupported: unknown shape paint"),
     }
-    render_paint.shader(None);
     render_paint.blend_mode(runtime_blend_mode(paint.render_blend_mode_value)?);
     match paint.paint_state.as_ref() {
         Some(RuntimeShapePaintState::SolidColor { render_color, .. }) => {
+            render_paint.shader(None);
             render_paint.color(*render_color);
         }
-        Some(RuntimeShapePaintState::LinearGradient { .. })
-        | Some(RuntimeShapePaintState::RadialGradient { .. }) => {
-            anyhow::bail!("unsupported: gradients in Rust runtime")
+        Some(RuntimeShapePaintState::LinearGradient {
+            start_x,
+            start_y,
+            end_x,
+            end_y,
+            stops,
+            ..
+        }) => {
+            if let Some(factory) = shader_factory {
+                runtime_configure_linear_gradient(
+                    render_paint,
+                    factory,
+                    *start_x,
+                    *start_y,
+                    *end_x,
+                    *end_y,
+                    stops,
+                );
+            }
         }
-        None => {}
+        Some(RuntimeShapePaintState::RadialGradient {
+            start_x,
+            start_y,
+            end_x,
+            end_y,
+            stops,
+            ..
+        }) => {
+            if let Some(factory) = shader_factory {
+                runtime_configure_radial_gradient(
+                    render_paint,
+                    factory,
+                    *start_x,
+                    *start_y,
+                    *end_x,
+                    *end_y,
+                    stops,
+                );
+            }
+        }
+        None => {
+            render_paint.shader(None);
+        }
     }
     Ok(())
+}
+
+// Ported from src/shapes/paint/linear_gradient.cpp and radial_gradient.cpp.
+fn runtime_configure_linear_gradient(
+    render_paint: &mut dyn RenderPaint,
+    factory: &mut dyn RenderFactory,
+    start_x: f32,
+    start_y: f32,
+    end_x: f32,
+    end_y: f32,
+    stops: &[RuntimeGradientStop],
+) {
+    let colors = stops
+        .iter()
+        .map(|stop| stop.render_color)
+        .collect::<Vec<_>>();
+    let positions = stops.iter().map(|stop| stop.position).collect::<Vec<_>>();
+    let shader = factory.make_linear_gradient(start_x, start_y, end_x, end_y, &colors, &positions);
+    render_paint.shader(Some(shader.as_ref()));
+}
+
+fn runtime_configure_radial_gradient(
+    render_paint: &mut dyn RenderPaint,
+    factory: &mut dyn RenderFactory,
+    start_x: f32,
+    start_y: f32,
+    end_x: f32,
+    end_y: f32,
+    stops: &[RuntimeGradientStop],
+) {
+    let colors = stops
+        .iter()
+        .map(|stop| stop.render_color)
+        .collect::<Vec<_>>();
+    let positions = stops.iter().map(|stop| stop.position).collect::<Vec<_>>();
+    let dx = end_x - start_x;
+    let dy = end_y - start_y;
+    let radius = (dx * dx + dy * dy).sqrt();
+    let shader = factory.make_radial_gradient(start_x, start_y, radius, &colors, &positions);
+    render_paint.shader(Some(shader.as_ref()));
 }
 
 fn runtime_configure_fill_rule(path: &mut dyn RenderPath, object: &RuntimeObject) {

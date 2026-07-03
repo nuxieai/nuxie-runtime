@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 18
+- Corpus files `exact`: 23
 - Current milestone: **M1 — Static Vector Rendering Exact (#V2-2)**
 
 ## Milestones
@@ -21,11 +21,12 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue the M1 candidate sweep with the next runner-clean small fixtures:
-   start with `script_paths_opacity_test`, `script_paths_test`,
-   `scripted_boolean`, `scripted_color`, `scripted_enum`, and
-   `scripted_graph`; promote exact sample-0 matches or add a verified
-   unsupported diagnostic when a later-phase feature causes the first diff.
+1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
+   start with `scripted_string`, `viewmodel_runtime_file`,
+   `databind_external_artboard_main`, `viewmodel_image_reset`,
+   `clear_viewmodel_list`, and `databind_external_artboard_child`; promote
+   exact sample-0 matches or add verified unsupported diagnostics for
+   later-phase first diffs.
 2. `solo_test` and `solos_collapse_tests` are parked for M2: C++ applies
    frame-0 `KeyFrameId` values through the default state machine/animation,
    overriding imported `Solo.activeComponentId`; Rust has no
@@ -58,6 +59,9 @@ the only memory the next session has. Update it every commit.
 - `click_event.riv` and `sound.riv` are parked for M2 at sample `0`: C++ applies
   frame-0 `KeyFrameColor` values through the selected/default state machine,
   while Rust still draws imported static solid colors.
+- `scripted_color.riv` is parked for M5 at sample `0`: C++ binds the default
+  `ViewModelPropertyColor` through `DataBindContext` to a `SolidColor`, while
+  static Rust still draws the imported color.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -213,3 +217,8 @@ the only memory the next session has. Update it every commit.
   unsupported diagnostic and `solid_affects_has_changed.riv` as a verified
   nested-artboard unsupported diagnostic; exact remains 18, unsupported-feature
   is now 68, and not-yet is now 209.
+- 2026-07-02: [M1] Promoted `script_paths_opacity_test.riv`,
+  `script_paths_test.riv`, `scripted_boolean.riv`, `scripted_enum.riv`, and
+  `scripted_graph.riv` as sample-0 exact, and gated `scripted_color.riv` as a
+  verified data-binding-color unsupported diagnostic; exact count is now 23,
+  unsupported-feature is now 69, and not-yet is now 203.

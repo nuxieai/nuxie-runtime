@@ -196,6 +196,18 @@ fn ensure_static_draw_supported(artboard: &ArtboardGraph) -> Result<()> {
         );
     }
 
+    if let Some(data_bind) = artboard
+        .data_binds
+        .iter()
+        .find(|data_bind| data_bind.target_type_name == Some("SolidColor"))
+    {
+        bail!(
+            "unsupported: data-binding-color in Rust golden runner (data bind global {} target global {:?})",
+            data_bind.global_id,
+            data_bind.target_global
+        );
+    }
+
     if let Some((constraint_type, global_id)) = artboard.local_objects.iter().find_map(|object| {
         let type_name = object.type_name?;
         type_name

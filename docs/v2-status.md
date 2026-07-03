@@ -22,10 +22,10 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
-   start with `hittest_collapsed_layouts`, `hosted_font_file`,
-   `hosted_image_file`, `hunter_x_demo`, `image_binding_with_listener`, and
-   `image_fit_alignment`; promote exact sample-0 matches or add verified
-   unsupported diagnostics for later-phase first diffs.
+   start with `image_fit_alignment_2`, `image_fit_alignment_3`,
+   `in_band_asset`, `interactive_scrolling`, `interpolate_to_end`, and
+   `interpolation_zero_duration`; promote exact sample-0 matches or add
+   verified unsupported diagnostics for later-phase first diffs.
 2. `solo_test` and `solos_collapse_tests` are parked for M2: C++ applies
    frame-0 `KeyFrameId` values through the default state machine/animation,
    overriding imported `Solo.activeComponentId`; Rust has no
@@ -124,6 +124,10 @@ the only memory the next session has. Update it every commit.
   parked for nested-artboard support; `format_number_with_commas.riv` and
   `hello_world.riv` are parked for text support; `formula_random.riv` is
   parked for M5 data-binding transform/formula application.
+- `hittest_collapsed_layouts.riv` and `hosted_font_file.riv` are parked for
+  text support; `hosted_image_file.riv`, `image_binding_with_listener.riv`,
+  and `image_fit_alignment.riv` are parked for image support;
+  `hunter_x_demo.riv` is parked for nested-artboard support.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -378,3 +382,8 @@ the only memory the next session has. Update it every commit.
   runner transform data-bind diagnostic to include converter-group-backed
   Shape x/y bindings; exact remains 41, unsupported-feature is now 144, and
   not-yet is now 110.
+- 2026-07-02: [M1] Gated `hittest_collapsed_layouts.riv`,
+  `hosted_font_file.riv`, `hosted_image_file.riv`, `hunter_x_demo.riv`,
+  `image_binding_with_listener.riv`, and `image_fit_alignment.riv` with
+  verified text/image/nested-artboard diagnostics; exact remains 41,
+  unsupported-feature is now 150, and not-yet is now 104.

@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 50
+- Corpus files `exact`: 51
 - Current milestone: **M1 — Static Vector Rendering Exact (#V2-2)**
 
 ## Milestones
@@ -22,9 +22,9 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
-   start with `relative_data_binding`, `remove_from_list`,
-   `replace_vm_instance`, `reset_phase`, `reuse_path_in_effect`, and
-   `rewards_demo`; promote exact sample-0 matches or add
+   start with `rocket`, `runtime_nested_inputs`, `runtime_nested_text_runs`,
+   `saturation`, `scripted_data_context`, and `scripted_listener_context`;
+   promote exact sample-0 matches or add
    verified unsupported diagnostics for later-phase first diffs.
 2. `joystick_flag_test` is parked for M2: its sample-0 first diff is joystick
    application/default state-machine behavior, while Rust still draws the
@@ -175,6 +175,10 @@ the only memory the next session has. Update it every commit.
   application: C++ applies the frame-0 keyed transform through the default
   scene, moving the ellipse to `x=0`, while static Rust still draws the
   imported transform.
+- `relative_data_binding.riv` and `rewards_demo.riv` are parked for
+  nested-artboard support; `replace_vm_instance.riv` is parked for text
+  support; `reset_phase.riv` is parked for M6 layout component paint drawing;
+  and `reuse_path_in_effect.riv` is parked for scripted path-effect support.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -501,3 +505,9 @@ the only memory the next session has. Update it every commit.
   verified nested-artboard/text diagnostics, and parked `quantize_test.riv`
   for M2 quantized animation application; exact count is now 50,
   unsupported-feature is now 189, and not-yet is now 56.
+- 2026-07-02: [M1] Added a scripted-path-effects runner diagnostic, promoted
+  `remove_from_list.riv` as sample-0 exact, and gated
+  `relative_data_binding.riv`, `replace_vm_instance.riv`, `reset_phase.riv`,
+  `reuse_path_in_effect.riv`, and `rewards_demo.riv` with verified
+  nested-artboard/text/layout/scripted-path diagnostics; exact count is now
+  51, unsupported-feature is now 194, and not-yet is now 50.

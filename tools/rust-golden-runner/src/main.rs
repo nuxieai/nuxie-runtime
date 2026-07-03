@@ -278,6 +278,22 @@ fn ensure_static_draw_supported(graph: &GraphFile, artboard: &ArtboardGraph) -> 
         );
     }
 
+    if let Some((path_effect_type, global_id)) =
+        artboard
+            .local_objects
+            .iter()
+            .find_map(|object| match object.type_name {
+                Some(
+                    path_effect_type @ ("ScriptedPathEffect" | "TargetEffect" | "GroupEffect"),
+                ) => Some((path_effect_type, object.global_id)),
+                _ => None,
+            })
+    {
+        bail!(
+            "unsupported: scripted-path-effects in Rust golden runner ({path_effect_type} global {global_id})"
+        );
+    }
+
     if let Some((constraint_type, global_id)) = artboard.local_objects.iter().find_map(|object| {
         let type_name = object.type_name?;
         type_name

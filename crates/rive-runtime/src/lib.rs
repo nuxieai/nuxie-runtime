@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use rive_binary::{
-    RuntimeFile, RuntimeImportStatus, RuntimeObject, RuntimeViewModel, RuntimeViewModelInstance,
+    RuntimeFile, RuntimeObject, RuntimeViewModel, RuntimeViewModelInstance,
     RuntimeViewModelInstanceReference,
 };
 use rive_graph::{
@@ -16,7 +16,7 @@ use rive_render_api::{
 };
 use rive_schema::{
     CoreRegistryFieldKind, FieldKind, core_registry_field_kind_by_property_key, definition_by_name,
-    definition_by_type_key, is_callback_property_key, object_supports_property,
+    definition_by_type_key, object_supports_property,
 };
 use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 
@@ -25,7 +25,7 @@ mod components;
 mod objects;
 mod state_machine;
 
-use animation::{AnimationLoop, RuntimeInterpolator, RuntimeJoystick, build_runtime_joysticks};
+use animation::{AnimationLoop, RuntimeJoystick, build_linear_animations, build_runtime_joysticks};
 pub use animation::{
     LinearAnimationInstance, RuntimeKeyFrameBool, RuntimeKeyFrameCallback, RuntimeKeyFrameColor,
     RuntimeKeyFrameDouble, RuntimeKeyFrameString, RuntimeKeyFrameUint, RuntimeKeyedObject,
@@ -24433,293 +24433,6 @@ struct BlendAnimationDirectInstance {
     mix: f32,
 }
 
-fn callback_event_for_keyed_property(
-    target_local_id: usize,
-    target: &RuntimeObject,
-    property_key: u16,
-) -> Option<StateMachineReportedEvent> {
-    if !is_callback_property_key(property_key) {
-        return None;
-    }
-    let definition = definition_by_type_key(target.type_key)?;
-    if !definition.is_a("Event") {
-        return None;
-    }
-    let property = definition.property_by_key_in_hierarchy(property_key)?;
-    if property.name != "trigger" {
-        return None;
-    }
-
-    Some(StateMachineReportedEvent {
-        event_local_index: target_local_id,
-        event_core_type: u32::from(target.type_key),
-        name: target.string_property("name").map(ToOwned::to_owned),
-        seconds_delay: 0.0,
-    })
-}
-
-fn build_linear_animations(
-    file: &RuntimeFile,
-    graph: &ArtboardGraph,
-    slots: &[InstanceSlot],
-) -> Vec<RuntimeLinearAnimation> {
-    let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
-        return Vec::new();
-    };
-    let Some((start, end)) = artboard_object_range(file, graph.global_id as usize) else {
-        return Vec::new();
-    };
-
-    let mut animations = Vec::<RuntimeLinearAnimation>::new();
-    let mut current_animation = None;
-    let mut current_keyed_object = None;
-    let mut current_keyed_property = None;
-
-    for global_id in start..end {
-        let Some(object) = file.object(global_id) else {
-            continue;
-        };
-        if file.import_status(global_id) != Some(RuntimeImportStatus::Imported) {
-            continue;
-        }
-
-        if object.type_name == "LinearAnimation" {
-            animations.push(RuntimeLinearAnimation {
-                global_id: global_id as u32,
-                name: object.string_property("name").map(ToOwned::to_owned),
-                fps: object.uint_property("fps").unwrap_or(60),
-                duration: object.uint_property("duration").unwrap_or(60),
-                speed: object.double_property("speed").unwrap_or(1.0),
-                loop_value: object.uint_property("loopValue").unwrap_or(0),
-                work_start: object.uint_property("workStart").unwrap_or(0),
-                work_end: object.uint_property("workEnd").unwrap_or(0),
-                enable_work_area: object.bool_property("enableWorkArea").unwrap_or(false),
-                quantize: object.bool_property("quantize").unwrap_or(false),
-                keyed_objects: Vec::new(),
-            });
-            current_animation = Some(animations.len() - 1);
-            current_keyed_object = None;
-            current_keyed_property = None;
-            continue;
-        }
-
-        let Some(animation_index) = current_animation else {
-            continue;
-        };
-
-        if object.type_name == "KeyedObject" {
-            let Some((object_id, target_local_id, _target)) =
-                keyed_object_target(file, slots, object)
-            else {
-                current_keyed_object = None;
-                current_keyed_property = None;
-                continue;
-            };
-
-            animations[animation_index]
-                .keyed_objects
-                .push(RuntimeKeyedObject {
-                    global_id: global_id as u32,
-                    object_id,
-                    target_local_id,
-                    keyed_properties: Vec::new(),
-                });
-            current_keyed_object = Some(animations[animation_index].keyed_objects.len() - 1);
-            current_keyed_property = None;
-            continue;
-        }
-
-        if object.type_name == "KeyedProperty" {
-            let Some(keyed_object_index) = current_keyed_object else {
-                continue;
-            };
-            let Some(property_key) = object
-                .uint_property("propertyKey")
-                .and_then(|key| u16::try_from(key).ok())
-            else {
-                current_keyed_property = None;
-                continue;
-            };
-            let keyed_object = &animations[animation_index].keyed_objects[keyed_object_index];
-            let object_id = keyed_object.object_id;
-            let target_local_id = keyed_object.target_local_id;
-            let Some(target) = slots
-                .get(object_id)
-                .and_then(|slot| file.object(slot.source_global_id as usize))
-            else {
-                current_keyed_property = None;
-                continue;
-            };
-            if !object_supports_property(target.type_key, property_key) {
-                current_keyed_property = None;
-                continue;
-            }
-
-            animations[animation_index].keyed_objects[keyed_object_index]
-                .keyed_properties
-                .push(RuntimeKeyedProperty {
-                    global_id: global_id as u32,
-                    property_key,
-                    transform_property: transform_property_for_key(property_key),
-                    double_property: core_registry_field_kind_by_property_key(property_key)
-                        == Some(CoreRegistryFieldKind::Double),
-                    double_source_value: runtime_object_double_property_by_key(
-                        target,
-                        property_key,
-                    )
-                    .unwrap_or(0.0),
-                    color_property: core_registry_field_kind_by_property_key(property_key)
-                        == Some(CoreRegistryFieldKind::Color),
-                    color_source_value: runtime_object_color_property_by_key(target, property_key)
-                        .unwrap_or(0),
-                    bool_property: core_registry_field_kind_by_property_key(property_key)
-                        == Some(CoreRegistryFieldKind::Bool),
-                    bool_source_value: runtime_object_bool_property_by_key(target, property_key)
-                        .unwrap_or(false),
-                    uint_property: core_registry_field_kind_by_property_key(property_key)
-                        == Some(CoreRegistryFieldKind::Uint),
-                    string_property: runtime_object_field_kind_by_key(target, property_key)
-                        == Some(FieldKind::String),
-                    callback_event: callback_event_for_keyed_property(
-                        target_local_id,
-                        target,
-                        property_key,
-                    ),
-                    key_frames: Vec::new(),
-                    color_key_frames: Vec::new(),
-                    bool_key_frames: Vec::new(),
-                    uint_key_frames: Vec::new(),
-                    string_key_frames: Vec::new(),
-                    callback_key_frames: Vec::new(),
-                });
-            current_keyed_property = Some((
-                keyed_object_index,
-                animations[animation_index].keyed_objects[keyed_object_index]
-                    .keyed_properties
-                    .len()
-                    - 1,
-            ));
-            continue;
-        }
-
-        if object.type_name == "KeyFrameDouble" {
-            let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
-                continue;
-            };
-            animations[animation_index].keyed_objects[keyed_object_index].keyed_properties
-                [keyed_property_index]
-                .key_frames
-                .push(RuntimeKeyFrameDouble {
-                    global_id: global_id as u32,
-                    frame: object.uint_property("frame").unwrap_or(0),
-                    interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
-                    interpolator_id: normalized_interpolator_id(object),
-                    interpolator: runtime_key_frame_interpolator(file, artboard_index, object),
-                    value: object.double_property("value").unwrap_or(0.0),
-                });
-        }
-
-        if object.type_name == "KeyFrameColor" {
-            let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
-                continue;
-            };
-            animations[animation_index].keyed_objects[keyed_object_index].keyed_properties
-                [keyed_property_index]
-                .color_key_frames
-                .push(RuntimeKeyFrameColor {
-                    global_id: global_id as u32,
-                    frame: object.uint_property("frame").unwrap_or(0),
-                    interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
-                    interpolator_id: normalized_interpolator_id(object),
-                    interpolator: runtime_key_frame_interpolator(file, artboard_index, object),
-                    value: object.color_property("value").unwrap_or(0),
-                });
-        }
-
-        if object.type_name == "KeyFrameBool" {
-            let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
-                continue;
-            };
-            animations[animation_index].keyed_objects[keyed_object_index].keyed_properties
-                [keyed_property_index]
-                .bool_key_frames
-                .push(RuntimeKeyFrameBool {
-                    global_id: global_id as u32,
-                    frame: object.uint_property("frame").unwrap_or(0),
-                    interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
-                    interpolator_id: normalized_interpolator_id(object),
-                    value: object.bool_property("value").unwrap_or(false),
-                });
-        }
-
-        if object.type_name == "KeyFrameUint" {
-            let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
-                continue;
-            };
-            animations[animation_index].keyed_objects[keyed_object_index].keyed_properties
-                [keyed_property_index]
-                .uint_key_frames
-                .push(RuntimeKeyFrameUint {
-                    global_id: global_id as u32,
-                    frame: object.uint_property("frame").unwrap_or(0),
-                    interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
-                    interpolator_id: normalized_interpolator_id(object),
-                    value: object.uint_property("value").unwrap_or(0),
-                });
-        }
-
-        if object.type_name == "KeyFrameId" {
-            let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
-                continue;
-            };
-            animations[animation_index].keyed_objects[keyed_object_index].keyed_properties
-                [keyed_property_index]
-                .uint_key_frames
-                .push(RuntimeKeyFrameUint {
-                    global_id: global_id as u32,
-                    frame: object.uint_property("frame").unwrap_or(0),
-                    interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
-                    interpolator_id: normalized_interpolator_id(object),
-                    value: object.uint_property("value").unwrap_or(0),
-                });
-        }
-
-        if object.type_name == "KeyFrameString" {
-            let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
-                continue;
-            };
-            animations[animation_index].keyed_objects[keyed_object_index].keyed_properties
-                [keyed_property_index]
-                .string_key_frames
-                .push(RuntimeKeyFrameString {
-                    global_id: global_id as u32,
-                    frame: object.uint_property("frame").unwrap_or(0),
-                    interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
-                    interpolator_id: normalized_interpolator_id(object),
-                    value: object
-                        .string_property_bytes("value")
-                        .unwrap_or_default()
-                        .to_vec(),
-                });
-        }
-
-        if object.type_name == "KeyFrameCallback" {
-            let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
-                continue;
-            };
-            animations[animation_index].keyed_objects[keyed_object_index].keyed_properties
-                [keyed_property_index]
-                .callback_key_frames
-                .push(RuntimeKeyFrameCallback {
-                    global_id: global_id as u32,
-                    frame: object.uint_property("frame").unwrap_or(0),
-                });
-        }
-    }
-
-    animations
-}
-
 fn build_state_machines(
     file: &RuntimeFile,
     graph: &ArtboardGraph,
@@ -26154,31 +25867,6 @@ fn artboard_index_for_graph(file: &RuntimeFile, graph: &ArtboardGraph) -> Option
         .position(|artboard| artboard.id == graph.global_id)
 }
 
-fn artboard_object_range(file: &RuntimeFile, start: usize) -> Option<(usize, usize)> {
-    let artboard = file.object(start)?;
-    if artboard.type_name != "Artboard" {
-        return None;
-    }
-    let end = ((start + 1)..file.objects.len())
-        .find(|index| {
-            file.object(*index)
-                .is_some_and(|object| object.type_name == "Artboard")
-        })
-        .unwrap_or(file.objects.len());
-    Some((start, end))
-}
-
-fn keyed_object_target<'a>(
-    file: &'a RuntimeFile,
-    slots: &[InstanceSlot],
-    keyed_object: &RuntimeObject,
-) -> Option<(usize, usize, &'a RuntimeObject)> {
-    let object_id = usize::try_from(keyed_object.uint_property("objectId")?).ok()?;
-    let slot = slots.get(object_id)?;
-    let target = file.object(slot.source_global_id as usize)?;
-    Some((object_id, slot.local_id, target))
-}
-
 fn transform_property_for_key(property_key: u16) -> Option<TransformProperty> {
     [
         ("Node", "x", TransformProperty::X),
@@ -26251,22 +25939,6 @@ fn mix_value(current: f32, value: f32, mix: f32) -> f32 {
     } else {
         current * (1.0 - mix) + value * mix
     }
-}
-
-fn normalized_interpolator_id(object: &RuntimeObject) -> Option<u64> {
-    object
-        .uint_property("interpolatorId")
-        .filter(|id| *id != u64::from(u32::MAX) && *id != u64::MAX)
-}
-
-fn runtime_key_frame_interpolator(
-    file: &RuntimeFile,
-    artboard_index: usize,
-    key_frame: &RuntimeObject,
-) -> Option<RuntimeInterpolator> {
-    let local_index = usize::try_from(normalized_interpolator_id(key_frame)?).ok()?;
-    let interpolator = file.artboard_local_object(artboard_index, local_index)?;
-    RuntimeInterpolator::from_object(interpolator)
 }
 
 #[derive(Debug, Clone)]

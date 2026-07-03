@@ -1,5 +1,6 @@
 use crate::animation::RuntimeInterpolator;
 use rive_binary::{RuntimeFile, RuntimeObject};
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
 pub struct RuntimeStateMachineInput {
@@ -208,6 +209,125 @@ impl RuntimeTransitionInterpolator {
                 easing_value,
             }
             .transform(factor),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeBlendState1D {
+    pub(crate) source: RuntimeBlendState1DSource,
+    pub(crate) animations: Vec<RuntimeBlendAnimation1D>,
+}
+
+impl RuntimeBlendState1D {
+    pub(crate) fn from_imported(
+        file: &RuntimeFile,
+        state: &rive_binary::RuntimeLayerState<'_>,
+        animation_index_by_global: &BTreeMap<u32, usize>,
+    ) -> Option<Self> {
+        let object = state.object?;
+        let source = match object.type_name {
+            "BlendState1DInput" => RuntimeBlendState1DSource::Input {
+                input_index: object
+                    .uint_property("inputId")
+                    .filter(|input_id| *input_id != u64::from(u32::MAX))
+                    .and_then(|input_id| usize::try_from(input_id).ok()),
+            },
+            "BlendState1DViewModel" => RuntimeBlendState1DSource::BindableProperty {
+                global_id: file.latest_bindable_property_for_object(object)?.id as u32,
+            },
+            _ => return None,
+        };
+        let animations = state
+            .blend_animations
+            .iter()
+            .filter_map(|animation| {
+                let animation_index = animation
+                    .animation
+                    .and_then(|animation| animation_index_by_global.get(&animation.id).copied())?;
+                Some(RuntimeBlendAnimation1D {
+                    animation_index,
+                    value: animation.object.double_property("value").unwrap_or(0.0),
+                })
+            })
+            .collect::<Vec<_>>();
+        (!animations.is_empty()).then_some(Self { source, animations })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum RuntimeBlendState1DSource {
+    Input { input_index: Option<usize> },
+    BindableProperty { global_id: u32 },
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeBlendAnimation1D {
+    pub(crate) animation_index: usize,
+    pub(crate) value: f32,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeBlendStateDirect {
+    pub(crate) animations: Vec<RuntimeBlendAnimationDirect>,
+}
+
+impl RuntimeBlendStateDirect {
+    pub(crate) fn from_imported(
+        file: &RuntimeFile,
+        state: &rive_binary::RuntimeLayerState<'_>,
+        animation_index_by_global: &BTreeMap<u32, usize>,
+    ) -> Option<Self> {
+        let object = state.object?;
+        if object.type_name != "BlendStateDirect" {
+            return None;
+        }
+        let animations = state
+            .blend_animations
+            .iter()
+            .filter_map(|animation| {
+                if animation.object.type_name != "BlendAnimationDirect" {
+                    return None;
+                }
+                let animation_index = animation
+                    .animation
+                    .and_then(|animation| animation_index_by_global.get(&animation.id).copied())?;
+                Some(RuntimeBlendAnimationDirect {
+                    animation_index,
+                    source: RuntimeDirectBlendSource::from_object(file, animation.object)?,
+                })
+            })
+            .collect::<Vec<_>>();
+        (!animations.is_empty()).then_some(Self { animations })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeBlendAnimationDirect {
+    pub(crate) animation_index: usize,
+    pub(crate) source: RuntimeDirectBlendSource,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum RuntimeDirectBlendSource {
+    Input { input_index: usize },
+    MixValue { value: f32 },
+    BindableProperty { global_id: u32 },
+}
+
+impl RuntimeDirectBlendSource {
+    fn from_object(file: &RuntimeFile, object: &RuntimeObject) -> Option<Self> {
+        match object.uint_property("blendSource").unwrap_or(0) {
+            0 => Some(Self::Input {
+                input_index: usize::try_from(object.uint_property("inputId")?).ok()?,
+            }),
+            1 => Some(Self::MixValue {
+                value: object.double_property("mixValue").unwrap_or(100.0),
+            }),
+            2 => Some(Self::BindableProperty {
+                global_id: file.latest_bindable_property_for_object(object)?.id as u32,
+            }),
+            _ => None,
         }
     }
 }

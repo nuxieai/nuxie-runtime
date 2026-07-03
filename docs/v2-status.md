@@ -30,7 +30,7 @@ the only memory the next session has. Update it every commit.
    `crates/rive-runtime/src/components.rs`, the linear animation runtime model
    and import builder live in `crates/rive-runtime/src/animation.rs`, and
    state-machine inputs/events/listener/fire actions/view-model trigger runtime
-   state and transition interpolators seed
+   state, transition interpolators, and blend-state import data seed
    `crates/rive-runtime/src/state_machine.rs`.
 2. Resume M2 sample widening after the object-model/modularization queue moves:
    pick the next small animated `exact` corpus file still pinned to sample `0`,
@@ -474,3 +474,10 @@ the only memory the next session has. Update it every commit.
   golden-compare` reports `exact=70`, `exact-segments=96`, `diverges=0`,
   `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
   passes.
+- 2026-07-03: [M2] Moved state-machine blend-state import/runtime model data
+  (`RuntimeBlendState1D`, `RuntimeBlendStateDirect`, and direct blend source
+  metadata) into `crates/rive-runtime/src/state_machine.rs`, leaving only the
+  live artboard-applying blend instances in `lib.rs`. Exact segments remain
+  96 across 70 exact files; `make golden-compare` reports `exact=70`,
+  `exact-segments=96`, `diverges=0`, `unsupported-feature=225`,
+  `not-yet=0`, and `cargo test --workspace` passes.

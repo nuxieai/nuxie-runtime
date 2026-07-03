@@ -102,6 +102,12 @@ fn property_key_for_name(type_name: &str, property_name: &str) -> u16 {
     panic!("missing property {type_name}.{property_name}");
 }
 
+fn transform_x(instance: &ArtboardInstance, local_id: usize) -> f32 {
+    instance
+        .transform_property(local_id, TransformProperty::X)
+        .unwrap_or_else(|| panic!("missing transform x for local id {local_id}"))
+}
+
 fn push_object_with_properties(
     bytes: &mut Vec<u8>,
     type_name: &str,
@@ -15993,7 +15999,7 @@ fn mutable_instance_transform_does_not_mutate_source_object() {
     assert_eq!(source_child.double_property("x"), Some(2.0));
 
     assert!(rust.set_transform_property(1, TransformProperty::X, 12.0));
-    assert_eq!(rust.component(1).unwrap().transform.x, 12.0);
+    assert_eq!(transform_x(&rust, 1), 12.0);
     assert_eq!(
         source_child.double_property("x"),
         Some(2.0),
@@ -16024,11 +16030,7 @@ fn linear_animation_apply_interpolates_keyframe_double_transform() {
     );
 
     assert!(rust.apply_linear_animation(0, 0.5, 1.0));
-    assert_close(
-        rust.component(1).unwrap().transform.x,
-        7.0,
-        "interpolated x",
-    );
+    assert_close(transform_x(&rust, 1), 7.0, "interpolated x");
     assert!(
         rust.component(1)
             .unwrap()
@@ -16142,7 +16144,7 @@ fn linear_animation_apply_holds_when_interpolation_type_is_zero() {
     let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
 
     assert!(rust.apply_linear_animation(0, 0.5, 1.0));
-    assert_close(rust.component(1).unwrap().transform.x, 4.0, "held x");
+    assert_close(transform_x(&rust, 1), 4.0, "held x");
 }
 
 #[test]
@@ -16152,22 +16154,14 @@ fn linear_animation_apply_uses_first_and_last_keyframes_outside_range() {
     let (_, mut before) = read_rust_instance_from_bytes(&before_bytes, before_label);
 
     assert!(before.apply_linear_animation(0, 0.0, 1.0));
-    assert_close(
-        before.component(1).unwrap().transform.x,
-        4.0,
-        "before first x",
-    );
+    assert_close(transform_x(&before, 1), 4.0, "before first x");
 
     let after_label = "synthetic/runtime_linear_animation_after_last.riv";
     let after_bytes = synthetic_linear_animation(8204, 0, 4.0, 10, 12.0, 1, false);
     let (_, mut after) = read_rust_instance_from_bytes(&after_bytes, after_label);
 
     assert!(after.apply_linear_animation(0, 2.0, 1.0));
-    assert_close(
-        after.component(1).unwrap().transform.x,
-        12.0,
-        "after last x",
-    );
+    assert_close(transform_x(&after, 1), 12.0, "after last x");
 }
 
 #[test]
@@ -16177,7 +16171,7 @@ fn linear_animation_apply_quantizes_seconds_before_sampling() {
     let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
 
     assert!(rust.apply_linear_animation(0, 0.99, 1.0));
-    assert_close(rust.component(1).unwrap().transform.x, 11.0, "quantized x");
+    assert_close(transform_x(&rust, 1), 11.0, "quantized x");
 }
 
 #[test]
@@ -16187,7 +16181,7 @@ fn linear_animation_apply_mixes_with_current_transform_value() {
     let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
 
     assert!(rust.apply_linear_animation(0, 1.0, 0.25));
-    assert_close(rust.component(1).unwrap().transform.x, 4.5, "mixed x");
+    assert_close(transform_x(&rust, 1), 4.5, "mixed x");
 }
 
 #[test]
@@ -16203,7 +16197,7 @@ fn linear_animation_apply_does_not_mutate_source_object() {
     assert_eq!(source_child.double_property("x"), Some(2.0));
 
     assert!(rust.apply_linear_animation(0, 1.0, 1.0));
-    assert_close(rust.component(1).unwrap().transform.x, 12.0, "applied x");
+    assert_close(transform_x(&rust, 1), 12.0, "applied x");
     assert_eq!(source_child.double_property("x"), Some(2.0));
 }
 
@@ -16459,11 +16453,7 @@ fn state_machine_animation_state_advances_through_public_runtime_seam() {
         0.0,
         "entered animation state time",
     );
-    assert_close(
-        rust.component(1).unwrap().transform.x,
-        2.0,
-        "entered animation state x",
-    );
+    assert_close(transform_x(&rust, 1), 2.0, "entered animation state x");
 
     assert!(rust.advance_state_machine_instance(&mut state_machine, 0.5));
     assert_close(
@@ -16471,11 +16461,7 @@ fn state_machine_animation_state_advances_through_public_runtime_seam() {
         0.5,
         "advanced animation state time",
     );
-    assert_close(
-        rust.component(1).unwrap().transform.x,
-        7.0,
-        "advanced animation state x",
-    );
+    assert_close(transform_x(&rust, 1), 7.0, "advanced animation state x");
 
     assert!(
         !rust.advance_state_machine_instance(&mut state_machine, 0.0),
@@ -16501,7 +16487,7 @@ fn state_machine_bool_input_drives_zero_duration_transition() {
 
     assert!(rust.advance_state_machine_instance(&mut state_machine, 0.0));
     assert_close(
-        rust.component(1).unwrap().transform.x,
+        transform_x(&rust, 1),
         2.0,
         "initial bool transition state x",
     );
@@ -16514,7 +16500,7 @@ fn state_machine_bool_input_drives_zero_duration_transition() {
     assert!(rust.advance_state_machine_instance(&mut state_machine, 0.0));
     assert_eq!(state_machine.changed_state_count(), 1);
     assert_close(
-        rust.component(1).unwrap().transform.x,
+        transform_x(&rust, 1),
         20.0,
         "bool transition target state x",
     );
@@ -16538,7 +16524,7 @@ fn state_machine_number_input_drives_zero_duration_transition() {
 
     assert!(rust.advance_state_machine_instance(&mut state_machine, 0.0));
     assert_close(
-        rust.component(1).unwrap().transform.x,
+        transform_x(&rust, 1),
         2.0,
         "initial number transition state x",
     );
@@ -16547,7 +16533,7 @@ fn state_machine_number_input_drives_zero_duration_transition() {
     assert!(rust.advance_state_machine_instance(&mut state_machine, 0.0));
     assert_eq!(state_machine.changed_state_count(), 1);
     assert_close(
-        rust.component(1).unwrap().transform.x,
+        transform_x(&rust, 1),
         20.0,
         "number transition target state x",
     );
@@ -16571,7 +16557,7 @@ fn state_machine_trigger_input_drives_zero_duration_transition_once() {
 
     assert!(rust.advance_state_machine_instance(&mut state_machine, 0.0));
     assert_close(
-        rust.component(1).unwrap().transform.x,
+        transform_x(&rust, 1),
         2.0,
         "initial trigger transition state x",
     );
@@ -16593,7 +16579,7 @@ fn state_machine_trigger_input_drives_zero_duration_transition_once() {
         "triggers clear after advance like C++ SMITrigger::advanced"
     );
     assert_close(
-        rust.component(1).unwrap().transform.x,
+        transform_x(&rust, 1),
         20.0,
         "trigger transition target state x",
     );

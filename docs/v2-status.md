@@ -21,12 +21,12 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue M2 real object model work by making generated
-   `InstanceObjectStorage` the source of truth for component transform/state
-   fields. Clone-time reads and live transform writes now flow through the
-   generated arena by concrete object property names, but
-   `TransformRuntimeState` still stores authored x/y/rotation/scale/opacity
-   alongside derived local/world/render transform state.
+1. Continue M2 real object model work by pushing the next runtime-authored
+   component fields through generated storage and modularizing `lib.rs` around
+   the instance object, animation, and state-machine surfaces. Authored
+   transform x/y/rotation/scale/opacity values now live only in
+   `InstanceObjectStorage`; `TransformRuntimeState` only carries derived
+   local/world/render transform state.
 2. Add handle-source world-space math and nested-remap dependent advancement
    to the joystick path when a corpus diff reaches those cases.
 
@@ -701,3 +701,10 @@ the only memory the next session has. Update it every commit.
   synthetic Node/vertex storage. Exact count remains 66; `make golden-compare`
   reports `exact=66`, `diverges=0`, `unsupported-feature=224`, `not-yet=5`,
   and `cargo test --workspace` passes.
+- 2026-07-03: [M2] Removed authored x/y/rotation/scale/opacity mirrors from
+  `TransformRuntimeState`; transform update and render-opacity update now read
+  generated `InstanceObjectStorage` through `ArtboardInstance` transform
+  accessors, leaving `RuntimeComponent` with only derived local/world/render
+  transform state. Exact count remains 66; `make golden-compare` reports
+  `exact=66`, `diverges=0`, `unsupported-feature=224`, `not-yet=5`, and
+  `cargo test --workspace` passes.

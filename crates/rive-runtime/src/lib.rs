@@ -81,7 +81,7 @@ impl ArtboardInstance {
             })?;
 
             component_by_local.insert(component.local_id, components.len());
-            components.push(RuntimeComponent::from_graph_component(component, &objects));
+            components.push(RuntimeComponent::from_graph_component(component));
             let slot = slots
                 .get_mut(component.local_id)
                 .with_context(|| format!("component local id {} is missing", component.local_id))?;
@@ -975,23 +975,15 @@ impl ArtboardInstance {
             return false;
         }
 
-        let property_name = property.property_name();
-        let requested_value = value;
-        let storage_changed =
-            self.objects
-                .set_double_property_by_name(local_id, property_name, requested_value);
-        let Some(value) = self
-            .objects
-            .double_property_by_name(local_id, property_name)
-        else {
+        let Some(current) = self.transform_property(local_id, property) else {
             return false;
         };
-        if !storage_changed && value != requested_value {
+        if current == value {
             return false;
         }
-        if !self.components[index]
-            .transform
-            .set_property(property, value)
+        if !self
+            .objects
+            .set_double_property_by_name(local_id, property.property_name(), value)
         {
             return false;
         }
@@ -1012,13 +1004,35 @@ impl ArtboardInstance {
         true
     }
 
-    fn transform_property(&self, local_id: usize, property: TransformProperty) -> Option<f32> {
-        let component = self
-            .component(local_id)
+    pub fn transform_property(&self, local_id: usize, property: TransformProperty) -> Option<f32> {
+        self.component(local_id)
             .filter(|component| component.capabilities.transform)?;
         self.objects
             .double_property_by_name(local_id, property.property_name())
-            .or_else(|| Some(component.transform.property(property)))
+            .or_else(|| Some(property.default_value()))
+    }
+
+    fn authored_transform(&self, local_id: usize) -> AuthoredTransform {
+        AuthoredTransform {
+            x: self
+                .transform_property(local_id, TransformProperty::X)
+                .unwrap_or_else(|| TransformProperty::X.default_value()),
+            y: self
+                .transform_property(local_id, TransformProperty::Y)
+                .unwrap_or_else(|| TransformProperty::Y.default_value()),
+            rotation: self
+                .transform_property(local_id, TransformProperty::Rotation)
+                .unwrap_or_else(|| TransformProperty::Rotation.default_value()),
+            scale_x: self
+                .transform_property(local_id, TransformProperty::ScaleX)
+                .unwrap_or_else(|| TransformProperty::ScaleX.default_value()),
+            scale_y: self
+                .transform_property(local_id, TransformProperty::ScaleY)
+                .unwrap_or_else(|| TransformProperty::ScaleY.default_value()),
+            opacity: self
+                .transform_property(local_id, TransformProperty::Opacity)
+                .unwrap_or_else(|| TransformProperty::Opacity.default_value()),
+        }
     }
 
     pub fn has_dirt(&self, dirt: ComponentDirt) -> bool {
@@ -1163,8 +1177,10 @@ impl ArtboardInstance {
     }
 
     fn update_component(&mut self, component_index: usize, dirt: ComponentDirt) {
+        let local_id = self.components[component_index].local_id;
         if dirt.contains(ComponentDirt::TRANSFORM) {
-            self.components[component_index].update_transform();
+            let authored = self.authored_transform(local_id);
+            self.components[component_index].update_transform(authored);
         }
         if dirt.contains(ComponentDirt::WORLD_TRANSFORM) {
             let parent_world = self.components[component_index]
@@ -1175,13 +1191,14 @@ impl ArtboardInstance {
             self.components[component_index].update_world_transform(parent_world);
         }
         if dirt.contains(ComponentDirt::RENDER_OPACITY) {
+            let opacity = self.authored_transform(local_id).opacity;
             let parent_opacity = self.components[component_index]
                 .parent_local
                 .and_then(|parent_local| self.component(parent_local))
                 .filter(|parent| parent.capabilities.world_transform)
                 .map(|parent| parent.transform.render_opacity)
                 .unwrap_or(1.0);
-            self.components[component_index].update_render_opacity(parent_opacity);
+            self.components[component_index].update_render_opacity(opacity, parent_opacity);
         }
     }
 
@@ -25752,7 +25769,7 @@ pub struct RuntimeComponent {
 }
 
 impl RuntimeComponent {
-    fn from_graph_component(component: &ComponentNode, objects: &InstanceObjectArena) -> Self {
+    fn from_graph_component(component: &ComponentNode) -> Self {
         Self {
             local_id: component.local_id,
             global_id: component.global_id,
@@ -25765,7 +25782,7 @@ impl RuntimeComponent {
             dependent_locals: component.dependent_locals.clone(),
             graph_order: component.graph_order.unwrap_or(0),
             dirt: ComponentDirt::FILTHY,
-            transform: TransformRuntimeState::from_instance_object(objects, component.local_id),
+            transform: TransformRuntimeState::default(),
         }
     }
 
@@ -27774,6 +27791,13 @@ impl TransformProperty {
             Self::Opacity => "opacity",
         }
     }
+
+    fn default_value(self) -> f32 {
+        match self {
+            Self::X | Self::Y | Self::Rotation => 0.0,
+            Self::ScaleX | Self::ScaleY | Self::Opacity => 1.0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -27783,76 +27807,25 @@ pub struct RuntimeComponentCapabilities {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+struct AuthoredTransform {
+    x: f32,
+    y: f32,
+    rotation: f32,
+    scale_x: f32,
+    scale_y: f32,
+    opacity: f32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TransformRuntimeState {
-    pub x: f32,
-    pub y: f32,
-    pub rotation: f32,
-    pub scale_x: f32,
-    pub scale_y: f32,
-    pub opacity: f32,
     pub local_transform: Mat2D,
     pub world_transform: Mat2D,
     pub render_opacity: f32,
 }
 
-impl TransformRuntimeState {
-    fn from_instance_object(objects: &InstanceObjectArena, local_id: usize) -> Self {
-        let double_property = |property_name, fallback| {
-            objects
-                .double_property_by_name(local_id, property_name)
-                .unwrap_or(fallback)
-        };
-
-        Self {
-            x: double_property("x", 0.0),
-            y: double_property("y", 0.0),
-            rotation: double_property("rotation", 0.0),
-            scale_x: double_property("scaleX", 1.0),
-            scale_y: double_property("scaleY", 1.0),
-            opacity: double_property("opacity", 1.0),
-            local_transform: Mat2D::IDENTITY,
-            world_transform: Mat2D::IDENTITY,
-            render_opacity: 0.0,
-        }
-    }
-
-    fn property(&self, property: TransformProperty) -> f32 {
-        match property {
-            TransformProperty::X => self.x,
-            TransformProperty::Y => self.y,
-            TransformProperty::Rotation => self.rotation,
-            TransformProperty::ScaleX => self.scale_x,
-            TransformProperty::ScaleY => self.scale_y,
-            TransformProperty::Opacity => self.opacity,
-        }
-    }
-
-    fn set_property(&mut self, property: TransformProperty, value: f32) -> bool {
-        let current = match property {
-            TransformProperty::X => &mut self.x,
-            TransformProperty::Y => &mut self.y,
-            TransformProperty::Rotation => &mut self.rotation,
-            TransformProperty::ScaleX => &mut self.scale_x,
-            TransformProperty::ScaleY => &mut self.scale_y,
-            TransformProperty::Opacity => &mut self.opacity,
-        };
-        if *current == value {
-            return false;
-        }
-        *current = value;
-        true
-    }
-}
-
 impl Default for TransformRuntimeState {
     fn default() -> Self {
         Self {
-            x: 0.0,
-            y: 0.0,
-            rotation: 0.0,
-            scale_x: 1.0,
-            scale_y: 1.0,
-            opacity: 1.0,
             local_transform: Mat2D::IDENTITY,
             world_transform: Mat2D::IDENTITY,
             render_opacity: 0.0,
@@ -28636,15 +28609,15 @@ fn runtime_object_u32_property(object: &RuntimeObject, property: &str) -> u32 {
 }
 
 impl RuntimeComponent {
-    fn update_transform(&mut self) {
+    fn update_transform(&mut self, authored: AuthoredTransform) {
         if !self.capabilities.transform {
             return;
         }
 
-        let mut transform = Mat2D::from_rotation(self.transform.rotation);
-        transform.0[4] = self.transform.x;
-        transform.0[5] = self.transform.y;
-        transform.scale_by_values(self.transform.scale_x, self.transform.scale_y);
+        let mut transform = Mat2D::from_rotation(authored.rotation);
+        transform.0[4] = authored.x;
+        transform.0[5] = authored.y;
+        transform.scale_by_values(authored.scale_x, authored.scale_y);
         self.transform.local_transform = transform;
     }
 
@@ -28659,12 +28632,12 @@ impl RuntimeComponent {
         };
     }
 
-    fn update_render_opacity(&mut self, parent_opacity: f32) {
+    fn update_render_opacity(&mut self, opacity: f32, parent_opacity: f32) {
         if !self.capabilities.transform {
             return;
         }
 
-        self.transform.render_opacity = self.transform.opacity * parent_opacity;
+        self.transform.render_opacity = opacity * parent_opacity;
     }
 }
 
@@ -28672,7 +28645,7 @@ impl RuntimeComponent {
 mod tests {
     use super::*;
     use rive_binary::{BytesValue, FieldValue, RuntimeProperty, read_runtime_file};
-    use rive_graph::{ComponentCapabilities, ComponentNode, GraphFile};
+    use rive_graph::GraphFile;
 
     fn synthetic_instance(
         components: Vec<RuntimeComponent>,
@@ -28997,90 +28970,29 @@ mod tests {
     }
 
     #[test]
-    fn runtime_component_initial_transform_reads_generated_instance_storage() {
+    fn update_transform_reads_generated_instance_storage() {
         let node_x_key = property_key_for_name("Node", "x").expect("Node.x key");
         let node_scale_x_key = property_key_for_name("Node", "scaleX").expect("Node.scaleX key");
-        let vertex_x_key = property_key_for_name("StraightVertex", "x").expect("StraightVertex.x");
-        let objects = InstanceObjectArena::from_runtime_objects(vec![
-            Some(synthetic_runtime_object(
-                0,
-                "Node",
-                vec![
-                    RuntimeProperty {
-                        key: node_x_key,
-                        name: "x",
-                        owner: "Node",
-                        value: FieldValue::Double(8.0),
-                    },
-                    RuntimeProperty {
-                        key: node_scale_x_key,
-                        name: "scaleX",
-                        owner: "Node",
-                        value: FieldValue::Double(2.5),
-                    },
-                ],
-            )),
-            Some(synthetic_runtime_object(
-                1,
-                "StraightVertex",
-                vec![RuntimeProperty {
-                    key: vertex_x_key,
-                    name: "x",
-                    owner: "StraightVertex",
-                    value: FieldValue::Double(14.0),
-                }],
-            )),
-        ]);
-        let component = RuntimeComponent::from_graph_component(
-            &ComponentNode {
-                local_id: 0,
-                global_id: 0,
-                type_name: "Node",
-                name: None,
-                capabilities: ComponentCapabilities {
-                    transform: true,
-                    world_transform: true,
-                    ..Default::default()
-                },
-                parent_local: None,
-                parent_global: None,
-                children: Vec::new(),
-                constraint_locals: Vec::new(),
-                dependent_locals: Vec::new(),
-                graph_order: Some(3),
-                missing_parent: false,
-            },
-            &objects,
+        let mut component = synthetic_component(0, 0);
+        component.dirt = ComponentDirt::TRANSFORM;
+        let mut instance = synthetic_instance(vec![component], vec![0]);
+
+        assert!(instance.objects.set_double_property_by_name(0, "x", 8.0));
+        assert!(
+            instance
+                .objects
+                .set_double_property_by_name(0, "scaleX", 2.5)
         );
 
-        assert_eq!(component.transform.x, 8.0);
-        assert_eq!(component.transform.y, 0.0);
-        assert_eq!(component.transform.scale_x, 2.5);
-        assert_eq!(component.transform.scale_y, 1.0);
+        let report = instance.update_components();
 
-        let vertex_component = RuntimeComponent::from_graph_component(
-            &ComponentNode {
-                local_id: 1,
-                global_id: 1,
-                type_name: "StraightVertex",
-                name: None,
-                capabilities: ComponentCapabilities {
-                    transform: true,
-                    world_transform: true,
-                    ..Default::default()
-                },
-                parent_local: None,
-                parent_global: None,
-                children: Vec::new(),
-                constraint_locals: Vec::new(),
-                dependent_locals: Vec::new(),
-                graph_order: Some(4),
-                missing_parent: false,
-            },
-            &objects,
+        assert_eq!(report.updated_locals, vec![0]);
+        assert_eq!(instance.double_property(0, node_x_key), Some(8.0));
+        assert_eq!(instance.double_property(0, node_scale_x_key), Some(2.5));
+        assert_eq!(
+            instance.component(0).unwrap().transform.local_transform,
+            Mat2D([2.5, 0.0, -0.0, 1.0, 8.0, 0.0])
         );
-
-        assert_eq!(vertex_component.transform.x, 14.0);
     }
 
     #[test]
@@ -29090,15 +29002,27 @@ mod tests {
         root.transform.render_opacity = 0.5;
         let mut child = synthetic_component(1, 1);
         child.parent_local = Some(0);
-        child.transform.x = 2.0;
-        child.transform.y = 3.0;
-        child.transform.scale_x = 4.0;
-        child.transform.scale_y = 5.0;
-        child.transform.opacity = 0.25;
         child.dirt = ComponentDirt::TRANSFORM
             | ComponentDirt::WORLD_TRANSFORM
             | ComponentDirt::RENDER_OPACITY;
         let mut instance = synthetic_instance(vec![root, child], vec![0, 1]);
+        assert!(instance.objects.set_double_property_by_name(1, "x", 2.0));
+        assert!(instance.objects.set_double_property_by_name(1, "y", 3.0));
+        assert!(
+            instance
+                .objects
+                .set_double_property_by_name(1, "scaleX", 4.0)
+        );
+        assert!(
+            instance
+                .objects
+                .set_double_property_by_name(1, "scaleY", 5.0)
+        );
+        assert!(
+            instance
+                .objects
+                .set_double_property_by_name(1, "opacity", 0.25)
+        );
 
         let report = instance.update_components();
 
@@ -29126,7 +29050,10 @@ mod tests {
 
         assert!(instance.set_transform_property(0, TransformProperty::X, 12.0));
         let component = instance.component(0).unwrap();
-        assert_eq!(component.transform.x, 12.0);
+        assert_eq!(
+            instance.transform_property(0, TransformProperty::X),
+            Some(12.0)
+        );
         assert_eq!(instance.double_property(0, node_x_key), Some(12.0));
         assert!(
             component
@@ -29149,7 +29076,10 @@ mod tests {
 
         assert!(instance.set_transform_property(0, TransformProperty::X, 14.0));
 
-        assert_eq!(instance.component(0).unwrap().transform.x, 14.0);
+        assert_eq!(
+            instance.transform_property(0, TransformProperty::X),
+            Some(14.0)
+        );
         assert_eq!(instance.double_property(0, vertex_x_key), Some(14.0));
         assert_eq!(instance.double_property(0, node_x_key), None);
     }
@@ -29183,7 +29113,10 @@ mod tests {
 
         assert!(instance.set_transform_property(0, TransformProperty::Opacity, 0.35));
         let component = instance.component(0).unwrap();
-        assert_eq!(component.transform.opacity, 0.35);
+        assert_eq!(
+            instance.transform_property(0, TransformProperty::Opacity),
+            Some(0.35)
+        );
         assert!(component.dirt.contains(ComponentDirt::RENDER_OPACITY));
         assert!(!component.dirt.contains(ComponentDirt::TRANSFORM));
     }

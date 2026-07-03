@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 42
+- Corpus files `exact`: 44
 - Current milestone: **M1 — Static Vector Rendering Exact (#V2-2)**
 
 ## Milestones
@@ -22,9 +22,9 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
-   start with `keyboard_event_to_script`, `keyboard_listener`, `library`,
-   `library_data_enum_test`, `library_view_model_test`, and
-   `library_vmtest_1_host`; promote exact sample-0 matches or add verified
+   start with `library_with_text_and_image`, `light_switch`,
+   `list_index_script_access`, `list_items`, `list_to_length_test`, and
+   `list_to_path`; promote exact sample-0 matches or add verified
    unsupported diagnostics for later-phase first diffs.
 2. `joystick_flag_test` is parked for M2: its sample-0 first diff is joystick
    application/default state-machine behavior, while Rust still draws the
@@ -140,6 +140,9 @@ the only memory the next session has. Update it every commit.
   `juice.riv` are parked for gradient rendering; `joel_v3.riv` is parked for
   text support; `joystick_flag_test.riv` is parked for M2 joystick
   application/default state-machine behavior.
+- `keyboard_listener.riv` is parked for text support; `library.riv` is parked
+  for image support; `library_view_model_test.riv` and
+  `library_vmtest_1_host.riv` are parked for nested-artboard support.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -411,3 +414,9 @@ the only memory the next session has. Update it every commit.
   `juice.riv` with verified image/gradient/text diagnostics, and parked
   `joystick_flag_test.riv` for M2 joystick application; exact count is now 42,
   unsupported-feature is now 159, and not-yet is now 94.
+- 2026-07-02: [M1] Promoted `keyboard_event_to_script.riv` and
+  `library_data_enum_test.riv` as sample-0 exact, and gated
+  `keyboard_listener.riv`, `library.riv`, `library_view_model_test.riv`, and
+  `library_vmtest_1_host.riv` with verified text/image/nested-artboard
+  diagnostics; exact count is now 44, unsupported-feature is now 163, and
+  not-yet is now 88.

@@ -182,6 +182,19 @@ impl Mat2D {
         ])
     }
 
+    pub(crate) fn multiply_path_local_fused(self, rhs: Self) -> Self {
+        let a = self.0;
+        let b = rhs.0;
+        Self([
+            a[0].mul_add(b[0], a[2] * b[1]),
+            a[1].mul_add(b[0], a[3] * b[1]),
+            a[0].mul_add(b[2], a[2] * b[3]),
+            a[1].mul_add(b[2], a[3] * b[3]),
+            a[0].mul_add(b[4], a[2].mul_add(b[5], a[4])),
+            a[1].mul_add(b[4], a[3].mul_add(b[5], a[5])),
+        ])
+    }
+
     pub fn scale_by_values(&mut self, scale_x: f32, scale_y: f32) {
         self.0[0] *= scale_x;
         self.0[1] *= scale_x;
@@ -223,9 +236,9 @@ impl Mat2D {
         // Ported from src/math/mat2d.cpp Mat2D::mapPoints. The grouping matters
         // for cancellation-heavy local path composition.
         if b == 0.0 && c == 0.0 {
-            (a * x + e, d * y + f)
+            (a.mul_add(x, e), d.mul_add(y, f))
         } else {
-            (a * x + (c * y + e), d * y + (b * x + f))
+            (a.mul_add(x, c.mul_add(y, e)), d.mul_add(y, b.mul_add(x, f)))
         }
     }
 

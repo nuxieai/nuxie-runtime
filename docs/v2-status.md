@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 69
+- Corpus files `exact`: 70
 - Current milestone: **M2 — Animated Playback Exact + Real Object Model (#V2-3)**
 
 ## Milestones
@@ -21,11 +21,11 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Stay on the exact-count path before more structural extraction: inspect the
-   remaining M2 sample-0 `rocket.riv` `not-yet` stream. Its first focused diff
-   is a rounded path numeric residual in path local 83 under shape local 82
-   after the local transform; localize whether this is path-local matrix
-   precision, rounded-rectangle generation, or runtime property application.
+1. Classify the last sample-0 `not-yet` file,
+   `interpolation_zero_duration.riv`: either promote it if the stream is now
+   exact, or park it behind the existing M5 zero-duration data-binding
+   transform diagnostic so the manifest has no unexplained sample-0 `not-yet`
+   entries.
 2. Continue M2 real object model work by modularizing the remaining
    animation/state-machine surfaces out of `lib.rs` while keeping generated
    `InstanceObjectStorage` as the authored-property source of truth, but only
@@ -59,10 +59,6 @@ the only memory the next session has. Update it every commit.
   Golden runner sample lists now advance by sorted absolute-time deltas and reuse render paths
   across samples;
   no images, text, nested artboards, constraints, or scripted input.
-- `rocket.riv` is parked for M2 at sample `0`: after keyed interpolation and
-  rounded-corner midpoint parity, its first focused diff is a rounded path
-  numeric residual in path local 83 under shape local 82, roughly
-  `(3e-5, 1.22e-4)` after the local transform.
 - `scripted_color.riv` is parked for M5 at sample `0`: C++ binds the default
   `ViewModelPropertyColor` through `DataBindContext` to a `SolidColor`, while
   static Rust still draws the imported color.
@@ -782,3 +778,8 @@ the only memory the next session has. Update it every commit.
   Promoted `juice.riv` to exact; `make golden-compare` reports `exact=69`,
   `diverges=0`, `unsupported-feature=224`, `not-yet=2`. Next M2 exact-count
   target is the remaining `rocket.riv` rounded path residual.
+- 2026-07-03: [M2] Matched rotated local path cancellation for `rocket.riv` by
+  using fused path-local composition for visibly rotated/skewed matrices while
+  preserving axis-aligned cancellation for `juice.riv`. Promoted `rocket.riv`
+  to exact; `make golden-compare` reports `exact=70`, `diverges=0`,
+  `unsupported-feature=224`, `not-yet=1`, and `cargo test --workspace` passes.

@@ -713,7 +713,13 @@ impl ArtboardInstance {
             let transform = match path_kind {
                 ShapePaintPathKind::World => path_transform,
                 ShapePaintPathKind::Local | ShapePaintPathKind::LocalClockwise => {
-                    inverse_shape_world.multiply(path_transform)
+                    if mat2d_has_visible_skew_or_rotation(shape_world)
+                        || mat2d_has_visible_skew_or_rotation(path_transform)
+                    {
+                        inverse_shape_world.multiply_path_local_fused(path_transform)
+                    } else {
+                        inverse_shape_world.multiply(path_transform)
+                    }
                 }
             };
 
@@ -2072,6 +2078,13 @@ fn runtime_rect_commands(left: f32, top: f32, right: f32, bottom: f32) -> Vec<Ru
 
 fn runtime_render_mat(mat: Mat2D) -> RenderMat2D {
     RenderMat2D(mat.0)
+}
+
+fn mat2d_has_visible_skew_or_rotation(mat: Mat2D) -> bool {
+    // Keep near-axis-aligned cancellation on the regular multiply path; real
+    // off-axis local path composition needs the fused C++ residual.
+    const MATRIX_AXIS_EPSILON: f32 = 5.0e-2;
+    mat.0[1].abs() > MATRIX_AXIS_EPSILON || mat.0[2].abs() > MATRIX_AXIS_EPSILON
 }
 
 fn runtime_blend_mode(value: u32) -> Result<RenderBlendMode> {

@@ -13,7 +13,12 @@ toward completion and leave a clean handoff.
 **Complete means:** every exit criterion of milestones M0–M7 in
 `docs/porting-map-v2.md` is checked off in `docs/v2-status.md`, and
 `make golden-compare` plus `cargo test --workspace` pass. When that is true,
-say so and stop — do not invent new scope.
+say so and stop — do not invent new scope. A follow-on renderer port is
+planned in `docs/renderer-port-map.md` (Phase R, tickets #R-0–#R-5), but it
+requires explicit user activation: when the user says to begin Phase R, adopt
+that map's tickets and verification model under these same ground rules,
+tracking R milestones in `docs/v2-status.md` alongside a `corpus-r.toml`
+pixel metric. Never start Phase R on your own initiative.
 
 ## The one metric
 

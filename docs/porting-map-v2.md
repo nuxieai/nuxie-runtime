@@ -15,8 +15,10 @@ verification model, and the porting method for everything that remains.
 A Rust runtime that loads real `.riv` files, instantiates artboards, advances
 animations/state machines with pointer input, resolves data binding, and draws
 through the existing C++ Rive Renderer via FFI. Everything but the renderer
-(and the C/C++ libraries the C++ runtime itself delegates to — Yoga, HarfBuzz,
-SheenBidi, Luau, miniaudio) is Rust.
+and the Luau VM is Rust: the subsystems the C++ runtime delegates to vendored
+C/C++ libraries use Rust-native equivalents instead (see #V2-7), chosen by the
+rule that spec-defined behavior may swap engines while implementation-defined
+semantics keep the same engine.
 
 Definition of done for every milestone: **N corpus files produce output
 identical to the C++ runtime**, never "behavior X is pinned."
@@ -209,28 +211,75 @@ scripts in the golden harness.
 Blocked by: #V2-2 (layout/text draw through the same seam)
 Target: weeks 4–6, corpus-gated order
 
-These are "everything but the renderer" only nominally — the C++ runtime
-itself delegates them, so Rust binds rather than ports:
+The C++ runtime delegates these subsystems to vendored C/C++ libraries. The
+Rust port uses Rust-native equivalents, selected by one rule: **spec-defined
+behavior may swap engines; implementation-defined behavior may not.** Each
+subsystem sits behind a trait so an engine can be swapped later without
+touching runtime code.
 
-- **Layout.** Bind Yoga via FFI (or the maintained `yoga` crate bindings);
-  port `src/layout/` glue (~0.9k) plus `LayoutComponent` style plumbing. Check
-  corpus frequency — likely high enough to pull forward into week 4.
-- **Text.** Port `src/text/` runtime objects (~8.5k) but keep HarfBuzz and
-  SheenBidi shaping behind FFI, mirroring the C++ build. Golden frames verify
-  glyph runs positionally. Largest remaining chunk: run a one-day sizing spike
-  before scheduling. Rust-native shapers (`rustybuzz`) can swap in later
-  behind the same trait.
-- **Audio.** miniaudio via FFI plus ~1k of glue. Only if corpus contains audio
-  events.
-- **Scripting.** `src/lua/` is ~16.4k lines of Luau glue — the largest single
-  item, and most content does not script. Feature-gate it, emit
-  `unsupported: scripting` at import, schedule only when a corpus file demands
-  it. This must not become the next formula swamp.
+Decided libraries (2026-07-02):
+
+- **Layout: Taffy** (`taffy` crate, DioxusLabs). Same lineage as Yoga — Yoga
+  core author Emil Sjölander wrote Stretch, which became Taffy. Implements
+  Block/Flexbox/CSS Grid per the CSS specs, while Yoga preserves
+  React-Native-era quirks that Rive editor files are authored against, so
+  edge-case layouts may diverge: layout-bearing corpus files verify in
+  `tolerant` mode. Port `src/layout/` glue (~0.9k) plus `LayoutComponent`
+  style plumbing against a layout trait. Fallback if corpus divergence proves
+  painful: Yoga via FFI behind the same trait — do not pin Taffy against Yoga
+  behavior-by-behavior; that is V1 with someone else's library. Taffy's CSS
+  Grid support is a post-M7 Rust-only enhancement opportunity (the editor
+  cannot author it).
+- **Text shaping: HarfRust** (`harfrust`, the HarfBuzz organization's official
+  Rust port) over **`read-fonts`/`skrifa`** (Google fontations) for font
+  parsing — the stack HarfRust itself builds on. Closest-to-exact swap in
+  this list: it tracks upstream HarfBuzz and passes nearly all of its test
+  suite. Known gaps (no Arabic fallback shaper for malformed fonts, a couple
+  dozen esoteric shaping features) go to the backlog only if a corpus file
+  hits them.
+- **Bidi: `unicode-bidi`.** Both it and C++'s SheenBidi implement UAX #9,
+  which is spec-defined; a mismatch is a bug in one of them, not a porting
+  concern.
+- **Line breaking / text layout:** Rive's own code in `src/text/` (~8.5k) —
+  ported, not replaced. Largest remaining chunk; run a one-day sizing spike
+  before scheduling. Avoid `cosmic-text`: it imposes its own line-layout
+  model and Rive has its own.
+- **Image decoding:** the `image`-ecosystem crates (`png`, `zune-jpeg`,
+  `image-webp`) replace libpng/libjpeg/libwebp. PNG is lossless and stays
+  exact; JPEG decoders are not bit-identical across implementations, so
+  image-bearing files verify decoded dimensions plus tolerant pixel sampling
+  — never payload hashes across runtimes.
+- **Audio: `cpal`/`rodio`** (or `kira`) instead of miniaudio, ~1k of glue.
+  Only when corpus files contain audio events.
+- **Scripting: `mlua` with the `luau` feature.** No mature pure-Rust Luau
+  exists; mlua vendors and compiles the official Roblox Luau (C++) sources
+  inside cargo and exposes safe bindings. Technically FFI, strategically
+  correct: scripting semantics are implementation-defined, and running the
+  same VM as the C++ runtime gives parity by construction, so scripted files
+  can still verify `exact`. Port the `src/lua/` glue (~16.4k) against mlua's
+  API, feature-gated, scheduled only when a corpus file demands it. This must
+  not become the next formula swamp.
+
+### Verification Modes
+
+`corpus.toml` gains a per-entry verification mode consumed by
+`golden-compare`:
+
+- `exact` — default; byte/epsilon-identical streams. All fully-ported
+  subsystems, plus scripting (same VM).
+- `tolerant(ε)` — positions/pixels compared within epsilon. Files exercising
+  Taffy layout, HarfRust-shaped text, or lossy image decoding.
+- `structural` — same call sequence and counts, values within tolerance; last
+  resort, requires a Decision-log entry justifying it.
+
+The mode is per-file and as strict as the file's content allows; a file with
+no layout/text/images never gets to hide behind `tolerant`.
 
 ### Milestone M6
 
-Layout and text corpus files exact; audio/scripting gated with explicit
-diagnostics.
+Layout and text corpus files verified in their declared modes (`exact` where
+no swapped engine is involved, `tolerant` otherwise); audio/scripting gated
+with explicit diagnostics.
 
 ## #V2-8: Ship Surface (Phase 7)
 
@@ -251,6 +300,14 @@ Target: ongoing from week 4
 
 Public API and C ABI published in-repo; advance/draw performance within target
 of C++ on the corpus.
+
+## Phase R: Renderer Port (separate map)
+
+The eventual Rust renderer — a faithful port of the C++ Rive Renderer's
+algorithm layer onto `wgpu`, replacing the ORE/impl HAL entirely — is planned
+in `docs/renderer-port-map.md`. It is blocked by M7 **and explicit user
+activation**; it is not part of V2 scope and must not be started by a `/goal`
+session on its own initiative.
 
 ---
 
@@ -290,7 +347,7 @@ front.
 | M3 | weeks 2–3 | Pointer-interactive files exact under scripted input |
 | M4 | week 3 | Nested artboards/lists exact |
 | M5 | week 4 | Data binding exact incl. external mutation |
-| M6 | weeks 5–6 | Layout + text exact; audio/scripting gated |
+| M6 | weeks 5–6 | Layout + text verified per declared modes; audio/scripting gated |
 | M7 | week 6 | Public API + C ABI; perf within target of C++ |
 
 Timeline calibration: the V1 process shipped binary import, the static graph,

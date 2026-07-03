@@ -16,7 +16,7 @@ the only memory the next session has. Update it every commit.
 - [ ] M3: Interactive files exact under scripted pointer input
 - [ ] M4: Nested artboards/lists exact
 - [ ] M5: Data binding exact incl. external view-model mutation
-- [ ] M6: Layout + text exact; audio/scripting gated with diagnostics
+- [ ] M6: Layout + text verified per declared corpus modes; audio/scripting gated with diagnostics
 - [ ] M7: Public `rive` API + C ABI; perf within target of C++
 
 ## Next
@@ -224,6 +224,20 @@ the only memory the next session has. Update it every commit.
   constraints and clipping shapes inherit the Solo's collapse value, while
   participating children collapse unless they match the imported
   `activeComponentId` resolved through the artboard-local object table.
+- 2026-07-02: Delegated subsystems (#V2-7) use Rust-native libraries instead
+  of FFI, chosen by "spec-defined may swap engines; implementation-defined may
+  not": Taffy (layout, behind a trait, Yoga-FFI as untriggered fallback),
+  HarfRust + read-fonts/skrifa (shaping/font parsing), unicode-bidi (bidi),
+  `image`-ecosystem crates (decoders), cpal/rodio (audio), and mlua+`luau`
+  vendoring the official Luau VM (scripting — same VM as C++, so scripted
+  files stay `exact`). `corpus.toml` gains per-entry verification modes
+  `exact | tolerant(ε) | structural`; files exercising Taffy layout, HarfRust
+  text, or lossy image decoding verify `tolerant`, everything else stays
+  `exact`. Cross-runtime image comparison must use decoded dimensions +
+  tolerant pixel sampling, never payload hashes (supersedes the size/hash
+  recording decision above once Rust image support lands). Do not pin Taffy
+  against Yoga behavior-by-behavior. Taffy CSS Grid is a post-M7 enhancement
+  idea, not port scope.
 
 ## Log
 

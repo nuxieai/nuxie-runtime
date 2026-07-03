@@ -37,20 +37,21 @@ pub use components::{
 };
 use objects::InstanceObjectArena;
 pub use objects::InstanceSlot;
+use state_machine::{
+    RuntimeBindableTriggerSource, RuntimeTransitionInterpolator,
+    StateMachineBindableArtboardInstance, StateMachineBindableAssetInstance,
+    StateMachineBindableBooleanInstance, StateMachineBindableColorInstance,
+    StateMachineBindableEnumInstance, StateMachineBindableIntegerInstance,
+    StateMachineBindableListInstance, StateMachineBindableNumberInstance,
+    StateMachineBindableStringInstance, StateMachineBindableTriggerInstance,
+    StateMachineBindableViewModelInstance, StateMachineLayerInstance,
+    StateMachineViewModelTriggerInstance, bindable_artboard_value, bindable_asset_value,
+    bindable_boolean_value, bindable_color_value, bindable_enum_value, bindable_integer_value,
+    bindable_string_value, bindable_trigger_value, build_state_machines,
+};
 pub use state_machine::{
     RuntimeLayerState, RuntimeStateMachine, RuntimeStateMachineInput, RuntimeStateMachineLayer,
     StateMachineInputInstance, StateMachineInputKind, StateMachineReportedEvent,
-};
-use state_machine::{
-    RuntimeTransitionInterpolator, StateMachineBindableArtboardInstance,
-    StateMachineBindableAssetInstance, StateMachineBindableBooleanInstance,
-    StateMachineBindableColorInstance, StateMachineBindableEnumInstance,
-    StateMachineBindableIntegerInstance, StateMachineBindableListInstance,
-    StateMachineBindableNumberInstance, StateMachineBindableStringInstance,
-    StateMachineBindableTriggerInstance, StateMachineBindableViewModelInstance,
-    StateMachineLayerInstance, StateMachineViewModelTriggerInstance, bindable_artboard_value,
-    bindable_asset_value, bindable_boolean_value, bindable_color_value, bindable_enum_value,
-    bindable_integer_value, bindable_string_value, bindable_trigger_value, build_state_machines,
 };
 
 #[derive(Debug, Clone)]
@@ -4228,210 +4229,6 @@ fn sorted_drawable_uses_render_opacity(type_name: &str) -> bool {
 
 fn sorted_drawable_is_nested_artboard(type_name: &str) -> bool {
     definition_by_name(type_name).is_some_and(|definition| definition.is_a("NestedArtboard"))
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct RuntimeBindableNumber {
-    global_id: u32,
-    data_bind_indices: Vec<usize>,
-    default_view_model_sources: Vec<RuntimeBindableNumberDefaultViewModelSource>,
-    value: f32,
-}
-
-#[derive(Debug, Clone)]
-struct RuntimeBindableNumberDefaultViewModelSource {
-    data_bind_index: usize,
-    path: Vec<u32>,
-    flags: u64,
-    converter: Option<RuntimeDataBindGraphConverter>,
-    value: RuntimeDataBindGraphValue,
-    view_model_instance_ids: Vec<u32>,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct RuntimeBindableInteger {
-    global_id: u32,
-    data_bind_indices: Vec<usize>,
-    default_view_model_sources: Vec<RuntimeBindableIntegerDefaultViewModelSource>,
-    value: u64,
-}
-
-#[derive(Debug, Clone)]
-struct RuntimeBindableIntegerDefaultViewModelSource {
-    data_bind_index: usize,
-    path: Vec<u32>,
-    flags: u64,
-    value: u64,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct RuntimeBindableColor {
-    global_id: u32,
-    data_bind_indices: Vec<usize>,
-    default_view_model_sources: Vec<RuntimeBindableColorDefaultViewModelSource>,
-    value: u32,
-}
-
-#[derive(Debug, Clone)]
-struct RuntimeBindableColorDefaultViewModelSource {
-    data_bind_index: usize,
-    path: Vec<u32>,
-    flags: u64,
-    value: u32,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct RuntimeBindableString {
-    global_id: u32,
-    data_bind_indices: Vec<usize>,
-    default_view_model_sources: Vec<RuntimeBindableStringDefaultViewModelSource>,
-    value: Vec<u8>,
-}
-
-#[derive(Debug, Clone)]
-struct RuntimeBindableStringDefaultViewModelSource {
-    data_bind_index: usize,
-    path: Vec<u32>,
-    flags: u64,
-    converter: Option<RuntimeDataBindGraphConverter>,
-    value: RuntimeDataBindGraphValue,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct RuntimeBindableEnum {
-    global_id: u32,
-    data_bind_indices: Vec<usize>,
-    default_view_model_sources: Vec<RuntimeBindableEnumDefaultViewModelSource>,
-    value: u64,
-}
-
-#[derive(Debug, Clone)]
-struct RuntimeBindableEnumDefaultViewModelSource {
-    data_bind_index: usize,
-    path: Vec<u32>,
-    flags: u64,
-    value: u64,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct RuntimeBindableAsset {
-    global_id: u32,
-    data_bind_indices: Vec<usize>,
-    default_view_model_sources: Vec<RuntimeBindableAssetDefaultViewModelSource>,
-    value: u64,
-}
-
-#[derive(Debug, Clone)]
-struct RuntimeBindableAssetDefaultViewModelSource {
-    data_bind_index: usize,
-    path: Vec<u32>,
-    flags: u64,
-    value: u64,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct RuntimeBindableArtboard {
-    global_id: u32,
-    data_bind_indices: Vec<usize>,
-    default_view_model_sources: Vec<RuntimeBindableArtboardDefaultViewModelSource>,
-    value: u64,
-}
-
-#[derive(Debug, Clone)]
-struct RuntimeBindableArtboardDefaultViewModelSource {
-    data_bind_index: usize,
-    path: Vec<u32>,
-    flags: u64,
-    value: u64,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct RuntimeBindableList {
-    global_id: u32,
-    data_bind_indices: Vec<usize>,
-    default_view_model_sources: Vec<RuntimeBindableListDefaultViewModelSource>,
-    value: usize,
-}
-
-#[derive(Debug, Clone)]
-struct RuntimeBindableListDefaultViewModelSource {
-    data_bind_index: usize,
-    path: Vec<u32>,
-    flags: u64,
-    converter: Option<RuntimeDataBindGraphConverter>,
-    value: RuntimeDataBindGraphValue,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct RuntimeBindableTrigger {
-    global_id: u32,
-    data_bind_indices: Vec<usize>,
-    value: u64,
-    source: RuntimeBindableTriggerSource,
-    default_view_model_sources: Vec<RuntimeBindableTriggerDefaultViewModelSource>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum RuntimeBindableTriggerSource {
-    None,
-    DefaultViewModelTrigger { trigger_global_id: u32 },
-}
-
-#[derive(Debug, Clone)]
-struct RuntimeBindableTriggerDefaultViewModelSource {
-    data_bind_index: usize,
-    path: Vec<u32>,
-    flags: u64,
-    converter: Option<RuntimeDataBindGraphConverter>,
-    value: u64,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct RuntimeBindableViewModel {
-    global_id: u32,
-    data_bind_indices: Vec<usize>,
-    source: RuntimeBindableViewModelSource,
-    default_view_model_sources: Vec<RuntimeBindableViewModelDefaultViewModelSource>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum RuntimeBindableViewModelSource {
-    Null,
-    RootDataContext,
-}
-
-#[derive(Debug, Clone)]
-struct RuntimeBindableViewModelDefaultViewModelSource {
-    data_bind_index: usize,
-    path: Vec<u32>,
-    flags: u64,
-    converter: Option<RuntimeDataBindGraphConverter>,
-    value: RuntimeViewModelPointer,
-    view_model_instance_ids: Vec<u32>,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct RuntimeBindableBoolean {
-    global_id: u32,
-    data_bind_indices: Vec<usize>,
-    default_view_model_sources: Vec<RuntimeBindableBooleanDefaultViewModelSource>,
-    value: bool,
-}
-
-#[derive(Debug, Clone)]
-struct RuntimeBindableBooleanDefaultViewModelSource {
-    data_bind_index: usize,
-    path: Vec<u32>,
-    flags: u64,
-    converter: Option<RuntimeDataBindGraphConverter>,
-    value: bool,
-}
-
-#[derive(Debug, Clone)]
-struct RuntimeViewModelTrigger {
-    global_id: u32,
-    view_model_property_id: u32,
-    value: u64,
 }
 
 #[derive(Debug, Clone)]

@@ -38,8 +38,8 @@ corpus.toml`, not backlog prose.
 ## Session loop
 
 1. **Orient.** Read `docs/v2-status.md`. Run `make golden-compare` (if it
-   exists) and note the current exact count. Restate in one sentence: current
-   milestone, metric value, and the task you are picking up.
+   exists) and note the current `exact-segments` value. Restate in one
+   sentence: current milestone, metric value, and the task you are picking up.
 2. **Pick work.** Take the top item from the "Next" queue in the status file.
    If the queue is empty, derive the next task from the current milestone's
    exit criteria in the porting map. Before starting, write down which corpus
@@ -47,8 +47,9 @@ corpus.toml`, not backlog prose.
    one, the task is out of scope — pick different work.**
 3. **Execute** under the porting method rules below.
 4. **Verify.** Run `make golden-compare` and the frozen test suite
-   (`cargo test --workspace`). The exact count is a ratchet: if your change
-   regressed any `exact` file, fix or revert before anything else.
+   (`cargo test --workspace`). `exact-segments` is a ratchet: if your change
+   regressed any `exact` file or sample segment, fix or revert before anything
+   else.
 5. **Record.** Update `corpus.toml` statuses (and `milestone` tags for gated
    entries), update `docs/v2-status.md` (metric, milestone checkboxes, Next
    queue, one-line log entry), and commit with the milestone tag in the
@@ -99,7 +100,7 @@ milestone queue:
 3. Your planned commit message **cannot name a milestone tag** honestly.
 4. You are **extending the contract suite** or adding a cpp-probe comparison
    outside the divergence protocol.
-5. The exact count **has not moved in your last ~10 commits** and you are not
+5. `exact-segments` **has not moved in your last ~10 commits** and you are not
    building #V2-1/#V2-8 infrastructure — the approach is wrong; re-read the
    current milestone and change tactics, or record a blocker for the user.
 

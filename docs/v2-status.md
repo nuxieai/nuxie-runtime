@@ -33,8 +33,9 @@ the only memory the next session has. Update it every commit.
    state, transition conditions, transition interpolators, transition
    timing/allowance model, blend-state import data, imported layer/state
    model, live blend-state instances, state-machine layer advancement, and
-   state-machine bindable instances/helpers/import builders seed
-   `crates/rive-runtime/src/state_machine.rs` and its submodules.
+   state-machine bindable import/runtime models, instances, helpers, and
+   builders seed `crates/rive-runtime/src/state_machine.rs` and its
+   submodules.
 2. Add handle-source world-space math and nested-remap dependent advancement
    to the joystick path when a corpus diff reaches those cases.
 3. Remaining exact entries pinned to sample `0` are static M1 holdovers:
@@ -815,3 +816,14 @@ the only memory the next session has. Update it every commit.
   137 across 70 exact files; `make golden-compare` reports `exact=70`,
   `exact-segments=137`, `diverges=0`, `unsupported-feature=225`,
   `not-yet=0`, and `cargo test --workspace` passes.
+- 2026-07-03: [M2] Moved the `RuntimeBindable*` import model structs,
+  default-source records, trigger source enum, view-model source enum, and
+  default view-model trigger record out of `lib.rs` and into
+  `crates/rive-runtime/src/state_machine/bindables.rs`, leaving the root
+  data-bind graph to read the same crate-visible fields until
+  `StateMachineInstance` data-context orchestration is split. Also aligned the
+  checked-in port map and `/goal` command wording around `exact-segments` as
+  the health metric. Exact segments remain 137 across 70 exact files;
+  `make golden-compare` reports `exact=70`, `exact-segments=137`,
+  `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
+  `cargo test --workspace` passes.

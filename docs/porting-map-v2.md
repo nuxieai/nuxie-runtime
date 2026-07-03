@@ -50,7 +50,9 @@ violates them should be rejected in review.
 
 `corpus.toml` tracks every fixture with the object type-keys it contains and a
 status: `exact | diverges | unsupported-feature | not-yet`. The single project
-health number is the count of `exact` files. CI publishes it per commit.
+health number is `exact-segments` from `make golden-compare`: the sum of
+verified file x sample segments across `exact` corpus entries. CI publishes it
+per commit.
 
 ---
 

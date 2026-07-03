@@ -1,18 +1,6 @@
 use crate::{
-    RuntimeBindableArtboard, RuntimeBindableArtboardDefaultViewModelSource, RuntimeBindableAsset,
-    RuntimeBindableAssetDefaultViewModelSource, RuntimeBindableBoolean,
-    RuntimeBindableBooleanDefaultViewModelSource, RuntimeBindableColor,
-    RuntimeBindableColorDefaultViewModelSource, RuntimeBindableEnum,
-    RuntimeBindableEnumDefaultViewModelSource, RuntimeBindableInteger,
-    RuntimeBindableIntegerDefaultViewModelSource, RuntimeBindableList,
-    RuntimeBindableListDefaultViewModelSource, RuntimeBindableNumber,
-    RuntimeBindableNumberDefaultViewModelSource, RuntimeBindableString,
-    RuntimeBindableStringDefaultViewModelSource, RuntimeBindableTrigger,
-    RuntimeBindableTriggerDefaultViewModelSource, RuntimeBindableTriggerSource,
-    RuntimeBindableViewModel, RuntimeBindableViewModelDefaultViewModelSource,
-    RuntimeBindableViewModelSource, RuntimeDataBindGraphConverter, RuntimeDataBindGraphValue,
-    RuntimeViewModelPointer, RuntimeViewModelTrigger, property_key_for_name,
-    runtime_data_bind_graph_converter,
+    RuntimeDataBindGraphConverter, RuntimeDataBindGraphValue, RuntimeViewModelPointer,
+    property_key_for_name, runtime_data_bind_graph_converter,
     runtime_data_bind_graph_converter_accepts_symbol_list_index_number_source,
     runtime_data_bind_graph_converter_starts_with_to_string,
     runtime_data_bind_graph_group_formula_operation_accepts_non_number_source,
@@ -20,6 +8,210 @@ use crate::{
 };
 use rive_binary::{RuntimeFile, RuntimeObject};
 use std::collections::BTreeMap;
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeBindableNumber {
+    pub(crate) global_id: u32,
+    pub(crate) data_bind_indices: Vec<usize>,
+    pub(crate) default_view_model_sources: Vec<RuntimeBindableNumberDefaultViewModelSource>,
+    pub(crate) value: f32,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeBindableNumberDefaultViewModelSource {
+    pub(crate) data_bind_index: usize,
+    pub(crate) path: Vec<u32>,
+    pub(crate) flags: u64,
+    pub(crate) converter: Option<RuntimeDataBindGraphConverter>,
+    pub(crate) value: RuntimeDataBindGraphValue,
+    pub(crate) view_model_instance_ids: Vec<u32>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeBindableInteger {
+    pub(crate) global_id: u32,
+    pub(crate) data_bind_indices: Vec<usize>,
+    pub(crate) default_view_model_sources: Vec<RuntimeBindableIntegerDefaultViewModelSource>,
+    pub(crate) value: u64,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeBindableIntegerDefaultViewModelSource {
+    pub(crate) data_bind_index: usize,
+    pub(crate) path: Vec<u32>,
+    pub(crate) flags: u64,
+    pub(crate) value: u64,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeBindableColor {
+    pub(crate) global_id: u32,
+    pub(crate) data_bind_indices: Vec<usize>,
+    pub(crate) default_view_model_sources: Vec<RuntimeBindableColorDefaultViewModelSource>,
+    pub(crate) value: u32,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeBindableColorDefaultViewModelSource {
+    pub(crate) data_bind_index: usize,
+    pub(crate) path: Vec<u32>,
+    pub(crate) flags: u64,
+    pub(crate) value: u32,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeBindableString {
+    pub(crate) global_id: u32,
+    pub(crate) data_bind_indices: Vec<usize>,
+    pub(crate) default_view_model_sources: Vec<RuntimeBindableStringDefaultViewModelSource>,
+    pub(crate) value: Vec<u8>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeBindableStringDefaultViewModelSource {
+    pub(crate) data_bind_index: usize,
+    pub(crate) path: Vec<u32>,
+    pub(crate) flags: u64,
+    pub(crate) converter: Option<RuntimeDataBindGraphConverter>,
+    pub(crate) value: RuntimeDataBindGraphValue,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeBindableEnum {
+    pub(crate) global_id: u32,
+    pub(crate) data_bind_indices: Vec<usize>,
+    pub(crate) default_view_model_sources: Vec<RuntimeBindableEnumDefaultViewModelSource>,
+    pub(crate) value: u64,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeBindableEnumDefaultViewModelSource {
+    pub(crate) data_bind_index: usize,
+    pub(crate) path: Vec<u32>,
+    pub(crate) flags: u64,
+    pub(crate) value: u64,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeBindableAsset {
+    pub(crate) global_id: u32,
+    pub(crate) data_bind_indices: Vec<usize>,
+    pub(crate) default_view_model_sources: Vec<RuntimeBindableAssetDefaultViewModelSource>,
+    pub(crate) value: u64,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeBindableAssetDefaultViewModelSource {
+    pub(crate) data_bind_index: usize,
+    pub(crate) path: Vec<u32>,
+    pub(crate) flags: u64,
+    pub(crate) value: u64,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeBindableArtboard {
+    pub(crate) global_id: u32,
+    pub(crate) data_bind_indices: Vec<usize>,
+    pub(crate) default_view_model_sources: Vec<RuntimeBindableArtboardDefaultViewModelSource>,
+    pub(crate) value: u64,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeBindableArtboardDefaultViewModelSource {
+    pub(crate) data_bind_index: usize,
+    pub(crate) path: Vec<u32>,
+    pub(crate) flags: u64,
+    pub(crate) value: u64,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeBindableList {
+    pub(crate) global_id: u32,
+    pub(crate) data_bind_indices: Vec<usize>,
+    pub(crate) default_view_model_sources: Vec<RuntimeBindableListDefaultViewModelSource>,
+    pub(crate) value: usize,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeBindableListDefaultViewModelSource {
+    pub(crate) data_bind_index: usize,
+    pub(crate) path: Vec<u32>,
+    pub(crate) flags: u64,
+    pub(crate) converter: Option<RuntimeDataBindGraphConverter>,
+    pub(crate) value: RuntimeDataBindGraphValue,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeBindableTrigger {
+    pub(crate) global_id: u32,
+    pub(crate) data_bind_indices: Vec<usize>,
+    pub(crate) value: u64,
+    pub(crate) source: RuntimeBindableTriggerSource,
+    pub(crate) default_view_model_sources: Vec<RuntimeBindableTriggerDefaultViewModelSource>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RuntimeBindableTriggerSource {
+    None,
+    DefaultViewModelTrigger { trigger_global_id: u32 },
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeBindableTriggerDefaultViewModelSource {
+    pub(crate) data_bind_index: usize,
+    pub(crate) path: Vec<u32>,
+    pub(crate) flags: u64,
+    pub(crate) converter: Option<RuntimeDataBindGraphConverter>,
+    pub(crate) value: u64,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeBindableViewModel {
+    pub(crate) global_id: u32,
+    pub(crate) data_bind_indices: Vec<usize>,
+    pub(crate) source: RuntimeBindableViewModelSource,
+    pub(crate) default_view_model_sources: Vec<RuntimeBindableViewModelDefaultViewModelSource>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RuntimeBindableViewModelSource {
+    Null,
+    RootDataContext,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeBindableViewModelDefaultViewModelSource {
+    pub(crate) data_bind_index: usize,
+    pub(crate) path: Vec<u32>,
+    pub(crate) flags: u64,
+    pub(crate) converter: Option<RuntimeDataBindGraphConverter>,
+    pub(crate) value: RuntimeViewModelPointer,
+    pub(crate) view_model_instance_ids: Vec<u32>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeBindableBoolean {
+    pub(crate) global_id: u32,
+    pub(crate) data_bind_indices: Vec<usize>,
+    pub(crate) default_view_model_sources: Vec<RuntimeBindableBooleanDefaultViewModelSource>,
+    pub(crate) value: bool,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeBindableBooleanDefaultViewModelSource {
+    pub(crate) data_bind_index: usize,
+    pub(crate) path: Vec<u32>,
+    pub(crate) flags: u64,
+    pub(crate) converter: Option<RuntimeDataBindGraphConverter>,
+    pub(crate) value: bool,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeViewModelTrigger {
+    pub(crate) global_id: u32,
+    pub(crate) view_model_property_id: u32,
+    pub(crate) value: u64,
+}
 
 #[derive(Debug, Clone)]
 pub(crate) struct StateMachineBindableNumberInstance {

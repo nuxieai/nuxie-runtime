@@ -1938,7 +1938,7 @@ features = ["type-key:16:PointsPath", "type-key:18:SolidColor", "type-key:1:Artb
 id = "trim_path_linear"
 path = "tests/unit_tests/assets/trim_path_linear.riv"
 samples = [0.0, 0.25]
-status = "not-yet"
+status = "exact"
 features = ["type-key:16:PointsPath", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:24:Stroke", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:47:TrimPath", "type-key:5:StraightVertex"]
 
 [[file]]

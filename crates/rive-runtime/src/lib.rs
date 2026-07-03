@@ -842,6 +842,17 @@ impl ArtboardInstance {
         self.objects.double_property(local_id, property_key)
     }
 
+    fn set_double_property(&mut self, local_id: usize, property_key: u16, value: f32) -> bool {
+        if !self
+            .objects
+            .set_double_property(local_id, property_key, value)
+        {
+            return false;
+        }
+        self.did_change = true;
+        true
+    }
+
     fn set_uint_property(&mut self, local_id: usize, property_key: u16, value: u64) -> bool {
         if !self
             .objects
@@ -1345,6 +1356,10 @@ impl InstanceObjectArena {
     fn double_property(&self, local_id: usize, property_key: u16) -> Option<f32> {
         self.object(local_id)
             .and_then(|object| runtime_object_double_property_by_key(object, property_key))
+    }
+
+    fn set_double_property(&mut self, local_id: usize, property_key: u16, value: f32) -> bool {
+        self.set_property_value(local_id, property_key, FieldValue::Double(value))
     }
 
     fn set_uint_property(&mut self, local_id: usize, property_key: u16, value: u64) -> bool {
@@ -2187,7 +2202,7 @@ fn runtime_shape_paint_command(
     if !runtime_shape_paint_is_visible(artboard, paint) {
         return None;
     }
-    let effect_path_commands = runtime_effect_path_commands(paint, &path_commands);
+    let effect_path_commands = runtime_effect_path_commands(artboard, paint, &path_commands);
     let has_effect_path = effect_path_commands.is_some();
     Some(RuntimeShapePaintCommand {
         paint_local: paint.local_id,
@@ -2638,6 +2653,7 @@ fn command_points(command: &RuntimePathCommand) -> Vec<(f32, f32)> {
 }
 
 fn runtime_effect_path_commands(
+    artboard: &ArtboardInstance,
     paint: &ShapePaintNode,
     source: &[RuntimePathCommand],
 ) -> Option<Vec<RuntimePathCommand>> {
@@ -2648,7 +2664,9 @@ fn runtime_effect_path_commands(
     let mut current = source.to_vec();
     let mut has_supported_effect = false;
     for effect in &paint.effects {
-        let Some(effect_path) = runtime_stroke_effect_path_commands(effect, paint, &current) else {
+        let Some(effect_path) =
+            runtime_stroke_effect_path_commands(artboard, effect, paint, &current)
+        else {
             continue;
         };
         current = effect_path;
@@ -2659,13 +2677,14 @@ fn runtime_effect_path_commands(
 }
 
 fn runtime_stroke_effect_path_commands(
+    artboard: &ArtboardInstance,
     effect: &StrokeEffectNode,
     paint: &ShapePaintNode,
     source: &[RuntimePathCommand],
 ) -> Option<Vec<RuntimePathCommand>> {
     match effect.type_name {
         "DashPath" => runtime_dash_path_effect_commands(effect, paint, source),
-        "TrimPath" => runtime_trim_path_line_effect_commands(effect, paint, source),
+        "TrimPath" => runtime_trim_path_line_effect_commands(artboard, effect, paint, source),
         _ => None,
     }
 }
@@ -2779,12 +2798,37 @@ fn dash_normalized_length(
     if is_percentage { p * contour_length } else { p }
 }
 
+fn runtime_trim_path_mode_value(
+    artboard: &ArtboardInstance,
+    effect: &StrokeEffectNode,
+) -> Option<u32> {
+    property_key_for_name("TrimPath", "modeValue")
+        .and_then(|key| artboard.uint_property(effect.local_id, key))
+        .and_then(|value| u32::try_from(value).ok())
+        .or(effect.trim_mode_value)
+}
+
+fn runtime_trim_path_double_property(
+    artboard: &ArtboardInstance,
+    effect: &StrokeEffectNode,
+    property_name: &str,
+    fallback: Option<f32>,
+) -> f32 {
+    property_key_for_name("TrimPath", property_name)
+        .and_then(|key| artboard.double_property(effect.local_id, key))
+        .or(fallback)
+        .unwrap_or(0.0)
+}
+
+// Coarsely translated from:
+// /Users/levi/dev/oss/rive-runtime/src/shapes/paint/trim_path.cpp TrimPath::trimPath
 fn runtime_trim_path_line_effect_commands(
+    artboard: &ArtboardInstance,
     effect: &StrokeEffectNode,
     paint: &ShapePaintNode,
     source: &[RuntimePathCommand],
 ) -> Option<Vec<RuntimePathCommand>> {
-    let mode = effect.trim_mode_value?;
+    let mode = runtime_trim_path_mode_value(artboard, effect)?;
     if !matches!(mode, 1 | 2) {
         return None;
     }
@@ -2793,9 +2837,15 @@ fn runtime_trim_path_line_effect_commands(
         return Some(Vec::new());
     }
 
-    let render_offset = positive_unit_mod(effect.trim_offset.unwrap_or(0.0));
-    let trim_start = effect.trim_start.unwrap_or(0.0);
-    let trim_end = effect.trim_end.unwrap_or(0.0);
+    let render_offset = positive_unit_mod(runtime_trim_path_double_property(
+        artboard,
+        effect,
+        "offset",
+        effect.trim_offset,
+    ));
+    let trim_start =
+        runtime_trim_path_double_property(artboard, effect, "start", effect.trim_start);
+    let trim_end = runtime_trim_path_double_property(artboard, effect, "end", effect.trim_end);
     let close_shape = paint.paint_type == ShapePaintKind::Fill;
     match mode {
         1 => Some(trim_path_sequential(
@@ -3457,11 +3507,8 @@ fn points_path_commands(
     {
         return Vec::new();
     }
-    if path_kind == ShapePaintPathKind::LocalClockwise
-        && path_needs_clockwise_reversal(path, transform)
-    {
-        return Vec::new();
-    }
+    let reverse_for_clockwise_fill = path_kind == ShapePaintPathKind::LocalClockwise
+        && path_needs_clockwise_reversal(path, transform);
 
     let mut commands = Vec::new();
     let first = &path.vertices[0];
@@ -3547,7 +3594,11 @@ fn points_path_commands(
         commands.push(RuntimePathCommand::Close);
     }
 
-    commands
+    if reverse_for_clockwise_fill {
+        path_commands_backwards(&commands)
+    } else {
+        commands
+    }
 }
 
 fn rectangle_path_commands(
@@ -3631,11 +3682,8 @@ fn ellipse_path_commands(
     else {
         return Vec::new();
     };
-    if path_kind == ShapePaintPathKind::LocalClockwise
-        && path_needs_clockwise_reversal(path, transform)
-    {
-        return Vec::new();
-    }
+    let reverse_for_clockwise_fill = path_kind == ShapePaintPathKind::LocalClockwise
+        && path_needs_clockwise_reversal(path, transform);
 
     let radius_x = *width / 2.0;
     let radius_y = *height / 2.0;
@@ -3677,7 +3725,11 @@ fn ellipse_path_commands(
         top,
     );
     commands.push(RuntimePathCommand::Close);
-    commands
+    if reverse_for_clockwise_fill {
+        path_commands_backwards(&commands)
+    } else {
+        commands
+    }
 }
 
 fn polygon_path_commands(
@@ -4186,6 +4238,21 @@ impl RuntimeLinearAnimation {
                     changed |= instance.set_transform_property(
                         keyed_object.target_local_id,
                         property,
+                        value,
+                    );
+                }
+                if keyed_property.transform_property.is_none() && keyed_property.double_property {
+                    let current = instance
+                        .double_property(keyed_object.target_local_id, keyed_property.property_key)
+                        .unwrap_or(keyed_property.double_source_value);
+                    let Some(value) =
+                        keyed_property.double_value_at(seconds, self.fps, current, mix)
+                    else {
+                        continue;
+                    };
+                    changed |= instance.set_double_property(
+                        keyed_object.target_local_id,
+                        keyed_property.property_key,
                         value,
                     );
                 }
@@ -25423,6 +25490,8 @@ pub struct RuntimeKeyedProperty {
     pub global_id: u32,
     pub property_key: u16,
     pub transform_property: Option<TransformProperty>,
+    pub double_property: bool,
+    pub double_source_value: f32,
     pub color_property: bool,
     pub color_source_value: u32,
     pub bool_property: bool,
@@ -26105,6 +26174,13 @@ fn build_linear_animations(
                     global_id: global_id as u32,
                     property_key,
                     transform_property: transform_property_for_key(property_key),
+                    double_property: core_registry_field_kind_by_property_key(property_key)
+                        == Some(CoreRegistryFieldKind::Double),
+                    double_source_value: runtime_object_double_property_by_key(
+                        target,
+                        property_key,
+                    )
+                    .unwrap_or(0.0),
                     color_property: core_registry_field_kind_by_property_key(property_key)
                         == Some(CoreRegistryFieldKind::Color),
                     color_source_value: runtime_object_color_property_by_key(target, property_key)

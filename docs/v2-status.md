@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 62
+- Corpus files `exact`: 63
 - Current milestone: **M2 — Animated Playback Exact + Real Object Model (#V2-3)**
 
 ## Milestones
@@ -21,9 +21,9 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Port the remaining C++ TrimPath contour/endpoint math needed for
-   `fill_trim_path` and `trim_path_linear`; `trim_path_linear` is now down to
-   a tiny endpoint delta after render-path cache reuse.
+1. Localize the remaining compound-fill TrimPath mismatch in
+   `fill_trim_path`; live TrimPath double-keyframe plumbing is in place, and
+   `trim_path_linear` now compares exact under the golden epsilon.
 2. Continue M2 real object model work by replacing the generic cloned
    `RuntimeObject` arena tracer with generated concrete object storage plus
    schema-generated setter side effects beyond the hand-ported Solo uint/id
@@ -51,9 +51,9 @@ the only memory the next session has. Update it every commit.
   lists now advance by sorted absolute-time deltas and reuse render paths
   across samples;
   no images, text, nested artboards, constraints, or scripted input.
-- `fill_trim_path.riv` and `trim_path_linear.riv` are parked for remaining
-  M2 TrimPath contour/endpoint parity; `trim_path_linear` currently differs by
-  only the final endpoint float values at samples `0` and `0.25`.
+- `fill_trim_path.riv` is parked for remaining M2 compound-fill TrimPath
+  parity; live TrimPath double-keyframe plumbing is in place, but the first
+  diff still assigns trim segments to the wrong fill contours.
 - `juice.riv` and `rocket.riv` are parked for M2 at sample `0`: after gradient
   shader creation matched C++, their first diffs traced to frame-0 keyed
   transform/geometry application from default animations/state machines, while
@@ -643,3 +643,10 @@ the only memory the next session has. Update it every commit.
   emitted samples. Promoted `clip_tests.riv` and `pointer_events.riv` after
   direct stream comparisons; `make golden-compare` reports
   `exact=62`, `diverges=0`, `unsupported-feature=224`, `not-yet=9`.
+- 2026-07-03: [M2] Added live double-property animation writes for cloned
+  runtime objects and made TrimPath effects read live `start`/`end`/`offset`
+  and `modeValue` from the instance. Also ported clockwise fill path reversal
+  instead of dropping reversed local-clockwise paths. Promoted
+  `trim_path_linear.riv`; `make golden-compare` reports `exact=63`,
+  `diverges=0`, `unsupported-feature=224`, `not-yet=8`, and
+  `cargo test --workspace` passes.

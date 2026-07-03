@@ -207,6 +207,17 @@ fn ensure_static_draw_supported(graph: &GraphFile, artboard: &ArtboardGraph) -> 
         );
     }
 
+    if let Some(n_sliced_node) = artboard
+        .local_objects
+        .iter()
+        .find(|object| object.type_name == Some("NSlicedNode"))
+    {
+        bail!(
+            "unsupported: n-slice in Rust golden runner (global {})",
+            n_sliced_node.global_id
+        );
+    }
+
     if let Some(container) = artboard
         .shape_paint_containers
         .iter()

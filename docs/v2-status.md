@@ -22,9 +22,9 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
-   start with `modifier_test`, `modifier_to_run`, `multitouch`,
-   `multitouch_enter`, `n_slice_triangle`, and
-   `nested_artboard_quantize_and_speed`; promote exact sample-0 matches or add
+   start with `nested_event_test`, `nested_events`, `nested_hug`,
+   `nested_needs_advance`, `nested_solo`, and `new_text`; promote exact
+   sample-0 matches or add
    verified unsupported diagnostics for later-phase first diffs.
 2. `joystick_flag_test` is parked for M2: its sample-0 first diff is joystick
    application/default state-machine behavior, while Rust still draws the
@@ -151,6 +151,11 @@ the only memory the next session has. Update it every commit.
   support; `listener_view_model.riv` is parked for text support;
   `local_bounds.riv` is parked for image support; and
   `magic_alley_db_reduced_export.riv` is parked for nested-artboard support.
+- `modifier_test.riv` and `modifier_to_run.riv` are parked for text support;
+  `multitouch.riv`, `multitouch_enter.riv`, and
+  `nested_artboard_quantize_and_speed.riv` are parked for nested-artboard
+  support; `n_slice_triangle.riv` is parked for n-slice geometry/deformation
+  support.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -440,3 +445,9 @@ the only memory the next session has. Update it every commit.
   and `magic_alley_db_reduced_export.riv` with verified scripted-condition,
   text, image, and nested-artboard diagnostics; exact count is now 48,
   unsupported-feature is now 171, and not-yet is now 76.
+- 2026-07-02: [M1] Added an n-slice Rust runner diagnostic and gated
+  `modifier_test.riv`, `modifier_to_run.riv`, `multitouch.riv`,
+  `multitouch_enter.riv`, `n_slice_triangle.riv`, and
+  `nested_artboard_quantize_and_speed.riv` with verified text,
+  nested-artboard, and n-slice diagnostics; exact remains 48,
+  unsupported-feature is now 177, and not-yet is now 70.

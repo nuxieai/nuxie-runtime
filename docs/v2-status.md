@@ -23,9 +23,10 @@ the only memory the next session has. Update it every commit.
 
 1. Continue M2 real object model work by making generated
    `InstanceObjectStorage` the source of truth for component transform/state
-   fields. The arena now generates per-type cloned object structs and
-   property-key getter/setter dispatch at build time, but `RuntimeComponent`
-   still mirrors transform/runtime fields in separate structs.
+   fields. Clone-time `RuntimeComponent` transform initialization now reads
+   generated object fields by concrete object property names, but live
+   transform mutation still updates `RuntimeComponent` directly after arena
+   writes.
 2. Add handle-source world-space math and nested-remap dependent advancement
    to the joystick path when a corpus diff reaches those cases.
 
@@ -687,3 +688,10 @@ the only memory the next session has. Update it every commit.
   storage. Exact count remains 66; `make golden-compare` reports `exact=66`,
   `diverges=0`, `unsupported-feature=224`, `not-yet=5`, and
   `cargo test --workspace` passes.
+- 2026-07-03: [M2] Made clone-time `RuntimeComponent` transform
+  initialization read from generated `InstanceObjectStorage` through
+  concrete object property-name lookup, so imported Node/vertex transform
+  fields flow through the cloned arena before component state. Exact count
+  remains 66; `make golden-compare` reports `exact=66`, `diverges=0`,
+  `unsupported-feature=224`, `not-yet=5`, and `cargo test --workspace`
+  passes.

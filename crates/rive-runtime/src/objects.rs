@@ -139,6 +139,16 @@ impl InstanceObjectArena {
             .and_then(|object| object.double_property(property_key))
     }
 
+    pub(crate) fn double_property_by_name(
+        &self,
+        local_id: usize,
+        property_name: &str,
+    ) -> Option<f32> {
+        let object = self.object(local_id)?;
+        let (_, property) = runtime_property_metadata_by_name(object.type_key(), property_name)?;
+        object.double_property(property.key.int)
+    }
+
     pub(crate) fn set_double_property(
         &mut self,
         local_id: usize,
@@ -239,6 +249,28 @@ fn runtime_property_metadata_by_key(
                 let definition = definition_by_name(ancestor)?;
                 definition
                     .property_by_key(property_key)
+                    .map(|property| (*ancestor, property))
+            })
+        })
+}
+
+fn runtime_property_metadata_by_name(
+    type_key: u16,
+    property_name: &str,
+) -> Option<(&'static str, &'static rive_schema::Property)> {
+    let definition = definition_by_type_key(type_key)?;
+    definition
+        .properties
+        .iter()
+        .find(|property| property.name == property_name)
+        .map(|property| (definition.name, property))
+        .or_else(|| {
+            definition.ancestors.iter().find_map(|ancestor| {
+                let definition = definition_by_name(ancestor)?;
+                definition
+                    .properties
+                    .iter()
+                    .find(|property| property.name == property_name)
                     .map(|property| (*ancestor, property))
             })
         })

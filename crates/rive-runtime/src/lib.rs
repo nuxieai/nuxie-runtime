@@ -76,12 +76,12 @@ impl ArtboardInstance {
         let mut components = Vec::new();
 
         for component in &graph.components {
-            let object = file.object(component.global_id as usize).with_context(|| {
+            file.object(component.global_id as usize).with_context(|| {
                 format!("component global id {} is missing", component.global_id)
             })?;
 
             component_by_local.insert(component.local_id, components.len());
-            components.push(RuntimeComponent::from_graph_component(component, object));
+            components.push(RuntimeComponent::from_graph_component(component, &objects));
             let slot = slots
                 .get_mut(component.local_id)
                 .with_context(|| format!("component local id {} is missing", component.local_id))?;
@@ -25735,7 +25735,7 @@ pub struct RuntimeComponent {
 }
 
 impl RuntimeComponent {
-    fn from_graph_component(component: &ComponentNode, object: &RuntimeObject) -> Self {
+    fn from_graph_component(component: &ComponentNode, objects: &InstanceObjectArena) -> Self {
         Self {
             local_id: component.local_id,
             global_id: component.global_id,
@@ -25748,7 +25748,7 @@ impl RuntimeComponent {
             dependent_locals: component.dependent_locals.clone(),
             graph_order: component.graph_order.unwrap_or(0),
             dirt: ComponentDirt::FILTHY,
-            transform: TransformRuntimeState::from_object(object),
+            transform: TransformRuntimeState::from_instance_object(objects, component.local_id),
         }
     }
 
@@ -27766,14 +27766,20 @@ pub struct TransformRuntimeState {
 }
 
 impl TransformRuntimeState {
-    fn from_object(object: &RuntimeObject) -> Self {
+    fn from_instance_object(objects: &InstanceObjectArena, local_id: usize) -> Self {
+        let double_property = |property_name, fallback| {
+            objects
+                .double_property_by_name(local_id, property_name)
+                .unwrap_or(fallback)
+        };
+
         Self {
-            x: object.double_property("x").unwrap_or(0.0),
-            y: object.double_property("y").unwrap_or(0.0),
-            rotation: object.double_property("rotation").unwrap_or(0.0),
-            scale_x: object.double_property("scaleX").unwrap_or(1.0),
-            scale_y: object.double_property("scaleY").unwrap_or(1.0),
-            opacity: object.double_property("opacity").unwrap_or(1.0),
+            x: double_property("x", 0.0),
+            y: double_property("y", 0.0),
+            rotation: double_property("rotation", 0.0),
+            scale_x: double_property("scaleX", 1.0),
+            scale_y: double_property("scaleY", 1.0),
+            opacity: double_property("opacity", 1.0),
             local_transform: Mat2D::IDENTITY,
             world_transform: Mat2D::IDENTITY,
             render_opacity: 0.0,
@@ -28636,7 +28642,7 @@ impl RuntimeComponent {
 mod tests {
     use super::*;
     use rive_binary::{BytesValue, FieldValue, RuntimeProperty, read_runtime_file};
-    use rive_graph::GraphFile;
+    use rive_graph::{ComponentCapabilities, ComponentNode, GraphFile};
 
     fn synthetic_instance(
         components: Vec<RuntimeComponent>,
@@ -28947,6 +28953,93 @@ mod tests {
         assert_eq!(arena.double_property(0, node_x_key), Some(7.5));
         assert_eq!(arena.bool_property(1, artboard_clip_key), Some(true));
         assert_eq!(arena.string_property(2, bytes_key), Some(&[1, 2, 3][..]));
+    }
+
+    #[test]
+    fn runtime_component_initial_transform_reads_generated_instance_storage() {
+        let node_x_key = property_key_for_name("Node", "x").expect("Node.x key");
+        let node_scale_x_key = property_key_for_name("Node", "scaleX").expect("Node.scaleX key");
+        let vertex_x_key = property_key_for_name("StraightVertex", "x").expect("StraightVertex.x");
+        let objects = InstanceObjectArena::from_runtime_objects(vec![
+            Some(synthetic_runtime_object(
+                0,
+                "Node",
+                vec![
+                    RuntimeProperty {
+                        key: node_x_key,
+                        name: "x",
+                        owner: "Node",
+                        value: FieldValue::Double(8.0),
+                    },
+                    RuntimeProperty {
+                        key: node_scale_x_key,
+                        name: "scaleX",
+                        owner: "Node",
+                        value: FieldValue::Double(2.5),
+                    },
+                ],
+            )),
+            Some(synthetic_runtime_object(
+                1,
+                "StraightVertex",
+                vec![RuntimeProperty {
+                    key: vertex_x_key,
+                    name: "x",
+                    owner: "StraightVertex",
+                    value: FieldValue::Double(14.0),
+                }],
+            )),
+        ]);
+        let component = RuntimeComponent::from_graph_component(
+            &ComponentNode {
+                local_id: 0,
+                global_id: 0,
+                type_name: "Node",
+                name: None,
+                capabilities: ComponentCapabilities {
+                    transform: true,
+                    world_transform: true,
+                    ..Default::default()
+                },
+                parent_local: None,
+                parent_global: None,
+                children: Vec::new(),
+                constraint_locals: Vec::new(),
+                dependent_locals: Vec::new(),
+                graph_order: Some(3),
+                missing_parent: false,
+            },
+            &objects,
+        );
+
+        assert_eq!(component.transform.x, 8.0);
+        assert_eq!(component.transform.y, 0.0);
+        assert_eq!(component.transform.scale_x, 2.5);
+        assert_eq!(component.transform.scale_y, 1.0);
+
+        let vertex_component = RuntimeComponent::from_graph_component(
+            &ComponentNode {
+                local_id: 1,
+                global_id: 1,
+                type_name: "StraightVertex",
+                name: None,
+                capabilities: ComponentCapabilities {
+                    transform: true,
+                    world_transform: true,
+                    ..Default::default()
+                },
+                parent_local: None,
+                parent_global: None,
+                children: Vec::new(),
+                constraint_locals: Vec::new(),
+                dependent_locals: Vec::new(),
+                graph_order: Some(4),
+                missing_parent: false,
+            },
+            &objects,
+        );
+
+        assert_eq!(vertex_component.transform.x, 14.0);
     }
 
     #[test]

@@ -1,6 +1,226 @@
 use crate::{
     ArtboardInstance, StateMachineReportedEvent, TransformProperty, color_lerp, mix_value,
 };
+use rive_binary::RuntimeObject;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum RuntimeInterpolator {
+    CubicEase {
+        x1: f32,
+        y1: f32,
+        x2: f32,
+        y2: f32,
+    },
+    CubicValue {
+        x1: f32,
+        y1: f32,
+        x2: f32,
+        y2: f32,
+    },
+    Elastic {
+        amplitude: f32,
+        period: f32,
+        easing_value: u64,
+    },
+}
+
+impl RuntimeInterpolator {
+    pub(crate) fn from_object(object: &RuntimeObject) -> Option<Self> {
+        match object.type_name {
+            "CubicEaseInterpolator" => Some(Self::CubicEase {
+                x1: object.double_property("x1").unwrap_or(0.42),
+                y1: object.double_property("y1").unwrap_or(0.0),
+                x2: object.double_property("x2").unwrap_or(0.58),
+                y2: object.double_property("y2").unwrap_or(1.0),
+            }),
+            "CubicValueInterpolator" => Some(Self::CubicValue {
+                x1: object.double_property("x1").unwrap_or(0.42),
+                y1: object.double_property("y1").unwrap_or(0.0),
+                x2: object.double_property("x2").unwrap_or(0.58),
+                y2: object.double_property("y2").unwrap_or(1.0),
+            }),
+            "ElasticInterpolator" => Some(Self::Elastic {
+                amplitude: object.double_property("amplitude").unwrap_or(1.0),
+                period: object.double_property("period").unwrap_or(1.0),
+                easing_value: object.uint_property("easingValue").unwrap_or(1),
+            }),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn transform_value(self, value_from: f32, value_to: f32, factor: f32) -> f32 {
+        match self {
+            Self::CubicValue { x1, y1, x2, y2 } => {
+                let t = cubic_interpolator_get_t(factor, x1, x2);
+                cubic_interpolator_calc_cubic_value(t, value_from, y1, y2, value_to)
+            }
+            _ => value_from + (value_to - value_from) * self.transform(factor),
+        }
+    }
+
+    pub(crate) fn transform(self, factor: f32) -> f32 {
+        match self {
+            Self::CubicEase { x1, y1, x2, y2 } => {
+                let t = cubic_interpolator_get_t(factor, x1, x2);
+                cubic_interpolator_calc_bezier(t, y1, y2)
+            }
+            Self::CubicValue { .. } => factor,
+            Self::Elastic {
+                amplitude,
+                period,
+                easing_value,
+            } => elastic_interpolator_transform(factor, amplitude, period, easing_value),
+        }
+    }
+}
+
+fn cubic_interpolator_calc_bezier(t: f32, a1: f32, a2: f32) -> f32 {
+    (((1.0 - 3.0 * a2 + 3.0 * a1) * t + (3.0 * a2 - 6.0 * a1)) * t + (3.0 * a1)) * t
+}
+
+fn cubic_interpolator_calc_cubic_value(
+    t: f32,
+    value_from: f32,
+    control_1: f32,
+    control_2: f32,
+    value_to: f32,
+) -> f32 {
+    let a = value_to + 3.0 * (control_1 - control_2) - value_from;
+    let b = 3.0 * (control_2 - control_1 * 2.0 + value_from);
+    let c = 3.0 * (control_1 - value_from);
+    ((a * t + b) * t + c) * t + value_from
+}
+
+fn cubic_interpolator_slope(t: f32, a1: f32, a2: f32) -> f32 {
+    3.0 * (1.0 - 3.0 * a2 + 3.0 * a1) * t * t + 2.0 * (3.0 * a2 - 6.0 * a1) * t + (3.0 * a1)
+}
+
+fn cubic_interpolator_get_t(x: f32, x1: f32, x2: f32) -> f32 {
+    const SPLINE_TABLE_SIZE: usize = 11;
+    const SAMPLE_STEP_SIZE: f32 = 1.0 / (SPLINE_TABLE_SIZE as f32 - 1.0);
+    const NEWTON_ITERATIONS: usize = 4;
+    const NEWTON_MIN_SLOPE: f32 = 0.001;
+    const SUBDIVISION_PRECISION: f32 = 0.0000001;
+    const SUBDIVISION_MAX_ITERATIONS: usize = 10;
+
+    let mut values = [0.0; SPLINE_TABLE_SIZE];
+    for (i, value) in values.iter_mut().enumerate() {
+        *value = cubic_interpolator_calc_bezier(i as f32 * SAMPLE_STEP_SIZE, x1, x2);
+    }
+
+    let mut interval_start = 0.0;
+    let mut current_sample = 1;
+    let last_sample = SPLINE_TABLE_SIZE - 1;
+    while current_sample != last_sample && values[current_sample] <= x {
+        interval_start += SAMPLE_STEP_SIZE;
+        current_sample += 1;
+    }
+    current_sample -= 1;
+
+    let dist = (x - values[current_sample]) / (values[current_sample + 1] - values[current_sample]);
+    let mut guess_for_t = interval_start + dist * SAMPLE_STEP_SIZE;
+    let initial_slope = cubic_interpolator_slope(guess_for_t, x1, x2);
+    if initial_slope >= NEWTON_MIN_SLOPE {
+        for _ in 0..NEWTON_ITERATIONS {
+            let current_slope = cubic_interpolator_slope(guess_for_t, x1, x2);
+            if current_slope == 0.0 {
+                return guess_for_t;
+            }
+            let current_x = cubic_interpolator_calc_bezier(guess_for_t, x1, x2) - x;
+            guess_for_t -= current_x / current_slope;
+        }
+        guess_for_t
+    } else if initial_slope == 0.0 {
+        guess_for_t
+    } else {
+        let mut upper_bound = interval_start + SAMPLE_STEP_SIZE;
+        let mut iterations = 0;
+        loop {
+            let current_t = interval_start + (upper_bound - interval_start) / 2.0;
+            let current_x = cubic_interpolator_calc_bezier(current_t, x1, x2) - x;
+            if current_x > 0.0 {
+                upper_bound = current_t;
+            } else {
+                interval_start = current_t;
+            }
+            iterations += 1;
+            if current_x.abs() <= SUBDIVISION_PRECISION || iterations >= SUBDIVISION_MAX_ITERATIONS
+            {
+                return current_t;
+            }
+        }
+    }
+}
+
+fn elastic_interpolator_transform(
+    factor: f32,
+    amplitude: f32,
+    serialized_period: f32,
+    easing_value: u64,
+) -> f32 {
+    let period = if serialized_period == 0.0 {
+        0.5
+    } else {
+        serialized_period
+    };
+    let shift = if amplitude < 1.0 {
+        period / 4.0
+    } else {
+        period / (2.0 * std::f32::consts::PI) * (1.0 / amplitude).asin()
+    };
+
+    match easing_value {
+        0 => elastic_ease_in(factor, amplitude, period, shift),
+        1 => elastic_ease_out(factor, amplitude, period, shift),
+        2 => elastic_ease_in_out(factor, amplitude, period, shift),
+        _ => factor,
+    }
+}
+
+fn elastic_actual_amplitude(time: f32, amplitude: f32, shift: f32) -> f32 {
+    if amplitude < 1.0 {
+        let shift_abs = shift.abs();
+        let time_abs = time.abs();
+        if time_abs < shift_abs {
+            let l = time_abs / shift_abs;
+            return (amplitude * l) + (1.0 - l);
+        }
+    }
+
+    amplitude
+}
+
+fn elastic_ease_out(factor: f32, amplitude: f32, period: f32, shift: f32) -> f32 {
+    let time = factor;
+    let actual_amplitude = elastic_actual_amplitude(time, amplitude, shift);
+    actual_amplitude
+        * 2.0_f32.powf(10.0 * -time)
+        * ((time - shift) * (2.0 * std::f32::consts::PI) / period).sin()
+        + 1.0
+}
+
+fn elastic_ease_in(factor: f32, amplitude: f32, period: f32, shift: f32) -> f32 {
+    let time = factor - 1.0;
+    let actual_amplitude = elastic_actual_amplitude(time, amplitude, shift);
+    -(actual_amplitude
+        * 2.0_f32.powf(10.0 * time)
+        * ((-time - shift) * (2.0 * std::f32::consts::PI) / period).sin())
+}
+
+fn elastic_ease_in_out(factor: f32, amplitude: f32, period: f32, shift: f32) -> f32 {
+    let time = factor * 2.0 - 1.0;
+    let actual_amplitude = elastic_actual_amplitude(time, amplitude, shift);
+    if time < 0.0 {
+        -0.5 * actual_amplitude
+            * 2.0_f32.powf(10.0 * time)
+            * ((-time - shift) * (2.0 * std::f32::consts::PI) / period).sin()
+    } else {
+        0.5 * (actual_amplitude
+            * 2.0_f32.powf(10.0 * -time)
+            * ((time - shift) * (2.0 * std::f32::consts::PI) / period).sin())
+            + 1.0
+    }
+}
 
 // Mirrors src/animation/linear_animation.cpp plus keyed object/property keyframe sampling.
 #[derive(Debug, Clone)]
@@ -235,15 +455,11 @@ impl RuntimeKeyedProperty {
             } else if from.interpolation_type == 0 {
                 from.value
             } else if from.interpolator_id.is_some() {
-                return None;
+                let frame_mix = frame_mix(seconds, from.seconds(fps), to.seconds(fps));
+                from.interpolator?
+                    .transform_value(from.value, to.value, frame_mix)
             } else {
-                let from_seconds = from.seconds(fps);
-                let to_seconds = to.seconds(fps);
-                let frame_mix = if to_seconds == from_seconds {
-                    1.0
-                } else {
-                    (seconds - from_seconds) / (to_seconds - from_seconds)
-                };
+                let frame_mix = frame_mix(seconds, from.seconds(fps), to.seconds(fps));
                 from.value + (to.value - from.value) * frame_mix
             }
         } else {
@@ -269,15 +485,14 @@ impl RuntimeKeyedProperty {
             } else if from.interpolation_type == 0 {
                 from.value
             } else if from.interpolator_id.is_some() {
-                return None;
+                let frame_mix = frame_mix(seconds, from.seconds(fps), to.seconds(fps));
+                color_lerp(
+                    from.value,
+                    to.value,
+                    from.interpolator?.transform(frame_mix),
+                )
             } else {
-                let from_seconds = from.seconds(fps);
-                let to_seconds = to.seconds(fps);
-                let frame_mix = if to_seconds == from_seconds {
-                    1.0
-                } else {
-                    (seconds - from_seconds) / (to_seconds - from_seconds)
-                };
+                let frame_mix = frame_mix(seconds, from.seconds(fps), to.seconds(fps));
                 color_lerp(from.value, to.value, frame_mix)
             }
         } else {
@@ -454,12 +669,21 @@ fn closest_key_frame_index_with_exact_offset<T: RuntimeKeyFrameTiming>(
     start
 }
 
+fn frame_mix(seconds: f32, from_seconds: f32, to_seconds: f32) -> f32 {
+    if to_seconds == from_seconds {
+        1.0
+    } else {
+        (seconds - from_seconds) / (to_seconds - from_seconds)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct RuntimeKeyFrameDouble {
     pub global_id: u32,
     pub frame: u64,
     pub interpolation_type: u64,
     pub interpolator_id: Option<u64>,
+    pub(crate) interpolator: Option<RuntimeInterpolator>,
     pub value: f32,
 }
 
@@ -484,6 +708,7 @@ pub struct RuntimeKeyFrameColor {
     pub frame: u64,
     pub interpolation_type: u64,
     pub interpolator_id: Option<u64>,
+    pub(crate) interpolator: Option<RuntimeInterpolator>,
     pub value: u32,
 }
 

@@ -25,7 +25,7 @@ mod components;
 mod objects;
 mod state_machine;
 
-use animation::AnimationLoop;
+use animation::{AnimationLoop, RuntimeInterpolator};
 pub use animation::{
     LinearAnimationInstance, RuntimeKeyFrameBool, RuntimeKeyFrameCallback, RuntimeKeyFrameColor,
     RuntimeKeyFrameDouble, RuntimeKeyFrameString, RuntimeKeyFrameUint, RuntimeKeyedObject,
@@ -24603,6 +24603,9 @@ fn build_linear_animations(
     graph: &ArtboardGraph,
     slots: &[InstanceSlot],
 ) -> Vec<RuntimeLinearAnimation> {
+    let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
+        return Vec::new();
+    };
     let Some((start, end)) = artboard_object_range(file, graph.global_id as usize) else {
         return Vec::new();
     };
@@ -24751,6 +24754,7 @@ fn build_linear_animations(
                     frame: object.uint_property("frame").unwrap_or(0),
                     interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
                     interpolator_id: normalized_interpolator_id(object),
+                    interpolator: runtime_key_frame_interpolator(file, artboard_index, object),
                     value: object.double_property("value").unwrap_or(0.0),
                 });
         }
@@ -24767,6 +24771,7 @@ fn build_linear_animations(
                     frame: object.uint_property("frame").unwrap_or(0),
                     interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
                     interpolator_id: normalized_interpolator_id(object),
+                    interpolator: runtime_key_frame_interpolator(file, artboard_index, object),
                     value: object.color_property("value").unwrap_or(0),
                 });
         }
@@ -26410,6 +26415,16 @@ fn normalized_interpolator_id(object: &RuntimeObject) -> Option<u64> {
     object
         .uint_property("interpolatorId")
         .filter(|id| *id != u64::from(u32::MAX) && *id != u64::MAX)
+}
+
+fn runtime_key_frame_interpolator(
+    file: &RuntimeFile,
+    artboard_index: usize,
+    key_frame: &RuntimeObject,
+) -> Option<RuntimeInterpolator> {
+    let local_index = usize::try_from(normalized_interpolator_id(key_frame)?).ok()?;
+    let interpolator = file.artboard_local_object(artboard_index, local_index)?;
+    RuntimeInterpolator::from_object(interpolator)
 }
 
 #[derive(Debug, Clone)]

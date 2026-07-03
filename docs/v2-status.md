@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 66
+- Corpus files `exact`: 68
 - Current milestone: **M2 — Animated Playback Exact + Real Object Model (#V2-3)**
 
 ## Milestones
@@ -21,18 +21,21 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue M2 real object model work by modularizing the remaining
+1. Stay on the exact-count path before more structural extraction: inspect the
+   remaining M2 sample-0 `not-yet` streams for `juice.riv` and `rocket.riv`
+   after keyed interpolator support. Both still fail the epsilon-aware stream
+   compare; identify the first non-epsilon geometry/transform difference and
+   port the corresponding C++ frame-0 animation/state-machine behavior.
+2. Continue M2 real object model work by modularizing the remaining
    animation/state-machine surfaces out of `lib.rs` while keeping generated
-   `InstanceObjectStorage` as the authored-property source of truth.
-   Component dirt/runtime transform state live in
-   `crates/rive-runtime/src/components.rs`, and the linear animation runtime
-   model now lives in `crates/rive-runtime/src/animation.rs`.
-   `StateMachineReportedEvent`, the state-machine input runtime model,
-   scheduled listener/state-machine fire action handling, and view-model
-   trigger runtime state now seed
-   `crates/rive-runtime/src/state_machine.rs`; next extract another
-   self-contained state-machine surface whose imports are cheap to untangle.
-2. Add handle-source world-space math and nested-remap dependent advancement
+   `InstanceObjectStorage` as the authored-property source of truth, but only
+   when it unblocks a corpus diff or removes risky coupling. Component
+   dirt/runtime transform state live in
+   `crates/rive-runtime/src/components.rs`, the linear animation runtime model
+   lives in `crates/rive-runtime/src/animation.rs`, and
+   state-machine inputs/events/listener/fire actions/view-model trigger runtime
+   state seed `crates/rive-runtime/src/state_machine.rs`.
+3. Add handle-source world-space math and nested-remap dependent advancement
    to the joystick path when a corpus diff reaches those cases.
 
 ## Known Divergences
@@ -50,9 +53,10 @@ the only memory the next session has. Update it every commit.
   multi-contour TrimPath effects, DashPath stroke effects, and linear/radial
   gradient shader creation, default state-machine frame-0 application for
   color/bool/uint/string keyframes, Solo active-child refresh, and
-  before-update joystick animation application without custom handle-source
-  world-space math or nested remap dependent advancement. Golden runner sample
-  lists now advance by sorted absolute-time deltas and reuse render paths
+  before-update joystick animation application, and keyed double/color
+  interpolation for CubicEase/CubicValue/Elastic keyframe interpolators without
+  custom handle-source world-space math or nested remap dependent advancement.
+  Golden runner sample lists now advance by sorted absolute-time deltas and reuse render paths
   across samples;
   no images, text, nested artboards, constraints, or scripted input.
 - `juice.riv` and `rocket.riv` are parked for M2 at sample `0`: after gradient
@@ -108,8 +112,7 @@ the only memory the next session has. Update it every commit.
 - `component_stateful.riv`, `component_stateful_vm_instance.riv`,
   `component_stateful_vm_instance_2.riv`, and `computed_values_test.riv` are parked
   for nested-artboard support; `computed_root_transform.riv` is parked for M6
-  layout component paint drawing; `cubic_value_test.riv` is parked for M2
-  keyframe/interpolator application after its sample-0 transform diff.
+  layout component paint drawing.
 - `custom_property_trigger.riv`, `data_binding_images_test.riv`, and
   `data_binding_test_3.riv` are parked for nested-artboard support;
   `data_bind_test_cmdq.riv`, `data_binding_artboards_source_test.riv`, and
@@ -160,8 +163,6 @@ the only memory the next session has. Update it every commit.
   `new_text.riv` is parked for text support.
 - `number_to_list_nested_children.riv` is parked for M6 layout component paint
   drawing; `pause_nested_artboard.riv` is parked for nested-artboard support.
-- `oneshotblend.riv` is parked for M2 1D blend/default state-machine
-  application at sample `0`.
 - `pointer_events_nested_artboards_in_solos.riv`, `pointer_exit.riv`, and
   `recursive_data_bind.riv` are parked for nested-artboard support;
   `rebind_with_nested_viewmodel.riv` is parked for text support.
@@ -768,3 +769,11 @@ the only memory the next session has. Update it every commit.
   runtime state lives there. Exact count remains 66; `make golden-compare`
   reports `exact=66`, `diverges=0`, `unsupported-feature=224`, `not-yet=5`,
   and `cargo test --workspace` passes.
+- 2026-07-03: [M2] Ported keyed-frame interpolator application for linear
+  animation sampling by resolving artboard-local `KeyFrameInterpolator`
+  objects into the runtime animation model and applying CubicEase,
+  CubicValue, and Elastic behavior for double/color keyframes. Promoted
+  `cubic_value_test.riv` and `oneshotblend.riv` to exact;
+  `make golden-compare` reports `exact=68`, `diverges=0`,
+  `unsupported-feature=224`, `not-yet=3`, and `cargo test --workspace`
+  passes.

@@ -21,9 +21,8 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. `crates/rive-render-api`: `Renderer`/`Factory`/`RenderPath`/`RenderPaint`/`RenderImage` traits + matching Rust serializer.
-2. `make golden-compare` + `corpus.toml` seeded from `tests/unit_tests/assets` with type-key tags from `riv-inspect`.
-3. First exact file: a trivial static rectangle fixture, end to end.
+1. `make golden-compare` + `corpus.toml` seeded from `tests/unit_tests/assets` with type-key tags from `riv-inspect`.
+2. First exact file: a trivial static rectangle fixture, end to end.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -37,6 +36,8 @@ the only memory the next session has. Update it every commit.
 - 2026-07-02: Golden runner emits one accumulated stream per run with
   `source`, `input`, `sample`, and `frame` markers; `golden-compare` will split
   sample segments from that stream.
+- 2026-07-02: `rive-render-api` owns the renderer seam; `rive-runtime` should
+  drive those traits when static drawing moves from reports to real rendering.
 
 ## Log
 
@@ -45,4 +46,8 @@ the only memory the next session has. Update it every commit.
 - 2026-07-02: [M0] Golden runner CLI now imports real `.riv` files, selects
   artboards/state machines, advances sampled timelines, replays pointer input
   scripts, and emits recording streams; `make golden-compare` still not
+  present.
+- 2026-07-02: [M0] Added `crates/rive-render-api` with C++-mirroring
+  renderer/factory/resource traits and a recording serializer whose smoke
+  output matches the C++ golden runner stream; `make golden-compare` still not
   present.

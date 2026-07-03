@@ -503,8 +503,8 @@ features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill",
 id = "double_library_with_image"
 path = "tests/unit_tests/assets/double_library_with_image.riv"
 samples = [0.0]
-status = "not-yet"
-features = ["type-key:100:Image", "type-key:105:ImageAsset", "type-key:106:FileAssetContents", "type-key:1:Artboard", "type-key:23:Backboard", "type-key:92:NestedArtboard"]
+status = "unsupported-feature"
+features = ["type-key:100:Image", "type-key:105:ImageAsset", "type-key:106:FileAssetContents", "type-key:1:Artboard", "type-key:23:Backboard", "type-key:92:NestedArtboard", "rust-runner-unsupported:nested-artboards"]
 
 [[file]]
 id = "double_line"
@@ -902,15 +902,15 @@ features = ["type-key:128:Event", "type-key:130:CustomPropertyString", "type-key
 id = "library_export_animation_test"
 path = "tests/unit_tests/assets/library_export_animation_test.riv"
 samples = [0.0]
-status = "not-yet"
-features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:92:NestedArtboard", "type-key:96:NestedSimpleAnimation"]
+status = "unsupported-feature"
+features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:92:NestedArtboard", "type-key:96:NestedSimpleAnimation", "rust-runner-unsupported:nested-artboards"]
 
 [[file]]
 id = "library_export_state_machine_test"
 path = "tests/unit_tests/assets/library_export_state_machine_test.riv"
 samples = [0.0]
-status = "not-yet"
-features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:53:StateMachine", "type-key:92:NestedArtboard", "type-key:95:NestedStateMachine"]
+status = "unsupported-feature"
+features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:53:StateMachine", "type-key:92:NestedArtboard", "type-key:95:NestedStateMachine", "rust-runner-unsupported:nested-artboards"]
 
 [[file]]
 id = "library_export_test"
@@ -937,8 +937,8 @@ features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill",
 id = "library_with_image"
 path = "tests/unit_tests/assets/library_with_image.riv"
 samples = [0.0]
-status = "not-yet"
-features = ["type-key:100:Image", "type-key:105:ImageAsset", "type-key:106:FileAssetContents", "type-key:1:Artboard", "type-key:23:Backboard", "type-key:92:NestedArtboard"]
+status = "unsupported-feature"
+features = ["type-key:100:Image", "type-key:105:ImageAsset", "type-key:106:FileAssetContents", "type-key:1:Artboard", "type-key:23:Backboard", "type-key:92:NestedArtboard", "rust-runner-unsupported:nested-artboards"]
 
 [[file]]
 id = "library_with_text_and_image"

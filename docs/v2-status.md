@@ -21,14 +21,12 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue the M1 gating pass at the new lowest-feature frontier:
-   `library_with_image`, `double_library_with_image`,
-   `library_export_state_machine_test`, and
-   `library_export_animation_test`. Use `rust-runner-unsupported:*` tags only
-   when `golden-compare` verifies an explicit Rust unsupported diagnostic.
-2. After the nested/image frontier is gated, inspect `long_name` and the
-   low-feature constraint files to decide whether M1 has remaining static
-   vector work or should move to its FFI viewer demo / M2 handoff.
+1. Triage `long_name` by comparing Rust and C++ streams at sample `0`; if the
+   current static renderer is exact, mark it `exact`, otherwise record whether
+   the `LinearAnimation` tag puts it in M2.
+2. Triage the low-feature constraint files (`scale_constraint`,
+   `translation_constraint`, `transform_constraint`, `rotation_constraint`) as
+   M3 blockers or M1 static-vector divergences.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -121,3 +119,8 @@ the only memory the next session has. Update it every commit.
   `library_export_test.riv`, and `nested_artboard_opacity.riv` as verified
   Rust unsupported diagnostics for images/nested artboards; exact remains 4,
   unsupported-feature is now 40, and not-yet is now 251.
+- 2026-07-02: [M1] Gated `library_with_image.riv`,
+  `double_library_with_image.riv`, `library_export_state_machine_test.riv`,
+  and `library_export_animation_test.riv` as verified nested-artboard
+  unsupported diagnostics; exact remains 4, unsupported-feature is now 44, and
+  not-yet is now 247.

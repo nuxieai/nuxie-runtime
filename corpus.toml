@@ -104,8 +104,8 @@ features = ["type-key:106:FileAssetContents", "type-key:134:Text", "type-key:135
 id = "bidirectional_precedence"
 path = "tests/unit_tests/assets/bidirectional_precedence.riv"
 samples = [0.0]
-status = "not-yet"
-features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:431:ViewModelPropertyNumber", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:442:ViewModelInstanceNumber", "type-key:447:DataBindContext", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle"]
+status = "unsupported-feature"
+features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:431:ViewModelPropertyNumber", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:442:ViewModelInstanceNumber", "type-key:447:DataBindContext", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle", "rust-runner-unsupported:data-binding-transform"]
 
 [[file]]
 id = "bindable_artboard_child"
@@ -188,8 +188,8 @@ features = ["type-key:148:Joystick", "type-key:16:PointsPath", "type-key:18:Soli
 id = "collapsable_data_binding"
 path = "tests/unit_tests/assets/collapsable_data_binding.riv"
 samples = [0.0]
-status = "not-yet"
-features = ["type-key:147:Solo", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:426:ViewModelInstanceColor", "type-key:431:ViewModelPropertyNumber", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:440:ViewModelPropertyColor", "type-key:442:ViewModelInstanceNumber", "type-key:447:DataBindContext", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle"]
+status = "unsupported-feature"
+features = ["type-key:147:Solo", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:426:ViewModelInstanceColor", "type-key:431:ViewModelPropertyNumber", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:440:ViewModelPropertyColor", "type-key:442:ViewModelInstanceNumber", "type-key:447:DataBindContext", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle", "rust-runner-unsupported:data-binding-color"]
 
 [[file]]
 id = "collapse_data_binds"
@@ -216,7 +216,7 @@ features = ["type-key:16:PointsPath", "type-key:18:SolidColor", "type-key:1:Artb
 id = "component_based_conditions"
 path = "tests/unit_tests/assets/component_based_conditions.riv"
 samples = [0.0]
-status = "not-yet"
+status = "exact"
 features = ["type-key:129:CustomPropertyBoolean", "type-key:130:CustomPropertyString", "type-key:142:KeyFrameString", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:431:ViewModelPropertyNumber", "type-key:432:ViewModelInstanceEnum", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:438:DataEnumCustom", "type-key:439:ViewModelPropertyEnumCustom", "type-key:442:ViewModelInstanceNumber", "type-key:445:DataEnumValue", "type-key:447:DataBindContext", "type-key:448:ViewModelPropertyBoolean", "type-key:449:ViewModelInstanceBoolean", "type-key:473:BindablePropertyNumber", "type-key:479:TransitionPropertyViewModelComparator", "type-key:481:TransitionValueBooleanComparator", "type-key:482:TransitionViewModelCondition", "type-key:483:TransitionValueColorComparator", "type-key:484:TransitionValueNumberComparator", "type-key:485:TransitionValueEnumComparator", "type-key:486:TransitionValueStringComparator", "type-key:50:KeyFrameId", "type-key:53:StateMachine", "type-key:548:CustomPropertyGroup", "type-key:57:StateMachineLayer", "type-key:592:CustomPropertyColor", "type-key:616:CustomPropertyEnum", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:667:TransitionPropertyComponentComparator", "type-key:7:Rectangle"]
 
 [[file]]
@@ -391,7 +391,7 @@ features = ["type-key:106:FileAssetContents", "type-key:127:CustomPropertyNumber
 id = "data_binding_test_2"
 path = "tests/unit_tests/assets/data_binding_test_2.riv"
 samples = [0.0]
-status = "not-yet"
+status = "exact"
 features = ["type-key:127:CustomPropertyNumber", "type-key:129:CustomPropertyBoolean", "type-key:130:CustomPropertyString", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:28:CubicEaseInterpolator", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:431:ViewModelPropertyNumber", "type-key:433:ViewModelInstanceString", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:442:ViewModelInstanceNumber", "type-key:443:ViewModelPropertyString", "type-key:447:DataBindContext", "type-key:448:ViewModelPropertyBoolean", "type-key:449:ViewModelInstanceBoolean", "type-key:519:DataConverterRangeMapper", "type-key:530:DataConverterStringPad", "type-key:534:DataConverterInterpolator", "type-key:535:DataConverterBooleanNegate", "type-key:53:StateMachine", "type-key:548:CustomPropertyGroup", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle"]
 
 [[file]]
@@ -1847,7 +1847,7 @@ features = ["type-key:114:StateMachineListenerSingle", "type-key:18:SolidColor",
 id = "timeline_event_test"
 path = "tests/unit_tests/assets/timeline_event_test.riv"
 samples = [0.0]
-status = "not-yet"
+status = "exact"
 features = ["type-key:128:Event", "type-key:171:KeyFrameCallback", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle"]
 
 [[file]]
@@ -2057,8 +2057,8 @@ features = ["type-key:106:FileAssetContents", "type-key:134:Text", "type-key:135
 id = "zero_width_space_line_break"
 path = "tests/unit_tests/assets/zero_width_space_line_break.riv"
 samples = [0.0]
-status = "not-yet"
-features = ["type-key:106:FileAssetContents", "type-key:134:Text", "type-key:135:TextValueRun", "type-key:137:TextStylePaint", "type-key:141:FontAsset", "type-key:144:TextStyleAxis", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:433:ViewModelInstanceString", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:443:ViewModelPropertyString", "type-key:447:DataBindContext", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle"]
+status = "unsupported-feature"
+features = ["type-key:106:FileAssetContents", "type-key:134:Text", "type-key:135:TextValueRun", "type-key:137:TextStylePaint", "type-key:141:FontAsset", "type-key:144:TextStyleAxis", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:433:ViewModelInstanceString", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:443:ViewModelPropertyString", "type-key:447:DataBindContext", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle", "rust-runner-unsupported:text"]
 
 [[file]]
 id = "zombie_skins"

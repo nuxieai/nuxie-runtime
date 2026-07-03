@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 31
+- Corpus files `exact`: 34
 - Current milestone: **M1 — Static Vector Rendering Exact (#V2-2)**
 
 ## Milestones
@@ -22,9 +22,9 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
-   start with `data_binding_test_2`, `zero_width_space_line_break`,
-   `bidirectional_precedence`, `collapsable_data_binding`,
-   `timeline_event_test`, and `component_based_conditions`; promote exact
+   start with `state_machine_triggers`, `viewmodel_from_context`,
+   `viewmodel_list_trigger`, `transition_index_condition`,
+   `complex_ik_dependency`, and `stateful_source_switch`; promote exact
    sample-0 matches or add verified unsupported diagnostics for later-phase
    first diffs.
 2. `solo_test` and `solos_collapse_tests` are parked for M2: C++ applies
@@ -73,6 +73,9 @@ the only memory the next session has. Update it every commit.
   `data_converter_interpolator_reset.riv` is parked for M5 color data binding;
   `stateful_keyed_trigger.riv`, `unbound_stateful_component.riv`, and
   `scripting_root_viewmodel.riv` are parked for nested-artboard support.
+- `bidirectional_precedence.riv` and `collapsable_data_binding.riv` are parked
+  for M5 data-binding transform/color application; `zero_width_space_line_break.riv`
+  is parked for text support.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -251,3 +254,9 @@ the only memory the next session has. Update it every commit.
   `unbound_stateful_component.riv`, and `scripting_root_viewmodel.riv` with
   verified scripted-transition/data-binding/nested-artboard diagnostics; exact
   count is now 31, unsupported-feature is now 79, and not-yet is now 185.
+- 2026-07-02: [M1] Promoted `data_binding_test_2.riv`,
+  `timeline_event_test.riv`, and `component_based_conditions.riv` as sample-0
+  exact, and gated `zero_width_space_line_break.riv`,
+  `bidirectional_precedence.riv`, and `collapsable_data_binding.riv` with
+  verified text/data-binding diagnostics; exact count is now 34,
+  unsupported-feature is now 82, and not-yet is now 179.

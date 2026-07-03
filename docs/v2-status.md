@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 16
+- Corpus files `exact`: 18
 - Current milestone: **M1 — Static Vector Rendering Exact (#V2-2)**
 
 ## Milestones
@@ -21,13 +21,14 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Inspect `solos_collapse_tests` at sample `0`: imported Solo collapse now
-   runs, but Rust still draws the red rectangle plus an empty collapsed path
-   while C++ draws the gray star; decide whether the remaining gap is M1
-   collapse/clip behavior or M2/M3 keyframe/constraint behavior.
-2. `solo_test` is parked for M2: C++ applies frame-0 `KeyFrameId` value `8`
-   through the default state machine/animation, overriding imported
-   `activeComponentId = 2`; Rust has no state-machine/keyframe application yet.
+1. Inspect `sorted_listeners` at sample `0`: Rust draws the same rectangle but
+   is missing a trailing C++ `save`/`restore` pair; decide whether this is M1
+   draw stack behavior or a harmless listener/state-machine artifact that
+   should park for M2/M3.
+2. `solo_test` and `solos_collapse_tests` are parked for M2: C++ applies
+   frame-0 `KeyFrameId` values through the default state machine/animation,
+   overriding imported `Solo.activeComponentId`; Rust has no
+   state-machine/keyframe application yet.
 3. `clip_tests` is raw-exact at sample `0`, but its manifest includes sample
    `0.25`; keep it parked until M2 non-zero sample support or an explicit
    sample-scope split.
@@ -49,6 +50,13 @@ the only memory the next session has. Update it every commit.
 - `solo_test.riv` is parked for M2 even at sample `0`: C++ applies the default
   state machine's frame-0 keyframe to `Solo.activeComponentId`, so imported
   static Solo collapse alone correctly selects the wrong child for the golden.
+- `solos_collapse_tests.riv` is parked for M2 even at sample `0`: the first
+  artboard imports `Solo.activeComponentId = 3`, but the default timeline has a
+  frame-0 `KeyFrameId` for property `296` that switches it to local `6`, so C++
+  draws the gray star while static Rust import draws the red rectangle.
+- `click_event.riv` and `sound.riv` are parked for M2 at sample `0`: C++ applies
+  frame-0 `KeyFrameColor` values through the selected/default state machine,
+  while Rust still draws imported static solid colors.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -195,3 +203,8 @@ the only memory the next session has. Update it every commit.
   `follow_path_solos.riv` as a verified constraint unsupported diagnostic, and
   parked `solo_test.riv` for M2 frame-0 keyframe application; exact count is
   now 16.
+- 2026-07-02: [M1] Marked `settler.riv` and `sound2.riv` exact at sample `0`,
+  gated follow-path, scroll/translation constraint, and nested-artboard files
+  as verified Rust unsupported diagnostics, and parked `solos_collapse_tests`,
+  `click_event`, and `sound` for M2 frame-0 keyframe application; exact count
+  is now 18, unsupported-feature is now 66, and not-yet is now 211.

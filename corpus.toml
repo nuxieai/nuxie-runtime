@@ -111,7 +111,7 @@ features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill",
 id = "bindable_artboard_child"
 path = "tests/unit_tests/assets/bindable_artboard_child.riv"
 samples = [0.0]
-status = "not-yet"
+status = "exact"
 features = ["type-key:114:StateMachineListenerSingle", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:447:DataBindContext", "type-key:479:TransitionPropertyViewModelComparator", "type-key:482:TransitionViewModelCondition", "type-key:487:ListenerViewModelChange", "type-key:501:ViewModelInstanceTrigger", "type-key:502:ViewModelPropertyTrigger", "type-key:503:BindablePropertyTrigger", "type-key:504:DataConverterTrigger", "type-key:505:TransitionValueTriggerComparator", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle"]
 
 [[file]]
@@ -223,14 +223,14 @@ features = ["type-key:129:CustomPropertyBoolean", "type-key:130:CustomPropertySt
 id = "component_list_1"
 path = "tests/unit_tests/assets/component_list_1.riv"
 samples = [0.0]
-status = "not-yet"
-features = ["type-key:106:FileAssetContents", "type-key:114:StateMachineListenerSingle", "type-key:117:ListenerBoolChange", "type-key:134:Text", "type-key:135:TextValueRun", "type-key:137:TextStylePaint", "type-key:141:FontAsset", "type-key:144:TextStyleAxis", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:409:LayoutComponent", "type-key:420:LayoutComponentStyle", "type-key:427:ViewModelInstanceListItem", "type-key:433:ViewModelInstanceString", "type-key:434:ViewModelPropertyList", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:441:ViewModelInstanceList", "type-key:443:ViewModelPropertyString", "type-key:447:DataBindContext", "type-key:521:ScrollConstraint", "type-key:525:ElasticScrollPhysics", "type-key:53:StateMachine", "type-key:559:ArtboardComponentList", "type-key:57:StateMachineLayer", "type-key:59:StateMachineBool", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:71:TransitionBoolCondition"]
+status = "unsupported-feature"
+features = ["type-key:106:FileAssetContents", "type-key:114:StateMachineListenerSingle", "type-key:117:ListenerBoolChange", "type-key:134:Text", "type-key:135:TextValueRun", "type-key:137:TextStylePaint", "type-key:141:FontAsset", "type-key:144:TextStyleAxis", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:409:LayoutComponent", "type-key:420:LayoutComponentStyle", "type-key:427:ViewModelInstanceListItem", "type-key:433:ViewModelInstanceString", "type-key:434:ViewModelPropertyList", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:441:ViewModelInstanceList", "type-key:443:ViewModelPropertyString", "type-key:447:DataBindContext", "type-key:521:ScrollConstraint", "type-key:525:ElasticScrollPhysics", "type-key:53:StateMachine", "type-key:559:ArtboardComponentList", "type-key:57:StateMachineLayer", "type-key:59:StateMachineBool", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:71:TransitionBoolCondition", "rust-runner-unsupported:constraints"]
 
 [[file]]
 id = "component_list_2"
 path = "tests/unit_tests/assets/component_list_2.riv"
 samples = [0.0]
-status = "not-yet"
+status = "exact"
 features = ["type-key:106:FileAssetContents", "type-key:114:StateMachineListenerSingle", "type-key:134:Text", "type-key:135:TextValueRun", "type-key:137:TextStylePaint", "type-key:141:FontAsset", "type-key:144:TextStyleAxis", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:3:Shape", "type-key:409:LayoutComponent", "type-key:420:LayoutComponentStyle", "type-key:431:ViewModelPropertyNumber", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:442:ViewModelInstanceNumber", "type-key:447:DataBindContext", "type-key:448:ViewModelPropertyBoolean", "type-key:449:ViewModelInstanceBoolean", "type-key:472:BindablePropertyBoolean", "type-key:479:TransitionPropertyViewModelComparator", "type-key:481:TransitionValueBooleanComparator", "type-key:482:TransitionViewModelCondition", "type-key:487:ListenerViewModelChange", "type-key:490:DataConverterToString", "type-key:4:Ellipse", "type-key:53:StateMachine", "type-key:559:ArtboardComponentList", "type-key:564:ViewModelPropertySymbolListIndex", "type-key:566:ViewModelInstanceSymbolListIndex", "type-key:568:DataConverterNumberToList", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition"]
 
 [[file]]
@@ -265,7 +265,7 @@ features = ["type-key:114:StateMachineListenerSingle", "type-key:18:SolidColor",
 id = "component_list_hit_order"
 path = "tests/unit_tests/assets/component_list_hit_order.riv"
 samples = [0.0]
-status = "not-yet"
+status = "exact"
 features = ["type-key:114:StateMachineListenerSingle", "type-key:117:ListenerBoolChange", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:24:Stroke", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:409:LayoutComponent", "type-key:420:LayoutComponentStyle", "type-key:427:ViewModelInstanceListItem", "type-key:434:ViewModelPropertyList", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:441:ViewModelInstanceList", "type-key:447:DataBindContext", "type-key:53:StateMachine", "type-key:559:ArtboardComponentList", "type-key:57:StateMachineLayer", "type-key:59:StateMachineBool", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:71:TransitionBoolCondition"]
 
 [[file]]
@@ -328,8 +328,8 @@ features = ["type-key:100:Image", "type-key:105:ImageAsset", "type-key:106:FileA
 id = "custom_property_enum"
 path = "tests/unit_tests/assets/custom_property_enum.riv"
 samples = [0.0]
-status = "not-yet"
-features = ["type-key:127:CustomPropertyNumber", "type-key:130:CustomPropertyString", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:432:ViewModelInstanceEnum", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:438:DataEnumCustom", "type-key:439:ViewModelPropertyEnumCustom", "type-key:445:DataEnumValue", "type-key:447:DataBindContext", "type-key:474:BindablePropertyEnum", "type-key:479:TransitionPropertyViewModelComparator", "type-key:482:TransitionViewModelCondition", "type-key:485:TransitionValueEnumComparator", "type-key:50:KeyFrameId", "type-key:53:StateMachine", "type-key:548:CustomPropertyGroup", "type-key:57:StateMachineLayer", "type-key:592:CustomPropertyColor", "type-key:613:CustomPropertyTrigger", "type-key:616:CustomPropertyEnum", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle"]
+status = "unsupported-feature"
+features = ["type-key:127:CustomPropertyNumber", "type-key:130:CustomPropertyString", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:432:ViewModelInstanceEnum", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:438:DataEnumCustom", "type-key:439:ViewModelPropertyEnumCustom", "type-key:445:DataEnumValue", "type-key:447:DataBindContext", "type-key:474:BindablePropertyEnum", "type-key:479:TransitionPropertyViewModelComparator", "type-key:482:TransitionViewModelCondition", "type-key:485:TransitionValueEnumComparator", "type-key:50:KeyFrameId", "type-key:53:StateMachine", "type-key:548:CustomPropertyGroup", "type-key:57:StateMachineLayer", "type-key:592:CustomPropertyColor", "type-key:613:CustomPropertyTrigger", "type-key:616:CustomPropertyEnum", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle", "rust-runner-unsupported:data-binding-custom-property-enum"]
 
 [[file]]
 id = "custom_property_trigger"
@@ -1805,7 +1805,7 @@ features = ["type-key:106:FileAssetContents", "type-key:114:StateMachineListener
 id = "text_input_event"
 path = "tests/unit_tests/assets/text_input_event.riv"
 samples = [0.0]
-status = "not-yet"
+status = "exact"
 features = ["type-key:114:StateMachineListenerSingle", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:447:DataBindContext", "type-key:448:ViewModelPropertyBoolean", "type-key:449:ViewModelInstanceBoolean", "type-key:472:BindablePropertyBoolean", "type-key:487:ListenerViewModelChange", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:653:FocusData", "type-key:654:StateMachineListener", "type-key:65:StateTransition", "type-key:664:KeyboardInput", "type-key:665:ListenerInputTypeKeyboard", "type-key:666:ListenerInputTypeText", "type-key:7:Rectangle"]
 
 [[file]]

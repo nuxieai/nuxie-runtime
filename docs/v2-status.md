@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 26
+- Corpus files `exact`: 30
 - Current milestone: **M1 — Static Vector Rendering Exact (#V2-2)**
 
 ## Milestones
@@ -22,10 +22,11 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the M1 candidate sweep with the next small runner-clean fixtures:
-   start with `component_list_hit_order`, `component_list_1`,
-   `component_list_2`, `bindable_artboard_child`, `custom_property_enum`, and
-   `text_input_event`; promote exact sample-0 matches or add verified
-   unsupported diagnostics for later-phase first diffs.
+   start with `scripted_transition_condition`,
+   `data_converter_interpolator_reset`, `stateful_keyed_trigger`,
+   `unbound_stateful_component`, `scripting_root_viewmodel`, and
+   `solos_with_nested_artboards`; promote exact sample-0 matches or add
+   verified unsupported diagnostics for later-phase first diffs.
 2. `solo_test` and `solos_collapse_tests` are parked for M2: C++ applies
    frame-0 `KeyFrameId` values through the default state machine/animation,
    overriding imported `Solo.activeComponentId`; Rust has no
@@ -65,6 +66,9 @@ the only memory the next session has. Update it every commit.
   and `viewmodel_image_reset.riv` are parked for nested-artboard, text, and
   image support respectively; their sample-0 first diffs are covered by the
   existing Rust runner diagnostics.
+- `component_list_1.riv` is parked for constraint support, and
+  `custom_property_enum.riv` is parked for M5 custom-property enum data
+  binding; both have verified Rust runner diagnostics.
 - Corpus entries tagged `cpp-runner-crash` are unsupported until the C++
   golden runner/importer can survive the FileAssetContents, scripting, and
   data-viz crash paths it currently aborts on.
@@ -231,3 +235,9 @@ the only memory the next session has. Update it every commit.
   `databind_external_artboard_child.riv`, and `viewmodel_image_reset.riv` with
   existing nested-artboard/text/image diagnostics; exact count is now 26,
   unsupported-feature is now 72, and not-yet is now 197.
+- 2026-07-02: [M1] Promoted `component_list_hit_order.riv`,
+  `component_list_2.riv`, `bindable_artboard_child.riv`, and
+  `text_input_event.riv` as sample-0 exact, and gated `component_list_1.riv`
+  plus `custom_property_enum.riv` with verified constraint/custom-property
+  enum diagnostics; exact count is now 30, unsupported-feature is now 74, and
+  not-yet is now 191.

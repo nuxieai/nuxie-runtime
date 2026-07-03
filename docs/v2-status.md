@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Corpus files `exact`: 2
+- Corpus files `exact`: 3
 - Current milestone: **M1 — Static Vector Rendering Exact (#V2-2)**
 
 ## Milestones
@@ -95,3 +95,5 @@ the only memory the next session has. Update it every commit.
 - 2026-07-02: [M1] Marked `artboardclipping.riv` exact by porting artboard
   origin transforms and selected-artboard paint allocation; exact count is now
   2.
+- 2026-07-02: [M1] Marked `shapetest.riv` exact through the runtime renderer
+  path; exact count is now 3.

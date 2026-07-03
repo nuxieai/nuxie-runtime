@@ -1588,7 +1588,7 @@ features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill",
 id = "shapetest"
 path = "tests/unit_tests/assets/shapetest.riv"
 samples = [0.0]
-status = "not-yet"
+status = "exact"
 features = ["type-key:16:PointsPath", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:3:Shape", "type-key:6:CubicDetachedVertex"]
 
 [[file]]

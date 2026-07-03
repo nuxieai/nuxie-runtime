@@ -15,8 +15,9 @@ use rive_render_api::{
     StrokeCap as RenderStrokeCap, StrokeJoin as RenderStrokeJoin,
 };
 use rive_schema::{
-    CoreRegistryFieldKind, FieldKind, core_registry_field_kind_by_property_key, definition_by_name,
-    definition_by_type_key, is_callback_property_key, object_supports_property,
+    CoreRegistryFieldKind, FieldKind, core_registry_field_kind_by_property_key,
+    core_registry_setter_field_kind_by_property_key, definition_by_name, definition_by_type_key,
+    is_callback_property_key, object_supports_property,
 };
 use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
@@ -1399,6 +1400,13 @@ impl InstanceObjectArena {
         else {
             return false;
         };
+        let Some(setter_kind) = core_registry_setter_field_kind_by_property_key(property_key)
+        else {
+            return false;
+        };
+        if !field_value_matches_kind(&value, setter_kind) {
+            return false;
+        }
         if !field_value_matches_kind(&value, property.runtime_type) {
             return false;
         }
@@ -29027,6 +29035,44 @@ mod tests {
         assert_eq!(report.updated_locals.len(), 100);
         assert!(report.max_steps_reached);
         assert!(instance.has_dirt(ComponentDirt::COMPONENTS));
+    }
+
+    fn synthetic_runtime_object(
+        id: u32,
+        type_name: &'static str,
+        properties: Vec<RuntimeProperty>,
+    ) -> RuntimeObject {
+        let definition = definition_by_name(type_name).expect("synthetic runtime object type");
+        RuntimeObject {
+            id,
+            type_key: definition.type_key.int,
+            type_name: definition.name,
+            rust_variant: definition.rust_variant,
+            properties,
+            skipped_properties: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn instance_object_arena_uses_generated_core_registry_setter_families() {
+        let node_x_key = property_key_for_name("Node", "x").expect("Node.x key");
+        let bytes_key =
+            property_key_for_name("FileAssetContents", "bytes").expect("FileAssetContents.bytes");
+        let mut arena = InstanceObjectArena {
+            objects: vec![
+                Some(synthetic_runtime_object(0, "Node", Vec::new())),
+                Some(synthetic_runtime_object(1, "FileAssetContents", Vec::new())),
+            ],
+        };
+
+        assert!(arena.set_double_property(0, node_x_key, 12.5));
+        assert_eq!(arena.double_property(0, node_x_key), Some(12.5));
+
+        assert!(!arena.set_uint_property(0, node_x_key, 12));
+        assert_eq!(arena.double_property(0, node_x_key), Some(12.5));
+
+        assert!(!arena.set_string_property(1, bytes_key, vec![1, 2, 3]));
+        assert_eq!(arena.string_property(1, bytes_key), None);
     }
 
     #[test]

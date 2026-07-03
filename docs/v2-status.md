@@ -21,10 +21,10 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue M2 real object model work by replacing the generic cloned
-   `RuntimeObject` arena tracer with generated concrete object storage plus
-   schema-generated setter side effects beyond the hand-ported Solo uint/id
-   path.
+1. Continue M2 real object model work by generating concrete object storage
+   for cloned artboard objects. The current `InstanceObjectArena` write path
+   now validates against generated CoreRegistry setter families, but backing
+   storage is still cloned `RuntimeObject` properties.
 2. Add handle-source world-space math and nested-remap dependent advancement
    to the joystick path when a corpus diff reaches those cases.
 
@@ -649,6 +649,13 @@ the only memory the next session has. Update it every commit.
 - 2026-07-03: [M2] Rechecked remaining M2 `not-yet` sample-0 files after the
   live keyed-property/state-machine work and promoted `opaque_hit_test.riv`
   and `quantize_test.riv` after direct C++/Rust stream comparisons matched.
+  `make golden-compare` reports `exact=66`, `diverges=0`,
+  `unsupported-feature=224`, `not-yet=5`, and `cargo test --workspace`
+  passes.
+- 2026-07-03: [M2] Started the real object model replacement by routing cloned
+  object arena writes through generated CoreRegistry setter-family metadata,
+  rejecting wrong-family and non-setter/encoded property writes before
+  mutating the `RuntimeObject` property bag. Exact count remains 66;
   `make golden-compare` reports `exact=66`, `diverges=0`,
   `unsupported-feature=224`, `not-yet=5`, and `cargo test --workspace`
   passes.

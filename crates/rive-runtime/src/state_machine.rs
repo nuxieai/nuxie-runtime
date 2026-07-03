@@ -1,4 +1,5 @@
-use crate::animation::RuntimeInterpolator;
+use crate::animation::{LinearAnimationInstance, RuntimeInterpolator};
+use crate::{ArtboardInstance, StateMachineBindableNumberInstance, bindable_number_value};
 use rive_binary::{RuntimeFile, RuntimeObject};
 use std::collections::BTreeMap;
 
@@ -330,6 +331,323 @@ impl RuntimeDirectBlendSource {
             _ => None,
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct BlendState1DInstance {
+    source: RuntimeBlendState1DSource,
+    animations: Vec<BlendAnimation1DInstance>,
+}
+
+impl BlendState1DInstance {
+    pub(crate) fn new(blend_state: &RuntimeBlendState1D, artboard: &ArtboardInstance) -> Self {
+        let animations = blend_state
+            .animations
+            .iter()
+            .filter_map(|animation| {
+                let linear_animation = artboard.linear_animation(animation.animation_index)?;
+                Some(BlendAnimation1DInstance {
+                    value: animation.value,
+                    animation: LinearAnimationInstance::new(
+                        animation.animation_index,
+                        linear_animation,
+                        1.0,
+                    ),
+                    mix: 0.0,
+                })
+            })
+            .collect();
+
+        Self {
+            source: blend_state.source.clone(),
+            animations,
+        }
+    }
+
+    pub(crate) fn advance(
+        &mut self,
+        artboard: &ArtboardInstance,
+        inputs: &[StateMachineInputInstance],
+        bindable_numbers: &[StateMachineBindableNumberInstance],
+        elapsed_seconds: f32,
+    ) -> bool {
+        self.advance_and_report(artboard, inputs, bindable_numbers, elapsed_seconds, None)
+    }
+
+    pub(crate) fn advance_with_events(
+        &mut self,
+        artboard: &ArtboardInstance,
+        inputs: &[StateMachineInputInstance],
+        bindable_numbers: &[StateMachineBindableNumberInstance],
+        elapsed_seconds: f32,
+        reported_events: &mut Vec<StateMachineReportedEvent>,
+    ) -> bool {
+        self.advance_and_report(
+            artboard,
+            inputs,
+            bindable_numbers,
+            elapsed_seconds,
+            Some(reported_events),
+        )
+    }
+
+    fn advance_and_report(
+        &mut self,
+        artboard: &ArtboardInstance,
+        inputs: &[StateMachineInputInstance],
+        bindable_numbers: &[StateMachineBindableNumberInstance],
+        elapsed_seconds: f32,
+        mut reported_events: Option<&mut Vec<StateMachineReportedEvent>>,
+    ) -> bool {
+        for animation in &mut self.animations {
+            if artboard.linear_animation_instance_keep_going(&animation.animation) {
+                if let Some(events) = reported_events.as_mut() {
+                    artboard.advance_linear_animation_instance_with_events(
+                        &mut animation.animation,
+                        elapsed_seconds,
+                        *events,
+                    );
+                } else {
+                    artboard.advance_linear_animation_instance(
+                        &mut animation.animation,
+                        elapsed_seconds,
+                    );
+                }
+            }
+        }
+
+        self.update_mix_values(inputs, bindable_numbers);
+        true
+    }
+
+    fn update_mix_values(
+        &mut self,
+        inputs: &[StateMachineInputInstance],
+        bindable_numbers: &[StateMachineBindableNumberInstance],
+    ) {
+        if self.animations.is_empty() {
+            return;
+        }
+
+        let value = match self.source {
+            RuntimeBlendState1DSource::Input { input_index } => input_index
+                .and_then(|input_index| inputs.get(input_index))
+                .and_then(StateMachineInputInstance::number_value)
+                .unwrap_or(0.0),
+            RuntimeBlendState1DSource::BindableProperty { global_id } => {
+                bindable_number_value(bindable_numbers, global_id).unwrap_or(0.0)
+            }
+        };
+
+        let animation_count = self.animations.len();
+        let to_index = self.animation_index(value);
+        let from_index = to_index.checked_sub(1);
+        let to_value = self
+            .animations
+            .get(to_index)
+            .map(|animation| animation.value)
+            .unwrap_or(0.0);
+        let from_value = from_index
+            .and_then(|index| self.animations.get(index))
+            .map(|animation| animation.value)
+            .unwrap_or(0.0);
+        let (mix, mix_from) =
+            if to_index >= animation_count || from_index.is_none() || to_value == from_value {
+                (1.0, 1.0)
+            } else {
+                let mix = (value - from_value) / (to_value - from_value);
+                (mix, 1.0 - mix)
+            };
+
+        for animation in &mut self.animations {
+            if to_index < animation_count && animation.value == to_value {
+                animation.mix = mix;
+            } else if from_index.is_some() && animation.value == from_value {
+                animation.mix = mix_from;
+            } else {
+                animation.mix = 0.0;
+            }
+        }
+    }
+
+    fn animation_index(&self, value: f32) -> usize {
+        let mut index = 0_usize;
+        let mut start = 0_isize;
+        let mut end = self.animations.len() as isize - 1;
+
+        while start <= end {
+            let mid = (start + end) >> 1;
+            let closest_value = self.animations[mid as usize].value;
+            if closest_value < value {
+                start = mid + 1;
+            } else if closest_value > value {
+                end = mid - 1;
+            } else {
+                index = mid as usize;
+                break;
+            }
+
+            index = start as usize;
+        }
+
+        index
+    }
+
+    pub(crate) fn animation_instance(&self, index: usize) -> Option<&LinearAnimationInstance> {
+        self.animations
+            .get(index)
+            .map(|animation| &animation.animation)
+    }
+
+    pub(crate) fn apply(&self, artboard: &mut ArtboardInstance, mix: f32) -> bool {
+        let mut changed = false;
+        for animation in &self.animations {
+            let animation_mix = mix * animation.mix;
+            if animation_mix == 0.0 {
+                continue;
+            }
+            changed |=
+                artboard.apply_linear_animation_instance(&animation.animation, animation_mix);
+        }
+        changed
+    }
+}
+
+#[derive(Debug, Clone)]
+struct BlendAnimation1DInstance {
+    value: f32,
+    animation: LinearAnimationInstance,
+    mix: f32,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct BlendStateDirectInstance {
+    animations: Vec<BlendAnimationDirectInstance>,
+}
+
+impl BlendStateDirectInstance {
+    pub(crate) fn new(blend_state: &RuntimeBlendStateDirect, artboard: &ArtboardInstance) -> Self {
+        let animations = blend_state
+            .animations
+            .iter()
+            .filter_map(|animation| {
+                let linear_animation = artboard.linear_animation(animation.animation_index)?;
+                Some(BlendAnimationDirectInstance {
+                    source: animation.source.clone(),
+                    animation: LinearAnimationInstance::new(
+                        animation.animation_index,
+                        linear_animation,
+                        1.0,
+                    ),
+                    mix: 0.0,
+                })
+            })
+            .collect();
+
+        Self { animations }
+    }
+
+    pub(crate) fn advance(
+        &mut self,
+        artboard: &ArtboardInstance,
+        inputs: &[StateMachineInputInstance],
+        bindable_numbers: &[StateMachineBindableNumberInstance],
+        elapsed_seconds: f32,
+    ) -> bool {
+        self.advance_and_report(artboard, inputs, bindable_numbers, elapsed_seconds, None)
+    }
+
+    pub(crate) fn advance_with_events(
+        &mut self,
+        artboard: &ArtboardInstance,
+        inputs: &[StateMachineInputInstance],
+        bindable_numbers: &[StateMachineBindableNumberInstance],
+        elapsed_seconds: f32,
+        reported_events: &mut Vec<StateMachineReportedEvent>,
+    ) -> bool {
+        self.advance_and_report(
+            artboard,
+            inputs,
+            bindable_numbers,
+            elapsed_seconds,
+            Some(reported_events),
+        )
+    }
+
+    fn advance_and_report(
+        &mut self,
+        artboard: &ArtboardInstance,
+        inputs: &[StateMachineInputInstance],
+        bindable_numbers: &[StateMachineBindableNumberInstance],
+        elapsed_seconds: f32,
+        mut reported_events: Option<&mut Vec<StateMachineReportedEvent>>,
+    ) -> bool {
+        for animation in &mut self.animations {
+            if artboard.linear_animation_instance_keep_going(&animation.animation) {
+                if let Some(events) = reported_events.as_mut() {
+                    artboard.advance_linear_animation_instance_with_events(
+                        &mut animation.animation,
+                        elapsed_seconds,
+                        *events,
+                    );
+                } else {
+                    artboard.advance_linear_animation_instance(
+                        &mut animation.animation,
+                        elapsed_seconds,
+                    );
+                }
+            }
+        }
+
+        self.update_mix_values(inputs, bindable_numbers);
+        true
+    }
+
+    fn update_mix_values(
+        &mut self,
+        inputs: &[StateMachineInputInstance],
+        bindable_numbers: &[StateMachineBindableNumberInstance],
+    ) {
+        for animation in &mut self.animations {
+            let value = match animation.source {
+                RuntimeDirectBlendSource::Input { input_index } => inputs
+                    .get(input_index)
+                    .and_then(StateMachineInputInstance::number_value)
+                    .unwrap_or(0.0),
+                RuntimeDirectBlendSource::MixValue { value } => value,
+                RuntimeDirectBlendSource::BindableProperty { global_id } => {
+                    bindable_number_value(bindable_numbers, global_id).unwrap_or(0.0)
+                }
+            };
+            animation.mix = (value / 100.0).clamp(0.0, 1.0);
+        }
+    }
+
+    pub(crate) fn animation_instance(&self, index: usize) -> Option<&LinearAnimationInstance> {
+        self.animations
+            .get(index)
+            .map(|animation| &animation.animation)
+    }
+
+    pub(crate) fn apply(&self, artboard: &mut ArtboardInstance, mix: f32) -> bool {
+        let mut changed = false;
+        for animation in &self.animations {
+            let animation_mix = mix * animation.mix;
+            if animation_mix == 0.0 {
+                continue;
+            }
+            changed |=
+                artboard.apply_linear_animation_instance(&animation.animation, animation_mix);
+        }
+        changed
+    }
+}
+
+#[derive(Debug, Clone)]
+struct BlendAnimationDirectInstance {
+    source: RuntimeDirectBlendSource,
+    animation: LinearAnimationInstance,
+    mix: f32,
 }
 
 pub(crate) fn perform_state_machine_fire_actions(

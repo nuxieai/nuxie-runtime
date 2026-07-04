@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 297 across 70 exact files
+- Exact segments (file × sample): 298 across 70 exact files
 - Parked breakdown (from `make golden-compare`): M3=21 M4=83 M5=8 M6=72 gated=5 harness=36
 - Current milestone: **M2 — Animated Playback Exact + Real Object Model (#V2-3)**
 
@@ -24,8 +24,8 @@ the only memory the next session has. Update it every commit.
 
 1. The fourth-sample exact widening queue is exhausted. Continue the
    fifth-sample M2 sweep over exact entries with samples `0`, `0.25`, `0.5`,
-   and `0.75`, starting after `keyboard_event_to_script.riv` (next candidate:
-   `library_data_enum_test.riv`),
+   and `0.75`, starting after `library_data_enum_test.riv` (next candidate:
+   `light_switch.riv`),
    and stop on the first real divergence to localize runtime code.
 2. Continue M2 real object model work by modularizing the remaining runtime
    surfaces out of `lib.rs` while keeping generated `InstanceObjectStorage` as
@@ -175,12 +175,6 @@ the only memory the next session has. Update it every commit.
   under `M2 active log rolloff`; keep only the recent rolling window here once
   Metric, Next, Decisions, and `corpus.toml` capture the current state.
 
-- 2026-07-03: [M2] Widened `sound2.riv` from samples `0`, `0.25`, and `0.5`
-  to samples `0`, `0.25`, `0.5`, and `0.75`, keeping passive audio,
-  open-url, and nested-artboard metadata playback exact before M4/M6 runtime
-  behavior. Exact segments are now 258 across 70 exact files; `make
-  golden-compare` reports `exact=70`, `exact-segments=258`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace` passes.
 - 2026-07-03: [M2] Widened `stacked_path_effects.riv` from samples `0`,
   `0.25`, and `0.5` to samples `0`, `0.25`, `0.5`, and `0.75`, keeping
   stacked TrimPath and DashPath playback exact across the wider sample set.
@@ -466,3 +460,10 @@ the only memory the next session has. Update it every commit.
   exact files; `make golden-compare` reports `exact=70`,
   `exact-segments=297`, `diverges=0`, `unsupported-feature=225`,
   `not-yet=0`, and `cargo test --workspace` passes.
+- 2026-07-04: [M2] Widened `library_data_enum_test.riv` from samples `0`,
+  `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
+  `1.0`, keeping passive custom-enum/view-model state-machine playback exact
+  across the fifth sample. Exact segments are now 298 across 70 exact files;
+  `make golden-compare` reports `exact=70`, `exact-segments=298`,
+  `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
+  `cargo test --workspace` passes.

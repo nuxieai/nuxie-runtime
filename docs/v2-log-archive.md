@@ -1891,3 +1891,9 @@ milestone entries are kept verbatim here. Newest milestone last.
   Exact segments are now 257 across 70 exact files; `make golden-compare`
   reports `exact=70`, `exact-segments=257`, `diverges=0`,
   `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace` passes.
+- 2026-07-03: [M2] Widened `sound2.riv` from samples `0`, `0.25`, and `0.5`
+  to samples `0`, `0.25`, `0.5`, and `0.75`, keeping passive audio,
+  open-url, and nested-artboard metadata playback exact before M4/M6 runtime
+  behavior. Exact segments are now 258 across 70 exact files; `make
+  golden-compare` reports `exact=70`, `exact-segments=258`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace` passes.

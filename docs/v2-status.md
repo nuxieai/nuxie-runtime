@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 244 across 70 exact files
+- Exact segments (file × sample): 245 across 70 exact files
 - Parked breakdown (from `make golden-compare`): M3=21 M4=83 M5=8 M6=72 gated=5 harness=36
 - Current milestone: **M2 — Animated Playback Exact + Real Object Model (#V2-3)**
 
@@ -24,7 +24,7 @@ the only memory the next session has. Update it every commit.
 
 1. The two-sample exact widening queue is exhausted. Continue the fourth-sample
    M2 sweep over exact entries with samples `0`, `0.25`, and `0.5`, starting
-   after `rapid_pointer_events.riv` (next candidate: `remove_from_list.riv`),
+   after `remove_from_list.riv` (next candidate: `rocket.riv`),
    and stop on the first real divergence to localize runtime code.
 2. Continue M2 real object model work by modularizing the remaining runtime
    surfaces out of `lib.rs` while keeping generated `InstanceObjectStorage` as
@@ -174,13 +174,6 @@ the only memory the next session has. Update it every commit.
   under `M2 active log rolloff`; keep only the recent rolling window here once
   Metric, Next, Decisions, and `corpus.toml` capture the current state.
 
-- 2026-07-03: [M2] Exhausted the exact two-sample widening queue and widened
-  `animation_reset_cases.riv` from samples `0`, `0.25`, and `0.5` to samples
-  `0`, `0.25`, `0.5`, and `0.75`, starting the fourth-sample M2 sweep with
-  blend/reset state-machine playback still exact. Exact segments are now 205
-  across 70 exact files; `make golden-compare` reports `exact=70`,
-  `exact-segments=205`, `diverges=0`, `unsupported-feature=225`,
-  `not-yet=0`, and `cargo test --workspace` passes.
 - 2026-07-03: [M2] Widened `bindable_artboard_child.riv` from samples `0`,
   `0.25`, and `0.5` to samples `0`, `0.25`, `0.5`, and `0.75`, keeping the
   passive bindable artboard-child state-machine render path exact while
@@ -445,5 +438,13 @@ the only memory the next session has. Update it every commit.
   across the wider sample set while leaving scripted pointer dispatch in M3
   scope. Exact segments are now 244 across 70 exact files;
   `make golden-compare` reports `exact=70`, `exact-segments=244`,
+  `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
+  `cargo test --workspace` passes.
+- 2026-07-03: [M2] Widened `remove_from_list.riv` from samples `0`, `0.25`,
+  and `0.5` to samples `0`, `0.25`, `0.5`, and `0.75`, keeping passive
+  scripted/list/view-model playback exact across the wider sample set while
+  leaving list mutation, scripting, and layout-component paint behavior in
+  later M4/M6 scope. Exact segments are now 245 across 70 exact files;
+  `make golden-compare` reports `exact=70`, `exact-segments=245`,
   `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
   `cargo test --workspace` passes.

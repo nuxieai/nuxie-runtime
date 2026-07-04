@@ -1528,3 +1528,10 @@ milestone entries are kept verbatim here. Newest milestone last.
   across 70 exact files; `make golden-compare` reports `exact=70`,
   `exact-segments=204`, `diverges=0`, `unsupported-feature=225`,
   `not-yet=0`, and `cargo test --workspace` passes.
+- 2026-07-03: [M2] Exhausted the exact two-sample widening queue and widened
+  `animation_reset_cases.riv` from samples `0`, `0.25`, and `0.5` to samples
+  `0`, `0.25`, `0.5`, and `0.75`, starting the fourth-sample M2 sweep with
+  blend/reset state-machine playback still exact. Exact segments are now 205
+  across 70 exact files; `make golden-compare` reports `exact=70`,
+  `exact-segments=205`, `diverges=0`, `unsupported-feature=225`,
+  `not-yet=0`, and `cargo test --workspace` passes.

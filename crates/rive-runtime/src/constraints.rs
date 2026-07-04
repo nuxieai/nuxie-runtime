@@ -14,6 +14,12 @@ pub(crate) struct RuntimeFollowPathConstraint {
     paths: Vec<RuntimeFollowPathPath>,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeListFollowPathConstraint {
+    list_local: usize,
+    constraint: RuntimeFollowPathConstraint,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RuntimeFollowPathTargetKind {
     Shape,
@@ -70,69 +76,107 @@ pub(crate) fn build_runtime_follow_path_constraints(
         .local_objects
         .iter()
         .filter(|object| object.type_name == Some("FollowPathConstraint"))
-        .filter_map(|object| {
-            let constraint = file.object(object.global_id as usize)?;
-            let target_local = usize::try_from(constraint.uint_property("targetId")?).ok()?;
-            let target_type = graph
-                .local_objects
-                .iter()
-                .find(|object| object.local_id == target_local)
-                .and_then(|object| object.type_name);
+        .filter_map(|object| build_runtime_follow_path_constraint(file, graph, object.local_id))
+        .collect()
+}
 
-            let target_kind = if target_type == Some("Shape") {
-                RuntimeFollowPathTargetKind::Shape
-            } else if graph.paths.iter().any(|path| path.local_id == target_local) {
-                RuntimeFollowPathTargetKind::Path
-            } else {
-                RuntimeFollowPathTargetKind::Other
-            };
-
-            let paths = match target_kind {
-                RuntimeFollowPathTargetKind::Shape => graph
-                    .path_composers
-                    .iter()
-                    .find(|composer| composer.shape_local == target_local)
-                    .map(|composer| {
-                        composer
-                            .paths
-                            .iter()
-                            .filter_map(|path_ref| {
-                                graph
-                                    .paths
-                                    .iter()
-                                    .find(|path| path.local_id == path_ref.local_id)
-                                    .cloned()
-                                    .map(|geometry| RuntimeFollowPathPath {
-                                        local_id: path_ref.local_id,
-                                        geometry,
-                                    })
-                            })
-                            .collect()
-                    })
-                    .unwrap_or_default(),
-                RuntimeFollowPathTargetKind::Path => graph
-                    .paths
-                    .iter()
-                    .find(|path| path.local_id == target_local)
-                    .cloned()
-                    .map(|geometry| {
-                        vec![RuntimeFollowPathPath {
-                            local_id: target_local,
-                            geometry,
-                        }]
-                    })
-                    .unwrap_or_default(),
-                RuntimeFollowPathTargetKind::Other => Vec::new(),
-            };
-
-            Some(RuntimeFollowPathConstraint {
-                local_id: object.local_id,
-                target_local,
-                target_kind,
-                paths,
+pub(crate) fn build_runtime_list_follow_path_constraints(
+    file: &RuntimeFile,
+    graph: &ArtboardGraph,
+) -> Vec<RuntimeListFollowPathConstraint> {
+    graph
+        .list_constraint_registrations
+        .iter()
+        .filter(|registration| registration.constraint_type_name == "ListFollowPathConstraint")
+        .filter_map(|registration| {
+            Some(RuntimeListFollowPathConstraint {
+                list_local: registration.constrainable_list_local,
+                constraint: build_runtime_follow_path_constraint(
+                    file,
+                    graph,
+                    registration.constraint_local,
+                )?,
             })
         })
         .collect()
+}
+
+fn build_runtime_follow_path_constraint(
+    file: &RuntimeFile,
+    graph: &ArtboardGraph,
+    constraint_local: usize,
+) -> Option<RuntimeFollowPathConstraint> {
+    let object = graph
+        .local_objects
+        .iter()
+        .find(|object| object.local_id == constraint_local)?;
+    if !matches!(
+        object.type_name,
+        Some("FollowPathConstraint" | "ListFollowPathConstraint")
+    ) {
+        return None;
+    }
+
+    let constraint = file.object(object.global_id as usize)?;
+    let target_local = usize::try_from(constraint.uint_property("targetId")?).ok()?;
+    let target_type = graph
+        .local_objects
+        .iter()
+        .find(|object| object.local_id == target_local)
+        .and_then(|object| object.type_name);
+
+    let target_kind = if target_type == Some("Shape") {
+        RuntimeFollowPathTargetKind::Shape
+    } else if graph.paths.iter().any(|path| path.local_id == target_local) {
+        RuntimeFollowPathTargetKind::Path
+    } else {
+        RuntimeFollowPathTargetKind::Other
+    };
+
+    let paths = match target_kind {
+        RuntimeFollowPathTargetKind::Shape => graph
+            .path_composers
+            .iter()
+            .find(|composer| composer.shape_local == target_local)
+            .map(|composer| {
+                composer
+                    .paths
+                    .iter()
+                    .filter_map(|path_ref| {
+                        graph
+                            .paths
+                            .iter()
+                            .find(|path| path.local_id == path_ref.local_id)
+                            .cloned()
+                            .map(|geometry| RuntimeFollowPathPath {
+                                local_id: path_ref.local_id,
+                                geometry,
+                            })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
+        RuntimeFollowPathTargetKind::Path => graph
+            .paths
+            .iter()
+            .find(|path| path.local_id == target_local)
+            .cloned()
+            .map(|geometry| {
+                vec![RuntimeFollowPathPath {
+                    local_id: target_local,
+                    geometry,
+                }]
+            })
+            .unwrap_or_default(),
+        RuntimeFollowPathTargetKind::Other => Vec::new(),
+    };
+
+    Some(RuntimeFollowPathConstraint {
+        local_id: constraint_local,
+        target_local,
+        target_kind,
+        paths,
+    })
 }
 
 pub(crate) fn build_runtime_ik_constraints(
@@ -189,6 +233,38 @@ pub(crate) fn apply_constraints(artboard: &mut ArtboardInstance, component_index
         .fold(false, |changed, constraint_local| {
             changed | apply_constraint(artboard, component_index, constraint_local)
         })
+}
+
+pub(crate) fn apply_list_constraints(
+    artboard: &mut ArtboardInstance,
+    component_index: usize,
+) -> bool {
+    if artboard.components[component_index].type_name != "ArtboardComponentList" {
+        return false;
+    }
+
+    let list_local = artboard.components[component_index].local_id;
+    let Some(mut item_transforms) = artboard.component_list_item_transforms.remove(&list_local)
+    else {
+        return false;
+    };
+    let constraints = artboard.list_follow_path_constraints.clone();
+    let changed = constraints
+        .iter()
+        .filter(|constraint| constraint.list_local == list_local)
+        .fold(false, |changed, constraint| {
+            changed
+                | apply_list_follow_path_constraint_to_transforms(
+                    artboard,
+                    component_index,
+                    &constraint.constraint,
+                    &mut item_transforms,
+                )
+        });
+    artboard
+        .component_list_item_transforms
+        .insert(list_local, item_transforms);
+    changed
 }
 
 fn apply_constraint(
@@ -791,15 +867,31 @@ fn target_transform_for_follow_path_constraint(
     target_index: usize,
     component_index: usize,
 ) -> Mat2D {
+    let distance = constraint_double(
+        artboard,
+        runtime.local_id,
+        "FollowPathConstraint",
+        "distance",
+        0.0,
+    );
+    target_transform_for_follow_path_constraint_at_distance(
+        artboard,
+        runtime,
+        target_index,
+        component_index,
+        distance,
+    )
+}
+
+fn target_transform_for_follow_path_constraint_at_distance(
+    artboard: &ArtboardInstance,
+    runtime: &RuntimeFollowPathConstraint,
+    target_index: usize,
+    offset_component_index: usize,
+    distance: f32,
+) -> Mat2D {
     match runtime.target_kind {
         RuntimeFollowPathTargetKind::Shape | RuntimeFollowPathTargetKind::Path => {
-            let distance = constraint_double(
-                artboard,
-                runtime.local_id,
-                "FollowPathConstraint",
-                "distance",
-                0.0,
-            );
             let mut commands = Vec::new();
             for path in &runtime.paths {
                 let Some(path_world) = artboard
@@ -855,7 +947,7 @@ fn target_transform_for_follow_path_constraint(
                 "offset",
                 false,
             ) {
-                let local_transform = artboard.components[component_index]
+                let local_transform = artboard.components[offset_component_index]
                     .transform
                     .local_transform
                     .0;
@@ -871,6 +963,84 @@ fn target_transform_for_follow_path_constraint(
             artboard.components[target_index].transform.world_transform
         }
     }
+}
+
+fn apply_list_follow_path_constraint_to_transforms(
+    artboard: &ArtboardInstance,
+    list_component_index: usize,
+    runtime: &RuntimeFollowPathConstraint,
+    item_transforms: &mut [Mat2D],
+) -> bool {
+    // Ported from C++ `src/constraints/list_follow_path_constraint.cpp`.
+    let Some(target_index) = artboard
+        .component_by_local
+        .get(&runtime.target_local)
+        .copied()
+    else {
+        return false;
+    };
+    if artboard.components[target_index].is_collapsed() {
+        return false;
+    }
+
+    let count = item_transforms.len();
+    let distance = constraint_double(
+        artboard,
+        runtime.local_id,
+        "FollowPathConstraint",
+        "distance",
+        0.0,
+    );
+    let distance_end = constraint_double(
+        artboard,
+        runtime.local_id,
+        "ListFollowPathConstraint",
+        "distanceEnd",
+        1.0,
+    );
+    let distance_offset = constraint_double(
+        artboard,
+        runtime.local_id,
+        "ListFollowPathConstraint",
+        "distanceOffset",
+        0.0,
+    );
+    let start_offset = distance_offset + distance;
+    let start_to_end_distance = distance_end - distance;
+    let offset_distance = if count <= 1 {
+        0.0
+    } else {
+        start_to_end_distance / (count as f32 - 1.0)
+    };
+    let list_transform = artboard.components[list_component_index]
+        .transform
+        .world_transform;
+    let mut changed = false;
+
+    for (index, transform) in item_transforms.iter_mut().enumerate() {
+        let transform_b = target_transform_for_follow_path_constraint_at_distance(
+            artboard,
+            runtime,
+            target_index,
+            list_component_index,
+            start_offset + index as f32 * offset_distance,
+        );
+        let components = follow_path_constrain_components(
+            artboard,
+            runtime.local_id,
+            target_index,
+            *transform,
+            transform_b,
+            list_transform,
+        );
+        let next = Mat2D::compose(components);
+        if *transform != next {
+            *transform = next;
+            changed = true;
+        }
+    }
+
+    changed
 }
 
 fn follow_path_constrain_components(

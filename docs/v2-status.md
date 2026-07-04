@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 351 across 82 exact files
-- Parked breakdown (from `make golden-compare`): M3=7 M4=83 M5=8 M6=73 gated=6 harness=36
+- Exact segments (file × sample): 353 across 84 exact files
+- Parked breakdown (from `make golden-compare`): M3=5 M4=83 M5=8 M6=73 gated=6 harness=36
 - Current milestone: **M3 — Interactivity Exact (#V2-4)**
 
 ## Milestones
@@ -24,20 +24,21 @@ the only memory the next session has. Update it every commit.
 
 1. Continue M3 constraints. `DistanceConstraint`, `TranslationConstraint`,
    `RotationConstraint`, `ScaleConstraint`, `TransformConstraint`, plain
-   `FollowPathConstraint`, and `IKConstraint` now run from
+   `FollowPathConstraint`, `ListFollowPathConstraint`, and `IKConstraint` now run from
    `crates/rive-runtime/src/constraints.rs` after world-transform updates.
    `distance_constraint.riv`, `translation_constraint.riv`,
    `rotation_constraint.riv`, `scale_constraint.riv`,
    `transform_constraint.riv`, `follow_path.riv`,
    `follow_path_constraint.riv`, `follow_path_path_0_opacity.riv`,
    `follow_path_solos.riv`, `follow_path_with_0_opacity.riv`,
-   `complex_ik_dependency.riv`, and `two_bone_ik.riv` are exact. The M3
-   parked queue has 7 files; query with
+   `complex_ik_dependency.riv`, `two_bone_ik.riv`,
+   `component_list_follow_path.riv`, and
+   `component_list_follow_path_distance.riv` are exact. The M3
+   parked queue has 5 files; query with
    `grep -B6 'milestone = "M3"' corpus.toml`.
 2. Port the remaining M3 scroll/list constraint files in corpus order:
-   `component_list_1`, `component_list_follow_path`,
-   `component_list_follow_path_distance`, `deterministic_mode`,
-   `draw_index_list`, and `virtualize_blendmode`. Keep `follow_path_shapes`
+   `component_list_1`, `deterministic_mode`, `draw_index_list`, and
+   `virtualize_blendmode`. Keep `follow_path_shapes`
    parked on its narrow
    `rust-runner-unsupported:follow-path-star-shapes` precision diagnostic
    until the Star/parametric local path sampler is investigated.
@@ -68,13 +69,15 @@ the only memory the next session has. Update it every commit.
   `ScaleConstraint` compose/decompose scale, `TransformConstraint`
   target-origin full-transform interpolation, `FollowPathConstraint`
   Shape/Path target sampling against runtime path geometry, C++ Bone x/y
-  overrides, and `IKConstraint` FK-chain solving. Custom handle-source
+  overrides, `IKConstraint` FK-chain solving, and
+  `ListFollowPathConstraint` registration/application over component-list item
+  transform slices once M4 list instances populate them. Custom handle-source
   world-space math and nested remap dependent advancement are still not
   supported.
   Golden runner sample lists now advance by sorted absolute-time deltas and reuse render paths
   across samples;
-  no images, text, nested artboards, scroll/list constraints, or scripted
-  input.
+  no images, text, nested artboards, scroll constraints, component-list
+  instancing, or scripted input.
 - `TransformConstraint` currently covers the default empty
   `TransformComponent::constraintBounds()` path. Text/LayoutComponent
   constraint bounds remain parked behind their M6 text/layout diagnostics.
@@ -505,3 +508,13 @@ the only memory the next session has. Update it every commit.
   files; `make golden-compare` reports `exact=82`,
   `exact-segments=351`, `diverges=0`, `unsupported-feature=213`,
   `not-yet=0`, parked `M3=7`, and `cargo test --workspace` passes.
+- 2026-07-04: [M3] Ported `ListFollowPathConstraint` from C++
+  `src/constraints/list_follow_path_constraint.cpp`, registering list
+  constraints from the graph and adding the runtime item-transform application
+  hook for M4 component-list instances, narrowed the Rust golden-runner
+  constraint gate for list follow-path constraints, and promoted
+  `component_list_follow_path.riv` and
+  `component_list_follow_path_distance.riv` to exact. Exact segments are now
+  353 across 84 exact files; `make golden-compare` reports `exact=84`,
+  `exact-segments=353`, `diverges=0`, `unsupported-feature=211`,
+  `not-yet=0`, parked `M3=5`, and `cargo test --workspace` passes.

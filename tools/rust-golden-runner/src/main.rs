@@ -433,6 +433,7 @@ fn ensure_static_draw_supported(graph: &GraphFile, artboard: &ArtboardGraph) -> 
             && type_name != "ScaleConstraint"
             && type_name != "TransformConstraint"
             && type_name != "FollowPathConstraint"
+            && type_name != "ListFollowPathConstraint"
             && type_name != "IKConstraint")
             .then_some((type_name, object.global_id))
     }) {

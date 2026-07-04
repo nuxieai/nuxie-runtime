@@ -15,12 +15,13 @@ use crate::artboard_data_bind::{
     build_artboard_solo_bindings,
 };
 use crate::components::{
-    AuthoredTransform, ComponentDirt, RuntimeComponent, RuntimeSolo, TransformProperty,
+    AuthoredTransform, ComponentDirt, Mat2D, RuntimeComponent, RuntimeSolo, TransformProperty,
     UpdateComponentsReport, apply_initial_solo_collapses, build_runtime_solos,
 };
 use crate::constraints::{
-    RuntimeFollowPathConstraint, RuntimeIkConstraint, build_runtime_follow_path_constraints,
-    build_runtime_ik_constraints,
+    RuntimeFollowPathConstraint, RuntimeIkConstraint, RuntimeListFollowPathConstraint,
+    build_runtime_follow_path_constraints, build_runtime_ik_constraints,
+    build_runtime_list_follow_path_constraints,
 };
 use crate::data_bind_graph::RuntimeDataBindGraphValue;
 use crate::objects::{InstanceObjectArena, InstanceSlot};
@@ -47,6 +48,8 @@ pub struct ArtboardInstance {
     pub(crate) solos: Vec<RuntimeSolo>,
     pub(crate) joysticks: Vec<RuntimeJoystick>,
     pub(crate) follow_path_constraints: Vec<RuntimeFollowPathConstraint>,
+    pub(crate) list_follow_path_constraints: Vec<RuntimeListFollowPathConstraint>,
+    pub(crate) component_list_item_transforms: BTreeMap<usize, Vec<Mat2D>>,
     pub(crate) ik_constraints: Vec<RuntimeIkConstraint>,
     pub(crate) joysticks_apply_before_update: bool,
     pub(crate) update_order: Vec<usize>,
@@ -118,6 +121,7 @@ impl ArtboardInstance {
         let linear_animations = build_linear_animations(file, graph, &slots);
         let joysticks = build_runtime_joysticks(graph, &linear_animations);
         let follow_path_constraints = build_runtime_follow_path_constraints(file, graph);
+        let list_follow_path_constraints = build_runtime_list_follow_path_constraints(file, graph);
         let ik_constraints = build_runtime_ik_constraints(file, graph);
         let state_machines = build_state_machines(file, graph, &linear_animations);
         let artboard_data_bind_values = build_artboard_default_view_model_values(file, graph);
@@ -140,6 +144,8 @@ impl ArtboardInstance {
             solos,
             joysticks,
             follow_path_constraints,
+            list_follow_path_constraints,
+            component_list_item_transforms: BTreeMap::new(),
             ik_constraints,
             joysticks_apply_before_update: graph.joysticks_apply_before_update,
             update_order,
@@ -648,6 +654,7 @@ impl ArtboardInstance {
                 .map(|parent| parent.transform.world_transform);
             self.components[component_index].update_world_transform(parent_world);
             crate::constraints::apply_constraints(self, component_index);
+            crate::constraints::apply_list_constraints(self, component_index);
         }
         if dirt.contains(ComponentDirt::RENDER_OPACITY) {
             let opacity = self.authored_transform(local_id).opacity;
@@ -924,6 +931,8 @@ mod tests {
             solos: Vec::new(),
             joysticks: Vec::new(),
             follow_path_constraints: Vec::new(),
+            list_follow_path_constraints: Vec::new(),
+            component_list_item_transforms: BTreeMap::new(),
             ik_constraints: Vec::new(),
             joysticks_apply_before_update: true,
             update_order,

@@ -1408,3 +1408,30 @@ milestone entries are kept verbatim here. Newest milestone last.
   `make golden-compare` reports `exact=70`, `exact-segments=186`,
   `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
   `cargo test --workspace` passes.
+- 2026-07-03: [M2] Widened `settler.riv` from samples `0` and `0.25` to
+  samples `0`, `0.25`, and `0.5`, keeping animated rectangle/vector
+  state-machine playback exact across the wider sample set. Exact segments
+  are now 187 across 70 exact files; `make golden-compare` reports
+  `exact=70`, `exact-segments=187`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+- 2026-07-03: [M2] Widened `solo_test.riv` from samples `0` and `0.25` to
+  samples `0`, `0.25`, and `0.5`, keeping Solo active-child keyed-ID
+  playback exact across the wider sample set. Exact segments are now 188
+  across 70 exact files; `make golden-compare` reports `exact=70`,
+  `exact-segments=188`, `diverges=0`, `unsupported-feature=225`,
+  `not-yet=0`, and `cargo test --workspace` passes.
+- 2026-07-03: [M2] Widened `solos_collapse_tests.riv` from samples `0` and
+  `0.25` to samples `0`, `0.25`, and `0.5`, keeping Solo collapse with
+  clipping and passive rotation-constraint content exact across the wider
+  sample set. Exact segments are now 189 across 70 exact files;
+  `make golden-compare` reports `exact=70`, `exact-segments=189`,
+  `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
+  `cargo test --workspace` passes.
+- 2026-07-03: [M2] Widened `solos_with_nested_artboards.riv` from samples `0`
+  and `0.25` to samples `0`, `0.25`, and `0.5`, keeping the already-exact
+  passive Solo/nested-artboard state-machine case exact without opening M4
+  nested-artboard runtime scope. Exact segments are now 190 across 70 exact
+  files; `make golden-compare` reports `exact=70`, `exact-segments=190`,
+  `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
+  `cargo test --workspace` passes.

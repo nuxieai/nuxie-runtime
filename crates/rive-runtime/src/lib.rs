@@ -20,6 +20,7 @@ use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 mod animation;
 mod artboard_data_bind;
 mod components;
+mod data_bind_graph;
 mod objects;
 mod state_machine;
 mod view_model;
@@ -42,6 +43,12 @@ use components::{
 pub use components::{
     ComponentDirt, Mat2D, RuntimeComponent, RuntimeComponentCapabilities, TransformProperty,
     TransformRuntimeState, UpdateComponentsReport,
+};
+use data_bind_graph::{
+    RuntimeDataBindGraph, RuntimeDataBindGraphContextKind, RuntimeDataBindGraphDefaultBinding,
+    RuntimeDataBindGraphFormulaRandomSource, RuntimeDataBindGraphSourceHandle,
+    RuntimeDataBindGraphTargetHandle, RuntimeImportedViewModelContextKey,
+    RuntimeImportedViewModelOverrideKey,
 };
 use objects::InstanceObjectArena;
 pub use objects::InstanceSlot;
@@ -4247,83 +4254,6 @@ fn sorted_drawable_uses_render_opacity(type_name: &str) -> bool {
 fn sorted_drawable_is_nested_artboard(type_name: &str) -> bool {
     definition_by_name(type_name).is_some_and(|definition| definition.is_a("NestedArtboard"))
 }
-
-#[derive(Debug, Clone)]
-struct RuntimeDataBindGraph {
-    context_kind: RuntimeDataBindGraphContextKind,
-    default_view_model_bindings_dirty: bool,
-    formula_random_source: RuntimeDataBindGraphFormulaRandomSource,
-    sources: Vec<RuntimeDataBindGraphSourceNode>,
-    targets: Vec<RuntimeDataBindGraphTargetNode>,
-    default_view_model_bindings: Vec<RuntimeDataBindGraphDefaultBinding>,
-    imported_view_model_context: Option<RuntimeImportedViewModelContextKey>,
-    imported_view_model_overrides:
-        BTreeMap<RuntimeImportedViewModelOverrideKey, RuntimeViewModelPointer>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RuntimeDataBindGraphContextKind {
-    None,
-    Empty,
-    DefaultViewModel,
-    ImportedViewModel,
-    OwnedViewModel,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct RuntimeImportedViewModelContextKey {
-    view_model_index: usize,
-    instance_index: usize,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-struct RuntimeImportedViewModelOverrideKey {
-    view_model_index: usize,
-    instance_index: usize,
-    path: Vec<u32>,
-}
-
-#[derive(Debug, Clone, Default)]
-struct RuntimeDataBindGraphFormulaRandomSource {
-    values: Vec<f32>,
-    next_index: usize,
-    call_count: usize,
-}
-
-impl RuntimeDataBindGraphFormulaRandomSource {
-    fn set_values(&mut self, values: &[f32]) {
-        self.values.clear();
-        self.values.extend_from_slice(values);
-        self.next_index = 0;
-        self.call_count = 0;
-    }
-
-    fn next_value(&mut self) -> f32 {
-        self.call_count += 1;
-        let value = self.values.get(self.next_index).copied().unwrap_or(0.0);
-        if self.next_index < self.values.len() {
-            self.next_index += 1;
-        }
-        value
-    }
-
-    fn call_count(&self) -> usize {
-        self.call_count
-    }
-}
-
-#[derive(Debug, Clone)]
-struct RuntimeDataBindGraphDefaultBinding {
-    data_bind_index: usize,
-    source: RuntimeDataBindGraphSourceHandle,
-    target: RuntimeDataBindGraphTargetHandle,
-}
-
-#[derive(Debug, Clone, Copy)]
-struct RuntimeDataBindGraphSourceHandle(usize);
-
-#[derive(Debug, Clone, Copy)]
-struct RuntimeDataBindGraphTargetHandle(usize);
 
 #[derive(Debug, Clone)]
 struct RuntimeDataBindGraphSourceNode {

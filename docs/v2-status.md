@@ -34,8 +34,11 @@ the only memory the next session has. Update it every commit.
    and list-binding queries, plus the adjacent binding structs/builders, live
    in `crates/rive-runtime/src/artboard_data_bind.rs`. Default and imported
    view-model source handle types and imported context storage/mutation methods
-   live in `crates/rive-runtime/src/view_model.rs`. Continue with the
-   remaining data-bind graph bridge, preserving the current golden set.
+   live in `crates/rive-runtime/src/view_model.rs`. Data-bind graph state,
+   context keys, default-binding records, source/target handles, and formula
+   random-source state live in `crates/rive-runtime/src/data_bind_graph.rs`.
+   Continue with the remaining data-bind graph source/target nodes,
+   converter/value types, and behavior impls, preserving the current golden set.
 2. Add handle-source world-space math and nested-remap dependent advancement
    to the joystick path when a corpus diff reaches those cases.
 3. Remaining exact entries pinned to sample `0` are static M1 holdovers:
@@ -173,12 +176,6 @@ the only memory the next session has. Update it every commit.
   under `M2 active log rolloff`; keep only the recent rolling window here once
   Metric, Next, Decisions, and `corpus.toml` capture the current state.
 
-- 2026-07-03: [M2] Widened `circle_clips.riv` from samples `0`, `0.25`,
-  `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and `1.0`,
-  keeping animated clipping-circle playback exact across the fifth sample.
-  Exact segments are now 274 across 70 exact files; `make golden-compare`
-  reports `exact=70`, `exact-segments=274`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace` passes.
 - 2026-07-03: [M2] Widened `clear_viewmodel_list.riv` from samples `0`,
   `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
   `1.0`, keeping passive view-model-list/scripted-drawable playback exact
@@ -486,6 +483,14 @@ the only memory the next session has. Update it every commit.
   public mutation methods from `crates/rive-runtime/src/lib.rs` into
   `crates/rive-runtime/src/view_model.rs`, re-exporting the context from the
   crate root while keeping the data-bind graph bridge in place for the next
+  extraction slice. Exact segments remain 339 across 70 exact files; `make
+  golden-compare` reports `exact=70`, `exact-segments=339`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+- 2026-07-04: [M2] Added `crates/rive-runtime/src/data_bind_graph.rs` for
+  data-bind graph state, imported-context keys, override keys, default-binding
+  records, source/target handles, and formula random-source state while leaving
+  behavior-heavy graph impls in `crates/rive-runtime/src/lib.rs` for the next
   extraction slice. Exact segments remain 339 across 70 exact files; `make
   golden-compare` reports `exact=70`, `exact-segments=339`, `diverges=0`,
   `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`

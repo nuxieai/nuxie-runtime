@@ -398,12 +398,24 @@ fn ensure_static_draw_supported(graph: &GraphFile, artboard: &ArtboardGraph) -> 
         );
     }
 
+    if let Some(feather) = artboard
+        .local_objects
+        .iter()
+        .find(|object| object.type_name == Some("Feather"))
+    {
+        bail!(
+            "unsupported: feather in Rust golden runner (global {})",
+            feather.global_id
+        );
+    }
+
     if let Some((constraint_type, global_id)) = artboard.local_objects.iter().find_map(|object| {
         let type_name = object.type_name?;
         (type_name.ends_with("Constraint")
             && type_name != "DistanceConstraint"
             && type_name != "TranslationConstraint"
-            && type_name != "RotationConstraint")
+            && type_name != "RotationConstraint"
+            && type_name != "ScaleConstraint")
             .then_some((type_name, object.global_id))
     }) {
         bail!(

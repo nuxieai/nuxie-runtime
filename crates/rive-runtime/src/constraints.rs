@@ -46,6 +46,9 @@ fn apply_constraint(
         Some("RotationConstraint") => {
             apply_rotation_constraint(artboard, component_index, constraint_local)
         }
+        Some("ScaleConstraint") => {
+            apply_scale_constraint(artboard, component_index, constraint_local)
+        }
         _ => false,
     }
 }
@@ -284,6 +287,239 @@ fn apply_rotation_constraint(
     components_b.y = components_a.y;
     components_b.scale_x = components_a.scale_x;
     components_b.scale_y = components_a.scale_y;
+    components_b.skew = components_a.skew;
+
+    write_world_transform(artboard, component_index, Mat2D::compose(components_b))
+}
+
+fn apply_scale_constraint(
+    artboard: &mut ArtboardInstance,
+    component_index: usize,
+    constraint_local: usize,
+) -> bool {
+    // Ported from C++ `src/constraints/scale_constraint.cpp`.
+    let target_index = targeted_constraint_target_local(artboard, constraint_local)
+        .and_then(|target_local| artboard.component_by_local.get(&target_local).copied());
+    if target_index.is_some_and(|index| artboard.components[index].is_collapsed()) {
+        return false;
+    }
+
+    let transform_a = artboard.components[component_index]
+        .transform
+        .world_transform;
+    let components_a = transform_a.decompose();
+    let mut components_b = components_a;
+
+    if let Some(target_index) = target_index {
+        let mut transform_b = artboard.components[target_index].transform.world_transform;
+        if transform_space(
+            artboard,
+            constraint_local,
+            "TransformSpaceConstraint",
+            "sourceSpaceValue",
+        ) == TransformSpace::Local
+        {
+            let Some(inverse) = invert(parent_world_transform(artboard, target_index)) else {
+                return false;
+            };
+            transform_b = inverse.multiply(transform_b);
+        }
+
+        components_b = transform_b.decompose();
+        let dest_space = transform_space(
+            artboard,
+            constraint_local,
+            "TransformSpaceConstraint",
+            "destSpaceValue",
+        );
+        let authored = artboard.authored_transform(artboard.components[component_index].local_id);
+        if !constraint_bool(
+            artboard,
+            constraint_local,
+            "TransformComponentConstraint",
+            "doesCopy",
+            true,
+        ) {
+            components_b.scale_x = if dest_space == TransformSpace::Local {
+                1.0
+            } else {
+                components_a.scale_x
+            };
+        } else {
+            components_b.scale_x *= constraint_double(
+                artboard,
+                constraint_local,
+                "TransformComponentConstraint",
+                "copyFactor",
+                1.0,
+            );
+            if constraint_bool(
+                artboard,
+                constraint_local,
+                "TransformComponentConstraint",
+                "offset",
+                false,
+            ) {
+                components_b.scale_x *= authored.scale_x;
+            }
+        }
+
+        if !constraint_bool(
+            artboard,
+            constraint_local,
+            "TransformComponentConstraintY",
+            "doesCopyY",
+            true,
+        ) {
+            components_b.scale_y = if dest_space == TransformSpace::Local {
+                1.0
+            } else {
+                components_a.scale_y
+            };
+        } else {
+            components_b.scale_y *= constraint_double(
+                artboard,
+                constraint_local,
+                "TransformComponentConstraintY",
+                "copyFactorY",
+                1.0,
+            );
+            if constraint_bool(
+                artboard,
+                constraint_local,
+                "TransformComponentConstraint",
+                "offset",
+                false,
+            ) {
+                components_b.scale_y *= authored.scale_y;
+            }
+        }
+
+        if dest_space == TransformSpace::Local {
+            let transform_b = parent_world_transform(artboard, component_index)
+                .multiply(Mat2D::compose(components_b));
+            components_b = transform_b.decompose();
+        }
+    }
+
+    let clamp_local = transform_space(
+        artboard,
+        constraint_local,
+        "TransformComponentConstraint",
+        "minMaxSpaceValue",
+    ) == TransformSpace::Local;
+    if clamp_local {
+        let transform_b = Mat2D::compose(components_b);
+        let Some(inverse) = invert(parent_world_transform(artboard, component_index)) else {
+            return false;
+        };
+        components_b = inverse.multiply(transform_b).decompose();
+    }
+    if constraint_bool(
+        artboard,
+        constraint_local,
+        "TransformComponentConstraint",
+        "max",
+        false,
+    ) && components_b.scale_x
+        > constraint_double(
+            artboard,
+            constraint_local,
+            "TransformComponentConstraint",
+            "maxValue",
+            0.0,
+        )
+    {
+        components_b.scale_x = constraint_double(
+            artboard,
+            constraint_local,
+            "TransformComponentConstraint",
+            "maxValue",
+            0.0,
+        );
+    }
+    if constraint_bool(
+        artboard,
+        constraint_local,
+        "TransformComponentConstraint",
+        "min",
+        false,
+    ) && components_b.scale_x
+        < constraint_double(
+            artboard,
+            constraint_local,
+            "TransformComponentConstraint",
+            "minValue",
+            0.0,
+        )
+    {
+        components_b.scale_x = constraint_double(
+            artboard,
+            constraint_local,
+            "TransformComponentConstraint",
+            "minValue",
+            0.0,
+        );
+    }
+    if constraint_bool(
+        artboard,
+        constraint_local,
+        "TransformComponentConstraintY",
+        "maxY",
+        false,
+    ) && components_b.scale_y
+        > constraint_double(
+            artboard,
+            constraint_local,
+            "TransformComponentConstraintY",
+            "maxValueY",
+            0.0,
+        )
+    {
+        components_b.scale_y = constraint_double(
+            artboard,
+            constraint_local,
+            "TransformComponentConstraintY",
+            "maxValueY",
+            0.0,
+        );
+    }
+    if constraint_bool(
+        artboard,
+        constraint_local,
+        "TransformComponentConstraintY",
+        "minY",
+        false,
+    ) && components_b.scale_y
+        < constraint_double(
+            artboard,
+            constraint_local,
+            "TransformComponentConstraintY",
+            "minValueY",
+            0.0,
+        )
+    {
+        components_b.scale_y = constraint_double(
+            artboard,
+            constraint_local,
+            "TransformComponentConstraintY",
+            "minValueY",
+            0.0,
+        );
+    }
+    if clamp_local {
+        let transform_b = parent_world_transform(artboard, component_index)
+            .multiply(Mat2D::compose(components_b));
+        components_b = transform_b.decompose();
+    }
+
+    let t = constraint_double(artboard, constraint_local, "Constraint", "strength", 1.0);
+    let ti = 1.0 - t;
+    components_b.rotation = components_a.rotation;
+    components_b.x = components_a.x;
+    components_b.y = components_a.y;
+    components_b.scale_x = components_a.scale_x * ti + components_b.scale_x * t;
+    components_b.scale_y = components_a.scale_y * ti + components_b.scale_y * t;
     components_b.skew = components_a.skew;
 
     write_world_transform(artboard, component_index, Mat2D::compose(components_b))

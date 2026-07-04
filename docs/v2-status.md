@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 342 across 73 exact files
-- Parked breakdown (from `make golden-compare`): M3=18 M4=83 M5=8 M6=72 gated=5 harness=36
+- Exact segments (file × sample): 343 across 74 exact files
+- Parked breakdown (from `make golden-compare`): M3=16 M4=83 M5=8 M6=72 gated=6 harness=36
 - Current milestone: **M3 — Interactivity Exact (#V2-4)**
 
 ## Milestones
@@ -23,14 +23,15 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue M3 constraints. `DistanceConstraint`, `TranslationConstraint`,
-   and `RotationConstraint` now run from
+   `RotationConstraint`, and `ScaleConstraint` now run from
    `crates/rive-runtime/src/constraints.rs`, apply after world-transform
    updates, and `distance_constraint.riv`, `translation_constraint.riv`, and
-   `rotation_constraint.riv` are exact. The M3 parked queue has 18 files, still gated by
+   `rotation_constraint.riv`, and `scale_constraint.riv` are exact. The M3
+   parked queue has 16 files, still gated by
    `rust-runner-unsupported:constraints`; query with
    `grep -B6 'milestone = "M3"' corpus.toml`. Port the
-   decompose/compose-backed `ScaleConstraint` and `TransformConstraint`
-   slices next for `scale_constraint.riv` and `transform_constraint.riv`.
+   decompose/compose-backed `TransformConstraint` slice next for
+   `transform_constraint.riv`.
 2. After basic transform/distance constraints, continue M3 with
    FollowPathConstraint and IK/skin-dependent constraint files
    (`follow_path*`, `two_bone_ik`, `complex_ik_dependency`) before returning
@@ -59,7 +60,8 @@ the only memory the next session has. Update it every commit.
   interpolation for CubicEase/CubicValue/Elastic keyframe interpolators, and
   `DistanceConstraint` world-translation application and
   `TranslationConstraint` target/source/destination/min-max translation
-  application, plus `RotationConstraint` compose/decompose rotation
+  application, `RotationConstraint` compose/decompose rotation, and
+  `ScaleConstraint` compose/decompose scale
   application without custom handle-source world-space math or nested remap
   dependent advancement.
   Golden runner sample lists now advance by sorted absolute-time deltas and reuse render paths
@@ -74,6 +76,9 @@ the only memory the next session has. Update it every commit.
 - Entries tagged `cpp-runner-crash` (`milestone = "harness"`) stay parked
   until the C++ golden runner survives the FileAssetContents, scripting,
   and data-viz crash paths it currently aborts on.
+- `coin.riv` is no longer parked as an M3 constraints file after
+  `ScaleConstraint`; it reaches draw and is now `milestone = "gated"` on the
+  explicit `rust-runner-unsupported:feather` renderer diagnostic.
 - `solar-system.riv` stays gated on a Rust import gap: `blendModeValue = 5`
   rejected on Shape object 13.
 
@@ -442,4 +447,15 @@ the only memory the next session has. Update it every commit.
   Exact segments are now 342 across 73 exact files; `make golden-compare`
   reports `exact=73`, `exact-segments=342`, `diverges=0`,
   `unsupported-feature=222`, `not-yet=0`, parked `M3=18`, and
+  `cargo test --workspace` passes.
+- 2026-07-04: [M3] Ported `ScaleConstraint` from C++
+  `src/constraints/scale_constraint.cpp`, reusing the compose/decompose
+  transform helpers for source/destination-space copying, min/max clamping,
+  authored-offset scale, and strength interpolation, narrowed the Rust
+  golden-runner constraint gate for scale constraints, promoted
+  `scale_constraint.riv` to exact, and reclassified `coin.riv` from M3
+  constraints to the explicit `rust-runner-unsupported:feather` gated
+  renderer backlog. Exact segments are now 343 across 74 exact files; `make
+  golden-compare` reports `exact=74`, `exact-segments=343`, `diverges=0`,
+  `unsupported-feature=221`, `not-yet=0`, parked `M3=16`, and
   `cargo test --workspace` passes.

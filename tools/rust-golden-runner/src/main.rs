@@ -857,10 +857,6 @@ fn nested_artboard_host_control_data_bind<'a>(
             // import-time swaps. Listener-driven recursive remaps need runtime
             // host swapping.
             197 => graph.artboards.len() > 1 && artboard_has_state_machine_listeners(artboard),
-            // Runtime pause still needs host data-bind propagation. Speed and
-            // quantize are read from the host object by rive-runtime; legacy
-            // keys 896/897 are not generated nested-host properties.
-            895 => true,
             _ => false,
         }
     })

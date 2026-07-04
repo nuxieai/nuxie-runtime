@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 436 across 115 exact files
-- Parked breakdown (from `make golden-compare`): M5=23 M6=115 gated=6 harness=36
+- Exact segments (file × sample): 437 across 116 exact files
+- Parked breakdown (from `make golden-compare`): M5=22 M6=115 gated=6 harness=36
 - Current milestone: **M5 — Data Binding Exact Incl. External View-Model Mutation (#V2-6)**
 
 ## Milestones
@@ -24,10 +24,8 @@ the only memory the next session has. Update it every commit.
 
 1. Continue M5 with the smallest data-binding slice that can move a corpus
    entry. Query the queue with `grep -B6 'milestone = "M5"' corpus.toml`;
-   the narrow first candidates are now `pause_nested_artboard.riv`
-   (`data-binding-nested-host` for live `NestedArtboard.isPaused`) and
-   `component_stateful_vm_instance.riv` (`data-binding-nested-child` targeting
-   an `Ellipse`). Prefer one whose
+   the narrow first candidate is now `component_stateful_vm_instance.riv`
+   (`data-binding-nested-child` targeting an `Ellipse`). Prefer one whose
    first diagnostic names a single data-binding behavior and does not require
    M6 text/images/layout.
 2. M4 is closed for the current corpus: `grep -B6 'milestone = "M4"'
@@ -78,8 +76,8 @@ the only memory the next session has. Update it every commit.
   per-host nested paint caches for repeated child instances under Solo-owned
   hosts, and nested state-machine reported-event bubbling into parent event
   listeners, custom-property trigger keyed-callback target-to-source binding,
-  plus no-input recursive nested `ListenerAlignTarget` fixtures where the
-  action is unexercised.
+  live data-bound nested host `isPaused` mutation, plus no-input recursive
+  nested `ListenerAlignTarget` fixtures where the action is unexercised.
   Custom handle-source world-space math, data-bound nested host controls beyond
   generated defaults
   (`artboardId` runtime swaps and external/live pause/speed/quantize
@@ -244,5 +242,6 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-04: [M5] Opened live data-bound nested host pause: `NestedArtboard.isPaused` source-to-target binding now runs through the existing artboard nested-host binding path, and `pause_nested_artboard.riv` is promoted to exact after direct C++/Rust stream comparison. `make golden-compare` reports `exact=116`, `exact-segments=437`, `diverges=0`, `unsupported-feature=179`, `not-yet=0`, and parked `M5=22 M6=115 gated=6 harness=36`; `cargo test --workspace` passes.
 - 2026-07-04: [M5] Ported custom-property trigger keyed-callback target-to-source binding: `CustomPropertyTrigger.fire` increments `propertyValue`, artboard custom-property data binds now read trigger counts, and `custom_property_trigger.riv` is promoted to exact after direct C++/Rust stream comparison. `make golden-compare` reports `exact=115`, `exact-segments=436`, `diverges=0`, `unsupported-feature=180`, `not-yet=0`, and parked `M5=23 M6=115 gated=6 harness=36`; `cargo test --workspace` passes.
 - 2026-07-04: [M5] Opened M5 after draining the M4 queue: all remaining `milestone = "M4"` entries were probed with `rust-golden-runner` and moved to their first verified later diagnostic (`data-binding-nested-child`, `data-binding-nested-host`, `data-binding-custom-property-trigger`, `nested-artboard-layout`, `text`, `images`, `focus-data`, or `layout-component-paint`). `make golden-compare` reports `exact=114`, `exact-segments=435`, `diverges=0`, `unsupported-feature=181`, `not-yet=0`, and parked `M5=24 M6=115 gated=6 harness=36`; `cargo test --workspace` passes.

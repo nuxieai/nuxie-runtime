@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 238 across 70 exact files
+- Exact segments (file × sample): 239 across 70 exact files
 - Parked breakdown (from `make golden-compare`): M3=21 M4=83 M5=8 M6=72 gated=5 harness=36
 - Current milestone: **M2 — Animated Playback Exact + Real Object Model (#V2-3)**
 
@@ -24,7 +24,7 @@ the only memory the next session has. Update it every commit.
 
 1. The two-sample exact widening queue is exhausted. Continue the fourth-sample
    M2 sweep over exact entries with samples `0`, `0.25`, and `0.5`, starting
-   after `multiple_state_machines.riv` (next candidate: `nested_solo.riv`),
+   after `nested_solo.riv` (next candidate: `off_road_car.riv`),
    and stop on the first real divergence to localize runtime code.
 2. Continue M2 real object model work by modularizing the remaining runtime
    surfaces out of `lib.rs` while keeping generated `InstanceObjectStorage` as
@@ -174,13 +174,6 @@ the only memory the next session has. Update it every commit.
   under `M2 active log rolloff`; keep only the recent rolling window here once
   Metric, Next, Decisions, and `corpus.toml` capture the current state.
 
-- 2026-07-03: [M2] Widened `text_input_event.riv` from samples `0` and
-  `0.25` to samples `0`, `0.25`, and `0.5`, keeping the passive
-  keyboard/text-input listener and view-model render path exact while leaving
-  interactive text input behavior in later M3/M5/M6 scope. Exact segments are
-  now 199 across 70 exact files; `make golden-compare` reports `exact=70`,
-  `exact-segments=199`, `diverges=0`, `unsupported-feature=225`,
-  `not-yet=0`, and `cargo test --workspace` passes.
 - 2026-07-03: [M2] Widened `timeline_event_test.riv` from samples `0` and
   `0.25` to samples `0`, `0.25`, and `0.5`, keeping passive
   callback-event animation/state-machine playback exact without opening M3
@@ -443,5 +436,12 @@ the only memory the next session has. Update it every commit.
   passive multi-state-machine playback exact across the wider sample set.
   Exact segments are now 238 across 70 exact files; `make golden-compare`
   reports `exact=70`, `exact-segments=238`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+- 2026-07-03: [M2] Widened `nested_solo.riv` from samples `0`, `0.25`, and
+  `0.5` to samples `0`, `0.25`, `0.5`, and `0.75`, keeping Solo
+  state-machine playback exact across the wider sample set. Exact segments
+  are now 239 across 70 exact files; `make golden-compare` reports
+  `exact=70`, `exact-segments=239`, `diverges=0`,
   `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
   passes.

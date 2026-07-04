@@ -1328,3 +1328,28 @@ milestone entries are kept verbatim here. Newest milestone last.
   exact files; `make golden-compare` reports `exact=70`,
   `exact-segments=174`, `diverges=0`, `unsupported-feature=225`, `not-yet=0`,
   and `cargo test --workspace` passes.
+- 2026-07-03: [M2] Widened `opaque_hit_test.riv` from samples `0` and `0.25`
+  to samples `0`, `0.25`, and `0.5`, keeping nested-bool/draw-rule playback
+  exact across the wider sample set. Exact segments are now 175 across 70
+  exact files; `make golden-compare` reports `exact=70`,
+  `exact-segments=175`, `diverges=0`, `unsupported-feature=225`, `not-yet=0`,
+  and `cargo test --workspace` passes.
+- 2026-07-03: [M2] Widened `pointer_events.riv` from samples `0` and `0.1`
+  to samples `0`, `0.1`, and `0.25`, keeping listener/bool pointer-event
+  playback exact at the next M2 sample. Exact segments are now 176 across 70
+  exact files; `make golden-compare` reports `exact=70`,
+  `exact-segments=176`, `diverges=0`, `unsupported-feature=225`, `not-yet=0`,
+  and `cargo test --workspace` passes.
+- 2026-07-03: [M2] Widened `quantize_test.riv` from samples `0` and `0.25`
+  to samples `0`, `0.25`, and `0.5`, keeping quantized keyframe playback
+  exact across the wider sample set. Exact segments are now 177 across 70
+  exact files; `make golden-compare` reports `exact=70`,
+  `exact-segments=177`, `diverges=0`, `unsupported-feature=225`, `not-yet=0`,
+  and `cargo test --workspace` passes.
+- 2026-07-03: [M2] Widened `rapid_pointer_events.riv` from samples `0` and
+  `0.25` to samples `0`, `0.25`, and `0.5`, keeping passive
+  listener/data-bind state-machine playback exact before M3 scripted pointer
+  input work. Exact segments are now 178 across 70 exact files;
+  `make golden-compare` reports `exact=70`, `exact-segments=178`,
+  `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
+  `cargo test --workspace` passes.

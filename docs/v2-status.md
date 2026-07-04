@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 218 across 70 exact files
+- Exact segments (file × sample): 219 across 70 exact files
 - Parked breakdown (from `make golden-compare`): M3=21 M4=83 M5=8 M6=72 gated=5 harness=36
 - Current milestone: **M2 — Animated Playback Exact + Real Object Model (#V2-3)**
 
@@ -24,7 +24,7 @@ the only memory the next session has. Update it every commit.
 
 1. The two-sample exact widening queue is exhausted. Continue the fourth-sample
    M2 sweep over exact entries with samples `0`, `0.25`, and `0.5`, starting
-   after `data_binding_test_2.riv` (next candidate: `dependency_test.riv`),
+   after `dependency_test.riv` (next candidate: `draw_rule_cycle.riv`),
    and stop on the first real divergence to localize runtime code.
 2. Continue M2 real object model work by modularizing the remaining runtime
    surfaces out of `lib.rs` while keeping generated `InstanceObjectStorage` as
@@ -174,31 +174,6 @@ the only memory the next session has. Update it every commit.
   under `M2 active log rolloff`; keep only the recent rolling window here once
   Metric, Next, Decisions, and `corpus.toml` capture the current state.
 
-- 2026-07-03: [M2] Widened `opaque_hit_test.riv` from samples `0` and `0.25`
-  to samples `0`, `0.25`, and `0.5`, keeping nested-bool/draw-rule playback
-  exact across the wider sample set. Exact segments are now 175 across 70
-  exact files; `make golden-compare` reports `exact=70`,
-  `exact-segments=175`, `diverges=0`, `unsupported-feature=225`, `not-yet=0`,
-  and `cargo test --workspace` passes.
-- 2026-07-03: [M2] Widened `pointer_events.riv` from samples `0` and `0.1`
-  to samples `0`, `0.1`, and `0.25`, keeping listener/bool pointer-event
-  playback exact at the next M2 sample. Exact segments are now 176 across 70
-  exact files; `make golden-compare` reports `exact=70`,
-  `exact-segments=176`, `diverges=0`, `unsupported-feature=225`, `not-yet=0`,
-  and `cargo test --workspace` passes.
-- 2026-07-03: [M2] Widened `quantize_test.riv` from samples `0` and `0.25`
-  to samples `0`, `0.25`, and `0.5`, keeping quantized keyframe playback
-  exact across the wider sample set. Exact segments are now 177 across 70
-  exact files; `make golden-compare` reports `exact=70`,
-  `exact-segments=177`, `diverges=0`, `unsupported-feature=225`, `not-yet=0`,
-  and `cargo test --workspace` passes.
-- 2026-07-03: [M2] Widened `rapid_pointer_events.riv` from samples `0` and
-  `0.25` to samples `0`, `0.25`, and `0.5`, keeping passive
-  listener/data-bind state-machine playback exact before M3 scripted pointer
-  input work. Exact segments are now 178 across 70 exact files;
-  `make golden-compare` reports `exact=70`, `exact-segments=178`,
-  `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
-  `cargo test --workspace` passes.
 - 2026-07-03: [M2] Widened `remove_from_list.riv` from samples `0` and
   `0.25` to samples `0`, `0.25`, and `0.5`, keeping passive
   text/list/scripted-drawable playback exact before M4/M5/M6 list,
@@ -471,3 +446,10 @@ the only memory the next session has. Update it every commit.
   `make golden-compare` reports `exact=70`, `exact-segments=218`,
   `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
   `cargo test --workspace` passes.
+- 2026-07-03: [M2] Widened `dependency_test.riv` from samples `0`, `0.25`,
+  and `0.5` to samples `0`, `0.25`, `0.5`, and `0.75`, keeping the base
+  vector playback stream exact across the wider sample set. Exact segments
+  are now 219 across 70 exact files; `make golden-compare` reports
+  `exact=70`, `exact-segments=219`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.

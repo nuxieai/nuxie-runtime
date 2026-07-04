@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 364 across 85 exact files
+- Exact segments (file × sample): 365 across 85 exact files
 - Parked breakdown (from `make golden-compare`): M4=83 M5=8 M6=77 gated=6 harness=36
 - Current milestone: **M3 — Interactivity Exact (#V2-4)**
 
@@ -28,30 +28,25 @@ the only memory the next session has. Update it every commit.
    `hit_test_solos.riv`, `click_event.riv`, `opaque_hit_test.riv`,
    `state_machine_triggers.riv`, `state_machine_transition.riv`,
    `light_switch.riv`, `event_on_listener.riv`,
-   `event_trigger_event.riv`, and `events_on_states.riv`.
+   `event_trigger_event.riv`, `events_on_states.riv`, and
+   `bindable_artboard_child.riv`.
 2. Remaining unscripted exact listener/event candidates are
-   `bindable_artboard_child.riv`, `component_list_2.riv`,
-   `component_list_follow_path.riv`, `component_list_grouped.riv`,
-   `component_list_hit_order.riv`, `joel_signed.riv`,
-   `lock_icon_demo.riv`, `solos_with_nested_artboards.riv`, `sound.riv`,
-   `stateful_list_props.riv`, and `text_input_event.riv`.
-3. Investigate `bindable_artboard_child.riv` before attaching a script: a
-   simple full-artboard click at `250,250` makes C++ turn the fill red while
-   Rust stays `0xff747474`; treat it as M3 only if listener/view-model action
-   dispatch is the blocker, otherwise park it behind M5 data-binding/view-model
-   behavior.
-4. `event_trigger_event.riv` has an exact primary rectangle click script at
+   `component_list_2.riv`, `component_list_follow_path.riv`,
+   `component_list_grouped.riv`, `component_list_hit_order.riv`,
+   `joel_signed.riv`, `lock_icon_demo.riv`,
+   `solos_with_nested_artboards.riv`, `sound.riv`, `stateful_list_props.riv`,
+   and `text_input_event.riv`.
+3. `event_trigger_event.riv` has an exact primary rectangle click script at
    `129,101`; an alternate red-target click at `450,50` changes C++ colors
    while Rust stays passive, so do not widen that coordinate until listener
    fire-event/view-model/event propagation scope is clear.
-5. Port additional `ListenerGroup` semantics only when a widened script proves
-   they are the blocking gap: hover/enter-exit state, click synthesis, drag
-   state, opaque target ordering, nested/list/text/layout targets, and
-   component-provided groups remain intentionally out of the direct rectangle
-   pointer slice.
-6. There are no remaining `milestone = "M3"` parked entries in `corpus.toml`;
+4. Port additional `ListenerGroup` semantics only when a widened script proves
+   they are the blocking gap: hover/enter-exit state, drag state, opaque target
+   ordering, nested/list/text/layout targets, and component-provided groups
+   remain intentionally out of the direct rectangle pointer slice.
+5. There are no remaining `milestone = "M3"` parked entries in `corpus.toml`;
    scripted input exactness is the active M3 exit criterion.
-7. Remaining exact entries pinned to sample `0` are static M1 holdovers:
+6. Remaining exact entries pinned to sample `0` are static M1 holdovers:
    `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
    them during M3 unless a related refactor needs a cheap draw-regression check.
 
@@ -88,10 +83,10 @@ the only memory the next session has. Update it every commit.
   reuse render paths across samples; no images, text, nested artboards, scroll
   constraints, or component-list instancing. Harness-level scripted input
   replay dispatches pointerDown/pointerMove/pointerUp/pointerExit markers into
-  direct rectangle state-machine listeners with listener input actions and
-  primitive listener-owned default view-model writes. Full C++ ListenerGroup
-  hover/click/drag/opaque behavior and nested/list/text/layout targets are
-  still not supported.
+  direct rectangle state-machine listeners with listener input actions, direct
+  rectangle click synthesis, and listener-owned default view-model trigger
+  target-to-source writes. Full C++ ListenerGroup hover/drag/opaque behavior
+  and nested/list/text/layout targets are still not supported.
 - `TransformConstraint` currently covers the default empty
   `TransformComponent::constraintBounds()` path. Text/LayoutComponent
   constraint bounds remain parked behind their M6 text/layout diagnostics.
@@ -603,4 +598,12 @@ the only memory the next session has. Update it every commit.
   Exact segments are now 364 across 85 exact files; `make golden-compare`
   reports `exact=85`, `exact-segments=364`, `diverges=0`,
   `unsupported-feature=210`, `not-yet=0`, no parked M3 entries, and
+  `cargo test --workspace` passes.
+- 2026-07-04: [M3] Ported the direct-rectangle click phase slice from C++
+  `ListenerGroup`, fixed `ListenerViewModelChange` trigger actions to
+  invalidate the bindable trigger target-to-source data-bind path, and added
+  `tests/input_scripts/bindable_artboard_child_click.txt` for
+  `bindable_artboard_child.riv`. Exact segments are now 365 across 85 exact
+  files; `make golden-compare` reports `exact=85`, `exact-segments=365`,
+  `diverges=0`, `unsupported-feature=210`, `not-yet=0`, and
   `cargo test --workspace` passes.

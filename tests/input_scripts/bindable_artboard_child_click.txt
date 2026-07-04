@@ -1,0 +1,2 @@
+0.05 pointerDown 250 250
+0.10 pointerUp 250 250

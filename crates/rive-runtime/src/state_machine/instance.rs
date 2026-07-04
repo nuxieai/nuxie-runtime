@@ -57,6 +57,13 @@ pub struct StateMachineInstance {
     changed_state_count: usize,
     needs_advance: bool,
     data_bind_graph: RuntimeDataBindGraph,
+    pointer_down_listener_hits: Vec<RuntimePointerDownListenerHit>,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimePointerDownListenerHit {
+    pointer_id: i32,
+    listener_index: usize,
 }
 
 impl StateMachineInstance {
@@ -166,6 +173,7 @@ impl StateMachineInstance {
             changed_state_count: 0,
             needs_advance: false,
             data_bind_graph: RuntimeDataBindGraph::new(state_machine),
+            pointer_down_listener_hits: Vec::new(),
         }
     }
 
@@ -237,9 +245,36 @@ impl StateMachineInstance {
         artboard: &ArtboardInstance,
         x: f32,
         y: f32,
-        _pointer_id: i32,
+        pointer_id: i32,
     ) -> bool {
-        self.update_pointer_listeners(artboard, RuntimeListenerType::Down, x, y)
+        self.pointer_down_listener_hits
+            .retain(|hit| hit.pointer_id != pointer_id);
+        let Some(state_machine) = artboard.state_machine(self.state_machine_index) else {
+            return false;
+        };
+
+        let mut hit = false;
+        for (listener_index, listener) in state_machine.listeners.iter().enumerate() {
+            if !(listener.has_listener(RuntimeListenerType::Down)
+                || listener.has_listener(RuntimeListenerType::Click))
+                || !listener.hit_test(artboard, x, y)
+            {
+                continue;
+            }
+            hit = true;
+            if listener.has_listener(RuntimeListenerType::Click) {
+                self.pointer_down_listener_hits
+                    .push(RuntimePointerDownListenerHit {
+                        pointer_id,
+                        listener_index,
+                    });
+            }
+            if listener.has_listener(RuntimeListenerType::Down) {
+                self.perform_pointer_listener_actions(&listener.listener_actions);
+                self.needs_advance = true;
+            }
+        }
+        hit
     }
 
     pub fn pointer_move(
@@ -258,9 +293,32 @@ impl StateMachineInstance {
         artboard: &ArtboardInstance,
         x: f32,
         y: f32,
-        _pointer_id: i32,
+        pointer_id: i32,
     ) -> bool {
-        self.update_pointer_listeners(artboard, RuntimeListenerType::Up, x, y)
+        let Some(state_machine) = artboard.state_machine(self.state_machine_index) else {
+            self.pointer_down_listener_hits
+                .retain(|hit| hit.pointer_id != pointer_id);
+            return false;
+        };
+
+        let mut hit = false;
+        for (listener_index, listener) in state_machine.listeners.iter().enumerate() {
+            let click_matched = listener.has_listener(RuntimeListenerType::Click)
+                && self.pointer_down_listener_hits.iter().any(|hit| {
+                    hit.pointer_id == pointer_id && hit.listener_index == listener_index
+                });
+            if !(click_matched || listener.has_listener(RuntimeListenerType::Up))
+                || !listener.hit_test(artboard, x, y)
+            {
+                continue;
+            }
+            hit = true;
+            self.perform_pointer_listener_actions(&listener.listener_actions);
+            self.needs_advance = true;
+        }
+        self.pointer_down_listener_hits
+            .retain(|hit| hit.pointer_id != pointer_id);
+        hit
     }
 
     pub fn pointer_exit(
@@ -371,12 +429,42 @@ impl StateMachineInstance {
                 self.set_default_view_model_artboard_source_for_data_bind(data_bind_index, *value)
             }
             RuntimeListenerViewModelChangeValue::Trigger(value) => {
-                self.set_default_view_model_trigger_source_for_data_bind(data_bind_index, *value)
+                self.perform_listener_trigger_view_model_change(data_bind_index, *value)
             }
             RuntimeListenerViewModelChangeValue::Boolean(value) => {
                 self.set_default_view_model_boolean_source_for_data_bind(data_bind_index, *value)
             }
         }
+    }
+
+    fn perform_listener_trigger_view_model_change(
+        &mut self,
+        data_bind_index: usize,
+        value: u64,
+    ) -> bool {
+        let Some(bindable_trigger) = self
+            .bindable_triggers
+            .iter_mut()
+            .find(|bindable_trigger| bindable_trigger.has_data_bind_index(data_bind_index))
+        else {
+            return false;
+        };
+
+        // Mirrors src/animation/listener_viewmodel_change.cpp: listener
+        // actions invalidate the target-to-source binding even when the
+        // trigger target value itself did not change.
+        bindable_trigger.set_value(value);
+        if !self
+            .data_bind_graph
+            .mark_trigger_target_dirty_for_data_bind(data_bind_index)
+        {
+            return false;
+        }
+        if !self.update_data_binds_apply_target_to_source() {
+            return false;
+        }
+        self.needs_advance = true;
+        true
     }
 
     pub fn set_bindable_number_for_data_bind(

@@ -970,7 +970,7 @@ features = ["type-key:16:PointsPath", "type-key:18:SolidColor", "type-key:19:Gra
 [[file]]
 id = "keyboard_event_to_script"
 path = "tests/unit_tests/assets/keyboard_event_to_script.riv"
-samples = [0.0, 0.25, 0.5]
+samples = [0.0, 0.25, 0.5, 0.75]
 status = "exact"
 features = ["type-key:106:FileAssetContents", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:420:LayoutComponentStyle", "type-key:431:ViewModelPropertyNumber", "type-key:433:ViewModelInstanceString", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:442:ViewModelInstanceNumber", "type-key:443:ViewModelPropertyString", "type-key:529:ScriptAsset", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:603:ScriptedDrawable", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:653:FocusData", "type-key:65:StateTransition"]
 

@@ -1426,7 +1426,7 @@ features = ["type-key:106:FileAssetContents", "type-key:114:StateMachineListener
 [[file]]
 id = "rocket"
 path = "tests/unit_tests/assets/rocket.riv"
-samples = [0.0, 0.25, 0.5]
+samples = [0.0, 0.25, 0.5, 0.75]
 status = "exact"
 features = ["type-key:16:PointsPath", "type-key:17:RadialGradient", "type-key:18:SolidColor", "type-key:19:GradientStop", "type-key:1:Artboard", "type-key:20:Fill", "type-key:22:LinearGradient", "type-key:23:Backboard", "type-key:24:Stroke", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:28:CubicEaseInterpolator", "type-key:2:Node", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:35:CubicMirroredVertex", "type-key:37:KeyFrameColor", "type-key:3:Shape", "type-key:42:ClippingShape", "type-key:48:DrawTarget", "type-key:49:DrawRules", "type-key:4:Ellipse", "type-key:50:KeyFrameId", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:59:StateMachineBool", "type-key:5:StraightVertex", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:71:TransitionBoolCondition"]
 

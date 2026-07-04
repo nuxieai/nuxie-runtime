@@ -1535,3 +1535,11 @@ milestone entries are kept verbatim here. Newest milestone last.
   across 70 exact files; `make golden-compare` reports `exact=70`,
   `exact-segments=205`, `diverges=0`, `unsupported-feature=225`,
   `not-yet=0`, and `cargo test --workspace` passes.
+- 2026-07-03: [M2] Widened `bindable_artboard_child.riv` from samples `0`,
+  `0.25`, and `0.5` to samples `0`, `0.25`, `0.5`, and `0.75`, keeping the
+  passive bindable artboard-child state-machine render path exact while
+  leaving interactive listener/data-binding behavior in later M3/M5 scope.
+  Exact segments are now 206 across 70 exact files; `make golden-compare`
+  reports `exact=70`, `exact-segments=206`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.

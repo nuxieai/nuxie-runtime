@@ -523,12 +523,6 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
-    if let Some(draw_target_global) = nested_remap_draw_target_global(artboard) {
-        bail!(
-            "unsupported: nested artboards in Rust golden runner (nested remap with draw target global {draw_target_global})"
-        );
-    }
-
     if let Some((type_name, global_id)) = nested_stateful_view_model_object(runtime, artboard) {
         bail!(
             "unsupported: nested artboards in Rust golden runner (stateful view model {type_name} global {global_id})"
@@ -826,21 +820,6 @@ fn nested_stateful_view_model_object(
             && !allowed_stateful_child_locals.contains(&object.local_id))
         .then_some((type_name, object.global_id))
     })
-}
-
-fn nested_remap_draw_target_global(artboard: &ArtboardGraph) -> Option<u32> {
-    if !artboard
-        .local_objects
-        .iter()
-        .any(|object| object.type_name == Some("NestedRemapAnimation"))
-    {
-        return None;
-    }
-    artboard
-        .local_objects
-        .iter()
-        .find(|object| object.type_name == Some("DrawTarget"))
-        .map(|object| object.global_id)
 }
 
 fn nested_artboard_host_control_data_bind<'a>(

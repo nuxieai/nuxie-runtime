@@ -1,9 +1,9 @@
 use anyhow::{Context, Result};
 use rive_binary::{RuntimeFile, RuntimeObject};
 use rive_graph::{
-    ArtboardGraph, ClippingShapeNode, DashNode, DrawableOrderKind, FeatherNode, GradientStopNode,
-    ParametricPathNode, PathComposerNode, PathComposerPathNode, PathGeometryNode, PathVertexNode,
-    ShapePaintContainerNode, ShapePaintKind, ShapePaintNode, ShapePaintPathKind,
+    ArtboardGraph, ClippingShapeNode, DashNode, DrawableOrderKind, DrawableOrderNode, FeatherNode,
+    GradientStopNode, ParametricPathNode, PathComposerNode, PathComposerPathNode, PathGeometryNode,
+    PathVertexNode, ShapePaintContainerNode, ShapePaintKind, ShapePaintNode, ShapePaintPathKind,
     ShapePaintStateNode, SortedDrawableNode, StrokeEffectNode,
 };
 use rive_render_api::{
@@ -25,7 +25,7 @@ impl ArtboardInstance {
         let mut pending_clip_operations = Vec::<&SortedDrawableNode>::new();
         let mut empty_clips = 0i32;
 
-        for drawable in &graph.sorted_drawable_order {
+        for drawable in &self.runtime_sorted_drawable_order(graph) {
             let prev_clips = empty_clips;
             empty_clips += self.runtime_empty_clip_count(drawable, graph);
             if !self.runtime_will_draw(drawable) || empty_clips != prev_clips || empty_clips > 0 {
@@ -52,6 +52,84 @@ impl ArtboardInstance {
         }
 
         commands
+    }
+
+    fn runtime_sorted_drawable_order(&self, graph: &ArtboardGraph) -> Vec<SortedDrawableNode> {
+        let Some(draw_target_id_key) = property_key_for_name("DrawRules", "drawTargetId") else {
+            return graph.sorted_drawable_order.clone();
+        };
+        let Some(placement_value_key) = property_key_for_name("DrawTarget", "placementValue")
+        else {
+            return graph.sorted_drawable_order.clone();
+        };
+
+        let draw_targets_by_local = graph
+            .draw_targets
+            .iter()
+            .map(|target| (target.local_id, target))
+            .collect::<BTreeMap<_, _>>();
+        let active_target_by_rules = graph
+            .draw_rules
+            .iter()
+            .filter_map(|rules| {
+                let target_local =
+                    usize::try_from(self.uint_property(rules.local_id, draw_target_id_key)?)
+                        .ok()?;
+                draw_targets_by_local
+                    .contains_key(&target_local)
+                    .then_some((rules.local_id, target_local))
+            })
+            .collect::<BTreeMap<_, _>>();
+        let mut main = Vec::new();
+        let mut grouped = BTreeMap::<usize, Vec<SortedDrawableNode>>::new();
+        for drawable in &graph.drawable_order {
+            let draw_target_local = drawable
+                .flattened_draw_rules_local
+                .and_then(|rules_local| active_target_by_rules.get(&rules_local).copied());
+            let node = runtime_sorted_drawable_node(drawable, draw_target_local);
+            if let Some(draw_target_local) = draw_target_local {
+                grouped.entry(draw_target_local).or_default().push(node);
+            } else {
+                main.push(node);
+            }
+        }
+
+        for draw_target_local in &graph.draw_target_order {
+            let Some(group) = grouped.remove(draw_target_local) else {
+                continue;
+            };
+            if group.is_empty() {
+                continue;
+            }
+            let Some(target) = draw_targets_by_local.get(draw_target_local) else {
+                continue;
+            };
+            let Some(target_drawable_local) = target.drawable_local else {
+                continue;
+            };
+            let Some(target_position) = main
+                .iter()
+                .position(|drawable| drawable.local_id == Some(target_drawable_local))
+            else {
+                continue;
+            };
+            let placement_value = self
+                .uint_property(target.local_id, placement_value_key)
+                .unwrap_or(target.placement_value);
+            let insert_at = match placement_value {
+                0 => target_position,
+                1 => target_position + 1,
+                _ => continue,
+            };
+            main.splice(insert_at..insert_at, group);
+        }
+
+        let mut sorted = runtime_interleave_clipping_proxy_drawables(
+            main.into_iter().rev(),
+            &graph.clipping_shapes,
+        );
+        runtime_apply_save_operation_elision(&mut sorted, &graph.clipping_shapes);
+        sorted
     }
 
     pub fn draw_static_artboard(
@@ -809,6 +887,182 @@ impl ArtboardInstance {
     }
 }
 
+fn runtime_sorted_drawable_node(
+    drawable: &DrawableOrderNode,
+    draw_target_local: Option<usize>,
+) -> SortedDrawableNode {
+    SortedDrawableNode {
+        kind: drawable.kind,
+        local_id: drawable.local_id,
+        global_id: drawable.global_id,
+        type_name: drawable.type_name,
+        is_hidden: drawable.is_hidden,
+        resolved_image_asset_global: drawable.resolved_image_asset_global,
+        referenced_artboard_global: drawable.referenced_artboard_global,
+        layout_local: drawable.layout_local,
+        layout_global: drawable.layout_global,
+        draw_target_local,
+        clipping_shape_local: None,
+        clipping_shape_global: None,
+        needs_save_operation: true,
+    }
+}
+
+fn runtime_interleave_clipping_proxy_drawables(
+    sorted_drawables: impl IntoIterator<Item = SortedDrawableNode>,
+    clipping_shapes: &[ClippingShapeNode],
+) -> Vec<SortedDrawableNode> {
+    let mut order = Vec::new();
+    let mut clipping_stack = Vec::<usize>::new();
+
+    for drawable in sorted_drawables {
+        let drawable_clipping_shapes =
+            runtime_drawable_clipping_shape_locals(&drawable, clipping_shapes);
+        let removing_index = clipping_stack
+            .iter()
+            .position(|clipping_shape_local| {
+                !drawable_clipping_shapes.contains(clipping_shape_local)
+            })
+            .unwrap_or(clipping_stack.len());
+
+        if removing_index < clipping_stack.len() {
+            for clipping_shape_local in clipping_stack[removing_index..].iter().rev() {
+                order.push(runtime_clipping_proxy_node(
+                    clipping_shapes,
+                    *clipping_shape_local,
+                    DrawableOrderKind::ClipEndProxy,
+                ));
+            }
+            clipping_stack.truncate(removing_index);
+        }
+
+        for clipping_shape_local in drawable_clipping_shapes {
+            if !clipping_stack.contains(&clipping_shape_local) {
+                order.push(runtime_clipping_proxy_node(
+                    clipping_shapes,
+                    clipping_shape_local,
+                    DrawableOrderKind::ClipStartProxy,
+                ));
+                clipping_stack.push(clipping_shape_local);
+            }
+        }
+
+        order.push(drawable);
+    }
+
+    for clipping_shape_local in clipping_stack.into_iter().rev() {
+        order.push(runtime_clipping_proxy_node(
+            clipping_shapes,
+            clipping_shape_local,
+            DrawableOrderKind::ClipEndProxy,
+        ));
+    }
+
+    order
+}
+
+fn runtime_drawable_clipping_shape_locals(
+    drawable: &SortedDrawableNode,
+    clipping_shapes: &[ClippingShapeNode],
+) -> Vec<usize> {
+    let Some(drawable_local) = drawable.local_id else {
+        return Vec::new();
+    };
+
+    clipping_shapes
+        .iter()
+        .filter_map(|clipping_shape| {
+            clipping_shape
+                .clipped_drawable_locals
+                .contains(&drawable_local)
+                .then_some(clipping_shape.local_id)
+        })
+        .collect()
+}
+
+fn runtime_clipping_proxy_node(
+    clipping_shapes: &[ClippingShapeNode],
+    clipping_shape_local: usize,
+    kind: DrawableOrderKind,
+) -> SortedDrawableNode {
+    let clipping_shape_global = clipping_shapes
+        .iter()
+        .find(|clipping_shape| clipping_shape.local_id == clipping_shape_local)
+        .map(|clipping_shape| clipping_shape.global_id);
+    debug_assert!(matches!(
+        kind,
+        DrawableOrderKind::ClipStartProxy | DrawableOrderKind::ClipEndProxy
+    ));
+
+    SortedDrawableNode {
+        kind,
+        local_id: None,
+        global_id: None,
+        type_name: "ClippingShapeProxyDrawable",
+        is_hidden: false,
+        resolved_image_asset_global: None,
+        referenced_artboard_global: None,
+        layout_local: None,
+        layout_global: None,
+        draw_target_local: None,
+        clipping_shape_local: Some(clipping_shape_local),
+        clipping_shape_global,
+        needs_save_operation: true,
+    }
+}
+
+fn runtime_apply_save_operation_elision(
+    sorted_drawables: &mut [SortedDrawableNode],
+    clipping_shapes: &[ClippingShapeNode],
+) {
+    let clipping_visibility = clipping_shapes
+        .iter()
+        .map(|clipping_shape| (clipping_shape.local_id, clipping_shape.is_visible))
+        .collect::<BTreeMap<_, _>>();
+    let mut prev_applied_save = false;
+    let mut applied_clipping_save_operations = Vec::<bool>::new();
+
+    for index in 0..sorted_drawables.len() {
+        sorted_drawables[index].needs_save_operation = true;
+        if prev_applied_save {
+            if sorted_drawables[index].kind == DrawableOrderKind::ClipStartProxy {
+                applied_clipping_save_operations.push(false);
+                sorted_drawables[index].needs_save_operation = false;
+            } else if sorted_drawables[index].kind == DrawableOrderKind::ClipEndProxy {
+                let operation_applied = applied_clipping_save_operations.pop().unwrap_or(true);
+                sorted_drawables[index].needs_save_operation = operation_applied;
+            } else if sorted_drawables
+                .get(index + 1)
+                .is_some_and(|next| next.kind == DrawableOrderKind::ClipEndProxy)
+            {
+                sorted_drawables[index].needs_save_operation = false;
+            }
+        } else if sorted_drawables[index].kind == DrawableOrderKind::ClipStartProxy {
+            applied_clipping_save_operations.push(true);
+        } else if sorted_drawables[index].kind == DrawableOrderKind::ClipEndProxy {
+            let operation_applied = applied_clipping_save_operations.pop().unwrap_or(true);
+            sorted_drawables[index].needs_save_operation = operation_applied;
+        }
+
+        prev_applied_save = sorted_drawables[index].kind == DrawableOrderKind::ClipStartProxy
+            && (runtime_sorted_drawable_will_clip(&sorted_drawables[index], &clipping_visibility)
+                || prev_applied_save);
+    }
+
+    debug_assert!(applied_clipping_save_operations.is_empty());
+}
+
+fn runtime_sorted_drawable_will_clip(
+    drawable: &SortedDrawableNode,
+    clipping_visibility: &BTreeMap<usize, bool>,
+) -> bool {
+    drawable
+        .clipping_shape_local
+        .and_then(|local_id| clipping_visibility.get(&local_id))
+        .copied()
+        .unwrap_or(false)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RuntimeDrawCommandKind {
     Draw,
@@ -1149,7 +1403,9 @@ fn preallocate_artboard_render_paint_tree_batch_into(
                 visiting,
             );
         }
+    }
 
+    for local_object in &graph.local_objects {
         if let Some(paint_global_id) = paint_by_mutator.get(&Some(local_object.global_id)) {
             preallocate_render_paint_for_instance(
                 *paint_global_id,

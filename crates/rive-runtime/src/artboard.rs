@@ -58,6 +58,7 @@ pub struct ArtboardInstance {
     pub(crate) linear_animations: Vec<RuntimeLinearAnimation>,
     pub(crate) state_machines: Vec<RuntimeStateMachine>,
     pub(crate) nested_artboards: BTreeMap<usize, RuntimeNestedArtboardInstance>,
+    newly_uncollapsed_nested_artboards: BTreeSet<usize>,
     pub(crate) artboard_data_bind_values: BTreeMap<Vec<u32>, RuntimeDataBindGraphValue>,
     pub(crate) artboard_custom_property_bindings: Vec<RuntimeArtboardCustomPropertyBindingInstance>,
     pub(crate) artboard_solo_bindings: Vec<RuntimeArtboardSoloBindingInstance>,
@@ -214,6 +215,7 @@ impl ArtboardInstance {
             linear_animations,
             state_machines,
             nested_artboards,
+            newly_uncollapsed_nested_artboards: BTreeSet::new(),
             artboard_data_bind_values,
             artboard_custom_property_bindings,
             artboard_solo_bindings,
@@ -654,8 +656,10 @@ impl ArtboardInstance {
             self.components[index].dirt |= ComponentDirt::COLLAPSED;
         } else {
             self.components[index].dirt &= !ComponentDirt::COLLAPSED;
+            if self.nested_artboards.contains_key(&local_id) {
+                self.newly_uncollapsed_nested_artboards.insert(local_id);
+            }
         }
-        self.sync_nested_artboard_root_opacity(local_id);
         self.on_component_dirty(local_id);
         self.apply_component_collapse_changed(local_id);
         true
@@ -727,6 +731,20 @@ impl ArtboardInstance {
             changed |= self.sync_nested_artboard_root_opacity(host_local_id);
         }
         if dirt.contains(ComponentDirt::COMPONENTS) {
+            let newly_uncollapsed = self
+                .newly_uncollapsed_nested_artboards
+                .remove(&host_local_id);
+            let is_remap_host = self
+                .nested_artboards
+                .get(&host_local_id)
+                .is_some_and(|nested| {
+                    nested.animations.iter().any(|animation| {
+                        matches!(animation, RuntimeNestedAnimationInstance::Remap { .. })
+                    })
+                });
+            if newly_uncollapsed && is_remap_host && dirt.contains(ComponentDirt::RENDER_OPACITY) {
+                return changed;
+            }
             if let Some(nested) = self.nested_artboards.get_mut(&host_local_id) {
                 changed |= nested.child.update_pass();
             }
@@ -744,11 +762,7 @@ impl ArtboardInstance {
         let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
             return false;
         };
-        let mut changed = nested.set_root_opacity(host_opacity);
-        if changed {
-            changed |= nested.child.update_pass();
-        }
-        changed
+        nested.set_root_opacity(host_opacity)
     }
 
     pub fn update_components_with_hook<F>(&mut self, mut hook: F) -> UpdateComponentsReport
@@ -1613,6 +1627,7 @@ mod tests {
             linear_animations: Vec::new(),
             state_machines: Vec::new(),
             nested_artboards: BTreeMap::new(),
+            newly_uncollapsed_nested_artboards: BTreeSet::new(),
             artboard_data_bind_values: BTreeMap::new(),
             artboard_custom_property_bindings: Vec::new(),
             artboard_solo_bindings: Vec::new(),

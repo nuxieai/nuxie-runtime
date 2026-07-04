@@ -6,7 +6,9 @@ use rive_runtime::{
     ArtboardInstance, RuntimeRenderPathCache, StateMachineInstance, preallocate_render_paints,
 };
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+const TIME_EPSILON: f32 = 0.000001;
 
 fn main() {
     match run() {
@@ -20,9 +22,12 @@ fn main() {
 
 fn run() -> Result<String> {
     let options = Options::parse(env::args().skip(1).collect())?;
-    if options.input_script.is_some() {
-        bail!("unsupported: Rust golden runner does not replay input scripts yet");
-    }
+    let input_events = options
+        .input_script
+        .as_deref()
+        .map(load_input_script)
+        .transpose()?
+        .unwrap_or_default();
     let bytes = std::fs::read(&options.file)
         .with_context(|| format!("failed to read {}", options.file.display()))?;
     let runtime = read_runtime_file(&bytes).context("failed to import runtime file")?;
@@ -67,7 +72,28 @@ fn run() -> Result<String> {
     factory.frame_size(frame_dimension(width), frame_dimension(height));
 
     let mut current_seconds = 0.0;
+    let mut next_input = 0;
     for sample in &options.samples {
+        while next_input < input_events.len()
+            && input_events[next_input].seconds <= *sample + TIME_EPSILON
+        {
+            let event = &input_events[next_input];
+            advance_scene_to(
+                &mut instance,
+                state_machine.as_mut(),
+                event.seconds,
+                &mut current_seconds,
+            )?;
+            apply_input_event(event);
+            factory.add_input_event(
+                event.kind.name(),
+                event.seconds,
+                event.x,
+                event.y,
+                event.pointer_id,
+            );
+            next_input += 1;
+        }
         advance_scene_to(
             &mut instance,
             state_machine.as_mut(),
@@ -94,6 +120,165 @@ fn run() -> Result<String> {
     }
 
     Ok(factory.stream())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum InputKind {
+    PointerDown,
+    PointerMove,
+    PointerUp,
+    PointerExit,
+}
+
+impl InputKind {
+    fn parse(value: &str, line_number: usize) -> Result<Self> {
+        match value {
+            "pointerDown" => Ok(Self::PointerDown),
+            "pointerMove" => Ok(Self::PointerMove),
+            "pointerUp" => Ok(Self::PointerUp),
+            "pointerExit" => Ok(Self::PointerExit),
+            _ => bail!("unknown input event on line {line_number}: {value}"),
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::PointerDown => "pointerDown",
+            Self::PointerMove => "pointerMove",
+            Self::PointerUp => "pointerUp",
+            Self::PointerExit => "pointerExit",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct InputEvent {
+    seconds: f32,
+    kind: InputKind,
+    x: f32,
+    y: f32,
+    pointer_id: i32,
+    order: usize,
+}
+
+fn load_input_script(path: &Path) -> Result<Vec<InputEvent>> {
+    let contents = std::fs::read_to_string(path)
+        .with_context(|| format!("unable to read input script: {}", path.display()))?;
+    parse_input_script(&contents)
+}
+
+fn parse_input_script(contents: &str) -> Result<Vec<InputEvent>> {
+    let mut events = Vec::new();
+    for (line_index, line) in contents.lines().enumerate() {
+        let line_number = line_index + 1;
+        let line = line.split_once('#').map_or(line, |(value, _)| value).trim();
+        if line.is_empty() {
+            continue;
+        }
+        let tokens = line.split_whitespace().collect::<Vec<_>>();
+        if tokens.len() != 4 && tokens.len() != 5 {
+            bail!("input script line {line_number} must be: <seconds> <event> <x> <y> [pointerId]");
+        }
+        let seconds = parse_script_float(
+            tokens[0],
+            &format!("input script line {line_number} seconds"),
+        )?;
+        if seconds < 0.0 {
+            bail!("input script line {line_number} has a negative time");
+        }
+        let kind = InputKind::parse(tokens[1], line_number)?;
+        let x = parse_script_float(tokens[2], &format!("input script line {line_number} x"))?;
+        let y = parse_script_float(tokens[3], &format!("input script line {line_number} y"))?;
+        let pointer_id = if let Some(pointer_id) = tokens.get(4) {
+            pointer_id.parse::<i32>().with_context(|| {
+                format!(
+                    "invalid integer for input script line {line_number} pointerId: {pointer_id}"
+                )
+            })?
+        } else {
+            0
+        };
+        events.push(InputEvent {
+            seconds,
+            kind,
+            x,
+            y,
+            pointer_id,
+            order: events.len(),
+        });
+    }
+
+    events.sort_by(|left, right| {
+        if (left.seconds - right.seconds).abs() <= TIME_EPSILON {
+            left.order.cmp(&right.order)
+        } else {
+            left.seconds.total_cmp(&right.seconds)
+        }
+    });
+    Ok(events)
+}
+
+fn parse_script_float(value: &str, context: &str) -> Result<f32> {
+    value
+        .parse::<f32>()
+        .with_context(|| format!("invalid float for {context}: {value}"))
+}
+
+fn apply_input_event(_event: &InputEvent) {
+    // TODO(golden): port StateMachineInstance::pointer* listener dispatch.
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn input_script_parser_matches_golden_runner_shape() {
+        let events = parse_input_script(
+            r#"
+            # comments and blank lines are ignored
+            0.2 pointerUp 5 6 7
+            0.1 pointerDown 1 2
+            0.1 pointerMove 3 4 # same-time events keep file order
+            "#,
+        )
+        .expect("script parses");
+
+        assert_eq!(
+            events
+                .iter()
+                .map(|event| (
+                    event.seconds,
+                    event.kind,
+                    event.x,
+                    event.y,
+                    event.pointer_id
+                ))
+                .collect::<Vec<_>>(),
+            vec![
+                (0.1, InputKind::PointerDown, 1.0, 2.0, 0),
+                (0.1, InputKind::PointerMove, 3.0, 4.0, 0),
+                (0.2, InputKind::PointerUp, 5.0, 6.0, 7),
+            ]
+        );
+    }
+
+    #[test]
+    fn input_script_parser_rejects_bad_shape() {
+        assert!(parse_input_script("0.1 pointerDown 1\n").is_err());
+        assert!(parse_input_script("-0.1 pointerDown 1 2\n").is_err());
+        assert!(parse_input_script("0.1 pointerCancel 1 2\n").is_err());
+    }
+
+    #[test]
+    fn sample_parser_matches_golden_runner_tolerance() {
+        assert_eq!(
+            parse_samples("0.1,0.0999995,0.2").expect("within epsilon is sorted"),
+            vec![0.1, 0.0999995, 0.2]
+        );
+        assert!(parse_samples("-0.1").is_err());
+        assert!(parse_samples("0.1,0.099").is_err());
+    }
 }
 
 #[derive(Debug)]
@@ -153,7 +338,7 @@ fn advance_scene_to(
     target_seconds: f32,
     current_seconds: &mut f32,
 ) -> Result<()> {
-    if target_seconds < *current_seconds {
+    if target_seconds + TIME_EPSILON < *current_seconds {
         bail!("cannot move timeline backwards");
     }
     let elapsed_seconds = (target_seconds - *current_seconds).max(0.0);
@@ -235,8 +420,11 @@ fn parse_samples(value: &str) -> Result<Vec<f32>> {
     if samples.is_empty() {
         bail!("--samples must include at least one sample");
     }
+    if samples.iter().any(|sample| *sample < 0.0) {
+        bail!("samples must be non-negative");
+    }
     for pair in samples.windows(2) {
-        if pair[1] < pair[0] {
+        if pair[1] + TIME_EPSILON < pair[0] {
             bail!("samples must be sorted");
         }
     }

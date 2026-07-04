@@ -22,20 +22,19 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Build the Rust side of M3 scripted pointer replay. The C++ golden runner
-   accepts `--input-script`, `golden-compare` forwards `input_script`, and
-   `rust-golden-runner` still rejects it up front, so no corpus entry can
-   currently exercise pointerDown/pointerMove/pointerUp/pointerExit parity.
-   Start by matching the C++ input-script parser/dispatch shape and proving
-   one small listener/hit-test fixture exact under a script.
-2. Port only the pointer routing/hit-testing behavior needed by that first
-   scripted fixture, reading C++ `src/input/` and `Scene::pointer*` side by
-   side with the Rust state-machine/listener path. Keep the verification
-   end-to-end through `golden-compare`; add targeted probes only if the
-   divergence protocol requires one.
-3. Once the first scripted input file is exact, add scripts in corpus-priority
-   order for the existing listener/pointer fixtures (`pointer_events.riv`,
-   `rapid_pointer_events.riv`, `hit_test_solos.riv`, etc.) until M3 can be
+1. Port M3 runtime pointer dispatch: C++
+   `StateMachineInstance::updateListeners`, `StateMachineInstance::pointer*`,
+   and simple `ListenerGroup` pointer phase/action handling. Start with the
+   now-scripted `pointer_events.riv`; its script is parsed and streamed by
+   both golden runners, but Rust `apply_input_event` is intentionally still a
+   no-op until listener dispatch is ported.
+2. Add shape hit testing for the simple component targets needed by
+   `pointer_events.riv` (rectangle/shape local target bounds), keeping
+   nested, layout, text, and component-list listener targets gated to later
+   milestones.
+3. Once an input script changes render output exactly, widen scripts in
+   corpus-priority order for the existing listener/pointer fixtures
+   (`rapid_pointer_events.riv`, `hit_test_solos.riv`, etc.) until M3 can be
    checked off. There are no remaining `milestone = "M3"` parked entries in
    `corpus.toml`; scripted input is the active M3 exit criterion.
 4. Remaining exact entries pinned to sample `0` are static M1 holdovers:
@@ -74,7 +73,9 @@ the only memory the next session has. Update it every commit.
   Golden runner sample lists now advance by sorted absolute-time deltas and reuse render paths
   across samples;
   no images, text, nested artboards, scroll constraints, component-list
-  instancing, or scripted input replay.
+  instancing, or runtime pointer listener dispatch. Harness-level scripted
+  input replay is supported for pointerDown/pointerMove/pointerUp/pointerExit
+  markers.
 - `TransformConstraint` currently covers the default empty
   `TransformComponent::constraintBounds()` path. Text/LayoutComponent
   constraint bounds remain parked behind their M6 text/layout diagnostics.
@@ -197,6 +198,11 @@ the only memory the next session has. Update it every commit.
   cancellation between C++ clang contraction/rounding and Rust strict `f32`.
   The comparator still rejects the next observed cancellation-grid step, and
   call order, IDs, verbs, and non-numeric text remain exact.
+- 2026-07-04: Rust golden runner now mirrors C++ input-script parsing and
+  timeline replay for pointer events and records input markers; runtime
+  listener dispatch remains the M3 port unit, so `apply_input_event` is
+  intentionally a narrow no-op until
+  `StateMachineInstance::pointer*`/`ListenerGroup` is ported.
 
 ## Log
 
@@ -545,3 +551,13 @@ the only memory the next session has. Update it every commit.
   across 85 exact files; `make golden-compare` reports `exact=85`,
   `exact-segments=354`, `diverges=0`, `unsupported-feature=210`,
   `not-yet=0`, no parked M3 entries, and `cargo test --workspace` passes.
+- 2026-07-04: [M3] Landed Rust golden-runner `--input-script`
+  parsing/replay to match the C++ runner, added
+  `tests/input_scripts/pointer_events_click.txt`, and attached it to
+  `pointer_events.riv` as the first scripted exact corpus entry. The runner
+  now advances to input timestamps and records input markers; listener
+  hit-testing/action dispatch is still the next M3 runtime port. Exact
+  segments remain 354 across 85 exact files; `make golden-compare` reports
+  `exact=85`, `exact-segments=354`, `diverges=0`,
+  `unsupported-feature=210`, `not-yet=0`, no parked M3 entries, and
+  `cargo test --workspace` passes.

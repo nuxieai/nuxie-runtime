@@ -2029,3 +2029,11 @@ milestone entries are kept verbatim here. Newest milestone last.
   reports `exact=70`, `exact-segments=277`, `diverges=0`,
   `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
   passes.
+- 2026-07-03: [M2] Widened `component_based_conditions.riv` from samples `0`,
+  `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
+  `1.0`, keeping passive component-comparator/data-bind condition playback
+  exact across the fifth sample while leaving external view-model mutation in
+  M5 scope. Exact segments are now 278 across 70 exact files; `make
+  golden-compare` reports `exact=70`, `exact-segments=278`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.

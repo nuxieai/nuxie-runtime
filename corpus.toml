@@ -2240,7 +2240,7 @@ features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill",
 [[file]]
 id = "viewmodel_runtime_file"
 path = "tests/unit_tests/assets/viewmodel_runtime_file.riv"
-samples = [0.0, 0.25, 0.5]
+samples = [0.0, 0.25, 0.5, 0.75]
 status = "exact"
 features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:420:LayoutComponentStyle", "type-key:431:ViewModelPropertyNumber", "type-key:434:ViewModelPropertyList", "type-key:435:ViewModel", "type-key:436:ViewModelPropertyViewModel", "type-key:438:DataEnumCustom", "type-key:439:ViewModelPropertyEnumCustom", "type-key:440:ViewModelPropertyColor", "type-key:443:ViewModelPropertyString", "type-key:445:DataEnumValue", "type-key:448:ViewModelPropertyBoolean", "type-key:502:ViewModelPropertyTrigger", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:585:ViewModelPropertyAssetImage", "type-key:598:ViewModelPropertyArtboard", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition"]
 

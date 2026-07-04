@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 358 across 85 exact files
+- Exact segments (file × sample): 364 across 85 exact files
 - Parked breakdown (from `make golden-compare`): M4=83 M5=8 M6=77 gated=6 harness=36
 - Current milestone: **M3 — Interactivity Exact (#V2-4)**
 
@@ -23,21 +23,35 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Widen scripted M3 coverage in corpus-priority order for exact listener/
-   pointer fixtures with visible render movement. `pointer_events.riv`,
-   `rapid_pointer_events.riv`, `hit_test_solos.riv`, `click_event.riv`, and
-   `opaque_hit_test.riv` now have render-affecting pointer scripts; next try
-   simple exact listener files that still lack scripts:
+   pointer fixtures with visible render movement. Scripted coverage now
+   includes `pointer_events.riv`, `rapid_pointer_events.riv`,
+   `hit_test_solos.riv`, `click_event.riv`, `opaque_hit_test.riv`,
    `state_machine_triggers.riv`, `state_machine_transition.riv`,
-   `light_switch.riv`, `event_on_listener.riv`, `event_trigger_event.riv`,
-   `events_on_states.riv`, and `bindable_artboard_child.riv`.
-2. Port additional `ListenerGroup` semantics only when a widened script proves
+   `light_switch.riv`, `event_on_listener.riv`,
+   `event_trigger_event.riv`, and `events_on_states.riv`.
+2. Remaining unscripted exact listener/event candidates are
+   `bindable_artboard_child.riv`, `component_list_2.riv`,
+   `component_list_follow_path.riv`, `component_list_grouped.riv`,
+   `component_list_hit_order.riv`, `joel_signed.riv`,
+   `lock_icon_demo.riv`, `solos_with_nested_artboards.riv`, `sound.riv`,
+   `stateful_list_props.riv`, and `text_input_event.riv`.
+3. Investigate `bindable_artboard_child.riv` before attaching a script: a
+   simple full-artboard click at `250,250` makes C++ turn the fill red while
+   Rust stays `0xff747474`; treat it as M3 only if listener/view-model action
+   dispatch is the blocker, otherwise park it behind M5 data-binding/view-model
+   behavior.
+4. `event_trigger_event.riv` has an exact primary rectangle click script at
+   `129,101`; an alternate red-target click at `450,50` changes C++ colors
+   while Rust stays passive, so do not widen that coordinate until listener
+   fire-event/view-model/event propagation scope is clear.
+5. Port additional `ListenerGroup` semantics only when a widened script proves
    they are the blocking gap: hover/enter-exit state, click synthesis, drag
    state, opaque target ordering, nested/list/text/layout targets, and
    component-provided groups remain intentionally out of the direct rectangle
    pointer slice.
-3. There are no remaining `milestone = "M3"` parked entries in `corpus.toml`;
+6. There are no remaining `milestone = "M3"` parked entries in `corpus.toml`;
    scripted input exactness is the active M3 exit criterion.
-4. Remaining exact entries pinned to sample `0` are static M1 holdovers:
+7. Remaining exact entries pinned to sample `0` are static M1 holdovers:
    `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
    them during M3 unless a related refactor needs a cheap draw-regression check.
 
@@ -579,5 +593,14 @@ the only memory the next session has. Update it every commit.
   C++/Rust stream diffs match for all three scripted fixtures. Exact segments
   are now 358 across 85 exact files; `make golden-compare` reports
   `exact=85`, `exact-segments=358`, `diverges=0`,
+  `unsupported-feature=210`, `not-yet=0`, no parked M3 entries, and
+  `cargo test --workspace` passes.
+- 2026-07-04: [M3] Widened scripted pointer coverage for
+  `state_machine_triggers.riv`, `state_machine_transition.riv`,
+  `light_switch.riv`, `event_on_listener.riv`, `event_trigger_event.riv`,
+  and `events_on_states.riv` with render-affecting down/up scripts and sample
+  `0.1`. Direct C++/Rust stream diffs match for all six scripted fixtures.
+  Exact segments are now 364 across 85 exact files; `make golden-compare`
+  reports `exact=85`, `exact-segments=364`, `diverges=0`,
   `unsupported-feature=210`, `not-yet=0`, no parked M3 entries, and
   `cargo test --workspace` passes.

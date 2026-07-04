@@ -1,0 +1,2 @@
+0.05 pointerDown 343 116
+0.10 pointerUp 343 116

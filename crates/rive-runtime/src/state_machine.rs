@@ -1,8 +1,9 @@
+use crate::ArtboardInstance;
 use crate::animation::{
     AnimationLoop, LinearAnimationInstance, RuntimeInterpolator, RuntimeLinearAnimation,
 };
 use crate::components::TransformProperty;
-use crate::{ArtboardInstance, artboard_index_for_graph};
+use crate::properties::artboard_index_for_graph;
 use rive_binary::{RuntimeFile, RuntimeObject};
 use rive_graph::ArtboardGraph;
 use std::collections::BTreeMap;

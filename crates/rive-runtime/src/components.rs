@@ -1,4 +1,5 @@
-use crate::{artboard_index_for_graph, objects::InstanceObjectArena};
+use crate::objects::InstanceObjectArena;
+use crate::properties::{artboard_index_for_graph, property_key_for_name};
 use rive_binary::RuntimeFile;
 use rive_graph::{ArtboardGraph, ComponentNode};
 use rive_schema::definition_by_name;
@@ -339,8 +340,7 @@ pub(crate) struct RuntimeSoloChild {
 }
 
 pub(crate) fn build_runtime_solos(file: &RuntimeFile, graph: &ArtboardGraph) -> Vec<RuntimeSolo> {
-    let Some(active_component_property_key) =
-        crate::property_key_for_name("Solo", "activeComponentId")
+    let Some(active_component_property_key) = property_key_for_name("Solo", "activeComponentId")
     else {
         return Vec::new();
     };

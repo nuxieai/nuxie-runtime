@@ -9,9 +9,10 @@ use super::{
     bindable_integer_value, bindable_number_value, bindable_string_value,
     bindable_trigger_source_global_id, bindable_trigger_value, bindable_view_model_value,
 };
+use crate::ArtboardInstance;
 use crate::components::TransformProperty;
-use crate::{
-    ArtboardInstance, property_key_for_name, runtime_object_bool_property_by_key,
+use crate::properties::{
+    property_key_for_name, runtime_object_bool_property_by_key,
     runtime_object_color_property_by_key, runtime_object_double_property_by_key,
     runtime_object_string_property_by_key, runtime_object_uint_property_by_key,
     transform_property_for_key,

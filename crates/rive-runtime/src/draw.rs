@@ -14,10 +14,10 @@ use rive_render_api::{
 use rive_schema::definition_by_name;
 use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 
-use crate::{
-    ArtboardInstance, Mat2D, RuntimeComponent, property_key_for_name,
-    shape_paint_is_visible_property_key, solid_color_value_property_key,
+use crate::properties::{
+    property_key_for_name, shape_paint_is_visible_property_key, solid_color_value_property_key,
 };
+use crate::{ArtboardInstance, Mat2D, RuntimeComponent};
 
 impl ArtboardInstance {
     pub fn draw_commands(&self, graph: &ArtboardGraph) -> Vec<RuntimeDrawCommand> {

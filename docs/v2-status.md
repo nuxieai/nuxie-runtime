@@ -51,14 +51,14 @@ the only memory the next session has. Update it every commit.
    pipeline, including `ArtboardInstance` draw methods, draw/path command
    types, render path cache, paint preallocation, path effect builders, and
    renderer trait driving, lives in `crates/rive-runtime/src/draw.rs`.
-   Continue modularizing the remaining root runtime surfaces; start with the
-   shared runtime property-key/object-value helper cluster
-   (`property_key_for_name`, `runtime_object_*_property_by_key`,
-   `transform_property_for_key`, joystick/Solo/paint key helpers, and
-   `mix_value`) plus `RuntimeArtboardDimensions` because extracted animation,
-   draw, state-machine, component, and artboard data-bind modules still depend
-   on these root helpers. Leave the public `ArtboardInstance` facade in
-   `lib.rs` until that smaller helper boundary is gone.
+   Shared runtime property-key/object-value helpers, transform-key lookup,
+   joystick/Solo/paint key helpers, `mix_value`, artboard-index lookup, and
+   `RuntimeArtboardDimensions` live in
+   `crates/rive-runtime/src/properties.rs`. Continue modularizing the
+   remaining root runtime surface; start by moving the `ArtboardInstance`
+   struct, core instance methods, and their local tests into
+   `crates/rive-runtime/src/artboard.rs`, then re-export `ArtboardInstance`
+   from `lib.rs`.
 2. Add handle-source world-space math and nested-remap dependent advancement
    to the joystick path when a corpus diff reaches those cases.
 3. Remaining exact entries pinned to sample `0` are static M1 holdovers:
@@ -411,3 +411,12 @@ the only memory the next session has. Update it every commit.
   `exact=70`, `exact-segments=339`, `diverges=0`,
   `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
   passes.
+- 2026-07-04: [M2] Added `crates/rive-runtime/src/properties.rs` for shared
+  runtime property-key/object-value helpers, transform-key lookup,
+  joystick/Solo/paint key helpers, `mix_value`, artboard-index lookup, and
+  `RuntimeArtboardDimensions`, with animation, draw, components,
+  artboard-data-bind, and state-machine modules importing the helper surface
+  directly instead of through `lib.rs`. Exact segments remain 339 across 70
+  exact files; `make golden-compare` reports `exact=70`,
+  `exact-segments=339`, `diverges=0`, `unsupported-feature=225`,
+  `not-yet=0`, and `cargo test --workspace` passes.

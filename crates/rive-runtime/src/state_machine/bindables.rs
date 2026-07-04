@@ -5,10 +5,8 @@ use crate::data_bind_graph::{
     runtime_data_bind_graph_group_formula_operation_accepts_non_number_source,
     runtime_data_bind_graph_group_operation_formula_accepts_non_number_source,
 };
-use crate::{
-    RuntimeDataBindGraphConverter, RuntimeDataBindGraphValue, RuntimeViewModelPointer,
-    property_key_for_name,
-};
+use crate::properties::property_key_for_name;
+use crate::{RuntimeDataBindGraphConverter, RuntimeDataBindGraphValue, RuntimeViewModelPointer};
 use rive_binary::{RuntimeFile, RuntimeObject};
 use std::collections::BTreeMap;
 

@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 214 across 70 exact files
+- Exact segments (file × sample): 215 across 70 exact files
 - Parked breakdown (from `make golden-compare`): M3=21 M4=83 M5=8 M6=72 gated=5 harness=36
 - Current milestone: **M2 — Animated Playback Exact + Real Object Model (#V2-3)**
 
@@ -24,7 +24,7 @@ the only memory the next session has. Update it every commit.
 
 1. The two-sample exact widening queue is exhausted. Continue the fourth-sample
    M2 sweep over exact entries with samples `0`, `0.25`, and `0.5`, starting
-   after `component_list_grouped.riv` (next candidate: `component_list_hit_order.riv`),
+   after `component_list_hit_order.riv` (next candidate: `cubic_value_test.riv`),
    and stop on the first real divergence to localize runtime code.
 2. Continue M2 real object model work by modularizing the remaining runtime
    surfaces out of `lib.rs` while keeping generated `InstanceObjectStorage` as
@@ -174,30 +174,6 @@ the only memory the next session has. Update it every commit.
   under `M2 active log rolloff`; keep only the recent rolling window here once
   Metric, Next, Decisions, and `corpus.toml` capture the current state.
 
-- 2026-07-03: [M2] Widened `multiple_state_machines.riv` from samples `0` and
-  `0.25` to samples `0`, `0.25`, and `0.5`, keeping default state-machine
-  selection/playback exact across the wider sample set. Exact segments are now
-  171 across 70 exact files; `make golden-compare` reports `exact=70`,
-  `exact-segments=171`, `diverges=0`, `unsupported-feature=225`, `not-yet=0`,
-  and `cargo test --workspace` passes.
-- 2026-07-03: [M2] Widened `nested_solo.riv` from samples `0` and `0.25` to
-  samples `0`, `0.25`, and `0.5`, keeping Solo collapse/state-machine
-  playback exact across the wider sample set. Exact segments are now 172
-  across 70 exact files; `make golden-compare` reports `exact=70`,
-  `exact-segments=172`, `diverges=0`, `unsupported-feature=225`, `not-yet=0`,
-  and `cargo test --workspace` passes.
-- 2026-07-03: [M2] Widened `off_road_car.riv` from samples `0` and `0.25` to
-  samples `0`, `0.25`, and `0.5`, keeping its animated skinned vector/path
-  playback exact across the wider sample set. Exact segments are now 173
-  across 70 exact files; `make golden-compare` reports `exact=70`,
-  `exact-segments=173`, `diverges=0`, `unsupported-feature=225`, `not-yet=0`,
-  and `cargo test --workspace` passes.
-- 2026-07-03: [M2] Widened `oneshotblend.riv` from samples `0` and `0.25` to
-  samples `0`, `0.25`, and `0.5`, keeping one-shot 1D blend-state playback
-  exact across the wider sample set. Exact segments are now 174 across 70
-  exact files; `make golden-compare` reports `exact=70`,
-  `exact-segments=174`, `diverges=0`, `unsupported-feature=225`, `not-yet=0`,
-  and `cargo test --workspace` passes.
 - 2026-07-03: [M2] Widened `opaque_hit_test.riv` from samples `0` and `0.25`
   to samples `0`, `0.25`, and `0.5`, keeping nested-bool/draw-rule playback
   exact across the wider sample set. Exact segments are now 175 across 70
@@ -467,4 +443,11 @@ the only memory the next session has. Update it every commit.
   mutation in later M4/M5 scope. Exact segments are now 214 across 70 exact
   files; `make golden-compare` reports `exact=70`,
   `exact-segments=214`, `diverges=0`, `unsupported-feature=225`,
+  `not-yet=0`, and `cargo test --workspace` passes.
+- 2026-07-03: [M2] Widened `component_list_hit_order.riv` from samples `0`,
+  `0.25`, and `0.5` to samples `0`, `0.25`, `0.5`, and `0.75`, keeping the
+  passive component-list hit-order render path exact while leaving scripted
+  input dispatch in M3 scope. Exact segments are now 215 across 70 exact
+  files; `make golden-compare` reports `exact=70`,
+  `exact-segments=215`, `diverges=0`, `unsupported-feature=225`,
   `not-yet=0`, and `cargo test --workspace` passes.

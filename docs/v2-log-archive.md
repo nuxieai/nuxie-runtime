@@ -1304,3 +1304,27 @@ milestone entries are kept verbatim here. Newest milestone last.
   across 70 exact files; `make golden-compare` reports `exact=70`,
   `exact-segments=170`, `diverges=0`, `unsupported-feature=225`, `not-yet=0`,
   and `cargo test --workspace` passes.
+- 2026-07-03: [M2] Widened `multiple_state_machines.riv` from samples `0` and
+  `0.25` to samples `0`, `0.25`, and `0.5`, keeping default state-machine
+  selection/playback exact across the wider sample set. Exact segments are now
+  171 across 70 exact files; `make golden-compare` reports `exact=70`,
+  `exact-segments=171`, `diverges=0`, `unsupported-feature=225`, `not-yet=0`,
+  and `cargo test --workspace` passes.
+- 2026-07-03: [M2] Widened `nested_solo.riv` from samples `0` and `0.25` to
+  samples `0`, `0.25`, and `0.5`, keeping Solo collapse/state-machine
+  playback exact across the wider sample set. Exact segments are now 172
+  across 70 exact files; `make golden-compare` reports `exact=70`,
+  `exact-segments=172`, `diverges=0`, `unsupported-feature=225`, `not-yet=0`,
+  and `cargo test --workspace` passes.
+- 2026-07-03: [M2] Widened `off_road_car.riv` from samples `0` and `0.25` to
+  samples `0`, `0.25`, and `0.5`, keeping its animated skinned vector/path
+  playback exact across the wider sample set. Exact segments are now 173
+  across 70 exact files; `make golden-compare` reports `exact=70`,
+  `exact-segments=173`, `diverges=0`, `unsupported-feature=225`, `not-yet=0`,
+  and `cargo test --workspace` passes.
+- 2026-07-03: [M2] Widened `oneshotblend.riv` from samples `0` and `0.25` to
+  samples `0`, `0.25`, and `0.5`, keeping one-shot 1D blend-state playback
+  exact across the wider sample set. Exact segments are now 174 across 70
+  exact files; `make golden-compare` reports `exact=70`,
+  `exact-segments=174`, `diverges=0`, `unsupported-feature=225`, `not-yet=0`,
+  and `cargo test --workspace` passes.

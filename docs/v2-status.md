@@ -40,8 +40,9 @@ the only memory the next session has. Update it every commit.
    formula random-source state live in
    `crates/rive-runtime/src/data_bind_graph.rs`; the
    `RuntimeDataBindGraphValue` owned/imported view-model resolution impl lives
-   there too. Continue with the graph behavior impls and target mutator bridge,
-   preserving the current golden set.
+   there too. Data-bind flag helpers and the target mutator bridge also live
+   there. Continue with the remaining graph behavior impls and converter-state
+   bridge, preserving the current golden set.
 2. Add handle-source world-space math and nested-remap dependent advancement
    to the joystick path when a corpus diff reaches those cases.
 3. Remaining exact entries pinned to sample `0` are static M1 holdovers:
@@ -179,13 +180,6 @@ the only memory the next session has. Update it every commit.
   under `M2 active log rolloff`; keep only the recent rolling window here once
   Metric, Next, Decisions, and `corpus.toml` capture the current state.
 
-- 2026-07-03: [M2] Widened `clip_tests.riv` from samples `0`, `0.25`,
-  `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and `1.0`,
-  keeping animated clipping-shape playback exact across the fifth sample.
-  Exact segments are now 277 across 70 exact files; `make golden-compare`
-  reports `exact=70`, `exact-segments=277`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
 - 2026-07-03: [M2] Widened `component_based_conditions.riv` from samples `0`,
   `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
   `1.0`, keeping passive component-comparator/data-bind condition playback
@@ -497,5 +491,14 @@ the only memory the next session has. Update it every commit.
   crate-visible while the remaining graph execution and target mutator bridge
   are extracted. Exact segments remain 339 across 70 exact files; `make
   golden-compare` reports `exact=70`, `exact-segments=339`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+- 2026-07-04: [M2] Moved data-bind direction flag helpers and
+  `RuntimeDataBindGraphTargetsMut` target application from
+  `crates/rive-runtime/src/lib.rs` into
+  `crates/rive-runtime/src/data_bind_graph.rs`, leaving the remaining graph
+  execution/converter-state bridge as the next extraction slice. Exact
+  segments remain 339 across 70 exact files; `make golden-compare` reports
+  `exact=70`, `exact-segments=339`, `diverges=0`,
   `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
   passes.

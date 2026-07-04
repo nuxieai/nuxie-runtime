@@ -5,7 +5,24 @@ use rive_binary::{RuntimeFile, RuntimeObject};
 use crate::{
     RuntimeDataBindGraphFormulaState, RuntimeDataBindGraphInterpolatorState, RuntimeDataContext,
     RuntimeOwnedViewModelInstance, RuntimeTransitionInterpolator, RuntimeViewModelPointer,
+    StateMachineBindableArtboardInstance, StateMachineBindableAssetInstance,
+    StateMachineBindableBooleanInstance, StateMachineBindableColorInstance,
+    StateMachineBindableEnumInstance, StateMachineBindableIntegerInstance,
+    StateMachineBindableListInstance, StateMachineBindableNumberInstance,
+    StateMachineBindableStringInstance, StateMachineBindableTriggerInstance,
+    StateMachineBindableViewModelInstance,
 };
+
+pub(crate) const DATA_BIND_FLAG_DIRECTION_TO_SOURCE: u64 = 1 << 0;
+pub(crate) const DATA_BIND_FLAG_TWO_WAY: u64 = 1 << 1;
+
+pub(crate) fn data_bind_flags_apply_source_to_target(flags: u64) -> bool {
+    flags & DATA_BIND_FLAG_TWO_WAY != 0 || flags & DATA_BIND_FLAG_DIRECTION_TO_SOURCE == 0
+}
+
+pub(crate) fn data_bind_flags_apply_target_to_source(flags: u64) -> bool {
+    flags & DATA_BIND_FLAG_TWO_WAY != 0 || flags & DATA_BIND_FLAG_DIRECTION_TO_SOURCE != 0
+}
 
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeDataBindGraph {
@@ -83,6 +100,21 @@ pub(crate) struct RuntimeDataBindGraphSourceHandle(pub(crate) usize);
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct RuntimeDataBindGraphTargetHandle(pub(crate) usize);
+
+pub(crate) struct RuntimeDataBindGraphTargetsMut<'a> {
+    pub(crate) numbers: &'a mut [StateMachineBindableNumberInstance],
+    pub(crate) integers: &'a mut [StateMachineBindableIntegerInstance],
+    pub(crate) booleans: &'a mut [StateMachineBindableBooleanInstance],
+    pub(crate) strings: &'a mut [StateMachineBindableStringInstance],
+    pub(crate) colors: &'a mut [StateMachineBindableColorInstance],
+    pub(crate) enums: &'a mut [StateMachineBindableEnumInstance],
+    pub(crate) assets: &'a mut [StateMachineBindableAssetInstance],
+    pub(crate) artboards: &'a mut [StateMachineBindableArtboardInstance],
+    pub(crate) lists: &'a mut [StateMachineBindableListInstance],
+    pub(crate) triggers: &'a mut [StateMachineBindableTriggerInstance],
+    pub(crate) view_models: &'a mut [StateMachineBindableViewModelInstance],
+    pub(crate) include_view_models: bool,
+}
 
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeDataBindGraphSourceNode {
@@ -427,6 +459,153 @@ impl RuntimeDataBindGraphValue {
                 .view_model_instance_trigger_count_for_object(source)
                 .map(Self::Trigger),
             Self::ViewModel(_) => None,
+        }
+    }
+}
+
+impl RuntimeDataBindGraphTargetsMut<'_> {
+    pub(crate) fn apply_default_view_model_binding(
+        &mut self,
+        target: &RuntimeDataBindGraphTarget,
+        value: &RuntimeDataBindGraphValue,
+    ) {
+        match (target, value) {
+            (
+                RuntimeDataBindGraphTarget::Number { global_id },
+                RuntimeDataBindGraphValue::Number(value),
+            ) => {
+                if let Some(target) = self
+                    .numbers
+                    .iter_mut()
+                    .find(|target| target.global_id == *global_id)
+                {
+                    target.set_value(*value);
+                }
+            }
+            (
+                RuntimeDataBindGraphTarget::Integer { global_id },
+                RuntimeDataBindGraphValue::SymbolListIndex(value),
+            ) => {
+                if let Some(target) = self
+                    .integers
+                    .iter_mut()
+                    .find(|target| target.global_id == *global_id)
+                {
+                    target.set_value(*value);
+                }
+            }
+            (
+                RuntimeDataBindGraphTarget::Boolean { global_id },
+                RuntimeDataBindGraphValue::Boolean(value),
+            ) => {
+                if let Some(target) = self
+                    .booleans
+                    .iter_mut()
+                    .find(|target| target.global_id == *global_id)
+                {
+                    target.set_value(*value);
+                }
+            }
+            (
+                RuntimeDataBindGraphTarget::String { global_id },
+                RuntimeDataBindGraphValue::String(value),
+            ) => {
+                if let Some(target) = self
+                    .strings
+                    .iter_mut()
+                    .find(|target| target.global_id == *global_id)
+                {
+                    target.set_value(value);
+                }
+            }
+            (
+                RuntimeDataBindGraphTarget::Color { global_id },
+                RuntimeDataBindGraphValue::Color(value),
+            ) => {
+                if let Some(target) = self
+                    .colors
+                    .iter_mut()
+                    .find(|target| target.global_id == *global_id)
+                {
+                    target.set_value(*value);
+                }
+            }
+            (
+                RuntimeDataBindGraphTarget::Enum { global_id },
+                RuntimeDataBindGraphValue::Enum(value),
+            ) => {
+                if let Some(target) = self
+                    .enums
+                    .iter_mut()
+                    .find(|target| target.global_id == *global_id)
+                {
+                    target.set_value(*value);
+                }
+            }
+            (
+                RuntimeDataBindGraphTarget::Asset { global_id },
+                RuntimeDataBindGraphValue::Asset(value),
+            ) => {
+                if let Some(target) = self
+                    .assets
+                    .iter_mut()
+                    .find(|target| target.global_id == *global_id)
+                {
+                    target.set_value(*value);
+                }
+            }
+            (
+                RuntimeDataBindGraphTarget::Artboard { global_id },
+                RuntimeDataBindGraphValue::Artboard(value),
+            ) => {
+                if let Some(target) = self
+                    .artboards
+                    .iter_mut()
+                    .find(|target| target.global_id == *global_id)
+                {
+                    target.set_value(*value);
+                }
+            }
+            (RuntimeDataBindGraphTarget::List { .. }, RuntimeDataBindGraphValue::List { .. }) => {
+                // C++ only applies list values to DataBindListItemConsumer targets.
+            }
+            (
+                RuntimeDataBindGraphTarget::List { global_id },
+                RuntimeDataBindGraphValue::Number(value),
+            ) => {
+                if let Some(target) = self
+                    .lists
+                    .iter_mut()
+                    .find(|target| target.global_id == *global_id)
+                {
+                    target.set_value(value.floor().max(0.0) as usize);
+                }
+            }
+            (
+                RuntimeDataBindGraphTarget::Trigger { global_id },
+                RuntimeDataBindGraphValue::Trigger(value),
+            ) => {
+                if let Some(target) = self
+                    .triggers
+                    .iter_mut()
+                    .find(|target| target.global_id == *global_id)
+                {
+                    target.set_value(*value);
+                }
+            }
+            (
+                RuntimeDataBindGraphTarget::ViewModel { global_id },
+                RuntimeDataBindGraphValue::ViewModel(value),
+            ) => {
+                if let Some(target) = self
+                    .view_models
+                    .iter_mut()
+                    .find(|target| target.global_id == *global_id)
+                {
+                    target.set_value(*value);
+                }
+            }
+            _ => {}
         }
     }
 }

@@ -45,14 +45,16 @@ pub use components::{
     TransformRuntimeState, UpdateComponentsReport,
 };
 use data_bind_graph::{
-    RuntimeDataBindGraph, RuntimeDataBindGraphApplyPhase, RuntimeDataBindGraphContextKind,
-    RuntimeDataBindGraphConverter, RuntimeDataBindGraphConverterState,
-    RuntimeDataBindGraphDefaultBinding, RuntimeDataBindGraphFormulaRandomSource,
-    RuntimeDataBindGraphFormulaToken, RuntimeDataBindGraphSourceHandle,
-    RuntimeDataBindGraphSourceNode, RuntimeDataBindGraphStatefulAdvance,
-    RuntimeDataBindGraphTarget, RuntimeDataBindGraphTargetHandle, RuntimeDataBindGraphTargetNode,
-    RuntimeDataBindGraphValue, RuntimeImportedViewModelContextKey,
-    RuntimeImportedViewModelOverrideKey,
+    DATA_BIND_FLAG_DIRECTION_TO_SOURCE, RuntimeDataBindGraph, RuntimeDataBindGraphApplyPhase,
+    RuntimeDataBindGraphContextKind, RuntimeDataBindGraphConverter,
+    RuntimeDataBindGraphConverterState, RuntimeDataBindGraphDefaultBinding,
+    RuntimeDataBindGraphFormulaRandomSource, RuntimeDataBindGraphFormulaToken,
+    RuntimeDataBindGraphSourceHandle, RuntimeDataBindGraphSourceNode,
+    RuntimeDataBindGraphStatefulAdvance, RuntimeDataBindGraphTarget,
+    RuntimeDataBindGraphTargetHandle, RuntimeDataBindGraphTargetNode,
+    RuntimeDataBindGraphTargetsMut, RuntimeDataBindGraphValue, RuntimeImportedViewModelContextKey,
+    RuntimeImportedViewModelOverrideKey, data_bind_flags_apply_source_to_target,
+    data_bind_flags_apply_target_to_source,
 };
 use objects::InstanceObjectArena;
 pub use objects::InstanceSlot;
@@ -4257,32 +4259,6 @@ fn sorted_drawable_uses_render_opacity(type_name: &str) -> bool {
 
 fn sorted_drawable_is_nested_artboard(type_name: &str) -> bool {
     definition_by_name(type_name).is_some_and(|definition| definition.is_a("NestedArtboard"))
-}
-
-const DATA_BIND_FLAG_DIRECTION_TO_SOURCE: u64 = 1 << 0;
-const DATA_BIND_FLAG_TWO_WAY: u64 = 1 << 1;
-
-fn data_bind_flags_apply_source_to_target(flags: u64) -> bool {
-    flags & DATA_BIND_FLAG_TWO_WAY != 0 || flags & DATA_BIND_FLAG_DIRECTION_TO_SOURCE == 0
-}
-
-fn data_bind_flags_apply_target_to_source(flags: u64) -> bool {
-    flags & DATA_BIND_FLAG_TWO_WAY != 0 || flags & DATA_BIND_FLAG_DIRECTION_TO_SOURCE != 0
-}
-
-struct RuntimeDataBindGraphTargetsMut<'a> {
-    numbers: &'a mut [StateMachineBindableNumberInstance],
-    integers: &'a mut [StateMachineBindableIntegerInstance],
-    booleans: &'a mut [StateMachineBindableBooleanInstance],
-    strings: &'a mut [StateMachineBindableStringInstance],
-    colors: &'a mut [StateMachineBindableColorInstance],
-    enums: &'a mut [StateMachineBindableEnumInstance],
-    assets: &'a mut [StateMachineBindableAssetInstance],
-    artboards: &'a mut [StateMachineBindableArtboardInstance],
-    lists: &'a mut [StateMachineBindableListInstance],
-    triggers: &'a mut [StateMachineBindableTriggerInstance],
-    view_models: &'a mut [StateMachineBindableViewModelInstance],
-    include_view_models: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -15798,153 +15774,6 @@ fn runtime_data_bind_graph_converter_starts_with_to_string(
             runtime_data_bind_graph_converter_starts_with_to_string(converters.first())
         }
         _ => false,
-    }
-}
-
-impl RuntimeDataBindGraphTargetsMut<'_> {
-    fn apply_default_view_model_binding(
-        &mut self,
-        target: &RuntimeDataBindGraphTarget,
-        value: &RuntimeDataBindGraphValue,
-    ) {
-        match (target, value) {
-            (
-                RuntimeDataBindGraphTarget::Number { global_id },
-                RuntimeDataBindGraphValue::Number(value),
-            ) => {
-                if let Some(target) = self
-                    .numbers
-                    .iter_mut()
-                    .find(|target| target.global_id == *global_id)
-                {
-                    target.set_value(*value);
-                }
-            }
-            (
-                RuntimeDataBindGraphTarget::Integer { global_id },
-                RuntimeDataBindGraphValue::SymbolListIndex(value),
-            ) => {
-                if let Some(target) = self
-                    .integers
-                    .iter_mut()
-                    .find(|target| target.global_id == *global_id)
-                {
-                    target.set_value(*value);
-                }
-            }
-            (
-                RuntimeDataBindGraphTarget::Boolean { global_id },
-                RuntimeDataBindGraphValue::Boolean(value),
-            ) => {
-                if let Some(target) = self
-                    .booleans
-                    .iter_mut()
-                    .find(|target| target.global_id == *global_id)
-                {
-                    target.set_value(*value);
-                }
-            }
-            (
-                RuntimeDataBindGraphTarget::String { global_id },
-                RuntimeDataBindGraphValue::String(value),
-            ) => {
-                if let Some(target) = self
-                    .strings
-                    .iter_mut()
-                    .find(|target| target.global_id == *global_id)
-                {
-                    target.set_value(value);
-                }
-            }
-            (
-                RuntimeDataBindGraphTarget::Color { global_id },
-                RuntimeDataBindGraphValue::Color(value),
-            ) => {
-                if let Some(target) = self
-                    .colors
-                    .iter_mut()
-                    .find(|target| target.global_id == *global_id)
-                {
-                    target.set_value(*value);
-                }
-            }
-            (
-                RuntimeDataBindGraphTarget::Enum { global_id },
-                RuntimeDataBindGraphValue::Enum(value),
-            ) => {
-                if let Some(target) = self
-                    .enums
-                    .iter_mut()
-                    .find(|target| target.global_id == *global_id)
-                {
-                    target.set_value(*value);
-                }
-            }
-            (
-                RuntimeDataBindGraphTarget::Asset { global_id },
-                RuntimeDataBindGraphValue::Asset(value),
-            ) => {
-                if let Some(target) = self
-                    .assets
-                    .iter_mut()
-                    .find(|target| target.global_id == *global_id)
-                {
-                    target.set_value(*value);
-                }
-            }
-            (
-                RuntimeDataBindGraphTarget::Artboard { global_id },
-                RuntimeDataBindGraphValue::Artboard(value),
-            ) => {
-                if let Some(target) = self
-                    .artboards
-                    .iter_mut()
-                    .find(|target| target.global_id == *global_id)
-                {
-                    target.set_value(*value);
-                }
-            }
-            (RuntimeDataBindGraphTarget::List { .. }, RuntimeDataBindGraphValue::List { .. }) => {
-                // C++ only applies list values to DataBindListItemConsumer targets.
-            }
-            (
-                RuntimeDataBindGraphTarget::List { global_id },
-                RuntimeDataBindGraphValue::Number(value),
-            ) => {
-                if let Some(target) = self
-                    .lists
-                    .iter_mut()
-                    .find(|target| target.global_id == *global_id)
-                {
-                    target.set_value(value.floor().max(0.0) as usize);
-                }
-            }
-            (
-                RuntimeDataBindGraphTarget::Trigger { global_id },
-                RuntimeDataBindGraphValue::Trigger(value),
-            ) => {
-                if let Some(target) = self
-                    .triggers
-                    .iter_mut()
-                    .find(|target| target.global_id == *global_id)
-                {
-                    target.set_value(*value);
-                }
-            }
-            (
-                RuntimeDataBindGraphTarget::ViewModel { global_id },
-                RuntimeDataBindGraphValue::ViewModel(value),
-            ) => {
-                if let Some(target) = self
-                    .view_models
-                    .iter_mut()
-                    .find(|target| target.global_id == *global_id)
-                {
-                    target.set_value(*value);
-                }
-            }
-            _ => {}
-        }
     }
 }
 

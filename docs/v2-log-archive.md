@@ -2022,3 +2022,10 @@ milestone entries are kept verbatim here. Newest milestone last.
   reports `exact=70`, `exact-segments=276`, `diverges=0`,
   `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
   passes.
+- 2026-07-03: [M2] Widened `clip_tests.riv` from samples `0`, `0.25`,
+  `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and `1.0`,
+  keeping animated clipping-shape playback exact across the fifth sample.
+  Exact segments are now 277 across 70 exact files; `make golden-compare`
+  reports `exact=70`, `exact-segments=277`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.

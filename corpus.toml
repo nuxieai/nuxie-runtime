@@ -14,8 +14,8 @@ id = "ai_assitant"
 path = "tests/unit_tests/assets/ai_assitant.riv"
 samples = [0.0]
 status = "unsupported-feature"
-milestone = "M5"
-features = ["type-key:16:PointsPath", "type-key:17:RadialGradient", "type-key:18:SolidColor", "type-key:19:GradientStop", "type-key:1:Artboard", "type-key:20:Fill", "type-key:22:LinearGradient", "type-key:23:Backboard", "type-key:24:Stroke", "type-key:2:Node", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:41:RootBone", "type-key:420:LayoutComponentStyle", "type-key:431:ViewModelPropertyNumber", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:43:Skin", "type-key:442:ViewModelInstanceNumber", "type-key:447:DataBindContext", "type-key:44:Tendon", "type-key:46:CubicWeight", "type-key:506:DashPath", "type-key:507:Dash", "type-key:533:Feather", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:5:StraightVertex", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:6:CubicDetachedVertex", "type-key:92:NestedArtboard", "type-key:95:NestedStateMachine", "rust-runner-unsupported:data-binding-nested-child"]
+milestone = "gated"
+features = ["type-key:16:PointsPath", "type-key:17:RadialGradient", "type-key:18:SolidColor", "type-key:19:GradientStop", "type-key:1:Artboard", "type-key:20:Fill", "type-key:22:LinearGradient", "type-key:23:Backboard", "type-key:24:Stroke", "type-key:2:Node", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:41:RootBone", "type-key:420:LayoutComponentStyle", "type-key:431:ViewModelPropertyNumber", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:43:Skin", "type-key:442:ViewModelInstanceNumber", "type-key:447:DataBindContext", "type-key:44:Tendon", "type-key:46:CubicWeight", "type-key:506:DashPath", "type-key:507:Dash", "type-key:533:Feather", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:5:StraightVertex", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:6:CubicDetachedVertex", "type-key:92:NestedArtboard", "type-key:95:NestedStateMachine", "rust-runner-unsupported:feather"]
 
 [[file]]
 id = "align_target"
@@ -114,9 +114,8 @@ features = ["type-key:106:FileAssetContents", "type-key:134:Text", "type-key:135
 id = "bidirectional_precedence"
 path = "tests/unit_tests/assets/bidirectional_precedence.riv"
 samples = [0.0]
-status = "unsupported-feature"
-milestone = "M5"
-features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:431:ViewModelPropertyNumber", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:442:ViewModelInstanceNumber", "type-key:447:DataBindContext", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle", "rust-runner-unsupported:data-binding-transform"]
+status = "exact"
+features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:420:LayoutComponentStyle", "type-key:431:ViewModelPropertyNumber", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:442:ViewModelInstanceNumber", "type-key:447:DataBindContext", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle"]
 
 [[file]]
 id = "bindable_artboard_child"

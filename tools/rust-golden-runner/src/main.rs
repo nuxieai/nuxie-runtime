@@ -684,8 +684,7 @@ fn ensure_static_draw_supported_for_artboard(
     if let Some(data_bind) = artboard.data_binds.iter().find(|data_bind| {
         data_bind.target_type_name == Some("Shape")
             && matches!(data_bind.property_key, 13 | 14)
-            && (data_bind.converter_global.is_none()
-                || matches!(data_bind.converter_type_name, Some("DataConverterGroup"))
+            && (matches!(data_bind.converter_type_name, Some("DataConverterGroup"))
                 // `interpolation_zero_duration.riv` authors 0.0001s here;
                 // park that M5 transform-bind path without catching default
                 // duration interpolators that are already sample-0 exact.
@@ -847,9 +846,12 @@ fn nested_child_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> boo
     if data_bind.target_type_name == Some("SolidColor") {
         return true;
     }
-    data_bind.target_type_name == Some("Ellipse")
+    (data_bind.target_type_name == Some("Ellipse")
         && matches!(data_bind.property_key, 20 | 21)
-        && data_bind.converter_global.is_none()
+        && data_bind.converter_global.is_none())
+        || (data_bind.target_type_name == Some("RootBone")
+            && matches!(data_bind.property_key, 90 | 91)
+            && data_bind.converter_global.is_none())
 }
 
 fn nested_artboard_host_control_data_bind<'a>(

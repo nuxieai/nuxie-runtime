@@ -558,6 +558,13 @@ fn ensure_static_draw_supported_for_artboard(
             .iter()
             .find(|data_bind| !nested_child_data_bind_supported(data_bind))
         {
+            if nested_child_data_bind_is_text(data_bind) {
+                bail!(
+                    "unsupported: text in Rust golden runner (nested child data bind global {} target {:?})",
+                    data_bind.global_id,
+                    data_bind.target_type_name
+                );
+            }
             bail!(
                 "unsupported: data-binding-nested-child in Rust golden runner (data bind global {} target {:?})",
                 data_bind.global_id,
@@ -861,6 +868,13 @@ fn direct_solid_color_data_bind_supported(data_bind: &rive_graph::DataBindNode) 
     // SolidColorBase::colorValuePropertyKey in C++ generated/shapes/paint/solid_color_base.hpp.
     const SOLID_COLOR_VALUE_PROPERTY_KEY: u64 = 37;
     data_bind.property_key == SOLID_COLOR_VALUE_PROPERTY_KEY && data_bind.converter_global.is_none()
+}
+
+fn nested_child_data_bind_is_text(data_bind: &rive_graph::DataBindNode) -> bool {
+    matches!(
+        data_bind.target_type_name,
+        Some("Text" | "TextValueRun" | "TextStylePaint")
+    )
 }
 
 fn nested_artboard_host_control_data_bind<'a>(

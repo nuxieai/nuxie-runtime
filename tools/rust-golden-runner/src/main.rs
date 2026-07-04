@@ -11,6 +11,8 @@ use std::env;
 use std::path::{Path, PathBuf};
 
 const TIME_EPSILON: f32 = 0.000001;
+const DATA_BIND_FLAG_DIRECTION_TO_SOURCE: u64 = 1 << 0;
+const DATA_BIND_FLAG_TWO_WAY: u64 = 1 << 1;
 
 fn main() {
     match run() {
@@ -679,11 +681,10 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
-    if let Some(data_bind) = artboard
-        .data_binds
-        .iter()
-        .find(|data_bind| data_bind.target_type_name == Some("CustomPropertyEnum"))
-    {
+    if let Some(data_bind) = artboard.data_binds.iter().find(|data_bind| {
+        data_bind.target_type_name == Some("CustomPropertyEnum")
+            && !custom_property_enum_data_bind_supported(data_bind)
+    }) {
         bail!(
             "unsupported: data-binding-custom-property-enum in Rust golden runner (data bind global {} target global {:?})",
             data_bind.global_id,
@@ -868,6 +869,16 @@ fn direct_solid_color_data_bind_supported(data_bind: &rive_graph::DataBindNode) 
     // SolidColorBase::colorValuePropertyKey in C++ generated/shapes/paint/solid_color_base.hpp.
     const SOLID_COLOR_VALUE_PROPERTY_KEY: u64 = 37;
     data_bind.property_key == SOLID_COLOR_VALUE_PROPERTY_KEY && data_bind.converter_global.is_none()
+}
+
+fn custom_property_enum_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> bool {
+    // CustomPropertyEnumBase::propertyValuePropertyKey in C++ generated/custom_property_enum_base.hpp.
+    const CUSTOM_PROPERTY_ENUM_VALUE_PROPERTY_KEY: u64 = 872;
+    let target_to_source = data_bind.flags & DATA_BIND_FLAG_TWO_WAY != 0
+        || data_bind.flags & DATA_BIND_FLAG_DIRECTION_TO_SOURCE != 0;
+    data_bind.property_key == CUSTOM_PROPERTY_ENUM_VALUE_PROPERTY_KEY
+        && data_bind.converter_global.is_none()
+        && target_to_source
 }
 
 fn nested_child_data_bind_is_text(data_bind: &rive_graph::DataBindNode) -> bool {

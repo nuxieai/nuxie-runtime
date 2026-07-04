@@ -1353,3 +1353,30 @@ milestone entries are kept verbatim here. Newest milestone last.
   `make golden-compare` reports `exact=70`, `exact-segments=178`,
   `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
   `cargo test --workspace` passes.
+- 2026-07-03: [M2] Widened `remove_from_list.riv` from samples `0` and
+  `0.25` to samples `0`, `0.25`, and `0.5`, keeping passive
+  text/list/scripted-drawable playback exact before M4/M5/M6 list,
+  data-binding, and scripting work. Exact segments are now 179 across 70
+  exact files; `make golden-compare` reports `exact=70`,
+  `exact-segments=179`, `diverges=0`, `unsupported-feature=225`, `not-yet=0`,
+  and `cargo test --workspace` passes.
+- 2026-07-03: [M2] Widened `rocket.riv` from samples `0` and `0.25` to
+  samples `0`, `0.25`, and `0.5`, keeping animated vector/gradient playback
+  exact across the wider sample set. Exact segments are now 180 across 70
+  exact files; `make golden-compare` reports `exact=70`,
+  `exact-segments=180`, `diverges=0`, `unsupported-feature=225`, `not-yet=0`,
+  and `cargo test --workspace` passes.
+- 2026-07-03: [M2] Widened `script_paths_opacity_test.riv` from samples `0`
+  and `0.25` to samples `0`, `0.25`, and `0.5`, keeping passive
+  scripted-drawable opacity/keyed-double playback exact before M6 scripting
+  work. Exact segments are now 181 across 70 exact files;
+  `make golden-compare` reports `exact=70`, `exact-segments=181`,
+  `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
+  `cargo test --workspace` passes.
+- 2026-07-03: [M2] Widened `script_paths_test.riv` from samples `0` and
+  `0.25` to samples `0`, `0.25`, and `0.5`, keeping passive
+  scripted-drawable/keyed-double playback exact before M6 scripting work.
+  Exact segments are now 182 across 70 exact files; `make golden-compare`
+  reports `exact=70`, `exact-segments=182`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.

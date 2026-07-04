@@ -1858,3 +1858,10 @@ milestone entries are kept verbatim here. Newest milestone last.
   `make golden-compare` reports `exact=70`, `exact-segments=252`,
   `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
   `cargo test --workspace` passes.
+- 2026-07-03: [M2] Widened `settler.riv` from samples `0`, `0.25`, and
+  `0.5` to samples `0`, `0.25`, `0.5`, and `0.75`, keeping CubicEase keyed
+  double animation playback exact across the wider sample set. Exact segments
+  are now 253 across 70 exact files; `make golden-compare` reports
+  `exact=70`, `exact-segments=253`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.

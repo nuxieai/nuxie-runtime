@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 292 across 70 exact files
+- Exact segments (file × sample): 293 across 70 exact files
 - Parked breakdown (from `make golden-compare`): M3=21 M4=83 M5=8 M6=72 gated=5 harness=36
 - Current milestone: **M2 — Animated Playback Exact + Real Object Model (#V2-3)**
 
@@ -24,8 +24,8 @@ the only memory the next session has. Update it every commit.
 
 1. The fourth-sample exact widening queue is exhausted. Continue the
    fifth-sample M2 sweep over exact entries with samples `0`, `0.25`, `0.5`,
-   and `0.75`, starting after `hit_test_solos.riv` (next candidate:
-   `joel_signed.riv`),
+   and `0.75`, starting after `joel_signed.riv` (next candidate:
+   `joystick_flag_test.riv`),
    and stop on the first real divergence to localize runtime code.
 2. Continue M2 real object model work by modularizing the remaining runtime
    surfaces out of `lib.rs` while keeping generated `InstanceObjectStorage` as
@@ -175,13 +175,6 @@ the only memory the next session has. Update it every commit.
   under `M2 active log rolloff`; keep only the recent rolling window here once
   Metric, Next, Decisions, and `corpus.toml` capture the current state.
 
-- 2026-07-03: [M2] Widened `settler.riv` from samples `0`, `0.25`, and
-  `0.5` to samples `0`, `0.25`, `0.5`, and `0.75`, keeping CubicEase keyed
-  double animation playback exact across the wider sample set. Exact segments
-  are now 253 across 70 exact files; `make golden-compare` reports
-  `exact=70`, `exact-segments=253`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
 - 2026-07-03: [M2] Widened `solo_test.riv` from samples `0`, `0.25`, and
   `0.5` to samples `0`, `0.25`, `0.5`, and `0.75`, keeping Solo
   active-child state-machine playback exact across the wider sample set. Exact
@@ -459,5 +452,13 @@ the only memory the next session has. Update it every commit.
   fifth sample while leaving scripted pointer dispatch in M3 scope. Exact
   segments are now 292 across 70 exact files; `make golden-compare` reports
   `exact=70`, `exact-segments=292`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+- 2026-07-03: [M2] Widened `joel_signed.riv` from samples `0`, `0.25`,
+  `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and `1.0`,
+  keeping the large signed-Joel skin, constraint, direct-blend animation, and
+  passive listener/data-bind fixture exact across the fifth sample. Exact
+  segments are now 293 across 70 exact files; `make golden-compare` reports
+  `exact=70`, `exact-segments=293`, `diverges=0`,
   `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
   passes.

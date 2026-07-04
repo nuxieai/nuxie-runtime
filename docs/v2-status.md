@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 433 across 112 exact files
-- Parked breakdown (from `make golden-compare`): M4=53 M5=8 M6=80 gated=6 harness=36
+- Exact segments (file × sample): 434 across 113 exact files
+- Parked breakdown (from `make golden-compare`): M4=52 M5=8 M6=80 gated=6 harness=36
 - Current milestone: **M4 — Nested Artboards And Lists Exact (#V2-5)**
 
 ## Milestones
@@ -25,7 +25,10 @@ the only memory the next session has. Update it every commit.
 1. Continue M4 with the smallest remaining pure nested-artboard runtime slice.
    Query the queue with `grep -B6 'milestone = "M4"' corpus.toml`; the raw
    queue now starts with `ai_assitant.riv`, but that file carries skin/mesh/
-   feather-ish complexity and should wait for a narrower entry point.
+   feather-ish complexity and should wait for a narrower entry point. Nested
+   reported-event bubbling is closed for `nested_event_test.riv`; prefer the
+   next file whose first failing diagnostic names a single nested host/list
+   behavior instead of pulling M5 data binding or M6 text/layout forward.
 2. Nested remap with runtime `DrawTarget` placement is closed for
    `death_knight.riv` at sample `0.0`: draw order now reads active
    `DrawRules.drawTargetId` / `DrawTarget.placementValue` during draw,
@@ -53,6 +56,7 @@ the only memory the next session has. Update it every commit.
    `nested_needs_advance.riv`, `scripted_listener_context.riv`,
    `pointer_events_nested_artboards_in_solos.riv`,
    `nested_artboard_quantize_and_speed.riv`,
+   `nested_event_test.riv`,
    `death_knight.riv`,
    `scripting_root_viewmodel.riv`, `solid_affects_has_changed.riv`,
    `target_event.riv`, and `transition_self_comparator_test.riv`.
@@ -99,14 +103,16 @@ the only memory the next session has. Update it every commit.
   plumbing, runtime `DrawTarget` placement sorting from active `DrawRules`,
   serialized nested host speed/quantize local elapsed, generated
   source-to-target nested host `isPaused`/`speed`/`quantize` default binding,
-  plus per-host nested paint caches for repeated child instances under
-  Solo-owned hosts.
+  per-host nested paint caches for repeated child instances under Solo-owned
+  hosts, and nested state-machine reported-event bubbling into parent event
+  listeners.
   Custom handle-source world-space math, data-bound nested host controls beyond
   generated defaults
   (`artboardId` runtime swaps and external/live pause/speed/quantize
   mutation), nested child non-color data-bind targets, focus data, bound
-  stateful child view-model propagation, nested listener/event propagation,
-  `NestedArtboardLayout` / `NestedArtboardLeaf`, and
+  stateful child view-model propagation, nested pointer/listener hit
+  propagation beyond reported `Event` listeners, `NestedArtboardLayout` /
+  `NestedArtboardLeaf`, and
   layout-backed or virtualized component-list instancing are still not
   supported.
   Golden runner sample lists now advance by sorted absolute-time deltas and
@@ -357,3 +363,12 @@ the only memory the next session has. Update it every commit.
   golden-compare` reports `exact=112`, `exact-segments=433`, `diverges=0`,
   `unsupported-feature=183`, `not-yet=0`, and parked
   `M4=53 M5=8 M6=80 gated=6 harness=36`; `cargo test --workspace` passes.
+- 2026-07-04: [M4] Ported nested reported-event bubbling from C++
+  `StateMachineInstance::notifyEventListeners`/`nestedEventListeners`: child
+  state-machine reported events are collected during nested host advancement,
+  parent event listeners no longer require hit paths, and parent listener
+  actions settle with a zero-time advance only when a nested event actually
+  changes the root state machine. Promoted `nested_event_test.riv` to exact.
+  `make golden-compare` reports `exact=113`, `exact-segments=434`,
+  `diverges=0`, `unsupported-feature=182`, `not-yet=0`, and parked
+  `M4=52 M5=8 M6=80 gated=6 harness=36`; `cargo test --workspace` passes.

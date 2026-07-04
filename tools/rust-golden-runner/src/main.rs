@@ -374,8 +374,12 @@ fn advance_scene_to(
     let elapsed_seconds = (target_seconds - *current_seconds).max(0.0);
     if let Some(state_machine) = state_machine {
         instance.advance_state_machine_instance(state_machine, elapsed_seconds);
+        if instance.advance_nested_artboards_with_state_machine(elapsed_seconds, state_machine) {
+            instance.advance_state_machine_instance(state_machine, 0.0);
+        }
+    } else {
+        instance.advance_nested_artboards(elapsed_seconds);
     }
-    instance.advance_nested_artboards(elapsed_seconds);
     instance.advance_artboard_data_binds();
     instance.update_pass();
     *current_seconds = target_seconds;
@@ -561,7 +565,9 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
-    if let Some(child_global) = nested_listener_propagation_child_global(graph, artboard) {
+    if let Some(child_global) =
+        nested_unsupported_listener_propagation_child_global(runtime, graph, artboard)
+    {
         bail!(
             "unsupported: nested artboards in Rust golden runner (listener propagation to nested child global {child_global})"
         );
@@ -845,7 +851,8 @@ fn nested_artboard_host_control_data_bind<'a>(
     })
 }
 
-fn nested_listener_propagation_child_global(
+fn nested_unsupported_listener_propagation_child_global(
+    runtime: &RuntimeFile,
     graph: &GraphFile,
     artboard: &ArtboardGraph,
 ) -> Option<u32> {
@@ -857,6 +864,9 @@ fn nested_listener_propagation_child_global(
 
     for state_machine in &artboard.state_machines {
         for listener in &state_machine.listeners {
+            if state_machine_listener_has_event_type(runtime, artboard, listener) {
+                continue;
+            }
             let Ok(target_id) = usize::try_from(listener.target_id) else {
                 continue;
             };
@@ -878,6 +888,37 @@ fn nested_listener_propagation_child_global(
     }
 
     None
+}
+
+fn state_machine_listener_has_event_type(
+    runtime: &RuntimeFile,
+    artboard: &ArtboardGraph,
+    listener: &rive_graph::StateMachineListenerGraph,
+) -> bool {
+    let Some(listener_object) = runtime.object(listener.global_id as usize) else {
+        return false;
+    };
+    if listener_object.type_name == "StateMachineListenerSingle" {
+        return listener_object.uint_property("listenerTypeValue") == Some(5);
+    }
+
+    let Some(listener_local) = artboard
+        .local_objects
+        .iter()
+        .find(|object| object.global_id == listener.global_id)
+        .map(|object| object.local_id)
+    else {
+        return false;
+    };
+
+    artboard.local_objects.iter().any(|object| {
+        let Some(runtime_object) = runtime.object(object.global_id as usize) else {
+            return false;
+        };
+        runtime_object.uint_property("parentId") == Some(listener_local as u64)
+            && (runtime_object.type_name == "ListenerInputTypeEvent"
+                || runtime_object.uint_property("listenerTypeValue") == Some(5))
+    })
 }
 
 fn artboard_has_state_machine_listeners(artboard: &ArtboardGraph) -> bool {

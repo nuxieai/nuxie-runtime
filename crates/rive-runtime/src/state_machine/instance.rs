@@ -285,9 +285,7 @@ impl StateMachineInstance {
             if listener_hit && (click_action || direct_action || hover_action.is_some()) {
                 hit = true;
             }
-            if action_type.is_some()
-                && self.perform_pointer_listener_actions(&listener.listener_actions)
-            {
+            if action_type.is_some() && self.perform_listener_actions(&listener.listener_actions) {
                 self.needs_advance = true;
             }
         }
@@ -338,9 +336,7 @@ impl StateMachineInstance {
             if listener_hit && (click_matched || direct_action || hover_action.is_some()) {
                 hit = true;
             }
-            if action_type.is_some()
-                && self.perform_pointer_listener_actions(&listener.listener_actions)
-            {
+            if action_type.is_some() && self.perform_listener_actions(&listener.listener_actions) {
                 self.needs_advance = true;
             }
         }
@@ -390,13 +386,48 @@ impl StateMachineInstance {
             if listener_hit && (direct_action || hover_action.is_some()) {
                 hit = true;
             }
-            if action_type.is_some()
-                && self.perform_pointer_listener_actions(&listener.listener_actions)
-            {
+            if action_type.is_some() && self.perform_listener_actions(&listener.listener_actions) {
                 self.needs_advance = true;
             }
         }
         hit
+    }
+
+    pub(crate) fn notify_events(
+        &mut self,
+        artboard: &ArtboardInstance,
+        source_local_id: Option<usize>,
+        events: &[StateMachineReportedEvent],
+    ) -> bool {
+        if events.is_empty() {
+            return false;
+        }
+        let Some(state_machine) = artboard.state_machine(self.state_machine_index) else {
+            return false;
+        };
+
+        let mut changed = false;
+        for listener in &state_machine.listeners {
+            if !listener.has_listener(RuntimeListenerType::Event) {
+                continue;
+            }
+            if source_local_id
+                .is_some_and(|source_local_id| listener.target_local_id != source_local_id)
+            {
+                continue;
+            }
+            if events.iter().any(|event| {
+                listener
+                    .event_local_indices
+                    .contains(&event.event_local_index())
+            }) {
+                changed |= self.perform_listener_actions(&listener.listener_actions);
+            }
+        }
+        if changed {
+            self.needs_advance = true;
+        }
+        changed
     }
 
     fn update_pointer_listener_hover(
@@ -435,7 +466,7 @@ impl StateMachineInstance {
         }
     }
 
-    fn perform_pointer_listener_actions(
+    fn perform_listener_actions(
         &mut self,
         listener_actions: &[RuntimeScheduledListenerAction],
     ) -> bool {

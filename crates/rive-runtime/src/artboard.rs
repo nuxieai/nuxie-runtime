@@ -482,6 +482,29 @@ impl ArtboardInstance {
     }
 
     pub fn advance_nested_artboards(&mut self, elapsed_seconds: f32) -> bool {
+        let mut ignored_events = Vec::new();
+        self.advance_nested_artboards_collect_events(elapsed_seconds, &mut ignored_events)
+    }
+
+    pub fn advance_nested_artboards_with_state_machine(
+        &mut self,
+        elapsed_seconds: f32,
+        state_machine: &mut StateMachineInstance,
+    ) -> bool {
+        let mut nested_events = Vec::new();
+        self.advance_nested_artboards_collect_events(elapsed_seconds, &mut nested_events);
+        let mut notified_state_machine = false;
+        for (host_local, events) in nested_events {
+            notified_state_machine |= state_machine.notify_events(self, Some(host_local), &events);
+        }
+        notified_state_machine
+    }
+
+    fn advance_nested_artboards_collect_events(
+        &mut self,
+        elapsed_seconds: f32,
+        nested_events: &mut Vec<(usize, Vec<StateMachineReportedEvent>)>,
+    ) -> bool {
         let host_locals = self.nested_artboards.keys().copied().collect::<Vec<_>>();
         let mut changed = false;
         for host_local in host_locals {
@@ -491,14 +514,18 @@ impl ArtboardInstance {
             {
                 continue;
             }
+            let mut reported_events = Vec::new();
             let nested_needs_update = self
                 .nested_artboards
                 .get_mut(&host_local)
                 .map(|nested| {
-                    nested.advance(elapsed_seconds)
+                    nested.advance(elapsed_seconds, &mut reported_events)
                         || nested.child.has_dirt(ComponentDirt::COMPONENTS)
                 })
                 .unwrap_or(false);
+            if !reported_events.is_empty() {
+                nested_events.push((host_local, reported_events));
+            }
             if nested_needs_update {
                 changed = true;
                 self.add_dirt(host_local, ComponentDirt::COMPONENTS, false);
@@ -1231,7 +1258,11 @@ impl ArtboardInstance {
 }
 
 impl RuntimeNestedArtboardInstance {
-    fn advance(&mut self, elapsed_seconds: f32) -> bool {
+    fn advance(
+        &mut self,
+        elapsed_seconds: f32,
+        reported_events: &mut Vec<StateMachineReportedEvent>,
+    ) -> bool {
         if self.is_paused {
             return false;
         }
@@ -1243,7 +1274,7 @@ impl RuntimeNestedArtboardInstance {
 
         let mut changed = false;
         for animation in &mut self.animations {
-            changed |= animation.advance(&mut self.child, local_elapsed_seconds);
+            changed |= animation.advance(&mut self.child, local_elapsed_seconds, reported_events);
         }
         changed |= self.child.advance_nested_artboards(local_elapsed_seconds);
         changed
@@ -1325,7 +1356,12 @@ impl RuntimeNestedArtboardInstance {
 }
 
 impl RuntimeNestedAnimationInstance {
-    fn advance(&mut self, child: &mut ArtboardInstance, elapsed_seconds: f32) -> bool {
+    fn advance(
+        &mut self,
+        child: &mut ArtboardInstance,
+        elapsed_seconds: f32,
+        reported_events: &mut Vec<StateMachineReportedEvent>,
+    ) -> bool {
         match self {
             Self::Simple {
                 animation,
@@ -1350,7 +1386,13 @@ impl RuntimeNestedAnimationInstance {
                 child.apply_linear_animation_instance(animation, *mix)
             }
             Self::StateMachine { state_machine, .. } => {
-                child.advance_state_machine_instance(state_machine, elapsed_seconds)
+                let changed = child.advance_state_machine_instance(state_machine, elapsed_seconds);
+                for index in 0..state_machine.reported_event_count() {
+                    if let Some(event) = state_machine.reported_event(index) {
+                        reported_events.push(event.clone());
+                    }
+                }
+                changed
             }
         }
     }

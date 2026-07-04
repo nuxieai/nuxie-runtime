@@ -322,6 +322,7 @@ pub(crate) fn build_state_machines(
 pub(crate) struct RuntimeStateMachineListener {
     pub(crate) target_local_id: usize,
     pub(crate) listener_types: Vec<RuntimeListenerType>,
+    pub(crate) event_local_indices: Vec<usize>,
     pub(crate) hit_paths: Vec<RuntimeListenerHitPath>,
     pub(crate) listener_actions: Vec<RuntimeScheduledListenerAction>,
 }
@@ -462,20 +463,32 @@ fn runtime_state_machine_listener(
     let target_local_id = usize::try_from(listener.object.uint_property("targetId")?).ok()?;
     let listener_types = runtime_listener_types(listener)
         .into_iter()
-        .filter(|listener_type| listener_type.is_pointer_hit())
+        .filter(|listener_type| {
+            listener_type.is_pointer_hit() || *listener_type == RuntimeListenerType::Event
+        })
         .collect::<Vec<_>>();
     if listener_types.is_empty() {
         return None;
     }
 
-    let hit_paths = runtime_listener_hit_paths(graph, target_local_id);
-    if hit_paths.is_empty() {
-        return None;
-    }
+    let hit_paths = if listener_types
+        .iter()
+        .any(|listener_type| listener_type.is_pointer_hit())
+    {
+        let hit_paths = runtime_listener_hit_paths(graph, target_local_id);
+        if hit_paths.is_empty() {
+            return None;
+        }
+        hit_paths
+    } else {
+        Vec::new()
+    };
+    let event_local_indices = runtime_listener_event_local_indices(listener);
 
     Some(RuntimeStateMachineListener {
         target_local_id,
         listener_types,
+        event_local_indices,
         hit_paths,
         listener_actions: listener
             .actions
@@ -510,6 +523,42 @@ fn runtime_listener_types(
         .iter()
         .map(|input_type| input_type.uint_property("listenerTypeValue").unwrap_or(0))
         .filter_map(RuntimeListenerType::from_value)
+        .collect()
+}
+
+fn runtime_listener_event_local_indices(
+    listener: &rive_binary::RuntimeStateMachineListener<'_>,
+) -> Vec<usize> {
+    if listener.object.type_name == "StateMachineListenerSingle" {
+        let listener_type = listener
+            .object
+            .uint_property("listenerTypeValue")
+            .and_then(RuntimeListenerType::from_value);
+        if listener_type != Some(RuntimeListenerType::Event) {
+            return Vec::new();
+        }
+        return listener
+            .object
+            .uint_property("eventId")
+            .and_then(|event_id| usize::try_from(event_id).ok())
+            .into_iter()
+            .collect();
+    }
+
+    listener
+        .listener_input_types
+        .iter()
+        .filter(|input_type| {
+            input_type
+                .uint_property("listenerTypeValue")
+                .and_then(RuntimeListenerType::from_value)
+                == Some(RuntimeListenerType::Event)
+        })
+        .filter_map(|input_type| {
+            input_type
+                .uint_property("eventId")
+                .and_then(|event_id| usize::try_from(event_id).ok())
+        })
         .collect()
 }
 

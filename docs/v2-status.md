@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 349 across 80 exact files
-- Parked breakdown (from `make golden-compare`): M3=9 M4=83 M5=8 M6=73 gated=6 harness=36
+- Exact segments (file × sample): 351 across 82 exact files
+- Parked breakdown (from `make golden-compare`): M3=7 M4=83 M5=8 M6=73 gated=6 harness=36
 - Current milestone: **M3 — Interactivity Exact (#V2-4)**
 
 ## Milestones
@@ -23,22 +23,22 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue M3 constraints. `DistanceConstraint`, `TranslationConstraint`,
-   `RotationConstraint`, `ScaleConstraint`, `TransformConstraint`, and plain
-   `FollowPathConstraint` now run from
+   `RotationConstraint`, `ScaleConstraint`, `TransformConstraint`, plain
+   `FollowPathConstraint`, and `IKConstraint` now run from
    `crates/rive-runtime/src/constraints.rs` after world-transform updates.
    `distance_constraint.riv`, `translation_constraint.riv`,
    `rotation_constraint.riv`, `scale_constraint.riv`,
    `transform_constraint.riv`, `follow_path.riv`,
    `follow_path_constraint.riv`, `follow_path_path_0_opacity.riv`,
-   `follow_path_solos.riv`, and `follow_path_with_0_opacity.riv` are exact.
-   The M3 parked queue has 9 files; query with
+   `follow_path_solos.riv`, `follow_path_with_0_opacity.riv`,
+   `complex_ik_dependency.riv`, and `two_bone_ik.riv` are exact. The M3
+   parked queue has 7 files; query with
    `grep -B6 'milestone = "M3"' corpus.toml`.
-2. Port the remaining M3 constraint families in corpus order:
-   IK/skin-dependent constraints (`two_bone_ik`, `complex_ik_dependency`),
-   then scroll/list constraint files (`component_list_1`,
-   `component_list_follow_path`, `component_list_follow_path_distance`,
-   `deterministic_mode`, `draw_index_list`, `virtualize_blendmode`). Keep
-   `follow_path_shapes` parked on its narrow
+2. Port the remaining M3 scroll/list constraint files in corpus order:
+   `component_list_1`, `component_list_follow_path`,
+   `component_list_follow_path_distance`, `deterministic_mode`,
+   `draw_index_list`, and `virtualize_blendmode`. Keep `follow_path_shapes`
+   parked on its narrow
    `rust-runner-unsupported:follow-path-star-shapes` precision diagnostic
    until the Star/parametric local path sampler is investigated.
 3. Remaining exact entries pinned to sample `0` are static M1 holdovers:
@@ -66,14 +66,15 @@ the only memory the next session has. Update it every commit.
   `TranslationConstraint` target/source/destination/min-max translation
   application, `RotationConstraint` compose/decompose rotation,
   `ScaleConstraint` compose/decompose scale, `TransformConstraint`
-  target-origin full-transform interpolation, and `FollowPathConstraint`
-  Shape/Path target sampling against runtime path geometry. Custom
-  handle-source world-space math and nested remap dependent advancement are
-  still not supported.
+  target-origin full-transform interpolation, `FollowPathConstraint`
+  Shape/Path target sampling against runtime path geometry, C++ Bone x/y
+  overrides, and `IKConstraint` FK-chain solving. Custom handle-source
+  world-space math and nested remap dependent advancement are still not
+  supported.
   Golden runner sample lists now advance by sorted absolute-time deltas and reuse render paths
   across samples;
-  no images, text, nested artboards, IK/scroll/list constraints, or
-  scripted input.
+  no images, text, nested artboards, scroll/list constraints, or scripted
+  input.
 - `TransformConstraint` currently covers the default empty
   `TransformComponent::constraintBounds()` path. Text/LayoutComponent
   constraint bounds remain parked behind their M6 text/layout diagnostics.
@@ -495,3 +496,12 @@ the only memory the next session has. Update it every commit.
   golden-compare` reports `exact=80`, `exact-segments=349`, `diverges=0`,
   `unsupported-feature=215`, `not-yet=0`, parked `M3=9`, and
   `cargo test --workspace` passes.
+- 2026-07-04: [M3] Ported `IKConstraint` from C++
+  `src/constraints/ik_constraint.cpp` plus the non-root Bone x/y override
+  from `src/bones/bone.cpp`, added runtime FK-chain solving for one-bone,
+  two-bone, and longer IK chains, narrowed the Rust golden-runner constraint
+  gate for IK, and promoted `complex_ik_dependency.riv` and
+  `two_bone_ik.riv` to exact. Exact segments are now 351 across 82 exact
+  files; `make golden-compare` reports `exact=82`,
+  `exact-segments=351`, `diverges=0`, `unsupported-feature=213`,
+  `not-yet=0`, parked `M3=7`, and `cargo test --workspace` passes.

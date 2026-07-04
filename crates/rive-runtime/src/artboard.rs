@@ -18,7 +18,10 @@ use crate::components::{
     AuthoredTransform, ComponentDirt, RuntimeComponent, RuntimeSolo, TransformProperty,
     UpdateComponentsReport, apply_initial_solo_collapses, build_runtime_solos,
 };
-use crate::constraints::{RuntimeFollowPathConstraint, build_runtime_follow_path_constraints};
+use crate::constraints::{
+    RuntimeFollowPathConstraint, RuntimeIkConstraint, build_runtime_follow_path_constraints,
+    build_runtime_ik_constraints,
+};
 use crate::data_bind_graph::RuntimeDataBindGraphValue;
 use crate::objects::{InstanceObjectArena, InstanceSlot};
 use crate::properties::{
@@ -44,6 +47,7 @@ pub struct ArtboardInstance {
     pub(crate) solos: Vec<RuntimeSolo>,
     pub(crate) joysticks: Vec<RuntimeJoystick>,
     pub(crate) follow_path_constraints: Vec<RuntimeFollowPathConstraint>,
+    pub(crate) ik_constraints: Vec<RuntimeIkConstraint>,
     pub(crate) joysticks_apply_before_update: bool,
     pub(crate) update_order: Vec<usize>,
     pub(crate) linear_animations: Vec<RuntimeLinearAnimation>,
@@ -114,6 +118,7 @@ impl ArtboardInstance {
         let linear_animations = build_linear_animations(file, graph, &slots);
         let joysticks = build_runtime_joysticks(graph, &linear_animations);
         let follow_path_constraints = build_runtime_follow_path_constraints(file, graph);
+        let ik_constraints = build_runtime_ik_constraints(file, graph);
         let state_machines = build_state_machines(file, graph, &linear_animations);
         let artboard_data_bind_values = build_artboard_default_view_model_values(file, graph);
         let artboard_custom_property_bindings =
@@ -135,6 +140,7 @@ impl ArtboardInstance {
             solos,
             joysticks,
             follow_path_constraints,
+            ik_constraints,
             joysticks_apply_before_update: graph.joysticks_apply_before_update,
             update_order,
             linear_animations,
@@ -442,13 +448,27 @@ impl ArtboardInstance {
     }
 
     pub(crate) fn authored_transform(&self, local_id: usize) -> AuthoredTransform {
+        let component = self.component(local_id);
+        let (x, y) = if component.is_some_and(|component| component.type_name == "Bone") {
+            (
+                component
+                    .and_then(|component| component.parent_local)
+                    .and_then(|parent_local| self.bone_length(parent_local))
+                    .unwrap_or(0.0),
+                0.0,
+            )
+        } else {
+            (
+                self.transform_property(local_id, TransformProperty::X)
+                    .unwrap_or_else(|| TransformProperty::X.default_value()),
+                self.transform_property(local_id, TransformProperty::Y)
+                    .unwrap_or_else(|| TransformProperty::Y.default_value()),
+            )
+        };
+
         AuthoredTransform {
-            x: self
-                .transform_property(local_id, TransformProperty::X)
-                .unwrap_or_else(|| TransformProperty::X.default_value()),
-            y: self
-                .transform_property(local_id, TransformProperty::Y)
-                .unwrap_or_else(|| TransformProperty::Y.default_value()),
+            x,
+            y,
             rotation: self
                 .transform_property(local_id, TransformProperty::Rotation)
                 .unwrap_or_else(|| TransformProperty::Rotation.default_value()),
@@ -462,6 +482,15 @@ impl ArtboardInstance {
                 .transform_property(local_id, TransformProperty::Opacity)
                 .unwrap_or_else(|| TransformProperty::Opacity.default_value()),
         }
+    }
+
+    pub(crate) fn bone_length(&self, local_id: usize) -> Option<f32> {
+        self.component(local_id).filter(|component| {
+            component.type_name == "Bone" || component.type_name == "RootBone"
+        })?;
+        self.objects
+            .double_property_by_name(local_id, "length")
+            .or(Some(0.0))
     }
 
     pub fn has_dirt(&self, dirt: ComponentDirt) -> bool {
@@ -895,6 +924,7 @@ mod tests {
             solos: Vec::new(),
             joysticks: Vec::new(),
             follow_path_constraints: Vec::new(),
+            ik_constraints: Vec::new(),
             joysticks_apply_before_update: true,
             update_order,
             linear_animations: Vec::new(),

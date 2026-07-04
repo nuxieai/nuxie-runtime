@@ -230,9 +230,8 @@ features = ["type-key:147:Solo", "type-key:18:SolidColor", "type-key:1:Artboard"
 id = "complex_ik_dependency"
 path = "tests/unit_tests/assets/complex_ik_dependency.riv"
 samples = [0.0]
-status = "unsupported-feature"
-milestone = "M3"
-features = ["type-key:16:PointsPath", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:2:Node", "type-key:3:Shape", "type-key:40:Bone", "type-key:41:RootBone", "type-key:43:Skin", "type-key:44:Tendon", "type-key:45:Weight", "type-key:5:StraightVertex", "type-key:81:IKConstraint", "rust-runner-unsupported:constraints"]
+status = "exact"
+features = ["type-key:16:PointsPath", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:2:Node", "type-key:3:Shape", "type-key:40:Bone", "type-key:41:RootBone", "type-key:43:Skin", "type-key:44:Tendon", "type-key:45:Weight", "type-key:5:StraightVertex", "type-key:81:IKConstraint"]
 
 [[file]]
 id = "component_based_conditions"
@@ -2151,9 +2150,8 @@ features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill",
 id = "two_bone_ik"
 path = "tests/unit_tests/assets/two_bone_ik.riv"
 samples = [0.0]
-status = "unsupported-feature"
-milestone = "M3"
-features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:2:Node", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:40:Bone", "type-key:41:RootBone", "type-key:4:Ellipse", "type-key:81:IKConstraint", "rust-runner-unsupported:constraints"]
+status = "exact"
+features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:2:Node", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:40:Bone", "type-key:41:RootBone", "type-key:4:Ellipse", "type-key:81:IKConstraint"]
 
 [[file]]
 id = "unbound_stateful_component"

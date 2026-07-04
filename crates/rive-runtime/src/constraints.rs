@@ -27,6 +27,26 @@ struct RuntimeFollowPathPath {
     geometry: PathGeometryNode,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeIkConstraint {
+    local_id: usize,
+    target_local: usize,
+    chain: Vec<RuntimeIkChainLink>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RuntimeIkChainLink {
+    bone_local: usize,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct IkChainState {
+    bone_index: usize,
+    parent_world_inverse: Mat2D,
+    transform_components: TransformComponents,
+    angle: f32,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TransformSpace {
     World,
@@ -115,6 +135,50 @@ pub(crate) fn build_runtime_follow_path_constraints(
         .collect()
 }
 
+pub(crate) fn build_runtime_ik_constraints(
+    file: &RuntimeFile,
+    graph: &ArtboardGraph,
+) -> Vec<RuntimeIkConstraint> {
+    graph
+        .local_objects
+        .iter()
+        .filter(|object| object.type_name == Some("IKConstraint"))
+        .filter_map(|object| {
+            let constraint = file.object(object.global_id as usize)?;
+            let tip_local = usize::try_from(constraint.uint_property("parentId")?).ok()?;
+            if !local_object_type(graph, tip_local).is_some_and(is_bone_type) {
+                return None;
+            }
+
+            let target_local = usize::try_from(constraint.uint_property("targetId")?).ok()?;
+            let mut reverse_chain = vec![tip_local];
+            let mut current_local = tip_local;
+            let mut remaining = constraint.uint_property("parentBoneCount").unwrap_or(0);
+            while remaining > 0 {
+                let Some(parent_local) = local_object_parent(file, graph, current_local) else {
+                    break;
+                };
+                if !local_object_type(graph, parent_local).is_some_and(is_bone_type) {
+                    break;
+                }
+                remaining -= 1;
+                reverse_chain.push(parent_local);
+                current_local = parent_local;
+            }
+            reverse_chain.reverse();
+
+            Some(RuntimeIkConstraint {
+                local_id: object.local_id,
+                target_local,
+                chain: reverse_chain
+                    .into_iter()
+                    .map(|bone_local| RuntimeIkChainLink { bone_local })
+                    .collect(),
+            })
+        })
+        .collect()
+}
+
 /// Runtime constraint application for the C++ `src/constraints/` path.
 pub(crate) fn apply_constraints(artboard: &mut ArtboardInstance, component_index: usize) -> bool {
     let constraint_locals = artboard.components[component_index]
@@ -154,6 +218,7 @@ fn apply_constraint(
         Some("FollowPathConstraint") => {
             apply_follow_path_constraint(artboard, component_index, constraint_local)
         }
+        Some("IKConstraint") => apply_ik_constraint(artboard, component_index, constraint_local),
         _ => false,
     }
 }
@@ -871,6 +936,244 @@ fn follow_path_constraint(
         .find(|constraint| constraint.local_id == constraint_local)
 }
 
+fn apply_ik_constraint(
+    artboard: &mut ArtboardInstance,
+    _component_index: usize,
+    constraint_local: usize,
+) -> bool {
+    // Ported from C++ `src/constraints/ik_constraint.cpp`.
+    let Some(runtime) = ik_constraint(artboard, constraint_local).cloned() else {
+        return false;
+    };
+    let Some(target_index) = artboard
+        .component_by_local
+        .get(&runtime.target_local)
+        .copied()
+    else {
+        return false;
+    };
+    if artboard.components[target_index].is_collapsed() {
+        return false;
+    }
+
+    let invert_direction = constraint_bool(
+        artboard,
+        constraint_local,
+        "IKConstraint",
+        "invertDirection",
+        false,
+    );
+    let world_target_translation =
+        world_translation(artboard.components[target_index].transform.world_transform);
+    let mut chain = Vec::new();
+    let mut changed = false;
+    for link in &runtime.chain {
+        let Some(bone_index) = artboard.component_by_local.get(&link.bone_local).copied() else {
+            continue;
+        };
+        let parent_world = parent_world_transform(artboard, bone_index);
+        let parent_world_inverse = parent_world.invert_or_identity();
+        let bone_transform = parent_world_inverse
+            .multiply(artboard.components[bone_index].transform.world_transform);
+        changed |= write_local_transform(artboard, bone_index, bone_transform);
+        chain.push(IkChainState {
+            bone_index,
+            parent_world_inverse,
+            transform_components: bone_transform.decompose(),
+            angle: 0.0,
+        });
+    }
+
+    match chain.len() {
+        0 => return changed,
+        1 => {
+            changed |= solve_ik1(artboard, &mut chain, 0, world_target_translation);
+        }
+        2 => {
+            changed |= solve_ik2(
+                artboard,
+                &mut chain,
+                0,
+                1,
+                world_target_translation,
+                invert_direction,
+            );
+        }
+        count => {
+            let tip_index = count - 1;
+            for index in 0..tip_index {
+                changed |= solve_ik2(
+                    artboard,
+                    &mut chain,
+                    index,
+                    tip_index,
+                    world_target_translation,
+                    invert_direction,
+                );
+                for child_index in (index + 1)..tip_index {
+                    let bone_index = chain[child_index].bone_index;
+                    chain[child_index].parent_world_inverse =
+                        parent_world_transform(artboard, bone_index).invert_or_identity();
+                }
+            }
+        }
+    }
+
+    let strength = constraint_double(artboard, constraint_local, "Constraint", "strength", 1.0);
+    if strength != 1.0 {
+        for index in 0..chain.len() {
+            let from_angle =
+                chain[index].transform_components.rotation % (std::f32::consts::PI * 2.0);
+            let to_angle = chain[index].angle % (std::f32::consts::PI * 2.0);
+            let mut diff = to_angle - from_angle;
+            if diff > std::f32::consts::PI {
+                diff -= std::f32::consts::PI * 2.0;
+            } else if diff < -std::f32::consts::PI {
+                diff += std::f32::consts::PI * 2.0;
+            }
+            changed |= constrain_ik_rotation(artboard, &chain[index], from_angle + diff * strength);
+        }
+    }
+
+    changed
+}
+
+fn solve_ik1(
+    artboard: &mut ArtboardInstance,
+    chain: &mut [IkChainState],
+    index: usize,
+    world_target_translation: (f32, f32),
+) -> bool {
+    let bone_index = chain[index].bone_index;
+    let p_a = world_translation(artboard.components[bone_index].transform.world_transform);
+    let to_target = (
+        world_target_translation.0 - p_a.0,
+        world_target_translation.1 - p_a.1,
+    );
+    let to_target_local = chain[index]
+        .parent_world_inverse
+        .transform_direction(to_target.0, to_target.1);
+    let rotation = point_atan2(to_target_local);
+    chain[index].angle = rotation;
+    constrain_ik_rotation(artboard, &chain[index], rotation)
+}
+
+fn solve_ik2(
+    artboard: &mut ArtboardInstance,
+    chain: &mut [IkChainState],
+    fk1_index: usize,
+    fk2_index: usize,
+    world_target_translation: (f32, f32),
+    invert_direction: bool,
+) -> bool {
+    let first_child_index = fk1_index + 1;
+    let b1_index = chain[fk1_index].bone_index;
+    let b2_index = chain[fk2_index].bone_index;
+    let first_child_bone_index = chain[first_child_index].bone_index;
+    let iworld = chain[fk1_index].parent_world_inverse;
+
+    let mut p_a = world_translation(artboard.components[b1_index].transform.world_transform);
+    let mut p_c = world_translation(
+        artboard.components[first_child_bone_index]
+            .transform
+            .world_transform,
+    );
+    let mut p_b = tip_world_translation(artboard, b2_index);
+    let mut p_bt = world_target_translation;
+
+    p_a = iworld.transform_point(p_a.0, p_a.1);
+    p_c = iworld.transform_point(p_c.0, p_c.1);
+    p_b = iworld.transform_point(p_b.0, p_b.1);
+    p_bt = iworld.transform_point(p_bt.0, p_bt.1);
+
+    let av = point_sub(p_b, p_c);
+    let bv = point_sub(p_c, p_a);
+    let cv = point_sub(p_bt, p_a);
+    let a = point_length(av);
+    let b = point_length(bv);
+    let c = point_length(cv);
+
+    let angle_a = ((-a * a + b * b + c * c) / (2.0 * b * c))
+        .clamp(-1.0, 1.0)
+        .acos();
+    let angle_c = ((a * a + b * b - c * c) / (2.0 * a * b))
+        .clamp(-1.0, 1.0)
+        .acos();
+
+    let (r1, r2) = if artboard.components[b2_index].parent_local
+        != Some(artboard.components[b1_index].local_id)
+    {
+        let second_child_index = fk1_index + 2;
+        let second_child_world_inverse = chain[second_child_index].parent_world_inverse;
+        let p_c_world = world_translation(
+            artboard.components[first_child_bone_index]
+                .transform
+                .world_transform,
+        );
+        let p_b_world = tip_world_translation(artboard, b2_index);
+        let av_local = second_child_world_inverse
+            .transform_direction(p_b_world.0 - p_c_world.0, p_b_world.1 - p_c_world.1);
+        let angle_correction = -point_atan2(av_local);
+        if invert_direction {
+            (
+                point_atan2(cv) - angle_a,
+                -angle_c + std::f32::consts::PI + angle_correction,
+            )
+        } else {
+            (
+                angle_a + point_atan2(cv),
+                angle_c - std::f32::consts::PI + angle_correction,
+            )
+        }
+    } else if invert_direction {
+        (point_atan2(cv) - angle_a, -angle_c + std::f32::consts::PI)
+    } else {
+        (angle_a + point_atan2(cv), angle_c - std::f32::consts::PI)
+    };
+
+    let mut changed = false;
+    changed |= constrain_ik_rotation(artboard, &chain[fk1_index], r1);
+    changed |= constrain_ik_rotation(artboard, &chain[first_child_index], r2);
+    if first_child_index != fk2_index {
+        let bone_index = chain[fk2_index].bone_index;
+        let parent_world = parent_world_transform(artboard, bone_index);
+        let local = artboard.components[bone_index].transform.local_transform;
+        changed |= write_world_transform(artboard, bone_index, parent_world.multiply(local));
+    }
+
+    chain[fk1_index].angle = r1;
+    chain[first_child_index].angle = r2;
+    changed
+}
+
+fn constrain_ik_rotation(
+    artboard: &mut ArtboardInstance,
+    state: &IkChainState,
+    rotation: f32,
+) -> bool {
+    let bone_index = state.bone_index;
+    let mut components = state.transform_components;
+    components.rotation = rotation;
+    let local_transform = Mat2D::compose(components);
+    let parent_world = parent_world_transform(artboard, bone_index);
+    write_local_world_transform(
+        artboard,
+        bone_index,
+        local_transform,
+        parent_world.multiply(local_transform),
+    )
+}
+
+fn ik_constraint(
+    artboard: &ArtboardInstance,
+    constraint_local: usize,
+) -> Option<&RuntimeIkConstraint> {
+    artboard
+        .ik_constraints
+        .iter()
+        .find(|constraint| constraint.local_id == constraint_local)
+}
+
 fn target_transform_for_transform_constraint(
     artboard: &ArtboardInstance,
     target_index: usize,
@@ -1183,6 +1486,55 @@ fn write_world_transform(
     true
 }
 
+fn write_local_transform(
+    artboard: &mut ArtboardInstance,
+    component_index: usize,
+    transform: Mat2D,
+) -> bool {
+    let local = &mut artboard.components[component_index]
+        .transform
+        .local_transform
+        .0;
+    if *local == transform.0 {
+        return false;
+    }
+    *local = transform.0;
+    true
+}
+
+fn write_local_world_transform(
+    artboard: &mut ArtboardInstance,
+    component_index: usize,
+    local_transform: Mat2D,
+    world_transform: Mat2D,
+) -> bool {
+    let local_changed = write_local_transform(artboard, component_index, local_transform);
+    let world_changed = write_world_transform(artboard, component_index, world_transform);
+    local_changed || world_changed
+}
+
+fn world_translation(transform: Mat2D) -> (f32, f32) {
+    (transform.0[4], transform.0[5])
+}
+
+fn tip_world_translation(artboard: &ArtboardInstance, bone_index: usize) -> (f32, f32) {
+    let bone = &artboard.components[bone_index];
+    let length = artboard.bone_length(bone.local_id).unwrap_or(0.0);
+    bone.transform.world_transform.transform_point(length, 0.0)
+}
+
+fn point_sub(left: (f32, f32), right: (f32, f32)) -> (f32, f32) {
+    (left.0 - right.0, left.1 - right.1)
+}
+
+fn point_length(point: (f32, f32)) -> f32 {
+    point.0.hypot(point.1)
+}
+
+fn point_atan2(point: (f32, f32)) -> f32 {
+    point.1.atan2(point.0)
+}
+
 fn targeted_constraint_target_local(
     artboard: &ArtboardInstance,
     constraint_local: usize,
@@ -1270,4 +1622,29 @@ fn constraint_uint(
     property_key_for_name(type_name, property_name)
         .and_then(|key| artboard.uint_property(local_id, key))
         .unwrap_or(default)
+}
+
+fn local_object_type(graph: &ArtboardGraph, local_id: usize) -> Option<&'static str> {
+    graph
+        .local_objects
+        .iter()
+        .find(|object| object.local_id == local_id)
+        .and_then(|object| object.type_name)
+}
+
+fn local_object_parent(
+    file: &RuntimeFile,
+    graph: &ArtboardGraph,
+    local_id: usize,
+) -> Option<usize> {
+    let global_id = graph
+        .local_objects
+        .iter()
+        .find(|object| object.local_id == local_id)?
+        .global_id;
+    usize::try_from(file.object(global_id as usize)?.uint_property("parentId")?).ok()
+}
+
+fn is_bone_type(type_name: &'static str) -> bool {
+    type_name == "Bone" || type_name == "RootBone"
 }

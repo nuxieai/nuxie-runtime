@@ -589,7 +589,7 @@ features = ["type-key:114:StateMachineListenerSingle", "type-key:18:SolidColor",
 [[file]]
 id = "draw_rule_cycle"
 path = "tests/unit_tests/assets/draw_rule_cycle.riv"
-samples = [0.0, 0.25, 0.5, 0.75]
+samples = [0.0, 0.25, 0.5, 0.75, 1.0]
 status = "exact"
 features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:28:CubicEaseInterpolator", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:48:DrawTarget", "type-key:49:DrawRules", "type-key:4:Ellipse", "type-key:50:KeyFrameId", "type-key:7:Rectangle"]
 

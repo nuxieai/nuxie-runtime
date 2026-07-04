@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 285 across 70 exact files
+- Exact segments (file × sample): 286 across 70 exact files
 - Parked breakdown (from `make golden-compare`): M3=21 M4=83 M5=8 M6=72 gated=5 harness=36
 - Current milestone: **M2 — Animated Playback Exact + Real Object Model (#V2-3)**
 
@@ -24,8 +24,8 @@ the only memory the next session has. Update it every commit.
 
 1. The fourth-sample exact widening queue is exhausted. Continue the
    fifth-sample M2 sweep over exact entries with samples `0`, `0.25`, `0.5`,
-   and `0.75`, starting after `dependency_test.riv` (next candidate:
-   `draw_rule_cycle.riv`),
+   and `0.75`, starting after `draw_rule_cycle.riv` (next candidate:
+   `event_on_listener.riv`),
    and stop on the first real divergence to localize runtime code.
 2. Continue M2 real object model work by modularizing the remaining runtime
    surfaces out of `lib.rs` while keeping generated `InstanceObjectStorage` as
@@ -175,13 +175,6 @@ the only memory the next session has. Update it every commit.
   under `M2 active log rolloff`; keep only the recent rolling window here once
   Metric, Next, Decisions, and `corpus.toml` capture the current state.
 
-- 2026-07-03: [M2] Widened `rocket.riv` from samples `0`, `0.25`, and `0.5`
-  to samples `0`, `0.25`, `0.5`, and `0.75`, keeping the richer
-  vector/gradient/clipping state-machine playback stream exact across the
-  wider sample set. Exact segments are now 246 across 70 exact files;
-  `make golden-compare` reports `exact=70`, `exact-segments=246`,
-  `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
-  `cargo test --workspace` passes.
 - 2026-07-03: [M2] Widened `script_paths_opacity_test.riv` from samples `0`,
   `0.25`, and `0.5` to samples `0`, `0.25`, `0.5`, and `0.75`, keeping
   passive scripted-drawable opacity playback exact across the wider sample
@@ -455,5 +448,12 @@ the only memory the next session has. Update it every commit.
   keeping the foundational vector dependency fixture exact across the fifth
   sample. Exact segments are now 285 across 70 exact files; `make
   golden-compare` reports `exact=70`, `exact-segments=285`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+- 2026-07-03: [M2] Widened `draw_rule_cycle.riv` from samples `0`,
+  `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
+  `1.0`, keeping animated draw-rule cycle playback exact across the fifth
+  sample. Exact segments are now 286 across 70 exact files; `make
+  golden-compare` reports `exact=70`, `exact-segments=286`, `diverges=0`,
   `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
   passes.

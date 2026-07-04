@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 200 across 70 exact files
+- Exact segments (file × sample): 201 across 70 exact files
 - Parked breakdown (from `make golden-compare`): M3=21 M4=83 M5=8 M6=72 gated=5 harness=36
 - Current milestone: **M2 — Animated Playback Exact + Real Object Model (#V2-3)**
 
@@ -369,3 +369,9 @@ the only memory the next session has. Update it every commit.
   `make golden-compare` reports `exact=70`, `exact-segments=200`,
   `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
   `cargo test --workspace` passes.
+- 2026-07-03: [M2] Widened `trim_path.riv` from samples `0` and `0.25` to
+  samples `0`, `0.25`, and `0.5`, keeping animated TrimPath vector playback
+  exact across the wider sample set. Exact segments are now 201 across 70
+  exact files; `make golden-compare` reports `exact=70`,
+  `exact-segments=201`, `diverges=0`, `unsupported-feature=225`,
+  `not-yet=0`, and `cargo test --workspace` passes.

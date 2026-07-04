@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 365 across 85 exact files
+- Exact segments (file × sample): 377 across 85 exact files
 - Parked breakdown (from `make golden-compare`): M4=83 M5=8 M6=77 gated=6 harness=36
 - Current milestone: **M3 — Interactivity Exact (#V2-4)**
 
@@ -29,13 +29,16 @@ the only memory the next session has. Update it every commit.
    `state_machine_triggers.riv`, `state_machine_transition.riv`,
    `light_switch.riv`, `event_on_listener.riv`,
    `event_trigger_event.riv`, `events_on_states.riv`, and
-   `bindable_artboard_child.riv`.
+   `bindable_artboard_child.riv`, all verified through sample `1.25`.
 2. Remaining unscripted exact listener/event candidates are
    `component_list_2.riv`, `component_list_follow_path.riv`,
    `component_list_grouped.riv`, `component_list_hit_order.riv`,
    `joel_signed.riv`, `lock_icon_demo.riv`,
    `solos_with_nested_artboards.riv`, `sound.riv`, `stateful_list_props.riv`,
    and `text_input_event.riv`.
+   `component_list_*` and `stateful_list_props.riv` are list/text/layout-heavy
+   despite passive exactness; only script them during M3 if a C++ probe shows
+   direct pointer-visible movement that does not require list or text runtime.
 3. `event_trigger_event.riv` has an exact primary rectangle click script at
    `129,101`; an alternate red-target click at `450,50` changes C++ colors
    while Rust stays passive, so do not widen that coordinate until listener
@@ -607,3 +610,13 @@ the only memory the next session has. Update it every commit.
   files; `make golden-compare` reports `exact=85`, `exact-segments=365`,
   `diverges=0`, `unsupported-feature=210`, `not-yet=0`, and
   `cargo test --workspace` passes.
+- 2026-07-04: [M3] Widened all 12 scripted direct-pointer corpus entries
+  from samples through `1.0` to samples through `1.25`, keeping direct
+  rectangle down/up, click, event, Solo, and listener-owned view-model trigger
+  paths exact after the interaction has more time to settle. Exact segments
+  are now 377 across 85 exact files; `make golden-compare` reports
+  `exact=85`, `exact-segments=377`, `diverges=0`,
+  `unsupported-feature=210`, and `not-yet=0`. C++ probes found no visible
+  render delta yet for `lock_icon_demo.riv` or `joel_signed.riv`; keep them in
+  the unscripted candidate list until a render-affecting coordinate or input
+  sequence is identified.

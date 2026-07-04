@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 439 across 118 exact files
-- Parked breakdown (from `make golden-compare`): M5=19 M6=115 gated=7 harness=36
+- Exact segments (file × sample): 441 across 120 exact files
+- Parked breakdown (from `make golden-compare`): M5=17 M6=115 gated=7 harness=36
 - Current milestone: **M5 — Data Binding Exact Incl. External View-Model Mutation (#V2-6)**
 
 ## Milestones
@@ -24,9 +24,10 @@ the only memory the next session has. Update it every commit.
 
 1. Continue M5 with the smallest data-binding slice that can move a corpus
    entry. Query the queue with `grep -B6 'milestone = "M5"' corpus.toml`;
-   the next manifest candidate is `collapsable_data_binding.riv`
-   (`data-binding-color`, no text/images/layout tags). Prefer a slice that
-   opens direct or nested color binding without pulling in converter groups.
+   the next manifest candidate is `component_stateful.riv`
+   (`data-binding-nested-child`). A direct Rust-runner probe currently reports
+   target `TextValueRun`; if that is really text runtime work, retag it to M6
+   and continue to `component_stateful_vm_instance_2.riv`.
 2. M4 is closed for the current corpus: `grep -B6 'milestone = "M4"'
    corpus.toml` is empty. The remaining formerly-M4 entries were probed with
    `rust-golden-runner` and moved to their first verified later blocker:
@@ -70,9 +71,9 @@ the only memory the next session has. Update it every commit.
   under plain nested hosts, nested child unbound SolidColor data-bind defaults,
   nested child Ellipse width/height and RootBone x/y source-to-target number
   binds backed by stateful child view-model values, direct no-converter Shape
-  x/y number binds, nested bool/number/trigger input proxying, and basic
-  nested remap-time host plumbing, runtime `DrawTarget` placement sorting from
-  active `DrawRules`,
+  x/y number binds, direct no-converter SolidColor `colorValue` color binds,
+  nested bool/number/trigger input proxying, and basic nested remap-time host
+  plumbing, runtime `DrawTarget` placement sorting from active `DrawRules`,
   serialized nested host speed/quantize local elapsed, generated
   source-to-target nested host `isPaused`/`speed`/`quantize` default binding,
   per-host nested paint caches for repeated child instances under Solo-owned
@@ -245,6 +246,7 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-04: [M5] Opened direct no-converter color binds: artboard `DataBindContext` source-to-target bindings now admit `FieldKind::Color` and apply `SolidColor.colorValue` through the runtime color setter, mirroring C++ `src/data_bind/context/context_value_color.cpp`. `collapsable_data_binding.riv` and `scripted_color.riv` are promoted to exact after direct C++/Rust stream comparison. `make golden-compare` reports `exact=120`, `exact-segments=441`, `diverges=0`, `unsupported-feature=175`, `not-yet=0`, and parked `M5=17 M6=115 gated=7 harness=36`; `cargo test --workspace` passes.
 - 2026-07-04: [M5] Opened no-converter transform binds: Rust now admits direct Shape x/y and nested child RootBone x/y DataBindContext number targets through the existing artboard property-binding path. `bidirectional_precedence.riv` is promoted to exact after direct C++/Rust stream comparison, and `ai_assitant.riv` is retagged from M5 to `gated` after the RootBone bind probe exposes the existing `feather` renderer diagnostic. `make golden-compare` reports `exact=118`, `exact-segments=439`, `diverges=0`, `unsupported-feature=177`, `not-yet=0`, and parked `M5=19 M6=115 gated=7 harness=36`; `cargo test --workspace` passes.
 - 2026-07-04: [M5] Ported stateful nested child number binding: artboard DataBindContext number sources now apply to double/uint targets, nested child artboards refresh Ellipse width/height from host stateful `ViewModelInstanceNumber` values after parent binds run, and `component_stateful_vm_instance.riv` is promoted to exact after direct C++/Rust stream comparison. `make golden-compare` reports `exact=117`, `exact-segments=438`, `diverges=0`, `unsupported-feature=178`, `not-yet=0`, and parked `M5=21 M6=115 gated=6 harness=36`; `cargo test --workspace` passes.
 - 2026-07-04: [M5] Opened live data-bound nested host pause: `NestedArtboard.isPaused` source-to-target binding now runs through the existing artboard nested-host binding path, and `pause_nested_artboard.riv` is promoted to exact after direct C++/Rust stream comparison. `make golden-compare` reports `exact=116`, `exact-segments=437`, `diverges=0`, `unsupported-feature=179`, `not-yet=0`, and parked `M5=22 M6=115 gated=6 harness=36`; `cargo test --workspace` passes.

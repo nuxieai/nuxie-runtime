@@ -167,9 +167,14 @@ pub(super) fn build_artboard_property_bindings(
             let target_local_id = data_bind.target_local_id?;
             let property_key =
                 u16::try_from(data_bind.object.uint_property("propertyKey")?).ok()?;
+            let Some(property_kind) =
+                rive_schema::core_registry_setter_field_kind_by_property_key(property_key)
+            else {
+                return None;
+            };
             if !matches!(
-                rive_schema::core_registry_setter_field_kind_by_property_key(property_key),
-                Some(FieldKind::Double | FieldKind::Uint)
+                property_kind,
+                FieldKind::Double | FieldKind::Uint | FieldKind::Color
             ) {
                 return None;
             }
@@ -182,7 +187,7 @@ pub(super) fn build_artboard_property_bindings(
                 .data_context_view_model_property_for_instance(default_instance.object, &path)
                 .and_then(|source| runtime_created_view_model_value_for_source(file, source))
                 .unwrap_or(RuntimeDataBindGraphValue::Number(0.0));
-            if !matches!(default_value, RuntimeDataBindGraphValue::Number(_)) {
+            if !artboard_property_binding_value_matches_kind(&default_value, property_kind) {
                 return None;
             }
 
@@ -195,6 +200,19 @@ pub(super) fn build_artboard_property_bindings(
             })
         })
         .collect()
+}
+
+fn artboard_property_binding_value_matches_kind(
+    value: &RuntimeDataBindGraphValue,
+    property_kind: FieldKind,
+) -> bool {
+    matches!(
+        (value, property_kind),
+        (
+            RuntimeDataBindGraphValue::Number(_),
+            FieldKind::Double | FieldKind::Uint
+        ) | (RuntimeDataBindGraphValue::Color(_), FieldKind::Color)
+    )
 }
 
 pub(super) fn build_artboard_nested_host_bindings(
@@ -555,19 +573,21 @@ impl ArtboardInstance {
             Some(converter) => runtime_data_bind_graph_convert_value(converter, value),
             None => Some(value.clone()),
         };
-        let Some(RuntimeDataBindGraphValue::Number(value)) = value else {
-            return false;
-        };
-        match self
-            .objects
-            .property_kind(binding.target_local_id, binding.property_key)
-        {
-            Some(FieldKind::Double) => {
+        match (
+            self.objects
+                .property_kind(binding.target_local_id, binding.property_key),
+            value,
+        ) {
+            (Some(FieldKind::Double), Some(RuntimeDataBindGraphValue::Number(value))) => {
                 self.set_double_property(binding.target_local_id, binding.property_key, value)
             }
-            Some(FieldKind::Uint) => {
+            (Some(FieldKind::Uint), Some(RuntimeDataBindGraphValue::Number(value))) => {
                 let rounded = if value < 0.0 { 0 } else { value.round() as u64 };
                 self.set_uint_property(binding.target_local_id, binding.property_key, rounded)
+            }
+            (Some(FieldKind::Color), Some(RuntimeDataBindGraphValue::Color(value))) => {
+                // Mirrors C++ src/data_bind/context/context_value_color.cpp.
+                self.set_color_property(binding.target_local_id, binding.property_key, value)
             }
             _ => false,
         }

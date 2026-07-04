@@ -659,7 +659,10 @@ fn ensure_static_draw_supported_for_artboard(
     if let Some(data_bind) = artboard
         .data_binds
         .iter()
-        .find(|data_bind| data_bind.target_type_name == Some("SolidColor"))
+        .find(|data_bind| {
+            data_bind.target_type_name == Some("SolidColor")
+                && !direct_solid_color_data_bind_supported(data_bind)
+        })
         .filter(|_| !is_nested_child)
     {
         bail!(
@@ -852,6 +855,12 @@ fn nested_child_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> boo
         || (data_bind.target_type_name == Some("RootBone")
             && matches!(data_bind.property_key, 90 | 91)
             && data_bind.converter_global.is_none())
+}
+
+fn direct_solid_color_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> bool {
+    // SolidColorBase::colorValuePropertyKey in C++ generated/shapes/paint/solid_color_base.hpp.
+    const SOLID_COLOR_VALUE_PROPERTY_KEY: u64 = 37;
+    data_bind.property_key == SOLID_COLOR_VALUE_PROPERTY_KEY && data_bind.converter_global.is_none()
 }
 
 fn nested_artboard_host_control_data_bind<'a>(

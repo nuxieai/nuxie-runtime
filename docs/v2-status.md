@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 355 across 85 exact files
+- Exact segments (file × sample): 358 across 85 exact files
 - Parked breakdown (from `make golden-compare`): M4=83 M5=8 M6=77 gated=6 harness=36
 - Current milestone: **M3 — Interactivity Exact (#V2-4)**
 
@@ -23,11 +23,13 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Widen scripted M3 coverage in corpus-priority order for exact listener/
-   pointer fixtures with visible render movement. `rapid_pointer_events.riv`
-   now has a render-affecting pointer script and is exact across six segments;
-   next try `hit_test_solos.riv`, `click_event.riv`, `opaque_hit_test.riv`,
-   and other simple shape-target listener files before reaching for later
-   runtime systems.
+   pointer fixtures with visible render movement. `pointer_events.riv`,
+   `rapid_pointer_events.riv`, `hit_test_solos.riv`, `click_event.riv`, and
+   `opaque_hit_test.riv` now have render-affecting pointer scripts; next try
+   simple exact listener files that still lack scripts:
+   `state_machine_triggers.riv`, `state_machine_transition.riv`,
+   `light_switch.riv`, `event_on_listener.riv`, `event_trigger_event.riv`,
+   `events_on_states.riv`, and `bindable_artboard_child.riv`.
 2. Port additional `ListenerGroup` semantics only when a widened script proves
    they are the blocking gap: hover/enter-exit state, click synthesis, drag
    state, opaque target ordering, nested/list/text/layout targets, and
@@ -569,5 +571,13 @@ the only memory the next session has. Update it every commit.
   `tests/input_scripts/rapid_pointer_events_click.txt` script. Exact segments
   are now 355 across 85 exact files; `make golden-compare` reports
   `exact=85`, `exact-segments=355`, `diverges=0`,
+  `unsupported-feature=210`, `not-yet=0`, no parked M3 entries, and
+  `cargo test --workspace` passes.
+- 2026-07-04: [M3] Widened scripted pointer coverage for
+  `click_event.riv`, `hit_test_solos.riv`, and `opaque_hit_test.riv` with
+  render-affecting down/up scripts, adding sample `0.1` to each. Direct
+  C++/Rust stream diffs match for all three scripted fixtures. Exact segments
+  are now 358 across 85 exact files; `make golden-compare` reports
+  `exact=85`, `exact-segments=358`, `diverges=0`,
   `unsupported-feature=210`, `not-yet=0`, no parked M3 entries, and
   `cargo test --workspace` passes.

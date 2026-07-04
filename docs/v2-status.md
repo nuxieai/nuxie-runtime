@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 389 across 85 exact files
+- Exact segments (file × sample): 392 across 85 exact files
 - Parked breakdown (from `make golden-compare`): M4=83 M5=8 M6=77 gated=6 harness=36
 - Current milestone: **M3 — Interactivity Exact (#V2-4)**
 
@@ -29,13 +29,14 @@ the only memory the next session has. Update it every commit.
    `state_machine_triggers.riv`, `state_machine_transition.riv`,
    `light_switch.riv`, `event_on_listener.riv`,
    `event_trigger_event.riv`, `events_on_states.riv`, and
-   `bindable_artboard_child.riv`, all verified through sample `1.5`.
+   `bindable_artboard_child.riv`, and `sound.riv`, all verified through
+   sample `1.5`.
 2. Remaining unscripted exact listener/event candidates are
    `component_list_2.riv`, `component_list_follow_path.riv`,
    `component_list_grouped.riv`, `component_list_hit_order.riv`,
    `joel_signed.riv`, `lock_icon_demo.riv`,
-   `solos_with_nested_artboards.riv`, `sound.riv`, `stateful_list_props.riv`,
-   and `text_input_event.riv`.
+   `solos_with_nested_artboards.riv`, `stateful_list_props.riv`, and
+   `text_input_event.riv`.
    `component_list_*` and `stateful_list_props.riv` are list/text/layout-heavy
    despite passive exactness; only script them during M3 if a C++ probe shows
    direct pointer-visible movement that does not require list or text runtime.
@@ -87,9 +88,10 @@ the only memory the next session has. Update it every commit.
   constraints, or component-list instancing. Harness-level scripted input
   replay dispatches pointerDown/pointerMove/pointerUp/pointerExit markers into
   direct rectangle state-machine listeners with listener input actions, direct
-  rectangle click synthesis, and listener-owned default view-model trigger
-  target-to-source writes. Full C++ ListenerGroup hover/drag/opaque behavior
-  and nested/list/text/layout targets are still not supported.
+  rectangle enter/exit hover state, direct rectangle click synthesis, and
+  listener-owned default view-model trigger target-to-source writes. Full C++
+  ListenerGroup drag/opaque behavior and nested/list/text/layout targets are
+  still not supported.
 - `TransformConstraint` currently covers the default empty
   `TransformComponent::constraintBounds()` path. Text/LayoutComponent
   constraint bounds remain parked behind their M6 text/layout diagnostics.
@@ -625,4 +627,13 @@ the only memory the next session has. Update it every commit.
   checkpoint without broadening runtime scope. Exact segments are now 389
   across 85 exact files; `make golden-compare` reports `exact=85`,
   `exact-segments=389`, `diverges=0`, `unsupported-feature=210`, and
+  `not-yet=0`, and `cargo test --workspace` passes.
+- 2026-07-04: [M3] Ported the direct-rectangle enter/exit hover slice from
+  C++ `ListenerGroup`, including the `StateMachineListenerSingle`
+  `listenerTypeValue = 0` default, and added
+  `tests/input_scripts/sound_enter.txt` for `sound.riv`. The script starts
+  outside the rectangle, moves inside, and keeps the number-driven hover
+  animation exact through sample `1.5`. Exact segments are now 392 across 85
+  exact files; `make golden-compare` reports `exact=85`,
+  `exact-segments=392`, `diverges=0`, `unsupported-feature=210`, and
   `not-yet=0`, and `cargo test --workspace` passes.

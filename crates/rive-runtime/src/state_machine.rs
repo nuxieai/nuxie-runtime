@@ -495,18 +495,20 @@ fn runtime_listener_types(
     listener: &rive_binary::RuntimeStateMachineListener<'_>,
 ) -> Vec<RuntimeListenerType> {
     if listener.object.type_name == "StateMachineListenerSingle" {
-        return listener
-            .object
-            .uint_property("listenerTypeValue")
-            .and_then(RuntimeListenerType::from_value)
-            .into_iter()
-            .collect();
+        return RuntimeListenerType::from_value(
+            listener
+                .object
+                .uint_property("listenerTypeValue")
+                .unwrap_or(0),
+        )
+        .into_iter()
+        .collect();
     }
 
     listener
         .listener_input_types
         .iter()
-        .filter_map(|input_type| input_type.uint_property("listenerTypeValue"))
+        .map(|input_type| input_type.uint_property("listenerTypeValue").unwrap_or(0))
         .filter_map(RuntimeListenerType::from_value)
         .collect()
 }

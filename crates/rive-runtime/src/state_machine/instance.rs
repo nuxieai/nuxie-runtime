@@ -58,12 +58,20 @@ pub struct StateMachineInstance {
     needs_advance: bool,
     data_bind_graph: RuntimeDataBindGraph,
     pointer_down_listener_hits: Vec<RuntimePointerDownListenerHit>,
+    pointer_listener_states: Vec<RuntimePointerListenerState>,
 }
 
 #[derive(Debug, Clone)]
 struct RuntimePointerDownListenerHit {
     pointer_id: i32,
     listener_index: usize,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimePointerListenerState {
+    pointer_id: i32,
+    listener_index: usize,
+    is_hovered: bool,
 }
 
 impl StateMachineInstance {
@@ -174,6 +182,7 @@ impl StateMachineInstance {
             needs_advance: false,
             data_bind_graph: RuntimeDataBindGraph::new(state_machine),
             pointer_down_listener_hits: Vec::new(),
+            pointer_listener_states: Vec::new(),
         }
     }
 
@@ -255,22 +264,30 @@ impl StateMachineInstance {
 
         let mut hit = false;
         for (listener_index, listener) in state_machine.listeners.iter().enumerate() {
-            if !(listener.has_listener(RuntimeListenerType::Down)
-                || listener.has_listener(RuntimeListenerType::Click))
-                || !listener.hit_test(artboard, x, y)
-            {
-                continue;
-            }
-            hit = true;
-            if listener.has_listener(RuntimeListenerType::Click) {
+            let listener_hit = listener.hit_test(artboard, x, y);
+            let hover_action = self.update_pointer_listener_hover(
+                listener_index,
+                listener,
+                listener_hit,
+                pointer_id,
+            );
+            let click_action = listener_hit && listener.has_listener(RuntimeListenerType::Click);
+            if click_action {
                 self.pointer_down_listener_hits
                     .push(RuntimePointerDownListenerHit {
                         pointer_id,
                         listener_index,
                     });
             }
-            if listener.has_listener(RuntimeListenerType::Down) {
-                self.perform_pointer_listener_actions(&listener.listener_actions);
+            let direct_action = listener_hit && listener.has_listener(RuntimeListenerType::Down);
+            let action_type =
+                hover_action.or_else(|| direct_action.then_some(RuntimeListenerType::Down));
+            if listener_hit && (click_action || direct_action || hover_action.is_some()) {
+                hit = true;
+            }
+            if action_type.is_some()
+                && self.perform_pointer_listener_actions(&listener.listener_actions)
+            {
                 self.needs_advance = true;
             }
         }
@@ -283,9 +300,9 @@ impl StateMachineInstance {
         x: f32,
         y: f32,
         _seconds: f32,
-        _pointer_id: i32,
+        pointer_id: i32,
     ) -> bool {
-        self.update_pointer_listeners(artboard, RuntimeListenerType::Move, x, y)
+        self.update_pointer_listeners(artboard, RuntimeListenerType::Move, x, y, pointer_id)
     }
 
     pub fn pointer_up(
@@ -303,18 +320,29 @@ impl StateMachineInstance {
 
         let mut hit = false;
         for (listener_index, listener) in state_machine.listeners.iter().enumerate() {
+            let listener_hit = listener.hit_test(artboard, x, y);
+            let hover_action = self.update_pointer_listener_hover(
+                listener_index,
+                listener,
+                listener_hit,
+                pointer_id,
+            );
             let click_matched = listener.has_listener(RuntimeListenerType::Click)
                 && self.pointer_down_listener_hits.iter().any(|hit| {
                     hit.pointer_id == pointer_id && hit.listener_index == listener_index
                 });
-            if !(click_matched || listener.has_listener(RuntimeListenerType::Up))
-                || !listener.hit_test(artboard, x, y)
-            {
-                continue;
+            let direct_action = listener_hit && listener.has_listener(RuntimeListenerType::Up);
+            let action_type = hover_action
+                .or_else(|| (listener_hit && click_matched).then_some(RuntimeListenerType::Click))
+                .or_else(|| direct_action.then_some(RuntimeListenerType::Up));
+            if listener_hit && (click_matched || direct_action || hover_action.is_some()) {
+                hit = true;
             }
-            hit = true;
-            self.perform_pointer_listener_actions(&listener.listener_actions);
-            self.needs_advance = true;
+            if action_type.is_some()
+                && self.perform_pointer_listener_actions(&listener.listener_actions)
+            {
+                self.needs_advance = true;
+            }
         }
         self.pointer_down_listener_hits
             .retain(|hit| hit.pointer_id != pointer_id);
@@ -326,9 +354,13 @@ impl StateMachineInstance {
         artboard: &ArtboardInstance,
         x: f32,
         y: f32,
-        _pointer_id: i32,
+        pointer_id: i32,
     ) -> bool {
-        self.update_pointer_listeners(artboard, RuntimeListenerType::Exit, x, y)
+        let hit =
+            self.update_pointer_listeners(artboard, RuntimeListenerType::Exit, x, y, pointer_id);
+        self.pointer_listener_states
+            .retain(|state| state.pointer_id != pointer_id);
+        hit
     }
 
     fn update_pointer_listeners(
@@ -337,21 +369,70 @@ impl StateMachineInstance {
         listener_type: RuntimeListenerType,
         x: f32,
         y: f32,
+        pointer_id: i32,
     ) -> bool {
         let Some(state_machine) = artboard.state_machine(self.state_machine_index) else {
             return false;
         };
 
         let mut hit = false;
-        for listener in &state_machine.listeners {
-            if !listener.has_listener(listener_type) || !listener.hit_test(artboard, x, y) {
-                continue;
+        for (listener_index, listener) in state_machine.listeners.iter().enumerate() {
+            let listener_hit =
+                listener_type != RuntimeListenerType::Exit && listener.hit_test(artboard, x, y);
+            let hover_action = self.update_pointer_listener_hover(
+                listener_index,
+                listener,
+                listener_hit,
+                pointer_id,
+            );
+            let direct_action = listener_hit && listener.has_listener(listener_type);
+            let action_type = hover_action.or_else(|| direct_action.then_some(listener_type));
+            if listener_hit && (direct_action || hover_action.is_some()) {
+                hit = true;
             }
-            hit = true;
-            self.perform_pointer_listener_actions(&listener.listener_actions);
-            self.needs_advance = true;
+            if action_type.is_some()
+                && self.perform_pointer_listener_actions(&listener.listener_actions)
+            {
+                self.needs_advance = true;
+            }
         }
         hit
+    }
+
+    fn update_pointer_listener_hover(
+        &mut self,
+        listener_index: usize,
+        listener: &RuntimeStateMachineListener,
+        is_hovered: bool,
+        pointer_id: i32,
+    ) -> Option<RuntimeListenerType> {
+        let state_index = self.pointer_listener_states.iter().position(|state| {
+            state.pointer_id == pointer_id && state.listener_index == listener_index
+        });
+        let was_hovered = state_index
+            .map(|index| self.pointer_listener_states[index].is_hovered)
+            .unwrap_or(false);
+
+        match state_index {
+            Some(index) => self.pointer_listener_states[index].is_hovered = is_hovered,
+            None => self
+                .pointer_listener_states
+                .push(RuntimePointerListenerState {
+                    pointer_id,
+                    listener_index,
+                    is_hovered,
+                }),
+        }
+
+        match (was_hovered, is_hovered) {
+            (false, true) if listener.has_listener(RuntimeListenerType::Enter) => {
+                Some(RuntimeListenerType::Enter)
+            }
+            (true, false) if listener.has_listener(RuntimeListenerType::Exit) => {
+                Some(RuntimeListenerType::Exit)
+            }
+            _ => None,
+        }
     }
 
     fn perform_pointer_listener_actions(

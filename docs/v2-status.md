@@ -32,9 +32,10 @@ the only memory the next session has. Update it every commit.
    `StateMachineInstance` orchestration live under
    `crates/rive-runtime/src/state_machine/`. Artboard data-bind propagation
    and list-binding queries, plus the adjacent binding structs/builders, live
-   in `crates/rive-runtime/src/artboard_data_bind.rs`. Continue with the
-   data-bind graph/default-view-model bridge, preserving the current golden
-   set.
+   in `crates/rive-runtime/src/artboard_data_bind.rs`. Default view-model
+   source handle types live in `crates/rive-runtime/src/view_model.rs`.
+   Continue with the imported view-model context/handle types, then the
+   remaining data-bind graph bridge, preserving the current golden set.
 2. Add handle-source world-space math and nested-remap dependent advancement
    to the joystick path when a corpus diff reaches those cases.
 3. Remaining exact entries pinned to sample `0` are static M1 holdovers:
@@ -172,12 +173,6 @@ the only memory the next session has. Update it every commit.
   under `M2 active log rolloff`; keep only the recent rolling window here once
   Metric, Next, Decisions, and `corpus.toml` capture the current state.
 
-- 2026-07-03: [M2] Widened `animation_reset_cases.riv` from samples `0`,
-  `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
-  `1.0`, keeping reset/transition/blend animation playback exact across the
-  fifth sample. Exact segments are now 271 across 70 exact files; `make
-  golden-compare` reports `exact=70`, `exact-segments=271`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace` passes.
 - 2026-07-03: [M2] Widened `bindable_artboard_child.riv` from samples `0`,
   `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
   `1.0`, keeping passive bindable-artboard/view-model state-machine playback
@@ -485,3 +480,11 @@ the only memory the next session has. Update it every commit.
   `make golden-compare` reports `exact=70`, `exact-segments=339`,
   `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
   `cargo test --workspace` passes.
+- 2026-07-04: [M2] Moved the default view-model source handle types from
+  `crates/rive-runtime/src/lib.rs` into `crates/rive-runtime/src/view_model.rs`
+  and re-exported them from the crate root, starting the data-bind
+  graph/default-view-model bridge extraction without changing graph execution.
+  Exact segments remain 339 across 70 exact files; `make golden-compare`
+  reports `exact=70`, `exact-segments=339`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.

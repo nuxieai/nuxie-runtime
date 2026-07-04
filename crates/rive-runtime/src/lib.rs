@@ -22,6 +22,7 @@ mod artboard_data_bind;
 mod components;
 mod objects;
 mod state_machine;
+mod view_model;
 
 pub use animation::{
     LinearAnimationInstance, RuntimeKeyFrameBool, RuntimeKeyFrameCallback, RuntimeKeyFrameColor,
@@ -57,6 +58,14 @@ use state_machine::{
     StateMachineBindableNumberInstance, StateMachineBindableStringInstance,
     StateMachineBindableTriggerInstance, StateMachineBindableViewModelInstance,
     build_state_machines,
+};
+pub use view_model::{
+    RuntimeDefaultViewModelArtboardSourceHandle, RuntimeDefaultViewModelAssetSourceHandle,
+    RuntimeDefaultViewModelBooleanSourceHandle, RuntimeDefaultViewModelColorSourceHandle,
+    RuntimeDefaultViewModelEnumSourceHandle, RuntimeDefaultViewModelListSourceHandle,
+    RuntimeDefaultViewModelNumberSourceHandle, RuntimeDefaultViewModelStringSourceHandle,
+    RuntimeDefaultViewModelSymbolListIndexSourceHandle, RuntimeDefaultViewModelTriggerSourceHandle,
+    RuntimeDefaultViewModelViewModelSourceHandle,
 };
 
 #[derive(Debug, Clone)]
@@ -4294,127 +4303,6 @@ impl RuntimeDataBindGraphFormulaRandomSource {
 
     fn call_count(&self) -> usize {
         self.call_count
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RuntimeDefaultViewModelNumberSourceHandle {
-    path: Vec<u32>,
-}
-
-impl RuntimeDefaultViewModelNumberSourceHandle {
-    pub fn path(&self) -> &[u32] {
-        &self.path
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RuntimeDefaultViewModelBooleanSourceHandle {
-    path: Vec<u32>,
-}
-
-impl RuntimeDefaultViewModelBooleanSourceHandle {
-    pub fn path(&self) -> &[u32] {
-        &self.path
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RuntimeDefaultViewModelStringSourceHandle {
-    path: Vec<u32>,
-}
-
-impl RuntimeDefaultViewModelStringSourceHandle {
-    pub fn path(&self) -> &[u32] {
-        &self.path
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RuntimeDefaultViewModelColorSourceHandle {
-    path: Vec<u32>,
-}
-
-impl RuntimeDefaultViewModelColorSourceHandle {
-    pub fn path(&self) -> &[u32] {
-        &self.path
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RuntimeDefaultViewModelEnumSourceHandle {
-    path: Vec<u32>,
-}
-
-impl RuntimeDefaultViewModelEnumSourceHandle {
-    pub fn path(&self) -> &[u32] {
-        &self.path
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RuntimeDefaultViewModelSymbolListIndexSourceHandle {
-    path: Vec<u32>,
-}
-
-impl RuntimeDefaultViewModelSymbolListIndexSourceHandle {
-    pub fn path(&self) -> &[u32] {
-        &self.path
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RuntimeDefaultViewModelAssetSourceHandle {
-    path: Vec<u32>,
-}
-
-impl RuntimeDefaultViewModelAssetSourceHandle {
-    pub fn path(&self) -> &[u32] {
-        &self.path
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RuntimeDefaultViewModelArtboardSourceHandle {
-    path: Vec<u32>,
-}
-
-impl RuntimeDefaultViewModelArtboardSourceHandle {
-    pub fn path(&self) -> &[u32] {
-        &self.path
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RuntimeDefaultViewModelTriggerSourceHandle {
-    path: Vec<u32>,
-}
-
-impl RuntimeDefaultViewModelTriggerSourceHandle {
-    pub fn path(&self) -> &[u32] {
-        &self.path
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RuntimeDefaultViewModelListSourceHandle {
-    path: Vec<u32>,
-}
-
-impl RuntimeDefaultViewModelListSourceHandle {
-    pub fn path(&self) -> &[u32] {
-        &self.path
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RuntimeDefaultViewModelViewModelSourceHandle {
-    path: Vec<u32>,
-}
-
-impl RuntimeDefaultViewModelViewModelSourceHandle {
-    pub fn path(&self) -> &[u32] {
-        &self.path
     }
 }
 

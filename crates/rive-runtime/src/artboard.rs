@@ -31,7 +31,8 @@ use crate::properties::{
     property_key_for_name, solo_active_component_id_property_key,
 };
 use crate::state_machine::{
-    RuntimeStateMachine, StateMachineInstance, StateMachineReportedEvent, build_state_machines,
+    RuntimeStateMachine, StateMachineInputKind, StateMachineInstance, StateMachineReportedEvent,
+    build_state_machines,
 };
 
 #[derive(Debug, Clone)]
@@ -79,7 +80,13 @@ enum RuntimeNestedAnimationInstance {
         speed: f32,
         mix: f32,
     },
+    Remap {
+        local_id: usize,
+        animation: LinearAnimationInstance,
+        mix: f32,
+    },
     StateMachine {
+        local_id: usize,
         state_machine: StateMachineInstance,
     },
 }
@@ -309,6 +316,7 @@ impl ArtboardInstance {
             return false;
         }
         self.did_change = true;
+        self.apply_bool_property_changed(local_id, property_key, value);
         true
     }
 
@@ -333,6 +341,7 @@ impl ArtboardInstance {
             return false;
         }
         self.did_change = true;
+        self.apply_double_property_changed(local_id, property_key, value);
         true
     }
 
@@ -812,10 +821,133 @@ impl ArtboardInstance {
         local_id: usize,
         property_key: u16,
     ) -> bool {
-        if solo_active_component_id_property_key() != Some(property_key) {
+        let mut changed = false;
+        if solo_active_component_id_property_key() == Some(property_key) {
+            changed |= self.propagate_solo_collapse(local_id);
+        }
+        changed |= self.apply_nested_trigger_property_changed(local_id, property_key);
+        changed
+    }
+
+    pub(crate) fn apply_bool_property_changed(
+        &mut self,
+        local_id: usize,
+        property_key: u16,
+        value: bool,
+    ) -> bool {
+        if self.slot(local_id).and_then(|slot| slot.type_name) != Some("NestedBool")
+            || property_key_for_name("NestedBool", "nestedValue") != Some(property_key)
+        {
             return false;
         }
-        self.propagate_solo_collapse(local_id)
+        let Some((state_machine_local_id, input_id)) = self.nested_input_target(local_id) else {
+            return false;
+        };
+        self.set_nested_state_machine_bool(state_machine_local_id, input_id, value)
+    }
+
+    pub(crate) fn apply_double_property_changed(
+        &mut self,
+        local_id: usize,
+        property_key: u16,
+        value: f32,
+    ) -> bool {
+        match self.slot(local_id).and_then(|slot| slot.type_name) {
+            Some("NestedNumber")
+                if property_key_for_name("NestedNumber", "nestedValue") == Some(property_key) =>
+            {
+                let Some((state_machine_local_id, input_id)) = self.nested_input_target(local_id)
+                else {
+                    return false;
+                };
+                self.set_nested_state_machine_number(state_machine_local_id, input_id, value)
+            }
+            Some("NestedRemapAnimation")
+                if property_key_for_name("NestedRemapAnimation", "time") == Some(property_key) =>
+            {
+                self.set_nested_remap_time(local_id, value)
+            }
+            _ => false,
+        }
+    }
+
+    fn apply_nested_trigger_property_changed(
+        &mut self,
+        local_id: usize,
+        property_key: u16,
+    ) -> bool {
+        if self.slot(local_id).and_then(|slot| slot.type_name) != Some("NestedTrigger")
+            || property_key_for_name("NestedTrigger", "fire") != Some(property_key)
+        {
+            return false;
+        }
+        let Some((state_machine_local_id, input_id)) = self.nested_input_target(local_id) else {
+            return false;
+        };
+        self.fire_nested_state_machine_trigger(state_machine_local_id, input_id)
+    }
+
+    fn nested_input_target(&self, local_id: usize) -> Option<(usize, usize)> {
+        let parent_key = property_key_for_name("Component", "parentId")?;
+        let input_key = property_key_for_name("NestedInput", "inputId")?;
+        let state_machine_local_id =
+            usize::try_from(self.uint_property(local_id, parent_key)?).ok()?;
+        let input_id = usize::try_from(self.uint_property(local_id, input_key)?).ok()?;
+        Some((state_machine_local_id, input_id))
+    }
+
+    fn nested_state_machine_mut(
+        &mut self,
+        state_machine_local_id: usize,
+    ) -> Option<&mut StateMachineInstance> {
+        for nested in self.nested_artboards.values_mut() {
+            for animation in &mut nested.animations {
+                if let RuntimeNestedAnimationInstance::StateMachine {
+                    local_id,
+                    state_machine,
+                } = animation
+                    && *local_id == state_machine_local_id
+                {
+                    return Some(state_machine);
+                }
+            }
+        }
+        None
+    }
+
+    fn set_nested_state_machine_bool(
+        &mut self,
+        state_machine_local_id: usize,
+        input_id: usize,
+        value: bool,
+    ) -> bool {
+        self.nested_state_machine_mut(state_machine_local_id)
+            .is_some_and(|state_machine| state_machine.set_bool(input_id, value))
+    }
+
+    fn set_nested_state_machine_number(
+        &mut self,
+        state_machine_local_id: usize,
+        input_id: usize,
+        value: f32,
+    ) -> bool {
+        self.nested_state_machine_mut(state_machine_local_id)
+            .is_some_and(|state_machine| state_machine.set_number(input_id, value))
+    }
+
+    fn fire_nested_state_machine_trigger(
+        &mut self,
+        state_machine_local_id: usize,
+        input_id: usize,
+    ) -> bool {
+        self.nested_state_machine_mut(state_machine_local_id)
+            .is_some_and(|state_machine| state_machine.fire_trigger(input_id))
+    }
+
+    fn set_nested_remap_time(&mut self, remap_local_id: usize, time: f32) -> bool {
+        self.nested_artboards
+            .values_mut()
+            .any(|nested| nested.set_remap_time(remap_local_id, time))
     }
 
     pub(crate) fn apply_component_collapse_changed(&mut self, local_id: usize) -> bool {
@@ -970,6 +1102,31 @@ impl RuntimeNestedArtboardInstance {
         };
         self.child.set_double_property(0, opacity_key, opacity)
     }
+
+    fn set_remap_time(&mut self, remap_local_id: usize, time: f32) -> bool {
+        for animation in &mut self.animations {
+            let RuntimeNestedAnimationInstance::Remap {
+                local_id,
+                animation,
+                ..
+            } = animation
+            else {
+                continue;
+            };
+            if *local_id != remap_local_id {
+                continue;
+            }
+            let Some(linear_animation) = self.child.linear_animation(animation.animation_index)
+            else {
+                return false;
+            };
+            let seconds = linear_animation
+                .global_to_local_seconds(linear_animation.duration_seconds() * time);
+            animation.set_time(linear_animation, seconds);
+            return true;
+        }
+        false
+    }
 }
 
 impl RuntimeNestedAnimationInstance {
@@ -991,7 +1148,13 @@ impl RuntimeNestedAnimationInstance {
                 }
                 changed
             }
-            Self::StateMachine { state_machine } => {
+            Self::Remap { animation, mix, .. } => {
+                if *mix == 0.0 {
+                    return false;
+                }
+                child.apply_linear_animation_instance(animation, *mix)
+            }
+            Self::StateMachine { state_machine, .. } => {
                 child.advance_state_machine_instance(state_machine, elapsed_seconds)
             }
         }
@@ -1069,8 +1232,22 @@ fn runtime_nested_animation_instances(
                 };
                 animations.push(animation);
             }
+            "NestedRemapAnimation" => {
+                let Some(animation) =
+                    nested_remap_animation_instance(local_object.local_id, object, child)
+                else {
+                    continue;
+                };
+                animations.push(animation);
+            }
             "NestedStateMachine" => {
-                let Some(animation) = nested_state_machine_instance(object, child) else {
+                let Some(animation) = nested_state_machine_instance(
+                    file,
+                    graph,
+                    local_object.local_id,
+                    object,
+                    child,
+                ) else {
                     continue;
                 };
                 animations.push(animation);
@@ -1094,7 +1271,29 @@ fn nested_simple_animation_instance(
     })
 }
 
+fn nested_remap_animation_instance(
+    local_id: usize,
+    object: &rive_binary::RuntimeObject,
+    child: &ArtboardInstance,
+) -> Option<RuntimeNestedAnimationInstance> {
+    let animation_index = usize::try_from(object.uint_property("animationId")?).ok()?;
+    let linear_animation = child.linear_animation(animation_index)?;
+    let mut animation = child.linear_animation_instance(animation_index)?;
+    let time = object.double_property("time").unwrap_or(0.0);
+    let seconds =
+        linear_animation.global_to_local_seconds(linear_animation.duration_seconds() * time);
+    animation.set_time(linear_animation, seconds);
+    Some(RuntimeNestedAnimationInstance::Remap {
+        local_id,
+        animation,
+        mix: object.double_property("mix").unwrap_or(1.0),
+    })
+}
+
 fn nested_state_machine_instance(
+    file: &RuntimeFile,
+    graph: &ArtboardGraph,
+    local_id: usize,
     object: &rive_binary::RuntimeObject,
     child: &ArtboardInstance,
 ) -> Option<RuntimeNestedAnimationInstance> {
@@ -1102,7 +1301,60 @@ fn nested_state_machine_instance(
     let mut state_machine = child.state_machine_instance(state_machine_index)?;
     state_machine.bind_default_view_model_context();
     state_machine.advance_data_context();
-    Some(RuntimeNestedAnimationInstance::StateMachine { state_machine })
+    apply_authored_nested_input_values(file, graph, local_id, &mut state_machine);
+    Some(RuntimeNestedAnimationInstance::StateMachine {
+        local_id,
+        state_machine,
+    })
+}
+
+fn apply_authored_nested_input_values(
+    file: &RuntimeFile,
+    graph: &ArtboardGraph,
+    state_machine_local_id: usize,
+    state_machine: &mut StateMachineInstance,
+) -> bool {
+    let mut changed = false;
+    for local_object in &graph.local_objects {
+        let Some(object) = file.object(local_object.global_id as usize) else {
+            continue;
+        };
+        if object.uint_property("parentId") != Some(state_machine_local_id as u64) {
+            continue;
+        }
+        let Some(input_id) = object
+            .uint_property("inputId")
+            .and_then(|input_id| usize::try_from(input_id).ok())
+        else {
+            continue;
+        };
+        match object.type_name {
+            "NestedBool" => {
+                if state_machine
+                    .input(input_id)
+                    .is_some_and(|input| input.kind() == StateMachineInputKind::Bool)
+                {
+                    changed |= state_machine.set_bool(
+                        input_id,
+                        object.bool_property("nestedValue").unwrap_or(false),
+                    );
+                }
+            }
+            "NestedNumber" => {
+                if state_machine
+                    .input(input_id)
+                    .is_some_and(|input| input.kind() == StateMachineInputKind::Number)
+                {
+                    changed |= state_machine.set_number(
+                        input_id,
+                        object.double_property("nestedValue").unwrap_or(0.0),
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+    changed
 }
 
 #[cfg(test)]

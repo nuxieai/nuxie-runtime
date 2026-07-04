@@ -741,6 +741,25 @@ impl RuntimeLinearAnimation {
         self.frame_to_seconds(self.duration as f32)
     }
 
+    pub(crate) fn global_to_local_seconds(&self, seconds: f32) -> f32 {
+        match AnimationLoop::from_loop_value(self.loop_value) {
+            AnimationLoop::OneShot => seconds + self.start_seconds(),
+            AnimationLoop::Loop => {
+                positive_mod(seconds, self.duration_seconds()) + self.start_seconds()
+            }
+            AnimationLoop::PingPong => {
+                let duration = self.duration_seconds();
+                let local_time = positive_mod(seconds, duration);
+                let direction = (seconds / duration) as i32 % 2;
+                if direction == 0 {
+                    local_time + self.start_seconds()
+                } else {
+                    self.end_seconds() - local_time
+                }
+            }
+        }
+    }
+
     fn start_time_with_speed(&self, speed_multiplier: f32) -> f32 {
         if self.speed * speed_multiplier >= 0.0 {
             self.start_seconds()
@@ -1205,6 +1224,13 @@ impl AnimationLoop {
             _ => Self::OneShot,
         }
     }
+}
+
+fn positive_mod(value: f32, range: f32) -> f32 {
+    if range == 0.0 {
+        return 0.0;
+    }
+    ((value % range) + range) % range
 }
 
 #[derive(Debug, Clone)]

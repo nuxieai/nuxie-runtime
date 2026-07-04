@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 414 across 106 exact files
-- Parked breakdown (from `make golden-compare`): M4=59 M5=8 M6=80 gated=6 harness=36
+- Exact segments (file × sample): 419 across 109 exact files
+- Parked breakdown (from `make golden-compare`): M4=56 M5=8 M6=80 gated=6 harness=36
 - Current milestone: **M4 — Nested Artboards And Lists Exact (#V2-5)**
 
 ## Milestones
@@ -24,13 +24,15 @@ the only memory the next session has. Update it every commit.
 
 1. Continue M4 with the smallest remaining pure nested-artboard runtime slice.
    Query the queue with `grep -B6 'milestone = "M4"' corpus.toml`; the raw
-   queue now starts with `advance_blend_mode.riv`.
-2. Next code slice should port C++ nested host remap/input controls
-   (`NestedNumber`, `NestedBool`, `NestedTrigger`, `NestedRemapAnimation`)
-   enough to promote `advance_blend_mode.riv`, then the adjacent remap/input
-   cluster. Keep data-bound host swaps/controls, nested child non-color
-   data-bind targets, focus data, nested layout/leaf, scroll, text, and images
-   parked behind diagnostics.
+   queue now starts with `ai_assitant.riv`, but that file carries skin/mesh/
+   feather-ish complexity and should wait for a narrower entry point.
+2. Nested bool/number/trigger proxying into hosted state machines is closed
+   for the current sample-0/0.25 corpus slice, and basic
+   `NestedRemapAnimation` time plumbing exists. The next useful M4 slice is to
+   reduce one of the precise diagnostics exposed here: nested remap with
+   `DrawTarget` rules (`death_knight.riv`) or Solo-owned nested listener child
+   paint allocation (`pointer_events_nested_artboards_in_solos.riv`),
+   whichever has smaller blast radius.
 3. Plain static `NestedArtboard` draw, default nested
    simple-animation/state-machine host advancement are closed for the current
    sample-0 corpus slice, and nested child unbound SolidColor data-bind
@@ -81,14 +83,15 @@ the only memory the next session has. Update it every commit.
   `NestedArtboard` host draw with child root opacity inheritance, default
   nested simple-animation/state-machine hosts backed by persistent child
   artboard instances, stateful child `ViewModelInstance` subtree admission
-  under plain nested hosts, and nested child unbound SolidColor data-bind
-  defaults. Custom handle-source world-space math, nested remap inputs, nested
-  bool/number/trigger inputs, data-bound nested host controls (`artboardId`
-  runtime swaps, pause, speed, quantize), nested child non-color data-bind
-  targets, focus data, bound stateful child view-model propagation, nested
-  listener/event propagation, `NestedArtboardLayout` / `NestedArtboardLeaf`,
-  and layout-backed or virtualized component-list instancing are still not
-  supported.
+  under plain nested hosts, nested child unbound SolidColor data-bind defaults,
+  nested bool/number/trigger input proxying, and basic nested remap-time host
+  plumbing. Custom handle-source world-space math, nested remap with
+  draw targets, data-bound nested host controls (`artboardId` runtime swaps,
+  pause, speed, quantize), nested child non-color data-bind targets, focus
+  data, bound stateful child view-model propagation, nested listener/event
+  propagation, Solo-owned nested listener child paint allocation,
+  `NestedArtboardLayout` / `NestedArtboardLeaf`, and layout-backed or
+  virtualized component-list instancing are still not supported.
   Golden runner sample lists now advance by sorted absolute-time deltas and
   reuse render paths across samples; no images, text, nested remap/input
   hosts, nested layout/leaf, scroll constraints, or layout-backed/virtualized
@@ -270,3 +273,13 @@ the only memory the next session has. Update it every commit.
   golden-compare` reports `exact=106`, `exact-segments=414`, `diverges=0`,
   `unsupported-feature=189`, `not-yet=0`, and parked
   `M4=59 M5=8 M6=80 gated=6 harness=36`; `cargo test --workspace` passes.
+- 2026-07-04: [M4] Ported nested input proxying from the C++ `NestedInput`,
+  `NestedBool`, `NestedNumber`, and `NestedTrigger` shape plus
+  `NestedRemapAnimation` time/apply plumbing: hosted child state machines now
+  receive authored/keyed nested bool/number/trigger values, remap hosts use
+  global-to-local animation time, and the runner has narrower diagnostics for
+  DrawTarget-heavy remap and Solo-owned nested listener children. Promoted
+  `advance_blend_mode.riv`, `runtime_nested_inputs.riv`, and `smi_test.riv`
+  to exact. `make golden-compare` reports `exact=109`, `exact-segments=419`,
+  `diverges=0`, `unsupported-feature=186`, `not-yet=0`, and parked
+  `M4=56 M5=8 M6=80 gated=6 harness=36`; `cargo test --workspace` passes.

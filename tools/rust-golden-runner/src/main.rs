@@ -522,16 +522,16 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
-    if let Some((type_name, global_id)) = artboard.local_objects.iter().find_map(|object| {
-        let type_name = object.type_name?;
-        matches!(
-            type_name,
-            "NestedRemapAnimation" | "NestedBool" | "NestedNumber" | "NestedTrigger"
-        )
-        .then_some((type_name, object.global_id))
-    }) {
+    if let Some(draw_target_global) = nested_remap_draw_target_global(artboard) {
         bail!(
-            "unsupported: nested artboards in Rust golden runner ({type_name} global {global_id})"
+            "unsupported: nested artboards in Rust golden runner (nested remap with draw target global {draw_target_global})"
+        );
+    }
+
+    if let Some((host_global, child_global)) = solo_nested_listener_child(runtime, graph, artboard)
+    {
+        bail!(
+            "unsupported: nested artboards in Rust golden runner (solo nested listener host global {host_global} child global {child_global})"
         );
     }
 
@@ -832,6 +832,66 @@ fn nested_stateful_view_model_object(
             && !allowed_stateful_child_locals.contains(&object.local_id))
         .then_some((type_name, object.global_id))
     })
+}
+
+fn nested_remap_draw_target_global(artboard: &ArtboardGraph) -> Option<u32> {
+    if !artboard
+        .local_objects
+        .iter()
+        .any(|object| object.type_name == Some("NestedRemapAnimation"))
+    {
+        return None;
+    }
+    artboard
+        .local_objects
+        .iter()
+        .find(|object| object.type_name == Some("DrawTarget"))
+        .map(|object| object.global_id)
+}
+
+fn solo_nested_listener_child(
+    runtime: &RuntimeFile,
+    graph: &GraphFile,
+    artboard: &ArtboardGraph,
+) -> Option<(u32, u32)> {
+    let solo_locals = artboard
+        .local_objects
+        .iter()
+        .filter(|object| object.type_name == Some("Solo"))
+        .map(|object| object.local_id)
+        .collect::<BTreeSet<_>>();
+    if solo_locals.is_empty() {
+        return None;
+    }
+    for host in &artboard.nested_artboards {
+        let parent_local = runtime
+            .object(host.global_id as usize)
+            .and_then(|object| object.uint_property("parentId"))
+            .and_then(|parent| usize::try_from(parent).ok());
+        if !parent_local.is_some_and(|parent| solo_locals.contains(&parent)) {
+            continue;
+        }
+        let Some(host_object) = runtime.object(host.global_id as usize) else {
+            continue;
+        };
+        let Some(child) = runtime.resolved_artboard_for_referencer_object(host_object) else {
+            continue;
+        };
+        if graph
+            .artboards
+            .iter()
+            .find(|artboard| artboard.global_id == child.id)
+            .is_some_and(|artboard| {
+                artboard
+                    .state_machines
+                    .iter()
+                    .any(|state_machine| !state_machine.listeners.is_empty())
+            })
+        {
+            return Some((host.global_id, child.id));
+        }
+    }
+    None
 }
 
 fn nested_artboard_host_control_data_bind<'a>(

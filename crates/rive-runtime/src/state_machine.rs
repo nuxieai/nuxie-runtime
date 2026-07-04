@@ -1182,12 +1182,20 @@ impl BlendState1DInstance {
         bindable_numbers: &[StateMachineBindableNumberInstance],
         elapsed_seconds: f32,
     ) -> bool {
-        self.advance_and_report(artboard, inputs, bindable_numbers, elapsed_seconds, None)
+        for animation in &mut self.animations {
+            if artboard.linear_animation_instance_keep_going(&animation.animation) {
+                artboard
+                    .advance_linear_animation_instance(&mut animation.animation, elapsed_seconds);
+            }
+        }
+
+        self.update_mix_values(inputs, bindable_numbers);
+        true
     }
 
     pub(crate) fn advance_with_events(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         inputs: &[StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
         elapsed_seconds: f32,
@@ -1204,7 +1212,7 @@ impl BlendState1DInstance {
 
     fn advance_and_report(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         inputs: &[StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
         elapsed_seconds: f32,
@@ -1365,12 +1373,20 @@ impl BlendStateDirectInstance {
         bindable_numbers: &[StateMachineBindableNumberInstance],
         elapsed_seconds: f32,
     ) -> bool {
-        self.advance_and_report(artboard, inputs, bindable_numbers, elapsed_seconds, None)
+        for animation in &mut self.animations {
+            if artboard.linear_animation_instance_keep_going(&animation.animation) {
+                artboard
+                    .advance_linear_animation_instance(&mut animation.animation, elapsed_seconds);
+            }
+        }
+
+        self.update_mix_values(inputs, bindable_numbers);
+        true
     }
 
     pub(crate) fn advance_with_events(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         inputs: &[StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
         elapsed_seconds: f32,
@@ -1387,7 +1403,7 @@ impl BlendStateDirectInstance {
 
     fn advance_and_report(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         inputs: &[StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
         elapsed_seconds: f32,
@@ -2187,7 +2203,7 @@ impl StateMachineLayerInstance {
 
     fn update_state(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         layer: &RuntimeStateMachineLayer,
         layer_index: usize,
         inputs: &mut [StateMachineInputInstance],
@@ -2258,7 +2274,7 @@ impl StateMachineLayerInstance {
 
     fn try_change_state(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         layer: &RuntimeStateMachineLayer,
         state_index: Option<usize>,
         layer_index: usize,
@@ -2519,7 +2535,7 @@ impl StateMachineLayerInstance {
 
     fn change_state(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         layer: &RuntimeStateMachineLayer,
         transition: &RuntimeStateTransition,
         state_to_index: usize,
@@ -2786,7 +2802,7 @@ impl StateMachineLayerInstance {
 
     fn advance_current_animation(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         layer: &RuntimeStateMachineLayer,
         elapsed_seconds: f32,
         inputs: &[StateMachineInputInstance],
@@ -2824,12 +2840,8 @@ impl StateMachineLayerInstance {
             self.current_animation_keep_going = false;
             return false;
         };
-        let Some(animation) = artboard.linear_animation(animation_instance.animation_index) else {
-            self.current_animation_keep_going = false;
-            return false;
-        };
-        self.current_animation_keep_going = animation_instance.advance_with_events(
-            animation,
+        self.current_animation_keep_going = artboard.advance_linear_animation_instance_with_events(
+            animation_instance,
             elapsed_seconds * state.speed,
             reported_events,
         );
@@ -2838,7 +2850,7 @@ impl StateMachineLayerInstance {
 
     fn advance_transition_source_animation(
         &mut self,
-        artboard: &ArtboardInstance,
+        artboard: &mut ArtboardInstance,
         layer: &RuntimeStateMachineLayer,
         elapsed_seconds: f32,
         inputs: &[StateMachineInputInstance],
@@ -2878,11 +2890,8 @@ impl StateMachineLayerInstance {
         else {
             return false;
         };
-        let Some(animation) = artboard.linear_animation(animation_instance.animation_index) else {
-            return false;
-        };
-        animation_instance.advance_with_events(
-            animation,
+        artboard.advance_linear_animation_instance_with_events(
+            animation_instance,
             elapsed_seconds * state.speed,
             reported_events,
         )

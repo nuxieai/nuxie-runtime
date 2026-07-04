@@ -520,7 +520,10 @@ fn ensure_static_draw_supported_for_artboard(
         .iter()
         .find(|nested| nested.type_name != "NestedArtboard")
     {
-        if matches!(nested.type_name, "NestedArtboardLayout" | "NestedArtboardLeaf") {
+        if matches!(
+            nested.type_name,
+            "NestedArtboardLayout" | "NestedArtboardLeaf"
+        ) {
             bail!(
                 "unsupported: nested-artboard-layout in Rust golden runner ({} global {})",
                 nested.type_name,
@@ -673,18 +676,6 @@ fn ensure_static_draw_supported_for_artboard(
     {
         bail!(
             "unsupported: data-binding-custom-property-enum in Rust golden runner (data bind global {} target global {:?})",
-            data_bind.global_id,
-            data_bind.target_global
-        );
-    }
-
-    if let Some(data_bind) = artboard
-        .data_binds
-        .iter()
-        .find(|data_bind| data_bind.target_type_name == Some("CustomPropertyTrigger"))
-    {
-        bail!(
-            "unsupported: data-binding-custom-property-trigger in Rust golden runner (data bind global {} target global {:?})",
             data_bind.global_id,
             data_bind.target_global
         );

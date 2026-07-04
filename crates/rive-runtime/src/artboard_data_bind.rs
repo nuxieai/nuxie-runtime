@@ -46,6 +46,7 @@ enum RuntimeArtboardNestedHostProperty {
 enum RuntimeArtboardDataBindValueKind {
     Number,
     String,
+    Trigger,
 }
 
 #[derive(Debug, Clone)]
@@ -267,6 +268,12 @@ pub(super) fn build_artboard_custom_property_bindings(
                 {
                     RuntimeArtboardDataBindValueKind::String
                 }
+                "CustomPropertyTrigger"
+                    if property_key_for_name("CustomPropertyTrigger", "propertyValue")
+                        == Some(property_key) =>
+                {
+                    RuntimeArtboardDataBindValueKind::Trigger
+                }
                 _ => return None,
             };
             Some(RuntimeArtboardCustomPropertyBindingInstance {
@@ -450,6 +457,9 @@ impl ArtboardInstance {
             RuntimeArtboardDataBindValueKind::String => self
                 .string_property(binding.target_local_id, binding.property_key)
                 .map(|value| RuntimeDataBindGraphValue::String(value.to_vec())),
+            RuntimeArtboardDataBindValueKind::Trigger => self
+                .uint_property(binding.target_local_id, binding.property_key)
+                .map(RuntimeDataBindGraphValue::Trigger),
         };
         let Some(value) = value else {
             return false;

@@ -5,8 +5,8 @@ use rive_binary::RuntimeFile;
 use rive_graph::ArtboardGraph;
 
 use crate::animation::{
-    LinearAnimationInstance, RuntimeJoystick, RuntimeLinearAnimation, build_linear_animations,
-    build_runtime_joysticks,
+    LinearAnimationInstance, RuntimeJoystick, RuntimeKeyedCallback, RuntimeLinearAnimation,
+    build_linear_animations, build_runtime_joysticks,
 };
 use crate::artboard_data_bind::{
     RuntimeArtboardCustomPropertyBindingInstance, RuntimeArtboardListBindingInstance,
@@ -438,15 +438,28 @@ impl ArtboardInstance {
     }
 
     pub fn advance_linear_animation_instance_with_events(
-        &self,
+        &mut self,
         instance: &mut LinearAnimationInstance,
         elapsed_seconds: f32,
         reported_events: &mut Vec<StateMachineReportedEvent>,
     ) -> bool {
-        let Some(animation) = self.linear_animation(instance.animation_index) else {
-            return false;
+        let (mut changed, keyed_callbacks) = {
+            let Some(animation) = self.linear_animation(instance.animation_index) else {
+                return false;
+            };
+            let mut keyed_callbacks = Vec::new();
+            let changed = instance.advance_with_events(
+                animation,
+                elapsed_seconds,
+                reported_events,
+                &mut keyed_callbacks,
+            );
+            (changed, keyed_callbacks)
         };
-        instance.advance_with_events(animation, elapsed_seconds, reported_events)
+        for callback in keyed_callbacks {
+            changed |= self.apply_keyed_callback(callback);
+        }
+        changed
     }
 
     pub fn apply_linear_animation_instance(
@@ -942,6 +955,31 @@ impl ArtboardInstance {
         }
         changed |= self.apply_nested_trigger_property_changed(local_id, property_key);
         changed
+    }
+
+    fn apply_keyed_callback(&mut self, callback: RuntimeKeyedCallback) -> bool {
+        let _seconds_delay = callback.seconds_delay;
+        match self
+            .slot(callback.target_local_id)
+            .and_then(|slot| slot.type_name)
+        {
+            Some("CustomPropertyTrigger")
+                if property_key_for_name("CustomPropertyTrigger", "fire")
+                    == Some(callback.property_key) =>
+            {
+                let Some(property_value_key) =
+                    property_key_for_name("CustomPropertyTrigger", "propertyValue")
+                else {
+                    return false;
+                };
+                let value = self
+                    .uint_property(callback.target_local_id, property_value_key)
+                    .unwrap_or(0)
+                    + 1;
+                self.set_uint_property(callback.target_local_id, property_value_key, value)
+            }
+            _ => false,
+        }
     }
 
     pub(crate) fn apply_bool_property_changed(

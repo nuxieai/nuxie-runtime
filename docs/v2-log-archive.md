@@ -2045,3 +2045,88 @@ milestone entries are kept verbatim here. Newest milestone last.
   golden-compare` reports `exact=70`, `exact-segments=279`, `diverges=0`,
   `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
   passes.
+
+- 2026-07-03: [M2] Widened `component_list_grouped.riv` from samples `0`,
+  `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
+  `1.0`, keeping grouped component-list/view-model-list playback exact across
+  the fifth sample while leaving active list/layout mutation in later
+  milestones. Exact segments are now 280 across 70 exact files; `make
+  golden-compare` reports `exact=70`, `exact-segments=280`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+- 2026-07-03: [M2] Widened `component_list_hit_order.riv` from samples `0`,
+  `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
+  `1.0`, keeping passive component-list hit-order/listener playback exact
+  across the fifth sample while leaving scripted input in M3 scope. Exact
+  segments are now 281 across 70 exact files; `make golden-compare` reports
+  `exact=70`, `exact-segments=281`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+- 2026-07-03: [M2] Widened `cubic_value_test.riv` from samples `0`, `0.25`,
+  `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and `1.0`,
+  keeping CubicValue/CubicEase keyed double animation playback exact across
+  the fifth sample. Exact segments are now 282 across 70 exact files; `make
+  golden-compare` reports `exact=70`, `exact-segments=282`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+- 2026-07-03: [M2] Widened `data_bind_solo.riv` from samples `0`, `0.25`,
+  `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and `1.0`,
+  keeping passive data-bind/Solo/view-model playback exact across the fifth
+  sample while leaving external mutation and active text behavior in later
+  milestones. Exact segments are now 283 across 70 exact files; `make
+  golden-compare` reports `exact=70`, `exact-segments=283`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+- 2026-07-03: [M2] Widened `data_binding_test_2.riv` from samples `0`,
+  `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
+  `1.0`, keeping passive data-bind converter and state-machine playback exact
+  across the fifth sample while leaving external view-model mutation in M5
+  scope. Exact segments are now 284 across 70 exact files; `make
+  golden-compare` reports `exact=70`, `exact-segments=284`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+- 2026-07-03: [M2] Widened `dependency_test.riv` from samples `0`, `0.25`,
+  `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and `1.0`,
+  keeping the foundational vector dependency fixture exact across the fifth
+  sample. Exact segments are now 285 across 70 exact files; `make
+  golden-compare` reports `exact=70`, `exact-segments=285`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+- 2026-07-03: [M2] Widened `draw_rule_cycle.riv` from samples `0`,
+  `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
+  `1.0`, keeping animated draw-rule cycle playback exact across the fifth
+  sample. Exact segments are now 286 across 70 exact files; `make
+  golden-compare` reports `exact=70`, `exact-segments=286`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+- 2026-07-03: [M2] Widened `event_on_listener.riv` from samples `0`,
+  `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
+  `1.0`, keeping passive listener event/open-url state-machine playback exact
+  across the fifth sample while leaving scripted pointer/event dispatch in M3
+  scope. Exact segments are now 287 across 70 exact files; `make
+  golden-compare` reports `exact=70`, `exact-segments=287`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+- 2026-07-03: [M2] Widened `event_trigger_event.riv` from samples `0`,
+  `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
+  `1.0`, keeping passive trigger/fire-event and view-model condition playback
+  exact across the fifth sample while leaving scripted pointer/event dispatch
+  in M3 scope. Exact segments are now 288 across 70 exact files; `make
+  golden-compare` reports `exact=70`, `exact-segments=288`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+- 2026-07-03: [M2] Widened `events_on_states.riv` from samples `0`,
+  `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
+  `1.0`, keeping passive listener events-on-states playback exact across the
+  fifth sample while leaving scripted pointer/event dispatch in M3 scope.
+  Exact segments are now 289 across 70 exact files; `make golden-compare`
+  reports `exact=70`, `exact-segments=289`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+- 2026-07-03: [M2] Widened `fill_trim_path.riv` from samples `0`, `0.25`,
+  `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and `1.0`,
+  keeping animated multi-shape TrimPath fill playback exact across the fifth
+  sample. Exact segments are now 290 across 70 exact files; `make
+  golden-compare` reports `exact=70`, `exact-segments=290`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.

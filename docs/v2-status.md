@@ -40,11 +40,14 @@ the only memory the next session has. Update it every commit.
    formula random-source state live in
    `crates/rive-runtime/src/data_bind_graph.rs`; the
    `RuntimeDataBindGraphValue` owned/imported view-model resolution impl lives
-   there too. Data-bind flag helpers and the target mutator bridge also live
-   there, along with the converter-state bridge, graph execution impls, and
-   source-node execution impl. Continue with the converter
-   state/formula/interpolator helper types and converter
-   conversion/construction helpers, preserving the current golden set.
+   there too. Data-bind flag helpers, the target mutator bridge, the
+   converter-state bridge, graph/source-node execution impls, converter
+   state/formula/interpolator helper types, owned view-model source-path
+   helpers, converter conversion/evaluation helpers, and converter
+   construction helpers also live there. Continue modularizing the remaining
+   root runtime surfaces; start with the draw/path/rendering command pipeline
+   because it is the largest contiguous `lib.rs` surface left and isolates the
+   renderer seam from object/data-bind work.
 2. Add handle-source world-space math and nested-remap dependent advancement
    to the joystick path when a corpus diff reaches those cases.
 3. Remaining exact entries pinned to sample `0` are static M1 holdovers:
@@ -182,90 +185,6 @@ the only memory the next session has. Update it every commit.
   under `M2 active log rolloff`; keep only the recent rolling window here once
   Metric, Next, Decisions, and `corpus.toml` capture the current state.
 
-- 2026-07-03: [M2] Widened `component_list_grouped.riv` from samples `0`,
-  `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
-  `1.0`, keeping grouped component-list/view-model-list playback exact across
-  the fifth sample while leaving active list/layout mutation in later
-  milestones. Exact segments are now 280 across 70 exact files; `make
-  golden-compare` reports `exact=70`, `exact-segments=280`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-03: [M2] Widened `component_list_hit_order.riv` from samples `0`,
-  `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
-  `1.0`, keeping passive component-list hit-order/listener playback exact
-  across the fifth sample while leaving scripted input in M3 scope. Exact
-  segments are now 281 across 70 exact files; `make golden-compare` reports
-  `exact=70`, `exact-segments=281`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-03: [M2] Widened `cubic_value_test.riv` from samples `0`, `0.25`,
-  `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and `1.0`,
-  keeping CubicValue/CubicEase keyed double animation playback exact across
-  the fifth sample. Exact segments are now 282 across 70 exact files; `make
-  golden-compare` reports `exact=70`, `exact-segments=282`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-03: [M2] Widened `data_bind_solo.riv` from samples `0`, `0.25`,
-  `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and `1.0`,
-  keeping passive data-bind/Solo/view-model playback exact across the fifth
-  sample while leaving external mutation and active text behavior in later
-  milestones. Exact segments are now 283 across 70 exact files; `make
-  golden-compare` reports `exact=70`, `exact-segments=283`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-03: [M2] Widened `data_binding_test_2.riv` from samples `0`,
-  `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
-  `1.0`, keeping passive data-bind converter and state-machine playback exact
-  across the fifth sample while leaving external view-model mutation in M5
-  scope. Exact segments are now 284 across 70 exact files; `make
-  golden-compare` reports `exact=70`, `exact-segments=284`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-03: [M2] Widened `dependency_test.riv` from samples `0`, `0.25`,
-  `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and `1.0`,
-  keeping the foundational vector dependency fixture exact across the fifth
-  sample. Exact segments are now 285 across 70 exact files; `make
-  golden-compare` reports `exact=70`, `exact-segments=285`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-03: [M2] Widened `draw_rule_cycle.riv` from samples `0`,
-  `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
-  `1.0`, keeping animated draw-rule cycle playback exact across the fifth
-  sample. Exact segments are now 286 across 70 exact files; `make
-  golden-compare` reports `exact=70`, `exact-segments=286`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-03: [M2] Widened `event_on_listener.riv` from samples `0`,
-  `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
-  `1.0`, keeping passive listener event/open-url state-machine playback exact
-  across the fifth sample while leaving scripted pointer/event dispatch in M3
-  scope. Exact segments are now 287 across 70 exact files; `make
-  golden-compare` reports `exact=70`, `exact-segments=287`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-03: [M2] Widened `event_trigger_event.riv` from samples `0`,
-  `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
-  `1.0`, keeping passive trigger/fire-event and view-model condition playback
-  exact across the fifth sample while leaving scripted pointer/event dispatch
-  in M3 scope. Exact segments are now 288 across 70 exact files; `make
-  golden-compare` reports `exact=70`, `exact-segments=288`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-03: [M2] Widened `events_on_states.riv` from samples `0`,
-  `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
-  `1.0`, keeping passive listener events-on-states playback exact across the
-  fifth sample while leaving scripted pointer/event dispatch in M3 scope.
-  Exact segments are now 289 across 70 exact files; `make golden-compare`
-  reports `exact=70`, `exact-segments=289`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-03: [M2] Widened `fill_trim_path.riv` from samples `0`, `0.25`,
-  `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and `1.0`,
-  keeping animated multi-shape TrimPath fill playback exact across the fifth
-  sample. Exact segments are now 290 across 70 exact files; `make
-  golden-compare` reports `exact=70`, `exact-segments=290`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
 - 2026-07-03: [M2] Widened `fix_rectangle.riv` from samples `0`, `0.25`,
   `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and `1.0`,
   keeping animated rectangle/path geometry playback exact across the fifth
@@ -505,3 +424,13 @@ the only memory the next session has. Update it every commit.
   70 exact files; `make golden-compare` reports `exact=70`,
   `exact-segments=339`, `diverges=0`, `unsupported-feature=225`,
   `not-yet=0`, and `cargo test --workspace` passes.
+- 2026-07-04: [M2] Moved the data-bind graph converter
+  state/formula/interpolator helper types, owned view-model source-path
+  helpers, converter conversion/evaluation helpers, and converter
+  construction helpers from `crates/rive-runtime/src/lib.rs` into
+  `crates/rive-runtime/src/data_bind_graph.rs`, with artboard/list binding
+  and state-machine bindable builders importing the graph helpers directly.
+  Exact segments remain 339 across 70 exact files; `make golden-compare`
+  reports `exact=70`, `exact-segments=339`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.

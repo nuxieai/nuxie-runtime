@@ -1,42 +1,16 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use rive_binary::{RuntimeFile, RuntimeObject};
 
 use crate::{
-    RuntimeDataBindGraphFormulaState, RuntimeDataBindGraphInterpolatorState, RuntimeDataContext,
-    RuntimeImportedViewModelInstanceContext, RuntimeOwnedViewModelInstance, RuntimeStateMachine,
-    RuntimeTransitionInterpolator, RuntimeViewModelPointer, StateMachineBindableArtboardInstance,
-    StateMachineBindableAssetInstance, StateMachineBindableBooleanInstance,
-    StateMachineBindableColorInstance, StateMachineBindableEnumInstance,
-    StateMachineBindableIntegerInstance, StateMachineBindableListInstance,
-    StateMachineBindableNumberInstance, StateMachineBindableStringInstance,
-    StateMachineBindableTriggerInstance, StateMachineBindableViewModelInstance,
-    runtime_data_bind_graph_convert_formula_value_with_state,
-    runtime_data_bind_graph_convert_value,
-    runtime_data_bind_graph_converter_contains_source_change_random,
-    runtime_data_bind_graph_converter_preserves_non_trigger_non_number_source_on_number_target_apply,
-    runtime_data_bind_graph_converter_preserves_string_source_on_main_to_source_target_apply,
-    runtime_data_bind_graph_converter_preserves_symbol_list_index_source_on_number_target_apply,
-    runtime_data_bind_graph_converter_preserves_trigger_source_on_number_target_apply,
-    runtime_data_bind_graph_converter_starts_with_to_string,
-    runtime_data_bind_graph_refresh_operation_view_model_converter_for_imported_context,
-    runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_context,
-    runtime_data_bind_graph_refresh_operation_view_model_number_converter_for_imported_context_path,
-    runtime_data_bind_graph_refresh_operation_view_model_number_converter_for_path,
-    runtime_data_bind_graph_reset_operation_view_model_converter_to_default,
-    runtime_data_bind_graph_reverse_convert_value,
-    runtime_owned_view_model_artboard_value_for_source_path,
-    runtime_owned_view_model_asset_value_for_source_path,
-    runtime_owned_view_model_boolean_value_for_source_path,
-    runtime_owned_view_model_color_value_for_source_path,
-    runtime_owned_view_model_enum_value_for_source_path,
-    runtime_owned_view_model_list_item_count_for_source_path,
-    runtime_owned_view_model_number_value_for_source_path,
-    runtime_owned_view_model_property_path_from_source_path,
-    runtime_owned_view_model_string_value_for_source_path,
-    runtime_owned_view_model_symbol_list_index_value_for_source_path,
-    runtime_owned_view_model_trigger_value_for_source_path,
-    runtime_owned_view_model_view_model_value_for_source_path,
+    RuntimeDataContext, RuntimeImportedViewModelInstanceContext, RuntimeOwnedViewModelInstance,
+    RuntimeStateMachine, RuntimeTransitionInterpolator, RuntimeViewModelPointer,
+    StateMachineBindableArtboardInstance, StateMachineBindableAssetInstance,
+    StateMachineBindableBooleanInstance, StateMachineBindableColorInstance,
+    StateMachineBindableEnumInstance, StateMachineBindableIntegerInstance,
+    StateMachineBindableListInstance, StateMachineBindableNumberInstance,
+    StateMachineBindableStringInstance, StateMachineBindableTriggerInstance,
+    StateMachineBindableViewModelInstance, color_lerp,
     runtime_view_model_view_model_property_path_for_name_path,
 };
 
@@ -232,6 +206,1800 @@ pub(crate) enum RuntimeDataBindGraphFormulaToken {
         arguments_count: usize,
         random_mode: u64,
     },
+}
+
+fn runtime_data_bind_graph_converter_contains_source_change_random(
+    converter: &RuntimeDataBindGraphConverter,
+) -> bool {
+    match converter {
+        RuntimeDataBindGraphConverter::Formula { tokens } => {
+            tokens.iter().any(|token| match token {
+                RuntimeDataBindGraphFormulaToken::Function {
+                    function_type,
+                    random_mode,
+                    ..
+                } => *function_type == 16 && *random_mode == 2,
+                _ => false,
+            })
+        }
+        RuntimeDataBindGraphConverter::Group(converters) => converters
+            .iter()
+            .any(runtime_data_bind_graph_converter_contains_source_change_random),
+        _ => false,
+    }
+}
+
+pub(crate) fn runtime_data_bind_graph_converter_accepts_symbol_list_index_number_source(
+    converter: &RuntimeDataBindGraphConverter,
+) -> bool {
+    match converter {
+        RuntimeDataBindGraphConverter::ToNumber
+        | RuntimeDataBindGraphConverter::OperationValue { .. }
+        | RuntimeDataBindGraphConverter::OperationViewModel { .. }
+        | RuntimeDataBindGraphConverter::Formula { .. } => true,
+        RuntimeDataBindGraphConverter::Group(converters) => converters
+            .first()
+            .is_some_and(runtime_data_bind_graph_converter_accepts_symbol_list_index_number_source),
+        _ => false,
+    }
+}
+
+fn runtime_data_bind_graph_converter_preserves_symbol_list_index_source_on_number_target_apply(
+    converter: &RuntimeDataBindGraphConverter,
+) -> bool {
+    matches!(
+        converter,
+        RuntimeDataBindGraphConverter::ToNumber | RuntimeDataBindGraphConverter::Formula { .. }
+    ) || (matches!(converter, RuntimeDataBindGraphConverter::Group(_))
+        && runtime_data_bind_graph_converter_accepts_symbol_list_index_number_source(converter))
+}
+
+fn runtime_data_bind_graph_converter_preserves_non_trigger_non_number_source_on_number_target_apply(
+    converter: &RuntimeDataBindGraphConverter,
+) -> bool {
+    matches!(
+        converter,
+        RuntimeDataBindGraphConverter::ToNumber | RuntimeDataBindGraphConverter::Formula { .. }
+    ) || matches!(
+        converter,
+        RuntimeDataBindGraphConverter::Group(converters)
+            if runtime_data_bind_graph_group_operation_formula_accepts_non_number_source(converters)
+                || runtime_data_bind_graph_group_formula_operation_accepts_non_number_source(converters)
+    )
+}
+
+fn runtime_data_bind_graph_converter_preserves_trigger_source_on_number_target_apply(
+    converter: &RuntimeDataBindGraphConverter,
+) -> bool {
+    matches!(converter, RuntimeDataBindGraphConverter::Formula { .. })
+        || matches!(
+            converter,
+            RuntimeDataBindGraphConverter::Group(converters)
+                if runtime_data_bind_graph_group_operation_formula_accepts_non_number_source(converters)
+                    || runtime_data_bind_graph_group_formula_operation_accepts_non_number_source(converters)
+        )
+}
+
+pub(crate) fn runtime_data_bind_graph_group_operation_formula_accepts_non_number_source(
+    converters: &[RuntimeDataBindGraphConverter],
+) -> bool {
+    let Some(formula_index) = converters
+        .iter()
+        .position(|converter| matches!(converter, RuntimeDataBindGraphConverter::Formula { .. }))
+    else {
+        return false;
+    };
+    converters.len() >= 2
+        && formula_index > 0
+        && converters.iter().enumerate().all(|(index, converter)| {
+            index == formula_index
+                || matches!(
+                    converter,
+                    RuntimeDataBindGraphConverter::OperationValue { .. }
+                )
+        })
+}
+
+pub(crate) fn runtime_data_bind_graph_group_formula_operation_accepts_non_number_source(
+    converters: &[RuntimeDataBindGraphConverter],
+) -> bool {
+    converters.len() >= 2
+        && matches!(
+            converters.first(),
+            Some(RuntimeDataBindGraphConverter::Formula { .. })
+        )
+        && converters[1..].iter().all(|converter| {
+            matches!(
+                converter,
+                RuntimeDataBindGraphConverter::OperationValue { .. }
+            )
+        })
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct RuntimeDataBindGraphFormulaState {
+    randoms: Vec<f32>,
+}
+
+impl RuntimeDataBindGraphFormulaState {
+    fn random_value(
+        &mut self,
+        random_mode: u64,
+        index: usize,
+        source: &mut RuntimeDataBindGraphFormulaRandomSource,
+    ) -> f32 {
+        if random_mode == 1 {
+            return source.next_value();
+        }
+        while self.randoms.len() <= index {
+            self.randoms.push(source.next_value());
+        }
+        self.randoms[index]
+    }
+
+    fn clear(&mut self) {
+        self.randoms.clear();
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct RuntimeDataBindGraphInterpolatorState {
+    advance_count: u8,
+    advancer: Option<RuntimeDataBindGraphInterpolatorAdvancer>,
+}
+
+impl RuntimeDataBindGraphInterpolatorState {
+    fn new() -> Self {
+        Self::default()
+    }
+
+    fn is_initialized(&self) -> bool {
+        self.advancer.is_some()
+    }
+
+    fn convert(
+        &mut self,
+        duration: f32,
+        _interpolator: Option<RuntimeTransitionInterpolator>,
+        input: &RuntimeDataBindGraphValue,
+    ) -> Option<RuntimeDataBindGraphValue> {
+        if duration == 0.0
+            && let Some(advancer) = &mut self.advancer
+        {
+            if let Some(input_value) = RuntimeDataBindGraphInterpolatorValue::from_graph(input) {
+                advancer.reset_to_start(&input_value);
+            }
+            return Some(input.clone());
+        }
+
+        if self.advancer.is_none() {
+            let Some(input_value) = RuntimeDataBindGraphInterpolatorValue::from_graph(input) else {
+                return Some(input.clone());
+            };
+            self.advancer = Some(RuntimeDataBindGraphInterpolatorAdvancer::new(&input_value));
+        }
+
+        let Some(input_value) = RuntimeDataBindGraphInterpolatorValue::from_graph(input) else {
+            return Some(input.clone());
+        };
+        let advancer = self.advancer.as_mut().expect("advancer initialized");
+        if self.advance_count < 2 {
+            advancer.reset_values(&input_value);
+        } else {
+            advancer.update_values(&input_value);
+        }
+        Some(advancer.current_value().to_graph_value())
+    }
+
+    fn advance(
+        &mut self,
+        duration: f32,
+        interpolator: Option<RuntimeTransitionInterpolator>,
+        elapsed_seconds: f32,
+    ) -> RuntimeDataBindGraphStatefulAdvance {
+        if self.advance_count < 2 && elapsed_seconds > 0.0 {
+            self.advance_count += 1;
+        }
+        let Some(advancer) = &mut self.advancer else {
+            return RuntimeDataBindGraphStatefulAdvance {
+                changed: true,
+                keep_going: true,
+            };
+        };
+        advancer.advance(duration, interpolator, elapsed_seconds)
+    }
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeDataBindGraphInterpolatorAdvancer {
+    animation_data_a: RuntimeDataBindGraphInterpolatorAnimationData,
+    animation_data_b: RuntimeDataBindGraphInterpolatorAnimationData,
+    current_value: RuntimeDataBindGraphInterpolatorValue,
+    is_smoothing_animation: bool,
+}
+
+impl RuntimeDataBindGraphInterpolatorAdvancer {
+    fn new(input: &RuntimeDataBindGraphInterpolatorValue) -> Self {
+        let default_value = input.default_for_kind();
+        Self {
+            animation_data_a: RuntimeDataBindGraphInterpolatorAnimationData::new(
+                default_value.clone(),
+            ),
+            animation_data_b: RuntimeDataBindGraphInterpolatorAnimationData::new(
+                default_value.clone(),
+            ),
+            current_value: default_value,
+            is_smoothing_animation: false,
+        }
+    }
+
+    fn current_value(&self) -> &RuntimeDataBindGraphInterpolatorValue {
+        &self.current_value
+    }
+
+    fn reset_values(&mut self, input: &RuntimeDataBindGraphInterpolatorValue) {
+        if self.is_smoothing_animation {
+            self.animation_data_b.reset_values(input);
+        } else {
+            self.animation_data_a.reset_values(input);
+        }
+        self.current_value.copy_from(input);
+    }
+
+    fn reset_to_start(&mut self, input: &RuntimeDataBindGraphInterpolatorValue) {
+        self.reset_values(input);
+        self.is_smoothing_animation = false;
+        self.animation_data_a.elapsed_seconds = 0.0;
+        self.animation_data_b.elapsed_seconds = 0.0;
+    }
+
+    fn update_values(&mut self, input: &RuntimeDataBindGraphInterpolatorValue) {
+        if self.current_animation_data().to.compare(input) {
+            return;
+        }
+
+        if self.current_animation_data().elapsed_seconds != 0.0 {
+            if self.is_smoothing_animation {
+                self.animation_data_a
+                    .copy_from(&self.animation_data_b.clone());
+            }
+            self.is_smoothing_animation = true;
+        } else {
+            self.is_smoothing_animation = false;
+        }
+
+        let current_value = self.current_value.clone();
+        let animation_data = self.current_animation_data_mut();
+        animation_data.from.copy_from(&current_value);
+        animation_data.to.copy_from(input);
+        animation_data.elapsed_seconds = 0.0;
+    }
+
+    fn advance(
+        &mut self,
+        duration: f32,
+        interpolator: Option<RuntimeTransitionInterpolator>,
+        elapsed_seconds: f32,
+    ) -> RuntimeDataBindGraphStatefulAdvance {
+        let animation_index = self.current_animation_index();
+        if self.animation_data(animation_index).to == self.current_value || elapsed_seconds == 0.0 {
+            return RuntimeDataBindGraphStatefulAdvance::default();
+        }
+
+        let previous_value = self.current_value.clone();
+        self.advance_animation_data(duration, interpolator, elapsed_seconds, animation_index);
+        RuntimeDataBindGraphStatefulAdvance {
+            changed: self.current_value != previous_value,
+            keep_going: self.animation_data(animation_index).elapsed_seconds < duration,
+        }
+    }
+
+    fn advance_animation_data(
+        &mut self,
+        duration: f32,
+        interpolator: Option<RuntimeTransitionInterpolator>,
+        elapsed_seconds: f32,
+        animation_index: usize,
+    ) {
+        if self.is_smoothing_animation {
+            let factor = runtime_data_bind_graph_interpolator_factor(
+                duration,
+                interpolator,
+                self.animation_data_a.elapsed_seconds,
+            );
+            let interpolated = self.animation_data_a.interpolate(factor);
+            self.animation_data_b.from.copy_from(&interpolated);
+            if factor == 1.0 {
+                self.animation_data_a
+                    .copy_from(&self.animation_data_b.clone());
+                self.is_smoothing_animation = false;
+            } else {
+                self.animation_data_a.elapsed_seconds += elapsed_seconds;
+            }
+        }
+
+        if self.animation_data(animation_index).elapsed_seconds >= duration {
+            self.current_value
+                .copy_from(&self.animation_data(animation_index).to.clone());
+            if self.is_smoothing_animation {
+                self.is_smoothing_animation = false;
+                self.animation_data_a
+                    .copy_from(&self.animation_data_b.clone());
+                self.animation_data_a.elapsed_seconds = 0.0;
+                self.animation_data_b.elapsed_seconds = 0.0;
+            } else {
+                self.animation_data_a.elapsed_seconds = 0.0;
+            }
+            return;
+        }
+
+        self.animation_data_mut(animation_index).elapsed_seconds += elapsed_seconds;
+        let factor = runtime_data_bind_graph_interpolator_factor(
+            duration,
+            interpolator,
+            self.animation_data(animation_index).elapsed_seconds,
+        );
+        let interpolated = self.animation_data(animation_index).interpolate(factor);
+        self.current_value.copy_from(&interpolated);
+    }
+
+    fn current_animation_data(&self) -> &RuntimeDataBindGraphInterpolatorAnimationData {
+        self.animation_data(self.current_animation_index())
+    }
+
+    fn current_animation_data_mut(&mut self) -> &mut RuntimeDataBindGraphInterpolatorAnimationData {
+        self.animation_data_mut(self.current_animation_index())
+    }
+
+    fn current_animation_index(&self) -> usize {
+        usize::from(self.is_smoothing_animation)
+    }
+
+    fn animation_data(&self, index: usize) -> &RuntimeDataBindGraphInterpolatorAnimationData {
+        if index == 0 {
+            &self.animation_data_a
+        } else {
+            &self.animation_data_b
+        }
+    }
+
+    fn animation_data_mut(
+        &mut self,
+        index: usize,
+    ) -> &mut RuntimeDataBindGraphInterpolatorAnimationData {
+        if index == 0 {
+            &mut self.animation_data_a
+        } else {
+            &mut self.animation_data_b
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeDataBindGraphInterpolatorAnimationData {
+    elapsed_seconds: f32,
+    from: RuntimeDataBindGraphInterpolatorValue,
+    to: RuntimeDataBindGraphInterpolatorValue,
+}
+
+impl RuntimeDataBindGraphInterpolatorAnimationData {
+    fn new(value: RuntimeDataBindGraphInterpolatorValue) -> Self {
+        Self {
+            elapsed_seconds: 0.0,
+            from: value.clone(),
+            to: value,
+        }
+    }
+
+    fn reset_values(&mut self, input: &RuntimeDataBindGraphInterpolatorValue) {
+        self.from.copy_from(input);
+        self.to.copy_from(input);
+    }
+
+    fn copy_from(&mut self, source: &Self) {
+        self.from.copy_from(&source.from);
+        self.to.copy_from(&source.to);
+        self.elapsed_seconds = source.elapsed_seconds;
+    }
+
+    fn interpolate(&self, factor: f32) -> RuntimeDataBindGraphInterpolatorValue {
+        self.from.interpolate(&self.to, factor)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum RuntimeDataBindGraphInterpolatorValue {
+    Number(f32),
+    Color(u32),
+}
+
+impl RuntimeDataBindGraphInterpolatorValue {
+    fn from_graph(value: &RuntimeDataBindGraphValue) -> Option<Self> {
+        match value {
+            RuntimeDataBindGraphValue::Number(value) => Some(Self::Number(*value)),
+            RuntimeDataBindGraphValue::Color(value) => Some(Self::Color(*value)),
+            _ => None,
+        }
+    }
+
+    fn default_for_kind(&self) -> Self {
+        match self {
+            Self::Number(_) => Self::Number(0.0),
+            Self::Color(_) => Self::Color(0),
+        }
+    }
+
+    fn copy_from(&mut self, source: &Self) {
+        if std::mem::discriminant(self) == std::mem::discriminant(source) {
+            *self = source.clone();
+        }
+    }
+
+    fn compare(&self, comparand: &Self) -> bool {
+        self == comparand
+    }
+
+    fn interpolate(&self, to: &Self, factor: f32) -> Self {
+        match (self, to) {
+            (Self::Number(from), Self::Number(to)) => {
+                Self::Number(*to * factor + *from * (1.0 - factor))
+            }
+            (Self::Color(from), Self::Color(to)) => Self::Color(color_lerp(*from, *to, factor)),
+            _ => self.clone(),
+        }
+    }
+
+    fn to_graph_value(&self) -> RuntimeDataBindGraphValue {
+        match self {
+            Self::Number(value) => RuntimeDataBindGraphValue::Number(*value),
+            Self::Color(value) => RuntimeDataBindGraphValue::Color(*value),
+        }
+    }
+}
+
+fn runtime_data_bind_graph_interpolator_factor(
+    duration: f32,
+    interpolator: Option<RuntimeTransitionInterpolator>,
+    elapsed_seconds: f32,
+) -> f32 {
+    let mut factor = if duration > 0.0 {
+        f32::min(1.0, elapsed_seconds / duration)
+    } else {
+        1.0
+    };
+    if let Some(interpolator) = interpolator {
+        factor = interpolator.transform(factor);
+    }
+    factor
+}
+
+fn runtime_data_bind_graph_converter_preserves_string_source_on_main_to_source_target_apply(
+    converter: &RuntimeDataBindGraphConverter,
+) -> bool {
+    match converter {
+        RuntimeDataBindGraphConverter::StringTrim { .. }
+        | RuntimeDataBindGraphConverter::StringRemoveZeros
+        | RuntimeDataBindGraphConverter::StringPad { .. } => true,
+        RuntimeDataBindGraphConverter::Group(converters) => {
+            !converters.is_empty()
+                && converters.iter().all(
+                    runtime_data_bind_graph_converter_preserves_string_source_on_main_to_source_target_apply,
+                )
+        }
+        _ => false,
+    }
+}
+
+fn runtime_data_bind_graph_refresh_operation_view_model_number_converter_for_path(
+    converter: &mut RuntimeDataBindGraphConverter,
+    path: &[u32],
+    value: f32,
+) -> bool {
+    match converter {
+        RuntimeDataBindGraphConverter::OperationViewModel {
+            operation_value,
+            default_operation_value,
+            source_path: Some(source_path),
+            ..
+        } if source_path.as_slice() == path
+            && (*operation_value != value || *default_operation_value != value) =>
+        {
+            *operation_value = value;
+            *default_operation_value = value;
+            true
+        }
+        RuntimeDataBindGraphConverter::Group(converters) => {
+            let mut changed = false;
+            for converter in converters {
+                changed |=
+                    runtime_data_bind_graph_refresh_operation_view_model_number_converter_for_path(
+                        converter, path, value,
+                    );
+            }
+            changed
+        }
+        _ => false,
+    }
+}
+
+fn runtime_data_bind_graph_refresh_operation_view_model_number_converter_for_imported_context_path(
+    converter: &mut RuntimeDataBindGraphConverter,
+    path: &[u32],
+    value: f32,
+) -> bool {
+    match converter {
+        RuntimeDataBindGraphConverter::OperationViewModel {
+            operation_value,
+            source_path: Some(source_path),
+            ..
+        } if source_path.as_slice() == path && *operation_value != value => {
+            *operation_value = value;
+            true
+        }
+        RuntimeDataBindGraphConverter::Group(converters) => {
+            let mut changed = false;
+            for converter in converters {
+                changed |= runtime_data_bind_graph_refresh_operation_view_model_number_converter_for_imported_context_path(
+                    converter, path, value,
+                );
+            }
+            changed
+        }
+        _ => false,
+    }
+}
+
+fn runtime_data_bind_graph_reset_operation_view_model_converter_to_default(
+    converter: &mut RuntimeDataBindGraphConverter,
+) -> bool {
+    match converter {
+        RuntimeDataBindGraphConverter::OperationViewModel {
+            operation_value,
+            default_operation_value,
+            ..
+        } if *operation_value != *default_operation_value => {
+            *operation_value = *default_operation_value;
+            true
+        }
+        RuntimeDataBindGraphConverter::Group(converters) => {
+            let mut changed = false;
+            for converter in converters {
+                changed |= runtime_data_bind_graph_reset_operation_view_model_converter_to_default(
+                    converter,
+                );
+            }
+            changed
+        }
+        _ => false,
+    }
+}
+
+fn runtime_data_bind_graph_refresh_operation_view_model_converter_for_imported_context(
+    file: &RuntimeFile,
+    converter: &mut RuntimeDataBindGraphConverter,
+    context: &RuntimeDataContext<'_>,
+) -> bool {
+    match converter {
+        RuntimeDataBindGraphConverter::OperationViewModel {
+            operation_value,
+            source_path: Some(source_path),
+            ..
+        } => {
+            let value = context
+                .absolute_property(source_path)
+                .and_then(|source| file.view_model_instance_number_value_for_object(source))
+                .unwrap_or(0.0);
+            if *operation_value == value {
+                return false;
+            }
+            *operation_value = value;
+            true
+        }
+        RuntimeDataBindGraphConverter::Group(converters) => {
+            let mut changed = false;
+            for converter in converters {
+                changed |=
+                    runtime_data_bind_graph_refresh_operation_view_model_converter_for_imported_context(
+                        file, converter, context,
+                    );
+            }
+            changed
+        }
+        _ => false,
+    }
+}
+
+fn runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_context(
+    converter: &mut RuntimeDataBindGraphConverter,
+    context: &RuntimeOwnedViewModelInstance,
+) -> bool {
+    match converter {
+        RuntimeDataBindGraphConverter::OperationViewModel {
+            operation_value,
+            source_path: Some(source_path),
+            ..
+        } => {
+            let value = runtime_owned_view_model_number_value_for_source_path(context, source_path)
+                .unwrap_or(0.0);
+            if *operation_value == value {
+                return false;
+            }
+            *operation_value = value;
+            true
+        }
+        RuntimeDataBindGraphConverter::Group(converters) => {
+            let mut changed = false;
+            for converter in converters {
+                changed |=
+                    runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_context(
+                        converter, context,
+                    );
+            }
+            changed
+        }
+        _ => false,
+    }
+}
+
+fn runtime_owned_view_model_number_value_for_source_path(
+    context: &RuntimeOwnedViewModelInstance,
+    source_path: &[u32],
+) -> Option<f32> {
+    let property_path =
+        runtime_owned_view_model_property_path_from_source_path(context, source_path)?;
+    context.number_value_by_property_path(&property_path)
+}
+
+fn runtime_owned_view_model_symbol_list_index_value_for_source_path(
+    context: &RuntimeOwnedViewModelInstance,
+    source_path: &[u32],
+) -> Option<u64> {
+    let property_path =
+        runtime_owned_view_model_property_path_from_source_path(context, source_path)?;
+    context.symbol_list_index_value_by_property_path(&property_path)
+}
+
+fn runtime_owned_view_model_boolean_value_for_source_path(
+    context: &RuntimeOwnedViewModelInstance,
+    source_path: &[u32],
+) -> Option<bool> {
+    let property_path =
+        runtime_owned_view_model_property_path_from_source_path(context, source_path)?;
+    context.boolean_value_by_property_path(&property_path)
+}
+
+fn runtime_owned_view_model_enum_value_for_source_path(
+    context: &RuntimeOwnedViewModelInstance,
+    source_path: &[u32],
+) -> Option<u64> {
+    let property_path =
+        runtime_owned_view_model_property_path_from_source_path(context, source_path)?;
+    context.enum_value_by_property_path(&property_path)
+}
+
+fn runtime_owned_view_model_color_value_for_source_path(
+    context: &RuntimeOwnedViewModelInstance,
+    source_path: &[u32],
+) -> Option<u32> {
+    let property_path =
+        runtime_owned_view_model_property_path_from_source_path(context, source_path)?;
+    context.color_value_by_property_path(&property_path)
+}
+
+fn runtime_owned_view_model_string_value_for_source_path<'a>(
+    context: &'a RuntimeOwnedViewModelInstance,
+    source_path: &[u32],
+) -> Option<&'a [u8]> {
+    let property_path =
+        runtime_owned_view_model_property_path_from_source_path(context, source_path)?;
+    context.string_value_by_property_path(&property_path)
+}
+
+fn runtime_owned_view_model_trigger_value_for_source_path(
+    context: &RuntimeOwnedViewModelInstance,
+    source_path: &[u32],
+) -> Option<u64> {
+    let property_path =
+        runtime_owned_view_model_property_path_from_source_path(context, source_path)?;
+    context.trigger_value_by_property_path(&property_path)
+}
+
+fn runtime_owned_view_model_list_item_count_for_source_path(
+    context: &RuntimeOwnedViewModelInstance,
+    source_path: &[u32],
+) -> Option<usize> {
+    let property_path =
+        runtime_owned_view_model_property_path_from_source_path(context, source_path)?;
+    context.list_item_count_by_property_path(&property_path)
+}
+
+fn runtime_owned_view_model_asset_value_for_source_path(
+    context: &RuntimeOwnedViewModelInstance,
+    source_path: &[u32],
+) -> Option<u64> {
+    let property_path =
+        runtime_owned_view_model_property_path_from_source_path(context, source_path)?;
+    context.asset_value_by_property_path(&property_path)
+}
+
+fn runtime_owned_view_model_artboard_value_for_source_path(
+    context: &RuntimeOwnedViewModelInstance,
+    source_path: &[u32],
+) -> Option<u64> {
+    let property_path =
+        runtime_owned_view_model_property_path_from_source_path(context, source_path)?;
+    context.artboard_value_by_property_path(&property_path)
+}
+
+fn runtime_owned_view_model_view_model_value_for_source_path(
+    context: &RuntimeOwnedViewModelInstance,
+    source_path: &[u32],
+) -> Option<RuntimeViewModelPointer> {
+    let property_path =
+        runtime_owned_view_model_property_path_from_source_path(context, source_path)?;
+    context.view_model_value_by_property_path(&property_path)
+}
+
+fn runtime_owned_view_model_property_path_from_source_path(
+    context: &RuntimeOwnedViewModelInstance,
+    source_path: &[u32],
+) -> Option<Vec<usize>> {
+    if source_path.len() < 2 || usize::try_from(source_path[0]).ok()? != context.view_model_index {
+        return None;
+    }
+    source_path[1..]
+        .iter()
+        .map(|property_index| usize::try_from(*property_index).ok())
+        .collect()
+}
+
+pub(crate) fn runtime_data_bind_graph_convert_value(
+    converter: &RuntimeDataBindGraphConverter,
+    value: &RuntimeDataBindGraphValue,
+) -> Option<RuntimeDataBindGraphValue> {
+    match (converter, value) {
+        (RuntimeDataBindGraphConverter::PassThrough, value) => Some(value.clone()),
+        (
+            RuntimeDataBindGraphConverter::BooleanNegate,
+            RuntimeDataBindGraphValue::Boolean(value),
+        ) => Some(RuntimeDataBindGraphValue::Boolean(!value)),
+        (RuntimeDataBindGraphConverter::BooleanNegate, _) => None,
+        (
+            RuntimeDataBindGraphConverter::TriggerIncrement,
+            RuntimeDataBindGraphValue::Trigger(value),
+        ) => Some(RuntimeDataBindGraphValue::Trigger(u64::from(
+            (*value as u32).wrapping_add(1),
+        ))),
+        (RuntimeDataBindGraphConverter::TriggerIncrement, _) => None,
+        (RuntimeDataBindGraphConverter::ToNumber, RuntimeDataBindGraphValue::Number(value)) => {
+            Some(RuntimeDataBindGraphValue::Number(*value))
+        }
+        (RuntimeDataBindGraphConverter::ToNumber, RuntimeDataBindGraphValue::Boolean(value)) => {
+            Some(RuntimeDataBindGraphValue::Number(if *value {
+                1.0
+            } else {
+                0.0
+            }))
+        }
+        (RuntimeDataBindGraphConverter::ToNumber, RuntimeDataBindGraphValue::Enum(value)) => {
+            Some(RuntimeDataBindGraphValue::Number(*value as f32))
+        }
+        (RuntimeDataBindGraphConverter::ToNumber, RuntimeDataBindGraphValue::Color(value)) => {
+            Some(RuntimeDataBindGraphValue::Number((*value as i32) as f32))
+        }
+        (
+            RuntimeDataBindGraphConverter::ToNumber,
+            RuntimeDataBindGraphValue::SymbolListIndex(value),
+        ) => Some(RuntimeDataBindGraphValue::Number(*value as f32)),
+        (RuntimeDataBindGraphConverter::ToNumber, RuntimeDataBindGraphValue::String(value)) => {
+            Some(RuntimeDataBindGraphValue::Number(
+                rive_binary::data_converter_to_number_string_value(value),
+            ))
+        }
+        (RuntimeDataBindGraphConverter::ToNumber, _) => None,
+        (
+            RuntimeDataBindGraphConverter::ListToLength,
+            RuntimeDataBindGraphValue::ListLength(value),
+        ) => Some(RuntimeDataBindGraphValue::Number(*value as f32)),
+        (
+            RuntimeDataBindGraphConverter::ListToLength,
+            RuntimeDataBindGraphValue::List { item_count },
+        ) => Some(RuntimeDataBindGraphValue::Number(*item_count as f32)),
+        (RuntimeDataBindGraphConverter::ListToLength, _) => {
+            Some(RuntimeDataBindGraphValue::Number(0.0))
+        }
+        (
+            RuntimeDataBindGraphConverter::NumberToList { .. },
+            RuntimeDataBindGraphValue::List { item_count },
+        ) => Some(RuntimeDataBindGraphValue::List {
+            item_count: *item_count,
+        }),
+        (
+            RuntimeDataBindGraphConverter::NumberToList { has_view_model },
+            RuntimeDataBindGraphValue::Number(value),
+        ) => Some(RuntimeDataBindGraphValue::List {
+            item_count: if *has_view_model {
+                value.floor().max(0.0) as usize
+            } else {
+                0
+            },
+        }),
+        (RuntimeDataBindGraphConverter::NumberToList { .. }, _) => None,
+        (
+            RuntimeDataBindGraphConverter::ToString {
+                flags, decimals, ..
+            },
+            RuntimeDataBindGraphValue::Number(value),
+        ) => Some(RuntimeDataBindGraphValue::String(
+            rive_binary::data_converter_to_string_number_value(*value, *flags, *decimals),
+        )),
+        (
+            RuntimeDataBindGraphConverter::ToString { .. },
+            RuntimeDataBindGraphValue::Boolean(value),
+        ) => Some(RuntimeDataBindGraphValue::String(
+            rive_binary::data_converter_to_string_boolean_value(*value),
+        )),
+        (
+            RuntimeDataBindGraphConverter::ToString { .. },
+            RuntimeDataBindGraphValue::String(value),
+        ) => Some(RuntimeDataBindGraphValue::String(
+            rive_binary::data_converter_to_string_string_value(value),
+        )),
+        (
+            RuntimeDataBindGraphConverter::ToString { .. },
+            RuntimeDataBindGraphValue::Trigger(value),
+        ) => Some(RuntimeDataBindGraphValue::String(
+            rive_binary::data_converter_to_string_trigger_value(*value),
+        )),
+        (
+            RuntimeDataBindGraphConverter::ToString { .. },
+            RuntimeDataBindGraphValue::SymbolListIndex(value),
+        ) => Some(RuntimeDataBindGraphValue::String(
+            rive_binary::data_converter_to_string_symbol_list_index_value(*value),
+        )),
+        (
+            RuntimeDataBindGraphConverter::ToString { color_format, .. },
+            RuntimeDataBindGraphValue::Color(value),
+        ) => Some(RuntimeDataBindGraphValue::String(
+            rive_binary::data_converter_to_string_color_value(*value, color_format),
+        )),
+        (RuntimeDataBindGraphConverter::ToString { .. }, RuntimeDataBindGraphValue::Enum(_)) => {
+            Some(RuntimeDataBindGraphValue::String(Vec::new()))
+        }
+        (RuntimeDataBindGraphConverter::ToString { .. }, _) => None,
+        (
+            RuntimeDataBindGraphConverter::OperationValue {
+                operation_type,
+                operation_value,
+            },
+            RuntimeDataBindGraphValue::Number(value),
+        ) => Some(RuntimeDataBindGraphValue::Number(
+            runtime_data_bind_graph_convert_operation_value(
+                *value,
+                *operation_value,
+                *operation_type,
+            ),
+        )),
+        (
+            RuntimeDataBindGraphConverter::OperationValue {
+                operation_type,
+                operation_value,
+            },
+            RuntimeDataBindGraphValue::SymbolListIndex(value),
+        ) => Some(RuntimeDataBindGraphValue::Number(
+            runtime_data_bind_graph_convert_operation_value(
+                *value as f32,
+                *operation_value,
+                *operation_type,
+            ),
+        )),
+        (RuntimeDataBindGraphConverter::OperationValue { .. }, _) => {
+            Some(RuntimeDataBindGraphValue::Number(0.0))
+        }
+        (
+            RuntimeDataBindGraphConverter::OperationViewModel {
+                operation_type,
+                operation_value,
+                ..
+            },
+            RuntimeDataBindGraphValue::Number(value),
+        ) => Some(RuntimeDataBindGraphValue::Number(
+            runtime_data_bind_graph_convert_operation_value(
+                *value,
+                *operation_value,
+                *operation_type,
+            ),
+        )),
+        (
+            RuntimeDataBindGraphConverter::OperationViewModel {
+                operation_type,
+                operation_value,
+                ..
+            },
+            RuntimeDataBindGraphValue::SymbolListIndex(value),
+        ) => Some(RuntimeDataBindGraphValue::Number(
+            runtime_data_bind_graph_convert_operation_value(
+                *value as f32,
+                *operation_value,
+                *operation_type,
+            ),
+        )),
+        (RuntimeDataBindGraphConverter::OperationViewModel { .. }, _) => {
+            Some(RuntimeDataBindGraphValue::Number(0.0))
+        }
+        (
+            RuntimeDataBindGraphConverter::SystemOperationValue {
+                operation_type,
+                operation_value,
+                reverse,
+            },
+            RuntimeDataBindGraphValue::Number(value),
+        ) => Some(RuntimeDataBindGraphValue::Number(if *reverse {
+            runtime_data_bind_graph_reverse_convert_operation_value(
+                *value,
+                *operation_value,
+                *operation_type,
+            )
+        } else {
+            runtime_data_bind_graph_convert_operation_value(
+                *value,
+                *operation_value,
+                *operation_type,
+            )
+        })),
+        (RuntimeDataBindGraphConverter::SystemOperationValue { .. }, _) => {
+            Some(RuntimeDataBindGraphValue::Number(0.0))
+        }
+        (
+            RuntimeDataBindGraphConverter::Rounder { decimals },
+            RuntimeDataBindGraphValue::Number(value),
+        ) => {
+            let rounder = 10.0_f32.powf(*decimals as f32);
+            Some(RuntimeDataBindGraphValue::Number(
+                (*value * rounder).round() / rounder,
+            ))
+        }
+        (RuntimeDataBindGraphConverter::Rounder { .. }, _) => {
+            Some(RuntimeDataBindGraphValue::Number(0.0))
+        }
+        (
+            RuntimeDataBindGraphConverter::RangeMapper {
+                min_input,
+                max_input,
+                min_output,
+                max_output,
+                flags,
+                interpolation_type,
+                interpolator,
+            },
+            RuntimeDataBindGraphValue::Number(value),
+        ) => Some(RuntimeDataBindGraphValue::Number(
+            runtime_data_bind_graph_convert_range_mapper(
+                *value,
+                *min_input,
+                *max_input,
+                *min_output,
+                *max_output,
+                *flags,
+                *interpolation_type,
+                *interpolator,
+            ),
+        )),
+        (RuntimeDataBindGraphConverter::RangeMapper { .. }, _) => {
+            Some(RuntimeDataBindGraphValue::Number(0.0))
+        }
+        (
+            RuntimeDataBindGraphConverter::StringTrim { trim_type },
+            RuntimeDataBindGraphValue::String(value),
+        ) => Some(RuntimeDataBindGraphValue::String(
+            rive_binary::data_converter_string_trim_value(value, *trim_type),
+        )),
+        (RuntimeDataBindGraphConverter::StringTrim { .. }, _) => None,
+        (
+            RuntimeDataBindGraphConverter::StringRemoveZeros,
+            RuntimeDataBindGraphValue::String(value),
+        ) => Some(RuntimeDataBindGraphValue::String(
+            rive_binary::data_converter_string_remove_zeros_value(value),
+        )),
+        (RuntimeDataBindGraphConverter::StringRemoveZeros, _) => None,
+        (
+            RuntimeDataBindGraphConverter::StringPad {
+                length,
+                text,
+                pad_type,
+            },
+            RuntimeDataBindGraphValue::String(value),
+        ) => Some(RuntimeDataBindGraphValue::String(
+            rive_binary::data_converter_string_pad_value(value, *length, text, *pad_type),
+        )),
+        (RuntimeDataBindGraphConverter::StringPad { .. }, _) => None,
+        (
+            RuntimeDataBindGraphConverter::Formula { tokens },
+            RuntimeDataBindGraphValue::Number(value),
+        ) => Some(RuntimeDataBindGraphValue::Number(
+            runtime_data_bind_graph_convert_formula(*value, tokens),
+        )),
+        (
+            RuntimeDataBindGraphConverter::Formula { tokens },
+            RuntimeDataBindGraphValue::SymbolListIndex(value),
+        ) => Some(RuntimeDataBindGraphValue::Number(
+            runtime_data_bind_graph_convert_formula(*value as f32, tokens),
+        )),
+        (RuntimeDataBindGraphConverter::Formula { .. }, _) => {
+            Some(RuntimeDataBindGraphValue::Number(0.0))
+        }
+        (RuntimeDataBindGraphConverter::Group(converters), value) => {
+            let mut value = value.clone();
+            for converter in converters {
+                value = runtime_data_bind_graph_convert_value(converter, &value)?;
+            }
+            Some(value)
+        }
+        (RuntimeDataBindGraphConverter::Interpolator { .. }, _) => None,
+        (RuntimeDataBindGraphConverter::Unsupported, _) => None,
+    }
+}
+
+pub(crate) fn runtime_data_bind_graph_reverse_convert_value(
+    converter: &RuntimeDataBindGraphConverter,
+    value: &RuntimeDataBindGraphValue,
+) -> Option<RuntimeDataBindGraphValue> {
+    match (converter, value) {
+        (RuntimeDataBindGraphConverter::PassThrough, value) => Some(value.clone()),
+        (
+            RuntimeDataBindGraphConverter::BooleanNegate,
+            RuntimeDataBindGraphValue::Boolean(value),
+        ) => Some(RuntimeDataBindGraphValue::Boolean(!value)),
+        (RuntimeDataBindGraphConverter::BooleanNegate, _) => None,
+        (
+            RuntimeDataBindGraphConverter::TriggerIncrement,
+            RuntimeDataBindGraphValue::Trigger(value),
+        ) => Some(RuntimeDataBindGraphValue::Trigger(*value)),
+        (RuntimeDataBindGraphConverter::TriggerIncrement, _) => None,
+        (RuntimeDataBindGraphConverter::ToNumber, RuntimeDataBindGraphValue::Number(value)) => {
+            Some(RuntimeDataBindGraphValue::Number(*value))
+        }
+        (RuntimeDataBindGraphConverter::ToNumber, _) => None,
+        (
+            RuntimeDataBindGraphConverter::ToString { .. },
+            RuntimeDataBindGraphValue::String(value),
+        ) => Some(RuntimeDataBindGraphValue::String(value.clone())),
+        (RuntimeDataBindGraphConverter::ToString { .. }, _) => {
+            Some(RuntimeDataBindGraphValue::String(Vec::new()))
+        }
+        (
+            RuntimeDataBindGraphConverter::StringTrim { .. },
+            RuntimeDataBindGraphValue::String(value),
+        ) => Some(RuntimeDataBindGraphValue::String(value.clone())),
+        (RuntimeDataBindGraphConverter::StringTrim { .. }, value) => Some(value.clone()),
+        (
+            RuntimeDataBindGraphConverter::StringRemoveZeros,
+            RuntimeDataBindGraphValue::String(value),
+        ) => Some(RuntimeDataBindGraphValue::String(value.clone())),
+        (RuntimeDataBindGraphConverter::StringRemoveZeros, value) => Some(value.clone()),
+        (
+            RuntimeDataBindGraphConverter::StringPad { .. },
+            RuntimeDataBindGraphValue::String(value),
+        ) => Some(RuntimeDataBindGraphValue::String(value.clone())),
+        (RuntimeDataBindGraphConverter::StringPad { .. }, value) => Some(value.clone()),
+        (RuntimeDataBindGraphConverter::ListToLength, RuntimeDataBindGraphValue::Number(value)) => {
+            Some(RuntimeDataBindGraphValue::Number(*value))
+        }
+        (RuntimeDataBindGraphConverter::ListToLength, RuntimeDataBindGraphValue::ListLength(_)) => {
+            Some(RuntimeDataBindGraphValue::Number(0.0))
+        }
+        (RuntimeDataBindGraphConverter::ListToLength, _) => None,
+        (
+            RuntimeDataBindGraphConverter::OperationValue {
+                operation_type,
+                operation_value,
+            },
+            RuntimeDataBindGraphValue::Number(value),
+        ) => Some(RuntimeDataBindGraphValue::Number(
+            runtime_data_bind_graph_reverse_convert_operation_value(
+                *value,
+                *operation_value,
+                *operation_type,
+            ),
+        )),
+        (RuntimeDataBindGraphConverter::OperationValue { .. }, _) => {
+            Some(RuntimeDataBindGraphValue::Number(0.0))
+        }
+        (
+            RuntimeDataBindGraphConverter::OperationViewModel {
+                operation_type,
+                operation_value,
+                ..
+            },
+            RuntimeDataBindGraphValue::Number(value),
+        ) => Some(RuntimeDataBindGraphValue::Number(
+            runtime_data_bind_graph_reverse_convert_operation_value(
+                *value,
+                *operation_value,
+                *operation_type,
+            ),
+        )),
+        (RuntimeDataBindGraphConverter::OperationViewModel { .. }, _) => {
+            Some(RuntimeDataBindGraphValue::Number(0.0))
+        }
+        (
+            RuntimeDataBindGraphConverter::RangeMapper {
+                min_input,
+                max_input,
+                min_output,
+                max_output,
+                flags,
+                interpolation_type,
+                interpolator,
+            },
+            RuntimeDataBindGraphValue::Number(value),
+        ) => Some(RuntimeDataBindGraphValue::Number(
+            runtime_data_bind_graph_convert_range_mapper(
+                *value,
+                *min_output,
+                *max_output,
+                *min_input,
+                *max_input,
+                *flags,
+                *interpolation_type,
+                *interpolator,
+            ),
+        )),
+        (RuntimeDataBindGraphConverter::RangeMapper { .. }, _) => None,
+        (
+            RuntimeDataBindGraphConverter::Rounder { .. },
+            RuntimeDataBindGraphValue::Number(value),
+        ) => Some(RuntimeDataBindGraphValue::Number(*value)),
+        (RuntimeDataBindGraphConverter::Rounder { .. }, _) => None,
+        (
+            RuntimeDataBindGraphConverter::SystemOperationValue {
+                operation_type,
+                operation_value,
+                reverse,
+            },
+            RuntimeDataBindGraphValue::Number(value),
+        ) => Some(RuntimeDataBindGraphValue::Number(if *reverse {
+            runtime_data_bind_graph_reverse_convert_operation_value(
+                *value,
+                *operation_value,
+                *operation_type,
+            )
+        } else {
+            runtime_data_bind_graph_convert_operation_value(
+                *value,
+                *operation_value,
+                *operation_type,
+            )
+        })),
+        (RuntimeDataBindGraphConverter::SystemOperationValue { .. }, _) => {
+            Some(RuntimeDataBindGraphValue::Number(0.0))
+        }
+        (
+            RuntimeDataBindGraphConverter::Formula { tokens },
+            RuntimeDataBindGraphValue::Number(value),
+        ) => Some(RuntimeDataBindGraphValue::Number(
+            runtime_data_bind_graph_convert_formula(*value, tokens),
+        )),
+        (RuntimeDataBindGraphConverter::Formula { .. }, _) => None,
+        (RuntimeDataBindGraphConverter::Group(converters), value) => {
+            let mut value = value.clone();
+            for converter in converters.iter().rev() {
+                value = runtime_data_bind_graph_reverse_convert_value(converter, &value)?;
+            }
+            Some(value)
+        }
+        _ => None,
+    }
+}
+
+fn runtime_data_bind_graph_convert_formula(
+    input: f32,
+    tokens: &[RuntimeDataBindGraphFormulaToken],
+) -> f32 {
+    let mut state = RuntimeDataBindGraphFormulaState::default();
+    let mut random_source = RuntimeDataBindGraphFormulaRandomSource::default();
+    runtime_data_bind_graph_convert_formula_with_state(
+        input,
+        tokens,
+        &mut state,
+        &mut random_source,
+    )
+}
+
+fn runtime_data_bind_graph_convert_formula_value_with_state(
+    value: &RuntimeDataBindGraphValue,
+    tokens: &[RuntimeDataBindGraphFormulaToken],
+    state: &mut RuntimeDataBindGraphFormulaState,
+    random_source: &mut RuntimeDataBindGraphFormulaRandomSource,
+) -> Option<RuntimeDataBindGraphValue> {
+    match value {
+        RuntimeDataBindGraphValue::Number(value) => Some(RuntimeDataBindGraphValue::Number(
+            runtime_data_bind_graph_convert_formula_with_state(
+                *value,
+                tokens,
+                state,
+                random_source,
+            ),
+        )),
+        RuntimeDataBindGraphValue::SymbolListIndex(value) => Some(
+            RuntimeDataBindGraphValue::Number(runtime_data_bind_graph_convert_formula_with_state(
+                *value as f32,
+                tokens,
+                state,
+                random_source,
+            )),
+        ),
+        _ => Some(RuntimeDataBindGraphValue::Number(0.0)),
+    }
+}
+
+fn runtime_data_bind_graph_convert_formula_with_state(
+    input: f32,
+    tokens: &[RuntimeDataBindGraphFormulaToken],
+    state: &mut RuntimeDataBindGraphFormulaState,
+    random_source: &mut RuntimeDataBindGraphFormulaRandomSource,
+) -> f32 {
+    let mut result = input;
+    let mut stack = Vec::new();
+    let mut current_random = 0;
+    for token in tokens {
+        match token {
+            RuntimeDataBindGraphFormulaToken::Input => stack.push(input),
+            RuntimeDataBindGraphFormulaToken::Value(value) => stack.push(*value),
+            RuntimeDataBindGraphFormulaToken::Operation { operation_type } => {
+                if stack.len() > 1 {
+                    let right = stack.pop().expect("stack length checked");
+                    let left = stack.pop().expect("stack length checked");
+                    stack.push(runtime_data_bind_graph_apply_formula_operation(
+                        left,
+                        right,
+                        *operation_type,
+                    ));
+                }
+            }
+            RuntimeDataBindGraphFormulaToken::Function {
+                function_type,
+                arguments_count,
+                random_mode,
+            } => {
+                let random_value = if *function_type == 16 {
+                    let value = state.random_value(*random_mode, current_random, random_source);
+                    current_random += 1;
+                    Some(value)
+                } else {
+                    None
+                };
+                let value = runtime_data_bind_graph_apply_formula_function(
+                    &mut stack,
+                    *function_type,
+                    *arguments_count,
+                    random_value,
+                );
+                stack.push(value);
+            }
+        }
+    }
+    if stack.len() == 1 {
+        result = stack.pop().expect("stack length checked");
+    }
+    result
+}
+
+fn runtime_data_bind_graph_apply_formula_operation(
+    left: f32,
+    right: f32,
+    operation_type: u64,
+) -> f32 {
+    match operation_type {
+        0 => left + right,
+        1 => left - right,
+        2 => left * right,
+        3 => left / right,
+        4 => runtime_data_bind_graph_positive_mod(left, right),
+        _ => 0.0,
+    }
+}
+
+fn runtime_data_bind_graph_apply_formula_function(
+    stack: &mut Vec<f32>,
+    function_type: u64,
+    total_arguments: usize,
+    random_value: Option<f32>,
+) -> f32 {
+    let mut function_arguments = Vec::new();
+    for _ in 0..total_arguments {
+        if let Some(function_argument) = stack.pop() {
+            function_arguments.push(function_argument);
+        }
+    }
+
+    match function_type {
+        0 => {
+            if function_arguments.is_empty() {
+                0.0
+            } else {
+                let mut min_value = function_arguments[0];
+                for value in function_arguments.iter().skip(1) {
+                    if *value < min_value {
+                        min_value = *value;
+                    }
+                }
+                min_value
+            }
+        }
+        1 => {
+            if function_arguments.is_empty() {
+                0.0
+            } else {
+                let mut max_value = function_arguments[0];
+                for value in function_arguments.iter().skip(1) {
+                    if *value > max_value {
+                        max_value = *value;
+                    }
+                }
+                max_value
+            }
+        }
+        2 => function_arguments
+            .last()
+            .copied()
+            .map(f32::round)
+            .unwrap_or(0.0),
+        3 => function_arguments
+            .last()
+            .copied()
+            .map(f32::ceil)
+            .unwrap_or(0.0),
+        4 => function_arguments
+            .last()
+            .copied()
+            .map(f32::floor)
+            .unwrap_or(0.0),
+        5 => function_arguments
+            .last()
+            .copied()
+            .map(f32::sqrt)
+            .unwrap_or(0.0),
+        6 => {
+            if function_arguments.len() > 1 {
+                let exponent = function_arguments[function_arguments.len() - 2];
+                let x = function_arguments[function_arguments.len() - 1];
+                x.powf(exponent)
+            } else {
+                0.0
+            }
+        }
+        7 => function_arguments
+            .last()
+            .copied()
+            .map(f32::exp)
+            .unwrap_or(0.0),
+        8 => function_arguments
+            .last()
+            .copied()
+            .map(f32::ln)
+            .unwrap_or(0.0),
+        9 => function_arguments
+            .last()
+            .copied()
+            .map(f32::cos)
+            .unwrap_or(0.0),
+        10 => function_arguments
+            .last()
+            .copied()
+            .map(f32::sin)
+            .unwrap_or(0.0),
+        11 => function_arguments
+            .last()
+            .copied()
+            .map(f32::tan)
+            .unwrap_or(0.0),
+        12 => function_arguments
+            .last()
+            .copied()
+            .map(f32::acos)
+            .unwrap_or(0.0),
+        13 => function_arguments
+            .last()
+            .copied()
+            .map(f32::asin)
+            .unwrap_or(0.0),
+        14 => function_arguments
+            .last()
+            .copied()
+            .map(f32::atan)
+            .unwrap_or(0.0),
+        15 => {
+            if function_arguments.len() > 1 {
+                let argument1 = function_arguments[function_arguments.len() - 1];
+                let argument2 = function_arguments[function_arguments.len() - 2];
+                argument1.atan2(argument2)
+            } else {
+                0.0
+            }
+        }
+        16 => {
+            let random_value = random_value.unwrap_or(0.0);
+            let mut lower_bound = 0.0;
+            let mut upper_bound = 1.0;
+            if function_arguments.len() == 1 {
+                upper_bound = function_arguments[function_arguments.len() - 1];
+            } else if function_arguments.len() > 1 {
+                lower_bound = function_arguments[function_arguments.len() - 1];
+                upper_bound = function_arguments[function_arguments.len() - 2];
+            }
+            lower_bound + (upper_bound - lower_bound) * random_value
+        }
+        _ => 0.0,
+    }
+}
+
+fn runtime_data_bind_graph_reverse_convert_operation_value(
+    input: f32,
+    operation_value: f32,
+    operation_type: u64,
+) -> f32 {
+    match operation_type {
+        0 => input - operation_value,
+        1 => input + operation_value,
+        2 => input / operation_value,
+        3 => input * operation_value,
+        4 => input,
+        5 => input.powf(2.0),
+        6 => input.powf(1.0 / operation_value),
+        7 => input.ln(),
+        8 => input.exp(),
+        9 => input.acos(),
+        10 => input.asin(),
+        11 => input.atan(),
+        12 => input.cos(),
+        13 => input.sin(),
+        14 => input.tan(),
+        15..=18 => input,
+        _ => operation_value,
+    }
+}
+
+fn runtime_data_bind_graph_convert_operation_value(
+    input: f32,
+    operation_value: f32,
+    operation_type: u64,
+) -> f32 {
+    match operation_type {
+        0 => input + operation_value,
+        1 => input - operation_value,
+        2 => input * operation_value,
+        3 => input / operation_value,
+        4 => runtime_data_bind_graph_positive_mod(input, operation_value),
+        5 => input.sqrt(),
+        6 => input.powf(operation_value),
+        7 => input.exp(),
+        8 => input.ln(),
+        9 => input.cos(),
+        10 => input.sin(),
+        11 => input.tan(),
+        12 => input.acos(),
+        13 => input.asin(),
+        14 => input.atan(),
+        15 => input.atan2(operation_value),
+        16 => input.round(),
+        17 => input.floor(),
+        18 => input.ceil(),
+        _ => operation_value,
+    }
+}
+
+fn runtime_data_bind_graph_convert_range_mapper(
+    input: f32,
+    min_input: f32,
+    max_input: f32,
+    min_output: f32,
+    max_output: f32,
+    flags: u64,
+    interpolation_type: u64,
+    interpolator: Option<RuntimeTransitionInterpolator>,
+) -> f32 {
+    if min_output == max_output {
+        return min_output;
+    }
+
+    const CLAMP_LOWER: u64 = 1 << 0;
+    const CLAMP_UPPER: u64 = 1 << 1;
+    const MODULO: u64 = 1 << 2;
+    const REVERSE: u64 = 1 << 3;
+
+    let mut value = input;
+    if value < min_input && flags & CLAMP_LOWER != 0 {
+        value = min_input;
+    } else if value > max_input && flags & CLAMP_UPPER != 0 {
+        value = max_input;
+    }
+    if (value < min_input || value > max_input) && flags & MODULO != 0 {
+        value =
+            (runtime_data_bind_graph_positive_mod(value, max_input - min_input) + min_input).abs();
+    }
+
+    let mut percent = (value - min_input) / (max_input - min_input);
+    if flags & REVERSE != 0 {
+        percent = 1.0 - percent;
+    }
+    if let Some(interpolator) = interpolator {
+        if percent > 0.0 && percent < 1.0 {
+            percent = interpolator.transform(percent);
+        } else if interpolation_type == 0 {
+            percent = if percent <= 0.0 { 0.0 } else { 1.0 };
+        }
+    } else if interpolation_type == 0 {
+        percent = if percent <= 0.0 { 0.0 } else { 1.0 };
+    }
+
+    percent * max_output + (1.0 - percent) * min_output
+}
+
+fn runtime_data_bind_graph_positive_mod(value: f32, mut range: f32) -> f32 {
+    if range < 0.0 {
+        range = -range;
+    }
+    let mut value = value % range;
+    if value < 0.0 {
+        value += range;
+    }
+    value
+}
+
+pub(crate) fn runtime_data_bind_graph_converter_starts_with_to_string(
+    converter: Option<&RuntimeDataBindGraphConverter>,
+) -> bool {
+    match converter {
+        Some(RuntimeDataBindGraphConverter::ToString { .. }) => true,
+        Some(RuntimeDataBindGraphConverter::Group(converters)) => {
+            runtime_data_bind_graph_converter_starts_with_to_string(converters.first())
+        }
+        _ => false,
+    }
+}
+
+pub(crate) fn runtime_data_bind_graph_converter(
+    file: &RuntimeFile,
+    data_bind: &RuntimeObject,
+) -> Option<RuntimeDataBindGraphConverter> {
+    let converter = file.resolved_data_converter_for_data_bind_object(data_bind)?;
+    let flags = data_bind.uint_property("flags").unwrap_or(0);
+    runtime_data_bind_graph_converter_for_object(file, converter, &mut BTreeSet::new(), true, flags)
+}
+
+fn runtime_data_bind_graph_system_operation_value_converter(
+    converter: &RuntimeObject,
+    flags: u64,
+) -> RuntimeDataBindGraphConverter {
+    if matches!(
+        converter.type_name,
+        "DataConverterSystemDegsToRads" | "DataConverterSystemNormalizer"
+    ) {
+        let to_target = flags & 0b10 != 0 || flags & 0b1 == 0;
+        if to_target {
+            RuntimeDataBindGraphConverter::SystemOperationValue {
+                operation_type: converter.uint_property("operationType").unwrap_or(0),
+                operation_value: converter.double_property("operationValue").unwrap_or(1.0),
+                reverse: flags & 0b1 != 0,
+            }
+        } else {
+            RuntimeDataBindGraphConverter::Unsupported
+        }
+    } else {
+        RuntimeDataBindGraphConverter::Unsupported
+    }
+}
+
+fn runtime_data_bind_graph_converter_for_object(
+    file: &RuntimeFile,
+    converter: &RuntimeObject,
+    visiting: &mut BTreeSet<u32>,
+    allow_stateful_interpolator: bool,
+    data_bind_flags: u64,
+) -> Option<RuntimeDataBindGraphConverter> {
+    if !visiting.insert(converter.id) {
+        return Some(RuntimeDataBindGraphConverter::Unsupported);
+    }
+
+    let graph_converter = match converter.type_name {
+        "DataConverterGroup" => RuntimeDataBindGraphConverter::Group(
+            file.data_converter_group_items_for_object(converter)
+                .into_iter()
+                .map(|item| {
+                    item.converter
+                        .and_then(|converter| {
+                            runtime_data_bind_graph_converter_for_object(
+                                file,
+                                converter,
+                                visiting,
+                                true,
+                                data_bind_flags,
+                            )
+                        })
+                        .unwrap_or(RuntimeDataBindGraphConverter::Unsupported)
+                })
+                .collect(),
+        ),
+        "DataConverterOperation" | "ScriptedDataConverter" => {
+            RuntimeDataBindGraphConverter::PassThrough
+        }
+        "DataConverterBooleanNegate" => RuntimeDataBindGraphConverter::BooleanNegate,
+        "DataConverterTrigger" => RuntimeDataBindGraphConverter::TriggerIncrement,
+        "DataConverterToNumber" => RuntimeDataBindGraphConverter::ToNumber,
+        "DataConverterListToLength" => RuntimeDataBindGraphConverter::ListToLength,
+        "DataConverterNumberToList" => RuntimeDataBindGraphConverter::NumberToList {
+            has_view_model: file
+                .resolved_view_model_for_number_to_list_converter_object(converter)
+                .is_some(),
+        },
+        "DataConverterToString" => RuntimeDataBindGraphConverter::ToString {
+            flags: converter.uint_property("flags").unwrap_or(0),
+            decimals: converter.uint_property("decimals").unwrap_or(0),
+            color_format: converter
+                .string_property_bytes("colorFormat")
+                .unwrap_or_default()
+                .to_vec(),
+        },
+        "DataConverterOperationValue" => RuntimeDataBindGraphConverter::OperationValue {
+            operation_type: converter.uint_property("operationType").unwrap_or(0),
+            operation_value: converter.double_property("operationValue").unwrap_or(1.0),
+        },
+        "DataConverterOperationViewModel" => {
+            let operand =
+                runtime_data_bind_graph_default_operation_view_model_operand(file, converter);
+            RuntimeDataBindGraphConverter::OperationViewModel {
+                operation_type: converter.uint_property("operationType").unwrap_or(0),
+                operation_value: operand.as_ref().map(|operand| operand.value).unwrap_or(0.0),
+                default_operation_value: operand
+                    .as_ref()
+                    .map(|operand| operand.value)
+                    .unwrap_or(0.0),
+                source_path: operand.map(|operand| operand.path),
+            }
+        }
+        "DataConverterSystemDegsToRads" | "DataConverterSystemNormalizer" => {
+            runtime_data_bind_graph_system_operation_value_converter(converter, data_bind_flags)
+        }
+        "DataConverterRounder" => RuntimeDataBindGraphConverter::Rounder {
+            decimals: converter.uint_property("decimals").unwrap_or(0),
+        },
+        "DataConverterRangeMapper" => {
+            runtime_data_bind_graph_range_mapper_converter(file, converter)
+        }
+        "DataConverterStringTrim" => RuntimeDataBindGraphConverter::StringTrim {
+            trim_type: converter.uint_property("trimType").unwrap_or(1),
+        },
+        "DataConverterStringRemoveZeros" => RuntimeDataBindGraphConverter::StringRemoveZeros,
+        "DataConverterStringPad" => RuntimeDataBindGraphConverter::StringPad {
+            length: converter.uint_property("length").unwrap_or(1),
+            text: converter
+                .string_property_bytes("text")
+                .unwrap_or_default()
+                .to_vec(),
+            pad_type: converter.uint_property("padType").unwrap_or(0),
+        },
+        "DataConverterFormula" => runtime_data_bind_graph_formula_converter(file, converter),
+        "DataConverterInterpolator" if allow_stateful_interpolator => {
+            runtime_data_bind_graph_interpolator_converter(file, converter)
+        }
+        "DataConverterInterpolator" => RuntimeDataBindGraphConverter::Unsupported,
+        _ => RuntimeDataBindGraphConverter::Unsupported,
+    };
+
+    visiting.remove(&converter.id);
+    Some(graph_converter)
+}
+
+fn runtime_data_bind_graph_formula_converter(
+    file: &RuntimeFile,
+    converter: &RuntimeObject,
+) -> RuntimeDataBindGraphConverter {
+    let mut tokens = Vec::new();
+    for token in file.data_converter_formula_output_tokens_for_object(converter) {
+        match token.object.type_name {
+            "FormulaTokenInput" => tokens.push(RuntimeDataBindGraphFormulaToken::Input),
+            "FormulaTokenValue" => tokens.push(RuntimeDataBindGraphFormulaToken::Value(
+                token
+                    .object
+                    .double_property("operationValue")
+                    .unwrap_or(1.0),
+            )),
+            "FormulaTokenOperation" => {
+                tokens.push(RuntimeDataBindGraphFormulaToken::Operation {
+                    operation_type: token.object.uint_property("operationType").unwrap_or(0),
+                });
+            }
+            "FormulaTokenFunction" => {
+                let function_type = token.object.uint_property("functionType").unwrap_or(0);
+                let random_mode = converter.uint_property("randomModeValue").unwrap_or(0);
+                if function_type == 16 && random_mode > 2 {
+                    return RuntimeDataBindGraphConverter::Unsupported;
+                }
+                tokens.push(RuntimeDataBindGraphFormulaToken::Function {
+                    function_type,
+                    arguments_count: token.arguments_count,
+                    random_mode,
+                });
+            }
+            _ => return RuntimeDataBindGraphConverter::Unsupported,
+        }
+    }
+
+    RuntimeDataBindGraphConverter::Formula { tokens }
+}
+
+fn runtime_data_bind_graph_interpolator_converter(
+    file: &RuntimeFile,
+    converter: &RuntimeObject,
+) -> RuntimeDataBindGraphConverter {
+    let interpolator = match file.resolved_interpolator_for_data_converter_object(converter) {
+        Some(interpolator) => match RuntimeTransitionInterpolator::from_object(interpolator) {
+            Some(interpolator) => Some(interpolator),
+            None => return RuntimeDataBindGraphConverter::Unsupported,
+        },
+        None => None,
+    };
+
+    RuntimeDataBindGraphConverter::Interpolator {
+        duration: converter.double_property("duration").unwrap_or(1.0),
+        interpolator,
+    }
+}
+
+fn runtime_data_bind_graph_range_mapper_converter(
+    file: &RuntimeFile,
+    converter: &RuntimeObject,
+) -> RuntimeDataBindGraphConverter {
+    let interpolator = match file.resolved_interpolator_for_data_converter_object(converter) {
+        Some(interpolator) => match RuntimeTransitionInterpolator::from_object(interpolator) {
+            Some(interpolator) => Some(interpolator),
+            None => return RuntimeDataBindGraphConverter::Unsupported,
+        },
+        None => None,
+    };
+
+    RuntimeDataBindGraphConverter::RangeMapper {
+        min_input: converter.double_property("minInput").unwrap_or(1.0),
+        max_input: converter.double_property("maxInput").unwrap_or(1.0),
+        min_output: converter.double_property("minOutput").unwrap_or(1.0),
+        max_output: converter.double_property("maxOutput").unwrap_or(1.0),
+        flags: converter.uint_property("flags").unwrap_or(0),
+        interpolation_type: converter.uint_property("interpolationType").unwrap_or(1),
+        interpolator,
+    }
+}
+
+struct RuntimeDataBindGraphOperationViewModelOperand {
+    path: Vec<u32>,
+    value: f32,
+}
+
+fn runtime_data_bind_graph_default_operation_view_model_operand(
+    file: &RuntimeFile,
+    converter: &RuntimeObject,
+) -> Option<RuntimeDataBindGraphOperationViewModelOperand> {
+    let Some(path) = converter.id_list_property("sourcePathIds") else {
+        return None;
+    };
+    let Some(default_instance) = file.view_model_default_instance(0) else {
+        return Some(RuntimeDataBindGraphOperationViewModelOperand { path, value: 0.0 });
+    };
+    let Some(context) = RuntimeDataContext::from_instance_reference(file, default_instance) else {
+        return Some(RuntimeDataBindGraphOperationViewModelOperand { path, value: 0.0 });
+    };
+    let Some(value) = context.absolute_property(&path) else {
+        return Some(RuntimeDataBindGraphOperationViewModelOperand { path, value: 0.0 });
+    };
+    if file.view_model_instance_value_data_type_for_object(value)
+        != Some(rive_binary::RuntimeDataType::Number)
+    {
+        return Some(RuntimeDataBindGraphOperationViewModelOperand { path, value: 0.0 });
+    }
+    Some(RuntimeDataBindGraphOperationViewModelOperand {
+        path,
+        value: value.double_property("propertyValue").unwrap_or(0.0),
+    })
 }
 
 #[derive(Debug, Clone)]

@@ -1462,3 +1462,30 @@ milestone entries are kept verbatim here. Newest milestone last.
   `make golden-compare` reports `exact=70`, `exact-segments=194`,
   `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
   `cargo test --workspace` passes.
+- 2026-07-03: [M2] Widened `state_machine_triggers.riv` from samples `0` and
+  `0.25` to samples `0`, `0.25`, and `0.5`, keeping trigger-condition
+  state-machine playback exact across the wider sample set. Exact segments
+  are now 195 across 70 exact files; `make golden-compare` reports
+  `exact=70`, `exact-segments=195`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+- 2026-07-03: [M2] Widened `stateful_list_props.riv` from samples `0` and
+  `0.25` to samples `0`, `0.25`, and `0.5`, keeping the passive text/layout,
+  view-model, and list-property render path exact while leaving those runtime
+  behaviors in M6/M5/M4 scope. Exact segments are now 196 across 70 exact
+  files; `make golden-compare` reports `exact=70`,
+  `exact-segments=196`, `diverges=0`, `unsupported-feature=225`,
+  `not-yet=0`, and `cargo test --workspace` passes.
+- 2026-07-03: [M2] Widened `stroke_name_test.riv` from samples `0` and
+  `0.25` to samples `0`, `0.25`, and `0.5`, keeping stroke-trigger
+  state-machine playback exact across the wider sample set. Exact segments
+  are now 197 across 70 exact files; `make golden-compare` reports
+  `exact=70`, `exact-segments=197`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+- 2026-07-03: [M2] Widened `test_elastic.riv` from samples `0` and `0.25` to
+  samples `0`, `0.25`, and `0.5`, keeping ElasticInterpolator keyed-double
+  playback exact across the wider sample set. Exact segments are now 198
+  across 70 exact files; `make golden-compare` reports `exact=70`,
+  `exact-segments=198`, `diverges=0`, `unsupported-feature=225`,
+  `not-yet=0`, and `cargo test --workspace` passes.

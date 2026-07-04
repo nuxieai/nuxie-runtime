@@ -6,7 +6,7 @@ the only memory the next session has. Update it every commit.
 ## Metric
 
 - Exact segments (file × sample): 449 across 128 exact files
-- Parked breakdown (from `make golden-compare`): M5=5 M6=119 gated=7 harness=36
+- Parked breakdown (from `make golden-compare`): M5=4 M6=120 gated=7 harness=36
 - Current milestone: **M5 — Data Binding Exact Incl. External View-Model Mutation (#V2-6)**
 
 ## Milestones
@@ -24,10 +24,9 @@ the only memory the next session has. Update it every commit.
 
 1. Continue M5 with the smallest data-binding slice that can move a corpus
    entry. Query the queue with `grep -B6 'milestone = "M5"' corpus.toml`;
-   the next manifest candidate is `relative_data_binding.riv`
-   (`data-binding-nested-child`). A direct Rust-runner probe reports
-   `unsupported: data-binding-nested-child` for data bind global 83 targeting
-   nested child `Shape` x/y.
+   the next manifest candidate is `scripted_data_context.riv` (`text`). A
+   direct Rust-runner probe reports `unsupported: text` for nested child data
+   bind global 38 targeting `TextValueRun`.
 2. M4 is closed for the current corpus: `grep -B6 'milestone = "M4"'
    corpus.toml` is empty. The remaining formerly-M4 entries were probed with
    `rust-golden-runner` and moved to their first verified later blocker:
@@ -69,9 +68,10 @@ the only memory the next session has. Update it every commit.
   nested simple-animation/state-machine hosts backed by persistent child
   artboard instances, stateful child `ViewModelInstance` subtree admission
   under plain nested hosts, nested child unbound SolidColor data-bind defaults,
-  nested child Ellipse width/height and RootBone x/y source-to-target number
-  binds backed by stateful child view-model values, direct no-converter Shape
-  x/y number binds, direct SolidColor `colorValue` color binds, artboard
+  nested child Ellipse width/height, RootBone x/y, and Shape x/y
+  source-to-target number binds backed by stateful child view-model values,
+  direct no-converter Shape x/y number binds, direct SolidColor `colorValue`
+  color binds, artboard
   source-to-target `DataConverterInterpolator` number/color binds,
   artboard source-to-target `DataConverterGroup`/`DataConverterFormula`
   transform binds with C++ fallback random sequencing, near-zero-duration
@@ -258,6 +258,13 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-04: [M5] Retagged relative data binding to text: the runner now
+  admits nested child `Shape.x/y` no-converter binds, and
+  `relative_data_binding.riv` moved from M5 to M6 after the same probe reached
+  nested child `TextValueRun`. `make golden-compare` reports `exact=128`,
+  `exact-segments=449`, `diverges=0`, `unsupported-feature=167`,
+  `not-yet=0`, and parked `M5=4 M6=120 gated=7 harness=36`; `cargo
+  test --workspace` passes.
 - 2026-07-04: [M5] Opened nested child custom string binds: the runner now
   admits nested child `CustomPropertyString.propertyValue` source-to-target
   binds with no converter or `DataConverterToString`, and current C++

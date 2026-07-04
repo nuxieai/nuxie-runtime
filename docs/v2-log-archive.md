@@ -1618,3 +1618,10 @@ milestone entries are kept verbatim here. Newest milestone last.
   reports `exact=70`, `exact-segments=217`, `diverges=0`,
   `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
   passes.
+- 2026-07-03: [M2] Widened `data_binding_test_2.riv` from samples `0`,
+  `0.25`, and `0.5` to samples `0`, `0.25`, `0.5`, and `0.75`, keeping
+  passive data-binding playback exact while leaving external mutation in M5
+  scope. Exact segments are now 218 across 70 exact files;
+  `make golden-compare` reports `exact=70`, `exact-segments=218`,
+  `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
+  `cargo test --workspace` passes.

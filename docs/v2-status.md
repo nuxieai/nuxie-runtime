@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 336 across 70 exact files
+- Exact segments (file × sample): 339 across 70 exact files
 - Parked breakdown (from `make golden-compare`): M3=21 M4=83 M5=8 M6=72 gated=5 harness=36
 - Current milestone: **M2 — Animated Playback Exact + Real Object Model (#V2-3)**
 
@@ -22,25 +22,21 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. The standard fifth-sample M2 sweep over exact entries with samples `0`,
-   `0.25`, `0.5`, and `0.75` is exhausted. Handle the one remaining
-   custom-sampled M2 exact entry, `pointer_events.riv`: probe widening from
-   samples `0`, `0.1`, and `0.25` toward the standard M2 sample set, and stop
-   on the first real divergence to localize runtime code.
-2. Continue M2 real object model work by modularizing the remaining runtime
+1. Continue M2 real object model work by modularizing the remaining runtime
    surfaces out of `lib.rs` while keeping generated `InstanceObjectStorage` as
-   the authored-property source of truth, but only when it unblocks a corpus
-   diff or removes risky coupling. Component dirt/runtime transform state live
-   in `crates/rive-runtime/src/components.rs`, the linear animation runtime
-   model and import builder live in `crates/rive-runtime/src/animation.rs`,
-   and state-machine import data, bindables, transition conditions, layer
-   advancement, and `StateMachineInstance` orchestration live under
+   the authored-property source of truth. Component dirt/runtime transform
+   state live in `crates/rive-runtime/src/components.rs`, the linear
+   animation runtime model and import builder live in
+   `crates/rive-runtime/src/animation.rs`, and state-machine import data,
+   bindables, transition conditions, layer advancement, and
+   `StateMachineInstance` orchestration live under
    `crates/rive-runtime/src/state_machine/`. Remaining root coupling is mostly
    the data-bind graph/default-view-model bridge and artboard-level data-bind
-   helpers; move those only with a corpus diff or a clear M2 coupling payoff.
-3. Add handle-source world-space math and nested-remap dependent advancement
+   helpers; start with the smallest mechanical extraction that preserves the
+   current golden set and removes root coupling.
+2. Add handle-source world-space math and nested-remap dependent advancement
    to the joystick path when a corpus diff reaches those cases.
-4. Remaining exact entries pinned to sample `0` are static M1 holdovers:
+3. Remaining exact entries pinned to sample `0` are static M1 holdovers:
    `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
    them for M2 unless a related refactor needs a cheap draw-regression check.
 
@@ -175,13 +171,6 @@ the only memory the next session has. Update it every commit.
   under `M2 active log rolloff`; keep only the recent rolling window here once
   Metric, Next, Decisions, and `corpus.toml` capture the current state.
 
-- 2026-07-03: [M2] Widened `trim_path_linear.riv` from samples `0`, `0.25`,
-  and `0.5` to samples `0`, `0.25`, `0.5`, and `0.75`, keeping linear
-  TrimPath animation playback exact across the wider sample set. Exact
-  segments are now 268 across 70 exact files; `make golden-compare` reports
-  `exact=70`, `exact-segments=268`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
 - 2026-07-03: [M2] Widened `two_artboards.riv` from samples `0`, `0.25`,
   and `0.5` to samples `0`, `0.25`, `0.5`, and `0.75`, keeping selected
   artboard animation playback exact across the wider sample set. Exact
@@ -485,3 +474,11 @@ the only memory the next session has. Update it every commit.
   segments are now 336 across 70 exact files; `make golden-compare` reports
   `exact=70`, `exact-segments=336`, `diverges=0`, `unsupported-feature=225`,
   `not-yet=0`, and `cargo test --workspace` passes.
+- 2026-07-04: [M2] Widened `pointer_events.riv` from samples `0`, `0.1`,
+  and `0.25` to samples `0`, `0.1`, `0.25`, `0.5`, `0.75`, and `1.0`,
+  keeping passive listener/bool pointer-event playback exact across the
+  standard M2 sample set while leaving scripted pointer dispatch in M3 scope.
+  Exact segments are now 339 across 70 exact files; `make golden-compare`
+  reports `exact=70`, `exact-segments=339`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.

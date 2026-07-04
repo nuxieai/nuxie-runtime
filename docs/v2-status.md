@@ -30,10 +30,11 @@ the only memory the next session has. Update it every commit.
    `crates/rive-runtime/src/animation.rs`, and state-machine import data,
    bindables, transition conditions, layer advancement, and
    `StateMachineInstance` orchestration live under
-   `crates/rive-runtime/src/state_machine/`. Remaining root coupling is mostly
-   the data-bind graph/default-view-model bridge and artboard-level data-bind
-   helpers; start with the smallest mechanical extraction that preserves the
-   current golden set and removes root coupling.
+   `crates/rive-runtime/src/state_machine/`. Artboard data-bind propagation
+   and list-binding queries live in
+   `crates/rive-runtime/src/artboard_data_bind.rs`. Continue with the adjacent
+   artboard data-bind binding structs/builders, then the data-bind
+   graph/default-view-model bridge, preserving the current golden set.
 2. Add handle-source world-space math and nested-remap dependent advancement
    to the joystick path when a corpus diff reaches those cases.
 3. Remaining exact entries pinned to sample `0` are static M1 holdovers:
@@ -171,13 +172,6 @@ the only memory the next session has. Update it every commit.
   under `M2 active log rolloff`; keep only the recent rolling window here once
   Metric, Next, Decisions, and `corpus.toml` capture the current state.
 
-- 2026-07-03: [M2] Widened `two_artboards.riv` from samples `0`, `0.25`,
-  and `0.5` to samples `0`, `0.25`, `0.5`, and `0.75`, keeping selected
-  artboard animation playback exact across the wider sample set. Exact
-  segments are now 269 across 70 exact files; `make golden-compare` reports
-  `exact=70`, `exact-segments=269`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
 - 2026-07-03: [M2] Widened `viewmodel_runtime_file.riv` from samples `0`,
   `0.25`, and `0.5` to samples `0`, `0.25`, `0.5`, and `0.75`, keeping
   passive view-model metadata playback exact across the wider sample set.
@@ -480,5 +474,13 @@ the only memory the next session has. Update it every commit.
   standard M2 sample set while leaving scripted pointer dispatch in M3 scope.
   Exact segments are now 339 across 70 exact files; `make golden-compare`
   reports `exact=70`, `exact-segments=339`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+- 2026-07-04: [M2] Extracted ArtboardInstance artboard data-bind propagation
+  and list-binding query methods from `crates/rive-runtime/src/lib.rs` to
+  `crates/rive-runtime/src/artboard_data_bind.rs`, reducing root runtime
+  coupling while preserving the generated `InstanceObjectStorage` mutation
+  path. Exact segments remain 339 across 70 exact files; `make
+  golden-compare` reports `exact=70`, `exact-segments=339`, `diverges=0`,
   `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
   passes.

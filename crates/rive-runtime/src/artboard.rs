@@ -1408,6 +1408,10 @@ impl RuntimeNestedArtboardInstance {
         for animation in &mut self.animations {
             changed |= animation.advance(&mut self.child, local_elapsed_seconds, reported_events);
         }
+        // Mirrors C++ src/nested_artboard.cpp NestedArtboard::updateDataBinds.
+        changed |= self
+            .child
+            .advance_artboard_data_binds_with_elapsed(local_elapsed_seconds);
         changed |= self.child.advance_nested_artboards(local_elapsed_seconds);
         changed
     }

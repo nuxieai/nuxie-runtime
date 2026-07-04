@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 446 across 125 exact files
-- Parked breakdown (from `make golden-compare`): M5=9 M6=118 gated=7 harness=36
+- Exact segments (file × sample): 447 across 126 exact files
+- Parked breakdown (from `make golden-compare`): M5=7 M6=119 gated=7 harness=36
 - Current milestone: **M5 — Data Binding Exact Incl. External View-Model Mutation (#V2-6)**
 
 ## Milestones
@@ -24,10 +24,11 @@ the only memory the next session has. Update it every commit.
 
 1. Continue M5 with the smallest data-binding slice that can move a corpus
    entry. Query the queue with `grep -B6 'milestone = "M5"' corpus.toml`;
-   the next manifest candidate is `hide_test.riv`
-   (`data-binding-nested-child`). A direct Rust-runner probe reports
-   `unsupported: data-binding-nested-child` for data bind global 99 targeting
-   `Node`.
+   the next manifest candidate is `interpolation_zero_duration.riv`
+   (`data-binding-transform`). A direct Rust-runner probe reports
+   `unsupported: data-binding-transform` for data bind global 15 targeting
+   global 14. `interpolate_to_end.riv` moved to M6 after nested child support
+   reached its first remaining blocker, `TextValueRun`.
 2. M4 is closed for the current corpus: `grep -B6 'milestone = "M4"'
    corpus.toml` is empty. The remaining formerly-M4 entries were probed with
    `rust-golden-runner` and moved to their first verified later blocker:
@@ -83,13 +84,17 @@ the only memory the next session has. Update it every commit.
   cleared-host draw suppression,
   per-host nested paint caches for repeated child instances under Solo-owned
   hosts, and nested state-machine reported-event bubbling into parent event
-  listeners, custom-property trigger keyed-callback target-to-source binding,
+  listeners, nested child `Node.opacity` and `Rectangle.width/height`
+  source-to-target number binds with child artboard data-bind advancement,
+  authored-transparent Backboard/background draw suppression,
+  custom-property trigger keyed-callback target-to-source binding,
   custom-property enum target-to-source binding, live data-bound nested host
   `isPaused` mutation, plus no-input recursive nested `ListenerAlignTarget`
   fixtures where the action is unexercised.
   Custom handle-source world-space math, data-bound nested host controls beyond
   generated defaults (external/live pause/speed/quantize mutation), remaining
-  nested child non-color data-bind targets, and broader
+  nested child data-bind targets beyond the current number/color/default bind
+  set, and broader
   bound stateful child view-model propagation are M5. Focus data,
   input-driven recursive
   `ListenerAlignTarget` and nested pointer/listener hit propagation beyond
@@ -251,6 +256,15 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-04: [M5] Ported nested child opacity/rectangle binds: the runner now
+  admits nested child `Node.opacity` and `Rectangle.width/height` no-converter
+  binds, nested artboard advance applies child artboard data binds, and
+  authored-transparent Backboard/background draws are skipped to match C++.
+  `hide_test.riv` is promoted to exact, while `interpolate_to_end.riv` moved to
+  M6 after the same slice reached nested child `TextValueRun`. `make
+  golden-compare` reports `exact=126`, `exact-segments=447`, `diverges=0`,
+  `unsupported-feature=169`, `not-yet=0`, and parked `M5=7 M6=119 gated=7
+  harness=36`; `cargo test --workspace` passes.
 - 2026-07-04: [M5] Ported artboard formula/group transform binds: artboard
   property bindings now run `DataConverterGroup` and `DataConverterFormula`
   through shared converter state, reset source-change random caches when

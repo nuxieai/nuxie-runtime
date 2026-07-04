@@ -1502,8 +1502,11 @@ fn runtime_draw_background(
         let object = runtime
             .object(paint.global_id as usize)
             .with_context(|| format!("missing paint global {}", paint.global_id))?;
-        let runtime_paint =
-            runtime_background_shape_paint_command(instance, paint, commands.clone());
+        let Some(runtime_paint) =
+            runtime_background_shape_paint_command(instance, paint, commands.clone())
+        else {
+            continue;
+        };
         runtime_configure_paint(
             paint_by_global
                 .get_mut(&paint.global_id)
@@ -1538,25 +1541,29 @@ fn runtime_background_shape_paint_command(
     instance: &ArtboardInstance,
     paint: &ShapePaintNode,
     path_commands: Vec<RuntimePathCommand>,
-) -> RuntimeShapePaintCommand {
+) -> Option<RuntimeShapePaintCommand> {
     let render_opacity = instance
         .component(0)
         .map(|component| component.transform.render_opacity)
         .unwrap_or(1.0);
-    RuntimeShapePaintCommand {
+    let paint_state = runtime_shape_paint_state(instance, paint, render_opacity);
+    if !runtime_shape_paint_state_is_visible(&paint_state) {
+        return None;
+    }
+    Some(RuntimeShapePaintCommand {
         paint_local: paint.local_id,
         mutator_local: paint.mutator_local,
         paint_type: runtime_shape_paint_kind(paint.paint_type),
         path_kind: RuntimeShapePaintPathKind::Local,
         blend_mode_value: paint.blend_mode_value,
         render_blend_mode_value: 3,
-        paint_state: runtime_shape_paint_state(instance, paint, render_opacity),
+        paint_state,
         feather_state: None,
         path_commands,
         effect_path_commands: Vec::new(),
         has_effect_path: false,
         needs_save_operation: true,
-    }
+    })
 }
 
 fn runtime_prepare_gradient_paint_command(
@@ -2272,6 +2279,15 @@ fn runtime_shape_paint_is_visible(artboard: &ArtboardInstance, paint: &ShapePain
             .map(|visible| paint.is_visible && visible)
             .unwrap_or(paint.is_visible),
     }
+}
+
+fn runtime_shape_paint_state_is_visible(state: &Option<RuntimeShapePaintState>) -> bool {
+    // C++ skips authored-transparent Backboard/background draws, while
+    // render-opacity-transparent backgrounds can still appear in the stream.
+    !matches!(
+        state,
+        Some(RuntimeShapePaintState::SolidColor { color, .. }) if (color >> 24) == 0
+    )
 }
 
 fn runtime_shape_paint_blend_mode_value(

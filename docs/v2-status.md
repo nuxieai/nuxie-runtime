@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 442 across 121 exact files
-- Parked breakdown (from `make golden-compare`): M5=14 M6=117 gated=7 harness=36
+- Exact segments (file × sample): 444 across 123 exact files
+- Parked breakdown (from `make golden-compare`): M5=12 M6=117 gated=7 harness=36
 - Current milestone: **M5 — Data Binding Exact Incl. External View-Model Mutation (#V2-6)**
 
 ## Milestones
@@ -24,10 +24,10 @@ the only memory the next session has. Update it every commit.
 
 1. Continue M5 with the smallest data-binding slice that can move a corpus
    entry. Query the queue with `grep -B6 'milestone = "M5"' corpus.toml`;
-   the next manifest candidate is `data_converter_interpolator_reset.riv`
-   (`data-binding-color`). A direct Rust-runner probe reports
-   `unsupported: data-binding-color` for data bind global 13 targeting global
-   12.
+   the next manifest candidate is `databind_artboard.riv`
+   (`data-binding-nested-host`). A direct Rust-runner probe reports
+   `unsupported: data-binding-nested-host` for data bind global 12 targeting
+   `NestedArtboard.artboardId` (property key 197).
 2. M4 is closed for the current corpus: `grep -B6 'milestone = "M4"'
    corpus.toml` is empty. The remaining formerly-M4 entries were probed with
    `rust-golden-runner` and moved to their first verified later blocker:
@@ -71,7 +71,8 @@ the only memory the next session has. Update it every commit.
   under plain nested hosts, nested child unbound SolidColor data-bind defaults,
   nested child Ellipse width/height and RootBone x/y source-to-target number
   binds backed by stateful child view-model values, direct no-converter Shape
-  x/y number binds, direct no-converter SolidColor `colorValue` color binds,
+  x/y number binds, direct SolidColor `colorValue` color binds, artboard
+  source-to-target `DataConverterInterpolator` number/color binds,
   nested bool/number/trigger input proxying, and basic nested remap-time host
   plumbing, runtime `DrawTarget` placement sorting from active `DrawRules`,
   serialized nested host speed/quantize local elapsed, generated
@@ -247,6 +248,7 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-04: [M5] Ported artboard source-to-target interpolator bindings: artboard property bindings now keep stateful `DataConverterInterpolator` converter state, advance it with scene elapsed time, and apply converted number/color values to target properties. The Rust runner admits source-to-target `SolidColor.colorValue` interpolator binds, and `data_converter_interpolator_reset.riv` plus `time_based_interpolation.riv` are promoted to exact after direct C++/Rust stream comparison. `make golden-compare` reports `exact=123`, `exact-segments=444`, `diverges=0`, `unsupported-feature=172`, `not-yet=0`, and parked `M5=12 M6=117 gated=7 harness=36`; `cargo test --workspace` passes.
 - 2026-07-04: [M5] Ported custom-property enum target-to-source binding: artboard `DataBindContext` custom-property bindings now capture `CustomPropertyEnum.propertyValue` as `RuntimeDataBindGraphValue::Enum`, the runner admits no-converter target-to-source enum binds, and `custom_property_enum.riv` is promoted to exact after direct C++/Rust stream comparison. `make golden-compare` reports `exact=121`, `exact-segments=442`, `diverges=0`, `unsupported-feature=174`, `not-yet=0`, and parked `M5=14 M6=117 gated=7 harness=36`; `cargo test --workspace` passes.
 - 2026-07-04: [M5] Retagged text-target nested child binds: nested child data-bind diagnostics now report `text` when the unsupported target is `Text`, `TextValueRun`, or `TextStylePaint`, and `component_stateful.riv` plus `component_stateful_vm_instance_2.riv` moved from M5 to M6 after direct probes showed `TextValueRun` as the first blocker. `make golden-compare` reports `exact=120`, `exact-segments=441`, `diverges=0`, `unsupported-feature=175`, `not-yet=0`, and parked `M5=15 M6=117 gated=7 harness=36`; `cargo test --workspace` passes.
 - 2026-07-04: [M5] Opened direct no-converter color binds: artboard `DataBindContext` source-to-target bindings now admit `FieldKind::Color` and apply `SolidColor.colorValue` through the runtime color setter, mirroring C++ `src/data_bind/context/context_value_color.cpp`. `collapsable_data_binding.riv` and `scripted_color.riv` are promoted to exact after direct C++/Rust stream comparison. `make golden-compare` reports `exact=120`, `exact-segments=441`, `diverges=0`, `unsupported-feature=175`, `not-yet=0`, and parked `M5=17 M6=115 gated=7 harness=36`; `cargo test --workspace` passes.

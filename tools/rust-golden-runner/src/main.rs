@@ -382,7 +382,7 @@ fn advance_scene_to(
     } else {
         instance.advance_nested_artboards(elapsed_seconds);
     }
-    instance.advance_artboard_data_binds();
+    instance.advance_artboard_data_binds_with_elapsed(elapsed_seconds);
     instance.update_pass();
     *current_seconds = target_seconds;
     Ok(())
@@ -670,7 +670,7 @@ fn ensure_static_draw_supported_for_artboard(
         .iter()
         .find(|data_bind| {
             data_bind.target_type_name == Some("SolidColor")
-                && !direct_solid_color_data_bind_supported(data_bind)
+                && !solid_color_data_bind_supported(data_bind)
         })
         .filter(|_| !is_nested_child)
     {
@@ -865,10 +865,15 @@ fn nested_child_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> boo
             && data_bind.converter_global.is_none())
 }
 
-fn direct_solid_color_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> bool {
+fn solid_color_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> bool {
     // SolidColorBase::colorValuePropertyKey in C++ generated/shapes/paint/solid_color_base.hpp.
     const SOLID_COLOR_VALUE_PROPERTY_KEY: u64 = 37;
-    data_bind.property_key == SOLID_COLOR_VALUE_PROPERTY_KEY && data_bind.converter_global.is_none()
+    let source_to_target = data_bind.flags & DATA_BIND_FLAG_TWO_WAY != 0
+        || data_bind.flags & DATA_BIND_FLAG_DIRECTION_TO_SOURCE == 0;
+    data_bind.property_key == SOLID_COLOR_VALUE_PROPERTY_KEY
+        && source_to_target
+        && (data_bind.converter_global.is_none()
+            || data_bind.converter_type_name == Some("DataConverterInterpolator"))
 }
 
 fn custom_property_enum_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> bool {

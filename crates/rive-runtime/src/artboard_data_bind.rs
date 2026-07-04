@@ -1,5 +1,6 @@
 use crate::data_bind_graph::{
-    runtime_data_bind_graph_convert_value, runtime_data_bind_graph_converter,
+    RuntimeDataBindGraphConverterState, runtime_data_bind_graph_convert_value,
+    runtime_data_bind_graph_converter,
 };
 use crate::objects::InstanceObjectArena;
 use crate::properties::{
@@ -21,6 +22,7 @@ pub(super) struct RuntimeArtboardPropertyBindingInstance {
     property_key: u16,
     path: Vec<u32>,
     converter: Option<RuntimeDataBindGraphConverter>,
+    converter_state: RuntimeDataBindGraphConverterState,
     default_value: RuntimeDataBindGraphValue,
 }
 
@@ -180,7 +182,10 @@ pub(super) fn build_artboard_property_bindings(
                 return None;
             }
             let converter = runtime_data_bind_graph_converter(file, data_bind.object);
-            if converter.is_some() {
+            if !matches!(
+                converter,
+                None | Some(RuntimeDataBindGraphConverter::Interpolator { .. })
+            ) {
                 return None;
             }
             let path = file.data_bind_context_source_path_ids_for_object(data_bind.object)?;
@@ -196,6 +201,9 @@ pub(super) fn build_artboard_property_bindings(
                 target_local_id,
                 property_key,
                 path: path.to_vec(),
+                converter_state: RuntimeDataBindGraphConverterState::for_converter(
+                    converter.as_ref(),
+                ),
                 converter,
                 default_value,
             })
@@ -533,10 +541,16 @@ impl ArtboardInstance {
     }
 
     pub fn advance_artboard_data_binds(&mut self) -> bool {
+        self.advance_artboard_data_binds_with_elapsed(0.0)
+    }
+
+    pub fn advance_artboard_data_binds_with_elapsed(&mut self, elapsed_seconds: f32) -> bool {
         let mut changed = false;
         for binding in self.artboard_custom_property_bindings.clone() {
             changed |= self.update_artboard_custom_property_binding(&binding);
         }
+        changed |= self.apply_artboard_property_bindings();
+        changed |= self.advance_artboard_property_binding_converters(elapsed_seconds);
         changed |= self.apply_artboard_property_bindings();
         for binding in &mut self.artboard_list_bindings {
             let target_value = match binding.converter.as_ref() {
@@ -562,39 +576,62 @@ impl ArtboardInstance {
 
     fn apply_artboard_property_bindings(&mut self) -> bool {
         let mut changed = false;
-        for binding in self.artboard_property_bindings.clone() {
-            let Some(value) = self.artboard_data_bind_values.get(&binding.path).cloned() else {
+        for index in 0..self.artboard_property_bindings.len() {
+            let Some((target_local_id, property_key, value)) =
+                self.converted_artboard_property_binding_value(index)
+            else {
                 continue;
             };
-            changed |= self.apply_artboard_property_binding_value(&binding, &value);
+            changed |=
+                self.apply_artboard_property_binding_value(target_local_id, property_key, &value);
+        }
+        changed
+    }
+
+    fn converted_artboard_property_binding_value(
+        &mut self,
+        index: usize,
+    ) -> Option<(usize, u16, RuntimeDataBindGraphValue)> {
+        let binding = self.artboard_property_bindings.get_mut(index)?;
+        let value = self.artboard_data_bind_values.get(&binding.path).cloned()?;
+        let converted = match binding.converter.as_ref() {
+            Some(converter) => binding.converter_state.convert_value(converter, &value),
+            None => Some(value),
+        }?;
+        Some((binding.target_local_id, binding.property_key, converted))
+    }
+
+    fn advance_artboard_property_binding_converters(&mut self, elapsed_seconds: f32) -> bool {
+        let mut changed = false;
+        for binding in &mut self.artboard_property_bindings {
+            let advance = binding
+                .converter_state
+                .advance_converter(binding.converter.as_ref(), elapsed_seconds);
+            changed |= advance.changed;
         }
         changed
     }
 
     fn apply_artboard_property_binding_value(
         &mut self,
-        binding: &RuntimeArtboardPropertyBindingInstance,
+        target_local_id: usize,
+        property_key: u16,
         value: &RuntimeDataBindGraphValue,
     ) -> bool {
-        let value = match binding.converter.as_ref() {
-            Some(converter) => runtime_data_bind_graph_convert_value(converter, value),
-            None => Some(value.clone()),
-        };
         match (
-            self.objects
-                .property_kind(binding.target_local_id, binding.property_key),
-            value,
+            self.objects.property_kind(target_local_id, property_key),
+            Some(value.clone()),
         ) {
             (Some(FieldKind::Double), Some(RuntimeDataBindGraphValue::Number(value))) => {
-                self.set_double_property(binding.target_local_id, binding.property_key, value)
+                self.set_double_property(target_local_id, property_key, value)
             }
             (Some(FieldKind::Uint), Some(RuntimeDataBindGraphValue::Number(value))) => {
                 let rounded = if value < 0.0 { 0 } else { value.round() as u64 };
-                self.set_uint_property(binding.target_local_id, binding.property_key, rounded)
+                self.set_uint_property(target_local_id, property_key, rounded)
             }
             (Some(FieldKind::Color), Some(RuntimeDataBindGraphValue::Color(value))) => {
                 // Mirrors C++ src/data_bind/context/context_value_color.cpp.
-                self.set_color_property(binding.target_local_id, binding.property_key, value)
+                self.set_color_property(target_local_id, property_key, value)
             }
             _ => false,
         }

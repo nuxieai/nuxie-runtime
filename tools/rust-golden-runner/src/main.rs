@@ -409,21 +409,6 @@ fn ensure_static_draw_supported(graph: &GraphFile, artboard: &ArtboardGraph) -> 
         );
     }
 
-    if artboard
-        .local_objects
-        .iter()
-        .any(|object| object.type_name == Some("FollowPathConstraint"))
-        && let Some(star) = artboard
-            .local_objects
-            .iter()
-            .find(|object| object.type_name == Some("Star"))
-    {
-        bail!(
-            "unsupported: follow-path-star-shapes in Rust golden runner (global {})",
-            star.global_id
-        );
-    }
-
     if let Some(scroll_constraint) = artboard
         .local_objects
         .iter()

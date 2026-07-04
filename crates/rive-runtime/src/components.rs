@@ -200,6 +200,19 @@ impl Mat2D {
         ])
     }
 
+    pub(crate) fn multiply_path_local_contracted(self, rhs: Self) -> Self {
+        let a = self.0;
+        let b = rhs.0;
+        Self([
+            a[0].mul_add(b[0], a[2] * b[1]),
+            a[1].mul_add(b[0], a[3] * b[1]),
+            a[0].mul_add(b[2], a[2] * b[3]),
+            a[1].mul_add(b[2], a[3] * b[3]),
+            a[0].mul_add(b[4], a[2] * b[5]) + a[4],
+            a[1].mul_add(b[4], a[3] * b[5]) + a[5],
+        ])
+    }
+
     pub fn scale_by_values(&mut self, scale_x: f32, scale_y: f32) {
         self.0[0] *= scale_x;
         self.0[1] *= scale_x;
@@ -260,8 +273,8 @@ impl Mat2D {
             -b * determinant,
             -c * determinant,
             a * determinant,
-            c.mul_add(f, -(d * e)) * determinant,
-            b.mul_add(e, -(a * f)) * determinant,
+            (c * f - d * e) * determinant,
+            (b * e - a * f) * determinant,
         ])
     }
 

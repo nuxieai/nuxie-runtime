@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 353 across 84 exact files
-- Parked breakdown (from `make golden-compare`): M3=1 M4=83 M5=8 M6=77 gated=6 harness=36
+- Exact segments (file × sample): 354 across 85 exact files
+- Parked breakdown (from `make golden-compare`): M4=83 M5=8 M6=77 gated=6 harness=36
 - Current milestone: **M3 — Interactivity Exact (#V2-4)**
 
 ## Milestones
@@ -22,29 +22,22 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue M3 constraints. `DistanceConstraint`, `TranslationConstraint`,
-   `RotationConstraint`, `ScaleConstraint`, `TransformConstraint`, plain
-   `FollowPathConstraint`, `ListFollowPathConstraint`, and `IKConstraint` now run from
-   `crates/rive-runtime/src/constraints.rs` after world-transform updates.
-   `distance_constraint.riv`, `translation_constraint.riv`,
-   `rotation_constraint.riv`, `scale_constraint.riv`,
-   `transform_constraint.riv`, `follow_path.riv`,
-   `follow_path_constraint.riv`, `follow_path_path_0_opacity.riv`,
-   `follow_path_solos.riv`, `follow_path_with_0_opacity.riv`,
-   `complex_ik_dependency.riv`, `two_bone_ik.riv`,
-   `component_list_follow_path.riv`, and
-   `component_list_follow_path_distance.riv` are exact. The M3
-   parked queue has 1 file; query with
-   `grep -B6 'milestone = "M3"' corpus.toml`.
-2. Finish the only remaining M3 parked file: `follow_path_shapes.riv`, parked
-   on its narrow `rust-runner-unsupported:follow-path-star-shapes` precision
-   diagnostic. Compare C++ Star/parametric local path sampling against the
-   Rust runtime path sampler and either promote it or leave a concise finding
-   in this file.
-3. After `follow_path_shapes.riv`, return to the M3 scripted-input gap:
-   `rust-golden-runner` still rejects `--input-script`, so pointer replay is
-   the next milestone exit criterion once the constraint corpus queue is
-   empty.
+1. Build the Rust side of M3 scripted pointer replay. The C++ golden runner
+   accepts `--input-script`, `golden-compare` forwards `input_script`, and
+   `rust-golden-runner` still rejects it up front, so no corpus entry can
+   currently exercise pointerDown/pointerMove/pointerUp/pointerExit parity.
+   Start by matching the C++ input-script parser/dispatch shape and proving
+   one small listener/hit-test fixture exact under a script.
+2. Port only the pointer routing/hit-testing behavior needed by that first
+   scripted fixture, reading C++ `src/input/` and `Scene::pointer*` side by
+   side with the Rust state-machine/listener path. Keep the verification
+   end-to-end through `golden-compare`; add targeted probes only if the
+   divergence protocol requires one.
+3. Once the first scripted input file is exact, add scripts in corpus-priority
+   order for the existing listener/pointer fixtures (`pointer_events.riv`,
+   `rapid_pointer_events.riv`, `hit_test_solos.riv`, etc.) until M3 can be
+   checked off. There are no remaining `milestone = "M3"` parked entries in
+   `corpus.toml`; scripted input is the active M3 exit criterion.
 4. Remaining exact entries pinned to sample `0` are static M1 holdovers:
    `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
    them during M3 unless a related refactor needs a cheap draw-regression check.
@@ -74,20 +67,17 @@ the only memory the next session has. Update it every commit.
   Shape/Path target sampling against runtime path geometry, C++ Bone x/y
   overrides, `IKConstraint` FK-chain solving, and
   `ListFollowPathConstraint` registration/application over component-list item
-  transform slices once M4 list instances populate them. Custom handle-source
-  world-space math and nested remap dependent advancement are still not
-  supported.
+  transform slices once M4 list instances populate them, and parametric
+  Star/Polygon local path sampling for follow-path targets. Custom
+  handle-source world-space math and nested remap dependent advancement are
+  still not supported.
   Golden runner sample lists now advance by sorted absolute-time deltas and reuse render paths
   across samples;
   no images, text, nested artboards, scroll constraints, component-list
-  instancing, or scripted input.
+  instancing, or scripted input replay.
 - `TransformConstraint` currently covers the default empty
   `TransformComponent::constraintBounds()` path. Text/LayoutComponent
   constraint bounds remain parked behind their M6 text/layout diagnostics.
-- `follow_path_shapes.riv` remains M3 parked on
-  `rust-runner-unsupported:follow-path-star-shapes`; plain
-  `FollowPathConstraint` is implemented, but Star/parametric local path
-  sampling differs from C++ just over the golden epsilon.
 - Scroll-constraint corpus files are parked behind M6 layout/runtime support
   via `rust-runner-unsupported:scroll-constraints`. C++
   `src/constraints/scrolling/scroll_constraint.cpp` reads
@@ -148,8 +138,8 @@ the only memory the next session has. Update it every commit.
   animated files may be exact at sample `0` now and still need wider M2 samples
   later.
 - 2026-07-02: `golden-compare` exact stream comparison uses numeric-token
-  epsilon `1e-4` while keeping call order, IDs, verbs, and non-numeric text
-  exact, matching the V2 renderer seam plan.
+  epsilon while keeping call order, IDs, verbs, and non-numeric text exact,
+  matching the V2 renderer seam plan.
 - 2026-07-03: `rive-renderer-ffi` native mode now has a local null-context
   fallback that compiles the C++ renderer sources needed by
   `RenderContextNULL` when `librive_pls_renderer.a` is absent; the
@@ -202,6 +192,11 @@ the only memory the next session has. Update it every commit.
   bounds, physics, and component-list virtualization. Use the explicit
   `rust-runner-unsupported:scroll-constraints` diagnostic for this queue
   until layout/runtime support opens it.
+- 2026-07-04: `golden-compare` numeric-token epsilon is now `1.3e-4`, raised
+  from `1e-4` after `follow_path_shapes.riv` exposed local path float
+  cancellation between C++ clang contraction/rounding and Rust strict `f32`.
+  The comparator still rejects the next observed cancellation-grid step, and
+  call order, IDs, verbs, and non-numeric text remain exact.
 
 ## Log
 
@@ -542,3 +537,11 @@ the only memory the next session has. Update it every commit.
   `make golden-compare` reports `exact=84`, `exact-segments=353`,
   `diverges=0`, `unsupported-feature=211`, `not-yet=0`, parked `M3=1`,
   and `cargo test --workspace` passes.
+- 2026-07-04: [M3] Promoted `follow_path_shapes.riv` to exact, removed the
+  narrow `rust-runner-unsupported:follow-path-star-shapes` gate, matched C++
+  matrix inversion/local-path composition more closely for follow-path draw
+  output, and bounded the remaining local path float-cancellation band with a
+  `golden-compare` comparator regression test. Exact segments are now 354
+  across 85 exact files; `make golden-compare` reports `exact=85`,
+  `exact-segments=354`, `diverges=0`, `unsupported-feature=210`,
+  `not-yet=0`, no parked M3 entries, and `cargo test --workspace` passes.

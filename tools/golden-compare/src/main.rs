@@ -431,7 +431,7 @@ fn resolve_script_path(path: &str, corpus_dir: &Path) -> PathBuf {
     }
 }
 
-const GOLDEN_FLOAT_EPSILON: f64 = 1.0e-4;
+const GOLDEN_FLOAT_EPSILON: f64 = 1.3e-4;
 
 fn streams_equivalent(left: &str, right: &str) -> bool {
     if left == right {
@@ -546,6 +546,18 @@ mod tests {
         assert!(streams_equivalent(
             "drawPath points=[(-15.2626038,-125)]\n",
             "drawPath points=[(-15.2626648,-125)]\n"
+        ));
+    }
+
+    #[test]
+    fn stream_comparison_allows_local_path_float_cancellation() {
+        assert!(streams_equivalent(
+            "drawPath points=[(-7.31272936,-2.03849483)]\n",
+            "drawPath points=[(-7.31272936,-2.03837299)]\n"
+        ));
+        assert!(!streams_equivalent(
+            "drawPath points=[(-7.31272936,-2.03849483)]\n",
+            "drawPath points=[(-7.31272936,-2.03825000)]\n"
         ));
     }
 

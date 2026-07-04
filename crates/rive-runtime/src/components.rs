@@ -207,6 +207,42 @@ impl Mat2D {
         self.0[3] *= scale_y;
     }
 
+    pub(crate) fn decompose(self) -> TransformComponents {
+        // Ported from C++ `src/math/mat2d.cpp`.
+        let [m0, m1, m2, m3, x, y] = self.0;
+        let rotation = m1.atan2(m0);
+        let denom = m0 * m0 + m1 * m1;
+        let scale_x = denom.sqrt();
+        let scale_y = if scale_x == 0.0 {
+            0.0
+        } else {
+            (m0 * m3 - m2 * m1) / scale_x
+        };
+        let skew = (m0 * m2 + m1 * m3).atan2(denom);
+        TransformComponents {
+            x,
+            y,
+            scale_x,
+            scale_y,
+            rotation,
+            skew,
+        }
+    }
+
+    pub(crate) fn compose(components: TransformComponents) -> Self {
+        // Ported from C++ `src/math/mat2d.cpp`.
+        let mut result = Self::from_rotation(components.rotation);
+        result.0[4] = components.x;
+        result.0[5] = components.y;
+        result.scale_by_values(components.scale_x, components.scale_y);
+
+        if components.skew != 0.0 {
+            result.0[2] = result.0[0] * components.skew + result.0[2];
+            result.0[3] = result.0[1] * components.skew + result.0[3];
+        }
+        result
+    }
+
     pub fn determinant(self) -> f32 {
         self.0[0] * self.0[3] - self.0[1] * self.0[2]
     }
@@ -255,6 +291,29 @@ impl Mat2D {
 impl Default for Mat2D {
     fn default() -> Self {
         Self::IDENTITY
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct TransformComponents {
+    pub(crate) x: f32,
+    pub(crate) y: f32,
+    pub(crate) scale_x: f32,
+    pub(crate) scale_y: f32,
+    pub(crate) rotation: f32,
+    pub(crate) skew: f32,
+}
+
+impl Default for TransformComponents {
+    fn default() -> Self {
+        Self {
+            x: 0.0,
+            y: 0.0,
+            scale_x: 1.0,
+            scale_y: 1.0,
+            rotation: 0.0,
+            skew: 0.0,
+        }
     }
 }
 

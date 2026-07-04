@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 341 across 72 exact files
-- Parked breakdown (from `make golden-compare`): M3=19 M4=83 M5=8 M6=72 gated=5 harness=36
+- Exact segments (file × sample): 342 across 73 exact files
+- Parked breakdown (from `make golden-compare`): M3=18 M4=83 M5=8 M6=72 gated=5 harness=36
 - Current milestone: **M3 — Interactivity Exact (#V2-4)**
 
 ## Milestones
@@ -22,16 +22,15 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue M3 constraints. `DistanceConstraint` and
-   `TranslationConstraint` now run from
+1. Continue M3 constraints. `DistanceConstraint`, `TranslationConstraint`,
+   and `RotationConstraint` now run from
    `crates/rive-runtime/src/constraints.rs`, apply after world-transform
-   updates, and `distance_constraint.riv` plus `translation_constraint.riv`
-   are exact. The M3 parked queue has 19 files, still gated by
+   updates, and `distance_constraint.riv`, `translation_constraint.riv`, and
+   `rotation_constraint.riv` are exact. The M3 parked queue has 18 files, still gated by
    `rust-runner-unsupported:constraints`; query with
    `grep -B6 'milestone = "M3"' corpus.toml`. Port the
-   decompose/compose-backed `RotationConstraint`, `ScaleConstraint`, and
-   `TransformConstraint` slices next for `rotation_constraint.riv`,
-   `scale_constraint.riv`, and `transform_constraint.riv`.
+   decompose/compose-backed `ScaleConstraint` and `TransformConstraint`
+   slices next for `scale_constraint.riv` and `transform_constraint.riv`.
 2. After basic transform/distance constraints, continue M3 with
    FollowPathConstraint and IK/skin-dependent constraint files
    (`follow_path*`, `two_bone_ik`, `complex_ik_dependency`) before returning
@@ -60,6 +59,7 @@ the only memory the next session has. Update it every commit.
   interpolation for CubicEase/CubicValue/Elastic keyframe interpolators, and
   `DistanceConstraint` world-translation application and
   `TranslationConstraint` target/source/destination/min-max translation
+  application, plus `RotationConstraint` compose/decompose rotation
   application without custom handle-source world-space math or nested remap
   dependent advancement.
   Golden runner sample lists now advance by sorted absolute-time deltas and reuse render paths
@@ -434,3 +434,12 @@ the only memory the next session has. Update it every commit.
   across 72 exact files; `make golden-compare` reports `exact=72`,
   `exact-segments=341`, `diverges=0`, `unsupported-feature=223`,
   `not-yet=0`, parked `M3=19`, and `cargo test --workspace` passes.
+- 2026-07-04: [M3] Ported `RotationConstraint` from C++
+  `src/constraints/rotation_constraint.cpp`, added shared
+  `Mat2D::decompose`/`Mat2D::compose` runtime math from C++
+  `src/math/mat2d.cpp`, narrowed the Rust golden-runner constraint gate for
+  rotation constraints, and promoted `rotation_constraint.riv` to exact.
+  Exact segments are now 342 across 73 exact files; `make golden-compare`
+  reports `exact=73`, `exact-segments=342`, `diverges=0`,
+  `unsupported-feature=222`, `not-yet=0`, parked `M3=18`, and
+  `cargo test --workspace` passes.

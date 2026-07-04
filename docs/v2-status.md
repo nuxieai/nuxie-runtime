@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 392 across 85 exact files
+- Exact segments (file × sample): 393 across 85 exact files
 - Parked breakdown (from `make golden-compare`): M4=83 M5=8 M6=77 gated=6 harness=36
 - Current milestone: **M3 — Interactivity Exact (#V2-4)**
 
@@ -637,3 +637,10 @@ the only memory the next session has. Update it every commit.
   exact files; `make golden-compare` reports `exact=85`,
   `exact-segments=392`, `diverges=0`, `unsupported-feature=210`, and
   `not-yet=0`, and `cargo test --workspace` passes.
+- 2026-07-04: [M3] Extended `sound.riv`'s hover script to move back outside
+  the direct rectangle and sample the exit path at `0.35`, keeping both
+  direct enter and exit listener-number changes exact through sample `1.5`.
+  Exact segments are now 393 across 85 exact files; `make golden-compare`
+  reports `exact=85`, `exact-segments=393`, `diverges=0`,
+  `unsupported-feature=210`, and `not-yet=0`, and `cargo test --workspace`
+  passes.

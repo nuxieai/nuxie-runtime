@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 427 across 110 exact files
-- Parked breakdown (from `make golden-compare`): M4=55 M5=8 M6=80 gated=6 harness=36
+- Exact segments (file × sample): 428 across 111 exact files
+- Parked breakdown (from `make golden-compare`): M4=54 M5=8 M6=80 gated=6 harness=36
 - Current milestone: **M4 — Nested Artboards And Lists Exact (#V2-5)**
 
 ## Milestones
@@ -26,14 +26,21 @@ the only memory the next session has. Update it every commit.
    Query the queue with `grep -B6 'milestone = "M4"' corpus.toml`; the raw
    queue now starts with `ai_assitant.riv`, but that file carries skin/mesh/
    feather-ish complexity and should wait for a narrower entry point.
-2. Solo-owned repeated nested child paint allocation is closed for
+2. Nested host serialized `speed`/`quantize` local elapsed is closed for
+   `nested_artboard_quantize_and_speed.riv` at sample `0.0`; Rust now mirrors
+   C++ `NestedArtboard::calculateLocalElapsedSeconds` for child animation and
+   nested-child advancement. A useful follow-up is widening that file's sample
+   list to expose whether live data-bound host speed/quantize mutation is
+   needed, then either port that narrow data-bind path or park it with a
+   sharper diagnostic.
+3. Solo-owned repeated nested child paint allocation is closed for
    `pointer_events_nested_artboards_in_solos.riv` through samples `0.0, 0.1,
    0.25, 0.5, 0.75, 1.0, 1.25, 1.5`: Rust now keeps per-host nested paint
    caches, so repeated child instances do not share mutable paint/shader state.
    The next useful M4 slice is nested remap with `DrawTarget` rules
    (`death_knight.riv`) or another smaller pure nested-artboard entry from the
    M4 queue.
-3. Plain static `NestedArtboard` draw, default nested
+4. Plain static `NestedArtboard` draw, default nested
    simple-animation/state-machine host advancement are closed for the current
    sample-0 corpus slice, and nested child unbound SolidColor data-bind
    defaults are closed for `library_vmtest_1_host.riv` and
@@ -44,13 +51,14 @@ the only memory the next session has. Update it every commit.
    `databind_external_artboard_main.riv`, `drag_event.riv`, `multitouch.riv`,
    `nested_needs_advance.riv`, `scripted_listener_context.riv`,
    `pointer_events_nested_artboards_in_solos.riv`,
+   `nested_artboard_quantize_and_speed.riv`,
    `scripting_root_viewmodel.riv`, `solid_affects_has_changed.riv`,
    `target_event.riv`, and `transition_self_comparator_test.riv`.
-4. M3 is closed: all `milestone = "M3"` parked entries are gone, all scripted
+5. M3 is closed: all `milestone = "M3"` parked entries are gone, all scripted
    direct-pointer corpus entries are exact through sample `1.5`, and the
    remaining unscripted exact listener files showed no C++ render delta on a
    bounded coarse click/hover probe or require M4/M5/M6 domains.
-5. Remaining exact entries pinned to sample `0` are static M1 holdovers:
+6. Remaining exact entries pinned to sample `0` are static M1 holdovers:
    `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
    them during M4 unless a related refactor needs a cheap draw-regression check.
 
@@ -86,11 +94,11 @@ the only memory the next session has. Update it every commit.
   artboard instances, stateful child `ViewModelInstance` subtree admission
   under plain nested hosts, nested child unbound SolidColor data-bind defaults,
   nested bool/number/trigger input proxying, and basic nested remap-time host
-  plumbing, plus per-host nested paint caches for repeated child instances
-  under Solo-owned hosts.
+  plumbing, serialized nested host speed/quantize local elapsed, plus per-host
+  nested paint caches for repeated child instances under Solo-owned hosts.
   Custom handle-source world-space math, nested remap with
   draw targets, data-bound nested host controls (`artboardId` runtime swaps,
-  pause, speed, quantize), nested child non-color data-bind targets, focus
+  pause, live speed/quantize), nested child non-color data-bind targets, focus
   data, bound stateful child view-model propagation, nested listener/event
   propagation, `NestedArtboardLayout` / `NestedArtboardLeaf`, and
   layout-backed or virtualized component-list instancing are still not
@@ -308,3 +316,14 @@ the only memory the next session has. Update it every commit.
   golden-compare` reports `exact=110`, `exact-segments=427`, `diverges=0`,
   `unsupported-feature=185`, `not-yet=0`, and parked
   `M4=55 M5=8 M6=80 gated=6 harness=36`; `cargo test --workspace` passes.
+- 2026-07-04: [M4] Mirrored C++ nested host local elapsed for serialized
+  `NestedArtboard.speed` and `NestedArtboard.quantize`: nested child
+  animations and child artboard advancement now run through
+  `NestedArtboard::calculateLocalElapsedSeconds` semantics, including paused
+  hosts and quantized accumulated time. Narrowed the golden-runner host-control
+  guard so generated speed/quantize properties no longer park otherwise exact
+  files, while live pause/data-bound host mutation stays gated. Promoted
+  `nested_artboard_quantize_and_speed.riv` to exact. `make golden-compare`
+  reports `exact=111`, `exact-segments=428`, `diverges=0`,
+  `unsupported-feature=184`, `not-yet=0`, and parked
+  `M4=54 M5=8 M6=80 gated=6 harness=36`; `cargo test --workspace` passes.

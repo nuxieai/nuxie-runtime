@@ -70,6 +70,10 @@ pub struct ArtboardInstance {
 pub(crate) struct RuntimeNestedArtboardInstance {
     pub(crate) child: Box<ArtboardInstance>,
     animations: Vec<RuntimeNestedAnimationInstance>,
+    is_paused: bool,
+    speed: f32,
+    quantize: f32,
+    cumulated_seconds: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -1171,12 +1175,39 @@ impl ArtboardInstance {
 
 impl RuntimeNestedArtboardInstance {
     fn advance(&mut self, elapsed_seconds: f32) -> bool {
+        if self.is_paused {
+            return false;
+        }
+
+        let local_elapsed_seconds = self.calculate_local_elapsed_seconds(elapsed_seconds);
+        if local_elapsed_seconds == 0.0 && self.quantize >= 0.0 {
+            return true;
+        }
+
         let mut changed = false;
         for animation in &mut self.animations {
-            changed |= animation.advance(&mut self.child, elapsed_seconds);
+            changed |= animation.advance(&mut self.child, local_elapsed_seconds);
         }
-        changed |= self.child.advance_nested_artboards(elapsed_seconds);
+        changed |= self.child.advance_nested_artboards(local_elapsed_seconds);
         changed
+    }
+
+    // Mirrors src/nested_artboard.cpp NestedArtboard::calculateLocalElapsedSeconds.
+    fn calculate_local_elapsed_seconds(&mut self, elapsed_seconds: f32) -> f32 {
+        let mut local_elapsed_seconds =
+            elapsed_seconds * if self.speed >= 0.0 { self.speed } else { 1.0 };
+        if self.quantize >= 0.0 {
+            self.cumulated_seconds += local_elapsed_seconds;
+            let quantized_seconds = 1.0 / self.quantize;
+            if self.cumulated_seconds > quantized_seconds {
+                local_elapsed_seconds =
+                    (self.cumulated_seconds / quantized_seconds).floor() * quantized_seconds;
+                self.cumulated_seconds -= local_elapsed_seconds;
+            } else {
+                local_elapsed_seconds = 0.0;
+            }
+        }
+        local_elapsed_seconds
     }
 
     fn set_root_opacity(&mut self, opacity: f32) -> bool {
@@ -1286,7 +1317,14 @@ fn build_runtime_nested_artboard_instances(
         let animations = runtime_nested_animation_instances(file, graph, host.local_id, &child);
         nested_artboards.insert(
             host.local_id,
-            RuntimeNestedArtboardInstance { child, animations },
+            RuntimeNestedArtboardInstance {
+                child,
+                animations,
+                is_paused: host_object.bool_property("isPaused").unwrap_or(false),
+                speed: host_object.double_property("speed").unwrap_or(1.0),
+                quantize: host_object.double_property("quantize").unwrap_or(-1.0),
+                cumulated_seconds: 0.0,
+            },
         );
     }
 

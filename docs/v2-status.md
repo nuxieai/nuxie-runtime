@@ -54,11 +54,15 @@ the only memory the next session has. Update it every commit.
    Shared runtime property-key/object-value helpers, transform-key lookup,
    joystick/Solo/paint key helpers, `mix_value`, artboard-index lookup, and
    `RuntimeArtboardDimensions` live in
-   `crates/rive-runtime/src/properties.rs`. Continue modularizing the
-   remaining root runtime surface; start by moving the `ArtboardInstance`
-   struct, core instance methods, and their local tests into
-   `crates/rive-runtime/src/artboard.rs`, then re-export `ArtboardInstance`
-   from `lib.rs`.
+   `crates/rive-runtime/src/properties.rs`. `ArtboardInstance`, core
+   instance methods, and local instance tests live in
+   `crates/rive-runtime/src/artboard.rs`; `lib.rs` is now a module/re-export
+   hub. Next, run the M2 completion audit: confirm the remaining non-exact
+   corpus entries are all later-milestone parked items, confirm the exact
+   corpus sample query still shows 66 entries at the standard five-sample M2
+   set, `pointer_events` at six samples, and only `artboardclipping.riv`,
+   `shapetest.riv`, and `trim.riv` pinned to static sample `0`, then either
+   mark M2 complete and advance to M3 or name the first M2-scope blocker.
 2. Add handle-source world-space math and nested-remap dependent advancement
    to the joystick path when a corpus diff reaches those cases.
 3. Remaining exact entries pinned to sample `0` are static M1 holdovers:
@@ -420,3 +424,11 @@ the only memory the next session has. Update it every commit.
   exact files; `make golden-compare` reports `exact=70`,
   `exact-segments=339`, `diverges=0`, `unsupported-feature=225`,
   `not-yet=0`, and `cargo test --workspace` passes.
+- 2026-07-04: [M2] Moved `ArtboardInstance`, core instance methods, and local
+  instance tests from `crates/rive-runtime/src/lib.rs` into
+  `crates/rive-runtime/src/artboard.rs`, leaving `lib.rs` as a 93-line
+  module/re-export hub and preserving crate-root `ArtboardInstance` as the
+  public API. Exact segments remain 339 across 70 exact files; `make
+  golden-compare` reports `exact=70`, `exact-segments=339`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.

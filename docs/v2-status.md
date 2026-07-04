@@ -41,9 +41,10 @@ the only memory the next session has. Update it every commit.
    `crates/rive-runtime/src/data_bind_graph.rs`; the
    `RuntimeDataBindGraphValue` owned/imported view-model resolution impl lives
    there too. Data-bind flag helpers and the target mutator bridge also live
-   there, along with the converter-state bridge. Continue with the remaining
-   graph execution impls and converter conversion/formula/interpolator helpers,
-   preserving the current golden set.
+   there, along with the converter-state bridge, graph execution impls, and
+   source-node execution impl. Continue with the converter
+   state/formula/interpolator helper types and converter
+   conversion/construction helpers, preserving the current golden set.
 2. Add handle-source world-space math and nested-remap dependent advancement
    to the joystick path when a corpus diff reaches those cases.
 3. Remaining exact entries pinned to sample `0` are static M1 holdovers:
@@ -181,14 +182,6 @@ the only memory the next session has. Update it every commit.
   under `M2 active log rolloff`; keep only the recent rolling window here once
   Metric, Next, Decisions, and `corpus.toml` capture the current state.
 
-- 2026-07-03: [M2] Widened `component_list_2.riv` from samples `0`, `0.25`,
-  `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and `1.0`,
-  keeping passive component-list/list-index state-machine playback exact
-  across the fifth sample while leaving active list/layout mutation in later
-  milestones. Exact segments are now 279 across 70 exact files; `make
-  golden-compare` reports `exact=70`, `exact-segments=279`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
 - 2026-07-03: [M2] Widened `component_list_grouped.riv` from samples `0`,
   `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
   `1.0`, keeping grouped component-list/view-model-list playback exact across
@@ -503,3 +496,12 @@ the only memory the next session has. Update it every commit.
   golden-compare` reports `exact=70`, `exact-segments=339`, `diverges=0`,
   `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
   passes.
+- 2026-07-04: [M2] Moved the `RuntimeDataBindGraph` and
+  `RuntimeDataBindGraphSourceNode` execution impls from
+  `crates/rive-runtime/src/lib.rs` into
+  `crates/rive-runtime/src/data_bind_graph.rs`, keeping converter
+  state/formula/interpolator helper types and converter construction helpers
+  in `lib.rs` for the next extraction slice. Exact segments remain 339 across
+  70 exact files; `make golden-compare` reports `exact=70`,
+  `exact-segments=339`, `diverges=0`, `unsupported-feature=225`,
+  `not-yet=0`, and `cargo test --workspace` passes.

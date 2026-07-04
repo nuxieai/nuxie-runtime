@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 447 across 126 exact files
-- Parked breakdown (from `make golden-compare`): M5=7 M6=119 gated=7 harness=36
+- Exact segments (file × sample): 448 across 127 exact files
+- Parked breakdown (from `make golden-compare`): M5=6 M6=119 gated=7 harness=36
 - Current milestone: **M5 — Data Binding Exact Incl. External View-Model Mutation (#V2-6)**
 
 ## Milestones
@@ -24,11 +24,10 @@ the only memory the next session has. Update it every commit.
 
 1. Continue M5 with the smallest data-binding slice that can move a corpus
    entry. Query the queue with `grep -B6 'milestone = "M5"' corpus.toml`;
-   the next manifest candidate is `interpolation_zero_duration.riv`
-   (`data-binding-transform`). A direct Rust-runner probe reports
-   `unsupported: data-binding-transform` for data bind global 15 targeting
-   global 14. `interpolate_to_end.riv` moved to M6 after nested child support
-   reached its first remaining blocker, `TextValueRun`.
+   the next manifest candidate is `library_view_model_test.riv`
+   (`data-binding-nested-child`). A direct Rust-runner probe reports
+   `unsupported: data-binding-nested-child` for data bind global 54 targeting
+   nested child `CustomPropertyString`.
 2. M4 is closed for the current corpus: `grep -B6 'milestone = "M4"'
    corpus.toml` is empty. The remaining formerly-M4 entries were probed with
    `rust-golden-runner` and moved to their first verified later blocker:
@@ -75,7 +74,8 @@ the only memory the next session has. Update it every commit.
   x/y number binds, direct SolidColor `colorValue` color binds, artboard
   source-to-target `DataConverterInterpolator` number/color binds,
   artboard source-to-target `DataConverterGroup`/`DataConverterFormula`
-  transform binds with C++ fallback random sequencing,
+  transform binds with C++ fallback random sequencing, near-zero-duration
+  `DataConverterInterpolator` Shape x/y transform binds,
   nested bool/number/trigger input proxying, and basic nested remap-time host
   plumbing, runtime `DrawTarget` placement sorting from active `DrawRules`,
   serialized nested host speed/quantize local elapsed, generated
@@ -256,6 +256,13 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-04: [M5] Opened zero-duration interpolator transform binds: the
+  obsolete Rust-runner gate for near-zero-duration `DataConverterInterpolator`
+  Shape x/y targets was removed after direct C++/Rust stream comparison showed
+  `interpolation_zero_duration.riv` is exact. `make golden-compare` reports
+  `exact=127`, `exact-segments=448`, `diverges=0`,
+  `unsupported-feature=168`, `not-yet=0`, and parked `M5=6 M6=119 gated=7
+  harness=36`; `cargo test --workspace` passes.
 - 2026-07-04: [M5] Ported nested child opacity/rectangle binds: the runner now
   admits nested child `Node.opacity` and `Rectangle.width/height` no-converter
   binds, nested artboard advance applies child artboard data binds, and

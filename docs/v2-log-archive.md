@@ -1879,3 +1879,9 @@ milestone entries are kept verbatim here. Newest milestone last.
   `exact=70`, `exact-segments=255`, `diverges=0`,
   `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
   passes.
+- 2026-07-03: [M2] Widened `solos_with_nested_artboards.riv` from samples
+  `0`, `0.25`, and `0.5` to samples `0`, `0.25`, `0.5`, and `0.75`,
+  keeping passive Solo/nested-artboard playback exact before M4 nested runtime
+  advancement. Exact segments are now 256 across 70 exact files; `make
+  golden-compare` reports `exact=70`, `exact-segments=256`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace` passes.

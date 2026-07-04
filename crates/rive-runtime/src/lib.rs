@@ -45,9 +45,13 @@ pub use components::{
     TransformRuntimeState, UpdateComponentsReport,
 };
 use data_bind_graph::{
-    RuntimeDataBindGraph, RuntimeDataBindGraphContextKind, RuntimeDataBindGraphDefaultBinding,
-    RuntimeDataBindGraphFormulaRandomSource, RuntimeDataBindGraphSourceHandle,
-    RuntimeDataBindGraphTargetHandle, RuntimeImportedViewModelContextKey,
+    RuntimeDataBindGraph, RuntimeDataBindGraphApplyPhase, RuntimeDataBindGraphContextKind,
+    RuntimeDataBindGraphConverter, RuntimeDataBindGraphConverterState,
+    RuntimeDataBindGraphDefaultBinding, RuntimeDataBindGraphFormulaRandomSource,
+    RuntimeDataBindGraphFormulaToken, RuntimeDataBindGraphSourceHandle,
+    RuntimeDataBindGraphSourceNode, RuntimeDataBindGraphStatefulAdvance,
+    RuntimeDataBindGraphTarget, RuntimeDataBindGraphTargetHandle, RuntimeDataBindGraphTargetNode,
+    RuntimeDataBindGraphValue, RuntimeImportedViewModelContextKey,
     RuntimeImportedViewModelOverrideKey,
 };
 use objects::InstanceObjectArena;
@@ -4253,155 +4257,6 @@ fn sorted_drawable_uses_render_opacity(type_name: &str) -> bool {
 
 fn sorted_drawable_is_nested_artboard(type_name: &str) -> bool {
     definition_by_name(type_name).is_some_and(|definition| definition.is_a("NestedArtboard"))
-}
-
-#[derive(Debug, Clone)]
-struct RuntimeDataBindGraphSourceNode {
-    path: Vec<u32>,
-    flags: u64,
-    bound: bool,
-    target_to_source_dirty: bool,
-    source_to_target_dirty_after_immediate: bool,
-    source_to_target_dirty_after_target_to_source: bool,
-    converter: Option<RuntimeDataBindGraphConverter>,
-    converter_state: RuntimeDataBindGraphConverterState,
-    default_value: RuntimeDataBindGraphValue,
-    value: RuntimeDataBindGraphValue,
-    view_model_instance_ids: Vec<u32>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-enum RuntimeDataBindGraphConverter {
-    PassThrough,
-    BooleanNegate,
-    TriggerIncrement,
-    ToNumber,
-    ListToLength,
-    NumberToList {
-        has_view_model: bool,
-    },
-    ToString {
-        flags: u64,
-        decimals: u64,
-        color_format: Vec<u8>,
-    },
-    OperationValue {
-        operation_type: u64,
-        operation_value: f32,
-    },
-    OperationViewModel {
-        operation_type: u64,
-        operation_value: f32,
-        default_operation_value: f32,
-        source_path: Option<Vec<u32>>,
-    },
-    SystemOperationValue {
-        operation_type: u64,
-        operation_value: f32,
-        reverse: bool,
-    },
-    Rounder {
-        decimals: u64,
-    },
-    RangeMapper {
-        min_input: f32,
-        max_input: f32,
-        min_output: f32,
-        max_output: f32,
-        flags: u64,
-        interpolation_type: u64,
-        interpolator: Option<RuntimeTransitionInterpolator>,
-    },
-    StringTrim {
-        trim_type: u64,
-    },
-    StringRemoveZeros,
-    StringPad {
-        length: u64,
-        text: Vec<u8>,
-        pad_type: u64,
-    },
-    Formula {
-        tokens: Vec<RuntimeDataBindGraphFormulaToken>,
-    },
-    Interpolator {
-        duration: f32,
-        interpolator: Option<RuntimeTransitionInterpolator>,
-    },
-    Group(Vec<RuntimeDataBindGraphConverter>),
-    Unsupported,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-enum RuntimeDataBindGraphFormulaToken {
-    Input,
-    Value(f32),
-    Operation {
-        operation_type: u64,
-    },
-    Function {
-        function_type: u64,
-        arguments_count: usize,
-        random_mode: u64,
-    },
-}
-
-#[derive(Debug, Clone)]
-enum RuntimeDataBindGraphConverterState {
-    None,
-    Formula(RuntimeDataBindGraphFormulaState),
-    Interpolator(RuntimeDataBindGraphInterpolatorState),
-    Group(Vec<RuntimeDataBindGraphConverterState>),
-}
-
-#[derive(Debug, Clone, Copy, Default)]
-struct RuntimeDataBindGraphStatefulAdvance {
-    changed: bool,
-    keep_going: bool,
-}
-
-#[derive(Debug, Clone, Copy)]
-enum RuntimeDataBindGraphApplyPhase {
-    BeforeStatefulAdvance,
-    AfterStatefulAdvance { elapsed_positive: bool },
-    Immediate,
-    PublicUpdate,
-}
-
-#[derive(Debug, Clone)]
-struct RuntimeDataBindGraphTargetNode {
-    target: RuntimeDataBindGraphTarget,
-}
-
-#[derive(Debug, Clone, Copy)]
-enum RuntimeDataBindGraphTarget {
-    Number { global_id: u32 },
-    Integer { global_id: u32 },
-    Boolean { global_id: u32 },
-    String { global_id: u32 },
-    Color { global_id: u32 },
-    Enum { global_id: u32 },
-    Asset { global_id: u32 },
-    Artboard { global_id: u32 },
-    List { global_id: u32 },
-    Trigger { global_id: u32 },
-    ViewModel { global_id: u32 },
-}
-
-#[derive(Debug, Clone, PartialEq)]
-enum RuntimeDataBindGraphValue {
-    Number(f32),
-    Boolean(bool),
-    String(Vec<u8>),
-    Color(u32),
-    Enum(u64),
-    SymbolListIndex(u64),
-    List { item_count: usize },
-    ListLength(usize),
-    Asset(u64),
-    Artboard(u64),
-    Trigger(u64),
-    ViewModel(RuntimeViewModelPointer),
 }
 
 const DATA_BIND_FLAG_DIRECTION_TO_SOURCE: u64 = 1 << 0;

@@ -2006,3 +2006,11 @@ milestone entries are kept verbatim here. Newest milestone last.
   Exact segments are now 274 across 70 exact files; `make golden-compare`
   reports `exact=70`, `exact-segments=274`, `diverges=0`,
   `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace` passes.
+- 2026-07-03: [M2] Widened `clear_viewmodel_list.riv` from samples `0`,
+  `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
+  `1.0`, keeping passive view-model-list/scripted-drawable playback exact
+  across the fifth sample while leaving list mutation, scripting, and
+  layout-component paint behavior in later milestones. Exact segments are now
+  275 across 70 exact files; `make golden-compare` reports `exact=70`,
+  `exact-segments=275`, `diverges=0`, `unsupported-feature=225`,
+  `not-yet=0`, and `cargo test --workspace` passes.

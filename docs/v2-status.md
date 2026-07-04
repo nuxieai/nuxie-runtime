@@ -35,10 +35,12 @@ the only memory the next session has. Update it every commit.
    in `crates/rive-runtime/src/artboard_data_bind.rs`. Default and imported
    view-model source handle types and imported context storage/mutation methods
    live in `crates/rive-runtime/src/view_model.rs`. Data-bind graph state,
-   context keys, default-binding records, source/target handles, and formula
-   random-source state live in `crates/rive-runtime/src/data_bind_graph.rs`.
-   Continue with the remaining data-bind graph source/target nodes,
-   converter/value types, and behavior impls, preserving the current golden set.
+   context keys, default-binding records, source/target handles, source/target
+   nodes, converter/value types, apply phases, stateful-advance records, and
+   formula random-source state live in
+   `crates/rive-runtime/src/data_bind_graph.rs`. Continue with the
+   `RuntimeDataBindGraphValue` impl, graph behavior impls, and target mutator
+   bridge, preserving the current golden set.
 2. Add handle-source world-space math and nested-remap dependent advancement
    to the joystick path when a corpus diff reaches those cases.
 3. Remaining exact entries pinned to sample `0` are static M1 holdovers:
@@ -176,14 +178,6 @@ the only memory the next session has. Update it every commit.
   under `M2 active log rolloff`; keep only the recent rolling window here once
   Metric, Next, Decisions, and `corpus.toml` capture the current state.
 
-- 2026-07-03: [M2] Widened `clear_viewmodel_list.riv` from samples `0`,
-  `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
-  `1.0`, keeping passive view-model-list/scripted-drawable playback exact
-  across the fifth sample while leaving list mutation, scripting, and
-  layout-component paint behavior in later milestones. Exact segments are now
-  275 across 70 exact files; `make golden-compare` reports `exact=70`,
-  `exact-segments=275`, `diverges=0`, `unsupported-feature=225`,
-  `not-yet=0`, and `cargo test --workspace` passes.
 - 2026-07-03: [M2] Widened `click_event.riv` from samples `0`, `0.25`,
   `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and `1.0`,
   keeping passive event/listener bool state-machine playback exact across the
@@ -492,6 +486,15 @@ the only memory the next session has. Update it every commit.
   records, source/target handles, and formula random-source state while leaving
   behavior-heavy graph impls in `crates/rive-runtime/src/lib.rs` for the next
   extraction slice. Exact segments remain 339 across 70 exact files; `make
+  golden-compare` reports `exact=70`, `exact-segments=339`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+- 2026-07-04: [M2] Moved the data-bind graph source/target node,
+  converter/value, apply-phase, and stateful-advance type definitions from
+  `crates/rive-runtime/src/lib.rs` into
+  `crates/rive-runtime/src/data_bind_graph.rs`, leaving graph value resolution,
+  graph behavior, and target mutator bridge impls in `lib.rs` for the next
+  extraction slices. Exact segments remain 339 across 70 exact files; `make
   golden-compare` reports `exact=70`, `exact-segments=339`, `diverges=0`,
   `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
   passes.

@@ -10,7 +10,7 @@ use crate::{
     ArtboardInstance, RuntimeDataBindGraphConverter, RuntimeDataBindGraphValue,
     data_bind_flags_apply_source_to_target, data_bind_flags_apply_target_to_source,
 };
-use rive_binary::{RuntimeFile, RuntimeObject};
+use rive_binary::{RuntimeDataType, RuntimeFile, RuntimeObject};
 use rive_graph::ArtboardGraph;
 use std::collections::BTreeMap;
 
@@ -26,6 +26,20 @@ pub(super) struct RuntimeArtboardCustomPropertyBindingInstance {
 pub(super) struct RuntimeArtboardSoloBindingInstance {
     target_local_id: usize,
     path: Vec<u32>,
+}
+
+#[derive(Debug, Clone)]
+pub(super) struct RuntimeArtboardNestedHostBindingInstance {
+    target_local_id: usize,
+    property: RuntimeArtboardNestedHostProperty,
+    path: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum RuntimeArtboardNestedHostProperty {
+    IsPaused { property_key: u16 },
+    Speed { property_key: u16 },
+    Quantize { property_key: u16 },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -113,6 +127,49 @@ pub(super) fn build_artboard_list_bindings(
         .collect()
 }
 
+pub(super) fn build_artboard_nested_host_bindings(
+    file: &RuntimeFile,
+    graph: &ArtboardGraph,
+) -> Vec<RuntimeArtboardNestedHostBindingInstance> {
+    let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
+        return Vec::new();
+    };
+    let is_paused_key = property_key_for_name("NestedArtboard", "isPaused");
+    let speed_key = property_key_for_name("NestedArtboard", "speed");
+    let quantize_key = property_key_for_name("NestedArtboard", "quantize");
+
+    file.artboard_data_binds(artboard_index)
+        .into_iter()
+        .filter_map(|data_bind| {
+            if !data_bind_flags_apply_source_to_target(
+                data_bind.object.uint_property("flags").unwrap_or(0),
+            ) {
+                return None;
+            }
+            let target = data_bind.target?;
+            if target.type_name != "NestedArtboard" {
+                return None;
+            }
+            let property_key =
+                u16::try_from(data_bind.object.uint_property("propertyKey")?).ok()?;
+            let property = if Some(property_key) == is_paused_key {
+                RuntimeArtboardNestedHostProperty::IsPaused { property_key }
+            } else if Some(property_key) == speed_key {
+                RuntimeArtboardNestedHostProperty::Speed { property_key }
+            } else if Some(property_key) == quantize_key {
+                RuntimeArtboardNestedHostProperty::Quantize { property_key }
+            } else {
+                return None;
+            };
+            Some(RuntimeArtboardNestedHostBindingInstance {
+                target_local_id: data_bind.target_local_id?,
+                property,
+                path: file.data_bind_context_source_path_ids_for_object(data_bind.object)?,
+            })
+        })
+        .collect()
+}
+
 pub(super) fn build_artboard_default_view_model_values(
     file: &RuntimeFile,
     graph: &ArtboardGraph,
@@ -130,7 +187,7 @@ pub(super) fn build_artboard_default_view_model_values(
             continue;
         };
         let Some(value) =
-            runtime_default_view_model_value_for_path(file, default_instance.object, &path)
+            runtime_created_view_model_value_for_path(file, default_instance.object, &path)
         else {
             continue;
         };
@@ -258,19 +315,36 @@ pub(super) fn build_artboard_solo_bindings(
         .collect()
 }
 
-fn runtime_default_view_model_value_for_path(
+fn runtime_created_view_model_value_for_path(
     file: &RuntimeFile,
     default_instance: &RuntimeObject,
     path: &[u32],
 ) -> Option<RuntimeDataBindGraphValue> {
     let source = file.data_context_view_model_property_for_instance(default_instance, path)?;
-    if let Some(value) = file.view_model_instance_number_value_for_object(source) {
-        return Some(RuntimeDataBindGraphValue::Number(value));
+    runtime_created_view_model_value_for_source(file, source)
+}
+
+fn runtime_created_view_model_value_for_source(
+    file: &RuntimeFile,
+    source: &RuntimeObject,
+) -> Option<RuntimeDataBindGraphValue> {
+    // The C++ golden runner binds File::createViewModelInstance(), not the
+    // serialized default instance. Use generated ViewModelInstance* field
+    // defaults while relying on the serialized instance only for path/type
+    // resolution.
+    match file.view_model_instance_value_data_type_for_object(source)? {
+        RuntimeDataType::Number => Some(RuntimeDataBindGraphValue::Number(0.0)),
+        RuntimeDataType::Boolean => Some(RuntimeDataBindGraphValue::Boolean(false)),
+        RuntimeDataType::String => Some(RuntimeDataBindGraphValue::String(Vec::new())),
+        RuntimeDataType::Color => Some(RuntimeDataBindGraphValue::Color(0xFF000000)),
+        RuntimeDataType::EnumType => Some(RuntimeDataBindGraphValue::Enum(0)),
+        RuntimeDataType::Trigger => Some(RuntimeDataBindGraphValue::Trigger(0)),
+        RuntimeDataType::List => Some(RuntimeDataBindGraphValue::List { item_count: 0 }),
+        RuntimeDataType::SymbolListIndex => Some(RuntimeDataBindGraphValue::SymbolListIndex(0)),
+        RuntimeDataType::AssetImage => Some(RuntimeDataBindGraphValue::Asset(u64::from(u32::MAX))),
+        RuntimeDataType::Artboard => Some(RuntimeDataBindGraphValue::Artboard(u64::from(u32::MAX))),
+        _ => None,
     }
-    if let Some(value) = file.view_model_instance_string_value_bytes_for_object(source) {
-        return Some(RuntimeDataBindGraphValue::String(value.to_vec()));
-    }
-    None
 }
 
 impl ArtboardInstance {
@@ -289,10 +363,15 @@ impl ArtboardInstance {
                     .iter()
                     .map(|binding| binding.path.clone()),
             )
+            .chain(
+                self.artboard_nested_host_bindings
+                    .iter()
+                    .map(|binding| binding.path.clone()),
+            )
             .collect::<Vec<_>>();
         for path in paths {
             let Some(value) =
-                runtime_default_view_model_value_for_path(file, default_instance.object, &path)
+                runtime_created_view_model_value_for_path(file, default_instance.object, &path)
             else {
                 continue;
             };
@@ -356,6 +435,7 @@ impl ArtboardInstance {
             }
         }
         changed |= self.apply_artboard_solo_bindings();
+        changed |= self.apply_artboard_nested_host_bindings();
         changed
     }
 
@@ -405,6 +485,39 @@ impl ArtboardInstance {
             RuntimeDataBindGraphValue::String(value) => {
                 self.set_solo_active_child_by_name(binding.target_local_id, value)
             }
+            _ => false,
+        }
+    }
+
+    fn apply_artboard_nested_host_bindings(&mut self) -> bool {
+        let mut changed = false;
+        for binding in self.artboard_nested_host_bindings.clone() {
+            let Some(value) = self.artboard_data_bind_values.get(&binding.path).cloned() else {
+                continue;
+            };
+            changed |= self.apply_artboard_nested_host_binding_value(&binding, &value);
+        }
+        changed
+    }
+
+    fn apply_artboard_nested_host_binding_value(
+        &mut self,
+        binding: &RuntimeArtboardNestedHostBindingInstance,
+        value: &RuntimeDataBindGraphValue,
+    ) -> bool {
+        match (binding.property, value) {
+            (
+                RuntimeArtboardNestedHostProperty::IsPaused { property_key },
+                RuntimeDataBindGraphValue::Boolean(value),
+            ) => self.set_bool_property(binding.target_local_id, property_key, *value),
+            (
+                RuntimeArtboardNestedHostProperty::Speed { property_key },
+                RuntimeDataBindGraphValue::Number(value),
+            )
+            | (
+                RuntimeArtboardNestedHostProperty::Quantize { property_key },
+                RuntimeDataBindGraphValue::Number(value),
+            ) => self.set_double_property(binding.target_local_id, property_key, *value),
             _ => false,
         }
     }

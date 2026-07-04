@@ -10,9 +10,10 @@ use crate::animation::{
 };
 use crate::artboard_data_bind::{
     RuntimeArtboardCustomPropertyBindingInstance, RuntimeArtboardListBindingInstance,
-    RuntimeArtboardSoloBindingInstance, apply_artboard_unbound_color_data_bind_defaults,
-    build_artboard_custom_property_bindings, build_artboard_default_view_model_values,
-    build_artboard_list_bindings, build_artboard_solo_bindings,
+    RuntimeArtboardNestedHostBindingInstance, RuntimeArtboardSoloBindingInstance,
+    apply_artboard_unbound_color_data_bind_defaults, build_artboard_custom_property_bindings,
+    build_artboard_default_view_model_values, build_artboard_list_bindings,
+    build_artboard_nested_host_bindings, build_artboard_solo_bindings,
 };
 use crate::components::{
     AuthoredTransform, ComponentDirt, Mat2D, RuntimeComponent, RuntimeSolo, TransformProperty,
@@ -60,6 +61,7 @@ pub struct ArtboardInstance {
     pub(crate) artboard_data_bind_values: BTreeMap<Vec<u32>, RuntimeDataBindGraphValue>,
     pub(crate) artboard_custom_property_bindings: Vec<RuntimeArtboardCustomPropertyBindingInstance>,
     pub(crate) artboard_solo_bindings: Vec<RuntimeArtboardSoloBindingInstance>,
+    pub(crate) artboard_nested_host_bindings: Vec<RuntimeArtboardNestedHostBindingInstance>,
     pub(crate) artboard_list_bindings: Vec<RuntimeArtboardListBindingInstance>,
     pub(crate) dirt: ComponentDirt,
     pub(crate) dirt_depth: usize,
@@ -179,6 +181,7 @@ impl ArtboardInstance {
         let artboard_custom_property_bindings =
             build_artboard_custom_property_bindings(file, graph);
         let artboard_solo_bindings = build_artboard_solo_bindings(file, graph);
+        let artboard_nested_host_bindings = build_artboard_nested_host_bindings(file, graph);
         let artboard_list_bindings = build_artboard_list_bindings(file, graph);
         apply_initial_solo_collapses(&objects, &solos, &mut components, &component_by_local);
         let nested_artboards = if inserted {
@@ -214,6 +217,7 @@ impl ArtboardInstance {
             artboard_data_bind_values,
             artboard_custom_property_bindings,
             artboard_solo_bindings,
+            artboard_nested_host_bindings,
             artboard_list_bindings,
             dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,
@@ -905,15 +909,23 @@ impl ArtboardInstance {
         property_key: u16,
         value: bool,
     ) -> bool {
-        if self.slot(local_id).and_then(|slot| slot.type_name) != Some("NestedBool")
-            || property_key_for_name("NestedBool", "nestedValue") != Some(property_key)
-        {
-            return false;
+        match self.slot(local_id).and_then(|slot| slot.type_name) {
+            Some("NestedArtboard")
+                if property_key_for_name("NestedArtboard", "isPaused") == Some(property_key) =>
+            {
+                self.set_nested_artboard_is_paused(local_id, value)
+            }
+            Some("NestedBool")
+                if property_key_for_name("NestedBool", "nestedValue") == Some(property_key) =>
+            {
+                let Some((state_machine_local_id, input_id)) = self.nested_input_target(local_id)
+                else {
+                    return false;
+                };
+                self.set_nested_state_machine_bool(state_machine_local_id, input_id, value)
+            }
+            _ => false,
         }
-        let Some((state_machine_local_id, input_id)) = self.nested_input_target(local_id) else {
-            return false;
-        };
-        self.set_nested_state_machine_bool(state_machine_local_id, input_id, value)
     }
 
     pub(crate) fn apply_double_property_changed(
@@ -940,6 +952,16 @@ impl ArtboardInstance {
         }
 
         match self.slot(local_id).and_then(|slot| slot.type_name) {
+            Some("NestedArtboard")
+                if property_key_for_name("NestedArtboard", "speed") == Some(property_key) =>
+            {
+                self.set_nested_artboard_speed(local_id, value)
+            }
+            Some("NestedArtboard")
+                if property_key_for_name("NestedArtboard", "quantize") == Some(property_key) =>
+            {
+                self.set_nested_artboard_quantize(local_id, value)
+            }
             Some("NestedNumber")
                 if property_key_for_name("NestedNumber", "nestedValue") == Some(property_key) =>
             {
@@ -956,6 +978,27 @@ impl ArtboardInstance {
             }
             _ => false,
         }
+    }
+
+    fn set_nested_artboard_is_paused(&mut self, local_id: usize, value: bool) -> bool {
+        let Some(nested) = self.nested_artboards.get_mut(&local_id) else {
+            return false;
+        };
+        nested.set_is_paused(value)
+    }
+
+    fn set_nested_artboard_speed(&mut self, local_id: usize, value: f32) -> bool {
+        let Some(nested) = self.nested_artboards.get_mut(&local_id) else {
+            return false;
+        };
+        nested.set_speed(value)
+    }
+
+    fn set_nested_artboard_quantize(&mut self, local_id: usize, value: f32) -> bool {
+        let Some(nested) = self.nested_artboards.get_mut(&local_id) else {
+            return false;
+        };
+        nested.set_quantize(value)
     }
 
     fn apply_nested_trigger_property_changed(
@@ -1240,6 +1283,30 @@ impl RuntimeNestedArtboardInstance {
             return true;
         }
         false
+    }
+
+    fn set_is_paused(&mut self, value: bool) -> bool {
+        if self.is_paused == value {
+            return false;
+        }
+        self.is_paused = value;
+        true
+    }
+
+    fn set_speed(&mut self, value: f32) -> bool {
+        if self.speed == value {
+            return false;
+        }
+        self.speed = value;
+        true
+    }
+
+    fn set_quantize(&mut self, value: f32) -> bool {
+        if self.quantize == value {
+            return false;
+        }
+        self.quantize = value;
+        true
     }
 }
 
@@ -1549,6 +1616,7 @@ mod tests {
             artboard_data_bind_values: BTreeMap::new(),
             artboard_custom_property_bindings: Vec::new(),
             artboard_solo_bindings: Vec::new(),
+            artboard_nested_host_bindings: Vec::new(),
             artboard_list_bindings: Vec::new(),
             dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,

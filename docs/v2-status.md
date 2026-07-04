@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 428 across 111 exact files
+- Exact segments (file × sample): 432 across 111 exact files
 - Parked breakdown (from `make golden-compare`): M4=54 M5=8 M6=80 gated=6 harness=36
 - Current milestone: **M4 — Nested Artboards And Lists Exact (#V2-5)**
 
@@ -26,13 +26,12 @@ the only memory the next session has. Update it every commit.
    Query the queue with `grep -B6 'milestone = "M4"' corpus.toml`; the raw
    queue now starts with `ai_assitant.riv`, but that file carries skin/mesh/
    feather-ish complexity and should wait for a narrower entry point.
-2. Nested host serialized `speed`/`quantize` local elapsed is closed for
-   `nested_artboard_quantize_and_speed.riv` at sample `0.0`; Rust now mirrors
-   C++ `NestedArtboard::calculateLocalElapsedSeconds` for child animation and
-   nested-child advancement. A useful follow-up is widening that file's sample
-   list to expose whether live data-bound host speed/quantize mutation is
-   needed, then either port that narrow data-bind path or park it with a
-   sharper diagnostic.
+2. Nested host serialized `speed`/`quantize` local elapsed and generated
+   source-to-target host-control defaults are closed for
+   `nested_artboard_quantize_and_speed.riv` through samples `0.0, 0.25, 0.5,
+   0.75, 1.0`. The next useful M4 slice is nested remap with `DrawTarget`
+   rules (`death_knight.riv`) or another smaller pure nested-artboard entry
+   from the M4 queue; external/live host-control mutation belongs to M5.
 3. Solo-owned repeated nested child paint allocation is closed for
    `pointer_events_nested_artboards_in_solos.riv` through samples `0.0, 0.1,
    0.25, 0.5, 0.75, 1.0, 1.25, 1.5`: Rust now keeps per-host nested paint
@@ -94,13 +93,16 @@ the only memory the next session has. Update it every commit.
   artboard instances, stateful child `ViewModelInstance` subtree admission
   under plain nested hosts, nested child unbound SolidColor data-bind defaults,
   nested bool/number/trigger input proxying, and basic nested remap-time host
-  plumbing, serialized nested host speed/quantize local elapsed, plus per-host
-  nested paint caches for repeated child instances under Solo-owned hosts.
+  plumbing, serialized nested host speed/quantize local elapsed, generated
+  source-to-target nested host `isPaused`/`speed`/`quantize` default binding,
+  plus per-host nested paint caches for repeated child instances under
+  Solo-owned hosts.
   Custom handle-source world-space math, nested remap with
-  draw targets, data-bound nested host controls (`artboardId` runtime swaps,
-  pause, live speed/quantize), nested child non-color data-bind targets, focus
-  data, bound stateful child view-model propagation, nested listener/event
-  propagation, `NestedArtboardLayout` / `NestedArtboardLeaf`, and
+  draw targets, data-bound nested host controls beyond generated defaults
+  (`artboardId` runtime swaps and external/live pause/speed/quantize
+  mutation), nested child non-color data-bind targets, focus data, bound
+  stateful child view-model propagation, nested listener/event propagation,
+  `NestedArtboardLayout` / `NestedArtboardLeaf`, and
   layout-backed or virtualized component-list instancing are still not
   supported.
   Golden runner sample lists now advance by sorted absolute-time deltas and
@@ -327,3 +329,13 @@ the only memory the next session has. Update it every commit.
   reports `exact=111`, `exact-segments=428`, `diverges=0`,
   `unsupported-feature=184`, `not-yet=0`, and parked
   `M4=54 M5=8 M6=80 gated=6 harness=36`; `cargo test --workspace` passes.
+- 2026-07-04: [M4] Closed generated source-to-target nested host
+  `isPaused`/`speed`/`quantize` defaults for the artboard-owned
+  `File::createViewModelInstance()` path while preserving serialized default
+  handling for component-list bindings. Widened
+  `nested_artboard_quantize_and_speed.riv` from sample `0.0` to samples `0.0,
+  0.25, 0.5, 0.75, 1.0`, raising `exact-segments` to 432 while `exact`
+  remains 111. `make golden-compare` reports `exact=111`,
+  `exact-segments=432`, `diverges=0`, `unsupported-feature=184`,
+  `not-yet=0`, and parked `M4=54 M5=8 M6=80 gated=6 harness=36`;
+  `cargo test --workspace` passes.

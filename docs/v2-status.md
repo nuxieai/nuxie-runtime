@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 393 across 85 exact files
-- Parked breakdown (from `make golden-compare`): M4=83 M5=8 M6=77 gated=6 harness=36
+- Exact segments (file × sample): 398 across 90 exact files
+- Parked breakdown (from `make golden-compare`): M4=75 M5=8 M6=80 gated=6 harness=36
 - Current milestone: **M4 — Nested Artboards And Lists Exact (#V2-5)**
 
 ## Milestones
@@ -22,20 +22,23 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Start M4 with the smallest nested-artboard corpus slice. Query the queue
-   with `grep -B6 'milestone = "M4"' corpus.toml`; the current smallest
-   parked files are `library_export_test.riv` and
-   `nested_artboard_opacity.riv` (six feature tags each, both gated only on
-   `rust-runner-unsupported:nested-artboards`).
-2. First code slice should port static `NestedArtboard`/`ArtboardHost`
-   resolution and draw enough to promote one of those two files to exact,
-   before adding nested simple animation, nested state machines, or
-   component-list instancing.
-3. M3 is closed: all `milestone = "M3"` parked entries are gone, all scripted
+1. Continue M4 with the smallest remaining pure nested-artboard runtime slice.
+   Query the queue with `grep -B6 'milestone = "M4"' corpus.toml`; the current
+   smallest parked files are `library_export_animation_test.riv`
+   (`NestedSimpleAnimation`) and `library_export_state_machine_test.riv`
+   (`NestedStateMachine`), eight feature tags each.
+2. Next code slice should port nested animation/state-machine host binding and
+   advancement enough to promote one of those two files before starting
+   `NestedArtboardLayout`, `NestedArtboardLeaf`, or component-list instancing.
+3. Plain static `NestedArtboard` draw is closed for the current sample-0
+   corpus slice: `entry.riv`, `library_export_test.riv`,
+   `magic_alley_db_reduced_export.riv`, `nested_artboard_opacity.riv`, and
+   `stateful_artboard_swap.riv` are exact.
+4. M3 is closed: all `milestone = "M3"` parked entries are gone, all scripted
    direct-pointer corpus entries are exact through sample `1.5`, and the
    remaining unscripted exact listener files showed no C++ render delta on a
    bounded coarse click/hover probe or require M4/M5/M6 domains.
-4. Remaining exact entries pinned to sample `0` are static M1 holdovers:
+5. Remaining exact entries pinned to sample `0` are static M1 holdovers:
    `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
    them during M4 unless a related refactor needs a cheap draw-regression check.
 
@@ -65,18 +68,20 @@ the only memory the next session has. Update it every commit.
   overrides, `IKConstraint` FK-chain solving, and
   `ListFollowPathConstraint` registration/application over component-list item
   transform slices once M4 list instances populate them, and parametric
-  Star/Polygon local path sampling for follow-path targets. Custom
-  handle-source world-space math and nested remap dependent advancement are
-  still not supported.
+  Star/Polygon local path sampling for follow-path targets, plus static plain
+  `NestedArtboard` host draw with child root opacity inheritance. Custom
+  handle-source world-space math and nested animation/state-machine/remap
+  dependent advancement are still not supported.
   Golden runner sample lists now advance by sorted absolute-time deltas and
-  reuse render paths across samples; no images, text, nested artboards, scroll
-  constraints, or component-list instancing. Harness-level scripted input
-  replay dispatches pointerDown/pointerMove/pointerUp/pointerExit markers into
-  direct rectangle state-machine listeners with listener input actions, direct
-  rectangle enter/exit hover state, direct rectangle click synthesis, and
-  listener-owned default view-model trigger target-to-source writes. Full C++
-  ListenerGroup drag/opaque behavior and nested/list/text/layout targets are
-  still not supported.
+  reuse render paths across samples; no images, text, nested
+  animation/state-machine/remap hosts, scroll constraints, or component-list
+  instancing. Harness-level scripted input replay dispatches
+  pointerDown/pointerMove/pointerUp/pointerExit markers into direct rectangle
+  state-machine listeners with listener input actions, direct rectangle
+  enter/exit hover state, direct rectangle click synthesis, and listener-owned
+  default view-model trigger target-to-source writes. Full C++ ListenerGroup
+  drag/opaque behavior and nested/list/text/layout targets are still not
+  supported.
 - `TransformConstraint` currently covers the default empty
   `TransformComponent::constraintBounds()` path. Text/LayoutComponent
   constraint bounds remain parked behind their M6 text/layout diagnostics.
@@ -642,3 +647,15 @@ the only memory the next session has. Update it every commit.
   `milestone = "M4"` parked files. `make golden-compare` reports `exact=85`,
   `exact-segments=393`, `diverges=0`, `unsupported-feature=210`, and
   `not-yet=0`, and `cargo test --workspace` passes.
+- 2026-07-04: [M4] Ported the first static plain `NestedArtboard` draw slice
+  from the C++ `ArtboardHost`/`NestedArtboard::draw` shape: Rust now resolves
+  referenced child artboards during draw, applies the host world transform,
+  draws children without the top-level artboard-origin transform, inherits host
+  render opacity into the child root, and preallocates child instance paints in
+  host object order. Promoted `entry.riv`, `library_export_test.riv`,
+  `magic_alley_db_reduced_export.riv`, `nested_artboard_opacity.riv`, and
+  `stateful_artboard_swap.riv` to exact; moved the three now image-blocked
+  library fixtures to M6 `rust-runner-unsupported:images`. `make
+  golden-compare` reports `exact=90`, `exact-segments=398`, `diverges=0`,
+  `unsupported-feature=205`, `not-yet=0`, and parked
+  `M4=75 M5=8 M6=80 gated=6 harness=36`; `cargo test --workspace` passes.

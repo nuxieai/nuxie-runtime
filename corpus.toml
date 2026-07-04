@@ -557,8 +557,8 @@ id = "double_library_with_image"
 path = "tests/unit_tests/assets/double_library_with_image.riv"
 samples = [0.0]
 status = "unsupported-feature"
-milestone = "M4"
-features = ["type-key:100:Image", "type-key:105:ImageAsset", "type-key:106:FileAssetContents", "type-key:1:Artboard", "type-key:23:Backboard", "type-key:92:NestedArtboard", "rust-runner-unsupported:nested-artboards"]
+milestone = "M6"
+features = ["type-key:100:Image", "type-key:105:ImageAsset", "type-key:106:FileAssetContents", "type-key:1:Artboard", "type-key:23:Backboard", "type-key:92:NestedArtboard", "rust-runner-unsupported:images"]
 
 [[file]]
 id = "double_line"
@@ -611,9 +611,8 @@ features = ["type-key:106:FileAssetContents", "type-key:134:Text", "type-key:135
 id = "entry"
 path = "tests/unit_tests/assets/entry.riv"
 samples = [0.0]
-status = "unsupported-feature"
-milestone = "M4"
-features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:2:Node", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:4:Ellipse", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:7:Rectangle", "type-key:83:TransformConstraint", "type-key:88:ScaleConstraint", "type-key:92:NestedArtboard", "rust-runner-unsupported:nested-artboards"]
+status = "exact"
+features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:2:Node", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:4:Ellipse", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:7:Rectangle", "type-key:83:TransformConstraint", "type-key:88:ScaleConstraint", "type-key:92:NestedArtboard"]
 
 [[file]]
 id = "event_on_listener"
@@ -1013,9 +1012,8 @@ features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill",
 id = "library_export_test"
 path = "tests/unit_tests/assets/library_export_test.riv"
 samples = [0.0]
-status = "unsupported-feature"
-milestone = "M4"
-features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:92:NestedArtboard", "rust-runner-unsupported:nested-artboards"]
+status = "exact"
+features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:92:NestedArtboard"]
 
 [[file]]
 id = "library_view_model_test"
@@ -1038,16 +1036,16 @@ id = "library_with_image"
 path = "tests/unit_tests/assets/library_with_image.riv"
 samples = [0.0]
 status = "unsupported-feature"
-milestone = "M4"
-features = ["type-key:100:Image", "type-key:105:ImageAsset", "type-key:106:FileAssetContents", "type-key:1:Artboard", "type-key:23:Backboard", "type-key:92:NestedArtboard", "rust-runner-unsupported:nested-artboards"]
+milestone = "M6"
+features = ["type-key:100:Image", "type-key:105:ImageAsset", "type-key:106:FileAssetContents", "type-key:1:Artboard", "type-key:23:Backboard", "type-key:92:NestedArtboard", "rust-runner-unsupported:images"]
 
 [[file]]
 id = "library_with_text_and_image"
 path = "tests/unit_tests/assets/library_with_text_and_image.riv"
 samples = [0.0]
 status = "unsupported-feature"
-milestone = "M4"
-features = ["type-key:105:ImageAsset", "type-key:106:FileAssetContents", "type-key:141:FontAsset", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:420:LayoutComponentStyle", "type-key:535:DataConverterBooleanNegate", "type-key:538:FormulaTokenArgumentSeparator", "type-key:53:StateMachine", "type-key:543:FormulaTokenValue", "type-key:544:FormulaTokenParenthesisOpen", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:92:NestedArtboard", "rust-runner-unsupported:nested-artboards"]
+milestone = "M6"
+features = ["type-key:105:ImageAsset", "type-key:106:FileAssetContents", "type-key:141:FontAsset", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:420:LayoutComponentStyle", "type-key:535:DataConverterBooleanNegate", "type-key:538:FormulaTokenArgumentSeparator", "type-key:53:StateMachine", "type-key:543:FormulaTokenValue", "type-key:544:FormulaTokenParenthesisOpen", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:92:NestedArtboard", "rust-runner-unsupported:images"]
 
 [[file]]
 id = "light_switch"
@@ -1137,9 +1135,8 @@ features = ["type-key:128:Event", "type-key:171:KeyFrameCallback", "type-key:18:
 id = "magic_alley_db_reduced_export"
 path = "tests/unit_tests/assets/magic_alley_db_reduced_export.riv"
 samples = [0.0]
-status = "unsupported-feature"
-milestone = "M4"
-features = ["type-key:114:StateMachineListenerSingle", "type-key:115:ListenerTriggerChange", "type-key:126:ListenerAlignTarget", "type-key:147:Solo", "type-key:148:Joystick", "type-key:165:FollowPathConstraint", "type-key:16:PointsPath", "type-key:17:RadialGradient", "type-key:18:SolidColor", "type-key:19:GradientStop", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:24:Stroke", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:2:Node", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:35:CubicMirroredVertex", "type-key:3:Shape", "type-key:41:RootBone", "type-key:420:LayoutComponentStyle", "type-key:42:ClippingShape", "type-key:447:DataBindContext", "type-key:4:Ellipse", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:59:StateMachineBool", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:6:CubicDetachedVertex", "type-key:71:TransitionBoolCondition", "type-key:7:Rectangle", "type-key:87:TranslationConstraint", "type-key:92:NestedArtboard", "rust-runner-unsupported:nested-artboards"]
+status = "exact"
+features = ["type-key:114:StateMachineListenerSingle", "type-key:115:ListenerTriggerChange", "type-key:126:ListenerAlignTarget", "type-key:147:Solo", "type-key:148:Joystick", "type-key:165:FollowPathConstraint", "type-key:16:PointsPath", "type-key:17:RadialGradient", "type-key:18:SolidColor", "type-key:19:GradientStop", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:24:Stroke", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:2:Node", "type-key:30:KeyFrameDouble", "type-key:31:LinearAnimation", "type-key:35:CubicMirroredVertex", "type-key:3:Shape", "type-key:41:RootBone", "type-key:420:LayoutComponentStyle", "type-key:42:ClippingShape", "type-key:447:DataBindContext", "type-key:4:Ellipse", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:59:StateMachineBool", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:6:CubicDetachedVertex", "type-key:71:TransitionBoolCondition", "type-key:7:Rectangle", "type-key:87:TranslationConstraint", "type-key:92:NestedArtboard"]
 
 [[file]]
 id = "modifier_test"
@@ -1200,9 +1197,8 @@ features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill",
 id = "nested_artboard_opacity"
 path = "tests/unit_tests/assets/nested_artboard_opacity.riv"
 samples = [0.0]
-status = "unsupported-feature"
-milestone = "M4"
-features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:92:NestedArtboard", "rust-runner-unsupported:nested-artboards"]
+status = "exact"
+features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:92:NestedArtboard"]
 
 [[file]]
 id = "nested_artboard_quantize_and_speed"
@@ -1891,9 +1887,8 @@ features = ["type-key:106:FileAssetContents", "type-key:114:StateMachineListener
 id = "stateful_artboard_swap"
 path = "tests/unit_tests/assets/stateful_artboard_swap.riv"
 samples = [0.0]
-status = "unsupported-feature"
-milestone = "M4"
-features = ["type-key:106:FileAssetContents", "type-key:114:StateMachineListenerSingle", "type-key:134:Text", "type-key:135:TextValueRun", "type-key:137:TextStylePaint", "type-key:141:FontAsset", "type-key:144:TextStyleAxis", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:24:Stroke", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:409:LayoutComponent", "type-key:420:LayoutComponentStyle", "type-key:426:ViewModelInstanceColor", "type-key:431:ViewModelPropertyNumber", "type-key:432:ViewModelInstanceEnum", "type-key:433:ViewModelInstanceString", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:438:DataEnumCustom", "type-key:439:ViewModelPropertyEnumCustom", "type-key:440:ViewModelPropertyColor", "type-key:442:ViewModelInstanceNumber", "type-key:443:ViewModelPropertyString", "type-key:445:DataEnumValue", "type-key:447:DataBindContext", "type-key:448:ViewModelPropertyBoolean", "type-key:449:ViewModelInstanceBoolean", "type-key:472:BindablePropertyBoolean", "type-key:487:ListenerViewModelChange", "type-key:4:Ellipse", "type-key:501:ViewModelInstanceTrigger", "type-key:502:ViewModelPropertyTrigger", "type-key:503:BindablePropertyTrigger", "type-key:504:DataConverterTrigger", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:598:ViewModelPropertyArtboard", "type-key:599:ViewModelInstanceArtboard", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle", "type-key:92:NestedArtboard", "rust-runner-unsupported:nested-artboards"]
+status = "exact"
+features = ["type-key:106:FileAssetContents", "type-key:114:StateMachineListenerSingle", "type-key:134:Text", "type-key:135:TextValueRun", "type-key:137:TextStylePaint", "type-key:141:FontAsset", "type-key:144:TextStyleAxis", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:24:Stroke", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:409:LayoutComponent", "type-key:420:LayoutComponentStyle", "type-key:426:ViewModelInstanceColor", "type-key:431:ViewModelPropertyNumber", "type-key:432:ViewModelInstanceEnum", "type-key:433:ViewModelInstanceString", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:438:DataEnumCustom", "type-key:439:ViewModelPropertyEnumCustom", "type-key:440:ViewModelPropertyColor", "type-key:442:ViewModelInstanceNumber", "type-key:443:ViewModelPropertyString", "type-key:445:DataEnumValue", "type-key:447:DataBindContext", "type-key:448:ViewModelPropertyBoolean", "type-key:449:ViewModelInstanceBoolean", "type-key:472:BindablePropertyBoolean", "type-key:487:ListenerViewModelChange", "type-key:4:Ellipse", "type-key:501:ViewModelInstanceTrigger", "type-key:502:ViewModelPropertyTrigger", "type-key:503:BindablePropertyTrigger", "type-key:504:DataConverterTrigger", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:598:ViewModelPropertyArtboard", "type-key:599:ViewModelInstanceArtboard", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "type-key:7:Rectangle", "type-key:92:NestedArtboard"]
 
 [[file]]
 id = "stateful_keyed_trigger"

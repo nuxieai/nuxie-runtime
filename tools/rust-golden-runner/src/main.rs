@@ -3,8 +3,10 @@ use rive_binary::{RuntimeFile, read_runtime_file};
 use rive_graph::{ArtboardGraph, GraphFile};
 use rive_render_api::RecordingFactory;
 use rive_runtime::{
-    ArtboardInstance, RuntimeRenderPathCache, StateMachineInstance, preallocate_render_paints,
+    ArtboardInstance, RuntimeRenderPathCache, StateMachineInstance,
+    preallocate_render_paints_for_artboard_tree,
 };
+use std::collections::BTreeSet;
 use std::env;
 use std::path::{Path, PathBuf};
 
@@ -57,7 +59,12 @@ fn run() -> Result<String> {
     }
 
     let mut factory = RecordingFactory::new();
-    let mut paint_by_global = preallocate_render_paints(&runtime, artboard, &mut factory);
+    let mut paint_by_global = preallocate_render_paints_for_artboard_tree(
+        &runtime,
+        artboard,
+        &graph.artboards,
+        &mut factory,
+    );
     let mut path_cache = RuntimeRenderPathCache::default();
     let mut renderer = factory.make_renderer();
 
@@ -111,6 +118,7 @@ fn run() -> Result<String> {
         instance.draw_prepared_static_artboard_with_path_cache(
             &runtime,
             artboard,
+            &graph.artboards,
             &mut factory,
             &mut renderer,
             &mut paint_by_global,
@@ -472,10 +480,45 @@ fn select_artboard<'a>(
 }
 
 fn ensure_static_draw_supported(graph: &GraphFile, artboard: &ArtboardGraph) -> Result<()> {
-    if let Some(nested) = artboard.nested_artboards.first() {
+    let mut visiting = BTreeSet::new();
+    ensure_static_draw_supported_for_artboard(graph, artboard, &mut visiting)
+}
+
+fn ensure_static_draw_supported_for_artboard(
+    graph: &GraphFile,
+    artboard: &ArtboardGraph,
+    visiting: &mut BTreeSet<u32>,
+) -> Result<()> {
+    if !visiting.insert(artboard.global_id) {
+        return Ok(());
+    }
+
+    if let Some(nested) = artboard
+        .nested_artboards
+        .iter()
+        .find(|nested| nested.type_name != "NestedArtboard")
+    {
         bail!(
             "unsupported: nested artboards in Rust golden runner ({})",
             nested.type_name
+        );
+    }
+
+    if let Some((type_name, global_id)) = artboard.local_objects.iter().find_map(|object| {
+        let type_name = object.type_name?;
+        matches!(
+            type_name,
+            "NestedSimpleAnimation"
+                | "NestedStateMachine"
+                | "NestedRemapAnimation"
+                | "NestedBool"
+                | "NestedNumber"
+                | "NestedTrigger"
+        )
+        .then_some((type_name, object.global_id))
+    }) {
+        bail!(
+            "unsupported: nested artboards in Rust golden runner ({type_name} global {global_id})"
         );
     }
 
@@ -644,6 +687,21 @@ fn ensure_static_draw_supported(graph: &GraphFile, artboard: &ArtboardGraph) -> 
         bail!(
             "unsupported: constraints in Rust golden runner ({constraint_type} global {global_id})"
         );
+    }
+
+    for referenced_artboard_global in artboard
+        .sorted_drawable_order
+        .iter()
+        .filter_map(|drawable| drawable.referenced_artboard_global)
+    {
+        let child_artboard = graph
+            .artboards
+            .iter()
+            .find(|artboard| artboard.global_id == referenced_artboard_global)
+            .with_context(|| {
+                format!("missing nested artboard graph for global {referenced_artboard_global}")
+            })?;
+        ensure_static_draw_supported_for_artboard(graph, child_artboard, visiting)?;
     }
 
     Ok(())

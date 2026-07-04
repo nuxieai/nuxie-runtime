@@ -73,6 +73,7 @@ impl ArtboardInstance {
         self.draw_prepared_static_artboard_with_path_cache(
             runtime,
             graph,
+            std::slice::from_ref(graph),
             factory,
             renderer,
             paint_by_global,
@@ -163,6 +164,7 @@ impl ArtboardInstance {
         self.draw_prepared_static_artboard_with_path_cache(
             runtime,
             graph,
+            std::slice::from_ref(graph),
             factory,
             renderer,
             paint_by_global,
@@ -174,21 +176,57 @@ impl ArtboardInstance {
         &self,
         runtime: &RuntimeFile,
         graph: &ArtboardGraph,
+        artboards: &[ArtboardGraph],
         factory: &mut dyn RenderFactory,
         renderer: &mut dyn Renderer,
         paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
         path_cache: &mut RuntimeRenderPathCache,
     ) -> Result<()> {
+        self.draw_prepared_static_artboard_internal_with_path_cache(
+            runtime,
+            graph,
+            artboards,
+            factory,
+            renderer,
+            paint_by_global,
+            path_cache,
+            true,
+        )
+    }
+
+    fn draw_prepared_static_artboard_internal_with_path_cache(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        artboards: &[ArtboardGraph],
+        factory: &mut dyn RenderFactory,
+        renderer: &mut dyn Renderer,
+        paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
+        path_cache: &mut RuntimeRenderPathCache,
+        apply_origin_transform: bool,
+    ) -> Result<()> {
         renderer.save();
         if self.clip {
+            let (clip_left, clip_top) = if apply_origin_transform {
+                (0.0, 0.0)
+            } else {
+                (-self.origin_x * self.width, -self.origin_y * self.height)
+            };
             let clip = path_cache.artboard_clip_path(
                 factory,
-                &runtime_rect_commands(0.0, 0.0, self.width, self.height),
+                &runtime_rect_commands(
+                    clip_left,
+                    clip_top,
+                    clip_left + self.width,
+                    clip_top + self.height,
+                ),
                 RenderFillRule::Clockwise,
             );
             renderer.clip_path(clip.as_ref());
         }
-        renderer.transform(self.artboard_origin_transform());
+        if apply_origin_transform {
+            renderer.transform(self.artboard_origin_transform());
+        }
 
         if let Some(background) = graph
             .shape_paint_containers
@@ -221,6 +259,7 @@ impl ArtboardInstance {
                 runtime,
                 self,
                 graph,
+                artboards,
                 &local_to_global,
                 command,
                 factory,
@@ -357,6 +396,9 @@ impl ArtboardInstance {
                 }
             },
             local_id: drawable.local_id,
+            global_id: drawable.global_id,
+            type_name: drawable.type_name,
+            referenced_artboard_global: drawable.referenced_artboard_global,
             clipping_shape_local: drawable.clipping_shape_local,
             needs_save_operation: drawable.needs_save_operation,
             shape_paints: self.runtime_shape_paint_commands(drawable, graph),
@@ -582,6 +624,9 @@ pub enum RuntimeDrawCommandKind {
 pub struct RuntimeDrawCommand {
     pub kind: RuntimeDrawCommandKind,
     pub local_id: Option<usize>,
+    pub global_id: Option<u32>,
+    pub type_name: &'static str,
+    pub referenced_artboard_global: Option<u32>,
     pub clipping_shape_local: Option<usize>,
     pub needs_save_operation: bool,
     pub shape_paints: Vec<RuntimeShapePaintCommand>,
@@ -657,6 +702,7 @@ pub struct RuntimeRenderPathCache {
     clip_paths: BTreeMap<usize, Box<dyn RenderPath>>,
     draw_paths: BTreeMap<RuntimeDrawPathCacheKey, Box<dyn RenderPath>>,
     gradient_shaders: BTreeMap<u32, RuntimeGradientShaderCacheEntry>,
+    nested_artboards: BTreeMap<u32, RuntimeRenderPathCache>,
 }
 
 struct RuntimeGradientShaderCacheEntry {
@@ -774,6 +820,16 @@ pub fn preallocate_render_paints(
     preallocate_artboard_render_paint_batch(runtime, graph, factory)
 }
 
+pub fn preallocate_render_paints_for_artboard_tree(
+    runtime: &RuntimeFile,
+    graph: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+    factory: &mut dyn RenderFactory,
+) -> BTreeMap<u32, Box<dyn RenderPaint>> {
+    let _source_artboard_paints = preallocate_render_paint_batch(runtime, factory);
+    preallocate_artboard_render_paint_tree_batch(runtime, graph, artboards, factory)
+}
+
 fn preallocate_render_paint_batch(
     runtime: &RuntimeFile,
     factory: &mut dyn RenderFactory,
@@ -816,6 +872,91 @@ fn preallocate_artboard_render_paint_batch(
         }
     }
     paints
+}
+
+fn preallocate_artboard_render_paint_tree_batch(
+    runtime: &RuntimeFile,
+    graph: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+    factory: &mut dyn RenderFactory,
+) -> BTreeMap<u32, Box<dyn RenderPaint>> {
+    let mut paints = BTreeMap::new();
+    let mut allocated = BTreeSet::new();
+    let mut visiting = BTreeSet::new();
+    preallocate_artboard_render_paint_tree_batch_into(
+        runtime,
+        graph,
+        artboards,
+        factory,
+        &mut paints,
+        &mut allocated,
+        &mut visiting,
+    );
+    paints
+}
+
+fn preallocate_artboard_render_paint_tree_batch_into(
+    runtime: &RuntimeFile,
+    graph: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+    factory: &mut dyn RenderFactory,
+    paints: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
+    allocated: &mut BTreeSet<u32>,
+    visiting: &mut BTreeSet<u32>,
+) {
+    if !visiting.insert(graph.global_id) {
+        return;
+    }
+
+    let paint_by_mutator = graph
+        .shape_paint_containers
+        .iter()
+        .flat_map(|container| container.paints.iter())
+        .map(|paint| (paint.mutator_global, paint.global_id))
+        .collect::<BTreeMap<_, _>>();
+
+    for local_object in &graph.local_objects {
+        if let Some(child_graph) =
+            referenced_artboard_graph_for_local_object(runtime, artboards, local_object.global_id)
+        {
+            preallocate_artboard_render_paint_tree_batch_into(
+                runtime,
+                child_graph,
+                artboards,
+                factory,
+                paints,
+                allocated,
+                visiting,
+            );
+        }
+
+        if let Some(paint_global_id) = paint_by_mutator.get(&Some(local_object.global_id)) {
+            preallocate_render_paint(*paint_global_id, factory, paints, allocated);
+        }
+    }
+
+    for local_object in &graph.local_objects {
+        let Some(object) = runtime.object(local_object.global_id as usize) else {
+            continue;
+        };
+        if matches!(object.type_name, "Fill" | "Stroke") {
+            preallocate_render_paint(object.id, factory, paints, allocated);
+        }
+    }
+
+    visiting.remove(&graph.global_id);
+}
+
+fn referenced_artboard_graph_for_local_object<'a>(
+    runtime: &RuntimeFile,
+    artboards: &'a [ArtboardGraph],
+    global_id: u32,
+) -> Option<&'a ArtboardGraph> {
+    let object = runtime.object(global_id as usize)?;
+    let referenced = runtime.resolved_artboard_for_referencer_object(object)?;
+    artboards
+        .iter()
+        .find(|graph| graph.global_id == referenced.id)
 }
 
 fn preallocate_render_paint(
@@ -886,6 +1027,10 @@ fn runtime_background_shape_paint_command(
     paint: &ShapePaintNode,
     path_commands: Vec<RuntimePathCommand>,
 ) -> RuntimeShapePaintCommand {
+    let render_opacity = instance
+        .component(0)
+        .map(|component| component.transform.render_opacity)
+        .unwrap_or(1.0);
     RuntimeShapePaintCommand {
         paint_local: paint.local_id,
         mutator_local: paint.mutator_local,
@@ -893,7 +1038,7 @@ fn runtime_background_shape_paint_command(
         path_kind: RuntimeShapePaintPathKind::Local,
         blend_mode_value: paint.blend_mode_value,
         render_blend_mode_value: 3,
-        paint_state: runtime_shape_paint_state(instance, paint, 1.0),
+        paint_state: runtime_shape_paint_state(instance, paint, render_opacity),
         feather_state: None,
         path_commands,
         effect_path_commands: Vec::new(),
@@ -937,6 +1082,7 @@ fn runtime_draw_command(
     runtime: &RuntimeFile,
     instance: &ArtboardInstance,
     graph: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
     local_to_global: &BTreeMap<usize, u32>,
     command: RuntimeDrawCommand,
     factory: &mut dyn RenderFactory,
@@ -954,6 +1100,19 @@ fn runtime_draw_command(
             return Ok(());
         }
         RuntimeDrawCommandKind::Draw => {}
+    }
+
+    if sorted_drawable_is_nested_artboard(command.type_name) {
+        return runtime_draw_nested_artboard(
+            runtime,
+            instance,
+            artboards,
+            command,
+            factory,
+            renderer,
+            paint_by_global,
+            path_cache,
+        );
     }
 
     let shape_world = command
@@ -1018,6 +1177,76 @@ fn runtime_draw_command(
         }
     }
 
+    Ok(())
+}
+
+fn runtime_draw_nested_artboard(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    artboards: &[ArtboardGraph],
+    command: RuntimeDrawCommand,
+    factory: &mut dyn RenderFactory,
+    renderer: &mut dyn Renderer,
+    paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
+    path_cache: &mut RuntimeRenderPathCache,
+) -> Result<()> {
+    let referenced_artboard_global = command
+        .referenced_artboard_global
+        .context("nested artboard missing referenced artboard")?;
+    let child_graph = artboards
+        .iter()
+        .find(|graph| graph.global_id == referenced_artboard_global)
+        .with_context(|| {
+            format!("missing nested artboard graph for global {referenced_artboard_global}")
+        })?;
+    let host_component = command
+        .local_id
+        .and_then(|local_id| instance.component(local_id))
+        .context("nested artboard host component is missing")?;
+    let host_world = host_component.transform.world_transform;
+    let host_opacity = host_component.transform.render_opacity;
+
+    let mut child = ArtboardInstance::from_graph(runtime, child_graph)?;
+    if let Some(opacity_key) = property_key_for_name("Artboard", "opacity") {
+        child.set_double_property(0, opacity_key, host_opacity);
+    }
+    child.update_pass();
+
+    if command.needs_save_operation {
+        renderer.save();
+    }
+    renderer.transform(runtime_render_mat(host_world));
+
+    let cache_key = command
+        .global_id
+        .or_else(|| {
+            command
+                .local_id
+                .and_then(|local_id| u32::try_from(local_id).ok())
+        })
+        .unwrap_or(referenced_artboard_global);
+    let child_cache = path_cache.nested_artboards.entry(cache_key).or_default();
+    child.prepare_static_artboard_paints(
+        runtime,
+        child_graph,
+        factory,
+        paint_by_global,
+        child_cache,
+    )?;
+    child.draw_prepared_static_artboard_internal_with_path_cache(
+        runtime,
+        child_graph,
+        artboards,
+        factory,
+        renderer,
+        paint_by_global,
+        child_cache,
+        false,
+    )?;
+
+    if command.needs_save_operation {
+        renderer.restore();
+    }
     Ok(())
 }
 

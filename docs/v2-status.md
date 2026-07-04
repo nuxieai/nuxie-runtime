@@ -7,13 +7,13 @@ the only memory the next session has. Update it every commit.
 
 - Exact segments (file × sample): 339 across 70 exact files
 - Parked breakdown (from `make golden-compare`): M3=21 M4=83 M5=8 M6=72 gated=5 harness=36
-- Current milestone: **M2 — Animated Playback Exact + Real Object Model (#V2-3)**
+- Current milestone: **M3 — Interactivity Exact (#V2-4)**
 
 ## Milestones
 
 - [x] M0: Golden diff harness + corpus manifest + one exact file
 - [x] M1: Static vector corpus files exact at advance(0); FFI viewer demo
-- [ ] M2: Animated playback exact at sampled times; real object model landed; lib.rs modularized
+- [x] M2: Animated playback exact at sampled times; real object model landed; lib.rs modularized
 - [ ] M3: Interactive files exact under scripted pointer input
 - [ ] M4: Nested artboards/lists exact
 - [ ] M5: Data binding exact incl. external view-model mutation
@@ -22,52 +22,24 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue M2 real object model work by modularizing the remaining runtime
-   surfaces out of `lib.rs` while keeping generated `InstanceObjectStorage` as
-   the authored-property source of truth. Component dirt/runtime transform
-   state live in `crates/rive-runtime/src/components.rs`, the linear
-   animation runtime model and import builder live in
-   `crates/rive-runtime/src/animation.rs`, and state-machine import data,
-   bindables, transition conditions, layer advancement, and
-   `StateMachineInstance` orchestration live under
-   `crates/rive-runtime/src/state_machine/`. Artboard data-bind propagation
-   and list-binding queries, plus the adjacent binding structs/builders, live
-   in `crates/rive-runtime/src/artboard_data_bind.rs`. Default and imported
-   view-model source handle types, owned view-model instances/source handles,
-   owned/default/imported property-path helpers, imported context
-   storage/mutation methods, runtime view-model pointers, and runtime
-   data-context lookup/reporting live in
-   `crates/rive-runtime/src/view_model.rs`. Data-bind graph state, context
-   keys, default-binding records, source/target handles, source/target nodes,
-   converter/value types, apply phases, stateful-advance records, and formula
-   random-source state live in
-   `crates/rive-runtime/src/data_bind_graph.rs`; the
-   `RuntimeDataBindGraphValue` owned/imported view-model resolution impl lives
-   there too. Data-bind flag helpers, the target mutator bridge, the
-   converter-state bridge, graph/source-node execution impls, converter
-   state/formula/interpolator helper types, owned view-model source-path
-   helpers, converter conversion/evaluation helpers, and converter
-   construction helpers also live there. The draw/path/rendering command
-   pipeline, including `ArtboardInstance` draw methods, draw/path command
-   types, render path cache, paint preallocation, path effect builders, and
-   renderer trait driving, lives in `crates/rive-runtime/src/draw.rs`.
-   Shared runtime property-key/object-value helpers, transform-key lookup,
-   joystick/Solo/paint key helpers, `mix_value`, artboard-index lookup, and
-   `RuntimeArtboardDimensions` live in
-   `crates/rive-runtime/src/properties.rs`. `ArtboardInstance`, core
-   instance methods, and local instance tests live in
-   `crates/rive-runtime/src/artboard.rs`; `lib.rs` is now a module/re-export
-   hub. Next, run the M2 completion audit: confirm the remaining non-exact
-   corpus entries are all later-milestone parked items, confirm the exact
-   corpus sample query still shows 66 entries at the standard five-sample M2
-   set, `pointer_events` at six samples, and only `artboardclipping.riv`,
-   `shapetest.riv`, and `trim.riv` pinned to static sample `0`, then either
-   mark M2 complete and advance to M3 or name the first M2-scope blocker.
-2. Add handle-source world-space math and nested-remap dependent advancement
-   to the joystick path when a corpus diff reaches those cases.
+1. Start M3 with constraints. The M3 parked queue has 21 files and all are
+   gated by `rust-runner-unsupported:constraints`; query with
+   `grep -B6 'milestone = "M3"' corpus.toml`. Port the smallest C++
+   `src/constraints/` slice first and target
+   `translation_constraint.riv`, `rotation_constraint.riv`,
+   `scale_constraint.riv`, `transform_constraint.riv`, and
+   `distance_constraint.riv` before the larger FollowPath/IK/component-list
+   fixtures. Wire the constraint update into component advance/update order,
+   remove the unsupported diagnostic for files the slice covers, and let
+   `make golden-compare` decide whether they become exact or diverge.
+2. After basic transform/distance constraints, continue M3 with
+   FollowPathConstraint and IK/skin-dependent constraint files
+   (`follow_path*`, `two_bone_ik`, `complex_ik_dependency`) before returning
+   to handle-source world-space math and nested-remap joystick advancement
+   if a corpus diff reaches those cases.
 3. Remaining exact entries pinned to sample `0` are static M1 holdovers:
    `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
-   them for M2 unless a related refactor needs a cheap draw-regression check.
+   them during M3 unless a related refactor needs a cheap draw-regression check.
 
 ## Known Divergences
 
@@ -432,3 +404,11 @@ the only memory the next session has. Update it every commit.
   golden-compare` reports `exact=70`, `exact-segments=339`, `diverges=0`,
   `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
   passes.
+- 2026-07-04: [M2] Completed the M2 exit audit and opened M3. The corpus has
+  295 entries with 70 exact files and no `diverges`/`not-yet` entries; exact
+  sample coverage is 66 files at the standard five-sample M2 set,
+  `pointer_events.riv` at six samples, and only the static M1 holdovers
+  `artboardclipping.riv`, `shapetest.riv`, and `trim.riv` at sample `0`.
+  All 225 parked entries carry milestones (`M3=21`, `M4=83`, `M5=8`,
+  `M6=72`, `gated=5`, `harness=36`), and all M3 parked files are currently
+  gated by `rust-runner-unsupported:constraints`.

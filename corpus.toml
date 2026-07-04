@@ -550,9 +550,8 @@ features = ["type-key:18:SolidColor", "type-key:19:GradientStop", "type-key:1:Ar
 id = "distance_constraint"
 path = "tests/unit_tests/assets/distance_constraint.riv"
 samples = [0.0]
-status = "unsupported-feature"
-milestone = "M3"
-features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:4:Ellipse", "type-key:82:DistanceConstraint", "rust-runner-unsupported:constraints"]
+status = "exact"
+features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:3:Shape", "type-key:4:Ellipse", "type-key:82:DistanceConstraint"]
 
 [[file]]
 id = "double_library_with_image"

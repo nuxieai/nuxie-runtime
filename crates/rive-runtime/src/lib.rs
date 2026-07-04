@@ -2,6 +2,7 @@ mod animation;
 mod artboard;
 mod artboard_data_bind;
 mod components;
+mod constraints;
 mod data_bind_graph;
 mod draw;
 mod objects;

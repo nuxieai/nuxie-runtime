@@ -614,6 +614,7 @@ impl ArtboardInstance {
                 .filter(|parent| parent.capabilities.world_transform)
                 .map(|parent| parent.transform.world_transform);
             self.components[component_index].update_world_transform(parent_world);
+            crate::constraints::apply_constraints(self, component_index);
         }
         if dirt.contains(ComponentDirt::RENDER_OPACITY) {
             let opacity = self.authored_transform(local_id).opacity;
@@ -913,6 +914,7 @@ mod tests {
                 transform: true,
             },
             parent_local: None,
+            constraint_locals: Vec::new(),
             dependent_locals: Vec::new(),
             graph_order,
             dirt: ComponentDirt::NONE,

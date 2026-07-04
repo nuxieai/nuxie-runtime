@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 339 across 70 exact files
-- Parked breakdown (from `make golden-compare`): M3=21 M4=83 M5=8 M6=72 gated=5 harness=36
+- Exact segments (file × sample): 340 across 71 exact files
+- Parked breakdown (from `make golden-compare`): M3=20 M4=83 M5=8 M6=72 gated=5 harness=36
 - Current milestone: **M3 — Interactivity Exact (#V2-4)**
 
 ## Milestones
@@ -22,16 +22,15 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Start M3 with constraints. The M3 parked queue has 21 files and all are
-   gated by `rust-runner-unsupported:constraints`; query with
-   `grep -B6 'milestone = "M3"' corpus.toml`. Port the smallest C++
-   `src/constraints/` slice first and target
-   `translation_constraint.riv`, `rotation_constraint.riv`,
-   `scale_constraint.riv`, `transform_constraint.riv`, and
-   `distance_constraint.riv` before the larger FollowPath/IK/component-list
-   fixtures. Wire the constraint update into component advance/update order,
-   remove the unsupported diagnostic for files the slice covers, and let
-   `make golden-compare` decide whether they become exact or diverge.
+1. Continue M3 constraints. `DistanceConstraint` now runs from
+   `crates/rive-runtime/src/constraints.rs`, applies after world-transform
+   updates, and `distance_constraint.riv` is exact. The M3 parked queue has 20
+   files, still gated by `rust-runner-unsupported:constraints`; query with
+   `grep -B6 'milestone = "M3"' corpus.toml`. Port `TranslationConstraint`
+   next and target `translation_constraint.riv`; then add the
+   decompose/compose-backed `RotationConstraint`, `ScaleConstraint`, and
+   `TransformConstraint` slices for `rotation_constraint.riv`,
+   `scale_constraint.riv`, and `transform_constraint.riv`.
 2. After basic transform/distance constraints, continue M3 with
    FollowPathConstraint and IK/skin-dependent constraint files
    (`follow_path*`, `two_bone_ik`, `complex_ik_dependency`) before returning
@@ -57,11 +56,13 @@ the only memory the next session has. Update it every commit.
   gradient shader creation, default state-machine frame-0 application for
   color/bool/uint/string keyframes, Solo active-child refresh, and
   before-update joystick animation application, keyed double/color
-  interpolation for CubicEase/CubicValue/Elastic keyframe interpolators without
-  custom handle-source world-space math or nested remap dependent advancement.
+  interpolation for CubicEase/CubicValue/Elastic keyframe interpolators, and
+  `DistanceConstraint` world-translation application without custom
+  handle-source world-space math or nested remap dependent advancement.
   Golden runner sample lists now advance by sorted absolute-time deltas and reuse render paths
   across samples;
-  no images, text, nested artboards, constraints, or scripted input.
+  no images, text, nested artboards, transform/IK/follow-path constraints, or
+  scripted input.
 - Per-file parked reasons now live in `corpus.toml`: each gated entry
   carries `milestone = "M3|M4|M5|M6|gated|harness"` plus its diagnostic
   feature tags (`rust-runner-unsupported:*`, `cpp-runner-crash`,
@@ -412,3 +413,12 @@ the only memory the next session has. Update it every commit.
   All 225 parked entries carry milestones (`M3=21`, `M4=83`, `M5=8`,
   `M6=72`, `gated=5`, `harness=36`), and all M3 parked files are currently
   gated by `rust-runner-unsupported:constraints`.
+- 2026-07-04: [M3] Ported `DistanceConstraint` world-translation application
+  from C++ `src/constraints/distance_constraint.cpp`, added runtime component
+  constraint-local application after world-transform updates, narrowed the
+  Rust golden-runner constraint gate to keep only unimplemented constraint
+  kinds parked, and promoted `distance_constraint.riv` to exact. Exact
+  segments are now 340 across 71 exact files; `make golden-compare` reports
+  `exact=71`, `exact-segments=340`, `diverges=0`,
+  `unsupported-feature=224`, `not-yet=0`, parked `M3=20`, and
+  `cargo test --workspace` passes.

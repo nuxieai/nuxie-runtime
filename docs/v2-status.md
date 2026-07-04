@@ -22,16 +22,17 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Open M6 with the text sizing spike called out in `docs/porting-map-v2.md`.
-   Query the queue with `grep -B6 'milestone = "M6"' corpus.toml`; the first
-   manifest candidate is `align_target.riv` (`text`). Before implementing,
-   inventory C++ `src/text/` against the Rust runtime/runner surfaces and
-   define the smallest corpus-backed vertical slice that can move a text file
-   to its declared verification mode.
-2. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
+1. Execute the first text tracer from
+   `docs/prototypes/m6-text-sizing-spike.md`: promote `hello_world.riv` by
+   supporting the narrow static top-level `Text` subset (one `TextValueRun`,
+   one `TextStylePaint` solid fill, one `FontAsset`, no modifiers/layout/input).
+2. `align_target.riv` is the first M6 entry by manifest order, but it has
+   listener align-target plus text modifier/axis objects. Keep it parked until
+   the static `hello_world.riv` path is exact.
+3. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
-3. Remaining exact entries pinned to sample `0` are static M1 holdovers:
+4. Remaining exact entries pinned to sample `0` are static M1 holdovers:
    `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
    them during M6 unless a related refactor needs a cheap draw-regression check.
 
@@ -264,3 +265,9 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=167`, `not-yet=0`, and parked
   `M6=124 gated=7 harness=36`; manifest query confirms M5=0, and `cargo
   test --workspace` passes.
+- 2026-07-04: [M6] Sized the text opening in
+  `docs/prototypes/m6-text-sizing-spike.md`: the largest M6 diagnostic bucket
+  is `text` (59 files), C++ text is about an 11k-line stack across import,
+  shaping, line breaking, draw, and input/editing, and the first implementation
+  slice is now pinned to `hello_world.riv` instead of manifest-first
+  `align_target.riv` because it isolates static top-level text path emission.

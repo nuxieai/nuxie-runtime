@@ -38,9 +38,10 @@ the only memory the next session has. Update it every commit.
    context keys, default-binding records, source/target handles, source/target
    nodes, converter/value types, apply phases, stateful-advance records, and
    formula random-source state live in
-   `crates/rive-runtime/src/data_bind_graph.rs`. Continue with the
-   `RuntimeDataBindGraphValue` impl, graph behavior impls, and target mutator
-   bridge, preserving the current golden set.
+   `crates/rive-runtime/src/data_bind_graph.rs`; the
+   `RuntimeDataBindGraphValue` owned/imported view-model resolution impl lives
+   there too. Continue with the graph behavior impls and target mutator bridge,
+   preserving the current golden set.
 2. Add handle-source world-space math and nested-remap dependent advancement
    to the joystick path when a corpus diff reaches those cases.
 3. Remaining exact entries pinned to sample `0` are static M1 holdovers:
@@ -178,14 +179,6 @@ the only memory the next session has. Update it every commit.
   under `M2 active log rolloff`; keep only the recent rolling window here once
   Metric, Next, Decisions, and `corpus.toml` capture the current state.
 
-- 2026-07-03: [M2] Widened `click_event.riv` from samples `0`, `0.25`,
-  `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and `1.0`,
-  keeping passive event/listener bool state-machine playback exact across the
-  fifth sample while leaving scripted pointer/event dispatch in M3 scope.
-  Exact segments are now 276 across 70 exact files; `make golden-compare`
-  reports `exact=70`, `exact-segments=276`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
 - 2026-07-03: [M2] Widened `clip_tests.riv` from samples `0`, `0.25`,
   `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and `1.0`,
   keeping animated clipping-shape playback exact across the fifth sample.
@@ -495,6 +488,14 @@ the only memory the next session has. Update it every commit.
   `crates/rive-runtime/src/data_bind_graph.rs`, leaving graph value resolution,
   graph behavior, and target mutator bridge impls in `lib.rs` for the next
   extraction slices. Exact segments remain 339 across 70 exact files; `make
+  golden-compare` reports `exact=70`, `exact-segments=339`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+- 2026-07-04: [M2] Moved the `RuntimeDataBindGraphValue` owned/imported
+  view-model resolution impl from `crates/rive-runtime/src/lib.rs` into
+  `crates/rive-runtime/src/data_bind_graph.rs`, keeping resolver methods
+  crate-visible while the remaining graph execution and target mutator bridge
+  are extracted. Exact segments remain 339 across 70 exact files; `make
   golden-compare` reports `exact=70`, `exact-segments=339`, `diverges=0`,
   `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
   passes.

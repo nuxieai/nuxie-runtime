@@ -1645,3 +1645,10 @@ milestone entries are kept verbatim here. Newest milestone last.
   `make golden-compare` reports `exact=70`, `exact-segments=221`,
   `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
   `cargo test --workspace` passes.
+- 2026-07-03: [M2] Widened `event_trigger_event.riv` from samples `0`,
+  `0.25`, and `0.5` to samples `0`, `0.25`, `0.5`, and `0.75`, keeping
+  passive event-trigger playback exact while leaving scripted input dispatch
+  in M3 scope. Exact segments are now 222 across 70 exact files;
+  `make golden-compare` reports `exact=70`, `exact-segments=222`,
+  `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
+  `cargo test --workspace` passes.

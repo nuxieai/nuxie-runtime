@@ -520,6 +520,13 @@ fn ensure_static_draw_supported_for_artboard(
         .iter()
         .find(|nested| nested.type_name != "NestedArtboard")
     {
+        if matches!(nested.type_name, "NestedArtboardLayout" | "NestedArtboardLeaf") {
+            bail!(
+                "unsupported: nested-artboard-layout in Rust golden runner ({} global {})",
+                nested.type_name,
+                nested.global_id
+            );
+        }
         bail!(
             "unsupported: nested artboards in Rust golden runner ({})",
             nested.type_name
@@ -532,13 +539,13 @@ fn ensure_static_draw_supported_for_artboard(
             .then_some((type_name, object.global_id))
     }) {
         bail!(
-            "unsupported: nested artboards in Rust golden runner ({type_name} global {global_id})"
+            "unsupported: nested-artboard-layout in Rust golden runner ({type_name} global {global_id})"
         );
     }
 
     if let Some((type_name, global_id)) = nested_stateful_view_model_object(runtime, artboard) {
         bail!(
-            "unsupported: nested artboards in Rust golden runner (stateful view model {type_name} global {global_id})"
+            "unsupported: data-binding-nested-stateful-view-model in Rust golden runner ({type_name} global {global_id})"
         );
     }
 
@@ -549,7 +556,7 @@ fn ensure_static_draw_supported_for_artboard(
             .find(|data_bind| data_bind.target_type_name != Some("SolidColor"))
         {
             bail!(
-                "unsupported: nested artboards in Rust golden runner (nested child data bind global {} target {:?})",
+                "unsupported: data-binding-nested-child in Rust golden runner (data bind global {} target {:?})",
                 data_bind.global_id,
                 data_bind.target_type_name
             );
@@ -560,7 +567,7 @@ fn ensure_static_draw_supported_for_artboard(
             .find(|object| object.type_name == Some("FocusData"))
         {
             bail!(
-                "unsupported: nested artboards in Rust golden runner (nested child focus data global {})",
+                "unsupported: focus-data in Rust golden runner (nested child global {})",
                 focus_data.global_id
             );
         }
@@ -568,7 +575,7 @@ fn ensure_static_draw_supported_for_artboard(
 
     if let Some(data_bind) = nested_artboard_host_control_data_bind(graph, artboard) {
         bail!(
-            "unsupported: nested artboards in Rust golden runner (nested host data bind global {} property key {})",
+            "unsupported: data-binding-nested-host in Rust golden runner (data bind global {} property key {})",
             data_bind.global_id,
             data_bind.property_key
         );

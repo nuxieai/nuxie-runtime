@@ -6,8 +6,8 @@ the only memory the next session has. Update it every commit.
 ## Metric
 
 - Exact segments (file × sample): 435 across 114 exact files
-- Parked breakdown (from `make golden-compare`): M4=50 M5=8 M6=81 gated=6 harness=36
-- Current milestone: **M4 — Nested Artboards And Lists Exact (#V2-5)**
+- Parked breakdown (from `make golden-compare`): M5=24 M6=115 gated=6 harness=36
+- Current milestone: **M5 — Data Binding Exact Incl. External View-Model Mutation (#V2-6)**
 
 ## Milestones
 
@@ -15,64 +15,30 @@ the only memory the next session has. Update it every commit.
 - [x] M1: Static vector corpus files exact at advance(0); FFI viewer demo
 - [x] M2: Animated playback exact at sampled times; real object model landed; lib.rs modularized
 - [x] M3: Interactive files exact under scripted pointer input
-- [ ] M4: Nested artboards/lists exact
+- [x] M4: Nested artboards/lists exact for corpus entries whose first verified blocker is not M5/M6/gated
 - [ ] M5: Data binding exact incl. external view-model mutation
 - [ ] M6: Layout + text verified per declared corpus modes; audio/scripting gated with diagnostics
 - [ ] M7: Public `rive` API + C ABI; perf within target of C++
 
 ## Next
 
-1. Continue M4 with the smallest remaining pure nested-artboard runtime slice.
-   Query the queue with `grep -B6 'milestone = "M4"' corpus.toml`; the raw
-   queue now starts with `ai_assitant.riv`, but that file carries skin/mesh/
-   feather-ish complexity and should wait for a narrower entry point. Nested
-   reported-event bubbling is closed for `nested_event_test.riv`; prefer the
-   next file whose first failing diagnostic names a single nested host/list
-   behavior instead of pulling M5 data binding or M6 text/layout forward.
-   Static sample-0 files with recursive nested `ListenerAlignTarget` actions
-   are no longer parked when the corpus entry has no input script, because
-   those actions are unexercised during static draw; input-driven align-target
-   behavior remains out of scope for this slice. `align_target.riv` moved to
-   M6 because its first remaining Rust diagnostic is text.
-2. Nested remap with runtime `DrawTarget` placement is closed for
-   `death_knight.riv` at sample `0.0`: draw order now reads active
-   `DrawRules.drawTargetId` / `DrawTarget.placementValue` during draw,
-   replays clipping proxy insertion, and mirrors C++ child-before-parent
-   render-paint preallocation for the nested tree. The next useful M4 slice is
-   another small nested/list file from the M4 queue; avoid pulling M5 data
-   binding or M6 layout/text/image support forward.
-3. Nested host serialized `speed`/`quantize` local elapsed and generated
-   source-to-target host-control defaults are closed for
-   `nested_artboard_quantize_and_speed.riv` through samples `0.0, 0.25, 0.5,
-   0.75, 1.0`; external/live host-control mutation belongs to M5.
-4. Solo-owned repeated nested child paint allocation is closed for
-   `pointer_events_nested_artboards_in_solos.riv` through samples `0.0, 0.1,
-   0.25, 0.5, 0.75, 1.0, 1.25, 1.5`: Rust now keeps per-host nested paint
-   caches, so repeated child instances do not share mutable paint/shader state.
-5. Plain static `NestedArtboard` draw, default nested
-   simple-animation/state-machine host advancement are closed for the current
-   sample-0 corpus slice, and nested child unbound SolidColor data-bind
-   defaults are closed for `library_vmtest_1_host.riv` and
-   `unbound_stateful_component.riv`. Exact promoted files now include the
-   earlier static set plus `library_export_animation_test.riv`,
-   `library_export_state_machine_test.riv`, `ball_test.riv`,
-   `data_binding_test_3.riv`, `data_binding_test_triggers.riv`,
-   `databind_external_artboard_main.riv`, `drag_event.riv`, `multitouch.riv`,
-   `nested_needs_advance.riv`, `scripted_listener_context.riv`,
-   `pointer_events_nested_artboards_in_solos.riv`,
-   `nested_artboard_quantize_and_speed.riv`,
-   `nested_event_test.riv`,
-   `death_knight.riv`,
-   `pointer_exit.riv`,
-   `scripting_root_viewmodel.riv`, `solid_affects_has_changed.riv`,
-   `target_event.riv`, and `transition_self_comparator_test.riv`.
-6. M3 is closed: all `milestone = "M3"` parked entries are gone, all scripted
-   direct-pointer corpus entries are exact through sample `1.5`, and the
-   remaining unscripted exact listener files showed no C++ render delta on a
-   bounded coarse click/hover probe or require M4/M5/M6 domains.
-7. Remaining exact entries pinned to sample `0` are static M1 holdovers:
+1. Continue M5 with the smallest data-binding slice that can move a corpus
+   entry. Query the queue with `grep -B6 'milestone = "M5"' corpus.toml`;
+   the narrow first candidates are:
+   `custom_property_trigger.riv` (`data-binding-custom-property-trigger`),
+   `pause_nested_artboard.riv` (`data-binding-nested-host` for live
+   `NestedArtboard.isPaused`), and `component_stateful_vm_instance.riv`
+   (`data-binding-nested-child` targeting an `Ellipse`). Prefer one whose
+   first diagnostic names a single data-binding behavior and does not require
+   M6 text/images/layout.
+2. M4 is closed for the current corpus: `grep -B6 'milestone = "M4"'
+   corpus.toml` is empty. The remaining formerly-M4 entries were probed with
+   `rust-golden-runner` and moved to their first verified later blocker:
+   M5 nested child/host data binding or custom-property trigger binding, or
+   M6 text/images/layout/focus diagnostics.
+3. Remaining exact entries pinned to sample `0` are static M1 holdovers:
    `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
-   them during M4 unless a related refactor needs a cheap draw-regression check.
+   them during M5 unless a related refactor needs a cheap draw-regression check.
 
 ## Known Divergences
 
@@ -99,7 +65,8 @@ the only memory the next session has. Update it every commit.
   Shape/Path target sampling against runtime path geometry, C++ Bone x/y
   overrides, `IKConstraint` FK-chain solving, and
   `ListFollowPathConstraint` registration/application over component-list item
-  transform slices once M4 list instances populate them, and parametric
+  transform slices once layout-backed list instances populate them, and
+  parametric
   Star/Polygon local path sampling for follow-path targets, plus static plain
   `NestedArtboard` host draw with child root opacity inheritance, default
   nested simple-animation/state-machine hosts backed by persistent child
@@ -116,13 +83,12 @@ the only memory the next session has. Update it every commit.
   Custom handle-source world-space math, data-bound nested host controls beyond
   generated defaults
   (`artboardId` runtime swaps and external/live pause/speed/quantize
-  mutation), nested child non-color data-bind targets, focus data, bound
-  stateful child view-model propagation, input-driven recursive
+  mutation), nested child non-color data-bind targets, and bound stateful child
+  view-model propagation are M5. Focus data, input-driven recursive
   `ListenerAlignTarget` and nested pointer/listener hit propagation beyond
   reported `Event` listeners, `NestedArtboardLayout` / `NestedArtboardLeaf`,
-  and
-  layout-backed or virtualized component-list instancing are still not
-  supported.
+  and layout-backed or virtualized component-list instancing remain M6 or
+  later diagnostics.
   Golden runner sample lists now advance by sorted absolute-time deltas and
   reuse render paths across samples; no images, text, live data-bound nested
   host controls/artboard swaps, nested layout/leaf, scroll constraints, or
@@ -147,7 +113,7 @@ the only memory the next session has. Update it every commit.
   carries `milestone = "M3|M4|M5|M6|gated|harness"` plus its diagnostic
   feature tags (`rust-runner-unsupported:*`, `cpp-runner-crash`,
   `import-error:*`). Query a milestone's work-list with e.g.
-  `grep -B6 'milestone = "M4"' corpus.toml`.
+  `grep -B6 'milestone = "M5"' corpus.toml`.
 - Entries tagged `cpp-runner-crash` (`milestone = "harness"`) stay parked
   until the C++ golden runner survives the FileAssetContents, scripting,
   and data-viz crash paths it currently aborts on.
@@ -265,127 +231,17 @@ the only memory the next session has. Update it every commit.
   driven by animations or nested remap time: Rust derives sorted drawables
   from active `DrawRules.drawTargetId` and `DrawTarget.placementValue` during
   draw, then recomputes clipping proxies and save-operation elision.
+- 2026-07-04: M4 is corpus-closed after a direct `rust-golden-runner` sweep:
+  no `milestone = "M4"` entries remain. Former M4 parked files now carry their
+  first verified later diagnostic: M5 data-binding nested child/host or
+  custom-property trigger paths, and M6 text/images/nested-artboard-layout/
+  focus/layout-component-paint paths. This opens M5 without hiding the later
+  text/layout/list work.
 
 ## Log
 
-- Completed-milestone entries (M0 through M3) are archived verbatim in
+- Completed-milestone entries (M0 through M4) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
-- 2026-07-04: [M4] Ported the first static plain `NestedArtboard` draw slice
-  from the C++ `ArtboardHost`/`NestedArtboard::draw` shape: Rust now resolves
-  referenced child artboards during draw, applies the host world transform,
-  draws children without the top-level artboard-origin transform, inherits host
-  render opacity into the child root, and preallocates child instance paints in
-  host object order. Promoted `entry.riv`, `library_export_test.riv`,
-  `magic_alley_db_reduced_export.riv`, `nested_artboard_opacity.riv`, and
-  `stateful_artboard_swap.riv` to exact; moved the three now image-blocked
-  library fixtures to M6 `rust-runner-unsupported:images`. `make
-  golden-compare` reports `exact=90`, `exact-segments=398`, `diverges=0`,
-  `unsupported-feature=205`, `not-yet=0`, and parked
-  `M4=75 M5=8 M6=80 gated=6 harness=36`; `cargo test --workspace` passes.
-- 2026-07-04: [M4] Ported default nested animation/state-machine host
-  instances from the C++ `NestedAnimation`, `NestedSimpleAnimation`, and
-  `NestedStateMachine` shape: selected artboards now build persistent nested
-  child instances, advance nested simple animations/state machines before
-  drawing, sync host render opacity into child roots, and call child
-  `drawInternal` without an unconditional wrapper save. Promoted
-  `library_export_animation_test.riv`, `library_export_state_machine_test.riv`,
-  and 12 newly unblocked nested-host corpus files to exact. Added runner
-  diagnostics for still-parked nested host controls: remap/input hosts,
-  data-bound host controls, stateful child view-model binding, nested
-  listener/event propagation, nested layout/leaf, and component-list paths.
-  `make golden-compare` reports `exact=104`, `exact-segments=412`,
-  `diverges=0`, `unsupported-feature=191`, `not-yet=0`, and parked
-  `M4=61 M5=8 M6=80 gated=6 harness=36`; `cargo test --workspace` passes.
-- 2026-07-04: [M4] Narrowed the nested stateful view-model guard to allow
-  authored child `ViewModelInstance` subtrees under plain `NestedArtboard`
-  hosts, and mirrored C++ unbound artboard-owned SolidColor
-  `DataBindContext` import defaults to opaque black for child artboard
-  instances. Promoted `library_vmtest_1_host.riv` and
-  `unbound_stateful_component.riv` to exact; kept nested child non-color
-  data-bind targets and focus data behind nested-artboards diagnostics. `make
-  golden-compare` reports `exact=106`, `exact-segments=414`, `diverges=0`,
-  `unsupported-feature=189`, `not-yet=0`, and parked
-  `M4=59 M5=8 M6=80 gated=6 harness=36`; `cargo test --workspace` passes.
-- 2026-07-04: [M4] Ported nested input proxying from the C++ `NestedInput`,
-  `NestedBool`, `NestedNumber`, and `NestedTrigger` shape plus
-  `NestedRemapAnimation` time/apply plumbing: hosted child state machines now
-  receive authored/keyed nested bool/number/trigger values, remap hosts use
-  global-to-local animation time, and the runner has narrower diagnostics for
-  DrawTarget-heavy remap and Solo-owned nested listener children. Promoted
-  `advance_blend_mode.riv`, `runtime_nested_inputs.riv`, and `smi_test.riv`
-  to exact. `make golden-compare` reports `exact=109`, `exact-segments=419`,
-  `diverges=0`, `unsupported-feature=186`, `not-yet=0`, and parked
-  `M4=56 M5=8 M6=80 gated=6 harness=36`; `cargo test --workspace` passes.
-- 2026-07-04: [M4] Ported sample-0 nested child paint allocation for
-  repeated nested artboard instances under Solo hosts: tree preallocation now
-  consumes `RenderPaint` allocation per child artboard instance while
-  preserving the first source-global paint mapping used by current draw
-  lookup. Promoted `pointer_events_nested_artboards_in_solos.riv` to exact.
-  `make golden-compare` reports `exact=110`, `exact-segments=420`,
-  `diverges=0`, `unsupported-feature=185`, `not-yet=0`, and parked
-  `M4=55 M5=8 M6=80 gated=6 harness=36`; `cargo test --workspace` passes.
-- 2026-07-04: [M4] Closed per-host nested paint caches for repeated
-  Solo-owned nested artboard instances: Rust render paint state now lives in a
-  recursive `RuntimeRenderPaintCache`, and the golden runner prepares/draws
-  nested children through matching per-host paint caches instead of reusing a
-  child artboard's global paint map. Widened
-  `pointer_events_nested_artboards_in_solos.riv` from sample `0.0` to samples
-  `0.0, 0.1, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5`, raising `exact-segments` to
-  427 while `exact` remains 110. At that point, `death_knight.riv` was still
-  gated on nested remap `DrawTarget` rules: the C++ runner creates
-  transparent child shaders for Death Up but never draws that child, while
-  Rust must not bypass the existing diagnostic until DrawTarget rules are
-  ported. `make
-  golden-compare` reports `exact=110`, `exact-segments=427`, `diverges=0`,
-  `unsupported-feature=185`, `not-yet=0`, and parked
-  `M4=55 M5=8 M6=80 gated=6 harness=36`; `cargo test --workspace` passes.
-- 2026-07-04: [M4] Mirrored C++ nested host local elapsed for serialized
-  `NestedArtboard.speed` and `NestedArtboard.quantize`: nested child
-  animations and child artboard advancement now run through
-  `NestedArtboard::calculateLocalElapsedSeconds` semantics, including paused
-  hosts and quantized accumulated time. Narrowed the golden-runner host-control
-  guard so generated speed/quantize properties no longer park otherwise exact
-  files, while live pause/data-bound host mutation stays gated. Promoted
-  `nested_artboard_quantize_and_speed.riv` to exact. `make golden-compare`
-  reports `exact=111`, `exact-segments=428`, `diverges=0`,
-  `unsupported-feature=184`, `not-yet=0`, and parked
-  `M4=54 M5=8 M6=80 gated=6 harness=36`; `cargo test --workspace` passes.
-- 2026-07-04: [M4] Closed generated source-to-target nested host
-  `isPaused`/`speed`/`quantize` defaults for the artboard-owned
-  `File::createViewModelInstance()` path while preserving serialized default
-  handling for component-list bindings. Widened
-  `nested_artboard_quantize_and_speed.riv` from sample `0.0` to samples `0.0,
-  0.25, 0.5, 0.75, 1.0`, raising `exact-segments` to 432 while `exact`
-  remains 111. `make golden-compare` reports `exact=111`,
-  `exact-segments=432`, `diverges=0`, `unsupported-feature=184`,
-  `not-yet=0`, and parked `M4=54 M5=8 M6=80 gated=6 harness=36`;
-  `cargo test --workspace` passes.
-- 2026-07-04: [M4] Closed `death_knight.riv` sample-0 nested remap
-  `DrawTarget` ordering: Rust draw emission now rebuilds runtime draw order
-  from active draw rules/placement values, mirrors C++ clipping proxy/save
-  elision for that order, preallocates nested child paint caches before parent
-  mutator paints, and defers the same-pass child update only for newly
-  uncollapsed remap hosts. Promoted `death_knight.riv` to exact. `make
-  golden-compare` reports `exact=112`, `exact-segments=433`, `diverges=0`,
-  `unsupported-feature=183`, `not-yet=0`, and parked
-  `M4=53 M5=8 M6=80 gated=6 harness=36`; `cargo test --workspace` passes.
-- 2026-07-04: [M4] Ported nested reported-event bubbling from C++
-  `StateMachineInstance::notifyEventListeners`/`nestedEventListeners`: child
-  state-machine reported events are collected during nested host advancement,
-  parent event listeners no longer require hit paths, and parent listener
-  actions settle with a zero-time advance only when a nested event actually
-  changes the root state machine. Promoted `nested_event_test.riv` to exact.
-  `make golden-compare` reports `exact=113`, `exact-segments=434`,
-  `diverges=0`, `unsupported-feature=182`, `not-yet=0`, and parked
-  `M4=52 M5=8 M6=80 gated=6 harness=36`; `cargo test --workspace` passes.
-- 2026-07-04: [M4] Narrowed the recursive nested `ListenerAlignTarget`
-  diagnostic to runs with input scripts, matching sample-0 static draw scope:
-  unexercised align-target listener actions no longer park static nested
-  files. Promoted `pointer_exit.riv` to exact and moved `align_target.riv` to
-  M6 `rust-runner-unsupported:text`; input-driven recursive align-target
-  behavior remains gated. `make golden-compare` reports `exact=114`,
-  `exact-segments=435`, `diverges=0`, `unsupported-feature=181`,
-  `not-yet=0`, and parked `M4=50 M5=8 M6=81 gated=6 harness=36`;
-  `cargo test --workspace` passes.
+- 2026-07-04: [M5] Opened M5 after draining the M4 queue: all remaining `milestone = "M4"` entries were probed with `rust-golden-runner` and moved to their first verified later diagnostic (`data-binding-nested-child`, `data-binding-nested-host`, `data-binding-custom-property-trigger`, `nested-artboard-layout`, `text`, `images`, `focus-data`, or `layout-component-paint`). `make golden-compare` reports `exact=114`, `exact-segments=435`, `diverges=0`, `unsupported-feature=181`, `not-yet=0`, and parked `M5=24 M6=115 gated=6 harness=36`; `cargo test --workspace` passes.

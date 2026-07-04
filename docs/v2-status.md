@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 204 across 70 exact files
+- Exact segments (file × sample): 205 across 70 exact files
 - Parked breakdown (from `make golden-compare`): M3=21 M4=83 M5=8 M6=72 gated=5 harness=36
 - Current milestone: **M2 — Animated Playback Exact + Real Object Model (#V2-3)**
 
@@ -22,7 +22,12 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue M2 real object model work by modularizing the remaining runtime
+1. The two-sample exact widening queue is exhausted. Continue the fourth-sample
+   M2 sweep over exact entries with samples `0`, `0.25`, and `0.5`, starting
+   after `animation_reset_cases.riv` (next candidate:
+   `bindable_artboard_child.riv`), and stop on the first real divergence to
+   localize runtime code.
+2. Continue M2 real object model work by modularizing the remaining runtime
    surfaces out of `lib.rs` while keeping generated `InstanceObjectStorage` as
    the authored-property source of truth, but only when it unblocks a corpus
    diff or removes risky coupling. Component dirt/runtime transform state live
@@ -33,9 +38,9 @@ the only memory the next session has. Update it every commit.
    `crates/rive-runtime/src/state_machine/`. Remaining root coupling is mostly
    the data-bind graph/default-view-model bridge and artboard-level data-bind
    helpers; move those only with a corpus diff or a clear M2 coupling payoff.
-2. Add handle-source world-space math and nested-remap dependent advancement
+3. Add handle-source world-space math and nested-remap dependent advancement
    to the joystick path when a corpus diff reaches those cases.
-3. Remaining exact entries pinned to sample `0` are static M1 holdovers:
+4. Remaining exact entries pinned to sample `0` are static M1 holdovers:
    `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
    them for M2 unless a related refactor needs a cheap draw-regression check.
 
@@ -393,4 +398,11 @@ the only memory the next session has. Update it every commit.
   external data-binding mutation in M5 scope. Exact segments are now 204
   across 70 exact files; `make golden-compare` reports `exact=70`,
   `exact-segments=204`, `diverges=0`, `unsupported-feature=225`,
+  `not-yet=0`, and `cargo test --workspace` passes.
+- 2026-07-03: [M2] Exhausted the exact two-sample widening queue and widened
+  `animation_reset_cases.riv` from samples `0`, `0.25`, and `0.5` to samples
+  `0`, `0.25`, `0.5`, and `0.75`, starting the fourth-sample M2 sweep with
+  blend/reset state-machine playback still exact. Exact segments are now 205
+  across 70 exact files; `make golden-compare` reports `exact=70`,
+  `exact-segments=205`, `diverges=0`, `unsupported-feature=225`,
   `not-yet=0`, and `cargo test --workspace` passes.

@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 444 across 123 exact files
-- Parked breakdown (from `make golden-compare`): M5=12 M6=117 gated=7 harness=36
+- Exact segments (file × sample): 445 across 124 exact files
+- Parked breakdown (from `make golden-compare`): M5=10 M6=118 gated=7 harness=36
 - Current milestone: **M5 — Data Binding Exact Incl. External View-Model Mutation (#V2-6)**
 
 ## Milestones
@@ -24,10 +24,10 @@ the only memory the next session has. Update it every commit.
 
 1. Continue M5 with the smallest data-binding slice that can move a corpus
    entry. Query the queue with `grep -B6 'milestone = "M5"' corpus.toml`;
-   the next manifest candidate is `databind_artboard.riv`
-   (`data-binding-nested-host`). A direct Rust-runner probe reports
-   `unsupported: data-binding-nested-host` for data bind global 12 targeting
-   `NestedArtboard.artboardId` (property key 197).
+   the next manifest candidate is `formula_random.riv`
+   (`data-binding-transform`). A direct Rust-runner probe reports
+   `unsupported: data-binding-transform` for data bind global 43 targeting
+   global 42.
 2. M4 is closed for the current corpus: `grep -B6 'milestone = "M4"'
    corpus.toml` is empty. The remaining formerly-M4 entries were probed with
    `rust-golden-runner` and moved to their first verified later blocker:
@@ -77,6 +77,8 @@ the only memory the next session has. Update it every commit.
   plumbing, runtime `DrawTarget` placement sorting from active `DrawRules`,
   serialized nested host speed/quantize local elapsed, generated
   source-to-target nested host `isPaused`/`speed`/`quantize` default binding,
+  source-to-target nested host `artboardId` default/runtime swaps with
+  cleared-host draw suppression,
   per-host nested paint caches for repeated child instances under Solo-owned
   hosts, and nested state-machine reported-event bubbling into parent event
   listeners, custom-property trigger keyed-callback target-to-source binding,
@@ -84,9 +86,8 @@ the only memory the next session has. Update it every commit.
   `isPaused` mutation, plus no-input recursive nested `ListenerAlignTarget`
   fixtures where the action is unexercised.
   Custom handle-source world-space math, data-bound nested host controls beyond
-  generated defaults
-  (`artboardId` runtime swaps and external/live pause/speed/quantize
-  mutation), remaining nested child non-color data-bind targets, and broader
+  generated defaults (external/live pause/speed/quantize mutation), remaining
+  nested child non-color data-bind targets, and broader
   bound stateful child view-model propagation are M5. Focus data,
   input-driven recursive
   `ListenerAlignTarget` and nested pointer/listener hit propagation beyond
@@ -248,6 +249,7 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-04: [M5] Ported nested host artboard binding: `NestedArtboard.artboardId` source-to-target artboard values now rebuild or clear the runtime child instance from shared graph context, draw skips the static nested fallback when a host is data-bound to `-1`, and the runner narrows the nested-host gate to converted or target-to-source host swaps. `recursive_data_bind.riv` is promoted to exact after direct C++/Rust stream comparison, while `databind_artboard.riv` moves to M6 after the same bind now reaches `text`. `make golden-compare` reports `exact=124`, `exact-segments=445`, `diverges=0`, `unsupported-feature=171`, `not-yet=0`, and parked `M5=10 M6=118 gated=7 harness=36`; `cargo test --workspace` passes.
 - 2026-07-04: [M5] Ported artboard source-to-target interpolator bindings: artboard property bindings now keep stateful `DataConverterInterpolator` converter state, advance it with scene elapsed time, and apply converted number/color values to target properties. The Rust runner admits source-to-target `SolidColor.colorValue` interpolator binds, and `data_converter_interpolator_reset.riv` plus `time_based_interpolation.riv` are promoted to exact after direct C++/Rust stream comparison. `make golden-compare` reports `exact=123`, `exact-segments=444`, `diverges=0`, `unsupported-feature=172`, `not-yet=0`, and parked `M5=12 M6=117 gated=7 harness=36`; `cargo test --workspace` passes.
 - 2026-07-04: [M5] Ported custom-property enum target-to-source binding: artboard `DataBindContext` custom-property bindings now capture `CustomPropertyEnum.propertyValue` as `RuntimeDataBindGraphValue::Enum`, the runner admits no-converter target-to-source enum binds, and `custom_property_enum.riv` is promoted to exact after direct C++/Rust stream comparison. `make golden-compare` reports `exact=121`, `exact-segments=442`, `diverges=0`, `unsupported-feature=174`, `not-yet=0`, and parked `M5=14 M6=117 gated=7 harness=36`; `cargo test --workspace` passes.
 - 2026-07-04: [M5] Retagged text-target nested child binds: nested child data-bind diagnostics now report `text` when the unsupported target is `Text`, `TextValueRun`, or `TextStylePaint`, and `component_stateful.riv` plus `component_stateful_vm_instance_2.riv` moved from M5 to M6 after direct probes showed `TextValueRun` as the first blocker. `make golden-compare` reports `exact=120`, `exact-segments=441`, `diverges=0`, `unsupported-feature=175`, `not-yet=0`, and parked `M5=15 M6=117 gated=7 harness=36`; `cargo test --workspace` passes.

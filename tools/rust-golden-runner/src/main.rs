@@ -587,9 +587,11 @@ fn ensure_static_draw_supported_for_artboard(
 
     if let Some(data_bind) = nested_artboard_host_control_data_bind(graph, artboard) {
         bail!(
-            "unsupported: data-binding-nested-host in Rust golden runner (data bind global {} property key {})",
+            "unsupported: data-binding-nested-host in Rust golden runner (data bind global {} property key {} flags {} converter {:?})",
             data_bind.global_id,
-            data_bind.property_key
+            data_bind.property_key,
+            data_bind.flags,
+            data_bind.converter_type_name
         );
     }
 
@@ -902,11 +904,14 @@ fn nested_artboard_host_control_data_bind<'a>(
             return false;
         }
         match data_bind.property_key {
-            // artboardId is exact for external-artboard files that do not carry
-            // the referenced child artboard in the same file, and for static
-            // import-time swaps. Listener-driven recursive remaps need runtime
-            // host swapping.
-            197 => graph.artboards.len() > 1 && artboard_has_state_machine_listeners(artboard),
+            // NestedArtboardBase::artboardIdPropertyKey in C++ generated/nested_artboard_base.hpp.
+            197 => {
+                let source_to_target = data_bind.flags & DATA_BIND_FLAG_TWO_WAY != 0
+                    || data_bind.flags & DATA_BIND_FLAG_DIRECTION_TO_SOURCE == 0;
+                graph.artboards.len() > 1
+                    && artboard_has_state_machine_listeners(artboard)
+                    && (!source_to_target || data_bind.converter_global.is_some())
+            }
             _ => false,
         }
     })

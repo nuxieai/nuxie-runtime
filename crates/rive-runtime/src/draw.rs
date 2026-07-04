@@ -1705,6 +1705,13 @@ fn runtime_draw_nested_artboard(
     path_cache: &mut RuntimeRenderPathCache,
     nested_paint_caches: Option<&mut BTreeMap<u32, RuntimeRenderPaintCache>>,
 ) -> Result<()> {
+    if let Some(local_id) = command.local_id
+        && let Some(artboard_id_key) = property_key_for_name("NestedArtboard", "artboardId")
+        && instance.uint_property(local_id, artboard_id_key) == Some(u64::from(u32::MAX))
+    {
+        return Ok(());
+    }
+
     let referenced_artboard_global = command
         .referenced_artboard_global
         .context("nested artboard missing referenced artboard")?;

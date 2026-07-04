@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use rive_binary::RuntimeFile;
@@ -60,6 +61,8 @@ pub struct ArtboardInstance {
     pub(crate) state_machines: Vec<RuntimeStateMachine>,
     pub(crate) nested_artboards: BTreeMap<usize, RuntimeNestedArtboardInstance>,
     newly_uncollapsed_nested_artboards: BTreeSet<usize>,
+    graph_global_id: u32,
+    build_context: Option<RuntimeArtboardBuildContext>,
     pub(crate) artboard_data_bind_values: BTreeMap<Vec<u32>, RuntimeDataBindGraphValue>,
     pub(crate) artboard_property_bindings: Vec<RuntimeArtboardPropertyBindingInstance>,
     pub(crate) artboard_custom_property_bindings: Vec<RuntimeArtboardCustomPropertyBindingInstance>,
@@ -79,6 +82,12 @@ pub(crate) struct RuntimeNestedArtboardInstance {
     speed: f32,
     quantize: f32,
     cumulated_seconds: f32,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeArtboardBuildContext {
+    file: Arc<RuntimeFile>,
+    artboards: Arc<Vec<ArtboardGraph>>,
 }
 
 #[derive(Debug, Clone)]
@@ -102,7 +111,7 @@ enum RuntimeNestedAnimationInstance {
 
 impl ArtboardInstance {
     pub fn from_graph(file: &RuntimeFile, graph: &ArtboardGraph) -> Result<Self> {
-        Self::from_graph_inner(file, graph, &[], &mut BTreeSet::new())
+        Self::from_graph_inner(file, graph, &[], &mut BTreeSet::new(), None)
     }
 
     pub fn from_graph_with_artboards(
@@ -110,7 +119,11 @@ impl ArtboardInstance {
         graph: &ArtboardGraph,
         artboards: &[ArtboardGraph],
     ) -> Result<Self> {
-        Self::from_graph_inner(file, graph, artboards, &mut BTreeSet::new())
+        let context = RuntimeArtboardBuildContext {
+            file: Arc::new(file.clone()),
+            artboards: Arc::new(artboards.to_vec()),
+        };
+        Self::from_graph_inner(file, graph, artboards, &mut BTreeSet::new(), Some(context))
     }
 
     fn from_graph_inner(
@@ -118,6 +131,7 @@ impl ArtboardInstance {
         graph: &ArtboardGraph,
         artboards: &[ArtboardGraph],
         visiting: &mut BTreeSet<u32>,
+        build_context: Option<RuntimeArtboardBuildContext>,
     ) -> Result<Self> {
         let inserted = visiting.insert(graph.global_id);
         let dimensions =
@@ -189,7 +203,13 @@ impl ArtboardInstance {
         let artboard_list_bindings = build_artboard_list_bindings(file, graph);
         apply_initial_solo_collapses(&objects, &solos, &mut components, &component_by_local);
         let nested_artboards = if inserted {
-            build_runtime_nested_artboard_instances(file, graph, artboards, visiting)?
+            build_runtime_nested_artboard_instances(
+                file,
+                graph,
+                artboards,
+                visiting,
+                build_context.clone(),
+            )?
         } else {
             BTreeMap::new()
         };
@@ -219,6 +239,8 @@ impl ArtboardInstance {
             state_machines,
             nested_artboards,
             newly_uncollapsed_nested_artboards: BTreeSet::new(),
+            graph_global_id: graph.global_id,
+            build_context,
             artboard_data_bind_values,
             artboard_property_bindings,
             artboard_custom_property_bindings,
@@ -954,6 +976,12 @@ impl ArtboardInstance {
         property_key: u16,
     ) -> bool {
         let mut changed = false;
+        if self.slot(local_id).and_then(|slot| slot.type_name) == Some("NestedArtboard")
+            && property_key_for_name("NestedArtboard", "artboardId") == Some(property_key)
+            && let Some(value) = self.uint_property(local_id, property_key)
+        {
+            changed |= self.set_nested_artboard_artboard_id(local_id, value);
+        }
         if solo_active_component_id_property_key() == Some(property_key) {
             changed |= self.propagate_solo_collapse(local_id);
         }
@@ -1082,6 +1110,66 @@ impl ArtboardInstance {
             return false;
         };
         nested.set_quantize(value)
+    }
+
+    pub(crate) fn set_nested_artboard_artboard_id(&mut self, local_id: usize, value: u64) -> bool {
+        let Some(nested) = self.runtime_nested_artboard_instance_for_id(local_id, value) else {
+            return self.nested_artboards.remove(&local_id).is_some();
+        };
+        self.nested_artboards.insert(local_id, nested);
+        self.sync_nested_artboard_root_opacity(local_id);
+        true
+    }
+
+    fn runtime_nested_artboard_instance_for_id(
+        &self,
+        host_local_id: usize,
+        artboard_id: u64,
+    ) -> Option<RuntimeNestedArtboardInstance> {
+        if artboard_id == u64::from(u32::MAX) {
+            return None;
+        }
+        let context = self.build_context.as_ref()?;
+        let artboard_index = usize::try_from(artboard_id).ok()?;
+        let referenced = context.file.artboard(artboard_index)?;
+        let child_graph = context
+            .artboards
+            .iter()
+            .find(|artboard| artboard.global_id == referenced.id)?;
+        if child_graph.global_id == self.graph_global_id {
+            return None;
+        }
+        let parent_graph = context
+            .artboards
+            .iter()
+            .find(|artboard| artboard.global_id == self.graph_global_id)?;
+        let mut visiting = BTreeSet::new();
+        visiting.insert(self.graph_global_id);
+        build_runtime_nested_artboard_instance(
+            &context.file,
+            parent_graph,
+            context.artboards.as_slice(),
+            host_local_id,
+            child_graph,
+            &mut visiting,
+            Some(context.clone()),
+            self.bool_property(
+                host_local_id,
+                property_key_for_name("NestedArtboard", "isPaused")?,
+            )
+            .unwrap_or(false),
+            self.double_property(
+                host_local_id,
+                property_key_for_name("NestedArtboard", "speed")?,
+            )
+            .unwrap_or(1.0),
+            self.double_property(
+                host_local_id,
+                property_key_for_name("NestedArtboard", "quantize")?,
+            )
+            .unwrap_or(-1.0),
+        )
+        .ok()
     }
 
     fn apply_nested_trigger_property_changed(
@@ -1445,6 +1533,7 @@ fn build_runtime_nested_artboard_instances(
     graph: &ArtboardGraph,
     artboards: &[ArtboardGraph],
     visiting: &mut BTreeSet<u32>,
+    build_context: Option<RuntimeArtboardBuildContext>,
 ) -> Result<BTreeMap<usize, RuntimeNestedArtboardInstance>> {
     if artboards.is_empty() {
         return Ok(BTreeMap::new());
@@ -1472,28 +1561,53 @@ fn build_runtime_nested_artboard_instances(
             continue;
         }
 
-        let mut child = Box::new(ArtboardInstance::from_graph_inner(
+        let instance = build_runtime_nested_artboard_instance(
             file,
-            child_graph,
+            graph,
             artboards,
-            visiting,
-        )?);
-        child.bind_default_view_model_artboard_list_context(file);
-        let animations = runtime_nested_animation_instances(file, graph, host.local_id, &child);
-        nested_artboards.insert(
             host.local_id,
-            RuntimeNestedArtboardInstance {
-                child,
-                animations,
-                is_paused: host_object.bool_property("isPaused").unwrap_or(false),
-                speed: host_object.double_property("speed").unwrap_or(1.0),
-                quantize: host_object.double_property("quantize").unwrap_or(-1.0),
-                cumulated_seconds: 0.0,
-            },
-        );
+            child_graph,
+            visiting,
+            build_context.clone(),
+            host_object.bool_property("isPaused").unwrap_or(false),
+            host_object.double_property("speed").unwrap_or(1.0),
+            host_object.double_property("quantize").unwrap_or(-1.0),
+        )?;
+        nested_artboards.insert(host.local_id, instance);
     }
 
     Ok(nested_artboards)
+}
+
+fn build_runtime_nested_artboard_instance(
+    file: &RuntimeFile,
+    parent_graph: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+    host_local_id: usize,
+    child_graph: &ArtboardGraph,
+    visiting: &mut BTreeSet<u32>,
+    build_context: Option<RuntimeArtboardBuildContext>,
+    is_paused: bool,
+    speed: f32,
+    quantize: f32,
+) -> Result<RuntimeNestedArtboardInstance> {
+    let mut child = Box::new(ArtboardInstance::from_graph_inner(
+        file,
+        child_graph,
+        artboards,
+        visiting,
+        build_context,
+    )?);
+    child.bind_default_view_model_artboard_list_context(file);
+    let animations = runtime_nested_animation_instances(file, parent_graph, host_local_id, &child);
+    Ok(RuntimeNestedArtboardInstance {
+        child,
+        animations,
+        is_paused,
+        speed,
+        quantize,
+        cumulated_seconds: 0.0,
+    })
 }
 
 fn runtime_nested_animation_instances(
@@ -1712,6 +1826,8 @@ mod tests {
             state_machines: Vec::new(),
             nested_artboards: BTreeMap::new(),
             newly_uncollapsed_nested_artboards: BTreeSet::new(),
+            graph_global_id: 0,
+            build_context: None,
             artboard_data_bind_values: BTreeMap::new(),
             artboard_property_bindings: Vec::new(),
             artboard_custom_property_bindings: Vec::new(),

@@ -49,6 +49,7 @@ pub(super) struct RuntimeArtboardNestedHostBindingInstance {
 
 #[derive(Debug, Clone, Copy)]
 enum RuntimeArtboardNestedHostProperty {
+    ArtboardId { property_key: u16 },
     IsPaused { property_key: u16 },
     Speed { property_key: u16 },
     Quantize { property_key: u16 },
@@ -231,6 +232,7 @@ pub(super) fn build_artboard_nested_host_bindings(
     let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
         return Vec::new();
     };
+    let artboard_id_key = property_key_for_name("NestedArtboard", "artboardId");
     let is_paused_key = property_key_for_name("NestedArtboard", "isPaused");
     let speed_key = property_key_for_name("NestedArtboard", "speed");
     let quantize_key = property_key_for_name("NestedArtboard", "quantize");
@@ -249,7 +251,9 @@ pub(super) fn build_artboard_nested_host_bindings(
             }
             let property_key =
                 u16::try_from(data_bind.object.uint_property("propertyKey")?).ok()?;
-            let property = if Some(property_key) == is_paused_key {
+            let property = if Some(property_key) == artboard_id_key {
+                RuntimeArtboardNestedHostProperty::ArtboardId { property_key }
+            } else if Some(property_key) == is_paused_key {
                 RuntimeArtboardNestedHostProperty::IsPaused { property_key }
             } else if Some(property_key) == speed_key {
                 RuntimeArtboardNestedHostProperty::Speed { property_key }
@@ -710,6 +714,13 @@ impl ArtboardInstance {
         value: &RuntimeDataBindGraphValue,
     ) -> bool {
         match (binding.property, value) {
+            (
+                RuntimeArtboardNestedHostProperty::ArtboardId { property_key },
+                RuntimeDataBindGraphValue::Artboard(value),
+            ) => {
+                let changed = self.set_uint_property(binding.target_local_id, property_key, *value);
+                changed || self.set_nested_artboard_artboard_id(binding.target_local_id, *value)
+            }
             (
                 RuntimeArtboardNestedHostProperty::IsPaused { property_key },
                 RuntimeDataBindGraphValue::Boolean(value),

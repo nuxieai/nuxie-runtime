@@ -415,7 +415,8 @@ fn ensure_static_draw_supported(graph: &GraphFile, artboard: &ArtboardGraph) -> 
             && type_name != "DistanceConstraint"
             && type_name != "TranslationConstraint"
             && type_name != "RotationConstraint"
-            && type_name != "ScaleConstraint")
+            && type_name != "ScaleConstraint"
+            && type_name != "TransformConstraint")
             .then_some((type_name, object.global_id))
     }) {
         bail!(

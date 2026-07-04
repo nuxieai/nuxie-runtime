@@ -49,6 +49,9 @@ fn apply_constraint(
         Some("ScaleConstraint") => {
             apply_scale_constraint(artboard, component_index, constraint_local)
         }
+        Some("TransformConstraint") => {
+            apply_transform_constraint(artboard, component_index, constraint_local)
+        }
         _ => false,
     }
 }
@@ -523,6 +526,122 @@ fn apply_scale_constraint(
     components_b.skew = components_a.skew;
 
     write_world_transform(artboard, component_index, Mat2D::compose(components_b))
+}
+
+fn apply_transform_constraint(
+    artboard: &mut ArtboardInstance,
+    component_index: usize,
+    constraint_local: usize,
+) -> bool {
+    // Ported from C++ `src/constraints/transform_constraint.cpp`.
+    let Some(target_index) = targeted_constraint_target_local(artboard, constraint_local)
+        .and_then(|target_local| artboard.component_by_local.get(&target_local).copied())
+    else {
+        return false;
+    };
+    if artboard.components[target_index].is_collapsed() {
+        return false;
+    }
+
+    let transform_a = artboard.components[component_index]
+        .transform
+        .world_transform;
+    let mut transform_b =
+        target_transform_for_transform_constraint(artboard, target_index, constraint_local);
+    if transform_space(
+        artboard,
+        constraint_local,
+        "TransformSpaceConstraint",
+        "sourceSpaceValue",
+    ) == TransformSpace::Local
+    {
+        let Some(inverse) = invert(parent_world_transform(artboard, target_index)) else {
+            return false;
+        };
+        transform_b = inverse.multiply(transform_b);
+    }
+    if transform_space(
+        artboard,
+        constraint_local,
+        "TransformSpaceConstraint",
+        "destSpaceValue",
+    ) == TransformSpace::Local
+    {
+        transform_b = parent_world_transform(artboard, component_index).multiply(transform_b);
+    }
+
+    constrain_world(
+        artboard,
+        component_index,
+        transform_a,
+        transform_b,
+        constraint_double(artboard, constraint_local, "Constraint", "strength", 1.0),
+    )
+}
+
+fn target_transform_for_transform_constraint(
+    artboard: &ArtboardInstance,
+    target_index: usize,
+    constraint_local: usize,
+) -> Mat2D {
+    let (left, top, width, height) = constraint_bounds(artboard, target_index);
+    let origin_x = constraint_double(
+        artboard,
+        constraint_local,
+        "TransformConstraint",
+        "originX",
+        0.0,
+    );
+    let origin_y = constraint_double(
+        artboard,
+        constraint_local,
+        "TransformConstraint",
+        "originY",
+        0.0,
+    );
+    artboard.components[target_index]
+        .transform
+        .world_transform
+        .multiply(Mat2D([
+            1.0,
+            0.0,
+            0.0,
+            1.0,
+            left + width * origin_x,
+            top + height * origin_y,
+        ]))
+}
+
+fn constraint_bounds(
+    _artboard: &ArtboardInstance,
+    _component_index: usize,
+) -> (f32, f32, f32, f32) {
+    // C++ `TransformComponent::constraintBounds()` defaults to an empty AABB.
+    // Text/LayoutComponent overrides stay behind their M6 gates for now.
+    (0.0, 0.0, 0.0, 0.0)
+}
+
+fn constrain_world(
+    artboard: &mut ArtboardInstance,
+    component_index: usize,
+    from: Mat2D,
+    to: Mat2D,
+    strength: f32,
+) -> bool {
+    let components_from = from.decompose();
+    let mut components_to = to.decompose();
+    let t = strength;
+    let ti = 1.0 - t;
+
+    components_to.rotation =
+        interpolated_rotation(components_from.rotation, components_to.rotation, t);
+    components_to.x = components_from.x * ti + components_to.x * t;
+    components_to.y = components_from.y * ti + components_to.y * t;
+    components_to.scale_x = components_from.scale_x * ti + components_to.scale_x * t;
+    components_to.scale_y = components_from.scale_y * ti + components_to.scale_y * t;
+    components_to.skew = components_from.skew * ti + components_to.skew * t;
+
+    write_world_transform(artboard, component_index, Mat2D::compose(components_to))
 }
 
 fn apply_translation_constraint(

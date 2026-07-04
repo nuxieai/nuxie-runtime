@@ -2050,9 +2050,8 @@ features = ["type-key:128:Event", "type-key:171:KeyFrameCallback", "type-key:18:
 id = "transform_constraint"
 path = "tests/unit_tests/assets/transform_constraint.riv"
 samples = [0.0]
-status = "unsupported-feature"
-milestone = "M3"
-features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:2:Node", "type-key:3:Shape", "type-key:7:Rectangle", "type-key:83:TransformConstraint", "rust-runner-unsupported:constraints"]
+status = "exact"
+features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:2:Node", "type-key:3:Shape", "type-key:7:Rectangle", "type-key:83:TransformConstraint"]
 
 [[file]]
 id = "transition_actions"

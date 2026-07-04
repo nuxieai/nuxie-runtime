@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 343 across 74 exact files
-- Parked breakdown (from `make golden-compare`): M3=16 M4=83 M5=8 M6=72 gated=6 harness=36
+- Exact segments (file × sample): 344 across 75 exact files
+- Parked breakdown (from `make golden-compare`): M3=15 M4=83 M5=8 M6=72 gated=6 harness=36
 - Current milestone: **M3 — Interactivity Exact (#V2-4)**
 
 ## Milestones
@@ -23,17 +23,16 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue M3 constraints. `DistanceConstraint`, `TranslationConstraint`,
-   `RotationConstraint`, and `ScaleConstraint` now run from
-   `crates/rive-runtime/src/constraints.rs`, apply after world-transform
-   updates, and `distance_constraint.riv`, `translation_constraint.riv`, and
-   `rotation_constraint.riv`, and `scale_constraint.riv` are exact. The M3
-   parked queue has 16 files, still gated by
+   `RotationConstraint`, `ScaleConstraint`, and `TransformConstraint` now run
+   from `crates/rive-runtime/src/constraints.rs`, apply after world-transform
+   updates, and `distance_constraint.riv`, `translation_constraint.riv`,
+   `rotation_constraint.riv`, `scale_constraint.riv`, and
+   `transform_constraint.riv` are exact. The M3 parked queue has 15 files,
+   still gated by
    `rust-runner-unsupported:constraints`; query with
-   `grep -B6 'milestone = "M3"' corpus.toml`. Port the
-   decompose/compose-backed `TransformConstraint` slice next for
-   `transform_constraint.riv`.
-2. After basic transform/distance constraints, continue M3 with
-   FollowPathConstraint and IK/skin-dependent constraint files
+   `grep -B6 'milestone = "M3"' corpus.toml`. Continue M3 with
+   FollowPathConstraint and IK/skin-dependent constraint files.
+2. Port the remaining M3 constraint families in corpus order
    (`follow_path*`, `two_bone_ik`, `complex_ik_dependency`) before returning
    to handle-source world-space math and nested-remap joystick advancement
    if a corpus diff reaches those cases.
@@ -60,14 +59,18 @@ the only memory the next session has. Update it every commit.
   interpolation for CubicEase/CubicValue/Elastic keyframe interpolators, and
   `DistanceConstraint` world-translation application and
   `TranslationConstraint` target/source/destination/min-max translation
-  application, `RotationConstraint` compose/decompose rotation, and
-  `ScaleConstraint` compose/decompose scale
-  application without custom handle-source world-space math or nested remap
-  dependent advancement.
+  application, `RotationConstraint` compose/decompose rotation,
+  `ScaleConstraint` compose/decompose scale, and `TransformConstraint`
+  target-origin full-transform interpolation. Custom handle-source
+  world-space math and nested remap dependent advancement are still not
+  supported.
   Golden runner sample lists now advance by sorted absolute-time deltas and reuse render paths
   across samples;
-  no images, text, nested artboards, transform/IK/follow-path constraints, or
+  no images, text, nested artboards, IK/follow-path/scroll constraints, or
   scripted input.
+- `TransformConstraint` currently covers the default empty
+  `TransformComponent::constraintBounds()` path. Text/LayoutComponent
+  constraint bounds remain parked behind their M6 text/layout diagnostics.
 - Per-file parked reasons now live in `corpus.toml`: each gated entry
   carries `milestone = "M3|M4|M5|M6|gated|harness"` plus its diagnostic
   feature tags (`rust-runner-unsupported:*`, `cpp-runner-crash`,
@@ -458,4 +461,14 @@ the only memory the next session has. Update it every commit.
   renderer backlog. Exact segments are now 343 across 74 exact files; `make
   golden-compare` reports `exact=74`, `exact-segments=343`, `diverges=0`,
   `unsupported-feature=221`, `not-yet=0`, parked `M3=16`, and
+  `cargo test --workspace` passes.
+- 2026-07-04: [M3] Ported `TransformConstraint` from C++
+  `src/constraints/transform_constraint.cpp`, including target-origin
+  transform construction, source/destination transform-space mapping, and
+  full transform-component interpolation via the shared compose/decompose
+  helpers, narrowed the Rust golden-runner constraint gate for transform
+  constraints, and promoted `transform_constraint.riv` to exact. Exact
+  segments are now 344 across 75 exact files; `make golden-compare` reports
+  `exact=75`, `exact-segments=344`, `diverges=0`,
+  `unsupported-feature=220`, `not-yet=0`, parked `M3=15`, and
   `cargo test --workspace` passes.

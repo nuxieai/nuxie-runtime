@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 412 across 104 exact files
-- Parked breakdown (from `make golden-compare`): M4=61 M5=8 M6=80 gated=6 harness=36
+- Exact segments (file × sample): 414 across 106 exact files
+- Parked breakdown (from `make golden-compare`): M4=59 M5=8 M6=80 gated=6 harness=36
 - Current milestone: **M4 — Nested Artboards And Lists Exact (#V2-5)**
 
 ## Milestones
@@ -24,19 +24,19 @@ the only memory the next session has. Update it every commit.
 
 1. Continue M4 with the smallest remaining pure nested-artboard runtime slice.
    Query the queue with `grep -B6 'milestone = "M4"' corpus.toml`; the raw
-   queue starts with `scroll_test.riv`, but that file carries
-   `ScrollConstraint`/layout runtime work and should be skipped or reclassified
-   until M6. The smallest useful M4 slice is now the stateful nested
-   view-model cluster: `unbound_stateful_component.riv`, then
-   `library_vmtest_1_host.riv`.
-2. Next code slice should port the C++ `NestedArtboard` stateful child
-   view-model binding/data-context path enough to promote one of those files,
-   before taking `NestedArtboardLayout`, `NestedArtboardLeaf`, nested remap
-   inputs, or component-list instancing.
-3. Plain static `NestedArtboard` draw and default nested
+   queue now starts with `advance_blend_mode.riv`.
+2. Next code slice should port C++ nested host remap/input controls
+   (`NestedNumber`, `NestedBool`, `NestedTrigger`, `NestedRemapAnimation`)
+   enough to promote `advance_blend_mode.riv`, then the adjacent remap/input
+   cluster. Keep data-bound host swaps/controls, nested child non-color
+   data-bind targets, focus data, nested layout/leaf, scroll, text, and images
+   parked behind diagnostics.
+3. Plain static `NestedArtboard` draw, default nested
    simple-animation/state-machine host advancement are closed for the current
-   sample-0 corpus slice. Exact promoted files now include the earlier static
-   set plus `library_export_animation_test.riv`,
+   sample-0 corpus slice, and nested child unbound SolidColor data-bind
+   defaults are closed for `library_vmtest_1_host.riv` and
+   `unbound_stateful_component.riv`. Exact promoted files now include the
+   earlier static set plus `library_export_animation_test.riv`,
    `library_export_state_machine_test.riv`, `ball_test.riv`,
    `data_binding_test_3.riv`, `data_binding_test_triggers.riv`,
    `databind_external_artboard_main.riv`, `drag_event.riv`, `multitouch.riv`,
@@ -78,17 +78,21 @@ the only memory the next session has. Update it every commit.
   `ListFollowPathConstraint` registration/application over component-list item
   transform slices once M4 list instances populate them, and parametric
   Star/Polygon local path sampling for follow-path targets, plus static plain
-  `NestedArtboard` host draw with child root opacity inheritance and default
+  `NestedArtboard` host draw with child root opacity inheritance, default
   nested simple-animation/state-machine hosts backed by persistent child
-  artboard instances. Custom handle-source world-space math, nested remap
-  inputs, nested bool/number/trigger inputs, data-bound nested host controls
-  (`artboardId` runtime swaps, pause, speed, quantize), stateful child
-  view-model binding, nested listener/event propagation, `NestedArtboardLayout`
-  / `NestedArtboardLeaf`, and component-list instancing are still not
+  artboard instances, stateful child `ViewModelInstance` subtree admission
+  under plain nested hosts, and nested child unbound SolidColor data-bind
+  defaults. Custom handle-source world-space math, nested remap inputs, nested
+  bool/number/trigger inputs, data-bound nested host controls (`artboardId`
+  runtime swaps, pause, speed, quantize), nested child non-color data-bind
+  targets, focus data, bound stateful child view-model propagation, nested
+  listener/event propagation, `NestedArtboardLayout` / `NestedArtboardLeaf`,
+  and layout-backed or virtualized component-list instancing are still not
   supported.
   Golden runner sample lists now advance by sorted absolute-time deltas and
   reuse render paths across samples; no images, text, nested remap/input
-  hosts, nested layout/leaf, scroll constraints, or component-list instancing.
+  hosts, nested layout/leaf, scroll constraints, or layout-backed/virtualized
+  component-list instancing.
   Harness-level scripted input replay dispatches
   pointerDown/pointerMove/pointerUp/pointerExit markers into direct rectangle
   state-machine listeners with listener input actions, direct rectangle
@@ -226,441 +230,10 @@ the only memory the next session has. Update it every commit.
 
 ## Log
 
-- Completed-milestone entries (M0, M1) are archived verbatim in
+- Completed-milestone entries (M0 through M3) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
-- Older active M2 entries are archived verbatim in `docs/v2-log-archive.md`
-  under `M2 active log rolloff`; keep only the recent rolling window here once
-  Metric, Next, Decisions, and `corpus.toml` capture the current state.
 
-- 2026-07-04: [M2] Widened `library_data_enum_test.riv` from samples `0`,
-  `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
-  `1.0`, keeping passive custom-enum/view-model state-machine playback exact
-  across the fifth sample. Exact segments are now 298 across 70 exact files;
-  `make golden-compare` reports `exact=70`, `exact-segments=298`,
-  `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
-  `cargo test --workspace` passes.
-- 2026-07-04: [M2] Widened `light_switch.riv` from samples `0`, `0.25`,
-  `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and `1.0`,
-  keeping passive listener/bool transition playback exact across the fifth
-  sample. Exact segments are now 299 across 70 exact files; `make
-  golden-compare` reports `exact=70`, `exact-segments=299`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-04: [M2] Widened `list_to_path.riv`, `lock_icon_demo.riv`,
-  `long_name.riv`, `looping_timeline_events.riv`, and
-  `multiple_state_machines.riv` from samples `0`, `0.25`, `0.5`, and
-  `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and `1.0`, keeping list
-  path, skinned lock icon, long-name static animation, looping timeline
-  events, and passive multi-state-machine playback exact across the fifth
-  sample. Exact segments are now 304 across 70 exact files; `make
-  golden-compare` reports `exact=70`, `exact-segments=304`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-04: [M2] Widened `nested_solo.riv`, `off_road_car.riv`,
-  `oneshotblend.riv`, `opaque_hit_test.riv`, and `quantize_test.riv` from
-  samples `0`, `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`,
-  `0.75`, and `1.0`, keeping Solo collapse, the large off-road car skin/
-  draw-rule fixture, one-shot blend, opaque hit-test, and quantized keyed
-  animation playback exact across the fifth sample. Exact segments are now
-  309 across 70 exact files; `make golden-compare` reports `exact=70`,
-  `exact-segments=309`, `diverges=0`, `unsupported-feature=225`,
-  `not-yet=0`, and `cargo test --workspace` passes.
-- 2026-07-04: [M2] Widened `rapid_pointer_events.riv`,
-  `remove_from_list.riv`, `rocket.riv`, `script_paths_opacity_test.riv`, and
-  `script_paths_test.riv` from samples `0`, `0.25`, `0.5`, and `0.75` to
-  samples `0`, `0.25`, `0.5`, `0.75`, and `1.0`, keeping passive pointer
-  listener/data-bind playback, list-removal metadata, the rocket draw-rule
-  fixture, and passive script-path animation exact across the fifth sample.
-  Exact segments are now 314 across 70 exact files; `make golden-compare`
-  reports `exact=70`, `exact-segments=314`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-04: [M2] Widened `scripted_boolean.riv`,
-  `scripted_enum.riv`, `scripted_graph.riv`, `scripted_string.riv`, and
-  `settler.riv` from samples `0`, `0.25`, `0.5`, and `0.75` to samples `0`,
-  `0.25`, `0.5`, `0.75`, and `1.0`, keeping passive scripted view-model
-  playback and CubicEase keyed double animation exact across the fifth
-  sample. Exact segments are now 319 across 70 exact files; `make
-  golden-compare` reports `exact=70`, `exact-segments=319`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-04: [M2] Widened `solo_test.riv`,
-  `solos_collapse_tests.riv`, `solos_with_nested_artboards.riv`,
-  `sound.riv`, and `sound2.riv` from samples `0`, `0.25`, `0.5`, and `0.75`
-  to samples `0`, `0.25`, `0.5`, `0.75`, and `1.0`, keeping Solo active
-  child/collapse playback, passive nested-artboard metadata, and audio/open-url
-  event metadata exact across the fifth sample. Exact segments are now 324
-  across 70 exact files; `make golden-compare` reports `exact=70`,
-  `exact-segments=324`, `diverges=0`, `unsupported-feature=225`,
-  `not-yet=0`, and `cargo test --workspace` passes.
-- 2026-07-04: [M2] Widened `stacked_path_effects.riv`,
-  `state_machine_transition.riv`, and `state_machine_triggers.riv` from
-  samples `0`, `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`,
-  `0.75`, and `1.0`, keeping stacked trim/dash path effects and passive
-  trigger/bool state-machine transition playback exact across the fifth
-  sample. Exact segments are now 327 across 70 exact files; `make
-  golden-compare` reports `exact=70`, `exact-segments=327`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-04: [M2] Widened `stateful_list_props.riv`,
-  `stroke_name_test.riv`, `test_elastic.riv`, `text_input_event.riv`, and
-  `timeline_event_test.riv` from samples `0`, `0.25`, `0.5`, and `0.75` to
-  samples `0`, `0.25`, `0.5`, `0.75`, and `1.0`, keeping passive
-  stateful-list/view-model playback, stroke/fill naming, ElasticInterpolator,
-  text-input listener metadata, and timeline callback events exact across the
-  fifth sample. Exact segments are now 332 across 70 exact files; `make
-  golden-compare` reports `exact=70`, `exact-segments=332`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-04: [M2] Widened `trim_path.riv`, `trim_path_linear.riv`,
-  `two_artboards.riv`, and `viewmodel_runtime_file.riv` from samples `0`,
-  `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
-  `1.0`, keeping TrimPath, linear TrimPath, selected-artboard animation, and
-  passive view-model metadata playback exact across the fifth sample. Exact
-  segments are now 336 across 70 exact files; `make golden-compare` reports
-  `exact=70`, `exact-segments=336`, `diverges=0`, `unsupported-feature=225`,
-  `not-yet=0`, and `cargo test --workspace` passes.
-- 2026-07-04: [M2] Widened `pointer_events.riv` from samples `0`, `0.1`,
-  and `0.25` to samples `0`, `0.1`, `0.25`, `0.5`, `0.75`, and `1.0`,
-  keeping passive listener/bool pointer-event playback exact across the
-  standard M2 sample set while leaving scripted pointer dispatch in M3 scope.
-  Exact segments are now 339 across 70 exact files; `make golden-compare`
-  reports `exact=70`, `exact-segments=339`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-04: [M2] Extracted ArtboardInstance artboard data-bind propagation
-  and list-binding query methods from `crates/rive-runtime/src/lib.rs` to
-  `crates/rive-runtime/src/artboard_data_bind.rs`, reducing root runtime
-  coupling while preserving the generated `InstanceObjectStorage` mutation
-  path. Exact segments remain 339 across 70 exact files; `make
-  golden-compare` reports `exact=70`, `exact-segments=339`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-04: [M2] Moved the artboard data-bind binding structs and import
-  builders from `crates/rive-runtime/src/lib.rs` into
-  `crates/rive-runtime/src/artboard_data_bind.rs`, keeping root runtime state
-  construction thin while preserving the generated `InstanceObjectStorage`
-  authored-property path. Exact segments remain 339 across 70 exact files;
-  `make golden-compare` reports `exact=70`, `exact-segments=339`,
-  `diverges=0`, `unsupported-feature=225`, `not-yet=0`, and
-  `cargo test --workspace` passes.
-- 2026-07-04: [M2] Moved the default view-model source handle types from
-  `crates/rive-runtime/src/lib.rs` into `crates/rive-runtime/src/view_model.rs`
-  and re-exported them from the crate root, starting the data-bind
-  graph/default-view-model bridge extraction without changing graph execution.
-  Exact segments remain 339 across 70 exact files; `make golden-compare`
-  reports `exact=70`, `exact-segments=339`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-04: [M2] Moved the imported view-model source handle types from
-  `crates/rive-runtime/src/lib.rs` into `crates/rive-runtime/src/view_model.rs`
-  and re-exported them from the crate root, leaving imported context mutation
-  behavior in place while shrinking the root data-bind bridge. Exact segments
-  remain 339 across 70 exact files; `make golden-compare` reports `exact=70`,
-  `exact-segments=339`, `diverges=0`, `unsupported-feature=225`,
-  `not-yet=0`, and `cargo test --workspace` passes.
-- 2026-07-04: [M2] Moved `RuntimeImportedViewModelInstanceContext` storage and
-  public mutation methods from `crates/rive-runtime/src/lib.rs` into
-  `crates/rive-runtime/src/view_model.rs`, re-exporting the context from the
-  crate root while keeping the data-bind graph bridge in place for the next
-  extraction slice. Exact segments remain 339 across 70 exact files; `make
-  golden-compare` reports `exact=70`, `exact-segments=339`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-04: [M2] Added `crates/rive-runtime/src/data_bind_graph.rs` for
-  data-bind graph state, imported-context keys, override keys, default-binding
-  records, source/target handles, and formula random-source state while leaving
-  behavior-heavy graph impls in `crates/rive-runtime/src/lib.rs` for the next
-  extraction slice. Exact segments remain 339 across 70 exact files; `make
-  golden-compare` reports `exact=70`, `exact-segments=339`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-04: [M2] Moved the data-bind graph source/target node,
-  converter/value, apply-phase, and stateful-advance type definitions from
-  `crates/rive-runtime/src/lib.rs` into
-  `crates/rive-runtime/src/data_bind_graph.rs`, leaving graph value resolution,
-  graph behavior, and target mutator bridge impls in `lib.rs` for the next
-  extraction slices. Exact segments remain 339 across 70 exact files; `make
-  golden-compare` reports `exact=70`, `exact-segments=339`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-04: [M2] Moved the `RuntimeDataBindGraphValue` owned/imported
-  view-model resolution impl from `crates/rive-runtime/src/lib.rs` into
-  `crates/rive-runtime/src/data_bind_graph.rs`, keeping resolver methods
-  crate-visible while the remaining graph execution and target mutator bridge
-  are extracted. Exact segments remain 339 across 70 exact files; `make
-  golden-compare` reports `exact=70`, `exact-segments=339`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-04: [M2] Moved data-bind direction flag helpers and
-  `RuntimeDataBindGraphTargetsMut` target application from
-  `crates/rive-runtime/src/lib.rs` into
-  `crates/rive-runtime/src/data_bind_graph.rs`, leaving the remaining graph
-  execution/converter-state bridge as the next extraction slice. Exact
-  segments remain 339 across 70 exact files; `make golden-compare` reports
-  `exact=70`, `exact-segments=339`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-04: [M2] Moved the `RuntimeDataBindGraphConverterState` bridge impl
-  from `crates/rive-runtime/src/lib.rs` into
-  `crates/rive-runtime/src/data_bind_graph.rs`, keeping the conversion
-  engine helpers in `lib.rs` for the next extraction slice while shrinking the
-  root graph bridge. Exact segments remain 339 across 70 exact files; `make
-  golden-compare` reports `exact=70`, `exact-segments=339`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-04: [M2] Moved the `RuntimeDataBindGraph` and
-  `RuntimeDataBindGraphSourceNode` execution impls from
-  `crates/rive-runtime/src/lib.rs` into
-  `crates/rive-runtime/src/data_bind_graph.rs`, keeping converter
-  state/formula/interpolator helper types and converter construction helpers
-  in `lib.rs` for the next extraction slice. Exact segments remain 339 across
-  70 exact files; `make golden-compare` reports `exact=70`,
-  `exact-segments=339`, `diverges=0`, `unsupported-feature=225`,
-  `not-yet=0`, and `cargo test --workspace` passes.
-- 2026-07-04: [M2] Moved the data-bind graph converter
-  state/formula/interpolator helper types, owned view-model source-path
-  helpers, converter conversion/evaluation helpers, and converter
-  construction helpers from `crates/rive-runtime/src/lib.rs` into
-  `crates/rive-runtime/src/data_bind_graph.rs`, with artboard/list binding
-  and state-machine bindable builders importing the graph helpers directly.
-  Exact segments remain 339 across 70 exact files; `make golden-compare`
-  reports `exact=70`, `exact-segments=339`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-04: [M2] Extracted the draw/path/rendering command pipeline from
-  `crates/rive-runtime/src/lib.rs` into `crates/rive-runtime/src/draw.rs`,
-  including `ArtboardInstance` draw methods, draw/path command types, render
-  path cache, paint preallocation, path effect builders, renderer trait
-  driving, and color interpolation helpers used by animation/data-bind code.
-  Exact segments remain 339 across 70 exact files; `make golden-compare`
-  reports `exact=70`, `exact-segments=339`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-04: [M2] Moved `RuntimeOwnedViewModelInstance`, owned view-model
-  source handles, owned/default/imported property-path helpers,
-  `RuntimeViewModelPointer`, and runtime data-context lookup/reporting from
-  `crates/rive-runtime/src/lib.rs` into
-  `crates/rive-runtime/src/view_model.rs`, keeping the crate-root API/re-export
-  surface stable while shrinking the remaining root runtime state. Exact
-  segments remain 339 across 70 exact files; `make golden-compare` reports
-  `exact=70`, `exact-segments=339`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-04: [M2] Added `crates/rive-runtime/src/properties.rs` for shared
-  runtime property-key/object-value helpers, transform-key lookup,
-  joystick/Solo/paint key helpers, `mix_value`, artboard-index lookup, and
-  `RuntimeArtboardDimensions`, with animation, draw, components,
-  artboard-data-bind, and state-machine modules importing the helper surface
-  directly instead of through `lib.rs`. Exact segments remain 339 across 70
-  exact files; `make golden-compare` reports `exact=70`,
-  `exact-segments=339`, `diverges=0`, `unsupported-feature=225`,
-  `not-yet=0`, and `cargo test --workspace` passes.
-- 2026-07-04: [M2] Moved `ArtboardInstance`, core instance methods, and local
-  instance tests from `crates/rive-runtime/src/lib.rs` into
-  `crates/rive-runtime/src/artboard.rs`, leaving `lib.rs` as a 93-line
-  module/re-export hub and preserving crate-root `ArtboardInstance` as the
-  public API. Exact segments remain 339 across 70 exact files; `make
-  golden-compare` reports `exact=70`, `exact-segments=339`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-04: [M2] Completed the M2 exit audit and opened M3. The corpus has
-  295 entries with 70 exact files and no `diverges`/`not-yet` entries; exact
-  sample coverage is 66 files at the standard five-sample M2 set,
-  `pointer_events.riv` at six samples, and only the static M1 holdovers
-  `artboardclipping.riv`, `shapetest.riv`, and `trim.riv` at sample `0`.
-  All 225 parked entries carry milestones (`M3=21`, `M4=83`, `M5=8`,
-  `M6=72`, `gated=5`, `harness=36`), and all M3 parked files are currently
-  gated by `rust-runner-unsupported:constraints`.
-- 2026-07-04: [M3] Ported `DistanceConstraint` world-translation application
-  from C++ `src/constraints/distance_constraint.cpp`, added runtime component
-  constraint-local application after world-transform updates, narrowed the
-  Rust golden-runner constraint gate to keep only unimplemented constraint
-  kinds parked, and promoted `distance_constraint.riv` to exact. Exact
-  segments are now 340 across 71 exact files; `make golden-compare` reports
-  `exact=71`, `exact-segments=340`, `diverges=0`,
-  `unsupported-feature=224`, `not-yet=0`, parked `M3=20`, and
-  `cargo test --workspace` passes.
-- 2026-07-04: [M3] Ported `TranslationConstraint` from C++
-  `src/constraints/translation_constraint.cpp`, added shared
-  transform-space/parent-world/min-max constraint helpers, corrected targeted
-  constraints to resolve `targetId` as the artboard-local core id, narrowed
-  the Rust golden-runner constraint gate for translation constraints, and
-  promoted `translation_constraint.riv` to exact. Exact segments are now 341
-  across 72 exact files; `make golden-compare` reports `exact=72`,
-  `exact-segments=341`, `diverges=0`, `unsupported-feature=223`,
-  `not-yet=0`, parked `M3=19`, and `cargo test --workspace` passes.
-- 2026-07-04: [M3] Ported `RotationConstraint` from C++
-  `src/constraints/rotation_constraint.cpp`, added shared
-  `Mat2D::decompose`/`Mat2D::compose` runtime math from C++
-  `src/math/mat2d.cpp`, narrowed the Rust golden-runner constraint gate for
-  rotation constraints, and promoted `rotation_constraint.riv` to exact.
-  Exact segments are now 342 across 73 exact files; `make golden-compare`
-  reports `exact=73`, `exact-segments=342`, `diverges=0`,
-  `unsupported-feature=222`, `not-yet=0`, parked `M3=18`, and
-  `cargo test --workspace` passes.
-- 2026-07-04: [M3] Ported `ScaleConstraint` from C++
-  `src/constraints/scale_constraint.cpp`, reusing the compose/decompose
-  transform helpers for source/destination-space copying, min/max clamping,
-  authored-offset scale, and strength interpolation, narrowed the Rust
-  golden-runner constraint gate for scale constraints, promoted
-  `scale_constraint.riv` to exact, and reclassified `coin.riv` from M3
-  constraints to the explicit `rust-runner-unsupported:feather` gated
-  renderer backlog. Exact segments are now 343 across 74 exact files; `make
-  golden-compare` reports `exact=74`, `exact-segments=343`, `diverges=0`,
-  `unsupported-feature=221`, `not-yet=0`, parked `M3=16`, and
-  `cargo test --workspace` passes.
-- 2026-07-04: [M3] Ported `TransformConstraint` from C++
-  `src/constraints/transform_constraint.cpp`, including target-origin
-  transform construction, source/destination transform-space mapping, and
-  full transform-component interpolation via the shared compose/decompose
-  helpers, narrowed the Rust golden-runner constraint gate for transform
-  constraints, and promoted `transform_constraint.riv` to exact. Exact
-  segments are now 344 across 75 exact files; `make golden-compare` reports
-  `exact=75`, `exact-segments=344`, `diverges=0`,
-  `unsupported-feature=220`, `not-yet=0`, parked `M3=15`, and
-  `cargo test --workspace` passes.
-- 2026-07-04: [M3] Ported `FollowPathConstraint` from C++
-  `src/constraints/follow_path_constraint.cpp`, added runtime path geometry
-  sampling with current path/vertex/parametric property overlays, narrowed the
-  Rust golden-runner constraint gate for plain follow-path constraints,
-  promoted `follow_path.riv`, `follow_path_constraint.riv`,
-  `follow_path_path_0_opacity.riv`, `follow_path_solos.riv`, and
-  `follow_path_with_0_opacity.riv` to exact, reclassified
-  `follow_path_path.riv` to M6 text, and parked `follow_path_shapes.riv` on
-  the narrow `rust-runner-unsupported:follow-path-star-shapes` precision
-  diagnostic. Exact segments are now 349 across 80 exact files; `make
-  golden-compare` reports `exact=80`, `exact-segments=349`, `diverges=0`,
-  `unsupported-feature=215`, `not-yet=0`, parked `M3=9`, and
-  `cargo test --workspace` passes.
-- 2026-07-04: [M3] Ported `IKConstraint` from C++
-  `src/constraints/ik_constraint.cpp` plus the non-root Bone x/y override
-  from `src/bones/bone.cpp`, added runtime FK-chain solving for one-bone,
-  two-bone, and longer IK chains, narrowed the Rust golden-runner constraint
-  gate for IK, and promoted `complex_ik_dependency.riv` and
-  `two_bone_ik.riv` to exact. Exact segments are now 351 across 82 exact
-  files; `make golden-compare` reports `exact=82`,
-  `exact-segments=351`, `diverges=0`, `unsupported-feature=213`,
-  `not-yet=0`, parked `M3=7`, and `cargo test --workspace` passes.
-- 2026-07-04: [M3] Ported `ListFollowPathConstraint` from C++
-  `src/constraints/list_follow_path_constraint.cpp`, registering list
-  constraints from the graph and adding the runtime item-transform application
-  hook for M4 component-list instances, narrowed the Rust golden-runner
-  constraint gate for list follow-path constraints, and promoted
-  `component_list_follow_path.riv` and
-  `component_list_follow_path_distance.riv` to exact. Exact segments are now
-  353 across 84 exact files; `make golden-compare` reports `exact=84`,
-  `exact-segments=353`, `diverges=0`, `unsupported-feature=211`,
-  `not-yet=0`, parked `M3=5`, and `cargo test --workspace` passes.
-- 2026-07-04: [M3] Added the explicit
-  `rust-runner-unsupported:scroll-constraints` diagnostic and reclassified
-  `component_list_1.riv`, `deterministic_mode.riv`,
-  `draw_index_list.riv`, and `virtualize_blendmode.riv` from the M3
-  constraint queue to M6 layout/runtime support after confirming C++
-  `ScrollConstraint` depends on `LayoutComponent` metrics and registered
-  layout-provider children. Exact segments remain 353 across 84 exact files;
-  `make golden-compare` reports `exact=84`, `exact-segments=353`,
-  `diverges=0`, `unsupported-feature=211`, `not-yet=0`, parked `M3=1`,
-  and `cargo test --workspace` passes.
-- 2026-07-04: [M3] Promoted `follow_path_shapes.riv` to exact, removed the
-  narrow `rust-runner-unsupported:follow-path-star-shapes` gate, matched C++
-  matrix inversion/local-path composition more closely for follow-path draw
-  output, and bounded the remaining local path float-cancellation band with a
-  `golden-compare` comparator regression test. Exact segments are now 354
-  across 85 exact files; `make golden-compare` reports `exact=85`,
-  `exact-segments=354`, `diverges=0`, `unsupported-feature=210`,
-  `not-yet=0`, no parked M3 entries, and `cargo test --workspace` passes.
-- 2026-07-04: [M3] Landed Rust golden-runner `--input-script`
-  parsing/replay to match the C++ runner, added
-  `tests/input_scripts/pointer_events_click.txt`, and attached it to
-  `pointer_events.riv` as the first scripted exact corpus entry. The runner
-  now advances to input timestamps and records input markers; listener
-  hit-testing/action dispatch is still the next M3 runtime port. Exact
-  segments remain 354 across 85 exact files; `make golden-compare` reports
-  `exact=85`, `exact-segments=354`, `diverges=0`,
-  `unsupported-feature=210`, `not-yet=0`, no parked M3 entries, and
-  `cargo test --workspace` passes.
-- 2026-07-04: [M3] Ported direct rectangle pointer listener dispatch from C++
-  `StateMachineInstance::pointer*`/`updateListeners` into Rust, wired
-  `rust-golden-runner` input replay into the state machine, added listener
-  input actions plus primitive listener-owned default view-model writes, and
-  widened `rapid_pointer_events.riv` with a render-affecting
-  `tests/input_scripts/rapid_pointer_events_click.txt` script. Exact segments
-  are now 355 across 85 exact files; `make golden-compare` reports
-  `exact=85`, `exact-segments=355`, `diverges=0`,
-  `unsupported-feature=210`, `not-yet=0`, no parked M3 entries, and
-  `cargo test --workspace` passes.
-- 2026-07-04: [M3] Widened scripted pointer coverage for
-  `click_event.riv`, `hit_test_solos.riv`, and `opaque_hit_test.riv` with
-  render-affecting down/up scripts, adding sample `0.1` to each. Direct
-  C++/Rust stream diffs match for all three scripted fixtures. Exact segments
-  are now 358 across 85 exact files; `make golden-compare` reports
-  `exact=85`, `exact-segments=358`, `diverges=0`,
-  `unsupported-feature=210`, `not-yet=0`, no parked M3 entries, and
-  `cargo test --workspace` passes.
-- 2026-07-04: [M3] Widened scripted pointer coverage for
-  `state_machine_triggers.riv`, `state_machine_transition.riv`,
-  `light_switch.riv`, `event_on_listener.riv`, `event_trigger_event.riv`,
-  and `events_on_states.riv` with render-affecting down/up scripts and sample
-  `0.1`. Direct C++/Rust stream diffs match for all six scripted fixtures.
-  Exact segments are now 364 across 85 exact files; `make golden-compare`
-  reports `exact=85`, `exact-segments=364`, `diverges=0`,
-  `unsupported-feature=210`, `not-yet=0`, no parked M3 entries, and
-  `cargo test --workspace` passes.
-- 2026-07-04: [M3] Ported the direct-rectangle click phase slice from C++
-  `ListenerGroup`, fixed `ListenerViewModelChange` trigger actions to
-  invalidate the bindable trigger target-to-source data-bind path, and added
-  `tests/input_scripts/bindable_artboard_child_click.txt` for
-  `bindable_artboard_child.riv`. Exact segments are now 365 across 85 exact
-  files; `make golden-compare` reports `exact=85`, `exact-segments=365`,
-  `diverges=0`, `unsupported-feature=210`, `not-yet=0`, and
-  `cargo test --workspace` passes.
-- 2026-07-04: [M3] Widened all 12 scripted direct-pointer corpus entries
-  from samples through `1.0` to samples through `1.25`, keeping direct
-  rectangle down/up, click, event, Solo, and listener-owned view-model trigger
-  paths exact after the interaction has more time to settle. Exact segments
-  are now 377 across 85 exact files; `make golden-compare` reports
-  `exact=85`, `exact-segments=377`, `diverges=0`,
-  `unsupported-feature=210`, and `not-yet=0`. C++ probes found no visible
-  render delta yet for `lock_icon_demo.riv` or `joel_signed.riv`; keep them in
-  the unscripted candidate list until a render-affecting coordinate or input
-  sequence is identified.
-- 2026-07-04: [M3] Widened the same 12 scripted direct-pointer entries from
-  samples through `1.25` to samples through `1.5`, adding another post-click
-  checkpoint without broadening runtime scope. Exact segments are now 389
-  across 85 exact files; `make golden-compare` reports `exact=85`,
-  `exact-segments=389`, `diverges=0`, `unsupported-feature=210`, and
-  `not-yet=0`, and `cargo test --workspace` passes.
-- 2026-07-04: [M3] Ported the direct-rectangle enter/exit hover slice from
-  C++ `ListenerGroup`, including the `StateMachineListenerSingle`
-  `listenerTypeValue = 0` default, and added
-  `tests/input_scripts/sound_enter.txt` for `sound.riv`. The script starts
-  outside the rectangle, moves inside, and keeps the number-driven hover
-  animation exact through sample `1.5`. Exact segments are now 392 across 85
-  exact files; `make golden-compare` reports `exact=85`,
-  `exact-segments=392`, `diverges=0`, `unsupported-feature=210`, and
-  `not-yet=0`, and `cargo test --workspace` passes.
-- 2026-07-04: [M3] Extended `sound.riv`'s hover script to move back outside
-  the direct rectangle and sample the exit path at `0.35`, keeping both
-  direct enter and exit listener-number changes exact through sample `1.5`.
-  Exact segments are now 393 across 85 exact files; `make golden-compare`
-  reports `exact=85`, `exact-segments=393`, `diverges=0`,
-  `unsupported-feature=210`, and `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-04: [M3] Closed the scripted-pointer milestone and opened M4.
-  The remaining unscripted exact listener candidates
-  (`component_list_2.riv`, `component_list_follow_path.riv`,
-  `component_list_grouped.riv`, `component_list_hit_order.riv`,
-  `joel_signed.riv`, `lock_icon_demo.riv`,
-  `solos_with_nested_artboards.riv`, `stateful_list_props.riv`, and
-  `text_input_event.riv`) produced no C++ render delta on a bounded coarse
-  click/hover probe after filtering synthetic input markers, or belong to
-  nested/list/text/keyboard domains. M4 should start with
-  `library_export_test.riv` or `nested_artboard_opacity.riv`, the two smallest
-  `milestone = "M4"` parked files. `make golden-compare` reports `exact=85`,
-  `exact-segments=393`, `diverges=0`, `unsupported-feature=210`, and
-  `not-yet=0`, and `cargo test --workspace` passes.
 - 2026-07-04: [M4] Ported the first static plain `NestedArtboard` draw slice
   from the C++ `ArtboardHost`/`NestedArtboard::draw` shape: Rust now resolves
   referenced child artboards during draw, applies the host world transform,
@@ -687,3 +260,13 @@ the only memory the next session has. Update it every commit.
   `make golden-compare` reports `exact=104`, `exact-segments=412`,
   `diverges=0`, `unsupported-feature=191`, `not-yet=0`, and parked
   `M4=61 M5=8 M6=80 gated=6 harness=36`; `cargo test --workspace` passes.
+- 2026-07-04: [M4] Narrowed the nested stateful view-model guard to allow
+  authored child `ViewModelInstance` subtrees under plain `NestedArtboard`
+  hosts, and mirrored C++ unbound artboard-owned SolidColor
+  `DataBindContext` import defaults to opaque black for child artboard
+  instances. Promoted `library_vmtest_1_host.riv` and
+  `unbound_stateful_component.riv` to exact; kept nested child non-color
+  data-bind targets and focus data behind nested-artboards diagnostics. `make
+  golden-compare` reports `exact=106`, `exact-segments=414`, `diverges=0`,
+  `unsupported-feature=189`, `not-yet=0`, and parked
+  `M4=59 M5=8 M6=80 gated=6 harness=36`; `cargo test --workspace` passes.

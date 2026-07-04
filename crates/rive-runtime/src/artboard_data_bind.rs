@@ -1,8 +1,10 @@
 use crate::data_bind_graph::{
     runtime_data_bind_graph_convert_value, runtime_data_bind_graph_converter,
 };
+use crate::objects::InstanceObjectArena;
 use crate::properties::{
-    artboard_index_for_graph, property_key_for_name, solo_active_component_id_property_key,
+    artboard_index_for_graph, property_key_for_name, solid_color_value_property_key,
+    solo_active_component_id_property_key,
 };
 use crate::{
     ArtboardInstance, RuntimeDataBindGraphConverter, RuntimeDataBindGraphValue,
@@ -135,6 +137,44 @@ pub(super) fn build_artboard_default_view_model_values(
         values.entry(path).or_insert(value);
     }
     values
+}
+
+pub(super) fn apply_artboard_unbound_color_data_bind_defaults(
+    file: &RuntimeFile,
+    graph: &ArtboardGraph,
+    objects: &mut InstanceObjectArena,
+) -> bool {
+    let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
+        return false;
+    };
+    let Some(color_key) = solid_color_value_property_key() else {
+        return false;
+    };
+
+    let mut changed = false;
+    for data_bind in file.artboard_data_binds(artboard_index) {
+        if !data_bind_flags_apply_source_to_target(
+            data_bind.object.uint_property("flags").unwrap_or(0),
+        ) {
+            continue;
+        }
+        if data_bind
+            .target
+            .is_none_or(|target| target.type_name != "SolidColor")
+        {
+            continue;
+        }
+        if u16::try_from(data_bind.object.uint_property("propertyKey").unwrap_or(0)).ok()
+            != Some(color_key)
+        {
+            continue;
+        }
+        let Some(target_local_id) = data_bind.target_local_id else {
+            continue;
+        };
+        changed |= objects.set_color_property(target_local_id, color_key, 0xFF000000);
+    }
+    changed
 }
 
 pub(super) fn build_artboard_custom_property_bindings(

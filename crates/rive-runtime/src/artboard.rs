@@ -10,9 +10,9 @@ use crate::animation::{
 };
 use crate::artboard_data_bind::{
     RuntimeArtboardCustomPropertyBindingInstance, RuntimeArtboardListBindingInstance,
-    RuntimeArtboardSoloBindingInstance, build_artboard_custom_property_bindings,
-    build_artboard_default_view_model_values, build_artboard_list_bindings,
-    build_artboard_solo_bindings,
+    RuntimeArtboardSoloBindingInstance, apply_artboard_unbound_color_data_bind_defaults,
+    build_artboard_custom_property_bindings, build_artboard_default_view_model_values,
+    build_artboard_list_bindings, build_artboard_solo_bindings,
 };
 use crate::components::{
     AuthoredTransform, ComponentDirt, Mat2D, RuntimeComponent, RuntimeSolo, TransformProperty,
@@ -124,7 +124,8 @@ impl ArtboardInstance {
                 component_index: None,
             });
         }
-        let objects = InstanceObjectArena::from_slots(file, &slots);
+        let mut objects = InstanceObjectArena::from_slots(file, &slots);
+        apply_artboard_unbound_color_data_bind_defaults(file, graph, &mut objects);
 
         let mut component_by_local = BTreeMap::new();
         let mut components = Vec::new();

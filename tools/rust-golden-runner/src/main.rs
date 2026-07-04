@@ -487,7 +487,7 @@ fn ensure_static_draw_supported(
     artboard: &ArtboardGraph,
 ) -> Result<()> {
     let mut visiting = BTreeSet::new();
-    ensure_static_draw_supported_for_artboard(runtime, graph, artboard, &mut visiting)
+    ensure_static_draw_supported_for_artboard(runtime, graph, artboard, &mut visiting, false)
 }
 
 fn ensure_static_draw_supported_for_artboard(
@@ -495,6 +495,7 @@ fn ensure_static_draw_supported_for_artboard(
     graph: &GraphFile,
     artboard: &ArtboardGraph,
     visiting: &mut BTreeSet<u32>,
+    is_nested_child: bool,
 ) -> Result<()> {
     if !visiting.insert(artboard.global_id) {
         return Ok(());
@@ -534,10 +535,34 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
-    if let Some((type_name, global_id)) = nested_stateful_view_model_object(artboard) {
+    if let Some((type_name, global_id)) = nested_stateful_view_model_object(runtime, artboard) {
         bail!(
             "unsupported: nested artboards in Rust golden runner (stateful view model {type_name} global {global_id})"
         );
+    }
+
+    if is_nested_child {
+        if let Some(data_bind) = artboard
+            .data_binds
+            .iter()
+            .find(|data_bind| data_bind.target_type_name != Some("SolidColor"))
+        {
+            bail!(
+                "unsupported: nested artboards in Rust golden runner (nested child data bind global {} target {:?})",
+                data_bind.global_id,
+                data_bind.target_type_name
+            );
+        }
+        if let Some(focus_data) = artboard
+            .local_objects
+            .iter()
+            .find(|object| object.type_name == Some("FocusData"))
+        {
+            bail!(
+                "unsupported: nested artboards in Rust golden runner (nested child focus data global {})",
+                focus_data.global_id
+            );
+        }
     }
 
     if let Some(data_bind) = nested_artboard_host_control_data_bind(graph, artboard) {
@@ -621,6 +646,7 @@ fn ensure_static_draw_supported_for_artboard(
         .data_binds
         .iter()
         .find(|data_bind| data_bind.target_type_name == Some("SolidColor"))
+        .filter(|_| !is_nested_child)
     {
         bail!(
             "unsupported: data-binding-color in Rust golden runner (data bind global {} target global {:?})",
@@ -753,21 +779,58 @@ fn ensure_static_draw_supported_for_artboard(
             .with_context(|| {
                 format!("missing nested artboard graph for global {referenced_artboard_global}")
             })?;
-        ensure_static_draw_supported_for_artboard(runtime, graph, child_artboard, visiting)?;
+        ensure_static_draw_supported_for_artboard(runtime, graph, child_artboard, visiting, true)?;
     }
 
     Ok(())
 }
 
-fn nested_stateful_view_model_object(artboard: &ArtboardGraph) -> Option<(&'static str, u32)> {
+fn nested_stateful_view_model_object(
+    runtime: &RuntimeFile,
+    artboard: &ArtboardGraph,
+) -> Option<(&'static str, u32)> {
     if artboard.nested_artboards.is_empty() {
         return None;
     }
+    let nested_host_locals = artboard
+        .nested_artboards
+        .iter()
+        .filter(|host| host.type_name == "NestedArtboard")
+        .map(|host| host.local_id)
+        .collect::<BTreeSet<_>>();
+    let mut allowed_stateful_child_locals = BTreeSet::<usize>::new();
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for object in &artboard.local_objects {
+            let Some(type_name) = object.type_name else {
+                continue;
+            };
+            if !type_name.starts_with("ViewModelInstance") {
+                continue;
+            }
+            if allowed_stateful_child_locals.contains(&object.local_id) {
+                continue;
+            }
+            let parent_local = runtime
+                .object(object.global_id as usize)
+                .and_then(|object| object.uint_property("parentId"))
+                .and_then(|parent| usize::try_from(parent).ok());
+            let is_stateful_root =
+                parent_local.is_some_and(|parent| nested_host_locals.contains(&parent));
+            let is_stateful_descendant =
+                parent_local.is_some_and(|parent| allowed_stateful_child_locals.contains(&parent));
+            if is_stateful_root || is_stateful_descendant {
+                allowed_stateful_child_locals.insert(object.local_id);
+                changed = true;
+            }
+        }
+    }
     artboard.local_objects.iter().find_map(|object| {
         let type_name = object.type_name?;
-        type_name
-            .starts_with("ViewModelInstance")
-            .then_some((type_name, object.global_id))
+        (type_name.starts_with("ViewModelInstance")
+            && !allowed_stateful_child_locals.contains(&object.local_id))
+        .then_some((type_name, object.global_id))
     })
 }
 

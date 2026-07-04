@@ -84,7 +84,7 @@ fn run() -> Result<String> {
                 event.seconds,
                 &mut current_seconds,
             )?;
-            apply_input_event(event);
+            apply_input_event(event, &instance, state_machine.as_mut());
             factory.add_input_event(
                 event.kind.name(),
                 event.seconds,
@@ -224,8 +224,28 @@ fn parse_script_float(value: &str, context: &str) -> Result<f32> {
         .with_context(|| format!("invalid float for {context}: {value}"))
 }
 
-fn apply_input_event(_event: &InputEvent) {
-    // TODO(golden): port StateMachineInstance::pointer* listener dispatch.
+fn apply_input_event(
+    event: &InputEvent,
+    instance: &ArtboardInstance,
+    state_machine: Option<&mut StateMachineInstance>,
+) {
+    let Some(state_machine) = state_machine else {
+        return;
+    };
+    match event.kind {
+        InputKind::PointerDown => {
+            state_machine.pointer_down(instance, event.x, event.y, event.pointer_id);
+        }
+        InputKind::PointerMove => {
+            state_machine.pointer_move(instance, event.x, event.y, event.seconds, event.pointer_id);
+        }
+        InputKind::PointerUp => {
+            state_machine.pointer_up(instance, event.x, event.y, event.pointer_id);
+        }
+        InputKind::PointerExit => {
+            state_machine.pointer_exit(instance, event.x, event.y, event.pointer_id);
+        }
+    }
 }
 
 #[cfg(test)]

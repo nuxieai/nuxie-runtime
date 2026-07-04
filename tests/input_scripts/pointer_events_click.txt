@@ -1,2 +1,2 @@
-0.05 pointerDown 75 75
-0.10 pointerUp 75 75
+0.05 pointerDown 75 425
+0.10 pointerUp 75 425

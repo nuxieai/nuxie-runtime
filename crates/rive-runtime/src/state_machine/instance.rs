@@ -232,6 +232,153 @@ impl StateMachineInstance {
         true
     }
 
+    pub fn pointer_down(
+        &mut self,
+        artboard: &ArtboardInstance,
+        x: f32,
+        y: f32,
+        _pointer_id: i32,
+    ) -> bool {
+        self.update_pointer_listeners(artboard, RuntimeListenerType::Down, x, y)
+    }
+
+    pub fn pointer_move(
+        &mut self,
+        artboard: &ArtboardInstance,
+        x: f32,
+        y: f32,
+        _seconds: f32,
+        _pointer_id: i32,
+    ) -> bool {
+        self.update_pointer_listeners(artboard, RuntimeListenerType::Move, x, y)
+    }
+
+    pub fn pointer_up(
+        &mut self,
+        artboard: &ArtboardInstance,
+        x: f32,
+        y: f32,
+        _pointer_id: i32,
+    ) -> bool {
+        self.update_pointer_listeners(artboard, RuntimeListenerType::Up, x, y)
+    }
+
+    pub fn pointer_exit(
+        &mut self,
+        artboard: &ArtboardInstance,
+        x: f32,
+        y: f32,
+        _pointer_id: i32,
+    ) -> bool {
+        self.update_pointer_listeners(artboard, RuntimeListenerType::Exit, x, y)
+    }
+
+    fn update_pointer_listeners(
+        &mut self,
+        artboard: &ArtboardInstance,
+        listener_type: RuntimeListenerType,
+        x: f32,
+        y: f32,
+    ) -> bool {
+        let Some(state_machine) = artboard.state_machine(self.state_machine_index) else {
+            return false;
+        };
+
+        let mut hit = false;
+        for listener in &state_machine.listeners {
+            if !listener.has_listener(listener_type) || !listener.hit_test(artboard, x, y) {
+                continue;
+            }
+            hit = true;
+            self.perform_pointer_listener_actions(&listener.listener_actions);
+            self.needs_advance = true;
+        }
+        hit
+    }
+
+    fn perform_pointer_listener_actions(
+        &mut self,
+        listener_actions: &[RuntimeScheduledListenerAction],
+    ) -> bool {
+        let mut changed = false;
+        for action in listener_actions {
+            match action {
+                RuntimeScheduledListenerAction::FireEvent { event, .. } => {
+                    self.reported_events.push(event.clone());
+                    changed = true;
+                }
+                RuntimeScheduledListenerAction::BoolChange {
+                    input_index, value, ..
+                } => {
+                    if let Some(input) = self.inputs.get_mut(*input_index) {
+                        changed |= input.apply_listener_bool_change(*value);
+                    }
+                }
+                RuntimeScheduledListenerAction::NumberChange {
+                    input_index, value, ..
+                } => {
+                    if let Some(input) = self.inputs.get_mut(*input_index) {
+                        changed |= input.set_number(*value);
+                    }
+                }
+                RuntimeScheduledListenerAction::TriggerChange { input_index, .. } => {
+                    if let Some(input) = self.inputs.get_mut(*input_index) {
+                        changed |= input.fire_trigger();
+                    }
+                }
+                RuntimeScheduledListenerAction::ViewModelChange {
+                    data_bind_index,
+                    value,
+                    ..
+                } => {
+                    changed |= self.perform_listener_view_model_change(*data_bind_index, value);
+                }
+            }
+        }
+        if changed {
+            self.needs_advance = true;
+        }
+        changed
+    }
+
+    fn perform_listener_view_model_change(
+        &mut self,
+        data_bind_index: usize,
+        value: &RuntimeListenerViewModelChangeValue,
+    ) -> bool {
+        match value {
+            RuntimeListenerViewModelChangeValue::Number(value) => {
+                self.set_default_view_model_number_source_for_data_bind(data_bind_index, *value)
+            }
+            RuntimeListenerViewModelChangeValue::Integer(value) => self
+                .set_default_view_model_symbol_list_index_source_for_data_bind(
+                    data_bind_index,
+                    *value,
+                ),
+            RuntimeListenerViewModelChangeValue::Color(value) => {
+                self.set_default_view_model_color_source_for_data_bind(data_bind_index, *value)
+            }
+            RuntimeListenerViewModelChangeValue::String(value) => {
+                self.set_default_view_model_string_source_for_data_bind(data_bind_index, value)
+            }
+            RuntimeListenerViewModelChangeValue::Enum(value) => {
+                self.set_default_view_model_enum_source_for_data_bind(data_bind_index, *value)
+            }
+            RuntimeListenerViewModelChangeValue::Asset(value) => {
+                self.set_default_view_model_asset_source_for_data_bind(data_bind_index, *value)
+            }
+            RuntimeListenerViewModelChangeValue::Artboard(value) => {
+                self.set_default_view_model_artboard_source_for_data_bind(data_bind_index, *value)
+            }
+            RuntimeListenerViewModelChangeValue::Trigger(value) => {
+                self.set_default_view_model_trigger_source_for_data_bind(data_bind_index, *value)
+            }
+            RuntimeListenerViewModelChangeValue::Boolean(value) => {
+                self.set_default_view_model_boolean_source_for_data_bind(data_bind_index, *value)
+            }
+        }
+    }
+
     pub fn set_bindable_number_for_data_bind(
         &mut self,
         data_bind_index: usize,

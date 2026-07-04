@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 354 across 85 exact files
+- Exact segments (file × sample): 355 across 85 exact files
 - Parked breakdown (from `make golden-compare`): M4=83 M5=8 M6=77 gated=6 harness=36
 - Current milestone: **M3 — Interactivity Exact (#V2-4)**
 
@@ -22,21 +22,19 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Port M3 runtime pointer dispatch: C++
-   `StateMachineInstance::updateListeners`, `StateMachineInstance::pointer*`,
-   and simple `ListenerGroup` pointer phase/action handling. Start with the
-   now-scripted `pointer_events.riv`; its script is parsed and streamed by
-   both golden runners, but Rust `apply_input_event` is intentionally still a
-   no-op until listener dispatch is ported.
-2. Add shape hit testing for the simple component targets needed by
-   `pointer_events.riv` (rectangle/shape local target bounds), keeping
-   nested, layout, text, and component-list listener targets gated to later
-   milestones.
-3. Once an input script changes render output exactly, widen scripts in
-   corpus-priority order for the existing listener/pointer fixtures
-   (`rapid_pointer_events.riv`, `hit_test_solos.riv`, etc.) until M3 can be
-   checked off. There are no remaining `milestone = "M3"` parked entries in
-   `corpus.toml`; scripted input is the active M3 exit criterion.
+1. Widen scripted M3 coverage in corpus-priority order for exact listener/
+   pointer fixtures with visible render movement. `rapid_pointer_events.riv`
+   now has a render-affecting pointer script and is exact across six segments;
+   next try `hit_test_solos.riv`, `click_event.riv`, `opaque_hit_test.riv`,
+   and other simple shape-target listener files before reaching for later
+   runtime systems.
+2. Port additional `ListenerGroup` semantics only when a widened script proves
+   they are the blocking gap: hover/enter-exit state, click synthesis, drag
+   state, opaque target ordering, nested/list/text/layout targets, and
+   component-provided groups remain intentionally out of the direct rectangle
+   pointer slice.
+3. There are no remaining `milestone = "M3"` parked entries in `corpus.toml`;
+   scripted input exactness is the active M3 exit criterion.
 4. Remaining exact entries pinned to sample `0` are static M1 holdovers:
    `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
    them during M3 unless a related refactor needs a cheap draw-regression check.
@@ -70,12 +68,14 @@ the only memory the next session has. Update it every commit.
   Star/Polygon local path sampling for follow-path targets. Custom
   handle-source world-space math and nested remap dependent advancement are
   still not supported.
-  Golden runner sample lists now advance by sorted absolute-time deltas and reuse render paths
-  across samples;
-  no images, text, nested artboards, scroll constraints, component-list
-  instancing, or runtime pointer listener dispatch. Harness-level scripted
-  input replay is supported for pointerDown/pointerMove/pointerUp/pointerExit
-  markers.
+  Golden runner sample lists now advance by sorted absolute-time deltas and
+  reuse render paths across samples; no images, text, nested artboards, scroll
+  constraints, or component-list instancing. Harness-level scripted input
+  replay dispatches pointerDown/pointerMove/pointerUp/pointerExit markers into
+  direct rectangle state-machine listeners with listener input actions and
+  primitive listener-owned default view-model writes. Full C++ ListenerGroup
+  hover/click/drag/opaque behavior and nested/list/text/layout targets are
+  still not supported.
 - `TransformConstraint` currently covers the default empty
   `TransformComponent::constraintBounds()` path. Text/LayoutComponent
   constraint bounds remain parked behind their M6 text/layout diagnostics.
@@ -199,10 +199,10 @@ the only memory the next session has. Update it every commit.
   The comparator still rejects the next observed cancellation-grid step, and
   call order, IDs, verbs, and non-numeric text remain exact.
 - 2026-07-04: Rust golden runner now mirrors C++ input-script parsing and
-  timeline replay for pointer events and records input markers; runtime
-  listener dispatch remains the M3 port unit, so `apply_input_event` is
-  intentionally a narrow no-op until
-  `StateMachineInstance::pointer*`/`ListenerGroup` is ported.
+  timeline replay for pointer events, records input markers, and dispatches
+  pointer events into direct rectangle state-machine listeners for the first
+  M3 scripted-interactivity slice. Full C++ ListenerGroup hover/click/drag/
+  opaque behavior remains corpus-driven follow-up work.
 
 ## Log
 
@@ -559,5 +559,15 @@ the only memory the next session has. Update it every commit.
   hit-testing/action dispatch is still the next M3 runtime port. Exact
   segments remain 354 across 85 exact files; `make golden-compare` reports
   `exact=85`, `exact-segments=354`, `diverges=0`,
+  `unsupported-feature=210`, `not-yet=0`, no parked M3 entries, and
+  `cargo test --workspace` passes.
+- 2026-07-04: [M3] Ported direct rectangle pointer listener dispatch from C++
+  `StateMachineInstance::pointer*`/`updateListeners` into Rust, wired
+  `rust-golden-runner` input replay into the state machine, added listener
+  input actions plus primitive listener-owned default view-model writes, and
+  widened `rapid_pointer_events.riv` with a render-affecting
+  `tests/input_scripts/rapid_pointer_events_click.txt` script. Exact segments
+  are now 355 across 85 exact files; `make golden-compare` reports
+  `exact=85`, `exact-segments=355`, `diverges=0`,
   `unsupported-feature=210`, `not-yet=0`, no parked M3 entries, and
   `cargo test --workspace` passes.

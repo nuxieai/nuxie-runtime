@@ -3,9 +3,10 @@ use crate::animation::{
     AnimationLoop, LinearAnimationInstance, RuntimeInterpolator, RuntimeLinearAnimation,
 };
 use crate::components::TransformProperty;
-use crate::properties::artboard_index_for_graph;
+use crate::data_bind_graph::data_bind_flags_apply_target_to_source;
+use crate::properties::{artboard_index_for_graph, property_key_for_name};
 use rive_binary::{RuntimeFile, RuntimeObject};
-use rive_graph::ArtboardGraph;
+use rive_graph::{ArtboardGraph, ParametricPathNode};
 use std::collections::BTreeMap;
 
 mod bindables;
@@ -97,6 +98,7 @@ pub struct RuntimeStateMachine {
     pub global_id: u32,
     pub name: Option<String>,
     pub inputs: Vec<RuntimeStateMachineInput>,
+    pub(crate) listeners: Vec<RuntimeStateMachineListener>,
     pub layers: Vec<RuntimeStateMachineLayer>,
     pub(crate) bindable_numbers: Vec<RuntimeBindableNumber>,
     pub(crate) bindable_integers: Vec<RuntimeBindableInteger>,
@@ -129,6 +131,7 @@ pub(crate) fn build_state_machines(
     file.artboard_state_machine_graphs(artboard_index)
         .into_iter()
         .map(|state_machine| {
+            let state_machine_data_binds = state_machine.data_binds.clone();
             let bindable_numbers = runtime_bindable_numbers(file, &state_machine);
             let bindable_integers = runtime_bindable_integers(file, &state_machine);
             let bindable_colors = runtime_bindable_colors(file, &state_machine);
@@ -149,8 +152,16 @@ pub(crate) fn build_state_machines(
                     .map(ToOwned::to_owned),
                 inputs: state_machine
                     .inputs
-                    .into_iter()
+                    .iter()
+                    .copied()
                     .filter_map(runtime_state_machine_input)
+                    .collect(),
+                listeners: state_machine
+                    .listeners
+                    .iter()
+                    .filter_map(|listener| {
+                        runtime_state_machine_listener(file, graph, &state_machine_data_binds, listener)
+                    })
                     .collect(),
                 bindable_numbers,
                 bindable_integers,
@@ -211,7 +222,13 @@ pub(crate) fn build_state_machines(
                                     listener_actions: state
                                         .listener_actions
                                         .iter()
-                                        .filter_map(RuntimeScheduledListenerAction::from_imported)
+                                        .filter_map(|action| {
+                                            RuntimeScheduledListenerAction::from_imported(
+                                                file,
+                                                &state_machine_data_binds,
+                                                action,
+                                            )
+                                        })
                                         .collect(),
                                     transitions: state
                                         .transitions
@@ -262,9 +279,13 @@ pub(crate) fn build_state_machines(
                                                 listener_actions: transition
                                                     .listener_actions
                                                     .iter()
-                                                    .filter_map(
-                                                        RuntimeScheduledListenerAction::from_imported,
-                                                    )
+                                                    .filter_map(|action| {
+                                                        RuntimeScheduledListenerAction::from_imported(
+                                                            file,
+                                                            &state_machine_data_binds,
+                                                            action,
+                                                        )
+                                                    })
                                                     .collect(),
                                                 interpolator,
                                                 has_unsupported_interpolator: transition
@@ -295,6 +316,255 @@ pub(crate) fn build_state_machines(
             }
         })
         .collect()
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeStateMachineListener {
+    pub(crate) target_local_id: usize,
+    pub(crate) listener_types: Vec<RuntimeListenerType>,
+    pub(crate) hit_paths: Vec<RuntimeListenerHitPath>,
+    pub(crate) listener_actions: Vec<RuntimeScheduledListenerAction>,
+}
+
+impl RuntimeStateMachineListener {
+    pub(crate) fn has_listener(&self, listener_type: RuntimeListenerType) -> bool {
+        self.listener_types.contains(&listener_type)
+    }
+
+    pub(crate) fn hit_test(&self, artboard: &ArtboardInstance, x: f32, y: f32) -> bool {
+        if artboard
+            .component(self.target_local_id)
+            .is_none_or(|component| component.is_collapsed())
+        {
+            return false;
+        }
+
+        self.hit_paths
+            .iter()
+            .any(|path| path.hit_test(artboard, x, y))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RuntimeListenerType {
+    Enter,
+    Exit,
+    Down,
+    Up,
+    Move,
+    Event,
+    Click,
+    ComponentProvided,
+    TextInput,
+    DragStart,
+    DragEnd,
+    ViewModel,
+    Drag,
+    Focus,
+    Blur,
+    Keyboard,
+    SemanticAction,
+    Gamepad,
+}
+
+impl RuntimeListenerType {
+    fn from_value(value: u64) -> Option<Self> {
+        match value {
+            0 => Some(Self::Enter),
+            1 => Some(Self::Exit),
+            2 => Some(Self::Down),
+            3 => Some(Self::Up),
+            4 => Some(Self::Move),
+            5 => Some(Self::Event),
+            6 => Some(Self::Click),
+            7 => Some(Self::ComponentProvided),
+            8 => Some(Self::TextInput),
+            9 => Some(Self::DragStart),
+            10 => Some(Self::DragEnd),
+            11 => Some(Self::ViewModel),
+            12 => Some(Self::Drag),
+            13 => Some(Self::Focus),
+            14 => Some(Self::Blur),
+            15 => Some(Self::Keyboard),
+            16 => Some(Self::SemanticAction),
+            17 => Some(Self::Gamepad),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn is_pointer_hit(self) -> bool {
+        matches!(
+            self,
+            Self::Enter
+                | Self::Exit
+                | Self::Down
+                | Self::Up
+                | Self::Move
+                | Self::Click
+                | Self::DragStart
+                | Self::DragEnd
+                | Self::Drag
+        )
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeListenerHitPath {
+    local_id: usize,
+    kind: RuntimeListenerHitPathKind,
+}
+
+impl RuntimeListenerHitPath {
+    fn hit_test(&self, artboard: &ArtboardInstance, x: f32, y: f32) -> bool {
+        if artboard
+            .component(self.local_id)
+            .is_none_or(|component| component.is_collapsed())
+        {
+            return false;
+        }
+
+        match self.kind {
+            RuntimeListenerHitPathKind::Rectangle => self.hit_test_rectangle(artboard, x, y),
+        }
+    }
+
+    fn hit_test_rectangle(&self, artboard: &ArtboardInstance, x: f32, y: f32) -> bool {
+        let Some(component) = artboard.component(self.local_id) else {
+            return false;
+        };
+        let local = component.transform.world_transform.invert_or_identity();
+        let (local_x, local_y) = local.transform_point(x, y);
+        let width = artboard_double_property(artboard, self.local_id, "Rectangle", "width", 0.0);
+        let height = artboard_double_property(artboard, self.local_id, "Rectangle", "height", 0.0);
+        let origin_x =
+            artboard_double_property(artboard, self.local_id, "Rectangle", "originX", 0.5);
+        let origin_y =
+            artboard_double_property(artboard, self.local_id, "Rectangle", "originY", 0.5);
+        let left = -width * origin_x;
+        let top = -height * origin_y;
+        local_x >= left && local_x <= left + width && local_y >= top && local_y <= top + height
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum RuntimeListenerHitPathKind {
+    Rectangle,
+}
+
+fn runtime_state_machine_listener(
+    file: &RuntimeFile,
+    graph: &ArtboardGraph,
+    state_machine_data_binds: &[&RuntimeObject],
+    listener: &rive_binary::RuntimeStateMachineListener<'_>,
+) -> Option<RuntimeStateMachineListener> {
+    // Mirrors C++ StateMachineListener import/action wiring and the first
+    // simple-shape branch of src/animation/state_machine_instance.cpp.
+    let target_local_id = usize::try_from(listener.object.uint_property("targetId")?).ok()?;
+    let listener_types = runtime_listener_types(listener)
+        .into_iter()
+        .filter(|listener_type| listener_type.is_pointer_hit())
+        .collect::<Vec<_>>();
+    if listener_types.is_empty() {
+        return None;
+    }
+
+    let hit_paths = runtime_listener_hit_paths(graph, target_local_id);
+    if hit_paths.is_empty() {
+        return None;
+    }
+
+    Some(RuntimeStateMachineListener {
+        target_local_id,
+        listener_types,
+        hit_paths,
+        listener_actions: listener
+            .actions
+            .iter()
+            .filter_map(|action| {
+                RuntimeScheduledListenerAction::from_imported(
+                    file,
+                    state_machine_data_binds,
+                    action,
+                )
+            })
+            .collect(),
+    })
+}
+
+fn runtime_listener_types(
+    listener: &rive_binary::RuntimeStateMachineListener<'_>,
+) -> Vec<RuntimeListenerType> {
+    if listener.object.type_name == "StateMachineListenerSingle" {
+        return listener
+            .object
+            .uint_property("listenerTypeValue")
+            .and_then(RuntimeListenerType::from_value)
+            .into_iter()
+            .collect();
+    }
+
+    listener
+        .listener_input_types
+        .iter()
+        .filter_map(|input_type| input_type.uint_property("listenerTypeValue"))
+        .filter_map(RuntimeListenerType::from_value)
+        .collect()
+}
+
+fn runtime_listener_hit_paths(
+    graph: &ArtboardGraph,
+    target_local_id: usize,
+) -> Vec<RuntimeListenerHitPath> {
+    let Some(target) = graph
+        .components
+        .iter()
+        .find(|component| component.local_id == target_local_id)
+    else {
+        return Vec::new();
+    };
+    if target.type_name != "Shape" {
+        // TODO(golden): port C++ StateMachineInstance::addToHitLookup for
+        // containers, layout proxies, text runs, and component-provided groups.
+        return Vec::new();
+    }
+
+    let Some(composer) = graph
+        .path_composers
+        .iter()
+        .find(|composer| composer.shape_local == target_local_id)
+    else {
+        return Vec::new();
+    };
+
+    composer
+        .path_locals
+        .iter()
+        .filter_map(|path_local| {
+            let path = graph
+                .paths
+                .iter()
+                .find(|path| path.local_id == *path_local)?;
+            match path.parametric {
+                Some(ParametricPathNode::Rectangle { .. }) => Some(RuntimeListenerHitPath {
+                    local_id: *path_local,
+                    kind: RuntimeListenerHitPathKind::Rectangle,
+                }),
+                _ => None,
+            }
+        })
+        .collect()
+}
+
+fn artboard_double_property(
+    artboard: &ArtboardInstance,
+    local_id: usize,
+    type_name: &str,
+    property_name: &str,
+    default: f32,
+) -> f32 {
+    property_key_for_name(type_name, property_name)
+        .and_then(|key| artboard.double_property(local_id, key))
+        .unwrap_or(default)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1212,10 +1482,32 @@ pub(crate) enum RuntimeScheduledListenerAction {
         flags: u64,
         input_index: usize,
     },
+    ViewModelChange {
+        flags: u64,
+        data_bind_index: usize,
+        value: RuntimeListenerViewModelChangeValue,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum RuntimeListenerViewModelChangeValue {
+    Number(f32),
+    Integer(u64),
+    Color(u32),
+    String(Vec<u8>),
+    Enum(u64),
+    Asset(u64),
+    Artboard(u64),
+    Trigger(u64),
+    Boolean(bool),
 }
 
 impl RuntimeScheduledListenerAction {
-    pub(crate) fn from_imported(action: &rive_binary::RuntimeListenerAction<'_>) -> Option<Self> {
+    pub(crate) fn from_imported(
+        file: &RuntimeFile,
+        state_machine_data_binds: &[&RuntimeObject],
+        action: &rive_binary::RuntimeListenerAction<'_>,
+    ) -> Option<Self> {
         let flags = action.object.uint_property("flags").unwrap_or(0);
         match action.object.type_name {
             "ListenerFireEvent" => {
@@ -1244,8 +1536,115 @@ impl RuntimeScheduledListenerAction {
                 flags,
                 input_index: listener_action_input_index(action)?,
             }),
+            "ListenerViewModelChange" => runtime_listener_view_model_change_action(
+                file,
+                state_machine_data_binds,
+                action,
+                flags,
+            ),
             _ => None,
         }
+    }
+}
+
+fn runtime_listener_view_model_change_action(
+    file: &RuntimeFile,
+    state_machine_data_binds: &[&RuntimeObject],
+    action: &rive_binary::RuntimeListenerAction<'_>,
+    flags: u64,
+) -> Option<RuntimeScheduledListenerAction> {
+    // Mirrors src/animation/listener_viewmodel_change.cpp import-time
+    // BindableProperty lookup, using object ids/data-bind indices instead of
+    // the C++ per-instance pointer maps.
+    let bindable_property_id = action
+        .object
+        .uint_property("bindablePropertyId")
+        .and_then(|id| u32::try_from(id).ok())
+        .or_else(|| latest_bindable_property_id_before(file, action.object.id))?;
+
+    state_machine_data_binds
+        .iter()
+        .enumerate()
+        .find_map(|(data_bind_index, data_bind)| {
+            let target = file.data_bind_target_for_object(data_bind)?;
+            if target.id != bindable_property_id {
+                return None;
+            }
+            let data_bind_flags = data_bind.uint_property("flags").unwrap_or(0);
+            if !data_bind_flags_apply_target_to_source(data_bind_flags) {
+                return None;
+            }
+            let value = runtime_listener_view_model_change_value(target)?;
+            Some(RuntimeScheduledListenerAction::ViewModelChange {
+                flags,
+                data_bind_index,
+                value,
+            })
+        })
+}
+
+fn latest_bindable_property_id_before(file: &RuntimeFile, object_id: u32) -> Option<u32> {
+    file.objects
+        .iter()
+        .rev()
+        .flatten()
+        .find(|object| object.id < object_id && is_bindable_property(object))
+        .map(|object| object.id)
+}
+
+fn is_bindable_property(object: &RuntimeObject) -> bool {
+    matches!(
+        object.type_name,
+        "BindablePropertyNumber"
+            | "BindablePropertyInteger"
+            | "BindablePropertyColor"
+            | "BindablePropertyString"
+            | "BindablePropertyEnum"
+            | "BindablePropertyAsset"
+            | "BindablePropertyArtboard"
+            | "BindablePropertyList"
+            | "BindablePropertyTrigger"
+            | "BindablePropertyViewModel"
+            | "BindablePropertyBoolean"
+    )
+}
+
+fn runtime_listener_view_model_change_value(
+    target: &RuntimeObject,
+) -> Option<RuntimeListenerViewModelChangeValue> {
+    match target.type_name {
+        "BindablePropertyNumber" => Some(RuntimeListenerViewModelChangeValue::Number(
+            target.double_property("propertyValue").unwrap_or(0.0),
+        )),
+        "BindablePropertyInteger" => Some(RuntimeListenerViewModelChangeValue::Integer(
+            target.uint_property("propertyValue").unwrap_or(0),
+        )),
+        "BindablePropertyColor" => Some(RuntimeListenerViewModelChangeValue::Color(
+            target.color_property("propertyValue").unwrap_or(0),
+        )),
+        "BindablePropertyString" => Some(RuntimeListenerViewModelChangeValue::String(
+            target
+                .string_property_bytes("propertyValue")
+                .unwrap_or_default()
+                .to_vec(),
+        )),
+        "BindablePropertyEnum" => Some(RuntimeListenerViewModelChangeValue::Enum(
+            target.uint_property("propertyValue").unwrap_or(0),
+        )),
+        "BindablePropertyAsset" => Some(RuntimeListenerViewModelChangeValue::Asset(
+            target.uint_property("propertyValue").unwrap_or(0),
+        )),
+        "BindablePropertyArtboard" => Some(RuntimeListenerViewModelChangeValue::Artboard(
+            target.uint_property("propertyValue").unwrap_or(0),
+        )),
+        "BindablePropertyList" => None,
+        "BindablePropertyTrigger" => Some(RuntimeListenerViewModelChangeValue::Trigger(
+            target.uint_property("propertyValue").unwrap_or(0),
+        )),
+        "BindablePropertyBoolean" => Some(RuntimeListenerViewModelChangeValue::Boolean(
+            target.bool_property("propertyValue").unwrap_or(false),
+        )),
+        _ => None,
     }
 }
 
@@ -1272,7 +1671,8 @@ pub(crate) fn perform_scheduled_listener_actions(
             RuntimeScheduledListenerAction::FireEvent { flags, .. }
             | RuntimeScheduledListenerAction::BoolChange { flags, .. }
             | RuntimeScheduledListenerAction::NumberChange { flags, .. }
-            | RuntimeScheduledListenerAction::TriggerChange { flags, .. } => *flags,
+            | RuntimeScheduledListenerAction::TriggerChange { flags, .. }
+            | RuntimeScheduledListenerAction::ViewModelChange { flags, .. } => *flags,
         };
         if flags & 1 != occurrence.value() {
             continue;
@@ -1300,6 +1700,7 @@ pub(crate) fn perform_scheduled_listener_actions(
                     changed_input |= input.fire_trigger();
                 }
             }
+            RuntimeScheduledListenerAction::ViewModelChange { .. } => {}
         }
     }
     changed_input

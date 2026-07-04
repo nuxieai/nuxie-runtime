@@ -556,7 +556,7 @@ fn ensure_static_draw_supported_for_artboard(
         if let Some(data_bind) = artboard
             .data_binds
             .iter()
-            .find(|data_bind| data_bind.target_type_name != Some("SolidColor"))
+            .find(|data_bind| !nested_child_data_bind_supported(data_bind))
         {
             bail!(
                 "unsupported: data-binding-nested-child in Rust golden runner (data bind global {} target {:?})",
@@ -841,6 +841,15 @@ fn nested_stateful_view_model_object(
             && !allowed_stateful_child_locals.contains(&object.local_id))
         .then_some((type_name, object.global_id))
     })
+}
+
+fn nested_child_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> bool {
+    if data_bind.target_type_name == Some("SolidColor") {
+        return true;
+    }
+    data_bind.target_type_name == Some("Ellipse")
+        && matches!(data_bind.property_key, 20 | 21)
+        && data_bind.converter_global.is_none()
 }
 
 fn nested_artboard_host_control_data_bind<'a>(

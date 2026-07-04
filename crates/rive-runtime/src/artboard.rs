@@ -10,10 +10,11 @@ use crate::animation::{
 };
 use crate::artboard_data_bind::{
     RuntimeArtboardCustomPropertyBindingInstance, RuntimeArtboardListBindingInstance,
-    RuntimeArtboardNestedHostBindingInstance, RuntimeArtboardSoloBindingInstance,
-    apply_artboard_unbound_color_data_bind_defaults, build_artboard_custom_property_bindings,
-    build_artboard_default_view_model_values, build_artboard_list_bindings,
-    build_artboard_nested_host_bindings, build_artboard_solo_bindings,
+    RuntimeArtboardNestedHostBindingInstance, RuntimeArtboardPropertyBindingInstance,
+    RuntimeArtboardSoloBindingInstance, apply_artboard_unbound_color_data_bind_defaults,
+    build_artboard_custom_property_bindings, build_artboard_default_view_model_values,
+    build_artboard_list_bindings, build_artboard_nested_host_bindings,
+    build_artboard_property_bindings, build_artboard_solo_bindings,
 };
 use crate::components::{
     AuthoredTransform, ComponentDirt, Mat2D, RuntimeComponent, RuntimeSolo, TransformProperty,
@@ -60,6 +61,7 @@ pub struct ArtboardInstance {
     pub(crate) nested_artboards: BTreeMap<usize, RuntimeNestedArtboardInstance>,
     newly_uncollapsed_nested_artboards: BTreeSet<usize>,
     pub(crate) artboard_data_bind_values: BTreeMap<Vec<u32>, RuntimeDataBindGraphValue>,
+    pub(crate) artboard_property_bindings: Vec<RuntimeArtboardPropertyBindingInstance>,
     pub(crate) artboard_custom_property_bindings: Vec<RuntimeArtboardCustomPropertyBindingInstance>,
     pub(crate) artboard_solo_bindings: Vec<RuntimeArtboardSoloBindingInstance>,
     pub(crate) artboard_nested_host_bindings: Vec<RuntimeArtboardNestedHostBindingInstance>,
@@ -179,6 +181,7 @@ impl ArtboardInstance {
         let ik_constraints = build_runtime_ik_constraints(file, graph);
         let state_machines = build_state_machines(file, graph, &linear_animations);
         let artboard_data_bind_values = build_artboard_default_view_model_values(file, graph);
+        let artboard_property_bindings = build_artboard_property_bindings(file, graph);
         let artboard_custom_property_bindings =
             build_artboard_custom_property_bindings(file, graph);
         let artboard_solo_bindings = build_artboard_solo_bindings(file, graph);
@@ -217,6 +220,7 @@ impl ArtboardInstance {
             nested_artboards,
             newly_uncollapsed_nested_artboards: BTreeSet::new(),
             artboard_data_bind_values,
+            artboard_property_bindings,
             artboard_custom_property_bindings,
             artboard_solo_bindings,
             artboard_nested_host_bindings,
@@ -1709,6 +1713,7 @@ mod tests {
             nested_artboards: BTreeMap::new(),
             newly_uncollapsed_nested_artboards: BTreeSet::new(),
             artboard_data_bind_values: BTreeMap::new(),
+            artboard_property_bindings: Vec::new(),
             artboard_custom_property_bindings: Vec::new(),
             artboard_solo_bindings: Vec::new(),
             artboard_nested_host_bindings: Vec::new(),

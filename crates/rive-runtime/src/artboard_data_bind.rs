@@ -12,7 +12,17 @@ use crate::{
 };
 use rive_binary::{RuntimeDataType, RuntimeFile, RuntimeObject};
 use rive_graph::ArtboardGraph;
+use rive_schema::FieldKind;
 use std::collections::BTreeMap;
+
+#[derive(Debug, Clone)]
+pub(super) struct RuntimeArtboardPropertyBindingInstance {
+    target_local_id: usize,
+    property_key: u16,
+    path: Vec<u32>,
+    converter: Option<RuntimeDataBindGraphConverter>,
+    default_value: RuntimeDataBindGraphValue,
+}
 
 #[derive(Debug, Clone)]
 pub(super) struct RuntimeArtboardCustomPropertyBindingInstance {
@@ -123,6 +133,65 @@ pub(super) fn build_artboard_list_bindings(
                 source_number_value: None,
                 target_list_size: source_is_unresolved_name_based.then_some(0),
                 should_reset_instances: false,
+            })
+        })
+        .collect()
+}
+
+pub(super) fn build_artboard_property_bindings(
+    file: &RuntimeFile,
+    graph: &ArtboardGraph,
+) -> Vec<RuntimeArtboardPropertyBindingInstance> {
+    let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
+        return Vec::new();
+    };
+    let Some(default_instance) = file.view_model_default_instance(0) else {
+        return Vec::new();
+    };
+
+    file.artboard_data_binds(artboard_index)
+        .into_iter()
+        .filter_map(|data_bind| {
+            if !data_bind_flags_apply_source_to_target(
+                data_bind.object.uint_property("flags").unwrap_or(0),
+            ) {
+                return None;
+            }
+            let target = data_bind.target?;
+            if matches!(
+                target.type_name,
+                "ArtboardComponentList" | "NestedArtboard" | "Solo"
+            ) {
+                return None;
+            }
+            let target_local_id = data_bind.target_local_id?;
+            let property_key =
+                u16::try_from(data_bind.object.uint_property("propertyKey")?).ok()?;
+            if !matches!(
+                rive_schema::core_registry_setter_field_kind_by_property_key(property_key),
+                Some(FieldKind::Double | FieldKind::Uint)
+            ) {
+                return None;
+            }
+            let converter = runtime_data_bind_graph_converter(file, data_bind.object);
+            if converter.is_some() {
+                return None;
+            }
+            let path = file.data_bind_context_source_path_ids_for_object(data_bind.object)?;
+            let default_value = file
+                .data_context_view_model_property_for_instance(default_instance.object, &path)
+                .and_then(|source| runtime_created_view_model_value_for_source(file, source))
+                .unwrap_or(RuntimeDataBindGraphValue::Number(0.0));
+            if !matches!(default_value, RuntimeDataBindGraphValue::Number(_)) {
+                return None;
+            }
+
+            Some(RuntimeArtboardPropertyBindingInstance {
+                target_local_id,
+                property_key,
+                path: path.to_vec(),
+                converter,
+                default_value,
             })
         })
         .collect()
@@ -359,12 +428,24 @@ impl ArtboardInstance {
         let Some(default_instance) = file.view_model_default_instance(0) else {
             return false;
         };
+        self.bind_artboard_data_context(file, default_instance.object)
+    }
 
+    fn bind_artboard_data_context(
+        &mut self,
+        file: &RuntimeFile,
+        view_model_instance: &RuntimeObject,
+    ) -> bool {
         let mut changed = false;
         let paths = self
-            .artboard_custom_property_bindings
+            .artboard_property_bindings
             .iter()
             .map(|binding| binding.path.clone())
+            .chain(
+                self.artboard_custom_property_bindings
+                    .iter()
+                    .map(|binding| binding.path.clone()),
+            )
             .chain(
                 self.artboard_solo_bindings
                     .iter()
@@ -377,8 +458,14 @@ impl ArtboardInstance {
             )
             .collect::<Vec<_>>();
         for path in paths {
-            let Some(value) =
-                runtime_created_view_model_value_for_path(file, default_instance.object, &path)
+            let Some(value) = self
+                .artboard_property_bindings
+                .iter()
+                .find(|binding| binding.path == path)
+                .map(|binding| binding.default_value.clone())
+                .or_else(|| {
+                    runtime_created_view_model_value_for_path(file, view_model_instance, &path)
+                })
             else {
                 continue;
             };
@@ -390,7 +477,7 @@ impl ArtboardInstance {
         for binding in &mut self.artboard_list_bindings {
             let Some(source_value) = binding.default_value.resolve_from_view_model_instance(
                 file,
-                default_instance.object,
+                view_model_instance,
                 &binding.path,
             ) else {
                 continue;
@@ -425,6 +512,7 @@ impl ArtboardInstance {
         for binding in self.artboard_custom_property_bindings.clone() {
             changed |= self.update_artboard_custom_property_binding(&binding);
         }
+        changed |= self.apply_artboard_property_bindings();
         for binding in &mut self.artboard_list_bindings {
             let target_value = match binding.converter.as_ref() {
                 Some(converter) => {
@@ -443,7 +531,46 @@ impl ArtboardInstance {
         }
         changed |= self.apply_artboard_solo_bindings();
         changed |= self.apply_artboard_nested_host_bindings();
+        changed |= self.sync_nested_child_artboard_data_contexts();
         changed
+    }
+
+    fn apply_artboard_property_bindings(&mut self) -> bool {
+        let mut changed = false;
+        for binding in self.artboard_property_bindings.clone() {
+            let Some(value) = self.artboard_data_bind_values.get(&binding.path).cloned() else {
+                continue;
+            };
+            changed |= self.apply_artboard_property_binding_value(&binding, &value);
+        }
+        changed
+    }
+
+    fn apply_artboard_property_binding_value(
+        &mut self,
+        binding: &RuntimeArtboardPropertyBindingInstance,
+        value: &RuntimeDataBindGraphValue,
+    ) -> bool {
+        let value = match binding.converter.as_ref() {
+            Some(converter) => runtime_data_bind_graph_convert_value(converter, value),
+            None => Some(value.clone()),
+        };
+        let Some(RuntimeDataBindGraphValue::Number(value)) = value else {
+            return false;
+        };
+        match self
+            .objects
+            .property_kind(binding.target_local_id, binding.property_key)
+        {
+            Some(FieldKind::Double) => {
+                self.set_double_property(binding.target_local_id, binding.property_key, value)
+            }
+            Some(FieldKind::Uint) => {
+                let rounded = if value < 0.0 { 0 } else { value.round() as u64 };
+                self.set_uint_property(binding.target_local_id, binding.property_key, rounded)
+            }
+            _ => false,
+        }
     }
 
     fn update_artboard_custom_property_binding(
@@ -530,6 +657,113 @@ impl ArtboardInstance {
             ) => self.set_double_property(binding.target_local_id, property_key, *value),
             _ => false,
         }
+    }
+
+    fn sync_nested_child_artboard_data_contexts(&mut self) -> bool {
+        let host_locals = self.nested_artboards.keys().copied().collect::<Vec<_>>();
+        let mut changed = false;
+        for host_local_id in host_locals {
+            let Some(bindings) = self
+                .nested_artboards
+                .get(&host_local_id)
+                .map(|nested| nested.child.artboard_property_bindings.clone())
+            else {
+                continue;
+            };
+            if bindings.is_empty() {
+                continue;
+            }
+            let updates = bindings
+                .iter()
+                .filter_map(|binding| {
+                    self.stateful_nested_host_binding_value(host_local_id, binding)
+                        .map(|value| (binding.path.clone(), value))
+                })
+                .collect::<Vec<_>>();
+            if updates.is_empty() {
+                continue;
+            }
+            let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
+                continue;
+            };
+            let mut child_context_changed = false;
+            for (path, value) in updates {
+                if nested.child.artboard_data_bind_values.get(&path) == Some(&value) {
+                    continue;
+                }
+                nested.child.artboard_data_bind_values.insert(path, value);
+                child_context_changed = true;
+            }
+            if child_context_changed {
+                changed = true;
+                changed |= nested.child.advance_artboard_data_binds();
+                nested.child.update_pass();
+            }
+        }
+        changed
+    }
+
+    fn stateful_nested_host_binding_value(
+        &self,
+        host_local_id: usize,
+        binding: &RuntimeArtboardPropertyBindingInstance,
+    ) -> Option<RuntimeDataBindGraphValue> {
+        if !matches!(binding.default_value, RuntimeDataBindGraphValue::Number(_)) {
+            return None;
+        }
+        let source_local = self.stateful_nested_host_value_local(host_local_id, &binding.path)?;
+        let property_value_key = property_key_for_name("ViewModelInstanceNumber", "propertyValue")?;
+        self.double_property(source_local, property_value_key)
+            .map(RuntimeDataBindGraphValue::Number)
+    }
+
+    fn stateful_nested_host_value_local(
+        &self,
+        host_local_id: usize,
+        path: &[u32],
+    ) -> Option<usize> {
+        let (view_model_id, property_path) = path.split_first()?;
+        let mut current_local =
+            self.stateful_nested_host_view_model_instance_local(host_local_id, *view_model_id)?;
+        for property_id in property_path {
+            current_local =
+                self.view_model_instance_value_child_local(current_local, *property_id)?;
+        }
+        Some(current_local)
+    }
+
+    fn stateful_nested_host_view_model_instance_local(
+        &self,
+        host_local_id: usize,
+        view_model_id: u32,
+    ) -> Option<usize> {
+        let parent_key = property_key_for_name("Component", "parentId")?;
+        let view_model_key = property_key_for_name("ViewModelInstance", "viewModelId")?;
+        self.slots.iter().find_map(|slot| {
+            (slot.type_name == Some("ViewModelInstance")
+                && self.uint_property(slot.local_id, parent_key) == Some(host_local_id as u64)
+                && self.uint_property(slot.local_id, view_model_key)
+                    == Some(u64::from(view_model_id)))
+            .then_some(slot.local_id)
+        })
+    }
+
+    fn view_model_instance_value_child_local(
+        &self,
+        parent_local_id: usize,
+        view_model_property_id: u32,
+    ) -> Option<usize> {
+        let parent_key = property_key_for_name("Component", "parentId")?;
+        let property_key = property_key_for_name("ViewModelInstanceValue", "viewModelPropertyId")?;
+        self.slots.iter().find_map(|slot| {
+            let type_name = slot.type_name?;
+            (type_name.starts_with("ViewModelInstance")
+                && type_name != "ViewModelInstance"
+                && self.uint_property(slot.local_id, parent_key) == Some(parent_local_id as u64)
+                && self.uint_property(slot.local_id, property_key)
+                    == Some(u64::from(view_model_property_id)))
+            .then_some(slot.local_id)
+        })
     }
 
     pub fn artboard_list_binding_source_list_size_for_data_bind(

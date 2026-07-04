@@ -451,7 +451,8 @@ impl ArtboardInstance {
             else {
                 continue;
             };
-            let weighted_context = self.runtime_weighted_path_context(path, graph);
+            let runtime_path = runtime_path_geometry(self, path);
+            let weighted_context = self.runtime_weighted_path_context(&runtime_path, graph);
             let path_transform = if weighted_context.is_some() {
                 Mat2D::IDENTITY
             } else {
@@ -470,8 +471,12 @@ impl ArtboardInstance {
                 }
             };
 
-            let mut path_commands =
-                path_commands(path, path_kind, transform, weighted_context.as_ref());
+            let mut path_commands = path_commands(
+                &runtime_path,
+                path_kind,
+                transform,
+                weighted_context.as_ref(),
+            );
             prune_empty_path_segments(&mut path_commands);
             commands.extend(path_commands);
         }
@@ -511,14 +516,15 @@ impl ArtboardInstance {
                 else {
                     continue;
                 };
-                let weighted_context = self.runtime_weighted_path_context(path, graph);
+                let runtime_path = runtime_path_geometry(self, path);
+                let weighted_context = self.runtime_weighted_path_context(&runtime_path, graph);
                 let path_transform = if weighted_context.is_some() {
                     Mat2D::IDENTITY
                 } else {
                     path_world
                 };
                 let mut path_commands = path_commands(
-                    path,
+                    &runtime_path,
                     ShapePaintPathKind::World,
                     path_transform,
                     weighted_context.as_ref(),
@@ -2110,9 +2116,15 @@ struct TrimContour {
 }
 
 #[derive(Debug, Clone)]
-struct RuntimePathMeasure {
+pub(crate) struct RuntimePathMeasure {
     contours: Vec<TrimContour>,
     length: f32,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct RuntimePathSample {
+    pub(crate) pos: (f32, f32),
+    pub(crate) tan: (f32, f32),
 }
 
 #[derive(Debug, Clone)]
@@ -2343,13 +2355,63 @@ impl TrimContour {
             .iter()
             .find(|segment| segment.original_index == original_index)
     }
+
+    fn position_tangent_at_distance(&self, distance: f32) -> ((f32, f32), (f32, f32)) {
+        let distance = distance.clamp(0.0, self.length);
+        let index = self.find_segment(distance);
+        let segment = &self.segments[index];
+
+        match segment.kind {
+            TrimSegmentKind::Line { from, to } => {
+                let mut previous_distance = 0.0;
+                if index > 0 {
+                    previous_distance = self.segments[index - 1].distance;
+                }
+                let denominator = segment.distance - previous_distance;
+                let rel_d = if denominator == 0.0 {
+                    0.0
+                } else {
+                    (distance - previous_distance) / denominator
+                };
+                let (tan, _) = normalize_vector((to.0 - from.0, to.1 - from.1));
+                (lerp_point(from, to, rel_d), tan)
+            }
+            TrimSegmentKind::Cubic { p0, p1, p2, p3 } => {
+                cubic_position_tangent([p0, p1, p2, p3], self.compute_t(index, distance))
+            }
+        }
+    }
 }
 
 impl RuntimePathMeasure {
-    fn from_commands(commands: &[RuntimePathCommand]) -> Self {
+    pub(crate) fn from_commands(commands: &[RuntimePathCommand]) -> Self {
         let contours = TrimContour::from_commands(commands);
         let length = contours.iter().map(|contour| contour.length).sum();
         Self { contours, length }
+    }
+
+    pub(crate) fn at_percentage(&self, percentage_distance: f32) -> RuntimePathSample {
+        let mut in_range_percentage = percentage_distance % 1.0;
+        if in_range_percentage < 0.0 {
+            in_range_percentage += 1.0;
+        }
+        if percentage_distance != 0.0 && in_range_percentage == 0.0 {
+            in_range_percentage = 1.0;
+        }
+        self.at_distance(self.length * in_range_percentage)
+    }
+
+    fn at_distance(&self, distance: f32) -> RuntimePathSample {
+        let mut current_distance = distance;
+        for contour in &self.contours {
+            let contour_length = contour.length;
+            if current_distance - contour_length <= 0.0 {
+                let (pos, tan) = contour.position_tangent_at_distance(current_distance);
+                return RuntimePathSample { pos, tan };
+            }
+            current_distance -= contour_length;
+        }
+        RuntimePathSample::default()
     }
 
     fn get_segment(
@@ -2609,6 +2671,53 @@ fn eval_cubic(points: [(f32, f32); 4], t: f32) -> (f32, f32) {
     )
 }
 
+fn cubic_position_tangent(points: [(f32, f32); 4], t: f32) -> ((f32, f32), (f32, f32)) {
+    if t == 0.0 {
+        let tangent_to = if points[0] != points[1] {
+            points[1]
+        } else if points[1] != points[2] {
+            points[2]
+        } else {
+            points[3]
+        };
+        return (
+            points[0],
+            (tangent_to.0 - points[0].0, tangent_to.1 - points[0].1),
+        );
+    }
+    if t == 1.0 {
+        let tangent_from = if points[3] != points[2] {
+            points[2]
+        } else if points[2] != points[1] {
+            points[1]
+        } else {
+            points[0]
+        };
+        return (
+            points[3],
+            (points[3].0 - tangent_from.0, points[3].1 - tangent_from.1),
+        );
+    }
+
+    let a = (
+        points[3].0 + 3.0 * (points[1].0 - points[2].0) - points[0].0,
+        points[3].1 + 3.0 * (points[1].1 - points[2].1) - points[0].1,
+    );
+    let b = (
+        3.0 * (points[2].0 - 2.0 * points[1].0 + points[0].0),
+        3.0 * (points[2].1 - 2.0 * points[1].1 + points[0].1),
+    );
+    let c = (
+        3.0 * (points[1].0 - points[0].0),
+        3.0 * (points[1].1 - points[0].1),
+    );
+    let (tan, _) = normalize_vector((
+        (3.0 * a.0 * t + 2.0 * b.0) * t + c.0,
+        (3.0 * a.1 * t + 2.0 * b.1) * t + c.1,
+    ));
+    (eval_cubic(points, t), tan)
+}
+
 fn cubic_extract(points: [(f32, f32); 4], start_t: f32, end_t: f32) -> [(f32, f32); 4] {
     if start_t == 0.0 && end_t == 1.0 {
         points
@@ -2708,6 +2817,410 @@ fn path_commands(
         "Triangle" => triangle_path_commands(path, path_kind, transform),
         _ => Vec::new(),
     }
+}
+
+pub(crate) fn runtime_path_geometry_commands(
+    artboard: &ArtboardInstance,
+    path: &PathGeometryNode,
+    transform: Mat2D,
+) -> Vec<RuntimePathCommand> {
+    let path = runtime_path_geometry(artboard, path);
+    let mut commands = path_commands(&path, ShapePaintPathKind::World, transform, None);
+    prune_empty_path_segments(&mut commands);
+    commands
+}
+
+fn runtime_path_geometry(artboard: &ArtboardInstance, path: &PathGeometryNode) -> PathGeometryNode {
+    let mut path = path.clone();
+    path.is_closed = runtime_path_bool_property(
+        artboard,
+        path.local_id,
+        path.type_name,
+        "isClosed",
+        path.is_closed,
+    );
+    path.is_hole = runtime_path_bool_property(
+        artboard,
+        path.local_id,
+        path.type_name,
+        "isHole",
+        path.is_hole,
+    );
+    path.is_clockwise = runtime_path_bool_property(
+        artboard,
+        path.local_id,
+        path.type_name,
+        "isClockwise",
+        path.is_clockwise,
+    );
+    path.parametric = runtime_parametric_path(artboard, &path);
+
+    for vertex in &mut path.vertices {
+        vertex.x = runtime_path_double_property(
+            artboard,
+            vertex.local_id,
+            vertex.type_name,
+            "x",
+            vertex.x,
+        );
+        vertex.y = runtime_path_double_property(
+            artboard,
+            vertex.local_id,
+            vertex.type_name,
+            "y",
+            vertex.y,
+        );
+        vertex.radius = runtime_path_double_property(
+            artboard,
+            vertex.local_id,
+            vertex.type_name,
+            "radius",
+            vertex.radius,
+        );
+        vertex.rotation = runtime_path_double_property(
+            artboard,
+            vertex.local_id,
+            vertex.type_name,
+            "rotation",
+            vertex.rotation,
+        );
+        vertex.distance = runtime_path_double_property(
+            artboard,
+            vertex.local_id,
+            vertex.type_name,
+            "distance",
+            vertex.distance,
+        );
+        vertex.in_rotation = runtime_path_double_property(
+            artboard,
+            vertex.local_id,
+            vertex.type_name,
+            "inRotation",
+            vertex.in_rotation,
+        );
+        vertex.in_distance = runtime_path_double_property(
+            artboard,
+            vertex.local_id,
+            vertex.type_name,
+            "inDistance",
+            vertex.in_distance,
+        );
+        vertex.out_rotation = runtime_path_double_property(
+            artboard,
+            vertex.local_id,
+            vertex.type_name,
+            "outRotation",
+            vertex.out_rotation,
+        );
+        vertex.out_distance = runtime_path_double_property(
+            artboard,
+            vertex.local_id,
+            vertex.type_name,
+            "outDistance",
+            vertex.out_distance,
+        );
+    }
+
+    path
+}
+
+fn runtime_parametric_path(
+    artboard: &ArtboardInstance,
+    path: &PathGeometryNode,
+) -> Option<ParametricPathNode> {
+    match path.parametric.as_ref()? {
+        ParametricPathNode::Ellipse {
+            width,
+            height,
+            origin_x,
+            origin_y,
+        } => Some(ParametricPathNode::Ellipse {
+            width: runtime_path_double_property(
+                artboard,
+                path.local_id,
+                path.type_name,
+                "width",
+                *width,
+            ),
+            height: runtime_path_double_property(
+                artboard,
+                path.local_id,
+                path.type_name,
+                "height",
+                *height,
+            ),
+            origin_x: runtime_path_double_property(
+                artboard,
+                path.local_id,
+                path.type_name,
+                "originX",
+                *origin_x,
+            ),
+            origin_y: runtime_path_double_property(
+                artboard,
+                path.local_id,
+                path.type_name,
+                "originY",
+                *origin_y,
+            ),
+        }),
+        ParametricPathNode::Polygon {
+            width,
+            height,
+            origin_x,
+            origin_y,
+            points,
+            corner_radius,
+        } => Some(ParametricPathNode::Polygon {
+            width: runtime_path_double_property(
+                artboard,
+                path.local_id,
+                path.type_name,
+                "width",
+                *width,
+            ),
+            height: runtime_path_double_property(
+                artboard,
+                path.local_id,
+                path.type_name,
+                "height",
+                *height,
+            ),
+            origin_x: runtime_path_double_property(
+                artboard,
+                path.local_id,
+                path.type_name,
+                "originX",
+                *origin_x,
+            ),
+            origin_y: runtime_path_double_property(
+                artboard,
+                path.local_id,
+                path.type_name,
+                "originY",
+                *origin_y,
+            ),
+            points: runtime_path_uint_property(
+                artboard,
+                path.local_id,
+                path.type_name,
+                "points",
+                *points as u64,
+            ) as u32,
+            corner_radius: runtime_path_double_property(
+                artboard,
+                path.local_id,
+                path.type_name,
+                "cornerRadius",
+                *corner_radius,
+            ),
+        }),
+        ParametricPathNode::Star {
+            width,
+            height,
+            origin_x,
+            origin_y,
+            points,
+            corner_radius,
+            inner_radius,
+        } => Some(ParametricPathNode::Star {
+            width: runtime_path_double_property(
+                artboard,
+                path.local_id,
+                path.type_name,
+                "width",
+                *width,
+            ),
+            height: runtime_path_double_property(
+                artboard,
+                path.local_id,
+                path.type_name,
+                "height",
+                *height,
+            ),
+            origin_x: runtime_path_double_property(
+                artboard,
+                path.local_id,
+                path.type_name,
+                "originX",
+                *origin_x,
+            ),
+            origin_y: runtime_path_double_property(
+                artboard,
+                path.local_id,
+                path.type_name,
+                "originY",
+                *origin_y,
+            ),
+            points: runtime_path_uint_property(
+                artboard,
+                path.local_id,
+                path.type_name,
+                "points",
+                *points as u64,
+            ) as u32,
+            corner_radius: runtime_path_double_property(
+                artboard,
+                path.local_id,
+                path.type_name,
+                "cornerRadius",
+                *corner_radius,
+            ),
+            inner_radius: runtime_path_double_property(
+                artboard,
+                path.local_id,
+                path.type_name,
+                "innerRadius",
+                *inner_radius,
+            ),
+        }),
+        ParametricPathNode::Rectangle {
+            width,
+            height,
+            origin_x,
+            origin_y,
+            link_corner_radius,
+            corner_radius_tl,
+            corner_radius_tr,
+            corner_radius_bl,
+            corner_radius_br,
+        } => Some(ParametricPathNode::Rectangle {
+            width: runtime_path_double_property(
+                artboard,
+                path.local_id,
+                path.type_name,
+                "width",
+                *width,
+            ),
+            height: runtime_path_double_property(
+                artboard,
+                path.local_id,
+                path.type_name,
+                "height",
+                *height,
+            ),
+            origin_x: runtime_path_double_property(
+                artboard,
+                path.local_id,
+                path.type_name,
+                "originX",
+                *origin_x,
+            ),
+            origin_y: runtime_path_double_property(
+                artboard,
+                path.local_id,
+                path.type_name,
+                "originY",
+                *origin_y,
+            ),
+            link_corner_radius: runtime_path_bool_property(
+                artboard,
+                path.local_id,
+                path.type_name,
+                "linkCornerRadius",
+                *link_corner_radius,
+            ),
+            corner_radius_tl: runtime_path_double_property(
+                artboard,
+                path.local_id,
+                path.type_name,
+                "cornerRadiusTL",
+                *corner_radius_tl,
+            ),
+            corner_radius_tr: runtime_path_double_property(
+                artboard,
+                path.local_id,
+                path.type_name,
+                "cornerRadiusTR",
+                *corner_radius_tr,
+            ),
+            corner_radius_bl: runtime_path_double_property(
+                artboard,
+                path.local_id,
+                path.type_name,
+                "cornerRadiusBL",
+                *corner_radius_bl,
+            ),
+            corner_radius_br: runtime_path_double_property(
+                artboard,
+                path.local_id,
+                path.type_name,
+                "cornerRadiusBR",
+                *corner_radius_br,
+            ),
+        }),
+        ParametricPathNode::Triangle {
+            width,
+            height,
+            origin_x,
+            origin_y,
+        } => Some(ParametricPathNode::Triangle {
+            width: runtime_path_double_property(
+                artboard,
+                path.local_id,
+                path.type_name,
+                "width",
+                *width,
+            ),
+            height: runtime_path_double_property(
+                artboard,
+                path.local_id,
+                path.type_name,
+                "height",
+                *height,
+            ),
+            origin_x: runtime_path_double_property(
+                artboard,
+                path.local_id,
+                path.type_name,
+                "originX",
+                *origin_x,
+            ),
+            origin_y: runtime_path_double_property(
+                artboard,
+                path.local_id,
+                path.type_name,
+                "originY",
+                *origin_y,
+            ),
+        }),
+    }
+}
+
+fn runtime_path_double_property(
+    artboard: &ArtboardInstance,
+    local_id: usize,
+    type_name: &str,
+    property_name: &str,
+    default: f32,
+) -> f32 {
+    property_key_for_name(type_name, property_name)
+        .and_then(|key| artboard.double_property(local_id, key))
+        .unwrap_or(default)
+}
+
+fn runtime_path_bool_property(
+    artboard: &ArtboardInstance,
+    local_id: usize,
+    type_name: &str,
+    property_name: &str,
+    default: bool,
+) -> bool {
+    property_key_for_name(type_name, property_name)
+        .and_then(|key| artboard.bool_property(local_id, key))
+        .unwrap_or(default)
+}
+
+fn runtime_path_uint_property(
+    artboard: &ArtboardInstance,
+    local_id: usize,
+    type_name: &str,
+    property_name: &str,
+    default: u64,
+) -> u64 {
+    property_key_for_name(type_name, property_name)
+        .and_then(|key| artboard.uint_property(local_id, key))
+        .unwrap_or(default)
 }
 
 fn points_path_commands(

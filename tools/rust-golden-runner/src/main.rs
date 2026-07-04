@@ -409,6 +409,21 @@ fn ensure_static_draw_supported(graph: &GraphFile, artboard: &ArtboardGraph) -> 
         );
     }
 
+    if artboard
+        .local_objects
+        .iter()
+        .any(|object| object.type_name == Some("FollowPathConstraint"))
+        && let Some(star) = artboard
+            .local_objects
+            .iter()
+            .find(|object| object.type_name == Some("Star"))
+    {
+        bail!(
+            "unsupported: follow-path-star-shapes in Rust golden runner (global {})",
+            star.global_id
+        );
+    }
+
     if let Some((constraint_type, global_id)) = artboard.local_objects.iter().find_map(|object| {
         let type_name = object.type_name?;
         (type_name.ends_with("Constraint")
@@ -416,7 +431,8 @@ fn ensure_static_draw_supported(graph: &GraphFile, artboard: &ArtboardGraph) -> 
             && type_name != "TranslationConstraint"
             && type_name != "RotationConstraint"
             && type_name != "ScaleConstraint"
-            && type_name != "TransformConstraint")
+            && type_name != "TransformConstraint"
+            && type_name != "FollowPathConstraint")
             .then_some((type_name, object.global_id))
     }) {
         bail!(

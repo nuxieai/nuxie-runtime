@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 344 across 75 exact files
-- Parked breakdown (from `make golden-compare`): M3=15 M4=83 M5=8 M6=72 gated=6 harness=36
+- Exact segments (file × sample): 349 across 80 exact files
+- Parked breakdown (from `make golden-compare`): M3=9 M4=83 M5=8 M6=73 gated=6 harness=36
 - Current milestone: **M3 — Interactivity Exact (#V2-4)**
 
 ## Milestones
@@ -23,19 +23,24 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue M3 constraints. `DistanceConstraint`, `TranslationConstraint`,
-   `RotationConstraint`, `ScaleConstraint`, and `TransformConstraint` now run
-   from `crates/rive-runtime/src/constraints.rs`, apply after world-transform
-   updates, and `distance_constraint.riv`, `translation_constraint.riv`,
-   `rotation_constraint.riv`, `scale_constraint.riv`, and
-   `transform_constraint.riv` are exact. The M3 parked queue has 15 files,
-   still gated by
-   `rust-runner-unsupported:constraints`; query with
-   `grep -B6 'milestone = "M3"' corpus.toml`. Continue M3 with
-   FollowPathConstraint and IK/skin-dependent constraint files.
-2. Port the remaining M3 constraint families in corpus order
-   (`follow_path*`, `two_bone_ik`, `complex_ik_dependency`) before returning
-   to handle-source world-space math and nested-remap joystick advancement
-   if a corpus diff reaches those cases.
+   `RotationConstraint`, `ScaleConstraint`, `TransformConstraint`, and plain
+   `FollowPathConstraint` now run from
+   `crates/rive-runtime/src/constraints.rs` after world-transform updates.
+   `distance_constraint.riv`, `translation_constraint.riv`,
+   `rotation_constraint.riv`, `scale_constraint.riv`,
+   `transform_constraint.riv`, `follow_path.riv`,
+   `follow_path_constraint.riv`, `follow_path_path_0_opacity.riv`,
+   `follow_path_solos.riv`, and `follow_path_with_0_opacity.riv` are exact.
+   The M3 parked queue has 9 files; query with
+   `grep -B6 'milestone = "M3"' corpus.toml`.
+2. Port the remaining M3 constraint families in corpus order:
+   IK/skin-dependent constraints (`two_bone_ik`, `complex_ik_dependency`),
+   then scroll/list constraint files (`component_list_1`,
+   `component_list_follow_path`, `component_list_follow_path_distance`,
+   `deterministic_mode`, `draw_index_list`, `virtualize_blendmode`). Keep
+   `follow_path_shapes` parked on its narrow
+   `rust-runner-unsupported:follow-path-star-shapes` precision diagnostic
+   until the Star/parametric local path sampler is investigated.
 3. Remaining exact entries pinned to sample `0` are static M1 holdovers:
    `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
    them during M3 unless a related refactor needs a cheap draw-regression check.
@@ -60,17 +65,22 @@ the only memory the next session has. Update it every commit.
   `DistanceConstraint` world-translation application and
   `TranslationConstraint` target/source/destination/min-max translation
   application, `RotationConstraint` compose/decompose rotation,
-  `ScaleConstraint` compose/decompose scale, and `TransformConstraint`
-  target-origin full-transform interpolation. Custom handle-source
-  world-space math and nested remap dependent advancement are still not
-  supported.
+  `ScaleConstraint` compose/decompose scale, `TransformConstraint`
+  target-origin full-transform interpolation, and `FollowPathConstraint`
+  Shape/Path target sampling against runtime path geometry. Custom
+  handle-source world-space math and nested remap dependent advancement are
+  still not supported.
   Golden runner sample lists now advance by sorted absolute-time deltas and reuse render paths
   across samples;
-  no images, text, nested artboards, IK/follow-path/scroll constraints, or
+  no images, text, nested artboards, IK/scroll/list constraints, or
   scripted input.
 - `TransformConstraint` currently covers the default empty
   `TransformComponent::constraintBounds()` path. Text/LayoutComponent
   constraint bounds remain parked behind their M6 text/layout diagnostics.
+- `follow_path_shapes.riv` remains M3 parked on
+  `rust-runner-unsupported:follow-path-star-shapes`; plain
+  `FollowPathConstraint` is implemented, but Star/parametric local path
+  sampling differs from C++ just over the golden epsilon.
 - Per-file parked reasons now live in `corpus.toml`: each gated entry
   carries `milestone = "M3|M4|M5|M6|gated|harness"` plus its diagnostic
   feature tags (`rust-runner-unsupported:*`, `cpp-runner-crash`,
@@ -471,4 +481,17 @@ the only memory the next session has. Update it every commit.
   segments are now 344 across 75 exact files; `make golden-compare` reports
   `exact=75`, `exact-segments=344`, `diverges=0`,
   `unsupported-feature=220`, `not-yet=0`, parked `M3=15`, and
+  `cargo test --workspace` passes.
+- 2026-07-04: [M3] Ported `FollowPathConstraint` from C++
+  `src/constraints/follow_path_constraint.cpp`, added runtime path geometry
+  sampling with current path/vertex/parametric property overlays, narrowed the
+  Rust golden-runner constraint gate for plain follow-path constraints,
+  promoted `follow_path.riv`, `follow_path_constraint.riv`,
+  `follow_path_path_0_opacity.riv`, `follow_path_solos.riv`, and
+  `follow_path_with_0_opacity.riv` to exact, reclassified
+  `follow_path_path.riv` to M6 text, and parked `follow_path_shapes.riv` on
+  the narrow `rust-runner-unsupported:follow-path-star-shapes` precision
+  diagnostic. Exact segments are now 349 across 80 exact files; `make
+  golden-compare` reports `exact=80`, `exact-segments=349`, `diverges=0`,
+  `unsupported-feature=215`, `not-yet=0`, parked `M3=9`, and
   `cargo test --workspace` passes.

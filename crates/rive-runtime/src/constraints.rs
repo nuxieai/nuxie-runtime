@@ -1,5 +1,31 @@
+use rive_binary::RuntimeFile;
+use rive_graph::{ArtboardGraph, PathGeometryNode};
+
+use crate::components::TransformComponents;
+use crate::draw::{RuntimePathMeasure, runtime_path_geometry_commands};
 use crate::properties::property_key_for_name;
 use crate::{ArtboardInstance, Mat2D};
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeFollowPathConstraint {
+    local_id: usize,
+    target_local: usize,
+    target_kind: RuntimeFollowPathTargetKind,
+    paths: Vec<RuntimeFollowPathPath>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeFollowPathTargetKind {
+    Shape,
+    Path,
+    Other,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeFollowPathPath {
+    local_id: usize,
+    geometry: PathGeometryNode,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TransformSpace {
@@ -14,6 +40,79 @@ impl TransformSpace {
             _ => Self::World,
         }
     }
+}
+
+pub(crate) fn build_runtime_follow_path_constraints(
+    file: &RuntimeFile,
+    graph: &ArtboardGraph,
+) -> Vec<RuntimeFollowPathConstraint> {
+    graph
+        .local_objects
+        .iter()
+        .filter(|object| object.type_name == Some("FollowPathConstraint"))
+        .filter_map(|object| {
+            let constraint = file.object(object.global_id as usize)?;
+            let target_local = usize::try_from(constraint.uint_property("targetId")?).ok()?;
+            let target_type = graph
+                .local_objects
+                .iter()
+                .find(|object| object.local_id == target_local)
+                .and_then(|object| object.type_name);
+
+            let target_kind = if target_type == Some("Shape") {
+                RuntimeFollowPathTargetKind::Shape
+            } else if graph.paths.iter().any(|path| path.local_id == target_local) {
+                RuntimeFollowPathTargetKind::Path
+            } else {
+                RuntimeFollowPathTargetKind::Other
+            };
+
+            let paths = match target_kind {
+                RuntimeFollowPathTargetKind::Shape => graph
+                    .path_composers
+                    .iter()
+                    .find(|composer| composer.shape_local == target_local)
+                    .map(|composer| {
+                        composer
+                            .paths
+                            .iter()
+                            .filter_map(|path_ref| {
+                                graph
+                                    .paths
+                                    .iter()
+                                    .find(|path| path.local_id == path_ref.local_id)
+                                    .cloned()
+                                    .map(|geometry| RuntimeFollowPathPath {
+                                        local_id: path_ref.local_id,
+                                        geometry,
+                                    })
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                RuntimeFollowPathTargetKind::Path => graph
+                    .paths
+                    .iter()
+                    .find(|path| path.local_id == target_local)
+                    .cloned()
+                    .map(|geometry| {
+                        vec![RuntimeFollowPathPath {
+                            local_id: target_local,
+                            geometry,
+                        }]
+                    })
+                    .unwrap_or_default(),
+                RuntimeFollowPathTargetKind::Other => Vec::new(),
+            };
+
+            Some(RuntimeFollowPathConstraint {
+                local_id: object.local_id,
+                target_local,
+                target_kind,
+                paths,
+            })
+        })
+        .collect()
 }
 
 /// Runtime constraint application for the C++ `src/constraints/` path.
@@ -51,6 +150,9 @@ fn apply_constraint(
         }
         Some("TransformConstraint") => {
             apply_transform_constraint(artboard, component_index, constraint_local)
+        }
+        Some("FollowPathConstraint") => {
+            apply_follow_path_constraint(artboard, component_index, constraint_local)
         }
         _ => false,
     }
@@ -577,6 +679,196 @@ fn apply_transform_constraint(
         transform_b,
         constraint_double(artboard, constraint_local, "Constraint", "strength", 1.0),
     )
+}
+
+fn apply_follow_path_constraint(
+    artboard: &mut ArtboardInstance,
+    component_index: usize,
+    constraint_local: usize,
+) -> bool {
+    // Ported from C++ `src/constraints/follow_path_constraint.cpp`.
+    let Some(runtime) = follow_path_constraint(artboard, constraint_local).cloned() else {
+        return false;
+    };
+    let Some(target_index) = artboard
+        .component_by_local
+        .get(&runtime.target_local)
+        .copied()
+    else {
+        return false;
+    };
+    if artboard.components[target_index].is_collapsed() {
+        return false;
+    }
+
+    let transform_b = target_transform_for_follow_path_constraint(
+        artboard,
+        &runtime,
+        target_index,
+        component_index,
+    );
+    let components = follow_path_constrain_components(
+        artboard,
+        constraint_local,
+        target_index,
+        artboard.components[component_index]
+            .transform
+            .world_transform,
+        transform_b,
+        parent_world_transform(artboard, component_index),
+    );
+    write_world_transform(artboard, component_index, Mat2D::compose(components))
+}
+
+fn target_transform_for_follow_path_constraint(
+    artboard: &ArtboardInstance,
+    runtime: &RuntimeFollowPathConstraint,
+    target_index: usize,
+    component_index: usize,
+) -> Mat2D {
+    match runtime.target_kind {
+        RuntimeFollowPathTargetKind::Shape | RuntimeFollowPathTargetKind::Path => {
+            let distance = constraint_double(
+                artboard,
+                runtime.local_id,
+                "FollowPathConstraint",
+                "distance",
+                0.0,
+            );
+            let mut commands = Vec::new();
+            for path in &runtime.paths {
+                let Some(path_world) = artboard
+                    .component(path.local_id)
+                    .map(|component| component.transform.world_transform)
+                else {
+                    continue;
+                };
+                commands.extend(runtime_path_geometry_commands(
+                    artboard,
+                    &path.geometry,
+                    path_world,
+                ));
+            }
+
+            let sample = RuntimePathMeasure::from_commands(&commands).at_percentage(distance);
+            let mut transform_b = artboard.components[target_index].transform.world_transform;
+
+            if constraint_bool(
+                artboard,
+                runtime.local_id,
+                "FollowPathConstraint",
+                "orient",
+                true,
+            ) {
+                let components_b = transform_b.decompose();
+                let tangent_rotation = sample.tan.1.atan2(sample.tan.0);
+                let two_pi = std::f32::consts::PI * 2.0;
+                let angle_b = components_b.rotation % two_pi;
+                let mut diff = tangent_rotation - angle_b;
+                if diff > std::f32::consts::PI {
+                    diff -= two_pi;
+                } else if diff < -std::f32::consts::PI {
+                    diff += two_pi;
+                }
+                transform_b = Mat2D::from_rotation(
+                    angle_b
+                        + diff
+                            * constraint_double(
+                                artboard,
+                                runtime.local_id,
+                                "Constraint",
+                                "strength",
+                                1.0,
+                            ),
+                );
+            }
+
+            let offset_position = if constraint_bool(
+                artboard,
+                runtime.local_id,
+                "FollowPathConstraint",
+                "offset",
+                false,
+            ) {
+                let local_transform = artboard.components[component_index]
+                    .transform
+                    .local_transform
+                    .0;
+                (local_transform[4], local_transform[5])
+            } else {
+                (0.0, 0.0)
+            };
+            transform_b.0[4] = sample.pos.0 + offset_position.0;
+            transform_b.0[5] = sample.pos.1 + offset_position.1;
+            transform_b
+        }
+        RuntimeFollowPathTargetKind::Other => {
+            artboard.components[target_index].transform.world_transform
+        }
+    }
+}
+
+fn follow_path_constrain_components(
+    artboard: &ArtboardInstance,
+    constraint_local: usize,
+    target_index: usize,
+    component_transform: Mat2D,
+    mut transform_b: Mat2D,
+    component_parent_world: Mat2D,
+) -> TransformComponents {
+    if transform_space(
+        artboard,
+        constraint_local,
+        "TransformSpaceConstraint",
+        "sourceSpaceValue",
+    ) == TransformSpace::Local
+    {
+        let target_parent_world = parent_world_transform(artboard, target_index);
+        let Some(inverse) = invert(target_parent_world) else {
+            return TransformComponents::default();
+        };
+        transform_b = inverse.multiply(transform_b);
+    }
+    if transform_space(
+        artboard,
+        constraint_local,
+        "TransformSpaceConstraint",
+        "destSpaceValue",
+    ) == TransformSpace::Local
+    {
+        transform_b = component_parent_world.multiply(transform_b);
+    }
+
+    let components_a = component_transform.decompose();
+    let mut components_b = transform_b.decompose();
+    let t = constraint_double(artboard, constraint_local, "Constraint", "strength", 1.0);
+    let ti = 1.0 - t;
+
+    if !constraint_bool(
+        artboard,
+        constraint_local,
+        "FollowPathConstraint",
+        "orient",
+        true,
+    ) {
+        components_b.rotation = components_a.rotation % (std::f32::consts::PI * 2.0);
+    }
+    components_b.x = components_a.x * ti + components_b.x * t;
+    components_b.y = components_a.y * ti + components_b.y * t;
+    components_b.scale_x = components_a.scale_x;
+    components_b.scale_y = components_a.scale_y;
+    components_b.skew = components_a.skew;
+    components_b
+}
+
+fn follow_path_constraint(
+    artboard: &ArtboardInstance,
+    constraint_local: usize,
+) -> Option<&RuntimeFollowPathConstraint> {
+    artboard
+        .follow_path_constraints
+        .iter()
+        .find(|constraint| constraint.local_id == constraint_local)
 }
 
 fn target_transform_for_transform_constraint(

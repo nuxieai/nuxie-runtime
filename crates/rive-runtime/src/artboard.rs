@@ -18,6 +18,7 @@ use crate::components::{
     AuthoredTransform, ComponentDirt, RuntimeComponent, RuntimeSolo, TransformProperty,
     UpdateComponentsReport, apply_initial_solo_collapses, build_runtime_solos,
 };
+use crate::constraints::{RuntimeFollowPathConstraint, build_runtime_follow_path_constraints};
 use crate::data_bind_graph::RuntimeDataBindGraphValue;
 use crate::objects::{InstanceObjectArena, InstanceSlot};
 use crate::properties::{
@@ -42,6 +43,7 @@ pub struct ArtboardInstance {
     pub(crate) component_by_local: BTreeMap<usize, usize>,
     pub(crate) solos: Vec<RuntimeSolo>,
     pub(crate) joysticks: Vec<RuntimeJoystick>,
+    pub(crate) follow_path_constraints: Vec<RuntimeFollowPathConstraint>,
     pub(crate) joysticks_apply_before_update: bool,
     pub(crate) update_order: Vec<usize>,
     pub(crate) linear_animations: Vec<RuntimeLinearAnimation>,
@@ -111,6 +113,7 @@ impl ArtboardInstance {
         let solos = build_runtime_solos(file, graph);
         let linear_animations = build_linear_animations(file, graph, &slots);
         let joysticks = build_runtime_joysticks(graph, &linear_animations);
+        let follow_path_constraints = build_runtime_follow_path_constraints(file, graph);
         let state_machines = build_state_machines(file, graph, &linear_animations);
         let artboard_data_bind_values = build_artboard_default_view_model_values(file, graph);
         let artboard_custom_property_bindings =
@@ -131,6 +134,7 @@ impl ArtboardInstance {
             component_by_local,
             solos,
             joysticks,
+            follow_path_constraints,
             joysticks_apply_before_update: graph.joysticks_apply_before_update,
             update_order,
             linear_animations,
@@ -890,6 +894,7 @@ mod tests {
             component_by_local,
             solos: Vec::new(),
             joysticks: Vec::new(),
+            follow_path_constraints: Vec::new(),
             joysticks_apply_before_update: true,
             update_order,
             linear_animations: Vec::new(),

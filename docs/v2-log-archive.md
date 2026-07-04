@@ -2130,3 +2130,56 @@ milestone entries are kept verbatim here. Newest milestone last.
   golden-compare` reports `exact=70`, `exact-segments=290`, `diverges=0`,
   `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
   passes.
+- 2026-07-03: [M2] Widened `fix_rectangle.riv` from samples `0`, `0.25`,
+  `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and `1.0`,
+  keeping animated rectangle/path geometry playback exact across the fifth
+  sample. Exact segments are now 291 across 70 exact files; `make
+  golden-compare` reports `exact=70`, `exact-segments=291`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+- 2026-07-03: [M2] Widened `hit_test_solos.riv` from samples `0`, `0.25`,
+  `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and `1.0`,
+  keeping passive hit-test Solo/bool state-machine playback exact across the
+  fifth sample while leaving scripted pointer dispatch in M3 scope. Exact
+  segments are now 292 across 70 exact files; `make golden-compare` reports
+  `exact=70`, `exact-segments=292`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+- 2026-07-03: [M2] Widened `joel_signed.riv` from samples `0`, `0.25`,
+  `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and `1.0`,
+  keeping the large signed-Joel skin, constraint, direct-blend animation, and
+  passive listener/data-bind fixture exact across the fifth sample. Exact
+  segments are now 293 across 70 exact files; `make golden-compare` reports
+  `exact=70`, `exact-segments=293`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+- 2026-07-03: [M2] Widened `joystick_flag_test.riv` from samples `0`,
+  `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
+  `1.0`, keeping passive joystick flag animation playback exact across the
+  fifth sample before opening scripted pointer input in M3. Exact segments
+  are now 294 across 70 exact files; `make golden-compare` reports
+  `exact=70`, `exact-segments=294`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+- 2026-07-03: [M2] Widened `joystick_nested_remap.riv` from samples `0`,
+  `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
+  `1.0`, keeping passive joystick nested-remap animation playback exact
+  across the fifth sample without opening M4 nested-artboard advancement.
+  Exact segments are now 295 across 70 exact files; `make golden-compare`
+  reports `exact=70`, `exact-segments=295`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+- 2026-07-03: [M2] Widened `juice.riv` from samples `0`, `0.25`, `0.5`,
+  and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and `1.0`, keeping the
+  animated gradient/vertex path fixture exact across the fifth sample. Exact
+  segments are now 296 across 70 exact files; `make golden-compare` reports
+  `exact=70`, `exact-segments=296`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+- 2026-07-03: [M2] Widened `keyboard_event_to_script.riv` from samples `0`,
+  `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
+  `1.0`, keeping passive script-asset/focus-data playback exact before active
+  keyboard/script input opens in M3/M6. Exact segments are now 297 across 70
+  exact files; `make golden-compare` reports `exact=70`,
+  `exact-segments=297`, `diverges=0`, `unsupported-feature=225`,
+  `not-yet=0`, and `cargo test --workspace` passes.

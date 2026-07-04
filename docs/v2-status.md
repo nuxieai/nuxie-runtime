@@ -44,10 +44,16 @@ the only memory the next session has. Update it every commit.
    converter-state bridge, graph/source-node execution impls, converter
    state/formula/interpolator helper types, owned view-model source-path
    helpers, converter conversion/evaluation helpers, and converter
-   construction helpers also live there. Continue modularizing the remaining
-   root runtime surfaces; start with the draw/path/rendering command pipeline
-   because it is the largest contiguous `lib.rs` surface left and isolates the
-   renderer seam from object/data-bind work.
+   construction helpers also live there. The draw/path/rendering command
+   pipeline, including `ArtboardInstance` draw methods, draw/path command
+   types, render path cache, paint preallocation, path effect builders, and
+   renderer trait driving, lives in `crates/rive-runtime/src/draw.rs`.
+   Continue modularizing the remaining root runtime surfaces; start with
+   `RuntimeOwnedViewModelInstance`, owned source handles, property-path
+   helpers, and adjacent runtime data-context lookup/reporting code because
+   that is now the largest coherent `lib.rs` surface and completes the
+   view-model/data-bind seam already opened by `view_model.rs` and
+   `data_bind_graph.rs`.
 2. Add handle-source world-space math and nested-remap dependent advancement
    to the joystick path when a corpus diff reaches those cases.
 3. Remaining exact entries pinned to sample `0` are static M1 holdovers:
@@ -185,59 +191,6 @@ the only memory the next session has. Update it every commit.
   under `M2 active log rolloff`; keep only the recent rolling window here once
   Metric, Next, Decisions, and `corpus.toml` capture the current state.
 
-- 2026-07-03: [M2] Widened `fix_rectangle.riv` from samples `0`, `0.25`,
-  `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and `1.0`,
-  keeping animated rectangle/path geometry playback exact across the fifth
-  sample. Exact segments are now 291 across 70 exact files; `make
-  golden-compare` reports `exact=70`, `exact-segments=291`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-03: [M2] Widened `hit_test_solos.riv` from samples `0`, `0.25`,
-  `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and `1.0`,
-  keeping passive hit-test Solo/bool state-machine playback exact across the
-  fifth sample while leaving scripted pointer dispatch in M3 scope. Exact
-  segments are now 292 across 70 exact files; `make golden-compare` reports
-  `exact=70`, `exact-segments=292`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-03: [M2] Widened `joel_signed.riv` from samples `0`, `0.25`,
-  `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and `1.0`,
-  keeping the large signed-Joel skin, constraint, direct-blend animation, and
-  passive listener/data-bind fixture exact across the fifth sample. Exact
-  segments are now 293 across 70 exact files; `make golden-compare` reports
-  `exact=70`, `exact-segments=293`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-03: [M2] Widened `joystick_flag_test.riv` from samples `0`,
-  `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
-  `1.0`, keeping passive joystick flag animation playback exact across the
-  fifth sample before opening scripted pointer input in M3. Exact segments
-  are now 294 across 70 exact files; `make golden-compare` reports
-  `exact=70`, `exact-segments=294`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-03: [M2] Widened `joystick_nested_remap.riv` from samples `0`,
-  `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
-  `1.0`, keeping passive joystick nested-remap animation playback exact
-  across the fifth sample without opening M4 nested-artboard advancement.
-  Exact segments are now 295 across 70 exact files; `make golden-compare`
-  reports `exact=70`, `exact-segments=295`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-03: [M2] Widened `juice.riv` from samples `0`, `0.25`, `0.5`,
-  and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and `1.0`, keeping the
-  animated gradient/vertex path fixture exact across the fifth sample. Exact
-  segments are now 296 across 70 exact files; `make golden-compare` reports
-  `exact=70`, `exact-segments=296`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
-- 2026-07-03: [M2] Widened `keyboard_event_to_script.riv` from samples `0`,
-  `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
-  `1.0`, keeping passive script-asset/focus-data playback exact before active
-  keyboard/script input opens in M3/M6. Exact segments are now 297 across 70
-  exact files; `make golden-compare` reports `exact=70`,
-  `exact-segments=297`, `diverges=0`, `unsupported-feature=225`,
-  `not-yet=0`, and `cargo test --workspace` passes.
 - 2026-07-04: [M2] Widened `library_data_enum_test.riv` from samples `0`,
   `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
   `1.0`, keeping passive custom-enum/view-model state-machine playback exact
@@ -430,6 +383,15 @@ the only memory the next session has. Update it every commit.
   construction helpers from `crates/rive-runtime/src/lib.rs` into
   `crates/rive-runtime/src/data_bind_graph.rs`, with artboard/list binding
   and state-machine bindable builders importing the graph helpers directly.
+  Exact segments remain 339 across 70 exact files; `make golden-compare`
+  reports `exact=70`, `exact-segments=339`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+- 2026-07-04: [M2] Extracted the draw/path/rendering command pipeline from
+  `crates/rive-runtime/src/lib.rs` into `crates/rive-runtime/src/draw.rs`,
+  including `ArtboardInstance` draw methods, draw/path command types, render
+  path cache, paint preallocation, path effect builders, renderer trait
+  driving, and color interpolation helpers used by animation/data-bind code.
   Exact segments remain 339 across 70 exact files; `make golden-compare`
   reports `exact=70`, `exact-segments=339`, `diverges=0`,
   `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`

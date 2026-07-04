@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use rive_binary::{RuntimeFile, RuntimeObject};
 
+use crate::draw::color_lerp;
 use crate::{
     RuntimeDataContext, RuntimeImportedViewModelInstanceContext, RuntimeOwnedViewModelInstance,
     RuntimeStateMachine, RuntimeTransitionInterpolator, RuntimeViewModelPointer,
@@ -10,7 +11,7 @@ use crate::{
     StateMachineBindableEnumInstance, StateMachineBindableIntegerInstance,
     StateMachineBindableListInstance, StateMachineBindableNumberInstance,
     StateMachineBindableStringInstance, StateMachineBindableTriggerInstance,
-    StateMachineBindableViewModelInstance, color_lerp,
+    StateMachineBindableViewModelInstance,
     runtime_view_model_view_model_property_path_for_name_path,
 };
 

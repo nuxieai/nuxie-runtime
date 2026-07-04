@@ -1,6 +1,7 @@
+use crate::draw::color_lerp;
 use crate::{
     ArtboardInstance, InstanceSlot, StateMachineReportedEvent, TransformProperty,
-    artboard_index_for_graph, color_lerp, mix_value, runtime_object_bool_property_by_key,
+    artboard_index_for_graph, mix_value, runtime_object_bool_property_by_key,
     runtime_object_color_property_by_key, runtime_object_double_property_by_key,
     runtime_object_field_kind_by_key, transform_property_for_key,
 };

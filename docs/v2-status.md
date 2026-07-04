@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 448 across 127 exact files
-- Parked breakdown (from `make golden-compare`): M5=6 M6=119 gated=7 harness=36
+- Exact segments (file × sample): 449 across 128 exact files
+- Parked breakdown (from `make golden-compare`): M5=5 M6=119 gated=7 harness=36
 - Current milestone: **M5 — Data Binding Exact Incl. External View-Model Mutation (#V2-6)**
 
 ## Milestones
@@ -24,10 +24,10 @@ the only memory the next session has. Update it every commit.
 
 1. Continue M5 with the smallest data-binding slice that can move a corpus
    entry. Query the queue with `grep -B6 'milestone = "M5"' corpus.toml`;
-   the next manifest candidate is `library_view_model_test.riv`
+   the next manifest candidate is `relative_data_binding.riv`
    (`data-binding-nested-child`). A direct Rust-runner probe reports
-   `unsupported: data-binding-nested-child` for data bind global 54 targeting
-   nested child `CustomPropertyString`.
+   `unsupported: data-binding-nested-child` for data bind global 83 targeting
+   nested child `Shape` x/y.
 2. M4 is closed for the current corpus: `grep -B6 'milestone = "M4"'
    corpus.toml` is empty. The remaining formerly-M4 entries were probed with
    `rust-golden-runner` and moved to their first verified later blocker:
@@ -86,6 +86,8 @@ the only memory the next session has. Update it every commit.
   hosts, and nested state-machine reported-event bubbling into parent event
   listeners, nested child `Node.opacity` and `Rectangle.width/height`
   source-to-target number binds with child artboard data-bind advancement,
+  nested child `CustomPropertyString.propertyValue` string binds and
+  `Rectangle.width/height` 20/21 binds,
   authored-transparent Backboard/background draw suppression,
   custom-property trigger keyed-callback target-to-source binding,
   custom-property enum target-to-source binding, live data-bound nested host
@@ -256,6 +258,14 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-04: [M5] Opened nested child custom string binds: the runner now
+  admits nested child `CustomPropertyString.propertyValue` source-to-target
+  binds with no converter or `DataConverterToString`, and current C++
+  `ParametricPathBase` Rectangle width/height keys 20/21. Direct C++/Rust
+  stream comparison promotes `library_view_model_test.riv` to exact. `make
+  golden-compare` reports `exact=128`, `exact-segments=449`, `diverges=0`,
+  `unsupported-feature=167`, `not-yet=0`, and parked `M5=5 M6=119 gated=7
+  harness=36`; `cargo test --workspace` passes.
 - 2026-07-04: [M5] Opened zero-duration interpolator transform binds: the
   obsolete Rust-runner gate for near-zero-duration `DataConverterInterpolator`
   Shape x/y targets was removed after direct C++/Rust stream comparison showed

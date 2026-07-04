@@ -851,9 +851,14 @@ fn nested_child_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> boo
             && data_bind.property_key == 18
             && data_bind.converter_global.is_none())
         || (data_bind.target_type_name == Some("Rectangle")
-            // ParametricPathBase::widthPropertyKey/heightPropertyKey in C++ generated/shapes/path/parametric_path_base.hpp.
-            && matches!(data_bind.property_key, 16 | 17)
+            // ParametricPathBase::widthPropertyKey/heightPropertyKey in C++ generated/shapes/parametric_path_base.hpp.
+            && matches!(data_bind.property_key, 16 | 17 | 20 | 21)
             && data_bind.converter_global.is_none())
+        || (data_bind.target_type_name == Some("CustomPropertyString")
+            // CustomPropertyStringBase::propertyValuePropertyKey in C++ generated/custom_property_string_base.hpp.
+            && data_bind.property_key == 246
+            && (data_bind.converter_global.is_none()
+                || data_bind.converter_type_name == Some("DataConverterToString")))
 }
 
 fn solid_color_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> bool {

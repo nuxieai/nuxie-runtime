@@ -424,6 +424,17 @@ fn ensure_static_draw_supported(graph: &GraphFile, artboard: &ArtboardGraph) -> 
         );
     }
 
+    if let Some(scroll_constraint) = artboard
+        .local_objects
+        .iter()
+        .find(|object| object.type_name == Some("ScrollConstraint"))
+    {
+        bail!(
+            "unsupported: scroll-constraints in Rust golden runner (global {})",
+            scroll_constraint.global_id
+        );
+    }
+
     if let Some((constraint_type, global_id)) = artboard.local_objects.iter().find_map(|object| {
         let type_name = object.type_name?;
         (type_name.ends_with("Constraint")

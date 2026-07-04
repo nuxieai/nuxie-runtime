@@ -6,7 +6,7 @@ the only memory the next session has. Update it every commit.
 ## Metric
 
 - Exact segments (file × sample): 353 across 84 exact files
-- Parked breakdown (from `make golden-compare`): M3=5 M4=83 M5=8 M6=73 gated=6 harness=36
+- Parked breakdown (from `make golden-compare`): M3=1 M4=83 M5=8 M6=77 gated=6 harness=36
 - Current milestone: **M3 — Interactivity Exact (#V2-4)**
 
 ## Milestones
@@ -34,15 +34,18 @@ the only memory the next session has. Update it every commit.
    `complex_ik_dependency.riv`, `two_bone_ik.riv`,
    `component_list_follow_path.riv`, and
    `component_list_follow_path_distance.riv` are exact. The M3
-   parked queue has 5 files; query with
+   parked queue has 1 file; query with
    `grep -B6 'milestone = "M3"' corpus.toml`.
-2. Port the remaining M3 scroll/list constraint files in corpus order:
-   `component_list_1`, `deterministic_mode`, `draw_index_list`, and
-   `virtualize_blendmode`. Keep `follow_path_shapes`
-   parked on its narrow
-   `rust-runner-unsupported:follow-path-star-shapes` precision diagnostic
-   until the Star/parametric local path sampler is investigated.
-3. Remaining exact entries pinned to sample `0` are static M1 holdovers:
+2. Finish the only remaining M3 parked file: `follow_path_shapes.riv`, parked
+   on its narrow `rust-runner-unsupported:follow-path-star-shapes` precision
+   diagnostic. Compare C++ Star/parametric local path sampling against the
+   Rust runtime path sampler and either promote it or leave a concise finding
+   in this file.
+3. After `follow_path_shapes.riv`, return to the M3 scripted-input gap:
+   `rust-golden-runner` still rejects `--input-script`, so pointer replay is
+   the next milestone exit criterion once the constraint corpus queue is
+   empty.
+4. Remaining exact entries pinned to sample `0` are static M1 holdovers:
    `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
    them during M3 unless a related refactor needs a cheap draw-regression check.
 
@@ -85,6 +88,12 @@ the only memory the next session has. Update it every commit.
   `rust-runner-unsupported:follow-path-star-shapes`; plain
   `FollowPathConstraint` is implemented, but Star/parametric local path
   sampling differs from C++ just over the golden epsilon.
+- Scroll-constraint corpus files are parked behind M6 layout/runtime support
+  via `rust-runner-unsupported:scroll-constraints`. C++
+  `src/constraints/scrolling/scroll_constraint.cpp` reads
+  `LayoutComponent` dimensions, layout-provider child bounds, physics state,
+  and optional component-list virtualization, so the current corpus has no
+  pure M3 scroll slice to port without pulling layout/list runtime forward.
 - Per-file parked reasons now live in `corpus.toml`: each gated entry
   carries `milestone = "M3|M4|M5|M6|gated|harness"` plus its diagnostic
   feature tags (`rust-runner-unsupported:*`, `cpp-runner-crash`,
@@ -188,6 +197,11 @@ the only memory the next session has. Update it every commit.
   breakdown, so each milestone's work-list is queryable from `corpus.toml`
   instead of backlog prose. Completed-milestone log entries are archived in
   `docs/v2-log-archive.md` to keep this file small.
+- 2026-07-04: Remaining scroll-constraint files are M6, not M3: the C++
+  implementation is coupled to layout dimensions, layout-provider child
+  bounds, physics, and component-list virtualization. Use the explicit
+  `rust-runner-unsupported:scroll-constraints` diagnostic for this queue
+  until layout/runtime support opens it.
 
 ## Log
 
@@ -518,3 +532,13 @@ the only memory the next session has. Update it every commit.
   353 across 84 exact files; `make golden-compare` reports `exact=84`,
   `exact-segments=353`, `diverges=0`, `unsupported-feature=211`,
   `not-yet=0`, parked `M3=5`, and `cargo test --workspace` passes.
+- 2026-07-04: [M3] Added the explicit
+  `rust-runner-unsupported:scroll-constraints` diagnostic and reclassified
+  `component_list_1.riv`, `deterministic_mode.riv`,
+  `draw_index_list.riv`, and `virtualize_blendmode.riv` from the M3
+  constraint queue to M6 layout/runtime support after confirming C++
+  `ScrollConstraint` depends on `LayoutComponent` metrics and registered
+  layout-provider children. Exact segments remain 353 across 84 exact files;
+  `make golden-compare` reports `exact=84`, `exact-segments=353`,
+  `diverges=0`, `unsupported-feature=211`, `not-yet=0`, parked `M3=1`,
+  and `cargo test --workspace` passes.

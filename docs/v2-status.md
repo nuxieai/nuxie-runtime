@@ -7,14 +7,14 @@ the only memory the next session has. Update it every commit.
 
 - Exact segments (file × sample): 393 across 85 exact files
 - Parked breakdown (from `make golden-compare`): M4=83 M5=8 M6=77 gated=6 harness=36
-- Current milestone: **M3 — Interactivity Exact (#V2-4)**
+- Current milestone: **M4 — Nested Artboards And Lists Exact (#V2-5)**
 
 ## Milestones
 
 - [x] M0: Golden diff harness + corpus manifest + one exact file
 - [x] M1: Static vector corpus files exact at advance(0); FFI viewer demo
 - [x] M2: Animated playback exact at sampled times; real object model landed; lib.rs modularized
-- [ ] M3: Interactive files exact under scripted pointer input
+- [x] M3: Interactive files exact under scripted pointer input
 - [ ] M4: Nested artboards/lists exact
 - [ ] M5: Data binding exact incl. external view-model mutation
 - [ ] M6: Layout + text verified per declared corpus modes; audio/scripting gated with diagnostics
@@ -22,37 +22,22 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Widen scripted M3 coverage in corpus-priority order for exact listener/
-   pointer fixtures with visible render movement. Scripted coverage now
-   includes `pointer_events.riv`, `rapid_pointer_events.riv`,
-   `hit_test_solos.riv`, `click_event.riv`, `opaque_hit_test.riv`,
-   `state_machine_triggers.riv`, `state_machine_transition.riv`,
-   `light_switch.riv`, `event_on_listener.riv`,
-   `event_trigger_event.riv`, `events_on_states.riv`, and
-   `bindable_artboard_child.riv`, and `sound.riv`, all verified through
-   sample `1.5`.
-2. Remaining unscripted exact listener/event candidates are
-   `component_list_2.riv`, `component_list_follow_path.riv`,
-   `component_list_grouped.riv`, `component_list_hit_order.riv`,
-   `joel_signed.riv`, `lock_icon_demo.riv`,
-   `solos_with_nested_artboards.riv`, `stateful_list_props.riv`, and
-   `text_input_event.riv`.
-   `component_list_*` and `stateful_list_props.riv` are list/text/layout-heavy
-   despite passive exactness; only script them during M3 if a C++ probe shows
-   direct pointer-visible movement that does not require list or text runtime.
-3. `event_trigger_event.riv` has an exact primary rectangle click script at
-   `129,101`; an alternate red-target click at `450,50` changes C++ colors
-   while Rust stays passive, so do not widen that coordinate until listener
-   fire-event/view-model/event propagation scope is clear.
-4. Port additional `ListenerGroup` semantics only when a widened script proves
-   they are the blocking gap: hover/enter-exit state, drag state, opaque target
-   ordering, nested/list/text/layout targets, and component-provided groups
-   remain intentionally out of the direct rectangle pointer slice.
-5. There are no remaining `milestone = "M3"` parked entries in `corpus.toml`;
-   scripted input exactness is the active M3 exit criterion.
-6. Remaining exact entries pinned to sample `0` are static M1 holdovers:
+1. Start M4 with the smallest nested-artboard corpus slice. Query the queue
+   with `grep -B6 'milestone = "M4"' corpus.toml`; the current smallest
+   parked files are `library_export_test.riv` and
+   `nested_artboard_opacity.riv` (six feature tags each, both gated only on
+   `rust-runner-unsupported:nested-artboards`).
+2. First code slice should port static `NestedArtboard`/`ArtboardHost`
+   resolution and draw enough to promote one of those two files to exact,
+   before adding nested simple animation, nested state machines, or
+   component-list instancing.
+3. M3 is closed: all `milestone = "M3"` parked entries are gone, all scripted
+   direct-pointer corpus entries are exact through sample `1.5`, and the
+   remaining unscripted exact listener files showed no C++ render delta on a
+   bounded coarse click/hover probe or require M4/M5/M6 domains.
+4. Remaining exact entries pinned to sample `0` are static M1 holdovers:
    `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
-   them during M3 unless a related refactor needs a cheap draw-regression check.
+   them during M4 unless a related refactor needs a cheap draw-regression check.
 
 ## Known Divergences
 
@@ -644,3 +629,16 @@ the only memory the next session has. Update it every commit.
   reports `exact=85`, `exact-segments=393`, `diverges=0`,
   `unsupported-feature=210`, and `not-yet=0`, and `cargo test --workspace`
   passes.
+- 2026-07-04: [M3] Closed the scripted-pointer milestone and opened M4.
+  The remaining unscripted exact listener candidates
+  (`component_list_2.riv`, `component_list_follow_path.riv`,
+  `component_list_grouped.riv`, `component_list_hit_order.riv`,
+  `joel_signed.riv`, `lock_icon_demo.riv`,
+  `solos_with_nested_artboards.riv`, `stateful_list_props.riv`, and
+  `text_input_event.riv`) produced no C++ render delta on a bounded coarse
+  click/hover probe after filtering synthetic input markers, or belong to
+  nested/list/text/keyboard domains. M4 should start with
+  `library_export_test.riv` or `nested_artboard_opacity.riv`, the two smallest
+  `milestone = "M4"` parked files. `make golden-compare` reports `exact=85`,
+  `exact-segments=393`, `diverges=0`, `unsupported-feature=210`, and
+  `not-yet=0`, and `cargo test --workspace` passes.

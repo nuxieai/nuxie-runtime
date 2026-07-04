@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 434 across 113 exact files
-- Parked breakdown (from `make golden-compare`): M4=52 M5=8 M6=80 gated=6 harness=36
+- Exact segments (file × sample): 435 across 114 exact files
+- Parked breakdown (from `make golden-compare`): M4=50 M5=8 M6=81 gated=6 harness=36
 - Current milestone: **M4 — Nested Artboards And Lists Exact (#V2-5)**
 
 ## Milestones
@@ -29,6 +29,11 @@ the only memory the next session has. Update it every commit.
    reported-event bubbling is closed for `nested_event_test.riv`; prefer the
    next file whose first failing diagnostic names a single nested host/list
    behavior instead of pulling M5 data binding or M6 text/layout forward.
+   Static sample-0 files with recursive nested `ListenerAlignTarget` actions
+   are no longer parked when the corpus entry has no input script, because
+   those actions are unexercised during static draw; input-driven align-target
+   behavior remains out of scope for this slice. `align_target.riv` moved to
+   M6 because its first remaining Rust diagnostic is text.
 2. Nested remap with runtime `DrawTarget` placement is closed for
    `death_knight.riv` at sample `0.0`: draw order now reads active
    `DrawRules.drawTargetId` / `DrawTarget.placementValue` during draw,
@@ -58,6 +63,7 @@ the only memory the next session has. Update it every commit.
    `nested_artboard_quantize_and_speed.riv`,
    `nested_event_test.riv`,
    `death_knight.riv`,
+   `pointer_exit.riv`,
    `scripting_root_viewmodel.riv`, `solid_affects_has_changed.riv`,
    `target_event.riv`, and `transition_self_comparator_test.riv`.
 6. M3 is closed: all `milestone = "M3"` parked entries are gone, all scripted
@@ -105,14 +111,16 @@ the only memory the next session has. Update it every commit.
   source-to-target nested host `isPaused`/`speed`/`quantize` default binding,
   per-host nested paint caches for repeated child instances under Solo-owned
   hosts, and nested state-machine reported-event bubbling into parent event
-  listeners.
+  listeners, plus no-input recursive nested `ListenerAlignTarget` fixtures
+  where the action is unexercised.
   Custom handle-source world-space math, data-bound nested host controls beyond
   generated defaults
   (`artboardId` runtime swaps and external/live pause/speed/quantize
   mutation), nested child non-color data-bind targets, focus data, bound
-  stateful child view-model propagation, nested pointer/listener hit
-  propagation beyond reported `Event` listeners, `NestedArtboardLayout` /
-  `NestedArtboardLeaf`, and
+  stateful child view-model propagation, input-driven recursive
+  `ListenerAlignTarget` and nested pointer/listener hit propagation beyond
+  reported `Event` listeners, `NestedArtboardLayout` / `NestedArtboardLeaf`,
+  and
   layout-backed or virtualized component-list instancing are still not
   supported.
   Golden runner sample lists now advance by sorted absolute-time deltas and
@@ -124,8 +132,8 @@ the only memory the next session has. Update it every commit.
   state-machine listeners with listener input actions, direct rectangle
   enter/exit hover state, direct rectangle click synthesis, and listener-owned
   default view-model trigger target-to-source writes. Full C++ ListenerGroup
-  drag/opaque behavior and nested/list/text/layout targets are still not
-  supported.
+  drag/opaque behavior and input-driven nested align-target/list/text/layout
+  targets are still not supported.
 - `TransformConstraint` currently covers the default empty
   `TransformComponent::constraintBounds()` path. Text/LayoutComponent
   constraint bounds remain parked behind their M6 text/layout diagnostics.
@@ -372,3 +380,12 @@ the only memory the next session has. Update it every commit.
   `make golden-compare` reports `exact=113`, `exact-segments=434`,
   `diverges=0`, `unsupported-feature=182`, `not-yet=0`, and parked
   `M4=52 M5=8 M6=80 gated=6 harness=36`; `cargo test --workspace` passes.
+- 2026-07-04: [M4] Narrowed the recursive nested `ListenerAlignTarget`
+  diagnostic to runs with input scripts, matching sample-0 static draw scope:
+  unexercised align-target listener actions no longer park static nested
+  files. Promoted `pointer_exit.riv` to exact and moved `align_target.riv` to
+  M6 `rust-runner-unsupported:text`; input-driven recursive align-target
+  behavior remains gated. `make golden-compare` reports `exact=114`,
+  `exact-segments=435`, `diverges=0`, `unsupported-feature=181`,
+  `not-yet=0`, and parked `M4=50 M5=8 M6=81 gated=6 harness=36`;
+  `cargo test --workspace` passes.

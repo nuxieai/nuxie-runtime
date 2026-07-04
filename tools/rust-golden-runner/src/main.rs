@@ -35,7 +35,7 @@ fn run() -> Result<String> {
     let runtime = read_runtime_file(&bytes).context("failed to import runtime file")?;
     let graph = GraphFile::from_runtime_file(&runtime).context("failed to build graph")?;
     let (artboard_index, artboard) = select_artboard(&graph, options.artboard.as_deref())?;
-    ensure_static_draw_supported(&runtime, &graph, artboard)?;
+    ensure_static_draw_supported(&runtime, &graph, artboard, !input_events.is_empty())?;
     let mut instance =
         ArtboardInstance::from_graph_with_artboards(&runtime, artboard, &graph.artboards)
             .context("failed to instantiate artboard")?;
@@ -490,9 +490,17 @@ fn ensure_static_draw_supported(
     runtime: &RuntimeFile,
     graph: &GraphFile,
     artboard: &ArtboardGraph,
+    has_input_events: bool,
 ) -> Result<()> {
     let mut visiting = BTreeSet::new();
-    ensure_static_draw_supported_for_artboard(runtime, graph, artboard, &mut visiting, false)
+    ensure_static_draw_supported_for_artboard(
+        runtime,
+        graph,
+        artboard,
+        &mut visiting,
+        false,
+        has_input_events,
+    )
 }
 
 fn ensure_static_draw_supported_for_artboard(
@@ -501,6 +509,7 @@ fn ensure_static_draw_supported_for_artboard(
     artboard: &ArtboardGraph,
     visiting: &mut BTreeSet<u32>,
     is_nested_child: bool,
+    has_input_events: bool,
 ) -> Result<()> {
     if !visiting.insert(artboard.global_id) {
         return Ok(());
@@ -573,7 +582,8 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
-    if runtime_has_type(runtime, "ListenerAlignTarget")
+    if has_input_events
+        && runtime_has_type(runtime, "ListenerAlignTarget")
         && artboard_has_recursive_nested_artboard(graph, artboard, &mut BTreeSet::new())
     {
         bail!(
@@ -773,7 +783,14 @@ fn ensure_static_draw_supported_for_artboard(
             .with_context(|| {
                 format!("missing nested artboard graph for global {referenced_artboard_global}")
             })?;
-        ensure_static_draw_supported_for_artboard(runtime, graph, child_artboard, visiting, true)?;
+        ensure_static_draw_supported_for_artboard(
+            runtime,
+            graph,
+            child_artboard,
+            visiting,
+            true,
+            has_input_events,
+        )?;
     }
 
     Ok(())

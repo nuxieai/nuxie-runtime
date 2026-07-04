@@ -1939,3 +1939,11 @@ milestone entries are kept verbatim here. Newest milestone last.
   golden-compare` reports `exact=70`, `exact-segments=264`, `diverges=0`,
   `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
   passes.
+- 2026-07-03: [M2] Widened `text_input_event.riv` from samples `0`, `0.25`,
+  and `0.5` to samples `0`, `0.25`, `0.5`, and `0.75`, keeping passive text
+  input listener and view-model bool playback exact while leaving active
+  scripted keyboard/text input behavior in later milestones. Exact segments
+  are now 265 across 70 exact files; `make golden-compare` reports
+  `exact=70`, `exact-segments=265`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.

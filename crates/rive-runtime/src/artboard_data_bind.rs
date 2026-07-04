@@ -1,6 +1,7 @@
 use crate::data_bind_graph::{
     RuntimeDataBindGraphConverterState, runtime_data_bind_graph_convert_value,
     runtime_data_bind_graph_converter,
+    runtime_data_bind_graph_converter_contains_source_change_random,
 };
 use crate::objects::InstanceObjectArena;
 use crate::properties::{
@@ -183,10 +184,7 @@ pub(super) fn build_artboard_property_bindings(
                 return None;
             }
             let converter = runtime_data_bind_graph_converter(file, data_bind.object);
-            if !matches!(
-                converter,
-                None | Some(RuntimeDataBindGraphConverter::Interpolator { .. })
-            ) {
+            if matches!(converter, Some(RuntimeDataBindGraphConverter::Unsupported)) {
                 return None;
             }
             let path = file.data_bind_context_source_path_ids_for_object(data_bind.object)?;
@@ -507,6 +505,7 @@ impl ArtboardInstance {
                 continue;
             };
             if self.artboard_data_bind_values.get(&path) != Some(&value) {
+                self.reset_artboard_property_formula_random_state_for_path(&path);
                 self.artboard_data_bind_values.insert(path, value);
                 changed = true;
             }
@@ -599,10 +598,27 @@ impl ArtboardInstance {
         let binding = self.artboard_property_bindings.get_mut(index)?;
         let value = self.artboard_data_bind_values.get(&binding.path).cloned()?;
         let converted = match binding.converter.as_ref() {
-            Some(converter) => binding.converter_state.convert_value(converter, &value),
+            Some(converter) => binding.converter_state.convert_value_with_formula_randoms(
+                converter,
+                &value,
+                &mut self.artboard_formula_random_source,
+            ),
             None => Some(value),
         }?;
         Some((binding.target_local_id, binding.property_key, converted))
+    }
+
+    fn reset_artboard_property_formula_random_state_for_path(&mut self, path: &[u32]) {
+        for binding in &mut self.artboard_property_bindings {
+            if binding.path == path
+                && binding
+                    .converter
+                    .as_ref()
+                    .is_some_and(runtime_data_bind_graph_converter_contains_source_change_random)
+            {
+                binding.converter_state.reset_formula_randoms();
+            }
+        }
     }
 
     fn advance_artboard_property_binding_converters(&mut self, elapsed_seconds: f32) -> bool {
@@ -667,6 +683,7 @@ impl ArtboardInstance {
         }
         self.artboard_data_bind_values
             .insert(binding.path.clone(), value);
+        self.reset_artboard_property_formula_random_state_for_path(&binding.path);
         true
     }
 

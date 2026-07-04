@@ -26,7 +26,7 @@ use crate::constraints::{
     build_runtime_follow_path_constraints, build_runtime_ik_constraints,
     build_runtime_list_follow_path_constraints,
 };
-use crate::data_bind_graph::RuntimeDataBindGraphValue;
+use crate::data_bind_graph::{RuntimeDataBindGraphFormulaRandomSource, RuntimeDataBindGraphValue};
 use crate::objects::{InstanceObjectArena, InstanceSlot};
 use crate::properties::{
     JOYSTICK_FLAG_INVERT_X, JOYSTICK_FLAG_INVERT_Y, RuntimeArtboardDimensions,
@@ -64,6 +64,7 @@ pub struct ArtboardInstance {
     graph_global_id: u32,
     build_context: Option<RuntimeArtboardBuildContext>,
     pub(crate) artboard_data_bind_values: BTreeMap<Vec<u32>, RuntimeDataBindGraphValue>,
+    pub(crate) artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource,
     pub(crate) artboard_property_bindings: Vec<RuntimeArtboardPropertyBindingInstance>,
     pub(crate) artboard_custom_property_bindings: Vec<RuntimeArtboardCustomPropertyBindingInstance>,
     pub(crate) artboard_solo_bindings: Vec<RuntimeArtboardSoloBindingInstance>,
@@ -242,6 +243,7 @@ impl ArtboardInstance {
             graph_global_id: graph.global_id,
             build_context,
             artboard_data_bind_values,
+            artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource::default(),
             artboard_property_bindings,
             artboard_custom_property_bindings,
             artboard_solo_bindings,
@@ -1829,6 +1831,7 @@ mod tests {
             graph_global_id: 0,
             build_context: None,
             artboard_data_bind_values: BTreeMap::new(),
+            artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource::default(),
             artboard_property_bindings: Vec::new(),
             artboard_custom_property_bindings: Vec::new(),
             artboard_solo_bindings: Vec::new(),

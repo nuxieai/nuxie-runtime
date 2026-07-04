@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 445 across 124 exact files
-- Parked breakdown (from `make golden-compare`): M5=10 M6=118 gated=7 harness=36
+- Exact segments (file × sample): 446 across 125 exact files
+- Parked breakdown (from `make golden-compare`): M5=9 M6=118 gated=7 harness=36
 - Current milestone: **M5 — Data Binding Exact Incl. External View-Model Mutation (#V2-6)**
 
 ## Milestones
@@ -24,10 +24,10 @@ the only memory the next session has. Update it every commit.
 
 1. Continue M5 with the smallest data-binding slice that can move a corpus
    entry. Query the queue with `grep -B6 'milestone = "M5"' corpus.toml`;
-   the next manifest candidate is `formula_random.riv`
-   (`data-binding-transform`). A direct Rust-runner probe reports
-   `unsupported: data-binding-transform` for data bind global 43 targeting
-   global 42.
+   the next manifest candidate is `hide_test.riv`
+   (`data-binding-nested-child`). A direct Rust-runner probe reports
+   `unsupported: data-binding-nested-child` for data bind global 99 targeting
+   `Node`.
 2. M4 is closed for the current corpus: `grep -B6 'milestone = "M4"'
    corpus.toml` is empty. The remaining formerly-M4 entries were probed with
    `rust-golden-runner` and moved to their first verified later blocker:
@@ -73,6 +73,8 @@ the only memory the next session has. Update it every commit.
   binds backed by stateful child view-model values, direct no-converter Shape
   x/y number binds, direct SolidColor `colorValue` color binds, artboard
   source-to-target `DataConverterInterpolator` number/color binds,
+  artboard source-to-target `DataConverterGroup`/`DataConverterFormula`
+  transform binds with C++ fallback random sequencing,
   nested bool/number/trigger input proxying, and basic nested remap-time host
   plumbing, runtime `DrawTarget` placement sorting from active `DrawRules`,
   serialized nested host speed/quantize local elapsed, generated
@@ -249,6 +251,17 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-04: [M5] Ported artboard formula/group transform binds: artboard
+  property bindings now run `DataConverterGroup` and `DataConverterFormula`
+  through shared converter state, reset source-change random caches when
+  source values mutate, and use the C++ `RandomProvider` fallback sequence for
+  unseeded formula randoms. The runner now admits grouped Shape x/y binds
+  while keeping the zero-duration interpolator transform gate for
+  `interpolation_zero_duration.riv`, and `formula_random.riv` is promoted to
+  exact after direct C++/Rust stream comparison. `make golden-compare` reports
+  `exact=125`, `exact-segments=446`, `diverges=0`, `unsupported-feature=170`,
+  `not-yet=0`, and parked `M5=9 M6=118 gated=7 harness=36`;
+  `cargo test --workspace` passes.
 - 2026-07-04: [M5] Ported nested host artboard binding: `NestedArtboard.artboardId` source-to-target artboard values now rebuild or clear the runtime child instance from shared graph context, draw skips the static nested fallback when a host is data-bound to `-1`, and the runner narrows the nested-host gate to converted or target-to-source host swaps. `recursive_data_bind.riv` is promoted to exact after direct C++/Rust stream comparison, while `databind_artboard.riv` moves to M6 after the same bind now reaches `text`. `make golden-compare` reports `exact=124`, `exact-segments=445`, `diverges=0`, `unsupported-feature=171`, `not-yet=0`, and parked `M5=10 M6=118 gated=7 harness=36`; `cargo test --workspace` passes.
 - 2026-07-04: [M5] Ported artboard source-to-target interpolator bindings: artboard property bindings now keep stateful `DataConverterInterpolator` converter state, advance it with scene elapsed time, and apply converted number/color values to target properties. The Rust runner admits source-to-target `SolidColor.colorValue` interpolator binds, and `data_converter_interpolator_reset.riv` plus `time_based_interpolation.riv` are promoted to exact after direct C++/Rust stream comparison. `make golden-compare` reports `exact=123`, `exact-segments=444`, `diverges=0`, `unsupported-feature=172`, `not-yet=0`, and parked `M5=12 M6=117 gated=7 harness=36`; `cargo test --workspace` passes.
 - 2026-07-04: [M5] Ported custom-property enum target-to-source binding: artboard `DataBindContext` custom-property bindings now capture `CustomPropertyEnum.propertyValue` as `RuntimeDataBindGraphValue::Enum`, the runner admits no-converter target-to-source enum binds, and `custom_property_enum.riv` is promoted to exact after direct C++/Rust stream comparison. `make golden-compare` reports `exact=121`, `exact-segments=442`, `diverges=0`, `unsupported-feature=174`, `not-yet=0`, and parked `M5=14 M6=117 gated=7 harness=36`; `cargo test --workspace` passes.

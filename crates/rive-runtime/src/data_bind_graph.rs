@@ -61,11 +61,25 @@ pub(crate) struct RuntimeImportedViewModelOverrideKey {
     pub(crate) path: Vec<u32>,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub(crate) struct RuntimeDataBindGraphFormulaRandomSource {
     values: Vec<f32>,
     next_index: usize,
     call_count: usize,
+    seeded_values: bool,
+    fallback_seed: u32,
+}
+
+impl Default for RuntimeDataBindGraphFormulaRandomSource {
+    fn default() -> Self {
+        Self {
+            values: Vec::new(),
+            next_index: 0,
+            call_count: 0,
+            seeded_values: false,
+            fallback_seed: 1,
+        }
+    }
 }
 
 impl RuntimeDataBindGraphFormulaRandomSource {
@@ -74,15 +88,23 @@ impl RuntimeDataBindGraphFormulaRandomSource {
         self.values.extend_from_slice(values);
         self.next_index = 0;
         self.call_count = 0;
+        self.seeded_values = true;
     }
 
     pub(crate) fn next_value(&mut self) -> f32 {
         self.call_count += 1;
-        let value = self.values.get(self.next_index).copied().unwrap_or(0.0);
-        if self.next_index < self.values.len() {
-            self.next_index += 1;
+        if self.seeded_values {
+            let value = self.values.get(self.next_index).copied().unwrap_or(0.0);
+            if self.next_index < self.values.len() {
+                self.next_index += 1;
+            }
+            return value;
         }
-        value
+
+        // Mirrors C++ include/rive/math/random.hpp's non-TESTING rand()
+        // sequence on macOS, where the default seed behaves like srand(1).
+        self.fallback_seed = ((16807_u64 * u64::from(self.fallback_seed)) % 2147483647) as u32;
+        self.fallback_seed as f32 / 2147483647_f32
     }
 
     pub(crate) fn call_count(&self) -> usize {
@@ -209,7 +231,7 @@ pub(crate) enum RuntimeDataBindGraphFormulaToken {
     },
 }
 
-fn runtime_data_bind_graph_converter_contains_source_change_random(
+pub(crate) fn runtime_data_bind_graph_converter_contains_source_change_random(
     converter: &RuntimeDataBindGraphConverter,
 ) -> bool {
     match converter {

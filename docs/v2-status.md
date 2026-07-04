@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 254 across 70 exact files
+- Exact segments (file × sample): 255 across 70 exact files
 - Parked breakdown (from `make golden-compare`): M3=21 M4=83 M5=8 M6=72 gated=5 harness=36
 - Current milestone: **M2 — Animated Playback Exact + Real Object Model (#V2-3)**
 
@@ -24,7 +24,7 @@ the only memory the next session has. Update it every commit.
 
 1. The two-sample exact widening queue is exhausted. Continue the fourth-sample
    M2 sweep over exact entries with samples `0`, `0.25`, and `0.5`, starting
-   after `solo_test.riv` (next candidate: `solos_collapse_tests.riv`),
+   after `solos_collapse_tests.riv` (next candidate: `solos_with_nested_artboards.riv`),
    and stop on the first real divergence to localize runtime code.
 2. Continue M2 real object model work by modularizing the remaining runtime
    surfaces out of `lib.rs` while keeping generated `InstanceObjectStorage` as
@@ -174,13 +174,6 @@ the only memory the next session has. Update it every commit.
   under `M2 active log rolloff`; keep only the recent rolling window here once
   Metric, Next, Decisions, and `corpus.toml` capture the current state.
 
-- 2026-07-03: [M2] Widened `component_list_hit_order.riv` from samples `0`,
-  `0.25`, and `0.5` to samples `0`, `0.25`, `0.5`, and `0.75`, keeping the
-  passive component-list hit-order render path exact while leaving scripted
-  input dispatch in M3 scope. Exact segments are now 215 across 70 exact
-  files; `make golden-compare` reports `exact=70`,
-  `exact-segments=215`, `diverges=0`, `unsupported-feature=225`,
-  `not-yet=0`, and `cargo test --workspace` passes.
 - 2026-07-03: [M2] Widened `cubic_value_test.riv` from samples `0`, `0.25`,
   and `0.5` to samples `0`, `0.25`, `0.5`, and `0.75`, keeping CubicValue
   interpolator playback exact across the wider sample set. Exact segments are
@@ -446,5 +439,12 @@ the only memory the next session has. Update it every commit.
   active-child state-machine playback exact across the wider sample set. Exact
   segments are now 254 across 70 exact files; `make golden-compare` reports
   `exact=70`, `exact-segments=254`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+- 2026-07-03: [M2] Widened `solos_collapse_tests.riv` from samples `0`,
+  `0.25`, and `0.5` to samples `0`, `0.25`, `0.5`, and `0.75`, keeping Solo
+  collapse and clipping playback exact across the wider sample set. Exact
+  segments are now 255 across 70 exact files; `make golden-compare` reports
+  `exact=70`, `exact-segments=255`, `diverges=0`,
   `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
   passes.

@@ -1598,3 +1598,10 @@ milestone entries are kept verbatim here. Newest milestone last.
   files; `make golden-compare` reports `exact=70`,
   `exact-segments=214`, `diverges=0`, `unsupported-feature=225`,
   `not-yet=0`, and `cargo test --workspace` passes.
+- 2026-07-03: [M2] Widened `component_list_hit_order.riv` from samples `0`,
+  `0.25`, and `0.5` to samples `0`, `0.25`, `0.5`, and `0.75`, keeping the
+  passive component-list hit-order render path exact while leaving scripted
+  input dispatch in M3 scope. Exact segments are now 215 across 70 exact
+  files; `make golden-compare` reports `exact=70`,
+  `exact-segments=215`, `diverges=0`, `unsupported-feature=225`,
+  `not-yet=0`, and `cargo test --workspace` passes.

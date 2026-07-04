@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 294 across 70 exact files
+- Exact segments (file × sample): 295 across 70 exact files
 - Parked breakdown (from `make golden-compare`): M3=21 M4=83 M5=8 M6=72 gated=5 harness=36
 - Current milestone: **M2 — Animated Playback Exact + Real Object Model (#V2-3)**
 
@@ -24,8 +24,8 @@ the only memory the next session has. Update it every commit.
 
 1. The fourth-sample exact widening queue is exhausted. Continue the
    fifth-sample M2 sweep over exact entries with samples `0`, `0.25`, `0.5`,
-   and `0.75`, starting after `joystick_flag_test.riv` (next candidate:
-   `joystick_nested_remap.riv`),
+   and `0.75`, starting after `joystick_nested_remap.riv` (next candidate:
+   `juice.riv`),
    and stop on the first real divergence to localize runtime code.
 2. Continue M2 real object model work by modularizing the remaining runtime
    surfaces out of `lib.rs` while keeping generated `InstanceObjectStorage` as
@@ -175,13 +175,6 @@ the only memory the next session has. Update it every commit.
   under `M2 active log rolloff`; keep only the recent rolling window here once
   Metric, Next, Decisions, and `corpus.toml` capture the current state.
 
-- 2026-07-03: [M2] Widened `solos_collapse_tests.riv` from samples `0`,
-  `0.25`, and `0.5` to samples `0`, `0.25`, `0.5`, and `0.75`, keeping Solo
-  collapse and clipping playback exact across the wider sample set. Exact
-  segments are now 255 across 70 exact files; `make golden-compare` reports
-  `exact=70`, `exact-segments=255`, `diverges=0`,
-  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
-  passes.
 - 2026-07-03: [M2] Widened `solos_with_nested_artboards.riv` from samples
   `0`, `0.25`, and `0.5` to samples `0`, `0.25`, `0.5`, and `0.75`,
   keeping passive Solo/nested-artboard playback exact before M4 nested runtime
@@ -461,5 +454,13 @@ the only memory the next session has. Update it every commit.
   fifth sample before opening scripted pointer input in M3. Exact segments
   are now 294 across 70 exact files; `make golden-compare` reports
   `exact=70`, `exact-segments=294`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+- 2026-07-03: [M2] Widened `joystick_nested_remap.riv` from samples `0`,
+  `0.25`, `0.5`, and `0.75` to samples `0`, `0.25`, `0.5`, `0.75`, and
+  `1.0`, keeping passive joystick nested-remap animation playback exact
+  across the fifth sample without opening M4 nested-artboard advancement.
+  Exact segments are now 295 across 70 exact files; `make golden-compare`
+  reports `exact=70`, `exact-segments=295`, `diverges=0`,
   `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
   passes.

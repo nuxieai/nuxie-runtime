@@ -1,5 +1,20 @@
-use crate::ArtboardInstance;
 use crate::properties::property_key_for_name;
+use crate::{ArtboardInstance, Mat2D};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TransformSpace {
+    World,
+    Local,
+}
+
+impl TransformSpace {
+    fn from_value(value: u64) -> Self {
+        match value {
+            1 => Self::Local,
+            _ => Self::World,
+        }
+    }
+}
 
 /// Runtime constraint application for the C++ `src/constraints/` path.
 pub(crate) fn apply_constraints(artboard: &mut ArtboardInstance, component_index: usize) -> bool {
@@ -9,8 +24,27 @@ pub(crate) fn apply_constraints(artboard: &mut ArtboardInstance, component_index
     constraint_locals
         .into_iter()
         .fold(false, |changed, constraint_local| {
-            changed | apply_distance_constraint(artboard, component_index, constraint_local)
+            changed | apply_constraint(artboard, component_index, constraint_local)
         })
+}
+
+fn apply_constraint(
+    artboard: &mut ArtboardInstance,
+    component_index: usize,
+    constraint_local: usize,
+) -> bool {
+    let Some(slot) = artboard.slot(constraint_local) else {
+        return false;
+    };
+    match slot.type_name {
+        Some("DistanceConstraint") => {
+            apply_distance_constraint(artboard, component_index, constraint_local)
+        }
+        Some("TranslationConstraint") => {
+            apply_translation_constraint(artboard, component_index, constraint_local)
+        }
+        _ => false,
+    }
 }
 
 fn apply_distance_constraint(
@@ -93,18 +127,279 @@ fn apply_distance_constraint(
     true
 }
 
+fn apply_translation_constraint(
+    artboard: &mut ArtboardInstance,
+    component_index: usize,
+    constraint_local: usize,
+) -> bool {
+    // Ported from C++ `src/constraints/translation_constraint.cpp`.
+    let target_index = targeted_constraint_target_local(artboard, constraint_local)
+        .and_then(|target_local| artboard.component_by_local.get(&target_local).copied());
+    if target_index.is_some_and(|index| artboard.components[index].is_collapsed()) {
+        return false;
+    }
+
+    let world = artboard.components[component_index]
+        .transform
+        .world_transform;
+    let translation_a = (world.0[4], world.0[5]);
+    let mut translation_b = translation_a;
+
+    if let Some(target_index) = target_index {
+        let mut transform_b = artboard.components[target_index].transform.world_transform;
+        if transform_space(
+            artboard,
+            constraint_local,
+            "TransformSpaceConstraint",
+            "sourceSpaceValue",
+        ) == TransformSpace::Local
+        {
+            let Some(inverse) = invert(parent_world_transform(artboard, target_index)) else {
+                return false;
+            };
+            transform_b = inverse.multiply(transform_b);
+        }
+        translation_b = (transform_b.0[4], transform_b.0[5]);
+
+        let dest_space = transform_space(
+            artboard,
+            constraint_local,
+            "TransformSpaceConstraint",
+            "destSpaceValue",
+        );
+        let authored = artboard.authored_transform(artboard.components[component_index].local_id);
+        if !constraint_bool(
+            artboard,
+            constraint_local,
+            "TransformComponentConstraint",
+            "doesCopy",
+            true,
+        ) {
+            translation_b.0 = if dest_space == TransformSpace::Local {
+                0.0
+            } else {
+                translation_a.0
+            };
+        } else {
+            translation_b.0 *= constraint_double(
+                artboard,
+                constraint_local,
+                "TransformComponentConstraint",
+                "copyFactor",
+                1.0,
+            );
+            if constraint_bool(
+                artboard,
+                constraint_local,
+                "TransformComponentConstraint",
+                "offset",
+                false,
+            ) {
+                translation_b.0 += authored.x;
+            }
+        }
+
+        if !constraint_bool(
+            artboard,
+            constraint_local,
+            "TransformComponentConstraintY",
+            "doesCopyY",
+            true,
+        ) {
+            translation_b.1 = if dest_space == TransformSpace::Local {
+                0.0
+            } else {
+                translation_a.1
+            };
+        } else {
+            translation_b.1 *= constraint_double(
+                artboard,
+                constraint_local,
+                "TransformComponentConstraintY",
+                "copyFactorY",
+                1.0,
+            );
+            if constraint_bool(
+                artboard,
+                constraint_local,
+                "TransformComponentConstraint",
+                "offset",
+                false,
+            ) {
+                translation_b.1 += authored.y;
+            }
+        }
+
+        if dest_space == TransformSpace::Local {
+            translation_b = parent_world_transform(artboard, component_index)
+                .transform_point(translation_b.0, translation_b.1);
+        }
+    }
+
+    let clamp_local = transform_space(
+        artboard,
+        constraint_local,
+        "TransformComponentConstraint",
+        "minMaxSpaceValue",
+    ) == TransformSpace::Local;
+    if clamp_local {
+        let Some(inverse) = invert(parent_world_transform(artboard, component_index)) else {
+            return false;
+        };
+        translation_b = inverse.transform_point(translation_b.0, translation_b.1);
+    }
+    if constraint_bool(
+        artboard,
+        constraint_local,
+        "TransformComponentConstraint",
+        "max",
+        false,
+    ) && translation_b.0
+        > constraint_double(
+            artboard,
+            constraint_local,
+            "TransformComponentConstraint",
+            "maxValue",
+            0.0,
+        )
+    {
+        translation_b.0 = constraint_double(
+            artboard,
+            constraint_local,
+            "TransformComponentConstraint",
+            "maxValue",
+            0.0,
+        );
+    }
+    if constraint_bool(
+        artboard,
+        constraint_local,
+        "TransformComponentConstraint",
+        "min",
+        false,
+    ) && translation_b.0
+        < constraint_double(
+            artboard,
+            constraint_local,
+            "TransformComponentConstraint",
+            "minValue",
+            0.0,
+        )
+    {
+        translation_b.0 = constraint_double(
+            artboard,
+            constraint_local,
+            "TransformComponentConstraint",
+            "minValue",
+            0.0,
+        );
+    }
+    if constraint_bool(
+        artboard,
+        constraint_local,
+        "TransformComponentConstraintY",
+        "maxY",
+        false,
+    ) && translation_b.1
+        > constraint_double(
+            artboard,
+            constraint_local,
+            "TransformComponentConstraintY",
+            "maxValueY",
+            0.0,
+        )
+    {
+        translation_b.1 = constraint_double(
+            artboard,
+            constraint_local,
+            "TransformComponentConstraintY",
+            "maxValueY",
+            0.0,
+        );
+    }
+    if constraint_bool(
+        artboard,
+        constraint_local,
+        "TransformComponentConstraintY",
+        "minY",
+        false,
+    ) && translation_b.1
+        < constraint_double(
+            artboard,
+            constraint_local,
+            "TransformComponentConstraintY",
+            "minValueY",
+            0.0,
+        )
+    {
+        translation_b.1 = constraint_double(
+            artboard,
+            constraint_local,
+            "TransformComponentConstraintY",
+            "minValueY",
+            0.0,
+        );
+    }
+    if clamp_local {
+        translation_b = parent_world_transform(artboard, component_index)
+            .transform_point(translation_b.0, translation_b.1);
+    }
+
+    let t = constraint_double(artboard, constraint_local, "Constraint", "strength", 1.0);
+    let ti = 1.0 - t;
+    let new_x = translation_a.0 * ti + translation_b.0 * t;
+    let new_y = translation_a.1 * ti + translation_b.1 * t;
+
+    let world = &mut artboard.components[component_index]
+        .transform
+        .world_transform
+        .0;
+    if world[4] == new_x && world[5] == new_y {
+        return false;
+    }
+    world[4] = new_x;
+    world[5] = new_y;
+    true
+}
+
 fn targeted_constraint_target_local(
     artboard: &ArtboardInstance,
     constraint_local: usize,
 ) -> Option<usize> {
     let target_key = property_key_for_name("TargetedConstraint", "targetId")?;
-    let target_global =
-        u32::try_from(artboard.uint_property(constraint_local, target_key)?).ok()?;
+    let target_local =
+        usize::try_from(artboard.uint_property(constraint_local, target_key)?).ok()?;
+    artboard.slot(target_local).map(|slot| slot.local_id)
+}
+
+fn parent_world_transform(artboard: &ArtboardInstance, component_index: usize) -> Mat2D {
+    let Some(parent_local) = artboard.components[component_index].parent_local else {
+        return Mat2D::IDENTITY;
+    };
     artboard
-        .slots
-        .iter()
-        .find(|slot| slot.source_global_id == target_global)
-        .map(|slot| slot.local_id)
+        .component(parent_local)
+        .filter(|parent| parent.capabilities.world_transform)
+        .map(|parent| parent.transform.world_transform)
+        .unwrap_or(Mat2D::IDENTITY)
+}
+
+fn invert(transform: Mat2D) -> Option<Mat2D> {
+    (transform.determinant() != 0.0).then(|| transform.invert_or_identity())
+}
+
+fn transform_space(
+    artboard: &ArtboardInstance,
+    local_id: usize,
+    type_name: &str,
+    property_name: &str,
+) -> TransformSpace {
+    TransformSpace::from_value(constraint_uint(
+        artboard,
+        local_id,
+        type_name,
+        property_name,
+        0,
+    ))
 }
 
 fn constraint_double(
@@ -116,6 +411,18 @@ fn constraint_double(
 ) -> f32 {
     property_key_for_name(type_name, property_name)
         .and_then(|key| artboard.double_property(local_id, key))
+        .unwrap_or(default)
+}
+
+fn constraint_bool(
+    artboard: &ArtboardInstance,
+    local_id: usize,
+    type_name: &str,
+    property_name: &str,
+    default: bool,
+) -> bool {
+    property_key_for_name(type_name, property_name)
+        .and_then(|key| artboard.bool_property(local_id, key))
         .unwrap_or(default)
 }
 

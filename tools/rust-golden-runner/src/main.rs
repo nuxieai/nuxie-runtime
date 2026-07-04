@@ -400,7 +400,9 @@ fn ensure_static_draw_supported(graph: &GraphFile, artboard: &ArtboardGraph) -> 
 
     if let Some((constraint_type, global_id)) = artboard.local_objects.iter().find_map(|object| {
         let type_name = object.type_name?;
-        (type_name.ends_with("Constraint") && type_name != "DistanceConstraint")
+        (type_name.ends_with("Constraint")
+            && type_name != "DistanceConstraint"
+            && type_name != "TranslationConstraint")
             .then_some((type_name, object.global_id))
     }) {
         bail!(

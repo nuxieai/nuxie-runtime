@@ -205,7 +205,10 @@ impl ArtboardInstance {
         path_cache: &mut RuntimeRenderPathCache,
         apply_origin_transform: bool,
     ) -> Result<()> {
-        renderer.save();
+        let needs_save = self.clip || apply_origin_transform;
+        if needs_save {
+            renderer.save();
+        }
         if self.clip {
             let (clip_left, clip_top) = if apply_origin_transform {
                 (0.0, 0.0)
@@ -269,7 +272,9 @@ impl ArtboardInstance {
             )?;
         }
 
-        renderer.restore();
+        if needs_save {
+            renderer.restore();
+        }
         Ok(())
     }
 
@@ -1206,12 +1211,6 @@ fn runtime_draw_nested_artboard(
     let host_world = host_component.transform.world_transform;
     let host_opacity = host_component.transform.render_opacity;
 
-    let mut child = ArtboardInstance::from_graph(runtime, child_graph)?;
-    if let Some(opacity_key) = property_key_for_name("Artboard", "opacity") {
-        child.set_double_property(0, opacity_key, host_opacity);
-    }
-    child.update_pass();
-
     if command.needs_save_operation {
         renderer.save();
     }
@@ -1226,6 +1225,41 @@ fn runtime_draw_nested_artboard(
         })
         .unwrap_or(referenced_artboard_global);
     let child_cache = path_cache.nested_artboards.entry(cache_key).or_default();
+
+    if let Some(child) = command
+        .local_id
+        .and_then(|local_id| instance.nested_artboards.get(&local_id))
+        .map(|nested| nested.child.as_ref())
+    {
+        child.prepare_static_artboard_paints(
+            runtime,
+            child_graph,
+            factory,
+            paint_by_global,
+            child_cache,
+        )?;
+        child.draw_prepared_static_artboard_internal_with_path_cache(
+            runtime,
+            child_graph,
+            artboards,
+            factory,
+            renderer,
+            paint_by_global,
+            child_cache,
+            false,
+        )?;
+
+        if command.needs_save_operation {
+            renderer.restore();
+        }
+        return Ok(());
+    }
+
+    let mut child = ArtboardInstance::from_graph(runtime, child_graph)?;
+    if let Some(opacity_key) = property_key_for_name("Artboard", "opacity") {
+        child.set_double_property(0, opacity_key, host_opacity);
+    }
+    child.update_pass();
     child.prepare_static_artboard_paints(
         runtime,
         child_graph,

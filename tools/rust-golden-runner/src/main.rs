@@ -35,9 +35,10 @@ fn run() -> Result<String> {
     let runtime = read_runtime_file(&bytes).context("failed to import runtime file")?;
     let graph = GraphFile::from_runtime_file(&runtime).context("failed to build graph")?;
     let (artboard_index, artboard) = select_artboard(&graph, options.artboard.as_deref())?;
-    ensure_static_draw_supported(&graph, artboard)?;
-    let mut instance = ArtboardInstance::from_graph(&runtime, artboard)
-        .context("failed to instantiate artboard")?;
+    ensure_static_draw_supported(&runtime, &graph, artboard)?;
+    let mut instance =
+        ArtboardInstance::from_graph_with_artboards(&runtime, artboard, &graph.artboards)
+            .context("failed to instantiate artboard")?;
     let scene = select_scene(
         &runtime,
         artboard_index,
@@ -373,6 +374,7 @@ fn advance_scene_to(
     if let Some(state_machine) = state_machine {
         instance.advance_state_machine_instance(state_machine, elapsed_seconds);
     }
+    instance.advance_nested_artboards(elapsed_seconds);
     instance.advance_artboard_data_binds();
     instance.update_pass();
     *current_seconds = target_seconds;
@@ -479,12 +481,17 @@ fn select_artboard<'a>(
     }
 }
 
-fn ensure_static_draw_supported(graph: &GraphFile, artboard: &ArtboardGraph) -> Result<()> {
+fn ensure_static_draw_supported(
+    runtime: &RuntimeFile,
+    graph: &GraphFile,
+    artboard: &ArtboardGraph,
+) -> Result<()> {
     let mut visiting = BTreeSet::new();
-    ensure_static_draw_supported_for_artboard(graph, artboard, &mut visiting)
+    ensure_static_draw_supported_for_artboard(runtime, graph, artboard, &mut visiting)
 }
 
 fn ensure_static_draw_supported_for_artboard(
+    runtime: &RuntimeFile,
     graph: &GraphFile,
     artboard: &ArtboardGraph,
     visiting: &mut BTreeSet<u32>,
@@ -506,19 +513,52 @@ fn ensure_static_draw_supported_for_artboard(
 
     if let Some((type_name, global_id)) = artboard.local_objects.iter().find_map(|object| {
         let type_name = object.type_name?;
+        matches!(type_name, "NestedArtboardLayout" | "NestedArtboardLeaf")
+            .then_some((type_name, object.global_id))
+    }) {
+        bail!(
+            "unsupported: nested artboards in Rust golden runner ({type_name} global {global_id})"
+        );
+    }
+
+    if let Some((type_name, global_id)) = artboard.local_objects.iter().find_map(|object| {
+        let type_name = object.type_name?;
         matches!(
             type_name,
-            "NestedSimpleAnimation"
-                | "NestedStateMachine"
-                | "NestedRemapAnimation"
-                | "NestedBool"
-                | "NestedNumber"
-                | "NestedTrigger"
+            "NestedRemapAnimation" | "NestedBool" | "NestedNumber" | "NestedTrigger"
         )
         .then_some((type_name, object.global_id))
     }) {
         bail!(
             "unsupported: nested artboards in Rust golden runner ({type_name} global {global_id})"
+        );
+    }
+
+    if let Some((type_name, global_id)) = nested_stateful_view_model_object(artboard) {
+        bail!(
+            "unsupported: nested artboards in Rust golden runner (stateful view model {type_name} global {global_id})"
+        );
+    }
+
+    if let Some(data_bind) = nested_artboard_host_control_data_bind(graph, artboard) {
+        bail!(
+            "unsupported: nested artboards in Rust golden runner (nested host data bind global {} property key {})",
+            data_bind.global_id,
+            data_bind.property_key
+        );
+    }
+
+    if let Some(child_global) = nested_listener_propagation_child_global(graph, artboard) {
+        bail!(
+            "unsupported: nested artboards in Rust golden runner (listener propagation to nested child global {child_global})"
+        );
+    }
+
+    if runtime_has_type(runtime, "ListenerAlignTarget")
+        && artboard_has_recursive_nested_artboard(graph, artboard, &mut BTreeSet::new())
+    {
+        bail!(
+            "unsupported: nested artboards in Rust golden runner (recursive nested listener align target)"
         );
     }
 
@@ -596,6 +636,18 @@ fn ensure_static_draw_supported_for_artboard(
     {
         bail!(
             "unsupported: data-binding-custom-property-enum in Rust golden runner (data bind global {} target global {:?})",
+            data_bind.global_id,
+            data_bind.target_global
+        );
+    }
+
+    if let Some(data_bind) = artboard
+        .data_binds
+        .iter()
+        .find(|data_bind| data_bind.target_type_name == Some("CustomPropertyTrigger"))
+    {
+        bail!(
+            "unsupported: data-binding-custom-property-trigger in Rust golden runner (data bind global {} target global {:?})",
             data_bind.global_id,
             data_bind.target_global
         );
@@ -701,10 +753,127 @@ fn ensure_static_draw_supported_for_artboard(
             .with_context(|| {
                 format!("missing nested artboard graph for global {referenced_artboard_global}")
             })?;
-        ensure_static_draw_supported_for_artboard(graph, child_artboard, visiting)?;
+        ensure_static_draw_supported_for_artboard(runtime, graph, child_artboard, visiting)?;
     }
 
     Ok(())
+}
+
+fn nested_stateful_view_model_object(artboard: &ArtboardGraph) -> Option<(&'static str, u32)> {
+    if artboard.nested_artboards.is_empty() {
+        return None;
+    }
+    artboard.local_objects.iter().find_map(|object| {
+        let type_name = object.type_name?;
+        type_name
+            .starts_with("ViewModelInstance")
+            .then_some((type_name, object.global_id))
+    })
+}
+
+fn nested_artboard_host_control_data_bind<'a>(
+    graph: &GraphFile,
+    artboard: &'a ArtboardGraph,
+) -> Option<&'a rive_graph::DataBindNode> {
+    artboard.data_binds.iter().find(|data_bind| {
+        if data_bind.target_type_name != Some("NestedArtboard") {
+            return false;
+        }
+        match data_bind.property_key {
+            // artboardId is exact for external-artboard files that do not carry
+            // the referenced child artboard in the same file, and for static
+            // import-time swaps. Listener-driven recursive remaps need runtime
+            // host swapping.
+            197 => graph.artboards.len() > 1 && artboard_has_state_machine_listeners(artboard),
+            // isPaused plus nested state-machine host runtime controls.
+            895 | 896 | 897 | 907 | 908 => true,
+            _ => false,
+        }
+    })
+}
+
+fn nested_listener_propagation_child_global(
+    graph: &GraphFile,
+    artboard: &ArtboardGraph,
+) -> Option<u32> {
+    let target_nested_child = artboard
+        .sorted_drawable_order
+        .iter()
+        .filter_map(|drawable| Some((drawable.local_id?, drawable.referenced_artboard_global?)))
+        .collect::<Vec<_>>();
+
+    for state_machine in &artboard.state_machines {
+        for listener in &state_machine.listeners {
+            let Ok(target_id) = usize::try_from(listener.target_id) else {
+                continue;
+            };
+            let Some((_, child_global)) = target_nested_child
+                .iter()
+                .find(|(local_id, _)| *local_id == target_id)
+            else {
+                continue;
+            };
+            if graph
+                .artboards
+                .iter()
+                .find(|child| child.global_id == *child_global)
+                .is_some_and(artboard_has_state_machine_listeners)
+            {
+                return Some(*child_global);
+            }
+        }
+    }
+
+    None
+}
+
+fn artboard_has_state_machine_listeners(artboard: &ArtboardGraph) -> bool {
+    artboard
+        .state_machines
+        .iter()
+        .any(|state_machine| !state_machine.listeners.is_empty())
+}
+
+fn artboard_has_recursive_nested_artboard(
+    graph: &GraphFile,
+    artboard: &ArtboardGraph,
+    visiting: &mut BTreeSet<u32>,
+) -> bool {
+    if !visiting.insert(artboard.global_id) {
+        return false;
+    }
+
+    for referenced_artboard_global in artboard
+        .sorted_drawable_order
+        .iter()
+        .filter_map(|drawable| drawable.referenced_artboard_global)
+    {
+        let Some(child) = graph
+            .artboards
+            .iter()
+            .find(|artboard| artboard.global_id == referenced_artboard_global)
+        else {
+            continue;
+        };
+        if child
+            .sorted_drawable_order
+            .iter()
+            .any(|drawable| drawable.referenced_artboard_global.is_some())
+            || artboard_has_recursive_nested_artboard(graph, child, visiting)
+        {
+            return true;
+        }
+    }
+
+    false
+}
+
+fn runtime_has_type(runtime: &RuntimeFile, type_name: &str) -> bool {
+    runtime
+        .objects
+        .iter()
+        .flatten()
+        .any(|object| object.type_name == type_name)
 }
 
 fn frame_dimension(value: f32) -> u32 {

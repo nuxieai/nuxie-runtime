@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 398 across 90 exact files
-- Parked breakdown (from `make golden-compare`): M4=75 M5=8 M6=80 gated=6 harness=36
+- Exact segments (file × sample): 412 across 104 exact files
+- Parked breakdown (from `make golden-compare`): M4=61 M5=8 M6=80 gated=6 harness=36
 - Current milestone: **M4 — Nested Artboards And Lists Exact (#V2-5)**
 
 ## Milestones
@@ -23,17 +23,26 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue M4 with the smallest remaining pure nested-artboard runtime slice.
-   Query the queue with `grep -B6 'milestone = "M4"' corpus.toml`; the current
-   smallest parked files are `library_export_animation_test.riv`
-   (`NestedSimpleAnimation`) and `library_export_state_machine_test.riv`
-   (`NestedStateMachine`), eight feature tags each.
-2. Next code slice should port nested animation/state-machine host binding and
-   advancement enough to promote one of those two files before starting
-   `NestedArtboardLayout`, `NestedArtboardLeaf`, or component-list instancing.
-3. Plain static `NestedArtboard` draw is closed for the current sample-0
-   corpus slice: `entry.riv`, `library_export_test.riv`,
-   `magic_alley_db_reduced_export.riv`, `nested_artboard_opacity.riv`, and
-   `stateful_artboard_swap.riv` are exact.
+   Query the queue with `grep -B6 'milestone = "M4"' corpus.toml`; the raw
+   queue starts with `scroll_test.riv`, but that file carries
+   `ScrollConstraint`/layout runtime work and should be skipped or reclassified
+   until M6. The smallest useful M4 slice is now the stateful nested
+   view-model cluster: `unbound_stateful_component.riv`, then
+   `library_vmtest_1_host.riv`.
+2. Next code slice should port the C++ `NestedArtboard` stateful child
+   view-model binding/data-context path enough to promote one of those files,
+   before taking `NestedArtboardLayout`, `NestedArtboardLeaf`, nested remap
+   inputs, or component-list instancing.
+3. Plain static `NestedArtboard` draw and default nested
+   simple-animation/state-machine host advancement are closed for the current
+   sample-0 corpus slice. Exact promoted files now include the earlier static
+   set plus `library_export_animation_test.riv`,
+   `library_export_state_machine_test.riv`, `ball_test.riv`,
+   `data_binding_test_3.riv`, `data_binding_test_triggers.riv`,
+   `databind_external_artboard_main.riv`, `drag_event.riv`, `multitouch.riv`,
+   `nested_needs_advance.riv`, `scripted_listener_context.riv`,
+   `scripting_root_viewmodel.riv`, `solid_affects_has_changed.riv`,
+   `target_event.riv`, and `transition_self_comparator_test.riv`.
 4. M3 is closed: all `milestone = "M3"` parked entries are gone, all scripted
    direct-pointer corpus entries are exact through sample `1.5`, and the
    remaining unscripted exact listener files showed no C++ render delta on a
@@ -69,13 +78,18 @@ the only memory the next session has. Update it every commit.
   `ListFollowPathConstraint` registration/application over component-list item
   transform slices once M4 list instances populate them, and parametric
   Star/Polygon local path sampling for follow-path targets, plus static plain
-  `NestedArtboard` host draw with child root opacity inheritance. Custom
-  handle-source world-space math and nested animation/state-machine/remap
-  dependent advancement are still not supported.
+  `NestedArtboard` host draw with child root opacity inheritance and default
+  nested simple-animation/state-machine hosts backed by persistent child
+  artboard instances. Custom handle-source world-space math, nested remap
+  inputs, nested bool/number/trigger inputs, data-bound nested host controls
+  (`artboardId` runtime swaps, pause, speed, quantize), stateful child
+  view-model binding, nested listener/event propagation, `NestedArtboardLayout`
+  / `NestedArtboardLeaf`, and component-list instancing are still not
+  supported.
   Golden runner sample lists now advance by sorted absolute-time deltas and
-  reuse render paths across samples; no images, text, nested
-  animation/state-machine/remap hosts, scroll constraints, or component-list
-  instancing. Harness-level scripted input replay dispatches
+  reuse render paths across samples; no images, text, nested remap/input
+  hosts, nested layout/leaf, scroll constraints, or component-list instancing.
+  Harness-level scripted input replay dispatches
   pointerDown/pointerMove/pointerUp/pointerExit markers into direct rectangle
   state-machine listeners with listener input actions, direct rectangle
   enter/exit hover state, direct rectangle click synthesis, and listener-owned
@@ -659,3 +673,17 @@ the only memory the next session has. Update it every commit.
   golden-compare` reports `exact=90`, `exact-segments=398`, `diverges=0`,
   `unsupported-feature=205`, `not-yet=0`, and parked
   `M4=75 M5=8 M6=80 gated=6 harness=36`; `cargo test --workspace` passes.
+- 2026-07-04: [M4] Ported default nested animation/state-machine host
+  instances from the C++ `NestedAnimation`, `NestedSimpleAnimation`, and
+  `NestedStateMachine` shape: selected artboards now build persistent nested
+  child instances, advance nested simple animations/state machines before
+  drawing, sync host render opacity into child roots, and call child
+  `drawInternal` without an unconditional wrapper save. Promoted
+  `library_export_animation_test.riv`, `library_export_state_machine_test.riv`,
+  and 12 newly unblocked nested-host corpus files to exact. Added runner
+  diagnostics for still-parked nested host controls: remap/input hosts,
+  data-bound host controls, stateful child view-model binding, nested
+  listener/event propagation, nested layout/leaf, and component-list paths.
+  `make golden-compare` reports `exact=104`, `exact-segments=412`,
+  `diverges=0`, `unsupported-feature=191`, `not-yet=0`, and parked
+  `M4=61 M5=8 M6=80 gated=6 harness=36`; `cargo test --workspace` passes.

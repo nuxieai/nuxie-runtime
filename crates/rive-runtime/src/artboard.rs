@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Context, Result};
 use rive_binary::RuntimeFile;
@@ -28,7 +28,7 @@ use crate::objects::{InstanceObjectArena, InstanceSlot};
 use crate::properties::{
     JOYSTICK_FLAG_INVERT_X, JOYSTICK_FLAG_INVERT_Y, RuntimeArtboardDimensions,
     joystick_flags_property_key, joystick_x_property_key, joystick_y_property_key,
-    solo_active_component_id_property_key,
+    property_key_for_name, solo_active_component_id_property_key,
 };
 use crate::state_machine::{
     RuntimeStateMachine, StateMachineInstance, StateMachineReportedEvent, build_state_machines,
@@ -55,6 +55,7 @@ pub struct ArtboardInstance {
     pub(crate) update_order: Vec<usize>,
     pub(crate) linear_animations: Vec<RuntimeLinearAnimation>,
     pub(crate) state_machines: Vec<RuntimeStateMachine>,
+    pub(crate) nested_artboards: BTreeMap<usize, RuntimeNestedArtboardInstance>,
     pub(crate) artboard_data_bind_values: BTreeMap<Vec<u32>, RuntimeDataBindGraphValue>,
     pub(crate) artboard_custom_property_bindings: Vec<RuntimeArtboardCustomPropertyBindingInstance>,
     pub(crate) artboard_solo_bindings: Vec<RuntimeArtboardSoloBindingInstance>,
@@ -63,8 +64,46 @@ pub struct ArtboardInstance {
     pub(crate) dirt_depth: usize,
     pub(crate) did_change: bool,
 }
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeNestedArtboardInstance {
+    pub(crate) child: Box<ArtboardInstance>,
+    animations: Vec<RuntimeNestedAnimationInstance>,
+}
+
+#[derive(Debug, Clone)]
+enum RuntimeNestedAnimationInstance {
+    Simple {
+        animation: LinearAnimationInstance,
+        is_playing: bool,
+        speed: f32,
+        mix: f32,
+    },
+    StateMachine {
+        state_machine: StateMachineInstance,
+    },
+}
+
 impl ArtboardInstance {
     pub fn from_graph(file: &RuntimeFile, graph: &ArtboardGraph) -> Result<Self> {
+        Self::from_graph_inner(file, graph, &[], &mut BTreeSet::new())
+    }
+
+    pub fn from_graph_with_artboards(
+        file: &RuntimeFile,
+        graph: &ArtboardGraph,
+        artboards: &[ArtboardGraph],
+    ) -> Result<Self> {
+        Self::from_graph_inner(file, graph, artboards, &mut BTreeSet::new())
+    }
+
+    fn from_graph_inner(
+        file: &RuntimeFile,
+        graph: &ArtboardGraph,
+        artboards: &[ArtboardGraph],
+        visiting: &mut BTreeSet<u32>,
+    ) -> Result<Self> {
+        let inserted = visiting.insert(graph.global_id);
         let dimensions =
             RuntimeArtboardDimensions::from_object(file.object(graph.global_id as usize));
         let mut slots = Vec::new();
@@ -130,6 +169,14 @@ impl ArtboardInstance {
         let artboard_solo_bindings = build_artboard_solo_bindings(file, graph);
         let artboard_list_bindings = build_artboard_list_bindings(file, graph);
         apply_initial_solo_collapses(&objects, &solos, &mut components, &component_by_local);
+        let nested_artboards = if inserted {
+            build_runtime_nested_artboard_instances(file, graph, artboards, visiting)?
+        } else {
+            BTreeMap::new()
+        };
+        if inserted {
+            visiting.remove(&graph.global_id);
+        }
 
         Ok(Self {
             width: dimensions.width,
@@ -151,6 +198,7 @@ impl ArtboardInstance {
             update_order,
             linear_animations,
             state_machines,
+            nested_artboards,
             artboard_data_bind_values,
             artboard_custom_property_bindings,
             artboard_solo_bindings,
@@ -403,6 +451,14 @@ impl ArtboardInstance {
         instance.advance(self, &state_machine, elapsed_seconds)
     }
 
+    pub fn advance_nested_artboards(&mut self, elapsed_seconds: f32) -> bool {
+        self.nested_artboards
+            .values_mut()
+            .fold(false, |changed, nested| {
+                changed | nested.advance(elapsed_seconds)
+            })
+    }
+
     pub fn set_transform_property(
         &mut self,
         local_id: usize,
@@ -582,7 +638,33 @@ impl ArtboardInstance {
                 did_update = true;
             }
         }
+        if self.update_nested_artboards() {
+            did_update = true;
+        }
         did_update
+    }
+
+    fn update_nested_artboards(&mut self) -> bool {
+        let host_opacities = self
+            .nested_artboards
+            .keys()
+            .filter_map(|host_local_id| {
+                let opacity = self
+                    .component(*host_local_id)
+                    .map(|component| component.transform.render_opacity)?;
+                Some((*host_local_id, opacity))
+            })
+            .collect::<Vec<_>>();
+
+        let mut changed = false;
+        for (host_local_id, host_opacity) in host_opacities {
+            let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
+                continue;
+            };
+            changed |= nested.set_root_opacity(host_opacity);
+            changed |= nested.child.update_pass();
+        }
+        changed
     }
 
     pub fn update_components_with_hook<F>(&mut self, mut hook: F) -> UpdateComponentsReport
@@ -871,6 +953,157 @@ impl ArtboardInstance {
     }
 }
 
+impl RuntimeNestedArtboardInstance {
+    fn advance(&mut self, elapsed_seconds: f32) -> bool {
+        let mut changed = false;
+        for animation in &mut self.animations {
+            changed |= animation.advance(&mut self.child, elapsed_seconds);
+        }
+        changed |= self.child.advance_nested_artboards(elapsed_seconds);
+        changed
+    }
+
+    fn set_root_opacity(&mut self, opacity: f32) -> bool {
+        let Some(opacity_key) = property_key_for_name("Artboard", "opacity") else {
+            return false;
+        };
+        self.child.set_double_property(0, opacity_key, opacity)
+    }
+}
+
+impl RuntimeNestedAnimationInstance {
+    fn advance(&mut self, child: &mut ArtboardInstance, elapsed_seconds: f32) -> bool {
+        match self {
+            Self::Simple {
+                animation,
+                is_playing,
+                speed,
+                mix,
+            } => {
+                let mut changed = false;
+                if *is_playing {
+                    changed |= child
+                        .advance_linear_animation_instance(animation, elapsed_seconds * *speed);
+                }
+                if *mix != 0.0 {
+                    changed |= child.apply_linear_animation_instance(animation, *mix);
+                }
+                changed
+            }
+            Self::StateMachine { state_machine } => {
+                child.advance_state_machine_instance(state_machine, elapsed_seconds)
+            }
+        }
+    }
+}
+
+fn build_runtime_nested_artboard_instances(
+    file: &RuntimeFile,
+    graph: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+    visiting: &mut BTreeSet<u32>,
+) -> Result<BTreeMap<usize, RuntimeNestedArtboardInstance>> {
+    if artboards.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+
+    let mut nested_artboards = BTreeMap::new();
+    for host in &graph.nested_artboards {
+        if host.type_name != "NestedArtboard" {
+            continue;
+        }
+
+        let Some(host_object) = file.object(host.global_id as usize) else {
+            continue;
+        };
+        let Some(referenced) = file.resolved_artboard_for_referencer_object(host_object) else {
+            continue;
+        };
+        let Some(child_graph) = artboards
+            .iter()
+            .find(|artboard| artboard.global_id == referenced.id)
+        else {
+            continue;
+        };
+        if visiting.contains(&child_graph.global_id) {
+            continue;
+        }
+
+        let mut child = Box::new(ArtboardInstance::from_graph_inner(
+            file,
+            child_graph,
+            artboards,
+            visiting,
+        )?);
+        child.bind_default_view_model_artboard_list_context(file);
+        let animations = runtime_nested_animation_instances(file, graph, host.local_id, &child);
+        nested_artboards.insert(
+            host.local_id,
+            RuntimeNestedArtboardInstance { child, animations },
+        );
+    }
+
+    Ok(nested_artboards)
+}
+
+fn runtime_nested_animation_instances(
+    file: &RuntimeFile,
+    graph: &ArtboardGraph,
+    host_local_id: usize,
+    child: &ArtboardInstance,
+) -> Vec<RuntimeNestedAnimationInstance> {
+    let mut animations = Vec::new();
+    for local_object in &graph.local_objects {
+        let Some(object) = file.object(local_object.global_id as usize) else {
+            continue;
+        };
+        if object.uint_property("parentId") != Some(host_local_id as u64) {
+            continue;
+        }
+
+        match object.type_name {
+            "NestedSimpleAnimation" => {
+                let Some(animation) = nested_simple_animation_instance(object, child) else {
+                    continue;
+                };
+                animations.push(animation);
+            }
+            "NestedStateMachine" => {
+                let Some(animation) = nested_state_machine_instance(object, child) else {
+                    continue;
+                };
+                animations.push(animation);
+            }
+            _ => {}
+        }
+    }
+    animations
+}
+
+fn nested_simple_animation_instance(
+    object: &rive_binary::RuntimeObject,
+    child: &ArtboardInstance,
+) -> Option<RuntimeNestedAnimationInstance> {
+    let animation_index = usize::try_from(object.uint_property("animationId")?).ok()?;
+    Some(RuntimeNestedAnimationInstance::Simple {
+        animation: child.linear_animation_instance(animation_index)?,
+        is_playing: object.bool_property("isPlaying").unwrap_or(false),
+        speed: object.double_property("speed").unwrap_or(1.0),
+        mix: object.double_property("mix").unwrap_or(1.0),
+    })
+}
+
+fn nested_state_machine_instance(
+    object: &rive_binary::RuntimeObject,
+    child: &ArtboardInstance,
+) -> Option<RuntimeNestedAnimationInstance> {
+    let state_machine_index = usize::try_from(object.uint_property("animationId")?).ok()?;
+    let mut state_machine = child.state_machine_instance(state_machine_index)?;
+    state_machine.bind_default_view_model_context();
+    state_machine.advance_data_context();
+    Some(RuntimeNestedAnimationInstance::StateMachine { state_machine })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -938,6 +1171,7 @@ mod tests {
             update_order,
             linear_animations: Vec::new(),
             state_machines: Vec::new(),
+            nested_artboards: BTreeMap::new(),
             artboard_data_bind_values: BTreeMap::new(),
             artboard_custom_property_bindings: Vec::new(),
             artboard_solo_bindings: Vec::new(),

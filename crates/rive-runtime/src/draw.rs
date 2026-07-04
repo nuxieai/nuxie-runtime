@@ -886,7 +886,6 @@ fn preallocate_artboard_render_paint_tree_batch(
     factory: &mut dyn RenderFactory,
 ) -> BTreeMap<u32, Box<dyn RenderPaint>> {
     let mut paints = BTreeMap::new();
-    let mut allocated = BTreeSet::new();
     let mut visiting = BTreeSet::new();
     preallocate_artboard_render_paint_tree_batch_into(
         runtime,
@@ -894,7 +893,6 @@ fn preallocate_artboard_render_paint_tree_batch(
         artboards,
         factory,
         &mut paints,
-        &mut allocated,
         &mut visiting,
     );
     paints
@@ -906,13 +904,13 @@ fn preallocate_artboard_render_paint_tree_batch_into(
     artboards: &[ArtboardGraph],
     factory: &mut dyn RenderFactory,
     paints: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
-    allocated: &mut BTreeSet<u32>,
     visiting: &mut BTreeSet<u32>,
 ) {
     if !visiting.insert(graph.global_id) {
         return;
     }
 
+    let mut allocated_for_instance = BTreeSet::new();
     let paint_by_mutator = graph
         .shape_paint_containers
         .iter()
@@ -930,13 +928,17 @@ fn preallocate_artboard_render_paint_tree_batch_into(
                 artboards,
                 factory,
                 paints,
-                allocated,
                 visiting,
             );
         }
 
         if let Some(paint_global_id) = paint_by_mutator.get(&Some(local_object.global_id)) {
-            preallocate_render_paint(*paint_global_id, factory, paints, allocated);
+            preallocate_render_paint_for_instance(
+                *paint_global_id,
+                factory,
+                paints,
+                &mut allocated_for_instance,
+            );
         }
     }
 
@@ -945,7 +947,12 @@ fn preallocate_artboard_render_paint_tree_batch_into(
             continue;
         };
         if matches!(object.type_name, "Fill" | "Stroke") {
-            preallocate_render_paint(object.id, factory, paints, allocated);
+            preallocate_render_paint_for_instance(
+                object.id,
+                factory,
+                paints,
+                &mut allocated_for_instance,
+            );
         }
     }
 
@@ -972,6 +979,22 @@ fn preallocate_render_paint(
 ) {
     if allocated.insert(global_id) {
         paints.insert(global_id, factory.make_render_paint());
+    }
+}
+
+fn preallocate_render_paint_for_instance(
+    global_id: u32,
+    factory: &mut dyn RenderFactory,
+    paints: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
+    allocated_for_instance: &mut BTreeSet<u32>,
+) {
+    if !allocated_for_instance.insert(global_id) {
+        return;
+    }
+
+    let render_paint = factory.make_render_paint();
+    if let Entry::Vacant(entry) = paints.entry(global_id) {
+        entry.insert(render_paint);
     }
 }
 

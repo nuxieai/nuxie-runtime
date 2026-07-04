@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 419 across 109 exact files
-- Parked breakdown (from `make golden-compare`): M4=56 M5=8 M6=80 gated=6 harness=36
+- Exact segments (file × sample): 420 across 110 exact files
+- Parked breakdown (from `make golden-compare`): M4=55 M5=8 M6=80 gated=6 harness=36
 - Current milestone: **M4 — Nested Artboards And Lists Exact (#V2-5)**
 
 ## Milestones
@@ -26,13 +26,14 @@ the only memory the next session has. Update it every commit.
    Query the queue with `grep -B6 'milestone = "M4"' corpus.toml`; the raw
    queue now starts with `ai_assitant.riv`, but that file carries skin/mesh/
    feather-ish complexity and should wait for a narrower entry point.
-2. Nested bool/number/trigger proxying into hosted state machines is closed
-   for the current sample-0/0.25 corpus slice, and basic
-   `NestedRemapAnimation` time plumbing exists. The next useful M4 slice is to
-   reduce one of the precise diagnostics exposed here: nested remap with
-   `DrawTarget` rules (`death_knight.riv`) or Solo-owned nested listener child
-   paint allocation (`pointer_events_nested_artboards_in_solos.riv`),
-   whichever has smaller blast radius.
+2. Solo-owned repeated nested child paint allocation is closed for the
+   sample-0 `pointer_events_nested_artboards_in_solos.riv` slice. The next
+   useful M4 slice is nested remap with `DrawTarget` rules
+   (`death_knight.riv`) or true per-host nested paint keys once a corpus sample
+   needs both repeated child instances drawing in the same frame. Do not widen
+   `pointer_events_nested_artboards_in_solos.riv` samples until that per-host
+   paint-key model exists, because C++ keeps independent child `SolidColor`
+   state across the two nested instances.
 3. Plain static `NestedArtboard` draw, default nested
    simple-animation/state-machine host advancement are closed for the current
    sample-0 corpus slice, and nested child unbound SolidColor data-bind
@@ -43,6 +44,7 @@ the only memory the next session has. Update it every commit.
    `data_binding_test_3.riv`, `data_binding_test_triggers.riv`,
    `databind_external_artboard_main.riv`, `drag_event.riv`, `multitouch.riv`,
    `nested_needs_advance.riv`, `scripted_listener_context.riv`,
+   `pointer_events_nested_artboards_in_solos.riv`,
    `scripting_root_viewmodel.riv`, `solid_affects_has_changed.riv`,
    `target_event.riv`, and `transition_self_comparator_test.riv`.
 4. M3 is closed: all `milestone = "M3"` parked entries are gone, all scripted
@@ -85,13 +87,15 @@ the only memory the next session has. Update it every commit.
   artboard instances, stateful child `ViewModelInstance` subtree admission
   under plain nested hosts, nested child unbound SolidColor data-bind defaults,
   nested bool/number/trigger input proxying, and basic nested remap-time host
-  plumbing. Custom handle-source world-space math, nested remap with
+  plumbing, plus sample-0 Solo-owned repeated nested child paint allocation.
+  Custom handle-source world-space math, nested remap with
   draw targets, data-bound nested host controls (`artboardId` runtime swaps,
   pause, speed, quantize), nested child non-color data-bind targets, focus
   data, bound stateful child view-model propagation, nested listener/event
-  propagation, Solo-owned nested listener child paint allocation,
-  `NestedArtboardLayout` / `NestedArtboardLeaf`, and layout-backed or
-  virtualized component-list instancing are still not supported.
+  propagation, per-host nested paint keys for repeated child instances when
+  multiple hosts draw in one frame, `NestedArtboardLayout` /
+  `NestedArtboardLeaf`, and layout-backed or virtualized component-list
+  instancing are still not supported.
   Golden runner sample lists now advance by sorted absolute-time deltas and
   reuse render paths across samples; no images, text, nested remap/input
   hosts, nested layout/leaf, scroll constraints, or layout-backed/virtualized
@@ -283,3 +287,11 @@ the only memory the next session has. Update it every commit.
   to exact. `make golden-compare` reports `exact=109`, `exact-segments=419`,
   `diverges=0`, `unsupported-feature=186`, `not-yet=0`, and parked
   `M4=56 M5=8 M6=80 gated=6 harness=36`; `cargo test --workspace` passes.
+- 2026-07-04: [M4] Ported sample-0 nested child paint allocation for
+  repeated nested artboard instances under Solo hosts: tree preallocation now
+  consumes `RenderPaint` allocation per child artboard instance while
+  preserving the first source-global paint mapping used by current draw
+  lookup. Promoted `pointer_events_nested_artboards_in_solos.riv` to exact.
+  `make golden-compare` reports `exact=110`, `exact-segments=420`,
+  `diverges=0`, `unsupported-feature=185`, `not-yet=0`, and parked
+  `M4=55 M5=8 M6=80 gated=6 harness=36`; `cargo test --workspace` passes.

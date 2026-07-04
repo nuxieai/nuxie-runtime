@@ -4,7 +4,7 @@ use rive_graph::{ArtboardGraph, GraphFile};
 use rive_render_api::RecordingFactory;
 use rive_runtime::{
     ArtboardInstance, RuntimeRenderPathCache, StateMachineInstance,
-    preallocate_render_paints_for_artboard_tree,
+    preallocate_render_paint_cache_for_artboard_tree,
 };
 use std::collections::BTreeSet;
 use std::env;
@@ -60,7 +60,7 @@ fn run() -> Result<String> {
     }
 
     let mut factory = RecordingFactory::new();
-    let mut paint_by_global = preallocate_render_paints_for_artboard_tree(
+    let mut paint_cache = preallocate_render_paint_cache_for_artboard_tree(
         &runtime,
         artboard,
         &graph.artboards,
@@ -108,21 +108,22 @@ fn run() -> Result<String> {
             *sample,
             &mut current_seconds,
         )?;
-        instance.prepare_static_artboard_paints(
+        instance.prepare_static_artboard_tree_paints(
             &runtime,
             artboard,
+            &graph.artboards,
             &mut factory,
-            &mut paint_by_global,
+            &mut paint_cache,
             &mut path_cache,
         )?;
         factory.add_sample(*sample);
-        instance.draw_prepared_static_artboard_with_path_cache(
+        instance.draw_prepared_static_artboard_with_render_cache(
             &runtime,
             artboard,
             &graph.artboards,
             &mut factory,
             &mut renderer,
-            &mut paint_by_global,
+            &mut paint_cache,
             &mut path_cache,
         )?;
         factory.add_frame();

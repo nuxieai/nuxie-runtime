@@ -5,7 +5,7 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 420 across 110 exact files
+- Exact segments (file × sample): 427 across 110 exact files
 - Parked breakdown (from `make golden-compare`): M4=55 M5=8 M6=80 gated=6 harness=36
 - Current milestone: **M4 — Nested Artboards And Lists Exact (#V2-5)**
 
@@ -26,14 +26,13 @@ the only memory the next session has. Update it every commit.
    Query the queue with `grep -B6 'milestone = "M4"' corpus.toml`; the raw
    queue now starts with `ai_assitant.riv`, but that file carries skin/mesh/
    feather-ish complexity and should wait for a narrower entry point.
-2. Solo-owned repeated nested child paint allocation is closed for the
-   sample-0 `pointer_events_nested_artboards_in_solos.riv` slice. The next
-   useful M4 slice is nested remap with `DrawTarget` rules
-   (`death_knight.riv`) or true per-host nested paint keys once a corpus sample
-   needs both repeated child instances drawing in the same frame. Do not widen
-   `pointer_events_nested_artboards_in_solos.riv` samples until that per-host
-   paint-key model exists, because C++ keeps independent child `SolidColor`
-   state across the two nested instances.
+2. Solo-owned repeated nested child paint allocation is closed for
+   `pointer_events_nested_artboards_in_solos.riv` through samples `0.0, 0.1,
+   0.25, 0.5, 0.75, 1.0, 1.25, 1.5`: Rust now keeps per-host nested paint
+   caches, so repeated child instances do not share mutable paint/shader state.
+   The next useful M4 slice is nested remap with `DrawTarget` rules
+   (`death_knight.riv`) or another smaller pure nested-artboard entry from the
+   M4 queue.
 3. Plain static `NestedArtboard` draw, default nested
    simple-animation/state-machine host advancement are closed for the current
    sample-0 corpus slice, and nested child unbound SolidColor data-bind
@@ -87,15 +86,15 @@ the only memory the next session has. Update it every commit.
   artboard instances, stateful child `ViewModelInstance` subtree admission
   under plain nested hosts, nested child unbound SolidColor data-bind defaults,
   nested bool/number/trigger input proxying, and basic nested remap-time host
-  plumbing, plus sample-0 Solo-owned repeated nested child paint allocation.
+  plumbing, plus per-host nested paint caches for repeated child instances
+  under Solo-owned hosts.
   Custom handle-source world-space math, nested remap with
   draw targets, data-bound nested host controls (`artboardId` runtime swaps,
   pause, speed, quantize), nested child non-color data-bind targets, focus
   data, bound stateful child view-model propagation, nested listener/event
-  propagation, per-host nested paint keys for repeated child instances when
-  multiple hosts draw in one frame, `NestedArtboardLayout` /
-  `NestedArtboardLeaf`, and layout-backed or virtualized component-list
-  instancing are still not supported.
+  propagation, `NestedArtboardLayout` / `NestedArtboardLeaf`, and
+  layout-backed or virtualized component-list instancing are still not
+  supported.
   Golden runner sample lists now advance by sorted absolute-time deltas and
   reuse render paths across samples; no images, text, nested remap/input
   hosts, nested layout/leaf, scroll constraints, or layout-backed/virtualized
@@ -294,4 +293,18 @@ the only memory the next session has. Update it every commit.
   lookup. Promoted `pointer_events_nested_artboards_in_solos.riv` to exact.
   `make golden-compare` reports `exact=110`, `exact-segments=420`,
   `diverges=0`, `unsupported-feature=185`, `not-yet=0`, and parked
+  `M4=55 M5=8 M6=80 gated=6 harness=36`; `cargo test --workspace` passes.
+- 2026-07-04: [M4] Closed per-host nested paint caches for repeated
+  Solo-owned nested artboard instances: Rust render paint state now lives in a
+  recursive `RuntimeRenderPaintCache`, and the golden runner prepares/draws
+  nested children through matching per-host paint caches instead of reusing a
+  child artboard's global paint map. Widened
+  `pointer_events_nested_artboards_in_solos.riv` from sample `0.0` to samples
+  `0.0, 0.1, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5`, raising `exact-segments` to
+  427 while `exact` remains 110. `death_knight.riv` remains parked behind
+  nested remap `DrawTarget` rules: the C++ runner creates transparent child
+  shaders for Death Up but never draws that child, while Rust must not bypass
+  the existing diagnostic until DrawTarget rules are ported. `make
+  golden-compare` reports `exact=110`, `exact-segments=427`, `diverges=0`,
+  `unsupported-feature=185`, `not-yet=0`, and parked
   `M4=55 M5=8 M6=80 gated=6 harness=36`; `cargo test --workspace` passes.

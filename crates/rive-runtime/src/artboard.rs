@@ -28,7 +28,7 @@ use crate::objects::{InstanceObjectArena, InstanceSlot};
 use crate::properties::{
     JOYSTICK_FLAG_INVERT_X, JOYSTICK_FLAG_INVERT_Y, RuntimeArtboardDimensions,
     joystick_flags_property_key, joystick_x_property_key, joystick_y_property_key,
-    property_key_for_name, solo_active_component_id_property_key,
+    property_key_for_name, solo_active_component_id_property_key, transform_property_for_key,
 };
 use crate::state_machine::{
     RuntimeStateMachine, StateMachineInputKind, StateMachineInstance, StateMachineReportedEvent,
@@ -186,7 +186,7 @@ impl ArtboardInstance {
             visiting.remove(&graph.global_id);
         }
 
-        Ok(Self {
+        let mut instance = Self {
             width: dimensions.width,
             height: dimensions.height,
             origin_x: dimensions.origin_x,
@@ -214,7 +214,17 @@ impl ArtboardInstance {
             dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,
             did_change: true,
-        })
+        };
+        let nested_host_locals = instance
+            .nested_artboards
+            .keys()
+            .copied()
+            .collect::<Vec<_>>();
+        for host_local_id in nested_host_locals {
+            instance.sync_nested_artboard_root_opacity(host_local_id);
+        }
+
+        Ok(instance)
     }
 
     pub fn component(&self, local_id: usize) -> Option<&RuntimeComponent> {
@@ -462,11 +472,29 @@ impl ArtboardInstance {
     }
 
     pub fn advance_nested_artboards(&mut self, elapsed_seconds: f32) -> bool {
-        self.nested_artboards
-            .values_mut()
-            .fold(false, |changed, nested| {
-                changed | nested.advance(elapsed_seconds)
-            })
+        let host_locals = self.nested_artboards.keys().copied().collect::<Vec<_>>();
+        let mut changed = false;
+        for host_local in host_locals {
+            if self
+                .component(host_local)
+                .is_some_and(RuntimeComponent::is_collapsed)
+            {
+                continue;
+            }
+            let nested_needs_update = self
+                .nested_artboards
+                .get_mut(&host_local)
+                .map(|nested| {
+                    nested.advance(elapsed_seconds)
+                        || nested.child.has_dirt(ComponentDirt::COMPONENTS)
+                })
+                .unwrap_or(false);
+            if nested_needs_update {
+                changed = true;
+                self.add_dirt(host_local, ComponentDirt::COMPONENTS, false);
+            }
+        }
+        changed
     }
 
     pub fn set_transform_property(
@@ -619,6 +647,7 @@ impl ArtboardInstance {
         } else {
             self.components[index].dirt &= !ComponentDirt::COLLAPSED;
         }
+        self.sync_nested_artboard_root_opacity(local_id);
         self.on_component_dirty(local_id);
         self.apply_component_collapse_changed(local_id);
         true
@@ -633,45 +662,82 @@ impl ArtboardInstance {
         if self.joysticks_apply_before_update {
             did_update |= self.apply_joysticks(true);
         }
-        if self.update_components().did_update {
+        let mut nested_did_update = false;
+        if self
+            .update_components_with_hook(|instance, local_id, dirt| {
+                nested_did_update |= instance.update_nested_artboard_from_host_dirt(local_id, dirt);
+            })
+            .did_update
+        {
             did_update = true;
         }
+        did_update |= nested_did_update;
         if !self.joysticks_apply_before_update {
             let joysticks = self.joysticks.clone();
             for joystick in joysticks {
-                if !joystick.can_apply_before_update && self.update_components().did_update {
+                let mut nested_did_update = false;
+                if !joystick.can_apply_before_update
+                    && self
+                        .update_components_with_hook(|instance, local_id, dirt| {
+                            nested_did_update |=
+                                instance.update_nested_artboard_from_host_dirt(local_id, dirt);
+                        })
+                        .did_update
+                {
                     did_update = true;
                 }
+                did_update |= nested_did_update;
                 did_update |= self.apply_joystick(&joystick);
             }
-            if self.update_components().did_update {
+            let mut nested_did_update = false;
+            if self
+                .update_components_with_hook(|instance, local_id, dirt| {
+                    nested_did_update |=
+                        instance.update_nested_artboard_from_host_dirt(local_id, dirt);
+                })
+                .did_update
+            {
                 did_update = true;
             }
-        }
-        if self.update_nested_artboards() {
-            did_update = true;
+            did_update |= nested_did_update;
         }
         did_update
     }
 
-    fn update_nested_artboards(&mut self) -> bool {
-        let host_opacities = self
-            .nested_artboards
-            .keys()
-            .filter_map(|host_local_id| {
-                let opacity = self
-                    .component(*host_local_id)
-                    .map(|component| component.transform.render_opacity)?;
-                Some((*host_local_id, opacity))
-            })
-            .collect::<Vec<_>>();
-
+    fn update_nested_artboard_from_host_dirt(
+        &mut self,
+        host_local_id: usize,
+        dirt: ComponentDirt,
+    ) -> bool {
+        if !dirt.contains(ComponentDirt::RENDER_OPACITY)
+            && !dirt.contains(ComponentDirt::COMPONENTS)
+        {
+            return false;
+        }
         let mut changed = false;
-        for (host_local_id, host_opacity) in host_opacities {
-            let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
-                continue;
-            };
-            changed |= nested.set_root_opacity(host_opacity);
+        if dirt.contains(ComponentDirt::RENDER_OPACITY) {
+            changed |= self.sync_nested_artboard_root_opacity(host_local_id);
+        }
+        if dirt.contains(ComponentDirt::COMPONENTS) {
+            if let Some(nested) = self.nested_artboards.get_mut(&host_local_id) {
+                changed |= nested.child.update_pass();
+            }
+        }
+        changed
+    }
+
+    fn sync_nested_artboard_root_opacity(&mut self, host_local_id: usize) -> bool {
+        let Some(host_opacity) = self
+            .component(host_local_id)
+            .map(|component| component.transform.render_opacity)
+        else {
+            return false;
+        };
+        let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
+            return false;
+        };
+        let mut changed = nested.set_root_opacity(host_opacity);
+        if changed {
             changed |= nested.child.update_pass();
         }
         changed
@@ -852,6 +918,23 @@ impl ArtboardInstance {
         property_key: u16,
         value: f32,
     ) -> bool {
+        if let Some(property) = transform_property_for_key(property_key) {
+            match property {
+                TransformProperty::Opacity => {
+                    self.add_dirt(local_id, ComponentDirt::RENDER_OPACITY, true);
+                }
+                TransformProperty::X
+                | TransformProperty::Y
+                | TransformProperty::Rotation
+                | TransformProperty::ScaleX
+                | TransformProperty::ScaleY => {
+                    self.add_dirt(local_id, ComponentDirt::TRANSFORM, false);
+                    self.add_dirt(local_id, ComponentDirt::WORLD_TRANSFORM, true);
+                }
+            }
+            return true;
+        }
+
         match self.slot(local_id).and_then(|slot| slot.type_name) {
             Some("NestedNumber")
                 if property_key_for_name("NestedNumber", "nestedValue") == Some(property_key) =>
@@ -1851,6 +1934,27 @@ mod tests {
         );
         assert!(component.dirt.contains(ComponentDirt::RENDER_OPACITY));
         assert!(!component.dirt.contains(ComponentDirt::TRANSFORM));
+    }
+
+    #[test]
+    fn generic_artboard_opacity_mutation_marks_render_opacity_dirty() {
+        let artboard_opacity_key =
+            property_key_for_name("Artboard", "opacity").expect("Artboard.opacity key");
+        let mut root = synthetic_component(0, 0);
+        root.type_name = "Artboard";
+        root.dirt = ComponentDirt::NONE;
+        let mut instance = synthetic_instance(vec![root], vec![0]);
+        instance.dirt = ComponentDirt::NONE;
+
+        assert!(instance.set_double_property(0, artboard_opacity_key, 0.25));
+
+        let root = instance.component(0).unwrap();
+        assert_eq!(
+            instance.transform_property(0, TransformProperty::Opacity),
+            Some(0.25)
+        );
+        assert!(root.dirt.contains(ComponentDirt::RENDER_OPACITY));
+        assert!(!root.dirt.contains(ComponentDirt::TRANSFORM));
     }
 
     #[test]

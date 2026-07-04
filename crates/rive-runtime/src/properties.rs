@@ -113,10 +113,15 @@ pub(crate) fn transform_property_for_key(property_key: u16) -> Option<TransformP
     [
         ("Node", "x", TransformProperty::X),
         ("Node", "y", TransformProperty::Y),
-        ("Node", "rotation", TransformProperty::Rotation),
-        ("Node", "scaleX", TransformProperty::ScaleX),
-        ("Node", "scaleY", TransformProperty::ScaleY),
-        ("Node", "opacity", TransformProperty::Opacity),
+        (
+            "TransformComponent",
+            "rotation",
+            TransformProperty::Rotation,
+        ),
+        ("TransformComponent", "scaleX", TransformProperty::ScaleX),
+        ("TransformComponent", "scaleY", TransformProperty::ScaleY),
+        ("TransformComponent", "opacity", TransformProperty::Opacity),
+        ("Artboard", "opacity", TransformProperty::Opacity),
     ]
     .into_iter()
     .find_map(|(type_name, property_name, property)| {

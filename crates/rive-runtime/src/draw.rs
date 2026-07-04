@@ -124,6 +124,9 @@ impl ArtboardInstance {
                 continue;
             };
             for (container, paint) in paints {
+                if self.runtime_gradient_paint_is_collapsed(container, paint) {
+                    continue;
+                }
                 if !prepared.insert(paint.global_id) {
                     continue;
                 }
@@ -150,6 +153,158 @@ impl ArtboardInstance {
         }
 
         Ok(())
+    }
+
+    pub fn prepare_static_artboard_tree_paints(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        artboards: &[ArtboardGraph],
+        factory: &mut dyn RenderFactory,
+        paint_cache: &mut RuntimeRenderPaintCache,
+        render_cache: &mut RuntimeRenderPathCache,
+    ) -> Result<()> {
+        self.prepare_static_artboard_tree_paints_internal(
+            runtime,
+            graph,
+            artboards,
+            factory,
+            &mut paint_cache.paints,
+            Some(&mut paint_cache.nested_artboards),
+            render_cache,
+        )
+    }
+
+    fn prepare_static_artboard_tree_paints_internal(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        artboards: &[ArtboardGraph],
+        factory: &mut dyn RenderFactory,
+        paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
+        mut nested_paint_caches: Option<&mut BTreeMap<u32, RuntimeRenderPaintCache>>,
+        render_cache: &mut RuntimeRenderPathCache,
+    ) -> Result<()> {
+        self.prepare_static_artboard_paints(
+            runtime,
+            graph,
+            factory,
+            paint_by_global,
+            render_cache,
+        )?;
+
+        for command in self.draw_commands(graph) {
+            if !sorted_drawable_is_nested_artboard(command.type_name) {
+                continue;
+            }
+
+            let referenced_artboard_global = command
+                .referenced_artboard_global
+                .context("nested artboard missing referenced artboard")?;
+            let child_graph = artboards
+                .iter()
+                .find(|graph| graph.global_id == referenced_artboard_global)
+                .with_context(|| {
+                    format!("missing nested artboard graph for global {referenced_artboard_global}")
+                })?;
+            let cache_key = nested_render_cache_key(
+                command.global_id,
+                command.local_id,
+                referenced_artboard_global,
+            );
+            let child_cache = render_cache.nested_artboards.entry(cache_key).or_default();
+            let child_paint_caches = match &mut nested_paint_caches {
+                Some(caches) => {
+                    let child_paint_cache = caches.entry(cache_key).or_default();
+                    Some((
+                        &mut child_paint_cache.paints,
+                        Some(&mut child_paint_cache.nested_artboards),
+                    ))
+                }
+                None => None,
+            };
+
+            if let Some(child) = command
+                .local_id
+                .and_then(|local_id| self.nested_artboards.get(&local_id))
+                .map(|nested| nested.child.as_ref())
+            {
+                if let Some((child_paints, child_nested_paints)) = child_paint_caches {
+                    child.prepare_static_artboard_tree_paints_internal(
+                        runtime,
+                        child_graph,
+                        artboards,
+                        factory,
+                        child_paints,
+                        child_nested_paints,
+                        child_cache,
+                    )?;
+                } else {
+                    child.prepare_static_artboard_tree_paints_internal(
+                        runtime,
+                        child_graph,
+                        artboards,
+                        factory,
+                        paint_by_global,
+                        None,
+                        child_cache,
+                    )?;
+                }
+                continue;
+            }
+
+            let mut child = ArtboardInstance::from_graph(runtime, child_graph)?;
+            let host_opacity = command
+                .local_id
+                .and_then(|local_id| self.component(local_id))
+                .map(|component| component.transform.render_opacity)
+                .unwrap_or(1.0);
+            if let Some(opacity_key) = property_key_for_name("Artboard", "opacity") {
+                child.set_double_property(0, opacity_key, host_opacity);
+            }
+            child.update_pass();
+            if let Some((child_paints, child_nested_paints)) = child_paint_caches {
+                child.prepare_static_artboard_tree_paints_internal(
+                    runtime,
+                    child_graph,
+                    artboards,
+                    factory,
+                    child_paints,
+                    child_nested_paints,
+                    child_cache,
+                )?;
+            } else {
+                child.prepare_static_artboard_tree_paints_internal(
+                    runtime,
+                    child_graph,
+                    artboards,
+                    factory,
+                    paint_by_global,
+                    None,
+                    child_cache,
+                )?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn runtime_gradient_paint_is_collapsed(
+        &self,
+        container: &ShapePaintContainerNode,
+        paint: &ShapePaintNode,
+    ) -> bool {
+        [
+            Some(container.local_id),
+            Some(paint.local_id),
+            paint.mutator_local,
+        ]
+        .into_iter()
+        .flatten()
+        .any(|local_id| {
+            self.component(local_id)
+                .is_some_and(RuntimeComponent::is_collapsed)
+        })
     }
 
     pub fn draw_prepared_static_artboard(
@@ -190,6 +345,30 @@ impl ArtboardInstance {
             renderer,
             paint_by_global,
             path_cache,
+            None,
+            true,
+        )
+    }
+
+    pub fn draw_prepared_static_artboard_with_render_cache(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        artboards: &[ArtboardGraph],
+        factory: &mut dyn RenderFactory,
+        renderer: &mut dyn Renderer,
+        paint_cache: &mut RuntimeRenderPaintCache,
+        path_cache: &mut RuntimeRenderPathCache,
+    ) -> Result<()> {
+        self.draw_prepared_static_artboard_internal_with_path_cache(
+            runtime,
+            graph,
+            artboards,
+            factory,
+            renderer,
+            &mut paint_cache.paints,
+            path_cache,
+            Some(&mut paint_cache.nested_artboards),
             true,
         )
     }
@@ -203,8 +382,16 @@ impl ArtboardInstance {
         renderer: &mut dyn Renderer,
         paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
         path_cache: &mut RuntimeRenderPathCache,
+        mut nested_paint_caches: Option<&mut BTreeMap<u32, RuntimeRenderPaintCache>>,
         apply_origin_transform: bool,
     ) -> Result<()> {
+        if self
+            .component(0)
+            .is_some_and(|component| component.transform.render_opacity == 0.0)
+        {
+            return Ok(());
+        }
+
         let needs_save = self.clip || apply_origin_transform;
         if needs_save {
             renderer.save();
@@ -269,6 +456,10 @@ impl ArtboardInstance {
                 renderer,
                 paint_by_global,
                 path_cache,
+                match &mut nested_paint_caches {
+                    Some(caches) => Some(&mut **caches),
+                    None => None,
+                },
             )?;
         }
 
@@ -701,6 +892,18 @@ pub struct RuntimeGradientStop {
 }
 
 #[derive(Default)]
+pub struct RuntimeRenderPaintCache {
+    paints: BTreeMap<u32, Box<dyn RenderPaint>>,
+    nested_artboards: BTreeMap<u32, RuntimeRenderPaintCache>,
+}
+
+impl RuntimeRenderPaintCache {
+    pub fn root_paints_mut(&mut self) -> &mut BTreeMap<u32, Box<dyn RenderPaint>> {
+        &mut self.paints
+    }
+}
+
+#[derive(Default)]
 pub struct RuntimeRenderPathCache {
     artboard_clip: Option<Box<dyn RenderPath>>,
     background_paths: BTreeMap<usize, Box<dyn RenderPath>>,
@@ -831,6 +1034,15 @@ pub fn preallocate_render_paints_for_artboard_tree(
     artboards: &[ArtboardGraph],
     factory: &mut dyn RenderFactory,
 ) -> BTreeMap<u32, Box<dyn RenderPaint>> {
+    preallocate_render_paint_cache_for_artboard_tree(runtime, graph, artboards, factory).paints
+}
+
+pub fn preallocate_render_paint_cache_for_artboard_tree(
+    runtime: &RuntimeFile,
+    graph: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+    factory: &mut dyn RenderFactory,
+) -> RuntimeRenderPaintCache {
     let _source_artboard_paints = preallocate_render_paint_batch(runtime, factory);
     preallocate_artboard_render_paint_tree_batch(runtime, graph, artboards, factory)
 }
@@ -884,18 +1096,18 @@ fn preallocate_artboard_render_paint_tree_batch(
     graph: &ArtboardGraph,
     artboards: &[ArtboardGraph],
     factory: &mut dyn RenderFactory,
-) -> BTreeMap<u32, Box<dyn RenderPaint>> {
-    let mut paints = BTreeMap::new();
+) -> RuntimeRenderPaintCache {
+    let mut cache = RuntimeRenderPaintCache::default();
     let mut visiting = BTreeSet::new();
     preallocate_artboard_render_paint_tree_batch_into(
         runtime,
         graph,
         artboards,
         factory,
-        &mut paints,
+        &mut cache,
         &mut visiting,
     );
-    paints
+    cache
 }
 
 fn preallocate_artboard_render_paint_tree_batch_into(
@@ -903,7 +1115,7 @@ fn preallocate_artboard_render_paint_tree_batch_into(
     graph: &ArtboardGraph,
     artboards: &[ArtboardGraph],
     factory: &mut dyn RenderFactory,
-    paints: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
+    cache: &mut RuntimeRenderPaintCache,
     visiting: &mut BTreeSet<u32>,
 ) {
     if !visiting.insert(graph.global_id) {
@@ -922,12 +1134,18 @@ fn preallocate_artboard_render_paint_tree_batch_into(
         if let Some(child_graph) =
             referenced_artboard_graph_for_local_object(runtime, artboards, local_object.global_id)
         {
+            let cache_key = nested_render_cache_key(
+                Some(local_object.global_id),
+                Some(local_object.local_id),
+                child_graph.global_id,
+            );
+            let child_cache = cache.nested_artboards.entry(cache_key).or_default();
             preallocate_artboard_render_paint_tree_batch_into(
                 runtime,
                 child_graph,
                 artboards,
                 factory,
-                paints,
+                child_cache,
                 visiting,
             );
         }
@@ -936,7 +1154,7 @@ fn preallocate_artboard_render_paint_tree_batch_into(
             preallocate_render_paint_for_instance(
                 *paint_global_id,
                 factory,
-                paints,
+                &mut cache.paints,
                 &mut allocated_for_instance,
             );
         }
@@ -950,7 +1168,7 @@ fn preallocate_artboard_render_paint_tree_batch_into(
             preallocate_render_paint_for_instance(
                 object.id,
                 factory,
-                paints,
+                &mut cache.paints,
                 &mut allocated_for_instance,
             );
         }
@@ -969,6 +1187,16 @@ fn referenced_artboard_graph_for_local_object<'a>(
     artboards
         .iter()
         .find(|graph| graph.global_id == referenced.id)
+}
+
+fn nested_render_cache_key(
+    global_id: Option<u32>,
+    local_id: Option<usize>,
+    referenced_artboard_global: u32,
+) -> u32 {
+    global_id
+        .or_else(|| local_id.and_then(|local_id| u32::try_from(local_id).ok()))
+        .unwrap_or(referenced_artboard_global)
 }
 
 fn preallocate_render_paint(
@@ -1117,6 +1345,7 @@ fn runtime_draw_command(
     renderer: &mut dyn Renderer,
     paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
     path_cache: &mut RuntimeRenderPathCache,
+    nested_paint_caches: Option<&mut BTreeMap<u32, RuntimeRenderPaintCache>>,
 ) -> Result<()> {
     match command.kind {
         RuntimeDrawCommandKind::ClipStart => {
@@ -1140,6 +1369,7 @@ fn runtime_draw_command(
             renderer,
             paint_by_global,
             path_cache,
+            nested_paint_caches,
         );
     }
 
@@ -1217,6 +1447,7 @@ fn runtime_draw_nested_artboard(
     renderer: &mut dyn Renderer,
     paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
     path_cache: &mut RuntimeRenderPathCache,
+    nested_paint_caches: Option<&mut BTreeMap<u32, RuntimeRenderPaintCache>>,
 ) -> Result<()> {
     let referenced_artboard_global = command
         .referenced_artboard_global
@@ -1239,14 +1470,11 @@ fn runtime_draw_nested_artboard(
     }
     renderer.transform(runtime_render_mat(host_world));
 
-    let cache_key = command
-        .global_id
-        .or_else(|| {
-            command
-                .local_id
-                .and_then(|local_id| u32::try_from(local_id).ok())
-        })
-        .unwrap_or(referenced_artboard_global);
+    let cache_key = nested_render_cache_key(
+        command.global_id,
+        command.local_id,
+        referenced_artboard_global,
+    );
     let child_cache = path_cache.nested_artboards.entry(cache_key).or_default();
 
     if let Some(child) = command
@@ -1254,23 +1482,50 @@ fn runtime_draw_nested_artboard(
         .and_then(|local_id| instance.nested_artboards.get(&local_id))
         .map(|nested| nested.child.as_ref())
     {
-        child.prepare_static_artboard_paints(
-            runtime,
-            child_graph,
-            factory,
-            paint_by_global,
-            child_cache,
-        )?;
-        child.draw_prepared_static_artboard_internal_with_path_cache(
-            runtime,
-            child_graph,
-            artboards,
-            factory,
-            renderer,
-            paint_by_global,
-            child_cache,
-            false,
-        )?;
+        if let Some(caches) = nested_paint_caches {
+            let child_paint_cache = caches.entry(cache_key).or_default();
+            child.prepare_static_artboard_tree_paints_internal(
+                runtime,
+                child_graph,
+                artboards,
+                factory,
+                &mut child_paint_cache.paints,
+                Some(&mut child_paint_cache.nested_artboards),
+                child_cache,
+            )?;
+            child.draw_prepared_static_artboard_internal_with_path_cache(
+                runtime,
+                child_graph,
+                artboards,
+                factory,
+                renderer,
+                &mut child_paint_cache.paints,
+                child_cache,
+                Some(&mut child_paint_cache.nested_artboards),
+                false,
+            )?;
+        } else {
+            child.prepare_static_artboard_tree_paints_internal(
+                runtime,
+                child_graph,
+                artboards,
+                factory,
+                paint_by_global,
+                None,
+                child_cache,
+            )?;
+            child.draw_prepared_static_artboard_internal_with_path_cache(
+                runtime,
+                child_graph,
+                artboards,
+                factory,
+                renderer,
+                paint_by_global,
+                child_cache,
+                None,
+                false,
+            )?;
+        }
 
         if command.needs_save_operation {
             renderer.restore();
@@ -1283,23 +1538,50 @@ fn runtime_draw_nested_artboard(
         child.set_double_property(0, opacity_key, host_opacity);
     }
     child.update_pass();
-    child.prepare_static_artboard_paints(
-        runtime,
-        child_graph,
-        factory,
-        paint_by_global,
-        child_cache,
-    )?;
-    child.draw_prepared_static_artboard_internal_with_path_cache(
-        runtime,
-        child_graph,
-        artboards,
-        factory,
-        renderer,
-        paint_by_global,
-        child_cache,
-        false,
-    )?;
+    if let Some(caches) = nested_paint_caches {
+        let child_paint_cache = caches.entry(cache_key).or_default();
+        child.prepare_static_artboard_tree_paints_internal(
+            runtime,
+            child_graph,
+            artboards,
+            factory,
+            &mut child_paint_cache.paints,
+            Some(&mut child_paint_cache.nested_artboards),
+            child_cache,
+        )?;
+        child.draw_prepared_static_artboard_internal_with_path_cache(
+            runtime,
+            child_graph,
+            artboards,
+            factory,
+            renderer,
+            &mut child_paint_cache.paints,
+            child_cache,
+            Some(&mut child_paint_cache.nested_artboards),
+            false,
+        )?;
+    } else {
+        child.prepare_static_artboard_tree_paints_internal(
+            runtime,
+            child_graph,
+            artboards,
+            factory,
+            paint_by_global,
+            None,
+            child_cache,
+        )?;
+        child.draw_prepared_static_artboard_internal_with_path_cache(
+            runtime,
+            child_graph,
+            artboards,
+            factory,
+            renderer,
+            paint_by_global,
+            child_cache,
+            None,
+            false,
+        )?;
+    }
 
     if command.needs_save_operation {
         renderer.restore();

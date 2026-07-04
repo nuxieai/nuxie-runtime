@@ -2734,3 +2734,66 @@ milestone entries are kept verbatim here. Newest milestone last.
   `exact-segments=435`, `diverges=0`, `unsupported-feature=181`,
   `not-yet=0`, and parked `M4=50 M5=8 M6=81 gated=6 harness=36`;
   `cargo test --workspace` passes.
+
+## M5 (completed 2026-07-04)
+
+- 2026-07-04: [M5] Closed M5 queue after direct probes showed the final four
+  M5 entries (`scripted_data_context.riv`, `shared_viewmodel_instance.riv`,
+  `stateful_source_switch.riv`, and `transition_duration_bind_nested.riv`)
+  now reach nested child `TextValueRun`; all four moved to M6 `text`. `make
+  golden-compare` reports `exact=128`, `exact-segments=449`, `diverges=0`,
+  `unsupported-feature=167`, `not-yet=0`, and parked
+  `M6=124 gated=7 harness=36`; manifest query confirms M5=0, and `cargo
+  test --workspace` passes.
+- 2026-07-04: [M5] Retagged relative data binding to text: the runner now
+  admits nested child `Shape.x/y` no-converter binds, and
+  `relative_data_binding.riv` moved from M5 to M6 after the same probe reached
+  nested child `TextValueRun`. `make golden-compare` reports `exact=128`,
+  `exact-segments=449`, `diverges=0`, `unsupported-feature=167`,
+  `not-yet=0`, and parked `M5=4 M6=120 gated=7 harness=36`; `cargo
+  test --workspace` passes.
+- 2026-07-04: [M5] Opened nested child custom string binds: the runner now
+  admits nested child `CustomPropertyString.propertyValue` source-to-target
+  binds with no converter or `DataConverterToString`, and current C++
+  `ParametricPathBase` Rectangle width/height keys 20/21. Direct C++/Rust
+  stream comparison promotes `library_view_model_test.riv` to exact. `make
+  golden-compare` reports `exact=128`, `exact-segments=449`, `diverges=0`,
+  `unsupported-feature=167`, `not-yet=0`, and parked `M5=5 M6=119 gated=7
+  harness=36`; `cargo test --workspace` passes.
+- 2026-07-04: [M5] Opened zero-duration interpolator transform binds: the
+  obsolete Rust-runner gate for near-zero-duration `DataConverterInterpolator`
+  Shape x/y targets was removed after direct C++/Rust stream comparison showed
+  `interpolation_zero_duration.riv` is exact. `make golden-compare` reports
+  `exact=127`, `exact-segments=448`, `diverges=0`,
+  `unsupported-feature=168`, `not-yet=0`, and parked `M5=6 M6=119 gated=7
+  harness=36`; `cargo test --workspace` passes.
+- 2026-07-04: [M5] Ported nested child opacity/rectangle binds: the runner now
+  admits nested child `Node.opacity` and `Rectangle.width/height` no-converter
+  binds, nested artboard advance applies child artboard data binds, and
+  authored-transparent Backboard/background draws are skipped to match C++.
+  `hide_test.riv` is promoted to exact, while `interpolate_to_end.riv` moved to
+  M6 after the same slice reached nested child `TextValueRun`. `make
+  golden-compare` reports `exact=126`, `exact-segments=447`, `diverges=0`,
+  `unsupported-feature=169`, `not-yet=0`, and parked `M5=7 M6=119 gated=7
+  harness=36`; `cargo test --workspace` passes.
+- 2026-07-04: [M5] Ported artboard formula/group transform binds: artboard
+  property bindings now run `DataConverterGroup` and `DataConverterFormula`
+  through shared converter state, reset source-change random caches when
+  source values mutate, and use the C++ `RandomProvider` fallback sequence for
+  unseeded formula randoms. The runner now admits grouped Shape x/y binds
+  while keeping the zero-duration interpolator transform gate for
+  `interpolation_zero_duration.riv`, and `formula_random.riv` is promoted to
+  exact after direct C++/Rust stream comparison. `make golden-compare` reports
+  `exact=125`, `exact-segments=446`, `diverges=0`, `unsupported-feature=170`,
+  `not-yet=0`, and parked `M5=9 M6=118 gated=7 harness=36`;
+  `cargo test --workspace` passes.
+- 2026-07-04: [M5] Ported nested host artboard binding: `NestedArtboard.artboardId` source-to-target artboard values now rebuild or clear the runtime child instance from shared graph context, draw skips the static nested fallback when a host is data-bound to `-1`, and the runner narrows the nested-host gate to converted or target-to-source host swaps. `recursive_data_bind.riv` is promoted to exact after direct C++/Rust stream comparison, while `databind_artboard.riv` moves to M6 after the same bind now reaches `text`. `make golden-compare` reports `exact=124`, `exact-segments=445`, `diverges=0`, `unsupported-feature=171`, `not-yet=0`, and parked `M5=10 M6=118 gated=7 harness=36`; `cargo test --workspace` passes.
+- 2026-07-04: [M5] Ported artboard source-to-target interpolator bindings: artboard property bindings now keep stateful `DataConverterInterpolator` converter state, advance it with scene elapsed time, and apply converted number/color values to target properties. The Rust runner admits source-to-target `SolidColor.colorValue` interpolator binds, and `data_converter_interpolator_reset.riv` plus `time_based_interpolation.riv` are promoted to exact after direct C++/Rust stream comparison. `make golden-compare` reports `exact=123`, `exact-segments=444`, `diverges=0`, `unsupported-feature=172`, `not-yet=0`, and parked `M5=12 M6=117 gated=7 harness=36`; `cargo test --workspace` passes.
+- 2026-07-04: [M5] Ported custom-property enum target-to-source binding: artboard `DataBindContext` custom-property bindings now capture `CustomPropertyEnum.propertyValue` as `RuntimeDataBindGraphValue::Enum`, the runner admits no-converter target-to-source enum binds, and `custom_property_enum.riv` is promoted to exact after direct C++/Rust stream comparison. `make golden-compare` reports `exact=121`, `exact-segments=442`, `diverges=0`, `unsupported-feature=174`, `not-yet=0`, and parked `M5=14 M6=117 gated=7 harness=36`; `cargo test --workspace` passes.
+- 2026-07-04: [M5] Retagged text-target nested child binds: nested child data-bind diagnostics now report `text` when the unsupported target is `Text`, `TextValueRun`, or `TextStylePaint`, and `component_stateful.riv` plus `component_stateful_vm_instance_2.riv` moved from M5 to M6 after direct probes showed `TextValueRun` as the first blocker. `make golden-compare` reports `exact=120`, `exact-segments=441`, `diverges=0`, `unsupported-feature=175`, `not-yet=0`, and parked `M5=15 M6=117 gated=7 harness=36`; `cargo test --workspace` passes.
+- 2026-07-04: [M5] Opened direct no-converter color binds: artboard `DataBindContext` source-to-target bindings now admit `FieldKind::Color` and apply `SolidColor.colorValue` through the runtime color setter, mirroring C++ `src/data_bind/context/context_value_color.cpp`. `collapsable_data_binding.riv` and `scripted_color.riv` are promoted to exact after direct C++/Rust stream comparison. `make golden-compare` reports `exact=120`, `exact-segments=441`, `diverges=0`, `unsupported-feature=175`, `not-yet=0`, and parked `M5=17 M6=115 gated=7 harness=36`; `cargo test --workspace` passes.
+- 2026-07-04: [M5] Opened no-converter transform binds: Rust now admits direct Shape x/y and nested child RootBone x/y DataBindContext number targets through the existing artboard property-binding path. `bidirectional_precedence.riv` is promoted to exact after direct C++/Rust stream comparison, and `ai_assitant.riv` is retagged from M5 to `gated` after the RootBone bind probe exposes the existing `feather` renderer diagnostic. `make golden-compare` reports `exact=118`, `exact-segments=439`, `diverges=0`, `unsupported-feature=177`, `not-yet=0`, and parked `M5=19 M6=115 gated=7 harness=36`; `cargo test --workspace` passes.
+- 2026-07-04: [M5] Ported stateful nested child number binding: artboard DataBindContext number sources now apply to double/uint targets, nested child artboards refresh Ellipse width/height from host stateful `ViewModelInstanceNumber` values after parent binds run, and `component_stateful_vm_instance.riv` is promoted to exact after direct C++/Rust stream comparison. `make golden-compare` reports `exact=117`, `exact-segments=438`, `diverges=0`, `unsupported-feature=178`, `not-yet=0`, and parked `M5=21 M6=115 gated=6 harness=36`; `cargo test --workspace` passes.
+- 2026-07-04: [M5] Opened live data-bound nested host pause: `NestedArtboard.isPaused` source-to-target binding now runs through the existing artboard nested-host binding path, and `pause_nested_artboard.riv` is promoted to exact after direct C++/Rust stream comparison. `make golden-compare` reports `exact=116`, `exact-segments=437`, `diverges=0`, `unsupported-feature=179`, `not-yet=0`, and parked `M5=22 M6=115 gated=6 harness=36`; `cargo test --workspace` passes.
+- 2026-07-04: [M5] Ported custom-property trigger keyed-callback target-to-source binding: `CustomPropertyTrigger.fire` increments `propertyValue`, artboard custom-property data binds now read trigger counts, and `custom_property_trigger.riv` is promoted to exact after direct C++/Rust stream comparison. `make golden-compare` reports `exact=115`, `exact-segments=436`, `diverges=0`, `unsupported-feature=180`, `not-yet=0`, and parked `M5=23 M6=115 gated=6 harness=36`; `cargo test --workspace` passes.
+- 2026-07-04: [M5] Opened M5 after draining the M4 queue: all remaining `milestone = "M4"` entries were probed with `rust-golden-runner` and moved to their first verified later diagnostic (`data-binding-nested-child`, `data-binding-nested-host`, `data-binding-custom-property-trigger`, `nested-artboard-layout`, `text`, `images`, `focus-data`, or `layout-component-paint`). `make golden-compare` reports `exact=114`, `exact-segments=435`, `diverges=0`, `unsupported-feature=181`, `not-yet=0`, and parked `M5=24 M6=115 gated=6 harness=36`; `cargo test --workspace` passes.

@@ -33,11 +33,14 @@ the only memory the next session has. Update it every commit.
    `crates/rive-runtime/src/state_machine/`. Artboard data-bind propagation
    and list-binding queries, plus the adjacent binding structs/builders, live
    in `crates/rive-runtime/src/artboard_data_bind.rs`. Default and imported
-   view-model source handle types and imported context storage/mutation methods
-   live in `crates/rive-runtime/src/view_model.rs`. Data-bind graph state,
-   context keys, default-binding records, source/target handles, source/target
-   nodes, converter/value types, apply phases, stateful-advance records, and
-   formula random-source state live in
+   view-model source handle types, owned view-model instances/source handles,
+   owned/default/imported property-path helpers, imported context
+   storage/mutation methods, runtime view-model pointers, and runtime
+   data-context lookup/reporting live in
+   `crates/rive-runtime/src/view_model.rs`. Data-bind graph state, context
+   keys, default-binding records, source/target handles, source/target nodes,
+   converter/value types, apply phases, stateful-advance records, and formula
+   random-source state live in
    `crates/rive-runtime/src/data_bind_graph.rs`; the
    `RuntimeDataBindGraphValue` owned/imported view-model resolution impl lives
    there too. Data-bind flag helpers, the target mutator bridge, the
@@ -48,12 +51,14 @@ the only memory the next session has. Update it every commit.
    pipeline, including `ArtboardInstance` draw methods, draw/path command
    types, render path cache, paint preallocation, path effect builders, and
    renderer trait driving, lives in `crates/rive-runtime/src/draw.rs`.
-   Continue modularizing the remaining root runtime surfaces; start with
-   `RuntimeOwnedViewModelInstance`, owned source handles, property-path
-   helpers, and adjacent runtime data-context lookup/reporting code because
-   that is now the largest coherent `lib.rs` surface and completes the
-   view-model/data-bind seam already opened by `view_model.rs` and
-   `data_bind_graph.rs`.
+   Continue modularizing the remaining root runtime surfaces; start with the
+   shared runtime property-key/object-value helper cluster
+   (`property_key_for_name`, `runtime_object_*_property_by_key`,
+   `transform_property_for_key`, joystick/Solo/paint key helpers, and
+   `mix_value`) plus `RuntimeArtboardDimensions` because extracted animation,
+   draw, state-machine, component, and artboard data-bind modules still depend
+   on these root helpers. Leave the public `ArtboardInstance` facade in
+   `lib.rs` until that smaller helper boundary is gone.
 2. Add handle-source world-space math and nested-remap dependent advancement
    to the joystick path when a corpus diff reaches those cases.
 3. Remaining exact entries pinned to sample `0` are static M1 holdovers:
@@ -394,5 +399,15 @@ the only memory the next session has. Update it every commit.
   driving, and color interpolation helpers used by animation/data-bind code.
   Exact segments remain 339 across 70 exact files; `make golden-compare`
   reports `exact=70`, `exact-segments=339`, `diverges=0`,
+  `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
+  passes.
+- 2026-07-04: [M2] Moved `RuntimeOwnedViewModelInstance`, owned view-model
+  source handles, owned/default/imported property-path helpers,
+  `RuntimeViewModelPointer`, and runtime data-context lookup/reporting from
+  `crates/rive-runtime/src/lib.rs` into
+  `crates/rive-runtime/src/view_model.rs`, keeping the crate-root API/re-export
+  surface stable while shrinking the remaining root runtime state. Exact
+  segments remain 339 across 70 exact files; `make golden-compare` reports
+  `exact=70`, `exact-segments=339`, `diverges=0`,
   `unsupported-feature=225`, `not-yet=0`, and `cargo test --workspace`
   passes.

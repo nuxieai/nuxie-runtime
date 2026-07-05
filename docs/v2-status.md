@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 454 across 133 exact files
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=119 gated=7 harness=36
+- Exact segments (file × sample): 455 across 134 exact files
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=118 gated=7 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -22,18 +22,17 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Inspect `background_measure.riv`: after the text/clipping slice, it is the
-   next narrow one-Text diagnostic by manifest order after parked modifier
-   cases, and currently stops because the static text subset rejects sibling
-   `RootBone` global 4. Admit only already-supported bone/skin decoration
-   around text if that reaches draw; otherwise leave it parked and move to the
-   first explicit text-modifier slice.
-2. Keep `new_text.riv` parked for now: it has five
+1. Inspect `modifier_to_run.riv` first, then `modifier_test.riv` if needed:
+   these are the narrowest remaining explicit text-modifier fixtures, isolating
+   `TextModifierRange`/`TextModifierGroup` without the nested/list/layout
+   breadth in earlier manifest entries.
+2. Keep `align_target.riv` parked for now: it is the first M6 entry by
+   manifest order, but combines listener align-target, text modifiers/axis,
+   nested hosts, and shape hit targets. It should reopen only after the narrow
+   modifier fixtures are understood.
+3. Keep `new_text.riv` parked for now: it has five
    `Text` objects, multiple runs/styles, gradients/strokes, clipping, and text
    keyframes, so it is not the next narrow static tracer.
-3. `align_target.riv` is the first M6 entry by manifest order, but it has
-   listener align-target plus text modifier/axis objects. Keep it parked until
-   modifiers become the narrowest remaining text blocker.
 4. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
@@ -119,9 +118,10 @@ the only memory the next session has. Update it every commit.
   default view-model trigger target-to-source writes. Full C++ ListenerGroup
   drag/opaque behavior and input-driven nested align-target/list/text/layout
   targets are still not supported.
-- `TransformConstraint` currently covers the default empty
-  `TransformComponent::constraintBounds()` path. Text/LayoutComponent
-  constraint bounds remain parked behind their M6 text/layout diagnostics.
+- `TransformConstraint` currently covers Text constraint bounds for the
+  supported static one-run Text subset plus the default empty
+  `TransformComponent::constraintBounds()` path. LayoutComponent bounds remain
+  parked behind M6 layout diagnostics.
 - Scroll-constraint corpus files are parked behind M6 layout/runtime support
   via `rust-runner-unsupported:scroll-constraints`. C++
   `src/constraints/scrolling/scroll_constraint.cpp` reads
@@ -309,3 +309,10 @@ the only memory the next session has. Update it every commit.
   moved to `exact=133`, `exact-segments=454`, `unsupported-feature=162`, and
   parked `M6=119 gated=7 harness=36`; next inspect `background_measure.riv`,
   which stops on sibling `RootBone` rather than modifiers.
+- 2026-07-04: [M6] Promoted `background_measure.riv` by admitting passive
+  bone/skin `PointsPath` decoration around one static Text, computing static
+  Text constraint bounds for `TransformConstraint`, and rounding HarfBuzz-style
+  line metrics while disabling legacy kern-only advances to preserve
+  `hello_world.riv`. `make golden-compare` moved to `exact=134`,
+  `exact-segments=455`, `unsupported-feature=161`, and parked
+  `M6=118 gated=7 harness=36`; next inspect the narrow text-modifier fixtures.

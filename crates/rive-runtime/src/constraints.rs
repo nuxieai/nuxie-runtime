@@ -4,6 +4,7 @@ use rive_graph::{ArtboardGraph, PathGeometryNode};
 use crate::components::TransformComponents;
 use crate::draw::{RuntimePathMeasure, runtime_path_geometry_commands};
 use crate::properties::property_key_for_name;
+use crate::text::static_text_constraint_bounds;
 use crate::{ArtboardInstance, Mat2D};
 
 #[derive(Debug, Clone)]
@@ -1377,12 +1378,18 @@ fn target_transform_for_transform_constraint(
         ]))
 }
 
-fn constraint_bounds(
-    _artboard: &ArtboardInstance,
-    _component_index: usize,
-) -> (f32, f32, f32, f32) {
+fn constraint_bounds(artboard: &ArtboardInstance, component_index: usize) -> (f32, f32, f32, f32) {
+    let component = &artboard.components[component_index];
+    if component.type_name == "Text"
+        && let (Some(runtime), Some(graph)) = (artboard.runtime_file(), artboard.runtime_graph())
+        && let Some(bounds) =
+            static_text_constraint_bounds(runtime, graph, artboard, component.local_id)
+    {
+        return bounds;
+    }
+
     // C++ `TransformComponent::constraintBounds()` defaults to an empty AABB.
-    // Text/LayoutComponent overrides stay behind their M6 gates for now.
+    // LayoutComponent overrides stay behind their M6 gate for now.
     (0.0, 0.0, 0.0, 0.0)
 }
 

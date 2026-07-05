@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, bail};
 use harfrust::{
-    Direction, FontRef as HarfFontRef, ShapeOptions, ShaperData, ShaperInstance, Tag as HarfTag,
-    UnicodeBuffer,
+    Direction, Feature, FontRef as HarfFontRef, ShapeOptions, ShaperData, ShaperInstance,
+    Tag as HarfTag, UnicodeBuffer,
 };
 use rive_binary::RuntimeFile;
 use rive_graph::{ArtboardGraph, ShapePaintContainerNode, ShapePaintKind, ShapePaintStateNode};
@@ -29,6 +29,19 @@ pub fn static_text_support_error(
     StaticTextSlice::from_graph(runtime, graph, text_local)
         .err()
         .map(|error| error.to_string())
+}
+
+pub(crate) fn static_text_constraint_bounds(
+    runtime: &RuntimeFile,
+    graph: &ArtboardGraph,
+    instance: &ArtboardInstance,
+    text_local: usize,
+) -> Option<(f32, f32, f32, f32)> {
+    StaticTextSlice::from_graph(runtime, graph, text_local)
+        .ok()?
+        .local_bounds(runtime, instance)
+        .ok()
+        .flatten()
 }
 
 pub(crate) fn runtime_text_shape_paint_commands(
@@ -126,6 +139,8 @@ impl<'a> StaticTextSlice<'a> {
                         | "TextStylePaint"
                         | "TextStyleAxis"
                         | "Shape"
+                        | "PointsPath"
+                        | "StraightVertex"
                         | "Triangle"
                         | "Ellipse"
                         | "Rectangle"
@@ -133,20 +148,29 @@ impl<'a> StaticTextSlice<'a> {
                         | "SolidColor"
                         | "Fill"
                         | "Backboard"
+                        | "RootBone"
+                        | "Skin"
+                        | "Tendon"
+                        | "Weight"
                         | "KeyedObject"
                         | "KeyedProperty"
                         | "LinearAnimation"
+                        | "KeyFrameColor"
                         | "KeyFrameBool"
+                        | "TransformConstraint"
                         | "LayoutComponentStyle"
                         | "ViewModel"
                         | "ViewModelInstance"
                         | "StateMachine"
                         | "StateMachineLayer"
+                        | "StateMachineBool"
+                        | "ListenerBoolChange"
                         | "AnimationState"
                         | "AnyState"
                         | "EntryState"
                         | "ExitState"
                         | "StateTransition"
+                        | "TransitionBoolCondition"
                 )
             })
         }) {
@@ -363,6 +387,7 @@ impl<'a> StaticTextSlice<'a> {
 
         let skrifa_font =
             SkrifaFontRef::new(font_bytes).context("failed to parse font for outlines")?;
+        let disable_legacy_kern = disable_legacy_kern_for_advances(&skrifa_font);
         let skrifa_variations = self
             .variations
             .iter()
@@ -372,24 +397,16 @@ impl<'a> StaticTextSlice<'a> {
             .axes()
             .location(skrifa_variations.iter().copied());
         let location_ref = LocationRef::from(&location);
-        let upem = skrifa_font
-            .head()
-            .context("font missing head table")?
-            .units_per_em()
-            .max(1) as f32;
-        let hhea = skrifa_font.hhea().context("font missing hhea table")?;
-        let ascent = hhea.ascender().to_i16() as f32 * (TEXT_SHAPE_SCALE_F32 / upem);
-        let descent = hhea.descender().to_i16() as f32 * (TEXT_SHAPE_SCALE_F32 / upem);
+        let (ascent, descent) = harfbuzz_line_metrics(&skrifa_font, location_ref);
         let baseline = ascent * font_size / TEXT_SHAPE_SCALE_F32;
         let line_height = (ascent - descent) * font_size / TEXT_SHAPE_SCALE_F32;
         let outlines = skrifa_font.outline_glyphs();
         let scale = font_size / TEXT_SHAPE_SCALE_F32;
-        let mut glyphs = shape_text_glyphs(&shaper, &text);
+        let mut glyphs = shape_text_glyphs(&shaper, &text, disable_legacy_kern);
         let apply_ellipsis = self.should_apply_static_ellipsis(runtime, instance)?;
-        let use_shaped_advances = apply_ellipsis || !self.variations.is_empty();
         if apply_ellipsis {
             let max_width = self.text_width(runtime, instance)?;
-            let ellipsis = shape_text_glyphs(&shaper, "...");
+            let ellipsis = shape_text_glyphs(&shaper, "...", disable_legacy_kern);
             let line_end = self.first_static_wrapped_line_end(
                 runtime,
                 instance,
@@ -421,24 +438,89 @@ impl<'a> StaticTextSlice<'a> {
             let offset_x = 0.0;
             let offset_y = 0.0;
             let glyph_id = GlyphId::new(glyph.glyph_id);
-            let mut advance = glyph.advance;
             if let Some(outline) = outlines.get(glyph_id) {
                 let mut pen = TextOutlinePen::new(cursor_x + offset_x, baseline + offset_y, scale);
                 let draw_settings =
                     DrawSettings::unhinted(Size::new(TEXT_SHAPE_SCALE_F32), location_ref)
                         .with_path_style(PathStyle::HarfBuzz);
-                let metrics = outline
+                outline
                     .draw(draw_settings, &mut pen)
                     .with_context(|| format!("failed to draw glyph {}", glyph.glyph_id))?;
-                if !use_shaped_advances && let Some(width) = metrics.advance_width {
-                    advance = width;
-                }
                 commands.extend(pen.commands);
             }
-            cursor_x += advance * scale + letter_spacing;
+            cursor_x += glyph.advance * scale + letter_spacing;
         }
 
         Ok(commands)
+    }
+
+    fn local_bounds(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+    ) -> Result<Option<(f32, f32, f32, f32)>> {
+        let text = self.text_value(runtime, instance)?;
+        let font_size = self.font_size(runtime, instance)?;
+        if text.is_empty() || font_size <= 0.0 {
+            return Ok(Some((0.0, 0.0, 0.0, 0.0)));
+        }
+        let Some(font_bytes) = self.font_bytes else {
+            return Ok(Some((0.0, 0.0, 0.0, 0.0)));
+        };
+
+        let harf_font = HarfFontRef::new(font_bytes).context("failed to parse font for shaping")?;
+        let harf_variations = self
+            .variations
+            .iter()
+            .map(|(tag, value)| (HarfTag::from_u32(*tag), *value))
+            .collect::<Vec<_>>();
+        let shaper_instance = if harf_variations.is_empty() {
+            None
+        } else {
+            Some(ShaperInstance::from_variations(
+                &harf_font,
+                harf_variations.iter().copied(),
+            ))
+        };
+        let shaper_data = ShaperData::new(&harf_font);
+        let shaper = shaper_data
+            .shaper(&harf_font)
+            .instance(shaper_instance.as_ref())
+            .build();
+
+        let skrifa_font =
+            SkrifaFontRef::new(font_bytes).context("failed to parse font for metrics")?;
+        let disable_legacy_kern = disable_legacy_kern_for_advances(&skrifa_font);
+        let skrifa_variations = self
+            .variations
+            .iter()
+            .map(|(tag, value)| VariationSetting::new(SkrifaTag::from_u32(*tag), *value))
+            .collect::<Vec<_>>();
+        let location = skrifa_font
+            .axes()
+            .location(skrifa_variations.iter().copied());
+        let location_ref = LocationRef::from(&location);
+        let (ascent, descent) = harfbuzz_line_metrics(&skrifa_font, location_ref);
+        let line_height = (ascent - descent) * font_size / TEXT_SHAPE_SCALE_F32;
+        let glyphs = shape_text_glyphs(&shaper, &text, disable_legacy_kern);
+        let measured_width = text_glyph_width(
+            &glyphs,
+            font_size / TEXT_SHAPE_SCALE_F32,
+            self.letter_spacing(runtime, instance),
+        );
+        let sizing = self.text_uint_property(runtime, instance, "sizingValue")?;
+        let width = match sizing {
+            1 | 2 => self.text_width(runtime, instance)?,
+            _ => measured_width,
+        };
+        let height = match sizing {
+            2 => self.text_height(runtime, instance)?,
+            _ => line_height,
+        };
+        let origin_x = self.text_double_property(runtime, instance, "originX", 0.0)?;
+        let origin_y = self.text_double_property(runtime, instance, "originY", 0.0)?;
+
+        Ok(Some((-width * origin_x, -height * origin_y, width, height)))
     }
 
     fn text_value(&self, runtime: &RuntimeFile, instance: &ArtboardInstance) -> Result<String> {
@@ -506,6 +588,25 @@ impl<'a> StaticTextSlice<'a> {
                     .and_then(|object| object.double_property("height"))
             })
             .unwrap_or(0.0))
+    }
+
+    fn text_double_property(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        property_name: &str,
+        default: f32,
+    ) -> Result<f32> {
+        let property_key = property_key_for_name("Text", property_name)
+            .with_context(|| format!("missing Text.{property_name} key"))?;
+        Ok(instance
+            .double_property(self.text_local, property_key)
+            .or_else(|| {
+                runtime
+                    .object(self.text_global as usize)
+                    .and_then(|object| object.double_property(property_name))
+            })
+            .unwrap_or(default))
     }
 
     fn text_uint_property(
@@ -603,12 +704,34 @@ struct TextGlyph {
     advance: f32,
 }
 
-fn shape_text_glyphs(shaper: &harfrust::Shaper<'_>, text: &str) -> Vec<TextGlyph> {
+fn harfbuzz_line_metrics(font: &SkrifaFontRef<'_>, location_ref: LocationRef<'_>) -> (f32, f32) {
+    // Mirrors src/text/font_hb.cpp::make_lmx: HarfBuzz scales extents to
+    // kStdScale and rounds them before Rive applies the authored font size.
+    let metrics = font.metrics(Size::new(TEXT_SHAPE_SCALE_F32), location_ref);
+    (metrics.ascent.round(), metrics.descent.round())
+}
+
+fn disable_legacy_kern_for_advances(font: &SkrifaFontRef<'_>) -> bool {
+    font.kern().is_ok() && font.gpos().is_err()
+}
+
+fn shape_text_glyphs(
+    shaper: &harfrust::Shaper<'_>,
+    text: &str,
+    disable_legacy_kern: bool,
+) -> Vec<TextGlyph> {
     let mut buffer = UnicodeBuffer::new();
     buffer.push_str(text);
     buffer.set_direction(Direction::LeftToRight);
     buffer.guess_segment_properties();
-    let glyphs = shaper.shape(buffer, ShapeOptions::new().scale(Some(TEXT_SHAPE_SCALE)));
+    let kern_off = [Feature::new(HarfTag::new(b"kern"), 0, ..)];
+    let shape_options = ShapeOptions::new().scale(Some(TEXT_SHAPE_SCALE));
+    let shape_options = if disable_legacy_kern {
+        shape_options.features(&kern_off)
+    } else {
+        shape_options
+    };
+    let glyphs = shaper.shape(buffer, shape_options);
     glyphs
         .glyph_infos()
         .iter()

@@ -288,6 +288,21 @@ impl ArtboardInstance {
         &self.components
     }
 
+    pub(crate) fn runtime_file(&self) -> Option<&RuntimeFile> {
+        self.build_context
+            .as_ref()
+            .map(|context| context.file.as_ref())
+    }
+
+    pub(crate) fn runtime_graph(&self) -> Option<&ArtboardGraph> {
+        let graph_global_id = self.graph_global_id;
+        self.build_context
+            .as_ref()?
+            .artboards
+            .iter()
+            .find(|graph| graph.global_id == graph_global_id)
+    }
+
     pub fn update_order(&self) -> &[usize] {
         &self.update_order
     }

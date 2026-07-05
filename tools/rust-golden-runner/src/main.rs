@@ -655,6 +655,17 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
+    if let Some(feather) = artboard
+        .local_objects
+        .iter()
+        .find(|object| object.type_name == Some("Feather"))
+    {
+        bail!(
+            "unsupported: feather in Rust golden runner (global {})",
+            feather.global_id
+        );
+    }
+
     if let Some((text, reason)) = artboard
         .local_objects
         .iter()
@@ -736,17 +747,6 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
-    if let Some(feather) = artboard
-        .local_objects
-        .iter()
-        .find(|object| object.type_name == Some("Feather"))
-    {
-        bail!(
-            "unsupported: feather in Rust golden runner (global {})",
-            feather.global_id
-        );
-    }
-
     if let Some(scroll_constraint) = artboard
         .local_objects
         .iter()
@@ -818,7 +818,41 @@ fn layout_component_paint_supported(
     container: &ShapePaintContainerNode,
 ) -> bool {
     simple_root_layout_component_paint_supported(runtime, artboard, container)
+        || root_layout_component_paint_supported(runtime, artboard, container)
         || clipped_nested_empty_list_layout_component_paint_supported(runtime, artboard, container)
+}
+
+fn root_layout_component_paint_supported(
+    runtime: &RuntimeFile,
+    artboard: &ArtboardGraph,
+    container: &ShapePaintContainerNode,
+) -> bool {
+    let Some(component) = artboard
+        .components
+        .iter()
+        .find(|component| component.local_id == container.local_id)
+    else {
+        return false;
+    };
+    if component.parent_local != Some(0) {
+        return false;
+    }
+    let Some(layout_object) = runtime.object(container.global_id as usize) else {
+        return false;
+    };
+    if layout_object.double_property("width").unwrap_or(0.0) <= 0.0
+        || layout_object.double_property("height").unwrap_or(0.0) <= 0.0
+    {
+        return false;
+    }
+    if layout_style_object(runtime, artboard, layout_object).is_none() {
+        return false;
+    }
+
+    container
+        .paints
+        .iter()
+        .all(root_layout_background_paint_supported)
 }
 
 fn simple_root_layout_component_paint_supported(
@@ -1077,6 +1111,21 @@ fn layout_style_has_zero_corners(style_object: &RuntimeObject) -> bool {
     ]
     .into_iter()
     .all(|property| nearly_equal(style_object.double_property(property).unwrap_or(0.0), 0.0))
+}
+
+fn root_layout_background_paint_supported(paint: &rive_graph::ShapePaintNode) -> bool {
+    paint.is_visible
+        && paint.paint_type == ShapePaintKind::Fill
+        && matches!(paint.path_kind, Some(ShapePaintPathKind::Local))
+        && matches!(
+            paint.paint_state.as_ref(),
+            Some(
+                ShapePaintStateNode::SolidColor { .. }
+                    | ShapePaintStateNode::LinearGradient { .. }
+                    | ShapePaintStateNode::RadialGradient { .. }
+            )
+        )
+        && paint.effects.is_empty()
 }
 
 fn simple_layout_background_paint_supported(paint: &rive_graph::ShapePaintNode) -> bool {

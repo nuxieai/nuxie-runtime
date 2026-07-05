@@ -5,9 +5,9 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 475 across 154 exact files
-- Current compare: `make golden-compare` reports diverges=7, unsupported-feature=134, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=91 gated=7 harness=36
+- Exact segments (file × sample): 477 across 156 exact files
+- Current compare: `make golden-compare` reports diverges=8, unsupported-feature=131, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=87 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -25,27 +25,31 @@ the only memory the next session has. Update it every commit.
 
 1. Continue the painted `LayoutComponent` slice: root row/fill layout
    backgrounds and the empty nested clipped component-list override case are
-   now exact through `artboard_list_overrides.riv`. There are 19 remaining M6
+   now exact through `artboard_list_overrides.riv`; `bankcard.riv` clears this
+   gate and is parked on `feather`. There are 17 remaining M6
    `rust-runner-unsupported:layout-component-paint` entries. Start with
-   `bankcard.riv`, which still stops on `LayoutComponent` paint global 21;
-   inspect whether it needs real child/list layout bounds, rounded layout
-   corners, or a broader layout style path before removing the gate.
-2. Keep `new_text.riv` parked as a known M6 divergence until a dedicated text
+   `collapse_data_binds.riv`, which stops on `LayoutComponent` paint global
+   31.
+2. Keep `number_to_list_nested_children.riv` as the current M6 layout
+   divergence: Rust now runs it, but the first diff is a layout background
+   rect height (`500` vs C++ `260`), tagged
+   `rust-runner-divergence:layout-component-bounds`.
+3. Keep `new_text.riv` parked as a known M6 divergence until a dedicated text
    outline backend/canonicalization slice: gradient sibling admission now
    reaches draw, but Rust/Skrifa and C++ HarfBuzz emit a glyph contour with a
    different segment start/order, so exact stream comparison fails on path
    verbs/points.
-3. Keep follow-path text files parked behind `TextFollowPathModifier` and
+4. Keep follow-path text files parked behind `TextFollowPathModifier` and
    unsupported `Text` property data-bind targets;
    `text_follow_path_shape_length.riv` currently fails first on data binding
    target `Text` global 73 before it reaches follow-path drawing.
-4. Keep `text_vertical_trim_test.riv` parked behind
+5. Keep `text_vertical_trim_test.riv` parked behind
    `layout-component-paint`; it now fails there before reaching any richer
    vertical-trim text behavior.
-5. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
+6. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
-6. Remaining exact entries pinned to sample `0` are static M1 holdovers:
+7. Remaining exact entries pinned to sample `0` are static M1 holdovers:
    `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
    them during M6 unless a related refactor needs a cheap draw-regression check.
 
@@ -57,6 +61,10 @@ the only memory the next session has. Update it every commit.
   (`src/text/font_hb.cpp`) and `TextStylePaint::addPathClockwise`; Rust uses
   Skrifa outlines. The first stream diff is path verb/point ordering, not a
   paint/gradient mismatch.
+- `number_to_list_nested_children.riv`: after the root layout paint admission,
+  Rust reaches draw but differs on the first layout background rect: Rust
+  emits height `500` where C++ emits `260`. This is a layout/list bounds
+  divergence, not an unsupported diagnostic.
 - Data-bound static text/converter bucket:
   `format_number_with_commas.riv`, `listener_view_model.riv`,
   `rebind_with_nested_viewmodel.riv`, `replace_vm_instance.riv`,
@@ -174,7 +182,9 @@ the only memory the next session has. Update it every commit.
   and data-viz crash paths it currently aborts on.
 - `coin.riv` is no longer parked as an M3 constraints file after
   `ScaleConstraint`; it reaches draw and is now `milestone = "gated"` on the
-  explicit `rust-runner-unsupported:feather` renderer diagnostic.
+  explicit `rust-runner-unsupported:feather` renderer diagnostic. `bankcard.riv`
+  is also now gated on feather after clearing its `layout-component-paint`
+  blocker.
 - `solar-system.riv` stays gated on a Rust import gap: `blendModeValue = 5`
   rejected on Shape object 13.
 
@@ -479,3 +489,14 @@ the only memory the next session has. Update it every commit.
   `diverges=7`, `unsupported-feature=134`, and parked
   `M6=91 gated=7 harness=36`; next target: `bankcard.riv`, still gated on
   `layout-component-paint` global 21.
+- 2026-07-04: [M6] Cleared `bankcard.riv`'s first `LayoutComponent` paint
+  blocker by admitting root layout backgrounds with rounded style corners and
+  moving unconditional `Feather` diagnostics ahead of text. `bankcard.riv` is
+  now `gated` on feather; passive text sibling/Node ancestry admission also
+  promoted `joel_v3.riv` and `word_joiner_test.riv`, while
+  `number_to_list_nested_children.riv` now runs as an M6
+  `layout-component-bounds` divergence. `make golden-compare` moved to
+  `exact=156`, `exact-segments=477`, `diverges=8`,
+  `unsupported-feature=131`, and parked `M6=87 gated=8 harness=36`; next
+  target: `collapse_data_binds.riv`, still gated on `layout-component-paint`
+  global 31.

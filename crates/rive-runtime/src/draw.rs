@@ -762,9 +762,10 @@ impl ArtboardInstance {
         // `LayoutComponent::drawProxy/updateRenderPath`: layout components draw
         // shape paints against a background rectangle built from computed
         // layout bounds. TODO(golden): route all layout components through the
-        // M6 layout engine and apply style corner radii.
+        // M6 layout engine.
         let bounds = self.runtime_layout_component_bounds(layout_local, graph);
-        runtime_layout_rect_path_commands(bounds)
+        let corners = self.runtime_layout_component_corners(layout_local);
+        runtime_layout_rect_path_commands(bounds, corners)
     }
 
     fn runtime_layout_component_clip_path_commands(
@@ -773,7 +774,8 @@ impl ArtboardInstance {
         graph: &ArtboardGraph,
     ) -> Vec<RuntimePathCommand> {
         let bounds = self.runtime_layout_component_bounds(layout_local, graph);
-        runtime_layout_rect_path_commands(bounds)
+        let corners = self.runtime_layout_component_corners(layout_local);
+        runtime_layout_rect_path_commands(bounds, corners)
     }
 
     fn runtime_layout_component_clip_enabled(&self, layout_local: usize) -> bool {
@@ -947,6 +949,43 @@ impl ArtboardInstance {
     fn runtime_layout_style_double(&self, style_local: usize, name: &str) -> Option<f32> {
         property_key_for_name("LayoutComponentStyle", name)
             .and_then(|key| self.double_property(style_local, key))
+    }
+
+    fn runtime_layout_style_bool(&self, style_local: usize, name: &str) -> Option<bool> {
+        property_key_for_name("LayoutComponentStyle", name)
+            .and_then(|key| self.bool_property(style_local, key))
+    }
+
+    fn runtime_layout_component_corners(&self, layout_local: usize) -> RuntimeLayoutCorners {
+        let Some(style_local) = self.runtime_layout_component_style_local(layout_local) else {
+            return RuntimeLayoutCorners::default();
+        };
+        let linked_value = self
+            .runtime_layout_style_double(style_local, "cornerRadiusTL")
+            .unwrap_or(0.0);
+        let linked = self
+            .runtime_layout_style_bool(style_local, "linkCornerRadius")
+            .unwrap_or(true);
+        if linked {
+            return RuntimeLayoutCorners {
+                top_left: linked_value,
+                top_right: linked_value,
+                bottom_right: linked_value,
+                bottom_left: linked_value,
+            };
+        }
+        RuntimeLayoutCorners {
+            top_left: linked_value,
+            top_right: self
+                .runtime_layout_style_double(style_local, "cornerRadiusTR")
+                .unwrap_or(0.0),
+            bottom_right: self
+                .runtime_layout_style_double(style_local, "cornerRadiusBR")
+                .unwrap_or(0.0),
+            bottom_left: self
+                .runtime_layout_style_double(style_local, "cornerRadiusBL")
+                .unwrap_or(0.0),
+        }
     }
 
     fn runtime_simple_root_row_fill_layout_bounds(
@@ -1400,7 +1439,27 @@ struct RuntimeLayoutBounds {
     height: f32,
 }
 
-fn runtime_layout_rect_path_commands(bounds: RuntimeLayoutBounds) -> Vec<RuntimePathCommand> {
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+struct RuntimeLayoutCorners {
+    top_left: f32,
+    top_right: f32,
+    bottom_right: f32,
+    bottom_left: f32,
+}
+
+impl RuntimeLayoutCorners {
+    fn is_square(self) -> bool {
+        self.top_left.abs() <= f32::EPSILON
+            && self.top_right.abs() <= f32::EPSILON
+            && self.bottom_right.abs() <= f32::EPSILON
+            && self.bottom_left.abs() <= f32::EPSILON
+    }
+}
+
+fn runtime_layout_rect_path_commands(
+    bounds: RuntimeLayoutBounds,
+    corners: RuntimeLayoutCorners,
+) -> Vec<RuntimePathCommand> {
     let width_is_zero = bounds.width.abs() <= f32::EPSILON;
     let height_is_zero = bounds.height.abs() <= f32::EPSILON;
     if height_is_zero {
@@ -1425,6 +1484,9 @@ fn runtime_layout_rect_path_commands(bounds: RuntimeLayoutBounds) -> Vec<Runtime
             RuntimePathCommand::Close,
         ];
     }
+    if !corners.is_square() {
+        return runtime_rounded_layout_rect_path_commands(bounds, corners);
+    }
     vec![
         RuntimePathCommand::Move { x: 0.0, y: 0.0 },
         RuntimePathCommand::Line {
@@ -1442,6 +1504,33 @@ fn runtime_layout_rect_path_commands(bounds: RuntimeLayoutBounds) -> Vec<Runtime
         RuntimePathCommand::Line { x: 0.0, y: 0.0 },
         RuntimePathCommand::Close,
     ]
+}
+
+fn runtime_rounded_layout_rect_path_commands(
+    bounds: RuntimeLayoutBounds,
+    corners: RuntimeLayoutCorners,
+) -> Vec<RuntimePathCommand> {
+    let virtual_path = PathGeometryNode {
+        local_id: 0,
+        global_id: 0,
+        type_name: "PointsPath",
+        is_closed: true,
+        is_hole: false,
+        is_clockwise: true,
+        parametric: None,
+        vertices: vec![
+            virtual_straight_vertex(0.0, 0.0, corners.top_left),
+            virtual_straight_vertex(bounds.width, 0.0, corners.top_right),
+            virtual_straight_vertex(bounds.width, bounds.height, corners.bottom_right),
+            virtual_straight_vertex(0.0, bounds.height, corners.bottom_left),
+        ],
+    };
+    points_path_commands(
+        &virtual_path,
+        ShapePaintPathKind::Local,
+        Mat2D::IDENTITY,
+        None,
+    )
 }
 
 fn runtime_layout_hug_size(

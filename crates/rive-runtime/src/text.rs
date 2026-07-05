@@ -252,6 +252,7 @@ impl<'a> StaticTextSlice<'a> {
                 !matches!(
                     type_name,
                     "Artboard"
+                        | "Node"
                         | "Text"
                         | "TextValueRun"
                         | "TextStylePaint"
@@ -283,12 +284,15 @@ impl<'a> StaticTextSlice<'a> {
                         | "KeyedProperty"
                         | "LinearAnimation"
                         | "CubicEaseInterpolator"
+                        | "ElasticInterpolator"
                         | "DashPath"
                         | "Dash"
                         | "KeyFrameColor"
                         | "KeyFrameBool"
                         | "TransformConstraint"
+                        | "LayoutComponent"
                         | "LayoutComponentStyle"
+                        | "Feather"
                         | "ViewModel"
                         | "ViewModelInstance"
                         | "StateMachine"
@@ -326,7 +330,6 @@ impl<'a> StaticTextSlice<'a> {
                         | "TextVariationModifier"
                         | "TextTargetModifier"
                         | "TextFollowPathModifier"
-                        | "LayoutComponent"
                         | "NestedArtboardLayout"
                         | "NestedArtboardLeaf"
                         | "ArtboardComponentList"
@@ -346,8 +349,10 @@ impl<'a> StaticTextSlice<'a> {
             .iter()
             .find(|component| component.local_id == text_local)
             .context("text component is missing")?;
-        if text_component.parent_local != Some(0) {
-            bail!("static text subset only supports top-level Text");
+        if !static_text_parent_chain_supported(graph, text_component.parent_local) {
+            bail!(
+                "static text subset only supports top-level Text or Text under plain Node transforms"
+            );
         }
 
         let child_type = |local_id| {
@@ -2477,6 +2482,25 @@ fn component_for_local(
         .components
         .iter()
         .find(|component| component.local_id == local_id)
+}
+
+fn static_text_parent_chain_supported(
+    graph: &ArtboardGraph,
+    mut parent_local: Option<usize>,
+) -> bool {
+    while let Some(local_id) = parent_local {
+        if local_id == 0 {
+            return true;
+        }
+        if type_for_local(graph, local_id) != Some("Node") {
+            return false;
+        }
+        let Some(component) = component_for_local(graph, local_id) else {
+            return false;
+        };
+        parent_local = component.parent_local;
+    }
+    false
 }
 
 fn embedded_file_asset_bytes(runtime: &RuntimeFile, asset_global: u32) -> Option<&[u8]> {

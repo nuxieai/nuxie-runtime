@@ -5,9 +5,9 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 497 across 176 exact files
-- Current compare: `make golden-compare` reports diverges=13, unsupported-feature=106, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=62 gated=8 harness=36
+- Exact segments (file × sample): 498 across 177 exact files
+- Current compare: `make golden-compare` reports diverges=14, unsupported-feature=104, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=60 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -23,16 +23,18 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Probe `list_index_script_access.riv` as the next
-   `rust-runner-unsupported:text` M6 gate: compare direct C++/Rust streams,
-   remove only stale static-text gates needed to reach draw, and fix or retag
-   the first real text/data-bind blocker. Do not start a general text layout
-   rewrite unless the stream diff proves the corpus needs it.
+1. Probe `saturation.riv` as the next `rust-runner-unsupported:text` M6
+   gate: the first direct Rust stop is a static-text data-binding target
+   `Shape` global 34. Compare direct C++/Rust streams, remove only stale
+   static-text gates needed to reach draw, and fix or retag the first real
+   text/data-bind blocker. Do not start a general text layout rewrite unless
+   the stream diff proves the corpus needs it.
 2. Keep `data_bind_test_cmdq.riv`, `data_binding_test.riv`,
-   `data_converter_to_number.riv`, `state_transition_fire_trigger.riv`, and
-   `trigger_based_listeners.riv` parked as known M6 text/data-bind divergences
-   until a text
-   layout/draw-suppression slice addresses their extra/misaligned text streams.
+   `data_converter_to_number.riv`, `scripted_data_context.riv`,
+   `state_transition_fire_trigger.riv`, and `trigger_based_listeners.riv`
+   parked as known M6 text/data-bind divergences until a text
+   layout/draw-suppression slice addresses their extra/misaligned text
+   streams.
 3. Keep `new_text.riv` and `follow_path_path.riv` parked as known M6
    divergences until a dedicated text outline backend/canonicalization slice.
    `follow_path_path.riv` now reaches draw after clearing stale
@@ -98,6 +100,12 @@ the only memory the next session has. Update it every commit.
   extra event/listener text draw calls that C++ suppresses at sample 0. Keep
   them parked under `rust-runner-divergence:event-trigger-extra-text-draw`
   until the text draw-suppression/runtime slice opens.
+- `scripted_data_context.riv`: after admitting passive `ScriptedDrawable`
+  siblings through the static text gate, Rust reaches draw but emits two
+  data-bound text payloads that C++ suppresses at sample 0 after the golden
+  runner fails to import object type 106 script contents. First diff is extra
+  text at transform `[1,0,0,1,0,90.4004059]`. Parked under
+  `rust-runner-divergence:scripted-data-context-extra-text-draw`.
 - `spotify_kids_app_icon.riv`: after cubic path vertex sibling admission, Rust
   reaches draw but emits a full-artboard background before C++'s centered
   rounded icon stream. First blocker is draw-order/background parity, not text
@@ -218,7 +226,7 @@ the only memory the next session has. Update it every commit.
   `DataConverterSystemDegsToRads` data binds around static text.
   Static text can coexist with authored nested bool input controls beside
   nested state-machine hosts and passive sample-0 `FocusData` /
-  `KeyboardInput` metadata.
+  `KeyboardInput` metadata plus inert `ScriptedDrawable` siblings.
   Shape/follow-path/scale/origin modifiers,
   gradient/feather/other text effects, richer layout, broader `Text` property
   data binds, and text input/editing remain M6 text diagnostics.
@@ -865,3 +873,14 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=106`, `not-yet=0`, and parked
   `M6=62 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
   `list_index_script_access.riv`.
+- 2026-07-05: [M6] Promoted `list_index_script_access.riv` by admitting
+  inert `ScriptedDrawable` siblings through the static text subset for
+  sample-0 rendering and declaring its existing Taffy/Yoga list-row rounding
+  drift as `verification = "tolerant(0.75)"`. The same gate removal reopens
+  `scripted_data_context.riv`, now parked as
+  `rust-runner-divergence:scripted-data-context-extra-text-draw` after direct
+  streams showed Rust drawing two data-bound text payloads C++ suppresses.
+  `make golden-compare` reports `exact=177`, `exact-segments=498`,
+  `diverges=14`, `unsupported-feature=104`, `not-yet=0`, and parked
+  `M6=60 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
+  `saturation.riv`.

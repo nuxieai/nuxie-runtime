@@ -217,6 +217,9 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
         Some("SolidColor") => {
             property_key_for_name("SolidColor", "colorValue") == Some(property_key)
         }
+        Some("NestedArtboard") => ["artboardId", "isPaused", "speed", "quantize"]
+            .into_iter()
+            .any(|name| property_key_for_name("NestedArtboard", name) == Some(property_key)),
         _ => false,
     }
 }

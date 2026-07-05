@@ -5,9 +5,9 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 490 across 169 exact files
-- Current compare: `make golden-compare` reports diverges=1, unsupported-feature=125, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=81 gated=8 harness=36
+- Exact segments (file × sample): 491 across 170 exact files
+- Current compare: `make golden-compare` reports diverges=1, unsupported-feature=124, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=80 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -26,7 +26,7 @@ the only memory the next session has. Update it every commit.
 1. The M6 text unsupported queue is the active line now that the compact
    layout/list/data-bound-text divergence queues are closed. Query it with
    `grep -B6 'milestone = "M6"' corpus.toml | rg -B6 'rust-runner-unsupported:text'`.
-   Start with `bindable_artboard_nesty.riv` unless a smaller text-only entry
+   Start with `component_stateful.riv` unless a smaller text-only entry
    is identified first; run the direct C++/Rust stream pair to verify the
    first unsupported gate before porting.
 2. Keep `new_text.riv` parked as a known M6 divergence until a dedicated text
@@ -612,3 +612,10 @@ the only memory the next session has. Update it every commit.
   `not-yet=0`, and parked `M6=81 gated=8 harness=36`; next target is the M6
   `rust-runner-unsupported:text` manifest queue, starting with
   `bindable_artboard_nesty.riv` unless a smaller text-only entry is found.
+- 2026-07-05: [M6] Promoted `bindable_artboard_nesty.riv` by admitting
+  source-to-target `NestedArtboard` host binds through the static text gate
+  for the nested-host properties already applied by the runtime
+  (`artboardId`, `isPaused`, `speed`, and `quantize`). `make golden-compare`
+  reports `exact=170`, `exact-segments=491`, `diverges=1`,
+  `unsupported-feature=124`, `not-yet=0`, and parked
+  `M6=80 gated=8 harness=36`; next target is `component_stateful.riv`.

@@ -5,7 +5,8 @@ use harfrust::{
 };
 use rive_binary::RuntimeFile;
 use rive_graph::{
-    ArtboardGraph, ShapePaintContainerNode, ShapePaintKind, ShapePaintPathKind, ShapePaintStateNode,
+    ArtboardGraph, DataBindNode, ShapePaintContainerNode, ShapePaintKind, ShapePaintPathKind,
+    ShapePaintStateNode,
 };
 use skrifa::instance::{LocationRef, Size};
 use skrifa::outline::pen::PathStyle;
@@ -15,6 +16,7 @@ use skrifa::setting::VariationSetting;
 use skrifa::{FontRef as SkrifaFontRef, GlyphId, MetadataProvider, Tag as SkrifaTag};
 use std::collections::BTreeSet;
 
+use crate::data_bind_flags_apply_source_to_target;
 use crate::draw::runtime_shape_paint_command;
 use crate::properties::property_key_for_name;
 use crate::{ArtboardInstance, Mat2D, RuntimeDrawCommand, RuntimePathCommand};
@@ -204,6 +206,22 @@ struct StaticCubicInterpolator {
     global_id: u32,
 }
 
+fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
+    if !data_bind_flags_apply_source_to_target(data_bind.flags) {
+        return true;
+    }
+    let Ok(property_key) = u16::try_from(data_bind.property_key) else {
+        return false;
+    };
+    match data_bind.target_type_name {
+        Some("TextValueRun") => property_key_for_name("TextValueRun", "text") == Some(property_key),
+        Some("SolidColor") => {
+            property_key_for_name("SolidColor", "colorValue") == Some(property_key)
+        }
+        _ => false,
+    }
+}
+
 impl<'a> StaticTextSlice<'a> {
     fn from_graph(
         runtime: &'a RuntimeFile,
@@ -218,8 +236,16 @@ impl<'a> StaticTextSlice<'a> {
         if text_object.type_name != Some("Text") {
             bail!("static text subset expected Text local {text_local}");
         }
-        if !graph.data_binds.is_empty() {
-            bail!("static text subset does not support text data binding");
+        if let Some(data_bind) = graph
+            .data_binds
+            .iter()
+            .find(|data_bind| !static_text_data_bind_supported(data_bind))
+        {
+            bail!(
+                "static text subset does not support data binding target {} global {}",
+                data_bind.target_type_name.unwrap_or("unknown"),
+                data_bind.target_global.unwrap_or(0)
+            );
         }
         if let Some(object) = graph.local_objects.iter().find(|object| {
             object.type_name.is_some_and(|type_name| {

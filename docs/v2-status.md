@@ -5,9 +5,9 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 465 across 144 exact files
-- Current compare: `make golden-compare` reports diverges=1, unsupported-feature=150, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=107 gated=7 harness=36
+- Exact segments (file × sample): 468 across 147 exact files
+- Current compare: `make golden-compare` reports diverges=7, unsupported-feature=141, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=98 gated=7 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -23,23 +23,24 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Start the static text data-binding slice with `bankcard.riv`: it is the
-   first corpus-order M6 text blocker after the nested text promotion, and it
-   currently fails on `static text subset does not support text data binding`.
-   Keep the slice to data-bound static `TextValueRun` text/style values that
-   already flow through the runtime data-bind graph; stop at the next concrete
-   gate or divergence.
+1. Start the painted `LayoutComponent` slice with `bankcard.riv`: after
+   admitting source-to-target `SolidColor.colorValue` and `TextValueRun.text`
+   data binds, its default artboard now fails first on sibling
+   `LayoutComponent` global 21, which is also a painted
+   `LayoutComponent` container. Treat this as layout work, not another text
+   data-binding expansion.
 2. Keep `new_text.riv` parked as a known M6 divergence until a dedicated text
    outline backend/canonicalization slice: gradient sibling admission now
    reaches draw, but Rust/Skrifa and C++ HarfBuzz emit a glyph contour with a
    different segment start/order, so exact stream comparison fails on path
    verbs/points.
-3. Keep follow-path text files parked behind `TextFollowPathModifier` and text
-   data-binding blockers; `text_follow_path_shape_length.riv` currently fails
-   first on text data binding before it reaches follow-path drawing.
-4. Keep `text_vertical_trim_test.riv` parked behind text data binding; it
-   currently fails first on `static text subset does not support text data
-   binding`.
+3. Keep follow-path text files parked behind `TextFollowPathModifier` and
+   unsupported `Text` property data-bind targets;
+   `text_follow_path_shape_length.riv` currently fails first on data binding
+   target `Text` global 73 before it reaches follow-path drawing.
+4. Keep `text_vertical_trim_test.riv` parked behind unsupported `Text`
+   property data-bind targets; it currently fails first on data binding target
+   `Text` global 41.
 5. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
@@ -55,6 +56,15 @@ the only memory the next session has. Update it every commit.
   (`src/text/font_hb.cpp`) and `TextStylePaint::addPathClockwise`; Rust uses
   Skrifa outlines. The first stream diff is path verb/point ordering, not a
   paint/gradient mismatch.
+- Data-bound static text/converter bucket:
+  `format_number_with_commas.riv`, `listener_view_model.riv`,
+  `rebind_with_nested_viewmodel.riv`, `replace_vm_instance.riv`,
+  `transition_actions.riv`, and `trigger_fires_single_change.riv` now reach
+  draw after the narrow source-to-target string/color bind admission, but
+  differ from C++ and carry
+  `rust-runner-divergence:data-bound-text`. The first observed diff for
+  `format_number_with_commas.riv` is the first text `drawPath` geometry, not
+  an unsupported diagnostic.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -138,10 +148,11 @@ the only memory the next session has. Update it every commit.
   `TextModifierRange` character, character-excluding-space, word, and static
   line range maps with runId targeting and optional cubic range
   interpolation, including C++-ordered opacity buckets, plus solid fill/stroke
-  `TextStylePaint` drawing with DashPath stroke effects. Shape/follow-path/
-  scale/origin modifiers, gradient/feather/other text effects, richer layout,
-  and text input/editing remain M6 text
-  diagnostics.
+  `TextStylePaint` drawing with DashPath stroke effects, and
+  source-to-target `TextValueRun.text` / `SolidColor.colorValue` data binds
+  around static text. Shape/follow-path/scale/origin modifiers,
+  gradient/feather/other text effects, richer layout, broader `Text` property
+  data binds, and text input/editing remain M6 text diagnostics.
 - `TransformConstraint` currently covers Text constraint bounds for the
   supported static Text subset plus the default empty
   `TransformComponent::constraintBounds()` path. LayoutComponent bounds remain
@@ -422,3 +433,12 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=150`, and parked `M6=107 gated=7 harness=36`; next
   start the high-frequency static text data-binding blocker with
   `bankcard.riv`.
+- 2026-07-04: [M6] Admitted source-to-target `TextValueRun.text` and
+  `SolidColor.colorValue` binds around static text. This promoted
+  `databind_external_artboard_child.riv`, `sorted_listeners.riv`, and
+  `zero_width_space_line_break.riv`; six broader data-bound text/converter
+  files now run but are marked as M6 divergences; and `bankcard.riv` gets past
+  data binding to the painted `LayoutComponent` gate. `make golden-compare`
+  moved to `exact=147`, `exact-segments=468`, `diverges=7`,
+  `unsupported-feature=141`, and parked `M6=98 gated=7 harness=36`; next
+  start the painted `LayoutComponent` slice with `bankcard.riv`.

@@ -179,7 +179,7 @@ pub(super) fn build_artboard_property_bindings(
             };
             if !matches!(
                 property_kind,
-                FieldKind::Double | FieldKind::Uint | FieldKind::Color
+                FieldKind::Double | FieldKind::Uint | FieldKind::Color | FieldKind::String
             ) {
                 return None;
             }
@@ -220,6 +220,7 @@ fn artboard_property_binding_value_matches_kind(
             RuntimeDataBindGraphValue::Number(_),
             FieldKind::Double | FieldKind::Uint
         ) | (RuntimeDataBindGraphValue::Color(_), FieldKind::Color)
+            | (RuntimeDataBindGraphValue::String(_), FieldKind::String)
     )
 }
 
@@ -652,6 +653,9 @@ impl ArtboardInstance {
             (Some(FieldKind::Color), Some(RuntimeDataBindGraphValue::Color(value))) => {
                 // Mirrors C++ src/data_bind/context/context_value_color.cpp.
                 self.set_color_property(target_local_id, property_key, value)
+            }
+            (Some(FieldKind::String), Some(RuntimeDataBindGraphValue::String(value))) => {
+                self.set_string_property(target_local_id, property_key, value)
             }
             _ => false,
         }

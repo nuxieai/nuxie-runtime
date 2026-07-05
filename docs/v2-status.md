@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 483 across 162 exact files
-- Current compare: `make golden-compare` reports diverges=8, unsupported-feature=125, not-yet=0
+- Exact segments (file × sample): 484 across 163 exact files
+- Current compare: `make golden-compare` reports diverges=7, unsupported-feature=125, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=81 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
@@ -34,11 +34,12 @@ the only memory the next session has. Update it every commit.
    `data_binding_artboards_source_test.riv` are exact; `hittest_collapsed_layouts.riv`
    is also exact after matching C++ fresh artboard view-model contexts in the
    golden runner.
-3. Highest priority is broader `LayoutComponent` bounds/positioning parity
-   before opening more runtime surface. Continue with
-   `transition_duration_bind_list.riv`, the remaining compact layout/list
-   bounds divergence after `number_to_list_nested_children.riv` proved exact
-   under the current direct C++/Rust stream compare.
+3. The compact `LayoutComponent`/list bounds divergence queue is closed for
+   the current corpus. Next priority is the M6 text divergence queue:
+   re-check `new_text.riv` first because it is the pure text outline-order
+   case, then work the six-file data-bound text bucket. Start each with a
+   focused direct C++/Rust stream compare before assuming the manifest
+   divergence is still live.
 4. Keep `new_text.riv` parked as a known M6 divergence until a dedicated text
    outline backend/canonicalization slice: gradient sibling admission now
    reaches draw, but Rust/Skrifa and C++ HarfBuzz emit a glyph contour with a
@@ -67,10 +68,6 @@ the only memory the next session has. Update it every commit.
   (`src/text/font_hb.cpp`) and `TextStylePaint::addPathClockwise`; Rust uses
   Skrifa outlines. The first stream diff is path verb/point ordering, not a
   paint/gradient mismatch.
-- `transition_duration_bind_list.riv`: after admitting root layout padding/gap
-  and clockwise layout backgrounds, Rust reaches draw but differs on the first
-  child layout background rect height (`2617` vs C++ `2000`), same
-  `layout-component-bounds` divergence family.
 - Data-bound static text/converter bucket:
   `format_number_with_commas.riv`, `listener_view_model.riv`,
   `rebind_with_nested_viewmodel.riv`, `replace_vm_instance.riv`,
@@ -594,3 +591,11 @@ the only memory the next session has. Update it every commit.
   `exact-segments=483`, `diverges=8`, `unsupported-feature=125`,
   `not-yet=0`, and parked `M6=81 gated=8 harness=36`; next target:
   `transition_duration_bind_list.riv`.
+- 2026-07-05: [M6] Promoted `transition_duration_bind_list.riv` after the
+  focused direct C++/Rust stream compare also showed exact output at its
+  declared sample; the stale `layout-component-bounds` manifest tag came from
+  before the previous layout/default-context fixes. `make golden-compare`
+  reports `exact=163`, `exact-segments=484`, `diverges=7`,
+  `unsupported-feature=125`, `not-yet=0`, and parked
+  `M6=81 gated=8 harness=36`; next target: `new_text.riv`, then the
+  data-bound text divergence bucket.

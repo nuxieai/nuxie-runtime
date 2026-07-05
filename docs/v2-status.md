@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 501 across 180 exact files
-- Current compare: `make golden-compare` reports diverges=14, unsupported-feature=101, not-yet=0
+- Exact segments (file × sample): 502 across 181 exact files
+- Current compare: `make golden-compare` reports diverges=13, unsupported-feature=101, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=57 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
@@ -23,13 +23,13 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue the text value/draw-suppression M6 bucket that currently holds
-   `data_converter_to_number.riv`, `scripted_data_context.riv`,
-   `state_transition_fire_trigger.riv`, and `trigger_based_listeners.riv` as
-   known divergences. Start with `data_converter_to_number.riv`: its first
-   data-bound text run is shorter than C++ (17 C++ move contours versus 15
-   Rust contours), so inspect the resolved text value before changing glyph
-   behavior.
+1. Continue the text draw-suppression M6 bucket that currently holds
+   `scripted_data_context.riv`, `state_transition_fire_trigger.riv`, and
+   `trigger_based_listeners.riv` as known divergences. Start with
+   `scripted_data_context.riv`: focused streams show Rust emits two
+   data-bound text payloads that C++ suppresses at sample 0 after the C++
+   golden runner fails to import object type 106 script contents, so inspect
+   draw suppression/runtime gating before changing glyph behavior.
 2. Keep `new_text.riv`, `follow_path_path.riv`, and
    `data_bind_test_cmdq.riv` parked as known M6
    divergences until a dedicated text outline backend/canonicalization slice.
@@ -88,13 +88,6 @@ the only memory the next session has. Update it every commit.
   payload at the matched transform, with both sides emitting 25 move contours,
   333 cubics, and 113 lines. Parked under the text-outline
   backend/canonicalization bucket.
-- `data_converter_to_number.riv`: after admitting custom-property siblings
-  through static text and adding `CustomPropertyBoolean` /
-  `CustomPropertyColor` target-to-source values, Rust reaches draw but the
-  first data-bound text run is shorter than C++. Focused first diff: first text
-  path at transform `[1,0,0,1,34.473156,389.39209]`; C++ has 17 `move`
-  contours versus Rust's 15. Parked under
-  `rust-runner-divergence:data-converter-to-number-text-values`.
 - `saturation.riv`: after admitting `Shape.x/y` source-to-target binds through
   static text for no-converter and `DataConverterGroup` paths, Rust reaches
   draw but the first data-bound text path differs. Debugged bindings show
@@ -1019,3 +1012,10 @@ the only memory the next session has. Update it every commit.
   `diverges=14`, `unsupported-feature=101`, `not-yet=0`, and parked
   `M6=57 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
   `data_converter_to_number.riv`.
+- 2026-07-05: [M6] Promoted `data_converter_to_number.riv` after refreshing
+  focused C++/Rust streams: the stale 17-vs-15 contour note was gone, both
+  streams had 75 lines with matching non-numeric structure, and the largest
+  numeric text-outline delta was about `1e-6`, below the normal golden epsilon.
+  `make golden-compare` reports `exact=181`, `exact-segments=502`,
+  `diverges=13`, `unsupported-feature=101`, `not-yet=0`, and parked
+  `M6=57 gated=8 harness=36`; next target is `scripted_data_context.riv`.

@@ -5,9 +5,9 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 493 across 172 exact files
-- Current compare: `make golden-compare` reports diverges=6, unsupported-feature=117, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=73 gated=8 harness=36
+- Exact segments (file × sample): 494 across 173 exact files
+- Current compare: `make golden-compare` reports diverges=9, unsupported-feature=113, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=69 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -23,31 +23,35 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Probe `data_bind_test_cmdq.riv` as the next
+1. Probe `data_binding_test.riv` as the next
    `rust-runner-unsupported:text` M6 gate: compare direct C++/Rust streams,
    remove only stale static-text gates needed to reach draw, and fix or retag
    the first real text/data-bind blocker. Do not start a general text layout
    rewrite unless the stream diff proves the corpus needs it.
-2. Keep `new_text.riv` and `follow_path_path.riv` parked as known M6
+2. Keep `data_bind_test_cmdq.riv`, `state_transition_fire_trigger.riv`, and
+   `trigger_based_listeners.riv` parked as known M6 text/data-bind
+   divergences until a text layout/draw-suppression slice addresses their
+   extra/misaligned text streams.
+3. Keep `new_text.riv` and `follow_path_path.riv` parked as known M6
    divergences until a dedicated text outline backend/canonicalization slice.
    `follow_path_path.riv` now reaches draw after clearing stale
    `FollowPathConstraint` and cubic vertex static-text gates, but its first
    diff is the same glyph outline payload family.
-3. Keep `spotify_kids_app_icon.riv` parked as a known M6 draw-order/background
+4. Keep `spotify_kids_app_icon.riv` parked as a known M6 draw-order/background
    divergence: after cubic path vertex sibling admission, Rust reaches draw but
    emits a full-artboard background before C++'s centered rounded icon stream.
-4. Keep richer follow-path text files parked behind `TextFollowPathModifier`
+5. Keep richer follow-path text files parked behind `TextFollowPathModifier`
    and unsupported `Text` property data-bind targets;
    `text_follow_path_shape_length.riv` currently fails first on data binding
    target `Text` global 73 before it reaches follow-path drawing.
-5. Keep `text_vertical_trim_test.riv` parked behind text data-binding target
+6. Keep `text_vertical_trim_test.riv` parked behind text data-binding target
    support; after the layout-paint slice it now fails on unsupported `Text`
    property data bind target global 41 before reaching richer vertical-trim
    behavior.
-6. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
+7. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
-7. Remaining exact entries pinned to sample `0` are static M1 holdovers:
+8. Remaining exact entries pinned to sample `0` are static M1 holdovers:
    `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
    them during M6 unless a related refactor needs a cheap draw-regression check.
 
@@ -64,6 +68,16 @@ the only memory the next session has. Update it every commit.
   `CubicMirroredVertex`, Rust reaches draw but the first diff is a text path
   payload after the first text transform. This belongs with the text-outline
   backend/canonicalization bucket, not follow-path constraint runtime.
+- `data_bind_test_cmdq.riv`: after admitting inert `Event` siblings through the
+  static text gate, Rust reaches draw but the bottom command-queue text/layout
+  block diverges. First focused diff: C++ transforms the block at
+  y=`434.356567` while Rust emits it at y=`460.671631`, with different
+  background/clip path heights.
+- `state_transition_fire_trigger.riv` and `trigger_based_listeners.riv`: the
+  same `Event` admission clears their stale text diagnostics, but Rust emits
+  extra event/listener text draw calls that C++ suppresses at sample 0. Keep
+  them parked under `rust-runner-divergence:event-trigger-extra-text-draw`
+  until the text draw-suppression/runtime slice opens.
 - `spotify_kids_app_icon.riv`: after cubic path vertex sibling admission, Rust
   reaches draw but emits a full-artboard background before C++'s centered
   rounded icon stream. First blocker is draw-order/background parity, not text
@@ -730,3 +744,14 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=117`, `not-yet=0`, and parked
   `M6=73 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
   `data_bind_test_cmdq.riv`.
+- 2026-07-05: [M6] Admitted inert `Event` siblings through the static text
+  gate. `nested_events.riv` is exact by focused stream comparison;
+  `data_bind_test_cmdq.riv` now reaches draw and is parked as
+  `rust-runner-divergence:data-bind-command-queue-text-layout`; the same gate
+  removal reopens `state_transition_fire_trigger.riv` and
+  `trigger_based_listeners.riv`, both parked as
+  `rust-runner-divergence:event-trigger-extra-text-draw`. `make
+  golden-compare` reports `exact=173`, `exact-segments=494`, `diverges=9`,
+  `unsupported-feature=113`, `not-yet=0`, and parked
+  `M6=69 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
+  `data_binding_test.riv`.

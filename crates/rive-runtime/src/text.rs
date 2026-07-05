@@ -326,6 +326,7 @@ impl<'a> StaticTextSlice<'a> {
                         | "ViewModelPropertyNumber"
                         | "ViewModelPropertyString"
                         | "ViewModelPropertyViewModel"
+                        | "Event"
                         | "StateMachine"
                         | "StateMachineLayer"
                         | "StateMachineBool"

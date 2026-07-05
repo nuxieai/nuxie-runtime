@@ -2726,7 +2726,7 @@ impl TaffyRuntimeLayoutEngine {
 
         let node = if child_nodes.is_empty() {
             if runtime.is_some()
-                && self.layout_component_has_static_measure(instance, graph, local)?
+                && self.layout_component_has_intrinsic_static_measure(instance, graph, local)?
             {
                 taffy.new_leaf_with_context(style, local).ok()?
             } else {
@@ -3224,7 +3224,7 @@ impl TaffyRuntimeLayoutEngine {
             return Some(false);
         }
         if runtime.is_some()
-            && self.layout_component_has_static_measure(instance, graph, layout_local)?
+            && self.layout_component_has_intrinsic_static_measure(instance, graph, layout_local)?
         {
             return Some(false);
         }
@@ -3255,12 +3255,19 @@ impl TaffyRuntimeLayoutEngine {
         }))
     }
 
-    fn layout_component_has_static_measure(
+    fn layout_component_has_intrinsic_static_measure(
         &self,
-        _instance: &ArtboardInstance,
+        instance: &ArtboardInstance,
         graph: &ArtboardGraph,
         layout_local: usize,
     ) -> Option<bool> {
+        let style_local = instance.runtime_layout_component_style_local(layout_local)?;
+        if !instance
+            .runtime_layout_style_bool(style_local, "intrinsicallySizedValue")
+            .unwrap_or(false)
+        {
+            return Some(false);
+        }
         let component = graph
             .components
             .iter()

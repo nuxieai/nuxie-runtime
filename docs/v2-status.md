@@ -23,21 +23,21 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Open the text layout/draw-suppression M6 bucket that currently holds
-   `data_bind_test_cmdq.riv`, `data_converter_to_number.riv`,
-   `scripted_data_context.riv`, `state_transition_fire_trigger.riv`, and
-   `trigger_based_listeners.riv` as known divergences. Continue
-   `data_bind_test_cmdq.riv`: local-id layout boxes now complete with 19 boxes
-   and the local 40 Shape leaf measures 24x24, but the bottom command-queue
-   text/layout block still diverges at y=`434.356567` C++ vs y=`453.185791`
-   Rust, with different background/clip path heights. The remaining placement
-   drift is in the Taffy/Yoga text-layout bucket; classify the text value/draw
-   suppression first diff before changing behavior.
-2. Keep `new_text.riv` and `follow_path_path.riv` parked as known M6
+1. Continue the text value/draw-suppression M6 bucket that currently holds
+   `data_converter_to_number.riv`, `scripted_data_context.riv`,
+   `state_transition_fire_trigger.riv`, and `trigger_based_listeners.riv` as
+   known divergences. Start with `data_converter_to_number.riv`: its first
+   data-bound text run is shorter than C++ (17 C++ move contours versus 15
+   Rust contours), so inspect the resolved text value before changing glyph
+   behavior.
+2. Keep `new_text.riv`, `follow_path_path.riv`, and
+   `data_bind_test_cmdq.riv` parked as known M6
    divergences until a dedicated text outline backend/canonicalization slice.
    `follow_path_path.riv` now reaches draw after clearing stale
    `FollowPathConstraint` and cubic vertex static-text gates, but its first
-   diff is the same glyph outline payload family.
+   diff is the same glyph outline payload family. `data_bind_test_cmdq.riv`
+   now has matching local-id layout boxes and matching command-queue text
+   transform; its remaining diff is the glyph payload for `Update Random Vals`.
 3. Keep `spotify_kids_app_icon.riv` parked as a known M6 draw-order/background
    divergence: after cubic path vertex sibling admission, Rust reaches draw but
    emits a full-artboard background before C++'s centered rounded icon stream.
@@ -81,11 +81,13 @@ the only memory the next session has. Update it every commit.
   wider line (`x=7.71484375` versus `x=212.890625`), and C++ emits a
   zero-sized middle text path that Rust suppresses.
 - `data_bind_test_cmdq.riv`: after admitting inert `Event` siblings through the
-  static text gate and measuring Shape layout leaves through the Taffy adapter,
-  Rust reaches draw and layout-bounds reports all 19 boxes; local 40 measures
-  24x24 like C++. The bottom command-queue text/layout block still diverges.
-  First focused diff: C++ transforms the block at y=`434.356567` while Rust
-  emits it at y=`453.185791`, with different background/clip path heights.
+  static text gate and measuring only intrinsic static leaves through the Taffy
+  adapter, Rust reaches draw and layout-bounds reports all 19 local-id boxes
+  matching C++ within float drift; local 98/101 now land at y=`434.35657` /
+  y=`444.35657`. The first focused diff is the `Update Random Vals` text path
+  payload at the matched transform, with both sides emitting 25 move contours,
+  333 cubics, and 113 lines. Parked under the text-outline
+  backend/canonicalization bucket.
 - `data_converter_to_number.riv`: after admitting custom-property siblings
   through static text and adding `CustomPropertyBoolean` /
   `CustomPropertyColor` target-to-source values, Rust reaches draw but the
@@ -1006,3 +1008,14 @@ the only memory the next session has. Update it every commit.
   `not-yet=0`, and parked `M6=57 gated=8 harness=36`;
   `cargo test --workspace` passes. Next target stays
   `data_bind_test_cmdq.riv`.
+- 2026-07-05: [M6] Narrowed `data_bind_test_cmdq.riv` again by mirroring C++
+  `LayoutComponent::syncStyle`: only leaf layout components with
+  `intrinsicallySizedValue` get a Taffy measure context. The C++ Yoga and Rust
+  Taffy local-id layout boxes now match for all 19 nodes, including the bottom
+  command-queue block at local 98/101; the remaining first diff is the
+  `Update Random Vals` glyph path payload at the matched transform, so the
+  file is retagged as `rust-runner-divergence:data-bind-command-queue-text-outline`.
+  `make golden-compare` remains `exact=180`, `exact-segments=501`,
+  `diverges=14`, `unsupported-feature=101`, `not-yet=0`, and parked
+  `M6=57 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
+  `data_converter_to_number.riv`.

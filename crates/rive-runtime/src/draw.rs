@@ -212,7 +212,9 @@ impl ArtboardInstance {
                 let object = runtime
                     .object(paint.global_id as usize)
                     .with_context(|| format!("missing paint global {}", paint.global_id))?;
-                let runtime_paint = runtime_prepare_gradient_paint_command(self, container, paint);
+                let opacity_local = shape_paint_container_opacity_local(graph, container.local_id);
+                let runtime_paint =
+                    runtime_prepare_gradient_paint_command(self, opacity_local, container, paint);
                 let mut gradient_resources = RuntimeGradientShaderResources {
                     factory,
                     shaders: &mut render_cache.gradient_shaders,
@@ -1575,11 +1577,12 @@ fn runtime_background_shape_paint_command(
 
 fn runtime_prepare_gradient_paint_command(
     instance: &ArtboardInstance,
+    opacity_local: usize,
     container: &ShapePaintContainerNode,
     paint: &ShapePaintNode,
 ) -> RuntimeShapePaintCommand {
     let render_opacity = instance
-        .component(container.local_id)
+        .component(opacity_local)
         .map(|component| component.transform.render_opacity)
         .unwrap_or(1.0);
     RuntimeShapePaintCommand {
@@ -2409,15 +2412,26 @@ fn runtime_shape_paint_state(
             end_y,
             opacity,
             stops,
-        } => Some(RuntimeShapePaintState::LinearGradient {
-            start_x,
-            start_y,
-            end_x,
-            end_y,
-            opacity,
-            render_opacity,
-            stops: runtime_gradient_stops(stops, opacity * render_opacity),
-        }),
+        } => {
+            let (start_x, start_y, end_x, end_y) = runtime_gradient_endpoints(
+                artboard,
+                paint.mutator_local,
+                "LinearGradient",
+                start_x,
+                start_y,
+                end_x,
+                end_y,
+            );
+            Some(RuntimeShapePaintState::LinearGradient {
+                start_x,
+                start_y,
+                end_x,
+                end_y,
+                opacity,
+                render_opacity,
+                stops: runtime_gradient_stops(stops, opacity * render_opacity),
+            })
+        }
         ShapePaintStateNode::RadialGradient {
             start_x,
             start_y,
@@ -2425,16 +2439,77 @@ fn runtime_shape_paint_state(
             end_y,
             opacity,
             stops,
-        } => Some(RuntimeShapePaintState::RadialGradient {
-            start_x,
-            start_y,
-            end_x,
-            end_y,
-            opacity,
-            render_opacity,
-            stops: runtime_gradient_stops(stops, opacity * render_opacity),
-        }),
+        } => {
+            let (start_x, start_y, end_x, end_y) = runtime_gradient_endpoints(
+                artboard,
+                paint.mutator_local,
+                "RadialGradient",
+                start_x,
+                start_y,
+                end_x,
+                end_y,
+            );
+            Some(RuntimeShapePaintState::RadialGradient {
+                start_x,
+                start_y,
+                end_x,
+                end_y,
+                opacity,
+                render_opacity,
+                stops: runtime_gradient_stops(stops, opacity * render_opacity),
+            })
+        }
     }
+}
+
+fn shape_paint_container_opacity_local(graph: &ArtboardGraph, container_local: usize) -> usize {
+    let mut current = Some(container_local);
+    while let Some(local_id) = current {
+        let Some(component) = graph
+            .components
+            .iter()
+            .find(|component| component.local_id == local_id)
+        else {
+            break;
+        };
+        if component.capabilities.transform || component.capabilities.artboard {
+            return local_id;
+        }
+        current = component.parent_local;
+    }
+    container_local
+}
+
+fn runtime_gradient_endpoints(
+    artboard: &ArtboardInstance,
+    mutator_local: Option<usize>,
+    type_name: &str,
+    start_x: f32,
+    start_y: f32,
+    end_x: f32,
+    end_y: f32,
+) -> (f32, f32, f32, f32) {
+    let Some(mutator_local) = mutator_local else {
+        return (start_x, start_y, end_x, end_y);
+    };
+    (
+        runtime_gradient_double_property(artboard, mutator_local, type_name, "startX", start_x),
+        runtime_gradient_double_property(artboard, mutator_local, type_name, "startY", start_y),
+        runtime_gradient_double_property(artboard, mutator_local, type_name, "endX", end_x),
+        runtime_gradient_double_property(artboard, mutator_local, type_name, "endY", end_y),
+    )
+}
+
+fn runtime_gradient_double_property(
+    artboard: &ArtboardInstance,
+    local_id: usize,
+    type_name: &str,
+    property_name: &str,
+    fallback: f32,
+) -> f32 {
+    property_key_for_name(type_name, property_name)
+        .and_then(|property_key| artboard.double_property(local_id, property_key))
+        .unwrap_or(fallback)
 }
 
 fn runtime_gradient_stops(

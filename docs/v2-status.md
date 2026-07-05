@@ -6,7 +6,8 @@ the only memory the next session has. Update it every commit.
 ## Metric
 
 - Exact segments (file × sample): 464 across 143 exact files
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=109 gated=7 harness=36
+- Current compare: `make golden-compare` reports diverges=1, unsupported-feature=151, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=108 gated=7 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -22,30 +23,37 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Start `new_text.riv`: after `text_listener_simpler.riv`, the smaller M6
-   text-only entries still probe as nested-artboard sibling, text data-binding,
-   nested child data-binding, follow-path, or layout blockers. `new_text.riv`
-   is now the first text queue entry that reaches a non-data sibling gate:
-   `static text subset does not support sibling LinearGradient global 34`.
-   Keep the slice to gradient/sibling admission and stop at the next concrete
-   gate or divergence.
-2. Keep follow-path text files parked behind `TextFollowPathModifier` and text
+1. Start `runtime_nested_text_runs.riv`: it is the next narrow text queue item
+   checked after `new_text.riv`; current first blocker is
+   `static text subset does not support sibling NestedArtboard global 26`.
+   Keep the slice to passive nested-artboard sibling admission around static
+   text and stop at the next concrete gate or divergence.
+2. Keep `new_text.riv` parked as a known M6 divergence until a dedicated text
+   outline backend/canonicalization slice: gradient sibling admission now
+   reaches draw, but Rust/Skrifa and C++ HarfBuzz emit a glyph contour with a
+   different segment start/order, so exact stream comparison fails on path
+   verbs/points.
+3. Keep follow-path text files parked behind `TextFollowPathModifier` and text
    data-binding blockers; `text_follow_path_shape_length.riv` currently fails
    first on text data binding before it reaches follow-path drawing.
-3. Keep `text_vertical_trim_test.riv` parked behind text data binding; it
+4. Keep `text_vertical_trim_test.riv` parked behind text data binding; it
    currently fails first on `static text subset does not support text data
    binding`.
-4. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
+5. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
-5. Remaining exact entries pinned to sample `0` are static M1 holdovers:
+6. Remaining exact entries pinned to sample `0` are static M1 holdovers:
    `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
    them during M6 unless a related refactor needs a cheap draw-regression check.
 
 ## Known Divergences
 
-- None currently tracked for M1/M2; remaining non-exact files are parked with
-  later-milestone diagnostics or unsupported-feature gates.
+- `new_text.riv`: after admitting static text sibling `LinearGradient` /
+  `GradientStop` and gradient text paints, Rust reaches draw but differs from
+  C++ on glyph outline contour ordering. C++ uses HarfBuzz draw callbacks
+  (`src/text/font_hb.cpp`) and `TextStylePaint::addPathClockwise`; Rust uses
+  Skrifa outlines. The first stream diff is path verb/point ordering, not a
+  paint/gradient mismatch.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -395,3 +403,13 @@ the only memory the next session has. Update it every commit.
   golden-compare` moved to `exact=143`, `exact-segments=464`,
   `unsupported-feature=152`, and parked `M6=109 gated=7 harness=36`; next
   reopen `new_text.riv`, which now fails first on sibling `LinearGradient`.
+- 2026-07-04: [M6] Admitted `new_text.riv` through its LinearGradient sibling
+  gate: static text allows gradient siblings and gradient text fill/stroke
+  paints, TextStylePaints without authored font/container no longer abort the
+  whole text, and keyed runtime gradient endpoints/render opacity now match
+  C++. The file reaches draw but is parked as the sole known divergence on
+  text-outline contour ordering between Rust/Skrifa and C++ HarfBuzz. `make
+  golden-compare` reports `exact=143`, `exact-segments=464`, `diverges=1`,
+  `unsupported-feature=151`, `not-yet=0`, and parked
+  `M6=108 gated=7 harness=36`; next start `runtime_nested_text_runs.riv`,
+  which fails first on sibling `NestedArtboard`.

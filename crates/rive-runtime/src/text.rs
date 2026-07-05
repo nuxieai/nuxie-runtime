@@ -79,12 +79,15 @@ pub(crate) fn runtime_text_shape_paint_commands(
 
     let mut commands = Vec::new();
     for (style, path_buckets) in slice.styles.iter().zip(render_data.path_buckets_by_style) {
+        let Some(container) = style.container else {
+            continue;
+        };
         let mut allocated_text_paint_pool = false;
         for path_bucket in order_opacity_buckets_like_cpp(path_buckets) {
             if path_bucket.commands.is_empty() {
                 continue;
             }
-            commands.extend(style.container.paints.iter().filter_map(|paint| {
+            commands.extend(container.paints.iter().filter_map(|paint| {
                 let mut path_commands = path_bucket.commands.clone();
                 if paint.path_kind == Some(ShapePaintPathKind::World) {
                     transform_path_commands(&mut path_commands, shape_world);
@@ -92,7 +95,7 @@ pub(crate) fn runtime_text_shape_paint_commands(
                 let mut command = runtime_shape_paint_command(
                     instance,
                     paint,
-                    style.container.blend_mode_value,
+                    container.blend_mode_value,
                     needs_save_operation,
                     render_opacity * path_bucket.opacity,
                     shape_world,
@@ -143,16 +146,9 @@ struct StaticResolvedRun {
 struct StaticTextStyle<'a> {
     local_id: usize,
     global_id: u32,
-    container: &'a ShapePaintContainerNode,
+    container: Option<&'a ShapePaintContainerNode>,
     font_bytes: Option<&'a [u8]>,
     variations: Vec<(u32, f32)>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct StaticTextStyleMetricSignature {
-    font_asset_id: u64,
-    font_size_bits: u32,
-    letter_spacing_bits: u32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -245,6 +241,9 @@ impl<'a> StaticTextSlice<'a> {
                         | "Rectangle"
                         | "ClippingShape"
                         | "SolidColor"
+                        | "LinearGradient"
+                        | "RadialGradient"
+                        | "GradientStop"
                         | "Fill"
                         | "Stroke"
                         | "Backboard"
@@ -356,7 +355,6 @@ impl<'a> StaticTextSlice<'a> {
         }
         let text_global = global_for_local(graph, text_local)?;
         let mut runs = Vec::new();
-        let mut authored_text = String::new();
         for run_local in run_locals {
             let run_global = global_for_local(graph, run_local)?;
             let run = runtime
@@ -373,8 +371,7 @@ impl<'a> StaticTextSlice<'a> {
             let bytes = run
                 .string_property_bytes("text")
                 .context("static text subset requires serialized TextValueRun.text")?;
-            let text = std::str::from_utf8(bytes).context("TextValueRun text is not UTF-8")?;
-            authored_text.push_str(text);
+            std::str::from_utf8(bytes).context("TextValueRun text is not UTF-8")?;
             runs.push(StaticTextRun {
                 local_id: run_local,
                 global_id: run_global,
@@ -384,9 +381,6 @@ impl<'a> StaticTextSlice<'a> {
         let mut styles = Vec::new();
         for style_local in style_locals {
             styles.push(StaticTextStyle::from_graph(runtime, graph, style_local)?);
-        }
-        if !has_forced_text_break(&authored_text) {
-            Self::ensure_matching_style_metrics(runtime, &styles)?;
         }
         let modifiers = text_component
             .children
@@ -469,9 +463,14 @@ impl<'a> StaticTextSlice<'a> {
             .location(skrifa_variations.iter().copied());
         let location_ref = LocationRef::from(&location);
         let (ascent, descent) = harfbuzz_line_metrics(&skrifa_font, location_ref);
-        let baseline = ascent * font_size / TEXT_SHAPE_SCALE_F32;
-        let line_height = (ascent - descent) * font_size / TEXT_SHAPE_SCALE_F32;
-        let outlines = skrifa_font.outline_glyphs();
+        let (baseline, line_height) = self
+            .max_static_line_metrics(runtime, instance)?
+            .unwrap_or_else(|| {
+                (
+                    ascent * font_size / TEXT_SHAPE_SCALE_F32,
+                    (ascent - descent) * font_size / TEXT_SHAPE_SCALE_F32,
+                )
+            });
         let scale = font_size / TEXT_SHAPE_SCALE_F32;
         let apply_ellipsis = self.should_apply_static_ellipsis(runtime, instance)?;
         let lines = self.layout_static_text_lines(
@@ -485,7 +484,7 @@ impl<'a> StaticTextSlice<'a> {
         )?;
         let measured_width = lines
             .iter()
-            .map(|line| self.styled_line_width(runtime, instance, font_bytes, line, &resolved_runs))
+            .map(|line| self.styled_line_width(runtime, instance, line, &resolved_runs))
             .collect::<Result<Vec<_>>>()?
             .into_iter()
             .fold(0.0f32, f32::max);
@@ -514,15 +513,13 @@ impl<'a> StaticTextSlice<'a> {
             if line.text.is_empty() {
                 continue;
             }
-            let mut glyphs =
-                self.styled_line_glyphs(runtime, instance, font_bytes, &line, &resolved_runs)?;
+            let mut glyphs = self.styled_line_glyphs(runtime, instance, &line, &resolved_runs)?;
             if layout_info.ellipsis_line == Some(line.line_index) {
                 let max_width = self.text_width(runtime, instance)?;
                 let ellipsis_style = glyphs.last().map(|glyph| glyph.style_index).unwrap_or(0);
                 let ellipsis = self.styled_text_glyphs_for_style(
                     runtime,
                     instance,
-                    font_bytes,
                     "...",
                     line.char_start + line.text.chars().count(),
                     ellipsis_style,
@@ -569,8 +566,11 @@ impl<'a> StaticTextSlice<'a> {
                     }
                 }
                 let glyph_id = GlyphId::new(glyph.glyph_id);
-                if let Some(outline) = outlines.get(glyph_id) {
-                    let style = &self.styles[glyph.style_index];
+                let style = &self.styles[glyph.style_index];
+                if let Some(style_font_bytes) = style.font_bytes {
+                    let style_font = SkrifaFontRef::new(style_font_bytes)
+                        .context("failed to parse font for outlines")?;
+                    let outlines = style_font.outline_glyphs();
                     let skrifa_variations = style
                         .variations
                         .iter()
@@ -578,29 +578,31 @@ impl<'a> StaticTextSlice<'a> {
                             VariationSetting::new(SkrifaTag::from_u32(*tag), *value)
                         })
                         .collect::<Vec<_>>();
-                    let location = skrifa_font
+                    let location = style_font
                         .axes()
                         .location(skrifa_variations.iter().copied());
                     let location_ref = LocationRef::from(&location);
-                    let mut pen = TextOutlinePen::new(
-                        cursor_x,
-                        line_baseline,
-                        glyph.scale,
-                        cursor_x + glyph.advance * 0.5,
-                        line_baseline,
-                        glyph_transform,
-                    );
-                    let draw_settings =
-                        DrawSettings::unhinted(Size::new(TEXT_SHAPE_SCALE_F32), location_ref)
-                            .with_path_style(PathStyle::HarfBuzz);
-                    outline
-                        .draw(draw_settings, &mut pen)
-                        .with_context(|| format!("failed to draw glyph {}", glyph.glyph_id))?;
-                    append_opacity_bucket(
-                        &mut commands_by_style[glyph.style_index],
-                        glyph_opacity,
-                        pen.commands,
-                    );
+                    if let Some(outline) = outlines.get(glyph_id) {
+                        let mut pen = TextOutlinePen::new(
+                            cursor_x,
+                            line_baseline,
+                            glyph.scale,
+                            cursor_x + glyph.advance * 0.5,
+                            line_baseline,
+                            glyph_transform,
+                        );
+                        let draw_settings =
+                            DrawSettings::unhinted(Size::new(TEXT_SHAPE_SCALE_F32), location_ref)
+                                .with_path_style(PathStyle::HarfBuzz);
+                        outline
+                            .draw(draw_settings, &mut pen)
+                            .with_context(|| format!("failed to draw glyph {}", glyph.glyph_id))?;
+                        append_opacity_bucket(
+                            &mut commands_by_style[glyph.style_index],
+                            glyph_opacity,
+                            pen.commands,
+                        );
+                    }
                 }
                 cursor_x += glyph.advance;
             }
@@ -784,11 +786,38 @@ impl<'a> StaticTextSlice<'a> {
             .unwrap_or(0.0)
     }
 
+    fn max_static_line_metrics(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+    ) -> Result<Option<(f32, f32)>> {
+        let mut baseline = 0.0f32;
+        let mut line_height = 0.0f32;
+        for style in &self.styles {
+            let Some(font_bytes) = style.font_bytes else {
+                continue;
+            };
+            let font =
+                SkrifaFontRef::new(font_bytes).context("failed to parse font for line metrics")?;
+            let skrifa_variations = style
+                .variations
+                .iter()
+                .map(|(tag, value)| VariationSetting::new(SkrifaTag::from_u32(*tag), *value))
+                .collect::<Vec<_>>();
+            let location = font.axes().location(skrifa_variations.iter().copied());
+            let location_ref = LocationRef::from(&location);
+            let (ascent, descent) = harfbuzz_line_metrics(&font, location_ref);
+            let scale = self.style_font_size(runtime, instance, style)? / TEXT_SHAPE_SCALE_F32;
+            baseline = baseline.max(ascent * scale);
+            line_height = line_height.max((ascent - descent) * scale);
+        }
+        Ok((line_height > 0.0).then_some((baseline, line_height)))
+    }
+
     fn styled_line_glyphs(
         &self,
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
-        font_bytes: &[u8],
         line: &StaticTextLine<'_>,
         runs: &[StaticResolvedRun],
     ) -> Result<Vec<StyledTextGlyph>> {
@@ -812,7 +841,6 @@ impl<'a> StaticTextSlice<'a> {
             glyphs.extend(self.styled_text_glyphs_for_style(
                 runtime,
                 instance,
-                font_bytes,
                 segment_text,
                 segment_start,
                 style_index,
@@ -825,12 +853,11 @@ impl<'a> StaticTextSlice<'a> {
         &self,
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
-        font_bytes: &[u8],
         line: &StaticTextLine<'_>,
         runs: &[StaticResolvedRun],
     ) -> Result<f32> {
         Ok(self
-            .styled_line_glyphs(runtime, instance, font_bytes, line, runs)?
+            .styled_line_glyphs(runtime, instance, line, runs)?
             .iter()
             .map(|glyph| glyph.advance)
             .sum())
@@ -840,7 +867,6 @@ impl<'a> StaticTextSlice<'a> {
         &self,
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
-        font_bytes: &[u8],
         text: &str,
         char_start: usize,
         style_index: usize,
@@ -849,6 +875,9 @@ impl<'a> StaticTextSlice<'a> {
             .styles
             .get(style_index)
             .with_context(|| format!("missing TextStylePaint index {style_index}"))?;
+        let Some(font_bytes) = style.font_bytes else {
+            return Ok(Vec::new());
+        };
         let font_size = self.style_font_size(runtime, instance, style)?;
         let scale = font_size / TEXT_SHAPE_SCALE_F32;
         let letter_spacing = self.style_letter_spacing(runtime, instance, style);
@@ -1140,25 +1169,6 @@ impl<'a> StaticTextSlice<'a> {
             .with_context(|| format!("TextValueRun references missing style local {style_local}"))
     }
 
-    fn ensure_matching_style_metrics(
-        runtime: &RuntimeFile,
-        styles: &[StaticTextStyle<'_>],
-    ) -> Result<()> {
-        let Some(first) = styles.first() else {
-            return Ok(());
-        };
-        let first_signature = StaticTextStyleMetricSignature::from_runtime(runtime, first)?;
-        for style in &styles[1..] {
-            let signature = StaticTextStyleMetricSignature::from_runtime(runtime, style)?;
-            if signature != first_signature {
-                bail!(
-                    "static text subset requires matching TextStylePaint metrics for no-break multi-run text"
-                );
-            }
-        }
-        Ok(())
-    }
-
     fn static_fixed_height_shows_first_line_only(
         &self,
         runtime: &RuntimeFile,
@@ -1180,56 +1190,61 @@ impl<'a> StaticTextStyle<'a> {
         let container = graph
             .shape_paint_containers
             .iter()
-            .find(|container| container.local_id == style_local)
-            .context("TextStylePaint shape paint container is missing")?;
-        if container.paints.is_empty() {
-            bail!(
-                "static text subset requires at least one TextStylePaint paint, found {}",
-                container.paints.len()
-            );
-        }
-        for paint in &container.paints {
-            if !matches!(
-                paint.paint_type,
-                ShapePaintKind::Fill | ShapePaintKind::Stroke
-            ) {
-                bail!("static text subset only supports Fill/Stroke text paints");
-            }
-            if !matches!(
-                paint.paint_state,
-                Some(ShapePaintStateNode::SolidColor { .. })
-            ) {
-                bail!("static text subset only supports solid text fill/stroke");
-            }
-            if paint.feather.is_some() {
-                bail!("static text subset does not support text paint feather");
-            }
-            if paint
-                .effects
-                .iter()
-                .any(|effect| effect.type_name != "DashPath")
-            {
-                bail!("static text subset only supports DashPath text paint effects");
+            .find(|container| container.local_id == style_local);
+        if let Some(container) = container {
+            for paint in &container.paints {
+                if !matches!(
+                    paint.paint_type,
+                    ShapePaintKind::Fill | ShapePaintKind::Stroke
+                ) {
+                    bail!("static text subset only supports Fill/Stroke text paints");
+                }
+                if !matches!(
+                    paint.paint_state,
+                    Some(
+                        ShapePaintStateNode::SolidColor { .. }
+                            | ShapePaintStateNode::LinearGradient { .. }
+                            | ShapePaintStateNode::RadialGradient { .. }
+                    )
+                ) {
+                    bail!("static text subset only supports solid/gradient text fill/stroke");
+                }
+                if paint.feather.is_some() {
+                    bail!("static text subset does not support text paint feather");
+                }
+                if paint
+                    .effects
+                    .iter()
+                    .any(|effect| effect.type_name != "DashPath")
+                {
+                    bail!("static text subset only supports DashPath text paint effects");
+                }
             }
         }
 
         let style = runtime
             .object(style_global as usize)
             .with_context(|| format!("missing TextStylePaint global {style_global}"))?;
-        let font_asset_index = style
-            .uint_property("fontAssetId")
-            .context("TextStylePaint missing fontAssetId")?;
-        let font_asset = runtime
-            .file_asset(usize::try_from(font_asset_index).context("font asset id is too large")?)
-            .context("TextStylePaint fontAssetId did not resolve to a file asset")?;
-        if font_asset.type_name != "FontAsset" {
-            bail!(
-                "static text subset expected FontAsset, found {} global {}",
-                font_asset.type_name,
-                font_asset.id
-            );
-        }
-        let font_bytes = embedded_file_asset_bytes(runtime, font_asset.id);
+        let font_bytes = if style.property("fontAssetId").is_some() {
+            let font_asset_index = style
+                .uint_property("fontAssetId")
+                .context("TextStylePaint serialized fontAssetId is not a uint")?;
+            let font_asset = runtime
+                .file_asset(
+                    usize::try_from(font_asset_index).context("font asset id is too large")?,
+                )
+                .context("TextStylePaint fontAssetId did not resolve to a file asset")?;
+            if font_asset.type_name != "FontAsset" {
+                bail!(
+                    "static text subset expected FontAsset, found {} global {}",
+                    font_asset.type_name,
+                    font_asset.id
+                );
+            }
+            embedded_file_asset_bytes(runtime, font_asset.id)
+        } else {
+            None
+        };
 
         let style_component = graph
             .components
@@ -1263,27 +1278,6 @@ impl<'a> StaticTextStyle<'a> {
             container,
             font_bytes,
             variations,
-        })
-    }
-}
-
-impl StaticTextStyleMetricSignature {
-    fn from_runtime(runtime: &RuntimeFile, style: &StaticTextStyle<'_>) -> Result<Self> {
-        let object = runtime
-            .object(style.global_id as usize)
-            .with_context(|| format!("missing TextStylePaint global {}", style.global_id))?;
-        let font_asset_id = object
-            .uint_property("fontAssetId")
-            .context("TextStylePaint missing fontAssetId")?;
-        let font_size_bits = object.double_property("fontSize").unwrap_or(12.0).to_bits();
-        let letter_spacing_bits = object
-            .double_property("letterSpacing")
-            .unwrap_or(0.0)
-            .to_bits();
-        Ok(Self {
-            font_asset_id,
-            font_size_bits,
-            letter_spacing_bits,
         })
     }
 }
@@ -2013,11 +2007,6 @@ fn is_prime(value: usize) -> bool {
         divisor += 1;
     }
     true
-}
-
-fn has_forced_text_break(text: &str) -> bool {
-    text.chars()
-        .any(|ch| matches!(ch, '\n' | '\r' | '\u{2028}'))
 }
 
 fn split_static_text_lines(text: &str) -> Vec<StaticTextLine<'_>> {

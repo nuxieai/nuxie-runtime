@@ -8,6 +8,7 @@ use rive_graph::{
     ArtboardGraph, DataBindNode, ShapePaintContainerNode, ShapePaintKind, ShapePaintPathKind,
     ShapePaintStateNode,
 };
+use rive_schema::definition_by_name;
 use skrifa::instance::{LocationRef, Size};
 use skrifa::outline::pen::PathStyle;
 use skrifa::outline::{DrawSettings, OutlinePen};
@@ -259,6 +260,22 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
     }
 }
 
+fn static_text_data_bind_property_name(data_bind: &DataBindNode) -> Option<&'static str> {
+    let target_type_name = data_bind.target_type_name?;
+    let property_key = u16::try_from(data_bind.property_key).ok()?;
+    definition_by_name(target_type_name)?
+        .property_by_key_in_hierarchy(property_key)
+        .map(|property| property.name)
+}
+
+fn static_text_data_bind_target_label(data_bind: &DataBindNode) -> String {
+    let target_type_name = data_bind.target_type_name.unwrap_or("unknown");
+    match static_text_data_bind_property_name(data_bind) {
+        Some(property_name) => format!("{target_type_name}.{property_name}"),
+        None => format!("{target_type_name} property {}", data_bind.property_key),
+    }
+}
+
 impl StaticTextLayoutInfo {
     fn line_start_x(self, line_width: f32) -> f32 {
         match self.align_value {
@@ -290,7 +307,7 @@ impl<'a> StaticTextSlice<'a> {
         {
             bail!(
                 "static text subset does not support data binding target {} global {}",
-                data_bind.target_type_name.unwrap_or("unknown"),
+                static_text_data_bind_target_label(data_bind),
                 data_bind.target_global.unwrap_or(0)
             );
         }

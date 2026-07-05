@@ -153,9 +153,18 @@ fn run() -> Result<String> {
 fn unsupported_static_text_draw_error(error: anyhow::Error) -> anyhow::Error {
     let message = format!("{error:#}");
     if message.contains("static text subset") {
-        anyhow!("unsupported: text in Rust golden runner ({message})")
+        let feature = unsupported_static_text_feature(&message);
+        anyhow!("unsupported: {feature} in Rust golden runner ({message})")
     } else {
         error
+    }
+}
+
+fn unsupported_static_text_feature(message: &str) -> &'static str {
+    if message.contains("verticalTrim") {
+        "text-vertical-trim"
+    } else {
+        "text"
     }
 }
 
@@ -753,8 +762,9 @@ fn ensure_static_draw_supported_for_artboard(
                 .map(|reason| (object, reason))
         })
     {
+        let feature = unsupported_static_text_feature(&reason);
         bail!(
-            "unsupported: text in Rust golden runner (global {}, {reason})",
+            "unsupported: {feature} in Rust golden runner (global {}, {reason})",
             text.global_id
         );
     }

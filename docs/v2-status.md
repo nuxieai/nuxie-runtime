@@ -23,12 +23,12 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Probe `text_vertical_trim_test.riv` as the next
+1. Probe `transition_duration_bind_nested.riv` as the remaining
    `rust-runner-unsupported:text` M6 gate: direct Rust currently stops on a
-   static-text data-binding target `Text` global 41 for property keys
-   1027/1028. Compare the target properties against C++ import/draw behavior,
-   admit only if they are finite import-time/static draw facts, then fix or
-   retag the first real blocker.
+   nested child data bind global 143 targeting `TextValueRun.text` through
+   converter global 3 (`DataConverterToNumber`). Decide whether that nested
+   bind belongs in the already-supported static text path or needs a sharper
+   nested-text/runtime diagnostic.
 2. Keep `data_bind_test_cmdq.riv`, `data_binding_test.riv`,
    `data_converter_to_number.riv`, `scripted_data_context.riv`,
    `state_transition_fire_trigger.riv`, and `trigger_based_listeners.riv`
@@ -47,8 +47,11 @@ the only memory the next session has. Update it every commit.
    `TextFollowPathModifier`: after admitting source-to-target `Text.width`
    binds with no converter or `DataConverterFormula`, direct Rust now stops on
    data-binding target `TextFollowPathModifier` global 168.
-6. Keep richer vertical trim behavior parked behind the top queue item until
-   its `Text` property data binds are classified.
+6. Keep `text_vertical_trim_test.riv` parked behind `text-vertical-trim`:
+   property keys 1027/1028 are `Text.verticalTrimTopValue` /
+   `Text.verticalTrimBottomValue` bitmask passthroughs into
+   `verticalTrimValue`, and C++ applies them in `Text::computeVerticalTrim`
+   to rendered/measured text bounds.
 7. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
@@ -933,3 +936,15 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=102`, `not-yet=0`, and parked
   `M6=58 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
   `text_vertical_trim_test.riv`.
+- 2026-07-05: [M6] Reclassified `text_vertical_trim_test.riv` as
+  `rust-runner-unsupported:text-vertical-trim` after confirming property keys
+  1027/1028 are `Text.verticalTrimTopValue` /
+  `Text.verticalTrimBottomValue`, bitmask passthroughs into
+  `verticalTrimValue`. C++ applies them in `src/text/text.cpp` through
+  `Text::computeVerticalTrim` to the rendered/measured text bounds, so this is
+  a real text-layout port rather than a finite static admission. Direct Rust
+  now reports `unsupported: text-vertical-trim`; `make golden-compare` remains
+  `exact=178`, `exact-segments=499`, `diverges=15`,
+  `unsupported-feature=102`, `not-yet=0`, and parked
+  `M6=58 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
+  `transition_duration_bind_nested.riv`.

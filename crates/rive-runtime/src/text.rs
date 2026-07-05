@@ -153,7 +153,6 @@ struct StaticTextStyleMetricSignature {
     font_asset_id: u64,
     font_size_bits: u32,
     letter_spacing_bits: u32,
-    variations: Vec<(u32, u32)>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -484,10 +483,21 @@ impl<'a> StaticTextSlice<'a> {
             scale,
             letter_spacing,
         )?;
-        let layout_info =
-            self.static_layout_info(runtime, instance, &lines, line_height, apply_ellipsis)?;
+        let measured_width = lines
+            .iter()
+            .map(|line| self.styled_line_width(runtime, instance, font_bytes, line, &resolved_runs))
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .fold(0.0f32, f32::max);
+        let layout_info = self.static_layout_info(
+            runtime,
+            instance,
+            &lines,
+            line_height,
+            measured_width,
+            apply_ellipsis,
+        )?;
         let mut commands_by_style = vec![Vec::new(); self.styles.len()];
-        let style_by_character = self.style_by_character(&text, &resolved_runs)?;
         let modifier_coverages = self
             .modifiers
             .iter()
@@ -504,21 +514,31 @@ impl<'a> StaticTextSlice<'a> {
             if line.text.is_empty() {
                 continue;
             }
-            let mut glyphs = shape_text_glyphs(&shaper, line.text, disable_legacy_kern);
+            let mut glyphs =
+                self.styled_line_glyphs(runtime, instance, font_bytes, &line, &resolved_runs)?;
             if layout_info.ellipsis_line == Some(line.line_index) {
                 let max_width = self.text_width(runtime, instance)?;
-                let ellipsis = shape_text_glyphs(&shaper, "...", disable_legacy_kern);
+                let ellipsis_style = glyphs.last().map(|glyph| glyph.style_index).unwrap_or(0);
+                let ellipsis = self.styled_text_glyphs_for_style(
+                    runtime,
+                    instance,
+                    font_bytes,
+                    "...",
+                    line.char_start + line.text.chars().count(),
+                    ellipsis_style,
+                )?;
+                let base_glyphs = shape_text_glyphs(&shaper, line.text, disable_legacy_kern);
                 let line_end = self.first_static_wrapped_line_end(
                     runtime,
                     instance,
                     line.text,
-                    &glyphs,
+                    &base_glyphs,
                     max_width,
                     scale,
                     letter_spacing,
                 )?;
                 let mut force_ellipsis = !layout_info.is_ellipsis_line_last;
-                if line_end < glyphs.len()
+                if line_end < base_glyphs.len()
                     && self.static_fixed_height_shows_first_line_only(
                         runtime,
                         instance,
@@ -528,26 +548,16 @@ impl<'a> StaticTextSlice<'a> {
                     glyphs.truncate(line_end);
                     force_ellipsis = true;
                 }
-                apply_static_ellipsis(
-                    &mut glyphs,
-                    ellipsis,
-                    max_width,
-                    scale,
-                    letter_spacing,
-                    force_ellipsis,
-                );
+                apply_static_ellipsis(&mut glyphs, ellipsis, max_width, force_ellipsis);
             }
 
             let mut cursor_x = 0.0f32;
             let line_baseline = baseline + line.line_index as f32 * line_height;
-            for (glyph_index, glyph) in glyphs.iter().enumerate() {
-                let char_index =
-                    line.char_start + character_index_for_cluster(line.text, glyph.cluster);
-                let char_len = glyph_character_len(line.text, &glyphs, glyph_index);
+            for glyph in &glyphs {
                 let mut glyph_transform = Mat2D::IDENTITY;
                 let mut glyph_opacity = 1.0;
                 for (modifier, coverage) in self.modifiers.iter().zip(&modifier_coverages) {
-                    let amount = glyph_coverage(coverage, char_index, char_len);
+                    let amount = glyph_coverage(coverage, glyph.char_index, glyph.char_len);
                     if amount != 0.0 {
                         glyph_transform = modifier
                             .transform(runtime, instance, amount)?
@@ -560,12 +570,23 @@ impl<'a> StaticTextSlice<'a> {
                 }
                 let glyph_id = GlyphId::new(glyph.glyph_id);
                 if let Some(outline) = outlines.get(glyph_id) {
-                    let advance = glyph.advance * scale + letter_spacing;
+                    let style = &self.styles[glyph.style_index];
+                    let skrifa_variations = style
+                        .variations
+                        .iter()
+                        .map(|(tag, value)| {
+                            VariationSetting::new(SkrifaTag::from_u32(*tag), *value)
+                        })
+                        .collect::<Vec<_>>();
+                    let location = skrifa_font
+                        .axes()
+                        .location(skrifa_variations.iter().copied());
+                    let location_ref = LocationRef::from(&location);
                     let mut pen = TextOutlinePen::new(
                         cursor_x,
                         line_baseline,
-                        scale,
-                        cursor_x + advance * 0.5,
+                        glyph.scale,
+                        cursor_x + glyph.advance * 0.5,
                         line_baseline,
                         glyph_transform,
                     );
@@ -575,14 +596,13 @@ impl<'a> StaticTextSlice<'a> {
                     outline
                         .draw(draw_settings, &mut pen)
                         .with_context(|| format!("failed to draw glyph {}", glyph.glyph_id))?;
-                    let style_index = style_by_character.get(char_index).copied().unwrap_or(0);
                     append_opacity_bucket(
-                        &mut commands_by_style[style_index],
+                        &mut commands_by_style[glyph.style_index],
                         glyph_opacity,
                         pen.commands,
                     );
                 }
-                cursor_x += glyph.advance * scale + letter_spacing;
+                cursor_x += glyph.advance;
             }
         }
 
@@ -739,10 +759,19 @@ impl<'a> StaticTextSlice<'a> {
     }
 
     fn letter_spacing(&self, runtime: &RuntimeFile, instance: &ArtboardInstance) -> f32 {
-        let Some(property_key) = property_key_for_name("TextStyle", "letterSpacing") else {
+        let Ok(style) = self.base_style() else {
             return 0.0;
         };
-        let Ok(style) = self.base_style() else {
+        self.style_letter_spacing(runtime, instance, style)
+    }
+
+    fn style_letter_spacing(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        style: &StaticTextStyle<'_>,
+    ) -> f32 {
+        let Some(property_key) = property_key_for_name("TextStyle", "letterSpacing") else {
             return 0.0;
         };
         instance
@@ -753,6 +782,89 @@ impl<'a> StaticTextSlice<'a> {
                     .and_then(|object| object.double_property("letterSpacing"))
             })
             .unwrap_or(0.0)
+    }
+
+    fn styled_line_glyphs(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        font_bytes: &[u8],
+        line: &StaticTextLine<'_>,
+        runs: &[StaticResolvedRun],
+    ) -> Result<Vec<StyledTextGlyph>> {
+        let line_start = line.char_start;
+        let line_end = line_start + line.text.chars().count();
+        let mut glyphs = Vec::new();
+        for run in runs {
+            let run_start = run.char_start;
+            let run_end = run.char_start + run.char_len;
+            let segment_start = line_start.max(run_start);
+            let segment_end = line_end.min(run_end);
+            if segment_start >= segment_end {
+                continue;
+            }
+            let style_index = self.style_index_for_local(run.style_local)?;
+            let segment_text = char_slice(
+                line.text,
+                segment_start - line_start,
+                segment_end - line_start,
+            );
+            glyphs.extend(self.styled_text_glyphs_for_style(
+                runtime,
+                instance,
+                font_bytes,
+                segment_text,
+                segment_start,
+                style_index,
+            )?);
+        }
+        Ok(glyphs)
+    }
+
+    fn styled_line_width(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        font_bytes: &[u8],
+        line: &StaticTextLine<'_>,
+        runs: &[StaticResolvedRun],
+    ) -> Result<f32> {
+        Ok(self
+            .styled_line_glyphs(runtime, instance, font_bytes, line, runs)?
+            .iter()
+            .map(|glyph| glyph.advance)
+            .sum())
+    }
+
+    fn styled_text_glyphs_for_style(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        font_bytes: &[u8],
+        text: &str,
+        char_start: usize,
+        style_index: usize,
+    ) -> Result<Vec<StyledTextGlyph>> {
+        let style = self
+            .styles
+            .get(style_index)
+            .with_context(|| format!("missing TextStylePaint index {style_index}"))?;
+        let font_size = self.style_font_size(runtime, instance, style)?;
+        let scale = font_size / TEXT_SHAPE_SCALE_F32;
+        let letter_spacing = self.style_letter_spacing(runtime, instance, style);
+        let raw_glyphs = shape_text_glyphs_for_style(font_bytes, style, text)?;
+        Ok(raw_glyphs
+            .iter()
+            .enumerate()
+            .map(|(glyph_index, glyph)| StyledTextGlyph {
+                glyph_id: glyph.glyph_id,
+                char_index: char_start + character_index_for_cluster(text, glyph.cluster),
+                char_len: glyph_character_len(text, &raw_glyphs, glyph_index),
+                style_index,
+                advance: glyph.advance * scale + letter_spacing,
+                scale,
+            })
+            .collect())
     }
 
     fn base_style(&self) -> Result<&StaticTextStyle<'a>> {
@@ -962,12 +1074,13 @@ impl<'a> StaticTextSlice<'a> {
         instance: &ArtboardInstance,
         lines: &[StaticTextLine<'_>],
         line_height: f32,
+        measured_width: f32,
         apply_ellipsis: bool,
     ) -> Result<StaticTextLayoutInfo> {
         let sizing = self.text_uint_property(runtime, instance, "sizingValue")?;
         let bounds_width = match sizing {
             1 | 2 => self.text_width(runtime, instance)?,
-            _ => 0.0,
+            _ => measured_width,
         };
         let bounds_height = match sizing {
             2 => self.text_height(runtime, instance)?,
@@ -1018,19 +1131,6 @@ impl<'a> StaticTextSlice<'a> {
             x_offset: -bounds_width * origin_x,
             y_offset,
         })
-    }
-
-    fn style_by_character(&self, text: &str, runs: &[StaticResolvedRun]) -> Result<Vec<usize>> {
-        let mut style_by_character = vec![0; text.chars().count()];
-        for run in runs {
-            let style_index = self.style_index_for_local(run.style_local)?;
-            let end = run.char_start + run.char_len;
-            if end > style_by_character.len() {
-                bail!("TextValueRun character range extends past text length");
-            }
-            style_by_character[run.char_start..end].fill(style_index);
-        }
-        Ok(style_by_character)
     }
 
     fn style_index_for_local(&self, style_local: usize) -> Result<usize> {
@@ -1180,16 +1280,10 @@ impl StaticTextStyleMetricSignature {
             .double_property("letterSpacing")
             .unwrap_or(0.0)
             .to_bits();
-        let variations = style
-            .variations
-            .iter()
-            .map(|(tag, value)| (*tag, value.to_bits()))
-            .collect();
         Ok(Self {
             font_asset_id,
             font_size_bits,
             letter_spacing_bits,
-            variations,
         })
     }
 }
@@ -1785,6 +1879,19 @@ fn character_index_for_cluster(text: &str, cluster: u32) -> usize {
         .saturating_sub(1)
 }
 
+fn char_slice(text: &str, start: usize, end: usize) -> &str {
+    let start_byte = char_byte_index(text, start);
+    let end_byte = char_byte_index(text, end);
+    &text[start_byte..end_byte]
+}
+
+fn char_byte_index(text: &str, char_index: usize) -> usize {
+    text.char_indices()
+        .nth(char_index)
+        .map(|(byte_index, _)| byte_index)
+        .unwrap_or(text.len())
+}
+
 fn glyph_character_len(text: &str, glyphs: &[TextGlyph], glyph_index: usize) -> usize {
     let char_index = character_index_for_cluster(text, glyphs[glyph_index].cluster);
     let next_char_index = glyphs
@@ -2066,6 +2173,16 @@ struct TextGlyph {
     advance: f32,
 }
 
+#[derive(Clone)]
+struct StyledTextGlyph {
+    glyph_id: u32,
+    char_index: usize,
+    char_len: usize,
+    style_index: usize,
+    advance: f32,
+    scale: f32,
+}
+
 fn harfbuzz_line_metrics(font: &SkrifaFontRef<'_>, location_ref: LocationRef<'_>) -> (f32, f32) {
     // Mirrors src/text/font_hb.cpp::make_lmx: HarfBuzz scales extents to
     // kStdScale and rounds them before Rive applies the authored font size.
@@ -2104,6 +2221,38 @@ fn shape_text_glyphs(
             advance: position.x_advance as f32,
         })
         .collect()
+}
+
+fn shape_text_glyphs_for_style(
+    font_bytes: &[u8],
+    style: &StaticTextStyle<'_>,
+    text: &str,
+) -> Result<Vec<TextGlyph>> {
+    let harf_font = HarfFontRef::new(font_bytes).context("failed to parse font for shaping")?;
+    let harf_variations = style
+        .variations
+        .iter()
+        .map(|(tag, value)| (HarfTag::from_u32(*tag), *value))
+        .collect::<Vec<_>>();
+    let shaper_instance = if harf_variations.is_empty() {
+        None
+    } else {
+        Some(ShaperInstance::from_variations(
+            &harf_font,
+            harf_variations.iter().copied(),
+        ))
+    };
+    let shaper_data = ShaperData::new(&harf_font);
+    let shaper = shaper_data
+        .shaper(&harf_font)
+        .instance(shaper_instance.as_ref())
+        .build();
+    let skrifa_font = SkrifaFontRef::new(font_bytes).context("failed to parse font for shaping")?;
+    Ok(shape_text_glyphs(
+        &shaper,
+        text,
+        disable_legacy_kern_for_advances(&skrifa_font),
+    ))
 }
 
 trait StaticTextWords {
@@ -2155,24 +2304,20 @@ fn first_fitting_glyph_end(
 }
 
 fn apply_static_ellipsis(
-    glyphs: &mut Vec<TextGlyph>,
-    ellipsis: Vec<TextGlyph>,
+    glyphs: &mut Vec<StyledTextGlyph>,
+    ellipsis: Vec<StyledTextGlyph>,
     max_width: f32,
-    scale: f32,
-    letter_spacing: f32,
     force: bool,
 ) {
-    let advance_width = |glyph: &TextGlyph| glyph.advance * scale + letter_spacing;
-    let ellipsis_width = ellipsis.iter().map(advance_width).sum::<f32>();
+    let ellipsis_width = ellipsis.iter().map(|glyph| glyph.advance).sum::<f32>();
     let mut width = 0.0;
     let mut keep = glyphs.len();
     for (index, glyph) in glyphs.iter().enumerate() {
-        let advance = advance_width(glyph);
-        if width + advance + ellipsis_width > max_width {
+        if width + glyph.advance + ellipsis_width > max_width {
             keep = index;
             break;
         }
-        width += advance;
+        width += glyph.advance;
     }
     if keep < glyphs.len() {
         glyphs.truncate(keep);

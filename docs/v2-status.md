@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 463 across 142 exact files
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=110 gated=7 harness=36
+- Exact segments (file × sample): 464 across 143 exact files
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=109 gated=7 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -22,26 +22,23 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Start `text_listener_simpler.riv`: among the remaining M6 text-only queue,
-   the smaller manifest entries probe as nested-artboard sibling
-   (`runtime_nested_text_runs.riv`) or text data-binding
-   (`zero_width_space_line_break.riv`, `word_joiner_test.riv`,
-   `format_number_with_commas.riv`) blockers. `text_listener_simpler.riv`
-   reaches the narrow static gate `matching TextStylePaint metrics for
-   no-break multi-run text`.
+1. Start `new_text.riv`: after `text_listener_simpler.riv`, the smaller M6
+   text-only entries still probe as nested-artboard sibling, text data-binding,
+   nested child data-binding, follow-path, or layout blockers. `new_text.riv`
+   is now the first text queue entry that reaches a non-data sibling gate:
+   `static text subset does not support sibling LinearGradient global 34`.
+   Keep the slice to gradient/sibling admission and stop at the next concrete
+   gate or divergence.
 2. Keep follow-path text files parked behind `TextFollowPathModifier` and text
    data-binding blockers; `text_follow_path_shape_length.riv` currently fails
    first on text data binding before it reaches follow-path drawing.
 3. Keep `text_vertical_trim_test.riv` parked behind text data binding; it
    currently fails first on `static text subset does not support text data
    binding`.
-4. Keep `new_text.riv` parked for now: it has five
-   `Text` objects, multiple runs/styles, gradients/strokes, clipping, and text
-   keyframes, so it is not the next narrow static tracer.
-5. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
+4. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
-6. Remaining exact entries pinned to sample `0` are static M1 holdovers:
+5. Remaining exact entries pinned to sample `0` are static M1 holdovers:
    `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
    them during M6 unless a related refactor needs a cheap draw-regression check.
 
@@ -126,8 +123,9 @@ the only memory the next session has. Update it every commit.
 - Static text support currently covers one style or matching-metric
   multi-style text, static authored-line-break and no-break multi-run text,
   fixed-size ellipsis across multiple authored lines with bottom/middle
-  vertical alignment, and translation/rotation/opacity `TextModifierGroup`
-  over C++-style
+  vertical alignment, variation-aware no-break multi-run style outlines,
+  auto-width origin offsets, and translation/rotation/opacity
+  `TextModifierGroup` over C++-style
   `TextModifierRange` character, character-excluding-space, word, and static
   line range maps with runId targeting and optional cubic range
   interpolation, including C++-ordered opacity buckets, plus solid fill/stroke
@@ -391,3 +389,9 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=153`, and parked `M6=110 gated=7 harness=36`; next
   reopen `text_listener_simpler.riv`, which now fails first on mismatched
   no-break multi-run `TextStylePaint` metrics.
+- 2026-07-04: [M6] Promoted `text_listener_simpler.riv` by shaping static
+  no-break text per `TextValueRun` style/variation, using measured auto-width
+  for C++-style origin offsets, and preserving per-style paint buckets. `make
+  golden-compare` moved to `exact=143`, `exact-segments=464`,
+  `unsupported-feature=152`, and parked `M6=109 gated=7 harness=36`; next
+  reopen `new_text.riv`, which now fails first on sibling `LinearGradient`.

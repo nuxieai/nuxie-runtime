@@ -9747,7 +9747,9 @@ fn cpp_format_number_to_string(value: f32, flags: u64, decimals: u64) -> Vec<u8>
     const TRAILING_ZEROS: u64 = 1 << 1;
     const FORMAT_WITH_COMMAS: u64 = 1 << 2;
 
-    let mut value = if flags & ROUND != 0 {
+    let mut value = if value.is_nan() {
+        "nan".to_owned()
+    } else if flags & ROUND != 0 {
         format!("{:.*}", decimals as usize, value)
     } else {
         format!("{value:.6}")

@@ -54,6 +54,20 @@ pub(crate) fn static_text_constraint_bounds(
         .flatten()
 }
 
+pub(crate) fn static_text_layout_measure_bounds(
+    runtime: &RuntimeFile,
+    graph: &ArtboardGraph,
+    instance: &ArtboardInstance,
+    text_local: usize,
+    layout_constraint: RuntimeTextLayoutConstraint,
+) -> Option<(f32, f32, f32, f32)> {
+    StaticTextSlice::from_graph(runtime, graph, text_local)
+        .ok()?
+        .local_bounds_with_layout_constraint(runtime, instance, layout_constraint)
+        .ok()
+        .flatten()
+}
+
 pub(crate) fn runtime_text_shape_paint_commands(
     runtime: &RuntimeFile,
     instance: &ArtboardInstance,
@@ -854,6 +868,105 @@ impl<'a> StaticTextSlice<'a> {
         let origin_y = self.text_double_property(runtime, instance, "originY", 0.0)?;
 
         Ok(Some((-width * origin_x, -height * origin_y, width, height)))
+    }
+
+    fn local_bounds_with_layout_constraint(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        layout_constraint: RuntimeTextLayoutConstraint,
+    ) -> Result<Option<(f32, f32, f32, f32)>> {
+        let resolved_runs = self.resolved_runs(runtime, instance)?;
+        let text = resolved_runs
+            .iter()
+            .map(|run| run.text.as_str())
+            .collect::<String>();
+        let base_style = self.base_style()?;
+        let font_size = self.style_font_size(runtime, instance, base_style)?;
+        if text.is_empty() || font_size <= 0.0 {
+            return Ok(Some((0.0, 0.0, 0.0, 0.0)));
+        }
+        let Some(font_bytes) = base_style.font_bytes else {
+            return Ok(Some((0.0, 0.0, 0.0, 0.0)));
+        };
+
+        let harf_font = HarfFontRef::new(font_bytes).context("failed to parse font for shaping")?;
+        let harf_variations = self
+            .base_style()?
+            .variations
+            .iter()
+            .map(|(tag, value)| (HarfTag::from_u32(*tag), *value))
+            .collect::<Vec<_>>();
+        let shaper_instance = if harf_variations.is_empty() {
+            None
+        } else {
+            Some(ShaperInstance::from_variations(
+                &harf_font,
+                harf_variations.iter().copied(),
+            ))
+        };
+        let shaper_data = ShaperData::new(&harf_font);
+        let shaper = shaper_data
+            .shaper(&harf_font)
+            .instance(shaper_instance.as_ref())
+            .build();
+
+        let skrifa_font =
+            SkrifaFontRef::new(font_bytes).context("failed to parse font for metrics")?;
+        let disable_legacy_kern = disable_legacy_kern_for_advances(&skrifa_font);
+        let skrifa_variations = self
+            .base_style()?
+            .variations
+            .iter()
+            .map(|(tag, value)| VariationSetting::new(SkrifaTag::from_u32(*tag), *value))
+            .collect::<Vec<_>>();
+        let location = skrifa_font
+            .axes()
+            .location(skrifa_variations.iter().copied());
+        let location_ref = LocationRef::from(&location);
+        let (ascent, descent) = harfbuzz_line_metrics(&skrifa_font, location_ref);
+        let (_baseline, line_height) = self
+            .max_static_line_metrics(runtime, instance)?
+            .unwrap_or_else(|| {
+                (
+                    ascent * font_size / TEXT_SHAPE_SCALE_F32,
+                    (ascent - descent) * font_size / TEXT_SHAPE_SCALE_F32,
+                )
+            });
+        let scale = font_size / TEXT_SHAPE_SCALE_F32;
+        let letter_spacing = self.letter_spacing(runtime, instance);
+        let lines = self.layout_static_text_lines(
+            runtime,
+            instance,
+            Some(layout_constraint),
+            &text,
+            &shaper,
+            disable_legacy_kern,
+            scale,
+            letter_spacing,
+        )?;
+        let measured_width = lines
+            .iter()
+            .map(|line| self.styled_line_width(runtime, instance, line, &resolved_runs))
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .fold(0.0f32, f32::max);
+        let sizing = self.text_uint_property(runtime, instance, "sizingValue")?;
+        let width = match sizing {
+            TEXT_SIZING_AUTO_HEIGHT | TEXT_SIZING_FIXED => self.text_width(runtime, instance)?,
+            _ => measured_width,
+        };
+        let measured_height = line_height * lines.len().max(1) as f32;
+        let height = match sizing {
+            TEXT_SIZING_FIXED => self.text_height(runtime, instance)?,
+            _ => measured_height,
+        };
+        Ok(Some((
+            0.0,
+            0.0,
+            width.min(layout_constraint.width),
+            height.min(layout_constraint.height),
+        )))
     }
 
     fn text_value(&self, runtime: &RuntimeFile, instance: &ArtboardInstance) -> Result<String> {

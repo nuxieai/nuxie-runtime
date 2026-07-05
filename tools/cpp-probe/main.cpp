@@ -183,6 +183,7 @@ size_t randomProviderTotalCalls();
 #include "rive/generated/event_base.hpp"
 #include "rive/math/path_types.hpp"
 #include "rive/math/raw_path.hpp"
+#include "rive/scene.hpp"
 #include "rive/component.hpp"
 #include "rive/layout_component.hpp"
 #include "rive/layout/axis.hpp"
@@ -213,6 +214,7 @@ size_t randomProviderTotalCalls();
 #include "rive/shapes/paint/trim_path.hpp"
 #include "rive/shapes/points_path.hpp"
 #include "rive/shapes/shape.hpp"
+#include "rive/static_scene.hpp"
 #include "rive/text/text_input_cursor.hpp"
 #include "rive/text/text_input_selected_text.hpp"
 #include "rive/text/text_input_selection.hpp"
@@ -641,6 +643,9 @@ struct ProbeOptions
     bool advanceArtboards = true;
     bool runtimeUpdate = false;
     bool instanceArtboards = false;
+    bool runtimeGoldenSceneAdvance = false;
+    float runtimeGoldenSceneSeconds = 0.0f;
+    bool runtimeLayoutBounds = false;
     bool runtimeBindDefaultViewModelArtboardContext = false;
     bool runtimeUpdateArtboardDataBinds = false;
     bool runtimeAdvanceArtboardAfterBind = false;
@@ -767,6 +772,14 @@ void write_mat2d(std::ostream& out, const rive::Mat2D& transform)
         out << transform[i];
     }
     out << ']';
+}
+
+void write_aabb(std::ostream& out, const rive::AABB& bounds)
+{
+    out << "{\"x\":" << bounds.left();
+    out << ",\"y\":" << bounds.top();
+    out << ",\"width\":" << bounds.width();
+    out << ",\"height\":" << bounds.height() << '}';
 }
 
 void write_world_transform(std::ostream& out,
@@ -934,6 +947,98 @@ void write_runtime_update(std::ostream& out,
             out, localIds, object->as<rive::Component>());
     }
     out << "]}";
+}
+
+void write_runtime_layout_bounds(std::ostream& out,
+                                 const LocalIds& localIds,
+                                 const std::vector<rive::Core*>& objects)
+{
+    out << '[';
+    bool first = true;
+    for (auto* object : objects)
+    {
+        if (object == nullptr || !object->is<rive::LayoutComponent>())
+        {
+            continue;
+        }
+        auto layout = object->as<rive::LayoutComponent>();
+        auto itr = localIds.find(object);
+        if (itr == localIds.end())
+        {
+            continue;
+        }
+
+        if (!first)
+        {
+            out << ',';
+        }
+        first = false;
+
+        out << "{\"localId\":" << itr->second;
+        out << ",\"coreType\":" << layout->coreType();
+        out << ",\"typeName\":";
+        write_json_string(out,
+                          layout->is<rive::Artboard>() ? "Artboard"
+                                                       : "LayoutComponent");
+        out << ",\"name\":";
+        write_json_string(out, layout->name());
+        out << ",\"parentLocal\":";
+        write_local_id_or_null(out, localIds, layout->parent());
+        out << ",\"collapsed\":"
+            << (layout->isCollapsed() ? "true" : "false");
+        out << ",\"x\":" << layout->layoutX();
+        out << ",\"y\":" << layout->layoutY();
+        out << ",\"width\":" << layout->layoutWidth();
+        out << ",\"height\":" << layout->layoutHeight();
+        out << ",\"innerWidth\":" << layout->innerWidth();
+        out << ",\"innerHeight\":" << layout->innerHeight();
+        out << ",\"paddingLeft\":" << layout->paddingLeft();
+        out << ",\"paddingTop\":" << layout->paddingTop();
+        out << ",\"paddingRight\":" << layout->paddingRight();
+        out << ",\"paddingBottom\":" << layout->paddingBottom();
+        out << ",\"worldTransform\":";
+        if (layout->is<rive::WorldTransformComponent>())
+        {
+            write_world_transform(
+                out, layout->as<rive::WorldTransformComponent>());
+        }
+        else
+        {
+            out << "null";
+        }
+        out << ",\"worldBounds\":";
+        write_aabb(out, layout->worldBounds());
+        out << '}';
+    }
+    out << ']';
+}
+
+void apply_runtime_golden_scene_advance(rive::File* file,
+                                        rive::ArtboardInstance* artboard,
+                                        const ProbeOptions& options)
+{
+    if (!options.runtimeGoldenSceneAdvance || artboard == nullptr)
+    {
+        return;
+    }
+
+    auto viewModelInstance =
+        file == nullptr ? nullptr : file->createViewModelInstance(artboard);
+    if (viewModelInstance != nullptr)
+    {
+        artboard->bindViewModelInstance(viewModelInstance);
+    }
+
+    std::unique_ptr<rive::Scene> scene = artboard->defaultStateMachine();
+    if (scene == nullptr)
+    {
+        scene = std::make_unique<rive::StaticScene>(artboard);
+    }
+    if (viewModelInstance != nullptr)
+    {
+        scene->bindViewModelInstance(viewModelInstance);
+    }
+    scene->advanceAndApply(options.runtimeGoldenSceneSeconds);
 }
 
 void apply_runtime_double_mutations(const std::vector<rive::Core*>& objects,
@@ -11185,6 +11290,7 @@ void write_artboard(std::ostream& out,
     {
         artboard->advance(0.0f);
     }
+    apply_runtime_golden_scene_advance(file, instanceArtboard, options);
     apply_runtime_animation_applications(instanceArtboard, options);
     auto runtimeAnimationAdvanceReports =
         apply_runtime_animation_advances(instanceArtboard, objects, options);
@@ -11227,6 +11333,11 @@ void write_artboard(std::ostream& out,
         out << ",\"runtimeUpdate\":";
         write_runtime_update(
             out, localIds, objects, runtimeUpdateDidUpdate, artboard);
+    }
+    if (options.runtimeLayoutBounds)
+    {
+        out << ",\"runtimeLayoutBounds\":";
+        write_runtime_layout_bounds(out, localIds, objects);
     }
     if (!options.runtimeAnimationAdvances.empty())
     {
@@ -12712,6 +12823,25 @@ int main(int argc, const char* argv[])
         if (is_arg(argv[i], "--runtime-update"))
         {
             options.runtimeUpdate = true;
+            continue;
+        }
+
+        if (is_arg(argv[i], "--runtime-layout-bounds"))
+        {
+            options.runtimeLayoutBounds = true;
+            continue;
+        }
+
+        if (is_arg(argv[i], "--runtime-golden-scene-advance"))
+        {
+            if (i + 1 >= argc)
+            {
+                std::cerr << "--runtime-golden-scene-advance requires seconds\n";
+                return 2;
+            }
+            options.runtimeGoldenSceneAdvance = true;
+            options.instanceArtboards = true;
+            options.runtimeGoldenSceneSeconds = std::strtof(argv[++i], nullptr);
             continue;
         }
 
@@ -15763,7 +15893,7 @@ int main(int argc, const char* argv[])
 
     if (filename == nullptr)
     {
-        std::cerr << "usage: rive_cpp_probe [--converter-samples] [--number-to-list-samples] [--property-values] [--file-property-values] [--no-advance] [--runtime-update] [--instance-artboards] [--runtime-bind-default-view-model-artboard-context] [--runtime-update-artboard-data-binds] [--runtime-advance-artboard-after-bind] [--runtime-set-double localId propertyKey value] [--runtime-collapse-component localId value] [--runtime-set-artboard-size width height] [--runtime-apply-animation animationIndex seconds mix] [--runtime-advance-animation animationIndex seconds mix] [--runtime-advance-state-machine stateMachineIndex seconds] [--runtime-advance-state-machine-data-context stateMachineIndex] [--runtime-update-state-machine-data-binds stateMachineIndex] [--runtime-set-state-machine-bool stateMachineIndex inputIndex value] [--runtime-set-state-machine-number stateMachineIndex inputIndex value] [--runtime-set-state-machine-bindable-number stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-bool stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-integer stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-color stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-string stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-enum stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-asset stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-artboard stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-list stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-viewmodel stateMachineIndex dataBindIndex referencedInstanceIndex] [--runtime-set-default-view-model-source-number stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-bool stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-string stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-color stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-enum stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-asset stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-artboard stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-trigger stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-list stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-viewmodel stateMachineIndex dataBindIndex value] [--runtime-bind-empty-state-machine-context stateMachineIndex] [--runtime-bind-default-view-model-state-machine-context stateMachineIndex] [--runtime-bind-view-model-instance-state-machine-context stateMachineIndex viewModelIndex instanceIndex] [--runtime-bind-owned-view-model-number-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-bool-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-string-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-color-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-enum-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-asset-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-artboard-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-trigger-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-fire-state-machine-trigger stateMachineIndex inputIndex] [--complete-view-model-properties] [--data-context-lookups] --file "
+        std::cerr << "usage: rive_cpp_probe [--converter-samples] [--number-to-list-samples] [--property-values] [--file-property-values] [--no-advance] [--runtime-update] [--runtime-layout-bounds] [--runtime-golden-scene-advance seconds] [--instance-artboards] [--runtime-bind-default-view-model-artboard-context] [--runtime-update-artboard-data-binds] [--runtime-advance-artboard-after-bind] [--runtime-set-double localId propertyKey value] [--runtime-collapse-component localId value] [--runtime-set-artboard-size width height] [--runtime-apply-animation animationIndex seconds mix] [--runtime-advance-animation animationIndex seconds mix] [--runtime-advance-state-machine stateMachineIndex seconds] [--runtime-advance-state-machine-data-context stateMachineIndex] [--runtime-update-state-machine-data-binds stateMachineIndex] [--runtime-set-state-machine-bool stateMachineIndex inputIndex value] [--runtime-set-state-machine-number stateMachineIndex inputIndex value] [--runtime-set-state-machine-bindable-number stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-bool stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-integer stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-color stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-string stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-enum stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-asset stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-artboard stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-list stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-viewmodel stateMachineIndex dataBindIndex referencedInstanceIndex] [--runtime-set-default-view-model-source-number stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-bool stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-string stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-color stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-enum stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-asset stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-artboard stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-trigger stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-list stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-viewmodel stateMachineIndex dataBindIndex value] [--runtime-bind-empty-state-machine-context stateMachineIndex] [--runtime-bind-default-view-model-state-machine-context stateMachineIndex] [--runtime-bind-view-model-instance-state-machine-context stateMachineIndex viewModelIndex instanceIndex] [--runtime-bind-owned-view-model-number-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-bool-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-string-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-color-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-enum-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-asset-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-artboard-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-trigger-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-fire-state-machine-trigger stateMachineIndex inputIndex] [--complete-view-model-properties] [--data-context-lookups] --file "
                      "path/to/file.riv\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-viewmodel-state-machine-context stateMachineIndex viewModelIndex propertyIndex value\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-viewmodel-default-state-machine-context stateMachineIndex viewModelIndex propertyIndex\n";

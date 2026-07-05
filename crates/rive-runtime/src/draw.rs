@@ -26,6 +26,7 @@ use crate::properties::{
 };
 use crate::text::{
     RuntimeTextLayoutConstraint, runtime_text_shape_paint_commands, static_text_constraint_bounds,
+    static_text_layout_measure_bounds,
 };
 use crate::{ArtboardInstance, Mat2D};
 
@@ -1018,6 +1019,47 @@ impl ArtboardInstance {
         runtime: Option<&RuntimeFile>,
     ) -> Option<BTreeMap<usize, RuntimeLayoutBounds>> {
         TaffyRuntimeLayoutEngine.compute_bounds(self, graph, runtime)
+    }
+
+    #[doc(hidden)]
+    pub fn debug_taffy_layout_bounds_report(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+    ) -> Option<Vec<RuntimeLayoutBoundsReport>> {
+        let layout_bounds = self.runtime_taffy_layout_bounds(graph, Some(runtime))?;
+        Some(
+            layout_bounds
+                .iter()
+                .filter_map(|(local_id, bounds)| {
+                    let component = self.component(*local_id)?;
+                    let world_transform = self
+                        .runtime_component_world_transform_with_bounds(
+                            *local_id,
+                            graph,
+                            Some(&layout_bounds),
+                        )
+                        .0;
+                    Some(RuntimeLayoutBoundsReport {
+                        local_id: *local_id,
+                        global_id: component.global_id,
+                        type_name: component.type_name,
+                        name: graph
+                            .components
+                            .iter()
+                            .find(|component| component.local_id == *local_id)
+                            .and_then(|component| component.name.clone()),
+                        parent_local: component.parent_local,
+                        collapsed: component.is_collapsed(),
+                        x: bounds.x,
+                        y: bounds.y,
+                        width: bounds.width,
+                        height: bounds.height,
+                        world_transform,
+                    })
+                })
+                .collect(),
+        )
     }
 
     fn runtime_text_layout_constraint(
@@ -2503,6 +2545,22 @@ pub struct RuntimeDrawCommand {
     pub shape_paints: Vec<RuntimeShapePaintCommand>,
 }
 
+#[doc(hidden)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct RuntimeLayoutBoundsReport {
+    pub local_id: usize,
+    pub global_id: u32,
+    pub type_name: &'static str,
+    pub name: Option<String>,
+    pub parent_local: Option<usize>,
+    pub collapsed: bool,
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub world_transform: [f32; 6],
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct RuntimeLayoutBounds {
     x: f32,
@@ -2526,6 +2584,13 @@ struct TaffyRuntimeLayoutEngine;
 struct TaffyLayoutBuild {
     nodes_by_local: BTreeMap<usize, NodeId>,
     children_by_local: BTreeMap<usize, Vec<usize>>,
+}
+
+fn definite_available_space(space: AvailableSpace) -> Option<f32> {
+    match space {
+        AvailableSpace::Definite(value) => Some(value),
+        AvailableSpace::MinContent | AvailableSpace::MaxContent => None,
+    }
 }
 
 impl RuntimeLayoutEngine for TaffyRuntimeLayoutEngine {
@@ -3214,7 +3279,7 @@ impl TaffyRuntimeLayoutEngine {
         graph: &ArtboardGraph,
         layout_local: usize,
         known_dimensions: Size<Option<f32>>,
-        _available_space: Size<AvailableSpace>,
+        available_space: Size<AvailableSpace>,
     ) -> Option<Size<f32>> {
         // Ported from C++ `src/layout_component.cpp`
         // `LayoutComponent::measureLayout`: measure intrinsically sizeable
@@ -3239,9 +3304,33 @@ impl TaffyRuntimeLayoutEngine {
             if child.type_name != "Text" {
                 continue;
             }
-            let Some((_x, _y, width, height)) =
-                static_text_constraint_bounds(runtime, graph, instance, child.local_id)
-            else {
+            let measured_bounds = instance
+                .runtime_layout_component_style_local(layout_local)
+                .and_then(|style_local| {
+                    let layout_constraint = RuntimeTextLayoutConstraint {
+                        width: known_dimensions
+                            .width
+                            .or_else(|| definite_available_space(available_space.width))
+                            .unwrap_or(f32::MAX),
+                        height: known_dimensions
+                            .height
+                            .or_else(|| definite_available_space(available_space.height))
+                            .unwrap_or(f32::MAX),
+                        width_scale_type: instance.runtime_layout_axis_scale(style_local, true),
+                        height_scale_type: instance.runtime_layout_axis_scale(style_local, false),
+                    };
+                    static_text_layout_measure_bounds(
+                        runtime,
+                        graph,
+                        instance,
+                        child.local_id,
+                        layout_constraint,
+                    )
+                })
+                .or_else(|| {
+                    static_text_constraint_bounds(runtime, graph, instance, child.local_id)
+                });
+            let Some((_x, _y, width, height)) = measured_bounds else {
                 continue;
             };
             measured.width = measured.width.max(width);

@@ -28,10 +28,10 @@ pub(crate) use data_bind_graph::{
 };
 pub use draw::{
     RuntimeDrawCommand, RuntimeDrawCommandKind, RuntimeFeatherState, RuntimeGradientStop,
-    RuntimePathCommand, RuntimeRenderPaintCache, RuntimeRenderPathCache, RuntimeShapePaintCommand,
-    RuntimeShapePaintKind, RuntimeShapePaintPathKind, RuntimeShapePaintState,
-    preallocate_render_paint_cache_for_artboard_tree, preallocate_render_paints,
-    preallocate_render_paints_for_artboard_tree,
+    RuntimeLayoutBoundsReport, RuntimePathCommand, RuntimeRenderPaintCache, RuntimeRenderPathCache,
+    RuntimeShapePaintCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind,
+    RuntimeShapePaintState, preallocate_render_paint_cache_for_artboard_tree,
+    preallocate_render_paints, preallocate_render_paints_for_artboard_tree,
 };
 pub use objects::InstanceSlot;
 pub use state_machine::{

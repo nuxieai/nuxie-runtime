@@ -6,11 +6,13 @@ use rive_graph::{
 };
 use rive_render_api::RecordingFactory;
 use rive_runtime::{
-    ArtboardInstance, RuntimeOwnedViewModelInstance, RuntimeRenderPathCache, StateMachineInstance,
-    preallocate_render_paint_cache_for_artboard_tree, static_text_support_error,
+    ArtboardInstance, RuntimeLayoutBoundsReport, RuntimeOwnedViewModelInstance,
+    RuntimeRenderPathCache, StateMachineInstance, preallocate_render_paint_cache_for_artboard_tree,
+    static_text_support_error,
 };
 use std::collections::BTreeSet;
 use std::env;
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 const TIME_EPSILON: f32 = 0.000001;
@@ -40,7 +42,9 @@ fn run() -> Result<String> {
     let runtime = read_runtime_file(&bytes).context("failed to import runtime file")?;
     let graph = GraphFile::from_runtime_file(&runtime).context("failed to build graph")?;
     let (artboard_index, artboard) = select_artboard(&graph, options.artboard.as_deref())?;
-    ensure_static_draw_supported(&runtime, &graph, artboard, !input_events.is_empty())?;
+    if !options.layout_bounds {
+        ensure_static_draw_supported(&runtime, &graph, artboard, !input_events.is_empty())?;
+    }
     let mut instance =
         ArtboardInstance::from_graph_with_artboards(&runtime, artboard, &graph.artboards)
             .context("failed to instantiate artboard")?;
@@ -70,6 +74,21 @@ fn run() -> Result<String> {
         state_machine.advance_data_context();
     }
 
+    let artboard_name = artboard.name.clone().unwrap_or_default();
+    if options.layout_bounds {
+        return write_layout_bounds_report(
+            &options,
+            &runtime,
+            artboard,
+            &artboard_name,
+            &scene.name,
+            &mut instance,
+            &mut state_machine,
+            &mut owned_view_model_context,
+            &input_events,
+        );
+    }
+
     let mut factory = RecordingFactory::new();
     let mut paint_cache = preallocate_render_paint_cache_for_artboard_tree(
         &runtime,
@@ -85,7 +104,6 @@ fn run() -> Result<String> {
         .context("missing selected artboard object")?;
     let width = artboard_object.double_property("width").unwrap_or(0.0);
     let height = artboard_object.double_property("height").unwrap_or(0.0);
-    let artboard_name = artboard.name.clone().unwrap_or_default();
 
     factory.source(&options.file.to_string_lossy(), &artboard_name, &scene.name);
     factory.frame_size(frame_dimension(width), frame_dimension(height));
@@ -148,6 +166,147 @@ fn run() -> Result<String> {
     }
 
     Ok(factory.stream())
+}
+
+fn write_layout_bounds_report(
+    options: &Options,
+    runtime: &RuntimeFile,
+    artboard: &ArtboardGraph,
+    artboard_name: &str,
+    scene_name: &str,
+    instance: &mut ArtboardInstance,
+    state_machine: &mut Option<StateMachineInstance>,
+    owned_view_model_context: &mut Option<RuntimeOwnedViewModelInstance>,
+    input_events: &[InputEvent],
+) -> Result<String> {
+    let mut out = String::new();
+    out.push('{');
+    out.push_str("\"source\":");
+    push_json_string(&mut out, &options.file.to_string_lossy());
+    out.push_str(",\"artboard\":");
+    push_json_string(&mut out, artboard_name);
+    out.push_str(",\"scene\":");
+    push_json_string(&mut out, scene_name);
+    out.push_str(",\"samples\":[");
+
+    let mut current_seconds = 0.0;
+    let mut next_input = 0;
+    for (sample_index, sample) in options.samples.iter().enumerate() {
+        while next_input < input_events.len()
+            && input_events[next_input].seconds <= *sample + TIME_EPSILON
+        {
+            let event = &input_events[next_input];
+            advance_scene_to(
+                instance,
+                state_machine.as_mut(),
+                event.seconds,
+                &mut current_seconds,
+            )?;
+            apply_input_event(
+                event,
+                instance,
+                state_machine.as_mut(),
+                owned_view_model_context.as_mut(),
+            );
+            next_input += 1;
+        }
+
+        advance_scene_to(
+            instance,
+            state_machine.as_mut(),
+            *sample,
+            &mut current_seconds,
+        )?;
+        let reports = instance
+            .debug_taffy_layout_bounds_report(runtime, artboard)
+            .context("failed to compute Taffy layout bounds")?;
+
+        if sample_index != 0 {
+            out.push(',');
+        }
+        out.push_str("{\"sample\":");
+        write!(&mut out, "{sample}")?;
+        out.push_str(",\"layoutBounds\":[");
+        for (report_index, report) in reports.iter().enumerate() {
+            if report_index != 0 {
+                out.push(',');
+            }
+            push_layout_bounds_report(&mut out, report)?;
+        }
+        out.push_str("]}");
+    }
+
+    out.push_str("]}\n");
+    Ok(out)
+}
+
+fn push_layout_bounds_report(out: &mut String, report: &RuntimeLayoutBoundsReport) -> Result<()> {
+    out.push('{');
+    out.push_str("\"localId\":");
+    write!(out, "{}", report.local_id)?;
+    out.push_str(",\"globalId\":");
+    write!(out, "{}", report.global_id)?;
+    out.push_str(",\"typeName\":");
+    push_json_string(out, report.type_name);
+    out.push_str(",\"name\":");
+    if let Some(name) = report.name.as_deref() {
+        push_json_string(out, name);
+    } else {
+        out.push_str("null");
+    }
+    out.push_str(",\"parentLocal\":");
+    if let Some(parent_local) = report.parent_local {
+        write!(out, "{parent_local}")?;
+    } else {
+        out.push_str("null");
+    }
+    out.push_str(",\"collapsed\":");
+    out.push_str(if report.collapsed { "true" } else { "false" });
+    out.push_str(",\"x\":");
+    write!(out, "{}", report.x)?;
+    out.push_str(",\"y\":");
+    write!(out, "{}", report.y)?;
+    out.push_str(",\"width\":");
+    write!(out, "{}", report.width)?;
+    out.push_str(",\"height\":");
+    write!(out, "{}", report.height)?;
+    out.push_str(",\"worldTransform\":[");
+    for (index, value) in report.world_transform.iter().enumerate() {
+        if index != 0 {
+            out.push(',');
+        }
+        write!(out, "{value}")?;
+    }
+    out.push_str("],\"worldBounds\":{\"x\":");
+    write!(out, "{}", report.world_transform[4])?;
+    out.push_str(",\"y\":");
+    write!(out, "{}", report.world_transform[5])?;
+    out.push_str(",\"width\":");
+    write!(out, "{}", report.width)?;
+    out.push_str(",\"height\":");
+    write!(out, "{}", report.height)?;
+    out.push_str("}}");
+    Ok(())
+}
+
+fn push_json_string(out: &mut String, value: &str) {
+    out.push('"');
+    for c in value.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            '\u{08}' => out.push_str("\\b"),
+            '\u{0c}' => out.push_str("\\f"),
+            c if c.is_control() => {
+                let _ = write!(out, "\\u{:04x}", c as u32);
+            }
+            c => out.push(c),
+        }
+    }
+    out.push('"');
 }
 
 fn unsupported_static_text_draw_error(error: anyhow::Error) -> anyhow::Error {
@@ -485,6 +644,7 @@ struct Options {
     state_machine: Option<String>,
     input_script: Option<PathBuf>,
     samples: Vec<f32>,
+    layout_bounds: bool,
 }
 
 impl Options {
@@ -494,6 +654,7 @@ impl Options {
         let mut state_machine = None;
         let mut input_script = None;
         let mut samples = vec![0.0];
+        let mut layout_bounds = false;
 
         let mut index = 0;
         while index < args.len() {
@@ -511,9 +672,10 @@ impl Options {
                 "--state-machine" => state_machine = Some(value(arg)?),
                 "--input-script" => input_script = Some(PathBuf::from(value(arg)?)),
                 "--samples" => samples = parse_samples(&value(arg)?)?,
+                "--layout-bounds" => layout_bounds = true,
                 "--help" | "-h" => {
                     println!(
-                        "usage: rust-golden-runner --file <path> [--artboard <name>] [--samples <t0,t1,...>]"
+                        "usage: rust-golden-runner --file <path> [--artboard <name>] [--samples <t0,t1,...>] [--layout-bounds]"
                     );
                     std::process::exit(0);
                 }
@@ -531,6 +693,7 @@ impl Options {
             state_machine,
             input_script,
             samples,
+            layout_bounds,
         })
     }
 }

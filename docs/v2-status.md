@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 500 across 179 exact files
-- Current compare: `make golden-compare` reports diverges=15, unsupported-feature=101, not-yet=0
+- Exact segments (file × sample): 501 across 180 exact files
+- Current compare: `make golden-compare` reports diverges=14, unsupported-feature=101, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=57 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
@@ -24,14 +24,14 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Open the text layout/draw-suppression M6 bucket that currently holds
-   `data_bind_test_cmdq.riv`, `data_binding_test.riv`,
-   `data_converter_to_number.riv`, `scripted_data_context.riv`,
-   `state_transition_fire_trigger.riv`, and `trigger_based_listeners.riv`
-   as known divergences. Continue `data_binding_test.riv`: foreground-layout
-   drawing, layout-backed text control size, and stream length are now wired,
-   but C++/Rust still diverge on the wrapped Taffy/Yoga row break between
-   `Row 26` and `Row 25`. Expose/compare layout boxes by local id before
-   changing more runtime behavior.
+   `data_bind_test_cmdq.riv`, `data_converter_to_number.riv`,
+   `scripted_data_context.riv`, `state_transition_fire_trigger.riv`, and
+   `trigger_based_listeners.riv` as known divergences. Continue
+   `data_bind_test_cmdq.riv`: it still diverges on the bottom command-queue
+   text/layout block at y=`434.356567` C++ vs y=`460.671631` Rust, with
+   different background/clip path heights. Use local-id layout boxes first if
+   placement is still suspect; if they match, classify the text value/draw
+   suppression first diff before changing behavior.
 2. Keep `new_text.riv` and `follow_path_path.riv` parked as known M6
    divergences until a dedicated text outline backend/canonicalization slice.
    `follow_path_path.riv` now reaches draw after clearing stale
@@ -84,14 +84,6 @@ the only memory the next session has. Update it every commit.
   block diverges. First focused diff: C++ transforms the block at
   y=`434.356567` while Rust emits it at y=`460.671631`, with different
   background/clip path heights.
-- `data_binding_test.riv`: foreground-layout-backed text now uses the parent
-  layout transform/path, static text receives layout control size, and focused
-  C++/Rust streams both have 1230 lines. The remaining first diff is row-wrap
-  geometry: C++ emits the first text block at
-  `[1,0,0,1,400,468.925781]` while Rust/Taffy emits
-  `[1,0,0,1,400,444.716797]`. The visible gap occurs between drawn
-  `Row 26` and `Row 25`, so the next step is local-id layout-box comparison
-  against C++ Yoga, not more text admission.
 - `data_converter_to_number.riv`: after admitting custom-property siblings
   through static text and adding `CustomPropertyBoolean` /
   `CustomPropertyColor` target-to-source values, Rust reaches draw but the
@@ -992,3 +984,12 @@ the only memory the next session has. Update it every commit.
   `diverges=15`, `unsupported-feature=101`, `not-yet=0`, and parked
   `M6=57 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
   a C++/Rust local-id layout-box probe for `data_binding_test.riv`.
+- 2026-07-05: [M6] Promoted `data_binding_test.riv` after the local-id
+  C++ Yoga/Rust Taffy probe showed all 142 layout nodes match once static Text
+  leaves measure with finite layout constraints. The remaining focused stream
+  diff was `DataConverterToString` spelling C++ `std::to_string(NaN)` as
+  lowercase `nan`, now mirrored in the shared converter helper. `make
+  golden-compare` reports `exact=180`, `exact-segments=501`, `diverges=14`,
+  `unsupported-feature=101`, `not-yet=0`, and parked
+  `M6=57 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
+  `data_bind_test_cmdq.riv` in the text layout/draw-suppression bucket.

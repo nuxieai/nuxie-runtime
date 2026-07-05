@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 452 across 131 exact files
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=121 gated=7 harness=36
+- Exact segments (file × sample): 454 across 133 exact files
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=119 gated=7 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -22,11 +22,12 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Open the next text/clipping widening with `animated_clipping.riv`: it has
-   one `Text` plus sibling Shapes/ClippingShapes and currently stops because
-   the static text subset rejects sibling `Shape` global 6. Inspect and admit
-   only the draw-order/clipping shape path needed by this file before moving
-   into multi-text, modifiers, or layout measurement.
+1. Inspect `background_measure.riv`: after the text/clipping slice, it is the
+   next narrow one-Text diagnostic by manifest order after parked modifier
+   cases, and currently stops because the static text subset rejects sibling
+   `RootBone` global 4. Admit only already-supported bone/skin decoration
+   around text if that reaches draw; otherwise leave it parked and move to the
+   first explicit text-modifier slice.
 2. Keep `new_text.riv` parked for now: it has five
    `Text` objects, multiple runs/styles, gradients/strokes, clipping, and text
    keyframes, so it is not the next narrow static tracer.
@@ -300,3 +301,11 @@ the only memory the next session has. Update it every commit.
   to `exact=131`, `exact-segments=452`, `unsupported-feature=164`, and parked
   `M6=121 gated=7 harness=36`; the next narrow text tracer is
   `animated_clipping.riv`, which now stops on sibling shape/clipping admission.
+- 2026-07-04: [M6] Promoted `animated_clipping.riv` by admitting sibling
+  Shape/ClippingShape scaffolding around the one supported static Text path
+  and preserving C++'s text-local save/restore around glyph transforms even
+  when clipping elides the drawable-level save. The same gate relaxation also
+  unlocked byte-identical `databind_artboard.riv`. `make golden-compare`
+  moved to `exact=133`, `exact-segments=454`, `unsupported-feature=162`, and
+  parked `M6=119 gated=7 harness=36`; next inspect `background_measure.riv`,
+  which stops on sibling `RootBone` rather than modifiers.

@@ -53,7 +53,9 @@ pub(crate) fn runtime_text_shape_paint_commands(
         .component(text_local)
         .map(|component| component.transform.world_transform)
         .unwrap_or(Mat2D::IDENTITY);
-    let needs_save_operation = command.needs_save_operation || slice.container.paints.len() > 1;
+    // C++ text draw isolates the glyph path transform even when clipping
+    // elides the drawable-level save.
+    let needs_save_operation = true;
 
     Ok(slice
         .container
@@ -123,10 +125,21 @@ impl<'a> StaticTextSlice<'a> {
                         | "TextValueRun"
                         | "TextStylePaint"
                         | "TextStyleAxis"
+                        | "Shape"
+                        | "Triangle"
+                        | "Ellipse"
+                        | "Rectangle"
+                        | "ClippingShape"
                         | "SolidColor"
                         | "Fill"
                         | "Backboard"
+                        | "KeyedObject"
+                        | "KeyedProperty"
                         | "LinearAnimation"
+                        | "KeyFrameBool"
+                        | "LayoutComponentStyle"
+                        | "ViewModel"
+                        | "ViewModelInstance"
                         | "StateMachine"
                         | "StateMachineLayer"
                         | "AnimationState"

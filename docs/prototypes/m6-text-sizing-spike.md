@@ -171,14 +171,17 @@ font and draws only the text drawable save/restore wrapper.
 A follow-up scan showed `new_text.riv` is still too broad for the next slice
 (five texts plus multi-run/style, gradient/stroke, clipping, and keyframed
 text). Use `animated_clipping.riv` next: it has one text and now isolates
-sibling Shape/ClippingShape admission around text draw order.
+sibling Shape/ClippingShape admission around text draw order. That file landed
+after the gate admitted already-supported sibling shape/clipping scaffolding
+and text path drawing preserved C++'s inner save/restore around glyph
+transforms.
 
 ## Follow-Up Order
 
-After `hosted_font_file.riv`, widen in this order:
+After `animated_clipping.riv`, widen in this order:
 
-1. Sibling Shape/ClippingShape draw-order cases around one supported Text,
-   starting with `animated_clipping.riv`.
+1. One-text files with already-supported non-text decoration, starting by
+   inspecting `background_measure.riv`'s sibling `RootBone` blocker.
 2. Text sizing/overflow/trim cases that only need the same line breaker.
 3. Multi-text or multi-run static cases without modifiers or layout coupling.
 4. `TextStyleFeature` and broader variable-font helper behavior.

@@ -56,8 +56,9 @@ pub(crate) fn runtime_text_shape_paint_commands(
         .local_id
         .context("text draw command missing local id")?;
     let slice = StaticTextSlice::from_graph(runtime, graph, text_local)?;
-    let path_buckets_by_style = slice.path_commands_by_style(runtime, instance)?;
-    if path_buckets_by_style
+    let render_data = slice.render_data(runtime, instance)?;
+    if render_data
+        .path_buckets_by_style
         .iter()
         .all(|buckets| buckets.iter().all(|bucket| bucket.commands.is_empty()))
     {
@@ -71,12 +72,13 @@ pub(crate) fn runtime_text_shape_paint_commands(
         .component(text_local)
         .map(|component| component.transform.world_transform)
         .unwrap_or(Mat2D::IDENTITY);
+    let shape_world = shape_world.multiply(render_data.local_transform);
     // C++ text draw isolates the glyph path transform even when clipping
     // elides the drawable-level save.
     let needs_save_operation = true;
 
     let mut commands = Vec::new();
-    for (style, path_buckets) in slice.styles.iter().zip(path_buckets_by_style) {
+    for (style, path_buckets) in slice.styles.iter().zip(render_data.path_buckets_by_style) {
         let mut allocated_text_paint_pool = false;
         for path_bucket in order_opacity_buckets_like_cpp(path_buckets) {
             if path_bucket.commands.is_empty() {
@@ -96,6 +98,7 @@ pub(crate) fn runtime_text_shape_paint_commands(
                     shape_world,
                     path_commands,
                 )?;
+                command.shape_world_override = Some(shape_world);
                 if command.paint_type == RuntimeShapePaintKind::Fill {
                     command.path_kind = RuntimeShapePaintPathKind::LocalClockwise;
                 }
@@ -158,6 +161,20 @@ struct StaticTextLine<'a> {
     text: &'a str,
     char_start: usize,
     line_index: usize,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct StaticTextLayoutInfo {
+    ellipsis_line: Option<usize>,
+    is_ellipsis_line_last: bool,
+    x_offset: f32,
+    y_offset: f32,
+}
+
+#[derive(Debug, Clone)]
+struct StaticTextRenderData {
+    path_buckets_by_style: Vec<Vec<StaticTextPathBucket>>,
+    local_transform: Mat2D,
 }
 
 #[derive(Debug, Clone)]
@@ -389,11 +406,11 @@ impl<'a> StaticTextSlice<'a> {
         })
     }
 
-    fn path_commands_by_style(
+    fn render_data(
         &self,
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
-    ) -> Result<Vec<Vec<StaticTextPathBucket>>> {
+    ) -> Result<StaticTextRenderData> {
         let resolved_runs = self.resolved_runs(runtime, instance)?;
         let text = resolved_runs
             .iter()
@@ -402,14 +419,20 @@ impl<'a> StaticTextSlice<'a> {
         let base_style = self.base_style()?;
         let font_size = self.style_font_size(runtime, instance, base_style)?;
         if text.is_empty() || font_size <= 0.0 {
-            return Ok(vec![Vec::new(); self.styles.len()]);
+            return Ok(StaticTextRenderData {
+                path_buckets_by_style: vec![Vec::new(); self.styles.len()],
+                local_transform: Mat2D::IDENTITY,
+            });
         }
         let letter_spacing = self.letter_spacing(runtime, instance);
         let Some(font_bytes) = base_style.font_bytes else {
             // Mirrors src/importers/file_asset_importer.cpp: with no
             // FileAssetLoader and no in-band contents, a hosted FontAsset
             // resolves successfully but has no decoded font.
-            return Ok(vec![Vec::new(); self.styles.len()]);
+            return Ok(StaticTextRenderData {
+                path_buckets_by_style: vec![Vec::new(); self.styles.len()],
+                local_transform: Mat2D::IDENTITY,
+            });
         };
 
         let harf_font = HarfFontRef::new(font_bytes).context("failed to parse font for shaping")?;
@@ -452,22 +475,17 @@ impl<'a> StaticTextSlice<'a> {
         let outlines = skrifa_font.outline_glyphs();
         let scale = font_size / TEXT_SHAPE_SCALE_F32;
         let apply_ellipsis = self.should_apply_static_ellipsis(runtime, instance)?;
-        let lines = if apply_ellipsis {
-            split_static_text_lines(&text)
-        } else {
-            self.layout_static_text_lines(
-                runtime,
-                instance,
-                &text,
-                &shaper,
-                disable_legacy_kern,
-                scale,
-                letter_spacing,
-            )?
-        };
-        if apply_ellipsis && lines.len() > 1 {
-            bail!("static text subset does not support ellipsis across multiple authored lines");
-        }
+        let lines = self.layout_static_text_lines(
+            runtime,
+            instance,
+            &text,
+            &shaper,
+            disable_legacy_kern,
+            scale,
+            letter_spacing,
+        )?;
+        let layout_info =
+            self.static_layout_info(runtime, instance, &lines, line_height, apply_ellipsis)?;
         let mut commands_by_style = vec![Vec::new(); self.styles.len()];
         let style_by_character = self.style_by_character(&text, &resolved_runs)?;
         let modifier_coverages = self
@@ -478,11 +496,16 @@ impl<'a> StaticTextSlice<'a> {
             })
             .collect::<Result<Vec<_>>>()?;
         for line in lines {
+            if let Some(ellipsis_line) = layout_info.ellipsis_line {
+                if line.line_index > ellipsis_line {
+                    break;
+                }
+            }
             if line.text.is_empty() {
                 continue;
             }
             let mut glyphs = shape_text_glyphs(&shaper, line.text, disable_legacy_kern);
-            if apply_ellipsis {
+            if layout_info.ellipsis_line == Some(line.line_index) {
                 let max_width = self.text_width(runtime, instance)?;
                 let ellipsis = shape_text_glyphs(&shaper, "...", disable_legacy_kern);
                 let line_end = self.first_static_wrapped_line_end(
@@ -494,7 +517,7 @@ impl<'a> StaticTextSlice<'a> {
                     scale,
                     letter_spacing,
                 )?;
-                let mut force_ellipsis = false;
+                let mut force_ellipsis = !layout_info.is_ellipsis_line_last;
                 if line_end < glyphs.len()
                     && self.static_fixed_height_shows_first_line_only(
                         runtime,
@@ -563,7 +586,17 @@ impl<'a> StaticTextSlice<'a> {
             }
         }
 
-        Ok(commands_by_style)
+        Ok(StaticTextRenderData {
+            path_buckets_by_style: commands_by_style,
+            local_transform: Mat2D([
+                1.0,
+                0.0,
+                0.0,
+                1.0,
+                layout_info.x_offset,
+                layout_info.y_offset,
+            ]),
+        })
     }
 
     fn local_bounds(
@@ -921,6 +954,70 @@ impl<'a> StaticTextSlice<'a> {
         }
 
         Ok(lines)
+    }
+
+    fn static_layout_info(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        lines: &[StaticTextLine<'_>],
+        line_height: f32,
+        apply_ellipsis: bool,
+    ) -> Result<StaticTextLayoutInfo> {
+        let sizing = self.text_uint_property(runtime, instance, "sizingValue")?;
+        let bounds_width = match sizing {
+            1 | 2 => self.text_width(runtime, instance)?,
+            _ => 0.0,
+        };
+        let bounds_height = match sizing {
+            2 => self.text_height(runtime, instance)?,
+            _ => line_height * lines.len().max(1) as f32,
+        };
+        let origin_x = self.text_double_property(runtime, instance, "originX", 0.0)?;
+        let origin_y = self.text_double_property(runtime, instance, "originY", 0.0)?;
+        let last_line_index = lines.last().map(|line| line.line_index).unwrap_or(0);
+        let full_height = line_height * (last_line_index + 1) as f32;
+        let mut total_height = full_height;
+        let mut ellipsis_line = None;
+        let mut is_ellipsis_line_last = false;
+
+        if apply_ellipsis && !lines.is_empty() {
+            // Mirrors src/text/text.cpp::computeBoundsInfo for the static text
+            // subset: choose the last visual line whose bottom fits the fixed
+            // box, falling back to the first line when nothing fits.
+            let mut ellipsed_height = 0.0;
+            for line in lines {
+                let line_bottom = line_height * (line.line_index + 1) as f32;
+                if line_bottom <= bounds_height {
+                    ellipsed_height = line_bottom;
+                    ellipsis_line = Some(line.line_index);
+                }
+            }
+            let chosen_line = ellipsis_line.unwrap_or(0);
+            ellipsis_line = Some(chosen_line);
+            is_ellipsis_line_last = chosen_line == last_line_index;
+            if chosen_line > 0 {
+                total_height = ellipsed_height;
+            }
+        }
+
+        let mut y_offset = -bounds_height * origin_y;
+        if sizing == 2 {
+            // Mirrors src/text/text.cpp::buildRenderStyles fixed-size vertical
+            // alignment transform for top/bottom/middle text.
+            match self.text_uint_property(runtime, instance, "verticalAlignValue")? {
+                1 => y_offset += bounds_height - total_height,
+                2 => y_offset += (bounds_height - total_height) / 2.0,
+                _ => {}
+            }
+        }
+
+        Ok(StaticTextLayoutInfo {
+            ellipsis_line,
+            is_ellipsis_line_last,
+            x_offset: -bounds_width * origin_x,
+            y_offset,
+        })
     }
 
     fn style_by_character(&self, text: &str, runs: &[StaticResolvedRun]) -> Result<Vec<usize>> {

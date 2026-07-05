@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 462 across 141 exact files
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=111 gated=7 harness=36
+- Exact segments (file × sample): 463 across 142 exact files
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=110 gated=7 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -22,11 +22,13 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Start `vertical_align_ellipsis.riv`: after the text-stroke slice promoted
-   `text_stroke_test.riv`, this fixture now reaches the static text layout
-   gate `ellipsis across multiple authored lines`. Reopen it through the
-   fixed-size vertical-align/ellipsis placement path; do not treat it as a
-   stroke follow-up.
+1. Start `text_listener_simpler.riv`: among the remaining M6 text-only queue,
+   the smaller manifest entries probe as nested-artboard sibling
+   (`runtime_nested_text_runs.riv`) or text data-binding
+   (`zero_width_space_line_break.riv`, `word_joiner_test.riv`,
+   `format_number_with_commas.riv`) blockers. `text_listener_simpler.riv`
+   reaches the narrow static gate `matching TextStylePaint metrics for
+   no-break multi-run text`.
 2. Keep follow-path text files parked behind `TextFollowPathModifier` and text
    data-binding blockers; `text_follow_path_shape_length.riv` currently fails
    first on text data binding before it reaches follow-path drawing.
@@ -123,7 +125,9 @@ the only memory the next session has. Update it every commit.
   targets are still not supported.
 - Static text support currently covers one style or matching-metric
   multi-style text, static authored-line-break and no-break multi-run text,
-  and translation/rotation/opacity `TextModifierGroup` over C++-style
+  fixed-size ellipsis across multiple authored lines with bottom/middle
+  vertical alignment, and translation/rotation/opacity `TextModifierGroup`
+  over C++-style
   `TextModifierRange` character, character-excluding-space, word, and static
   line range maps with runId targeting and optional cubic range
   interpolation, including C++-ordered opacity buckets, plus solid fill/stroke
@@ -379,3 +383,11 @@ the only memory the next session has. Update it every commit.
   `exact-segments=462`, `unsupported-feature=154`, and parked
   `M6=111 gated=7 harness=36`; next reopen `vertical_align_ellipsis.riv`,
   which now fails first on ellipsis across multiple authored lines.
+- 2026-07-04: [M6] Promoted `vertical_align_ellipsis.riv` by moving
+  fixed-size ellipsis line selection and bottom/middle vertical-align offsets
+  into the static text render path, mirroring C++
+  `src/text/text.cpp::computeBoundsInfo`/`buildRenderStyles`. `make
+  golden-compare` moved to `exact=142`, `exact-segments=463`,
+  `unsupported-feature=153`, and parked `M6=110 gated=7 harness=36`; next
+  reopen `text_listener_simpler.riv`, which now fails first on mismatched
+  no-break multi-run `TextStylePaint` metrics.

@@ -1111,6 +1111,7 @@ pub struct RuntimeShapePaintCommand {
     pub effect_path_commands: Vec<RuntimePathCommand>,
     pub has_effect_path: bool,
     pub needs_save_operation: bool,
+    pub shape_world_override: Option<Mat2D>,
     pub uses_temporary_paint: bool,
     pub allocates_text_paint_pool: bool,
 }
@@ -1566,6 +1567,7 @@ fn runtime_background_shape_paint_command(
         effect_path_commands: Vec::new(),
         has_effect_path: false,
         needs_save_operation: true,
+        shape_world_override: None,
         uses_temporary_paint: false,
         allocates_text_paint_pool: false,
     })
@@ -1599,6 +1601,7 @@ fn runtime_prepare_gradient_paint_command(
         effect_path_commands: Vec::new(),
         has_effect_path: false,
         needs_save_operation: false,
+        shape_world_override: None,
         uses_temporary_paint: false,
         allocates_text_paint_pool: false,
     }
@@ -1715,6 +1718,7 @@ fn runtime_draw_command(
         };
         let path_index = runtime_cached_path_slot_index(&mut draw_path_slots, path_commands);
         let mut saved = !paint.needs_save_operation;
+        let paint_shape_world = paint.shape_world_override.unwrap_or(shape_world);
         if matches!(
             paint.path_kind,
             RuntimeShapePaintPathKind::Local | RuntimeShapePaintPathKind::LocalClockwise
@@ -1723,7 +1727,7 @@ fn runtime_draw_command(
                 saved = true;
                 renderer.save();
             }
-            renderer.transform(runtime_render_mat(shape_world));
+            renderer.transform(runtime_render_mat(paint_shape_world));
         }
         let path = path_cache.draw_path(
             RuntimeDrawPathCacheKey {
@@ -2322,6 +2326,7 @@ pub(crate) fn runtime_shape_paint_command(
         effect_path_commands: effect_path_commands.unwrap_or_default(),
         has_effect_path,
         needs_save_operation,
+        shape_world_override: None,
         uses_temporary_paint: false,
         allocates_text_paint_pool: false,
     })

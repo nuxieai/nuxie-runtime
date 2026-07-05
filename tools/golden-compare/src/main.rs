@@ -93,10 +93,11 @@ fn run() -> Result<(), String> {
                                 Some(rust_runner) => {
                                     let rust_stream =
                                         run_stream(rust_runner, entry, &file, &corpus_dir)?;
-                                    if !streams_equivalent(&rust_stream, &cpp_stream) {
+                                    if !entry.verification.streams_match(&rust_stream, &cpp_stream)
+                                    {
                                         failures.push(format!(
-                                            "{}: exact stream differs from C++ beyond epsilon",
-                                            entry.id
+                                            "{}: stream differs from C++ under {} verification",
+                                            entry.id, entry.verification
                                         ));
                                     }
                                 }
@@ -219,6 +220,7 @@ struct CorpusEntry {
     input_script: Option<String>,
     samples: Vec<f32>,
     status: Status,
+    verification: VerificationMode,
     milestone: Option<String>,
     features: Vec<String>,
 }
@@ -233,6 +235,7 @@ impl CorpusEntry {
             input_script: None,
             samples: vec![0.0],
             status: Status::NotYet,
+            verification: VerificationMode::Exact,
             milestone: None,
             features: Vec::new(),
         }
@@ -297,6 +300,57 @@ impl Display for Status {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum VerificationMode {
+    Exact,
+    Tolerant(f64),
+    Structural,
+}
+
+impl VerificationMode {
+    fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "exact" => Ok(Self::Exact),
+            "structural" => Ok(Self::Structural),
+            _ => {
+                let Some(inner) = value
+                    .strip_prefix("tolerant(")
+                    .and_then(|value| value.strip_suffix(')'))
+                else {
+                    return Err(format!("unknown corpus verification mode: {value}"));
+                };
+                let epsilon = inner
+                    .parse::<f64>()
+                    .map_err(|error| format!("invalid tolerant epsilon {inner}: {error}"))?;
+                if !epsilon.is_finite() || epsilon.is_sign_negative() {
+                    return Err(format!(
+                        "tolerant epsilon must be finite and non-negative: {inner}"
+                    ));
+                }
+                Ok(Self::Tolerant(epsilon))
+            }
+        }
+    }
+
+    fn streams_match(self, left: &str, right: &str) -> bool {
+        match self {
+            Self::Exact => streams_equivalent(left, right),
+            Self::Tolerant(epsilon) => streams_equivalent_with_epsilon(left, right, epsilon),
+            Self::Structural => streams_structurally_equivalent(left, right),
+        }
+    }
+}
+
+impl Display for VerificationMode {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Exact => formatter.write_str("exact"),
+            Self::Tolerant(epsilon) => write!(formatter, "tolerant({epsilon})"),
+            Self::Structural => formatter.write_str("structural"),
+        }
+    }
+}
+
 fn parse_corpus(path: &Path) -> Result<Vec<CorpusEntry>, String> {
     let text = std::fs::read_to_string(path)
         .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
@@ -335,6 +389,9 @@ fn parse_corpus(path: &Path) -> Result<Vec<CorpusEntry>, String> {
             "input_script" => entry.input_script = Some(parse_string(value, line_number)?),
             "samples" => entry.samples = parse_float_array(value, line_number)?,
             "status" => entry.status = Status::parse(&parse_string(value, line_number)?)?,
+            "verification" => {
+                entry.verification = VerificationMode::parse(&parse_string(value, line_number)?)?
+            }
             "milestone" => entry.milestone = Some(parse_string(value, line_number)?),
             "features" => entry.features = parse_string_array(value, line_number)?,
             other => return Err(format!("line {line_number}: unknown key {other}")),
@@ -432,8 +489,17 @@ fn resolve_script_path(path: &str, corpus_dir: &Path) -> PathBuf {
 }
 
 const GOLDEN_FLOAT_EPSILON: f64 = 1.3e-4;
+const STRUCTURAL_FLOAT_EPSILON: f64 = GOLDEN_FLOAT_EPSILON;
 
 fn streams_equivalent(left: &str, right: &str) -> bool {
+    streams_equivalent_with_epsilon(left, right, GOLDEN_FLOAT_EPSILON)
+}
+
+fn streams_structurally_equivalent(left: &str, right: &str) -> bool {
+    streams_equivalent_with_epsilon(left, right, STRUCTURAL_FLOAT_EPSILON)
+}
+
+fn streams_equivalent_with_epsilon(left: &str, right: &str, epsilon: f64) -> bool {
     if left == right {
         return true;
     }
@@ -445,14 +511,14 @@ fn streams_equivalent(left: &str, right: &str) -> bool {
     let mut right_lines = right.lines();
     loop {
         match (left_lines.next(), right_lines.next()) {
-            (Some(left), Some(right)) if line_equivalent(left, right) => {}
+            (Some(left), Some(right)) if line_equivalent(left, right, epsilon) => {}
             (None, None) => return true,
             _ => return false,
         }
     }
 }
 
-fn line_equivalent(left: &str, right: &str) -> bool {
+fn line_equivalent(left: &str, right: &str, epsilon: f64) -> bool {
     let left_bytes = left.as_bytes();
     let right_bytes = right.as_bytes();
     let mut left_index = 0usize;
@@ -468,7 +534,7 @@ fn line_equivalent(left: &str, right: &str) -> bool {
             let Ok(right_number) = right[right_index..right_end].parse::<f64>() else {
                 return false;
             };
-            if (left_number - right_number).abs() > GOLDEN_FLOAT_EPSILON {
+            if (left_number - right_number).abs() > epsilon {
                 return false;
             }
             left_index = left_end;
@@ -566,6 +632,70 @@ mod tests {
         assert!(!streams_equivalent("drawPath id=2\n", "clipPath id=2\n"));
         assert!(!streams_equivalent("drawPath id=2\n", "drawPath id=3\n"));
         assert!(!streams_equivalent("drawPath id=2\n", "drawPath id=2"));
+    }
+
+    #[test]
+    fn verification_mode_parses_declared_modes() {
+        assert_eq!(
+            VerificationMode::parse("exact").unwrap(),
+            VerificationMode::Exact
+        );
+        assert_eq!(
+            VerificationMode::parse("structural").unwrap(),
+            VerificationMode::Structural
+        );
+        assert_eq!(
+            VerificationMode::parse("tolerant(0.25)").unwrap(),
+            VerificationMode::Tolerant(0.25)
+        );
+        assert!(VerificationMode::parse("tolerant(-0.1)").is_err());
+        assert!(VerificationMode::parse("tolerant(nan)").is_err());
+        assert!(VerificationMode::parse("loose").is_err());
+    }
+
+    #[test]
+    fn tolerant_verification_uses_declared_epsilon() {
+        let left = "drawPath points=[(0,0)]\n";
+        let right = "drawPath points=[(0.004,0)]\n";
+
+        assert!(!VerificationMode::Exact.streams_match(left, right));
+        assert!(!VerificationMode::Tolerant(0.001).streams_match(left, right));
+        assert!(VerificationMode::Tolerant(0.005).streams_match(left, right));
+        assert!(
+            !VerificationMode::Tolerant(0.005)
+                .streams_match("drawPath points=[(0,0)]\n", "clipPath points=[(0,0)]\n")
+        );
+    }
+
+    #[test]
+    fn corpus_parser_accepts_verification_mode() {
+        let path = std::env::temp_dir().join(format!(
+            "golden-compare-verification-{}-{}.toml",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::write(
+            &path,
+            r#"
+[[file]]
+id = "layoutish"
+path = "tests/unit_tests/assets/layoutish.riv"
+samples = [0.0]
+status = "exact"
+verification = "tolerant(0.25)"
+features = []
+"#,
+        )
+        .unwrap();
+
+        let entries = parse_corpus(&path).unwrap();
+        std::fs::remove_file(&path).ok();
+
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].verification, VerificationMode::Tolerant(0.25));
     }
 }
 

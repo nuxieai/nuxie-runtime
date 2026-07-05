@@ -91,6 +91,12 @@ fn run() -> Result<()> {
             .unwrap_or_else(|| vec!["0.0".to_owned()]);
         output.push_str(&format!("samples = [{}]\n", samples.join(", ")));
         output.push_str(&format!("status = {}\n", quoted(&status)));
+        if let Some(verification) = previous
+            .and_then(|entry| entry.verification.as_ref())
+            .filter(|verification| verification.as_str() != "exact")
+        {
+            output.push_str(&format!("verification = {}\n", quoted(verification)));
+        }
         if let Some(milestone) = previous.and_then(|entry| entry.milestone.as_ref()) {
             output.push_str(&format!("milestone = {}\n", quoted(milestone)));
         }
@@ -174,6 +180,7 @@ struct ExistingEntry {
     input_script: Option<String>,
     samples: Vec<String>,
     status: String,
+    verification: Option<String>,
     milestone: Option<String>,
     features: Vec<String>,
 }
@@ -209,6 +216,7 @@ fn parse_existing(path: &Path) -> Result<BTreeMap<String, ExistingEntry>> {
             "input_script" => entry.input_script = Some(parse_string(value)?),
             "samples" => entry.samples = parse_array(value).unwrap_or_default(),
             "status" => entry.status = parse_string(value)?,
+            "verification" => entry.verification = Some(parse_string(value)?),
             "milestone" => entry.milestone = Some(parse_string(value)?),
             "features" => entry.features = parse_string_array(value).unwrap_or_default(),
             _ => {}

@@ -23,12 +23,12 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. The M6 text unsupported queue is the active line now that the compact
-   layout/list/data-bound-text divergence queues are closed. Query it with
-   `grep -A1 -B6 'milestone = "M6"' corpus.toml | rg -B7 -A1 'rust-runner-unsupported:text'`.
-   Start with `computed_values_test.riv` unless a smaller
-   text-only entry is identified first; run the direct C++/Rust stream pair to
-   verify the first unsupported gate before porting.
+1. Implement the #V2-7 layout engine slice before reopening
+   `computed_values_test.riv`: add Taffy behind a layout trait, route the
+   existing simple root row/column cases through it, then use
+   `computed_values_test.riv` as the first corpus exerciser for nested
+   layout/computed-value text. Do not extend the hand-rolled flex math to
+   clear this file.
 2. Keep `new_text.riv` parked as a known M6 divergence until a dedicated text
    outline backend/canonicalization slice: gradient sibling admission now
    reaches draw, but Rust/Skrifa and C++ HarfBuzz emit a glyph contour with a
@@ -312,6 +312,11 @@ the only memory the next session has. Update it every commit.
   Yoga behavior-by-behavior — the V1 pattern — and is a tripwire. Files
   whose layouts diverge under Taffy verify in `tolerant` mode per the
   V2 map; do not pin Taffy against Yoga.
+- 2026-07-05: `golden-compare` implements the #V2-7 manifest field
+  `verification = "exact" | "tolerant(ε)" | "structural"` for exact corpus
+  entries, defaulting omitted entries to `exact`; `generate-corpus` preserves
+  non-default verification modes across regeneration. This is the harness
+  prerequisite for Taffy/HarfRust/image-decoder corpus admission.
 
 ## Log
 
@@ -654,3 +659,11 @@ the only memory the next session has. Update it every commit.
   `exact-segments=493`, `diverges=3`, `unsupported-feature=120`,
   `not-yet=0`, and parked `M6=76 gated=8 harness=36`; `cargo test
   --workspace` passes. Next target is `computed_values_test.riv`.
+- 2026-07-05: [M6] Added #V2-7 per-entry verification modes to
+  `golden-compare` and preserved non-default modes in `generate-corpus` so
+  layout/text/image entries can declare `tolerant(ε)` or `structural` before
+  moving to `exact`. Baseline after unwinding the misaligned computed-values
+  spike remains `exact=172`, `exact-segments=493`, `diverges=3`,
+  `unsupported-feature=120`, `not-yet=0`, and parked
+  `M6=76 gated=8 harness=36`; next target is the Taffy-backed layout trait
+  slice for `computed_values_test.riv`.

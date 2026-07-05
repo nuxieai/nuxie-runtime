@@ -265,7 +265,7 @@ Decided libraries (2026-07-02):
 
 ### Verification Modes
 
-`corpus.toml` gains a per-entry verification mode consumed by
+`corpus.toml` gains a per-entry `verification = "..."` mode consumed by
 `golden-compare`:
 
 - `exact` — default; byte/epsilon-identical streams. All fully-ported

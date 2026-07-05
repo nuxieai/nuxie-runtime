@@ -11,7 +11,7 @@ use crate::{
     StateMachineBindableEnumInstance, StateMachineBindableIntegerInstance,
     StateMachineBindableListInstance, StateMachineBindableNumberInstance,
     StateMachineBindableStringInstance, StateMachineBindableTriggerInstance,
-    StateMachineBindableViewModelInstance,
+    StateMachineBindableViewModelInstance, StateMachineTransitionDurationInstance,
     runtime_view_model_view_model_property_path_for_name_path,
 };
 
@@ -137,6 +137,7 @@ pub(crate) struct RuntimeDataBindGraphTargetsMut<'a> {
     pub(crate) lists: &'a mut [StateMachineBindableListInstance],
     pub(crate) triggers: &'a mut [StateMachineBindableTriggerInstance],
     pub(crate) view_models: &'a mut [StateMachineBindableViewModelInstance],
+    pub(crate) transition_durations: &'a mut [StateMachineTransitionDurationInstance],
     pub(crate) include_view_models: bool,
 }
 
@@ -2233,6 +2234,7 @@ pub(crate) enum RuntimeDataBindGraphTarget {
     List { global_id: u32 },
     Trigger { global_id: u32 },
     ViewModel { global_id: u32 },
+    TransitionDuration { transition_global_id: u32 },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -2473,6 +2475,25 @@ impl RuntimeDataBindGraph {
                 if let Some(node) = sources.get_mut(source_handle.0) {
                     node.view_model_instance_ids = source.view_model_instance_ids.clone();
                 }
+            }
+        }
+        for binding in &state_machine.transition_duration_bindings {
+            let source = &binding.source;
+            let source_handle = Self::push_default_view_model_binding(
+                &mut sources,
+                &mut targets,
+                &mut default_view_model_bindings,
+                source.data_bind_index,
+                &source.path,
+                source.flags,
+                source.converter.clone(),
+                RuntimeDataBindGraphTarget::TransitionDuration {
+                    transition_global_id: binding.transition_global_id,
+                },
+                source.value.clone(),
+            );
+            if let Some(node) = sources.get_mut(source_handle.0) {
+                node.view_model_instance_ids = source.view_model_instance_ids.clone();
             }
         }
         for bindable in &state_machine.bindable_integers {
@@ -8078,6 +8099,20 @@ impl RuntimeDataBindGraphTargetsMut<'_> {
                     .view_models
                     .iter_mut()
                     .find(|target| target.global_id == *global_id)
+                {
+                    target.set_value(*value);
+                }
+            }
+            (
+                RuntimeDataBindGraphTarget::TransitionDuration {
+                    transition_global_id,
+                },
+                RuntimeDataBindGraphValue::Number(value),
+            ) => {
+                if let Some(target) = self
+                    .transition_durations
+                    .iter_mut()
+                    .find(|target| target.transition_global_id == *transition_global_id)
                 {
                     target.set_value(*value);
                 }

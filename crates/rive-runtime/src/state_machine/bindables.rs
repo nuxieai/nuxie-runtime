@@ -706,14 +706,47 @@ fn runtime_bindable_number_default_view_model_source(
     data_bind_index: usize,
     data_bind: &RuntimeObject,
 ) -> Option<RuntimeBindableNumberDefaultViewModelSource> {
+    runtime_number_default_view_model_source(
+        file,
+        data_bind_index,
+        data_bind,
+        "BindablePropertyNumber",
+        "propertyValue",
+    )
+}
+
+pub(crate) fn runtime_number_default_view_model_source(
+    file: &RuntimeFile,
+    data_bind_index: usize,
+    data_bind: &RuntimeObject,
+    target_type_name: &str,
+    target_property_name: &str,
+) -> Option<RuntimeBindableNumberDefaultViewModelSource> {
+    let default_instance = file.view_model_default_instance(0)?;
+    runtime_number_default_view_model_source_for_instance(
+        file,
+        data_bind_index,
+        data_bind,
+        target_type_name,
+        target_property_name,
+        default_instance.object,
+    )
+}
+
+pub(crate) fn runtime_number_default_view_model_source_for_instance(
+    file: &RuntimeFile,
+    data_bind_index: usize,
+    data_bind: &RuntimeObject,
+    target_type_name: &str,
+    target_property_name: &str,
+    default_instance: &RuntimeObject,
+) -> Option<RuntimeBindableNumberDefaultViewModelSource> {
     let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
-    if property_key_for_name("BindablePropertyNumber", "propertyValue") != Some(property_key) {
+    if property_key_for_name(target_type_name, target_property_name) != Some(property_key) {
         return None;
     }
     let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
-    let default_instance = file.view_model_default_instance(0)?;
-    let source =
-        file.data_context_view_model_property_for_instance(default_instance.object, &path)?;
+    let source = file.data_context_view_model_property_for_instance(default_instance, &path)?;
     let converter = runtime_data_bind_graph_converter(file, data_bind);
     let value = match converter.as_ref() {
         Some(RuntimeDataBindGraphConverter::ToNumber) => {
@@ -774,7 +807,7 @@ fn runtime_bindable_number_default_view_model_source(
             } else if source.type_name == "ViewModelInstanceArtboard" {
                 RuntimeDataBindGraphValue::Artboard(source.uint_property("propertyValue")?)
             } else if let Some(reference) =
-                file.data_context_view_model_instance_for_instance(default_instance.object, &path)
+                file.data_context_view_model_instance_for_instance(default_instance, &path)
             {
                 RuntimeDataBindGraphValue::ViewModel(RuntimeViewModelPointer::Imported {
                     object_id: reference.object.id,
@@ -818,8 +851,8 @@ fn runtime_bindable_number_default_view_model_source(
                     RuntimeDataBindGraphValue::Asset(source.uint_property("propertyValue")?)
                 } else if source.type_name == "ViewModelInstanceArtboard" {
                     RuntimeDataBindGraphValue::Artboard(source.uint_property("propertyValue")?)
-                } else if let Some(reference) = file
-                    .data_context_view_model_instance_for_instance(default_instance.object, &path)
+                } else if let Some(reference) =
+                    file.data_context_view_model_instance_for_instance(default_instance, &path)
                 {
                     RuntimeDataBindGraphValue::ViewModel(RuntimeViewModelPointer::Imported {
                         object_id: reference.object.id,
@@ -840,7 +873,7 @@ fn runtime_bindable_number_default_view_model_source(
     };
     let view_model_instance_ids = if matches!(&value, RuntimeDataBindGraphValue::ViewModel(_)) {
         let reference =
-            file.data_context_view_model_instance_for_instance(default_instance.object, &path)?;
+            file.data_context_view_model_instance_for_instance(default_instance, &path)?;
         file.view_model(reference.view_model_index)?
             .instances
             .into_iter()

@@ -46,6 +46,7 @@ pub(crate) use state_machine::{
     StateMachineBindableIntegerInstance, StateMachineBindableListInstance,
     StateMachineBindableNumberInstance, StateMachineBindableStringInstance,
     StateMachineBindableTriggerInstance, StateMachineBindableViewModelInstance,
+    StateMachineTransitionDurationInstance,
 };
 pub use text::static_text_support_error;
 pub use view_model::{

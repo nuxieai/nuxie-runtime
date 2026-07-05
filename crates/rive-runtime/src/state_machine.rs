@@ -15,20 +15,22 @@ mod transition_conditions;
 pub(crate) use bindables::{
     RuntimeBindableArtboard, RuntimeBindableAsset, RuntimeBindableBoolean, RuntimeBindableColor,
     RuntimeBindableEnum, RuntimeBindableInteger, RuntimeBindableList, RuntimeBindableNumber,
-    RuntimeBindableString, RuntimeBindableTrigger, RuntimeBindableTriggerSource,
-    RuntimeBindableViewModel, RuntimeViewModelTrigger, StateMachineBindableArtboardInstance,
-    StateMachineBindableAssetInstance, StateMachineBindableBooleanInstance,
-    StateMachineBindableColorInstance, StateMachineBindableEnumInstance,
-    StateMachineBindableIntegerInstance, StateMachineBindableListInstance,
-    StateMachineBindableNumberInstance, StateMachineBindableStringInstance,
-    StateMachineBindableTriggerInstance, StateMachineBindableViewModelInstance,
-    bindable_artboard_value, bindable_asset_value, bindable_boolean_value, bindable_color_value,
-    bindable_enum_value, bindable_integer_value, bindable_number_value, bindable_string_value,
-    bindable_trigger_source_global_id, bindable_trigger_value, bindable_view_model_value,
-    runtime_bindable_artboards, runtime_bindable_assets, runtime_bindable_booleans,
-    runtime_bindable_colors, runtime_bindable_enums, runtime_bindable_integers,
-    runtime_bindable_lists, runtime_bindable_numbers, runtime_bindable_strings,
-    runtime_bindable_triggers, runtime_bindable_view_models, runtime_default_view_model_triggers,
+    RuntimeBindableNumberDefaultViewModelSource, RuntimeBindableString, RuntimeBindableTrigger,
+    RuntimeBindableTriggerSource, RuntimeBindableViewModel, RuntimeViewModelTrigger,
+    StateMachineBindableArtboardInstance, StateMachineBindableAssetInstance,
+    StateMachineBindableBooleanInstance, StateMachineBindableColorInstance,
+    StateMachineBindableEnumInstance, StateMachineBindableIntegerInstance,
+    StateMachineBindableListInstance, StateMachineBindableNumberInstance,
+    StateMachineBindableStringInstance, StateMachineBindableTriggerInstance,
+    StateMachineBindableViewModelInstance, bindable_artboard_value, bindable_asset_value,
+    bindable_boolean_value, bindable_color_value, bindable_enum_value, bindable_integer_value,
+    bindable_number_value, bindable_string_value, bindable_trigger_source_global_id,
+    bindable_trigger_value, bindable_view_model_value, runtime_bindable_artboards,
+    runtime_bindable_assets, runtime_bindable_booleans, runtime_bindable_colors,
+    runtime_bindable_enums, runtime_bindable_integers, runtime_bindable_lists,
+    runtime_bindable_numbers, runtime_bindable_strings, runtime_bindable_triggers,
+    runtime_bindable_view_models, runtime_default_view_model_triggers,
+    runtime_number_default_view_model_source_for_instance,
 };
 pub use instance::StateMachineInstance;
 use transition_conditions::RuntimeTransitionCondition;
@@ -112,6 +114,36 @@ pub struct RuntimeStateMachine {
     pub(crate) bindable_view_models: Vec<RuntimeBindableViewModel>,
     pub(crate) bindable_booleans: Vec<RuntimeBindableBoolean>,
     pub(crate) view_model_triggers: Vec<RuntimeViewModelTrigger>,
+    pub(crate) transition_duration_bindings: Vec<RuntimeTransitionDurationBinding>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeTransitionDurationBinding {
+    pub(crate) transition_global_id: u32,
+    pub(crate) source: RuntimeBindableNumberDefaultViewModelSource,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct StateMachineTransitionDurationInstance {
+    pub(crate) transition_global_id: u32,
+    value: f32,
+}
+
+impl StateMachineTransitionDurationInstance {
+    pub(crate) fn new(binding: &RuntimeTransitionDurationBinding) -> Self {
+        Self {
+            transition_global_id: binding.transition_global_id,
+            value: 0.0,
+        }
+    }
+
+    pub(crate) fn set_value(&mut self, value: f32) {
+        self.value = value;
+    }
+
+    pub(crate) fn value(&self) -> f32 {
+        self.value
+    }
 }
 
 pub(crate) fn build_state_machines(
@@ -144,6 +176,8 @@ pub(crate) fn build_state_machines(
             let bindable_view_models = runtime_bindable_view_models(file, &state_machine);
             let bindable_booleans = runtime_bindable_booleans(file, &state_machine);
             let view_model_triggers = runtime_default_view_model_triggers(file);
+            let transition_duration_bindings =
+                runtime_transition_duration_bindings(file, &state_machine, artboard_index);
             RuntimeStateMachine {
                 global_id: state_machine.object.id,
                 name: state_machine
@@ -175,6 +209,7 @@ pub(crate) fn build_state_machines(
                 bindable_view_models,
                 bindable_booleans,
                 view_model_triggers,
+                transition_duration_bindings,
                 layers: state_machine
                     .layers
                     .into_iter()
@@ -238,6 +273,7 @@ pub(crate) fn build_state_machines(
                                                 RuntimeTransitionInterpolator::from_object,
                                             );
                                             RuntimeStateTransition {
+                                                global_id: transition.object.id,
                                                 state_to_index: transition.state_to_index,
                                                 exit_blend_animation_index: transition
                                                     .exit_blend_animation_index,
@@ -316,6 +352,67 @@ pub(crate) fn build_state_machines(
             }
         })
         .collect()
+}
+
+fn runtime_transition_duration_bindings(
+    file: &RuntimeFile,
+    state_machine: &rive_binary::RuntimeStateMachine<'_>,
+    artboard_index: usize,
+) -> Vec<RuntimeTransitionDurationBinding> {
+    let Some(default_instance) = file
+        .resolved_view_model_for_artboard(artboard_index)
+        .and_then(|view_model| file.view_model_default_instance(view_model.view_model_index))
+    else {
+        return Vec::new();
+    };
+    let mut bindings = BTreeMap::<u32, RuntimeTransitionDurationBinding>::new();
+    for (data_bind_index, data_bind) in state_machine.data_binds.iter().enumerate() {
+        let Some(target) =
+            state_machine_transition_target_for_data_bind(file, state_machine, data_bind)
+        else {
+            continue;
+        };
+        if target.type_name != "StateTransition" {
+            continue;
+        }
+        let Some(source) = runtime_number_default_view_model_source_for_instance(
+            file,
+            data_bind_index,
+            data_bind,
+            "StateTransition",
+            "duration",
+            default_instance.object,
+        ) else {
+            continue;
+        };
+        bindings.insert(
+            target.id,
+            RuntimeTransitionDurationBinding {
+                transition_global_id: target.id,
+                source,
+            },
+        );
+    }
+    bindings.into_values().collect()
+}
+
+fn state_machine_transition_target_for_data_bind<'a>(
+    file: &'a RuntimeFile,
+    state_machine: &rive_binary::RuntimeStateMachine<'a>,
+    data_bind: &RuntimeObject,
+) -> Option<&'a RuntimeObject> {
+    if let Some(target) = file.data_bind_target_for_object(data_bind) {
+        return Some(target);
+    }
+
+    state_machine
+        .layers
+        .iter()
+        .flat_map(|layer| &layer.states)
+        .flat_map(|state| &state.transitions)
+        .map(|transition| transition.object)
+        .filter(|transition| transition.id < data_bind.id)
+        .max_by_key(|transition| transition.id)
 }
 
 #[derive(Debug, Clone)]
@@ -727,6 +824,7 @@ impl RuntimeLayerState {
 
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeStateTransition {
+    pub(crate) global_id: u32,
     pub(crate) state_to_index: Option<usize>,
     pub(crate) exit_blend_animation_index: Option<usize>,
     pub(crate) duration: u64,
@@ -870,16 +968,23 @@ impl RuntimeStateTransition {
         )
     }
 
-    fn transition_duration_seconds(&self, animation_from: Option<&RuntimeLinearAnimation>) -> f32 {
-        if self.duration == 0 {
+    fn transition_duration_seconds(
+        &self,
+        animation_from: Option<&RuntimeLinearAnimation>,
+        duration_override: Option<f32>,
+    ) -> f32 {
+        let duration = duration_override
+            .map(|value| if value < 0.0 { 0 } else { value.round() as u64 })
+            .unwrap_or(self.duration);
+        if duration == 0 {
             return 0.0;
         }
         if self.flags & Self::DURATION_IS_PERCENTAGE == Self::DURATION_IS_PERCENTAGE {
             return animation_from
-                .map(|animation| self.duration as f32 / 100.0 * animation.duration_seconds())
+                .map(|animation| duration as f32 / 100.0 * animation.duration_seconds())
                 .unwrap_or(0.0);
         }
-        self.duration as f32 / 1000.0
+        duration as f32 / 1000.0
     }
 
     fn exit_time_seconds(
@@ -913,6 +1018,16 @@ impl RuntimeStateTransition {
             condition.use_input(inputs, bindable_triggers, view_model_triggers, layer_index);
         }
     }
+}
+
+fn transition_duration_value(
+    transition_durations: &[StateMachineTransitionDurationInstance],
+    transition_global_id: u32,
+) -> Option<f32> {
+    transition_durations
+        .iter()
+        .find(|duration| duration.transition_global_id == transition_global_id)
+        .map(StateMachineTransitionDurationInstance::value)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2141,6 +2256,7 @@ impl StateMachineLayerInstance {
         bindable_triggers: &[StateMachineBindableTriggerInstance],
         bindable_view_models: &[StateMachineBindableViewModelInstance],
         bindable_booleans: &[StateMachineBindableBooleanInstance],
+        transition_durations: &[StateMachineTransitionDurationInstance],
         data_context_present: bool,
         data_context_view_model_bound: bool,
         view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
@@ -2190,6 +2306,7 @@ impl StateMachineLayerInstance {
                 bindable_triggers,
                 bindable_view_models,
                 bindable_booleans,
+                transition_durations,
                 data_context_present,
                 data_context_view_model_bound,
                 view_model_triggers,
@@ -2230,6 +2347,7 @@ impl StateMachineLayerInstance {
         bindable_triggers: &[StateMachineBindableTriggerInstance],
         bindable_view_models: &[StateMachineBindableViewModelInstance],
         bindable_booleans: &[StateMachineBindableBooleanInstance],
+        transition_durations: &[StateMachineTransitionDurationInstance],
         data_context_present: bool,
         data_context_view_model_bound: bool,
         view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
@@ -2256,6 +2374,7 @@ impl StateMachineLayerInstance {
             bindable_triggers,
             bindable_view_models,
             bindable_booleans,
+            transition_durations,
             data_context_present,
             data_context_view_model_bound,
             view_model_triggers,
@@ -2280,6 +2399,7 @@ impl StateMachineLayerInstance {
             bindable_triggers,
             bindable_view_models,
             bindable_booleans,
+            transition_durations,
             data_context_present,
             data_context_view_model_bound,
             view_model_triggers,
@@ -2305,6 +2425,7 @@ impl StateMachineLayerInstance {
         bindable_triggers: &[StateMachineBindableTriggerInstance],
         bindable_view_models: &[StateMachineBindableViewModelInstance],
         bindable_booleans: &[StateMachineBindableBooleanInstance],
+        transition_durations: &[StateMachineTransitionDurationInstance],
         data_context_present: bool,
         data_context_view_model_bound: bool,
         view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
@@ -2350,6 +2471,7 @@ impl StateMachineLayerInstance {
                 state_to_index,
                 inputs,
                 bindable_numbers,
+                transition_durations,
                 data_context_view_model_bound,
                 view_model_triggers,
                 reported_events,
@@ -2409,6 +2531,7 @@ impl StateMachineLayerInstance {
                 state_to_index,
                 inputs,
                 bindable_numbers,
+                transition_durations,
                 data_context_view_model_bound,
                 view_model_triggers,
                 reported_events,
@@ -2560,6 +2683,7 @@ impl StateMachineLayerInstance {
         state_to_index: usize,
         inputs: &mut [StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
+        transition_durations: &[StateMachineTransitionDurationInstance],
         data_context_view_model_bound: bool,
         view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
@@ -2605,8 +2729,10 @@ impl StateMachineLayerInstance {
             previous_animation.as_ref().and_then(|animation_instance| {
                 artboard.linear_animation(animation_instance.animation_index)
             });
+        let duration_override =
+            transition_duration_value(transition_durations, transition.global_id);
         let transition_duration_seconds =
-            transition.transition_duration_seconds(previous_runtime_animation);
+            transition.transition_duration_seconds(previous_runtime_animation, duration_override);
 
         self.current_state_index = Some(state_to_index);
         self.refresh_current_animation(artboard, layer, inputs, bindable_numbers);

@@ -52,6 +52,7 @@ pub struct StateMachineInstance {
     bindable_booleans: Vec<StateMachineBindableBooleanInstance>,
     default_view_model_triggers: Vec<StateMachineViewModelTriggerInstance>,
     view_model_triggers: Vec<StateMachineViewModelTriggerInstance>,
+    transition_durations: Vec<StateMachineTransitionDurationInstance>,
     layers: Vec<StateMachineLayerInstance>,
     reported_events: Vec<StateMachineReportedEvent>,
     changed_state_count: usize,
@@ -153,6 +154,11 @@ impl StateMachineInstance {
             })
             .collect::<Vec<_>>();
         let default_view_model_triggers = view_model_triggers.clone();
+        let transition_durations = state_machine
+            .transition_duration_bindings
+            .iter()
+            .map(StateMachineTransitionDurationInstance::new)
+            .collect::<Vec<_>>();
         let layers = state_machine
             .layers
             .iter()
@@ -176,6 +182,7 @@ impl StateMachineInstance {
             bindable_booleans,
             default_view_model_triggers,
             view_model_triggers,
+            transition_durations,
             layers,
             reported_events: Vec::new(),
             changed_state_count: 0,
@@ -3038,6 +3045,7 @@ impl StateMachineInstance {
                     &self.bindable_triggers,
                     &self.bindable_view_models,
                     &self.bindable_booleans,
+                    &self.transition_durations,
                     data_context_present,
                     data_context_view_model_bound,
                     &mut self.view_model_triggers,
@@ -3085,6 +3093,7 @@ impl StateMachineInstance {
                 lists: &mut self.bindable_lists,
                 triggers: &mut self.bindable_triggers,
                 view_models: &mut self.bindable_view_models,
+                transition_durations: &mut self.transition_durations,
                 include_view_models,
             },
             phase,

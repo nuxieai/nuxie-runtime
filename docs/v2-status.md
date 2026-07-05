@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 499 across 178 exact files
-- Current compare: `make golden-compare` reports diverges=16, unsupported-feature=101, not-yet=0
+- Exact segments (file × sample): 500 across 179 exact files
+- Current compare: `make golden-compare` reports diverges=15, unsupported-feature=101, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=57 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
@@ -23,42 +23,38 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Inspect `transition_duration_bind_nested.riv` as the newest M6 divergence:
-   after admitting nested child `TextValueRun.text` through
-   `DataConverterFormula`, Rust reaches draw but C++ collapses the nested icon
-   circles with zero-scale transforms at sample 0 while Rust draws full
-   circles. Compare nested state-machine transition-duration/data-bind
-   application before broad text/layout work.
-2. Keep `data_bind_test_cmdq.riv`, `data_binding_test.riv`,
+1. Open the text layout/draw-suppression M6 bucket that currently holds
+   `data_bind_test_cmdq.riv`, `data_binding_test.riv`,
    `data_converter_to_number.riv`, `scripted_data_context.riv`,
    `state_transition_fire_trigger.riv`, and `trigger_based_listeners.riv`
-   parked as known M6 text/data-bind divergences until a text
-   layout/draw-suppression slice addresses their extra/misaligned text
-   streams.
-3. Keep `new_text.riv` and `follow_path_path.riv` parked as known M6
+   as known divergences. Start with `data_binding_test.riv` because its first
+   diff is foreground-layout-backed text emitted at identity transform where
+   C++ uses the layout position, then check whether the same text
+   bounds/suppression path moves the other five files.
+2. Keep `new_text.riv` and `follow_path_path.riv` parked as known M6
    divergences until a dedicated text outline backend/canonicalization slice.
    `follow_path_path.riv` now reaches draw after clearing stale
    `FollowPathConstraint` and cubic vertex static-text gates, but its first
    diff is the same glyph outline payload family.
-4. Keep `spotify_kids_app_icon.riv` parked as a known M6 draw-order/background
+3. Keep `spotify_kids_app_icon.riv` parked as a known M6 draw-order/background
    divergence: after cubic path vertex sibling admission, Rust reaches draw but
    emits a full-artboard background before C++'s centered rounded icon stream.
-5. Keep `text_follow_path_shape_length.riv` parked behind
+4. Keep `text_follow_path_shape_length.riv` parked behind
    `TextFollowPathModifier`: after admitting source-to-target `Text.width`
    binds with no converter or `DataConverterFormula`, direct Rust now stops on
    data-binding target `TextFollowPathModifier` global 168.
-6. Keep `text_vertical_trim_test.riv` parked behind `text-vertical-trim`:
+5. Keep `text_vertical_trim_test.riv` parked behind `text-vertical-trim`:
    property keys 1027/1028 are `Text.verticalTrimTopValue` /
    `Text.verticalTrimBottomValue` bitmask passthroughs into
    `verticalTrimValue`, and C++ applies them in `Text::computeVerticalTrim`
    to rendered/measured text bounds.
-7. Generic `rust-runner-unsupported:text` is empty in the current corpus; the
+6. Generic `rust-runner-unsupported:text` is empty in the current corpus; the
    remaining sharper text gates are `text-follow-path-modifier` and
    `text-vertical-trim`.
-8. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
+7. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
-9. Remaining exact entries pinned to sample `0` are static M1 holdovers:
+8. Remaining exact entries pinned to sample `0` are static M1 holdovers:
    `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
    them during M6 unless a related refactor needs a cheap draw-regression check.
 
@@ -143,13 +139,6 @@ the only memory the next session has. Update it every commit.
   `[1,0,0,1,245.207031,58.4726562]`; C++ emits a longer cubic-heavy numeric
   text path while Rust emits the shorter fallback `text` glyph payload. Parked
   under `rust-runner-divergence:nested-child-text-converter-context`.
-- `transition_duration_bind_nested.riv`: after admitting nested child
-  `TextValueRun.text` through `DataConverterFormula`, Rust reaches draw but
-  the first diff is nested child reveal timing/scale. C++ uses zero-scale
-  transform `[0,0,0,0,250,250]` and a degenerate `move,close` circle at sample
-  0, while Rust draws the full circle at transform `[1,0,0,1,250,250]`.
-  Parked under `rust-runner-divergence:nested-transition-duration-bind`.
-
 ## Backlog (unsupported features awaiting corpus demand)
 
 - Golden runner view-model mutation scripts; `--view-model-script` is reserved
@@ -971,3 +960,14 @@ the only memory the next session has. Update it every commit.
   `M6=57 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
   `transition_duration_bind_nested.riv` as a focused nested
   transition-duration/data-bind divergence.
+- 2026-07-05: [M6] Promoted `transition_duration_bind_nested.riv` by mirroring
+  C++ per-instance `StateTransition.duration` data binds. State-machine data
+  binds targeting transitions now create runtime transition-duration slots,
+  child-artboard default view-model values resolve against the selected
+  artboard context, and transition mixing rounds/clamps bound durations like
+  C++ `StateMachineInstance::resolvedDuration`. `make golden-compare` reports
+  `exact=179`, `exact-segments=500`, `diverges=15`,
+  `unsupported-feature=101`, `not-yet=0`, and parked
+  `M6=57 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
+  the M6 text layout/draw-suppression bucket, starting with
+  `data_binding_test.riv`.

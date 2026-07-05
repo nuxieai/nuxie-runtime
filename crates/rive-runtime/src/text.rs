@@ -226,6 +226,12 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
                 || (property_key_for_name("TransformComponent", "rotation") == Some(property_key)
                     && data_bind.converter_type_name == Some("DataConverterSystemDegsToRads"))
         }
+        Some("Ellipse" | "Polygon" | "Rectangle" | "Star" | "Triangle") => {
+            ["width", "height"]
+                .into_iter()
+                .any(|name| property_key_for_name("ParametricPath", name) == Some(property_key))
+                && data_bind.converter_global.is_none()
+        }
         Some("NestedArtboard") => ["artboardId", "isPaused", "speed", "quantize"]
             .into_iter()
             .any(|name| property_key_for_name("NestedArtboard", name) == Some(property_key)),

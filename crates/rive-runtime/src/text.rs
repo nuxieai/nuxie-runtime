@@ -245,9 +245,16 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
         Some("TextStylePaint") => {
             property_key_for_name("TextStyle", "fontSize") == Some(property_key)
         }
-        Some("Text") => ["alignValue", "overflowValue"]
-            .into_iter()
-            .any(|name| property_key_for_name("Text", name) == Some(property_key)),
+        Some("Text") => {
+            ["alignValue", "overflowValue"]
+                .into_iter()
+                .any(|name| property_key_for_name("Text", name) == Some(property_key))
+                || (["width", "height"]
+                    .into_iter()
+                    .any(|name| property_key_for_name("Text", name) == Some(property_key))
+                    && (data_bind.converter_global.is_none()
+                        || data_bind.converter_type_name == Some("DataConverterFormula")))
+        }
         _ => false,
     }
 }

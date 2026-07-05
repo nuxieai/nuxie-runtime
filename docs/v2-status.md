@@ -23,12 +23,12 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Probe `text_follow_path_shape_length.riv` as the next
+1. Probe `text_vertical_trim_test.riv` as the next
    `rust-runner-unsupported:text` M6 gate: direct Rust currently stops on a
-   static-text data-binding target `Text` global 73 before it reaches
-   follow-path drawing. Compare the target property against C++ import/draw
-   behavior, admit only if it is a finite import-time/static draw fact, then
-   fix or retag the first real blocker.
+   static-text data-binding target `Text` global 41 for property keys
+   1027/1028. Compare the target properties against C++ import/draw behavior,
+   admit only if they are finite import-time/static draw facts, then fix or
+   retag the first real blocker.
 2. Keep `data_bind_test_cmdq.riv`, `data_binding_test.riv`,
    `data_converter_to_number.riv`, `scripted_data_context.riv`,
    `state_transition_fire_trigger.riv`, and `trigger_based_listeners.riv`
@@ -43,13 +43,12 @@ the only memory the next session has. Update it every commit.
 4. Keep `spotify_kids_app_icon.riv` parked as a known M6 draw-order/background
    divergence: after cubic path vertex sibling admission, Rust reaches draw but
    emits a full-artboard background before C++'s centered rounded icon stream.
-5. Keep richer follow-path text files parked behind `TextFollowPathModifier`
-   and unsupported `Text` property data-bind targets until the top queue item
-   resolves which of those is the first real blocker.
-6. Keep `text_vertical_trim_test.riv` parked behind text data-binding target
-   support; after the layout-paint slice it now fails on unsupported `Text`
-   property data bind target global 41 before reaching richer vertical-trim
-   behavior.
+5. Keep `text_follow_path_shape_length.riv` parked behind
+   `TextFollowPathModifier`: after admitting source-to-target `Text.width`
+   binds with no converter or `DataConverterFormula`, direct Rust now stops on
+   data-binding target `TextFollowPathModifier` global 168.
+6. Keep richer vertical trim behavior parked behind the top queue item until
+   its `Text` property data binds are classified.
 7. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
@@ -231,9 +230,9 @@ the only memory the next session has. Update it every commit.
   `Text.overflowValue` / `TextStylePaint.fontSize` /
   `LayoutComponent.height` / `SolidColor.colorValue` / `Shape.x/y` through
   no-converter and `DataConverterGroup` paths / `Shape.rotation` via
-  `DataConverterSystemDegsToRads`, plus no-converter `ParametricPath`
-  width/height binds for Ellipse/Polygon/Rectangle/Star/Triangle around
-  static text.
+  `DataConverterSystemDegsToRads`, `Text.width/height` through no converter
+  or `DataConverterFormula`, plus no-converter `ParametricPath` width/height
+  binds for Ellipse/Polygon/Rectangle/Star/Triangle around static text.
   Static text can coexist with authored nested bool input controls beside
   nested state-machine hosts and passive sample-0 `FocusData` /
   `KeyboardInput` metadata plus inert `ScriptedDrawable` siblings.
@@ -924,3 +923,13 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=102`, `not-yet=0`, and parked
   `M6=58 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
   `text_follow_path_shape_length.riv`.
+- 2026-07-05: [M6] Reclassified `text_follow_path_shape_length.riv` after
+  admitting source-to-target `Text.width/height` data binds with no converter
+  or `DataConverterFormula` through the static text gate. Direct Rust now gets
+  past the generic `Text` property blockers and stops on
+  `TextFollowPathModifier` global 168, so the file is retagged as
+  `rust-runner-unsupported:text-follow-path-modifier`. `make golden-compare`
+  remains `exact=178`, `exact-segments=499`, `diverges=15`,
+  `unsupported-feature=102`, `not-yet=0`, and parked
+  `M6=58 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
+  `text_vertical_trim_test.riv`.

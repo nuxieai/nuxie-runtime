@@ -27,10 +27,11 @@ the only memory the next session has. Update it every commit.
    `data_bind_test_cmdq.riv`, `data_converter_to_number.riv`,
    `scripted_data_context.riv`, `state_transition_fire_trigger.riv`, and
    `trigger_based_listeners.riv` as known divergences. Continue
-   `data_bind_test_cmdq.riv`: it still diverges on the bottom command-queue
-   text/layout block at y=`434.356567` C++ vs y=`460.671631` Rust, with
-   different background/clip path heights. Use local-id layout boxes first if
-   placement is still suspect; if they match, classify the text value/draw
+   `data_bind_test_cmdq.riv`: local-id layout boxes now complete with 19 boxes
+   and the local 40 Shape leaf measures 24x24, but the bottom command-queue
+   text/layout block still diverges at y=`434.356567` C++ vs y=`453.185791`
+   Rust, with different background/clip path heights. The remaining placement
+   drift is in the Taffy/Yoga text-layout bucket; classify the text value/draw
    suppression first diff before changing behavior.
 2. Keep `new_text.riv` and `follow_path_path.riv` parked as known M6
    divergences until a dedicated text outline backend/canonicalization slice.
@@ -80,10 +81,11 @@ the only memory the next session has. Update it every commit.
   wider line (`x=7.71484375` versus `x=212.890625`), and C++ emits a
   zero-sized middle text path that Rust suppresses.
 - `data_bind_test_cmdq.riv`: after admitting inert `Event` siblings through the
-  static text gate, Rust reaches draw but the bottom command-queue text/layout
-  block diverges. First focused diff: C++ transforms the block at
-  y=`434.356567` while Rust emits it at y=`460.671631`, with different
-  background/clip path heights.
+  static text gate and measuring Shape layout leaves through the Taffy adapter,
+  Rust reaches draw and layout-bounds reports all 19 boxes; local 40 measures
+  24x24 like C++. The bottom command-queue text/layout block still diverges.
+  First focused diff: C++ transforms the block at y=`434.356567` while Rust
+  emits it at y=`453.185791`, with different background/clip path heights.
 - `data_converter_to_number.riv`: after admitting custom-property siblings
   through static text and adding `CustomPropertyBoolean` /
   `CustomPropertyColor` target-to-source values, Rust reaches draw but the
@@ -993,3 +995,14 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=101`, `not-yet=0`, and parked
   `M6=57 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
   `data_bind_test_cmdq.riv` in the text layout/draw-suppression bucket.
+- 2026-07-05: [M6] Narrowed `data_bind_test_cmdq.riv` by measuring Shape
+  layout leaves in the Taffy adapter using C++ `Shape::measureLayout` /
+  `ParametricPath::measureLayout` semantics for the static runtime subset.
+  Rust layout-bounds now succeeds with all 19 boxes and local 40 measures
+  24x24; the first stream diff improved from y=`460.671631` to
+  y=`453.185791` but the file remains a known Taffy/Yoga text-layout
+  divergence. `make golden-compare` remains `exact=180`,
+  `exact-segments=501`, `diverges=14`, `unsupported-feature=101`,
+  `not-yet=0`, and parked `M6=57 gated=8 harness=36`;
+  `cargo test --workspace` passes. Next target stays
+  `data_bind_test_cmdq.riv`.

@@ -2726,7 +2726,7 @@ impl TaffyRuntimeLayoutEngine {
 
         let node = if child_nodes.is_empty() {
             if runtime.is_some()
-                && self.layout_component_has_static_text_measure(instance, graph, local)?
+                && self.layout_component_has_static_measure(instance, graph, local)?
             {
                 taffy.new_leaf_with_context(style, local).ok()?
             } else {
@@ -3224,7 +3224,7 @@ impl TaffyRuntimeLayoutEngine {
             return Some(false);
         }
         if runtime.is_some()
-            && self.layout_component_has_static_text_measure(instance, graph, layout_local)?
+            && self.layout_component_has_static_measure(instance, graph, layout_local)?
         {
             return Some(false);
         }
@@ -3238,22 +3238,24 @@ impl TaffyRuntimeLayoutEngine {
                 .iter()
                 .find(|component| component.local_id == *child_local)
                 .map(|child| child.type_name);
-            !matches!(
-                child_type,
-                Some(
-                    "LayoutComponent"
-                        | "Fill"
-                        | "LinearGradient"
-                        | "RadialGradient"
-                        | "SolidColor"
-                        | "Stroke"
-                        | "LayoutComponentStyle"
+            let measured_child = runtime.is_some() && matches!(child_type, Some("Shape" | "Text"));
+            !measured_child
+                && !matches!(
+                    child_type,
+                    Some(
+                        "LayoutComponent"
+                            | "Fill"
+                            | "LinearGradient"
+                            | "RadialGradient"
+                            | "SolidColor"
+                            | "Stroke"
+                            | "LayoutComponentStyle"
+                    )
                 )
-            )
         }))
     }
 
-    fn layout_component_has_static_text_measure(
+    fn layout_component_has_static_measure(
         &self,
         _instance: &ArtboardInstance,
         graph: &ArtboardGraph,
@@ -3268,7 +3270,7 @@ impl TaffyRuntimeLayoutEngine {
                 .components
                 .iter()
                 .find(|component| component.local_id == *child_local)
-                .is_some_and(|child| child.type_name == "Text")
+                .is_some_and(|child| matches!(child.type_name, "Shape" | "Text"))
         }))
     }
 
@@ -3283,8 +3285,8 @@ impl TaffyRuntimeLayoutEngine {
     ) -> Option<Size<f32>> {
         // Ported from C++ `src/layout_component.cpp`
         // `LayoutComponent::measureLayout`: measure intrinsically sizeable
-        // non-layout children and take the max size. This first M6 slice wires
-        // static Text through the existing text-measurement subset.
+        // non-layout children and take the max size for the static runtime
+        // subsets the Taffy adapter can currently model.
         let component = graph
             .components
             .iter()
@@ -3301,45 +3303,107 @@ impl TaffyRuntimeLayoutEngine {
             else {
                 continue;
             };
-            if child.type_name != "Text" {
-                continue;
-            }
-            let measured_bounds = instance
-                .runtime_layout_component_style_local(layout_local)
-                .and_then(|style_local| {
-                    let layout_constraint = RuntimeTextLayoutConstraint {
-                        width: known_dimensions
-                            .width
-                            .or_else(|| definite_available_space(available_space.width))
-                            .unwrap_or(f32::MAX),
-                        height: known_dimensions
-                            .height
-                            .or_else(|| definite_available_space(available_space.height))
-                            .unwrap_or(f32::MAX),
-                        width_scale_type: instance.runtime_layout_axis_scale(style_local, true),
-                        height_scale_type: instance.runtime_layout_axis_scale(style_local, false),
-                    };
-                    static_text_layout_measure_bounds(
-                        runtime,
-                        graph,
+            match child.type_name {
+                "Shape" => {
+                    let Some((width, height)) = self.measure_shape_layout_child(
                         instance,
+                        graph,
                         child.local_id,
-                        layout_constraint,
-                    )
-                })
-                .or_else(|| {
-                    static_text_constraint_bounds(runtime, graph, instance, child.local_id)
-                });
-            let Some((_x, _y, width, height)) = measured_bounds else {
-                continue;
-            };
-            measured.width = measured.width.max(width);
-            measured.height = measured.height.max(height);
+                        known_dimensions,
+                        available_space,
+                    ) else {
+                        continue;
+                    };
+                    measured.width = measured.width.max(width);
+                    measured.height = measured.height.max(height);
+                }
+                "Text" => {
+                    let measured_bounds = instance
+                        .runtime_layout_component_style_local(layout_local)
+                        .and_then(|style_local| {
+                            let layout_constraint = RuntimeTextLayoutConstraint {
+                                width: known_dimensions
+                                    .width
+                                    .or_else(|| definite_available_space(available_space.width))
+                                    .unwrap_or(f32::MAX),
+                                height: known_dimensions
+                                    .height
+                                    .or_else(|| definite_available_space(available_space.height))
+                                    .unwrap_or(f32::MAX),
+                                width_scale_type: instance
+                                    .runtime_layout_axis_scale(style_local, true),
+                                height_scale_type: instance
+                                    .runtime_layout_axis_scale(style_local, false),
+                            };
+                            static_text_layout_measure_bounds(
+                                runtime,
+                                graph,
+                                instance,
+                                child.local_id,
+                                layout_constraint,
+                            )
+                        })
+                        .or_else(|| {
+                            static_text_constraint_bounds(runtime, graph, instance, child.local_id)
+                        });
+                    let Some((_x, _y, width, height)) = measured_bounds else {
+                        continue;
+                    };
+                    measured.width = measured.width.max(width);
+                    measured.height = measured.height.max(height);
+                }
+                _ => {}
+            }
         }
         Some(Size {
             width: known_dimensions.width.unwrap_or(measured.width),
             height: known_dimensions.height.unwrap_or(measured.height),
         })
+    }
+
+    fn measure_shape_layout_child(
+        &self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        shape_local: usize,
+        known_dimensions: Size<Option<f32>>,
+        available_space: Size<AvailableSpace>,
+    ) -> Option<(f32, f32)> {
+        // Ported from C++ `src/shapes/shape.cpp` and
+        // `src/shapes/parametric_path.cpp`: `Shape::measureLayout` takes the max
+        // measured size of its intrinsically sizeable paths; parametric paths
+        // clamp their authored size to the provided measure constraints.
+        let composer = graph
+            .path_composers
+            .iter()
+            .find(|composer| composer.shape_local == shape_local)?;
+        let max_width = known_dimensions
+            .width
+            .or_else(|| definite_available_space(available_space.width))
+            .unwrap_or(f32::MAX);
+        let max_height = known_dimensions
+            .height
+            .or_else(|| definite_available_space(available_space.height))
+            .unwrap_or(f32::MAX);
+        let mut measured = Size::ZERO;
+        for path_ref in &composer.paths {
+            let Some(path) = graph
+                .paths
+                .iter()
+                .find(|path| path.local_id == path_ref.local_id)
+            else {
+                continue;
+            };
+            let runtime_path = runtime_path_geometry(instance, path);
+            let Some((width, height)) =
+                measure_parametric_path_layout(&runtime_path, max_width, max_height)
+            else {
+                continue;
+            };
+            measured.width = measured.width.max(width);
+            measured.height = measured.height.max(height);
+        }
+        Some((measured.width, measured.height))
     }
 
     fn layout_provider_children(
@@ -6774,6 +6838,21 @@ fn runtime_parametric_path(
             ),
         }),
     }
+}
+
+fn measure_parametric_path_layout(
+    path: &PathGeometryNode,
+    max_width: f32,
+    max_height: f32,
+) -> Option<(f32, f32)> {
+    let (width, height) = match path.parametric.as_ref()? {
+        ParametricPathNode::Ellipse { width, height, .. }
+        | ParametricPathNode::Polygon { width, height, .. }
+        | ParametricPathNode::Rectangle { width, height, .. }
+        | ParametricPathNode::Star { width, height, .. }
+        | ParametricPathNode::Triangle { width, height, .. } => (*width, *height),
+    };
+    Some((max_width.min(width), max_height.min(height)))
 }
 
 fn runtime_path_double_property(

@@ -5,9 +5,9 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 477 across 156 exact files
-- Current compare: `make golden-compare` reports diverges=9, unsupported-feature=130, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=86 gated=8 harness=36
+- Exact segments (file × sample): 479 across 158 exact files
+- Current compare: `make golden-compare` reports diverges=9, unsupported-feature=128, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=84 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -23,13 +23,15 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue the painted `LayoutComponent` slice: root row/fill layout
-   backgrounds and the empty nested clipped component-list override case are
-   now exact through `artboard_list_overrides.riv`; `bankcard.riv` clears this
-   gate and is parked on `feather`. There are 12 remaining M6
-   `rust-runner-unsupported:layout-component-paint` entries. Start with
-   `computed_root_transform.riv`, which stops on `LayoutComponent` paint
-   global 32.
+1. Continue the painted `LayoutComponent` slice: simple root row/fill,
+   clipped empty-list override, and non-reverse row/column fixed-percent/fill
+   backgrounds are now exact through `computed_root_transform.riv` and
+   `list_items.riv`. Seven stale layout-paint entries were retagged to
+   `rust-runner-unsupported:text` after clearing this gate. There are 3
+   remaining M6 `rust-runner-unsupported:layout-component-paint` entries:
+   `data_bind_test_cmdq.riv`, `scroll_snap.riv`, and `scroll_test.riv`. Start
+   with `data_bind_test_cmdq.riv`, which stops on `LayoutComponent` paint
+   global 162.
 2. Keep `collapse_data_binds.riv` parked behind
    `layout-computed-values`: it data-binds `LayoutComponent.computedLocalX`
    into text, so the missing work is computed layout geometry/data-bind
@@ -48,9 +50,10 @@ the only memory the next session has. Update it every commit.
    unsupported `Text` property data-bind targets;
    `text_follow_path_shape_length.riv` currently fails first on data binding
    target `Text` global 73 before it reaches follow-path drawing.
-6. Keep `text_vertical_trim_test.riv` parked behind
-   `layout-component-paint`; it now fails there before reaching any richer
-   vertical-trim text behavior.
+6. Keep `text_vertical_trim_test.riv` parked behind text data-binding target
+   support; after the layout-paint slice it now fails on unsupported `Text`
+   property data bind target global 41 before reaching richer vertical-trim
+   behavior.
 7. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
@@ -527,3 +530,13 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=130`, and parked `M6=86 gated=8 harness=36`; next
   target: `computed_root_transform.riv`, still gated on
   `layout-component-paint` global 32.
+- 2026-07-04: [M6] Promoted `computed_root_transform.riv` and
+  `list_items.riv` by adding the first simple flex layout background sizing:
+  non-reverse row/column parents, fixed point/percent main-axis sizes,
+  fill-weighted remaining space via `fractionalWidth`/`fractionalHeight`, and
+  fill/fixed/hug cross-axis sizing. Seven files now clear layout paint and are
+  retagged to `rust-runner-unsupported:text`; only
+  `data_bind_test_cmdq.riv`, `scroll_snap.riv`, and `scroll_test.riv` remain
+  on `layout-component-paint`. `make golden-compare` reports `exact=158`,
+  `exact-segments=479`, `diverges=9`, `unsupported-feature=128`, and parked
+  `M6=84 gated=8 harness=36`; `cargo test --workspace` passes.

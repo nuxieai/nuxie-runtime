@@ -825,7 +825,8 @@ fn layout_component_paint_supported(
     artboard: &ArtboardGraph,
     container: &ShapePaintContainerNode,
 ) -> bool {
-    simple_root_layout_component_paint_supported(runtime, artboard, container)
+    simple_flex_layout_component_paint_supported(runtime, artboard, container)
+        || simple_root_layout_component_paint_supported(runtime, artboard, container)
         || root_layout_component_paint_supported(runtime, artboard, container)
         || clipped_nested_empty_list_layout_component_paint_supported(runtime, artboard, container)
 }
@@ -1083,6 +1084,160 @@ fn clipped_nested_empty_list_layout_component_paint_supported(
         .paints
         .iter()
         .all(simple_layout_background_paint_supported)
+}
+
+fn simple_flex_layout_component_paint_supported(
+    runtime: &RuntimeFile,
+    artboard: &ArtboardGraph,
+    container: &ShapePaintContainerNode,
+) -> bool {
+    let Some(component) = artboard
+        .components
+        .iter()
+        .find(|component| component.local_id == container.local_id)
+    else {
+        return false;
+    };
+    if component.type_name != "LayoutComponent" {
+        return false;
+    }
+    let Some(parent_local) = component.parent_local else {
+        return false;
+    };
+    let Some(parent) = artboard
+        .components
+        .iter()
+        .find(|component| component.local_id == parent_local)
+    else {
+        return false;
+    };
+    if !matches!(parent.type_name, "Artboard" | "LayoutComponent") {
+        return false;
+    }
+
+    let Some(layout_object) = runtime.object(container.global_id as usize) else {
+        return false;
+    };
+    if layout_object.bool_property("clip").unwrap_or(false) {
+        return false;
+    }
+    let Some(style_object) = layout_style_object(runtime, artboard, layout_object) else {
+        return false;
+    };
+    if !layout_style_has_zero_corners(style_object) {
+        return false;
+    }
+
+    let Some(parent_object) = runtime.object(parent.global_id as usize) else {
+        return false;
+    };
+    let Some(parent_style) = layout_style_object(runtime, artboard, parent_object) else {
+        return false;
+    };
+    let parent_direction = parent_style
+        .uint_property("flexDirectionValue")
+        .unwrap_or(2);
+    if !matches!(parent_direction, 0 | 2) {
+        return false;
+    }
+    if !simple_flex_layout_spacing_supported(parent_style, parent_direction == 2) {
+        return false;
+    }
+
+    let layout_children = parent
+        .children
+        .iter()
+        .filter_map(|child_local| {
+            artboard
+                .components
+                .iter()
+                .find(|component| component.local_id == *child_local)
+        })
+        .filter(|child| child.type_name == "LayoutComponent")
+        .collect::<Vec<_>>();
+    if !layout_children
+        .iter()
+        .any(|child| child.local_id == component.local_id)
+    {
+        return false;
+    }
+    if !layout_children.iter().all(|child| {
+        simple_flex_layout_child_supported(runtime, artboard, child, parent_direction == 2)
+    }) {
+        return false;
+    }
+
+    container
+        .paints
+        .iter()
+        .all(simple_layout_background_paint_supported)
+}
+
+fn simple_flex_layout_child_supported(
+    runtime: &RuntimeFile,
+    artboard: &ArtboardGraph,
+    child: &rive_graph::ComponentNode,
+    parent_is_row: bool,
+) -> bool {
+    let Some(child_object) = runtime.object(child.global_id as usize) else {
+        return false;
+    };
+    if child_object.bool_property("clip").unwrap_or(false) {
+        return false;
+    }
+    let Some(style_object) = layout_style_object(runtime, artboard, child_object) else {
+        return false;
+    };
+    simple_flex_axis_supported(style_object, parent_is_row)
+        && simple_flex_axis_supported(style_object, !parent_is_row)
+}
+
+fn simple_flex_axis_supported(style_object: &RuntimeObject, width_axis: bool) -> bool {
+    let scale_property = if width_axis {
+        "layoutWidthScaleType"
+    } else {
+        "layoutHeightScaleType"
+    };
+    let scale = style_object.uint_property(scale_property).unwrap_or(0);
+    match scale {
+        0 => simple_flex_dimension_unit_supported(style_object, width_axis),
+        1 | 2 => true,
+        _ => false,
+    }
+}
+
+fn simple_flex_dimension_unit_supported(style_object: &RuntimeObject, width_axis: bool) -> bool {
+    let unit_property = if width_axis {
+        "widthUnitsValue"
+    } else {
+        "heightUnitsValue"
+    };
+    matches!(
+        style_object.uint_property(unit_property).unwrap_or(1),
+        0 | 1 | 2 | 3
+    )
+}
+
+fn simple_flex_layout_spacing_supported(style_object: &RuntimeObject, parent_is_row: bool) -> bool {
+    let gap_units = if parent_is_row {
+        "gapHorizontalUnitsValue"
+    } else {
+        "gapVerticalUnitsValue"
+    };
+    [
+        "paddingLeftUnitsValue",
+        "paddingRightUnitsValue",
+        "paddingTopUnitsValue",
+        "paddingBottomUnitsValue",
+        gap_units,
+    ]
+    .into_iter()
+    .all(|property| {
+        matches!(
+            style_object.uint_property(property).unwrap_or(0),
+            0 | 1 | 2 | 3
+        )
+    })
 }
 
 fn layout_computed_value_data_bind(artboard: &ArtboardGraph) -> Option<(u32, u64, Option<u32>)> {

@@ -789,9 +789,7 @@ impl ArtboardInstance {
         layout_local: usize,
         graph: &ArtboardGraph,
     ) -> Mat2D {
-        let bounds = self
-            .runtime_simple_root_row_fill_layout_bounds(layout_local, graph)
-            .or_else(|| self.runtime_nested_fill_hug_layout_bounds(layout_local, graph));
+        let bounds = self.runtime_supported_layout_component_bounds(layout_local, graph);
         if let Some(bounds) = bounds {
             return Mat2D([1.0, 0.0, 0.0, 1.0, bounds.x, bounds.y]);
         }
@@ -805,10 +803,7 @@ impl ArtboardInstance {
         layout_local: usize,
         graph: &ArtboardGraph,
     ) -> RuntimeLayoutBounds {
-        if let Some(bounds) = self.runtime_simple_root_row_fill_layout_bounds(layout_local, graph) {
-            return bounds;
-        }
-        if let Some(bounds) = self.runtime_nested_fill_hug_layout_bounds(layout_local, graph) {
+        if let Some(bounds) = self.runtime_supported_layout_component_bounds(layout_local, graph) {
             return bounds;
         }
         let width = self.runtime_layout_component_dimension(layout_local, "width");
@@ -830,6 +825,214 @@ impl ArtboardInstance {
             width,
             height,
         }
+    }
+
+    fn runtime_supported_layout_component_bounds(
+        &self,
+        layout_local: usize,
+        graph: &ArtboardGraph,
+    ) -> Option<RuntimeLayoutBounds> {
+        self.runtime_simple_flex_layout_bounds(layout_local, graph)
+            .or_else(|| self.runtime_simple_root_row_fill_layout_bounds(layout_local, graph))
+            .or_else(|| self.runtime_nested_fill_hug_layout_bounds(layout_local, graph))
+    }
+
+    fn runtime_simple_flex_layout_bounds(
+        &self,
+        layout_local: usize,
+        graph: &ArtboardGraph,
+    ) -> Option<RuntimeLayoutBounds> {
+        let component = graph
+            .components
+            .iter()
+            .find(|component| component.local_id == layout_local)?;
+        if component.type_name != "LayoutComponent" {
+            return None;
+        }
+        let parent_local = component.parent_local?;
+        let parent = graph
+            .components
+            .iter()
+            .find(|component| component.local_id == parent_local)?;
+        if !matches!(parent.type_name, "Artboard" | "LayoutComponent") {
+            return None;
+        }
+
+        let parent_bounds = if parent_local == 0 {
+            RuntimeLayoutBounds {
+                x: 0.0,
+                y: 0.0,
+                width: self.width,
+                height: self.height,
+            }
+        } else {
+            self.runtime_layout_component_bounds(parent_local, graph)
+        };
+        let parent_style = self.runtime_layout_component_style_local(parent_local);
+        let parent_direction = parent_style
+            .map(|style_local| {
+                self.runtime_layout_style_uint_default(style_local, "flexDirectionValue", 2)
+            })
+            .unwrap_or(2);
+        let parent_is_row = match parent_direction {
+            0 => false,
+            2 => true,
+            _ => return None,
+        };
+
+        let mut layout_children = Vec::new();
+        for child_local in &parent.children {
+            let Some(child) = graph
+                .components
+                .iter()
+                .find(|component| component.local_id == *child_local)
+            else {
+                continue;
+            };
+            if child.type_name == "LayoutComponent" && !layout_children.contains(child_local) {
+                layout_children.push(*child_local);
+            }
+        }
+        if !layout_children.contains(&layout_local) {
+            return None;
+        }
+
+        let (padding_left, padding_right, padding_top, padding_bottom, gap) =
+            if let Some(style_local) = parent_style {
+                (
+                    self.runtime_layout_style_length(
+                        style_local,
+                        "paddingLeft",
+                        "paddingLeftUnitsValue",
+                        parent_bounds.width,
+                    )?,
+                    self.runtime_layout_style_length(
+                        style_local,
+                        "paddingRight",
+                        "paddingRightUnitsValue",
+                        parent_bounds.width,
+                    )?,
+                    self.runtime_layout_style_length(
+                        style_local,
+                        "paddingTop",
+                        "paddingTopUnitsValue",
+                        parent_bounds.height,
+                    )?,
+                    self.runtime_layout_style_length(
+                        style_local,
+                        "paddingBottom",
+                        "paddingBottomUnitsValue",
+                        parent_bounds.height,
+                    )?,
+                    if parent_is_row {
+                        self.runtime_layout_style_length(
+                            style_local,
+                            "gapHorizontal",
+                            "gapHorizontalUnitsValue",
+                            parent_bounds.width,
+                        )?
+                    } else {
+                        self.runtime_layout_style_length(
+                            style_local,
+                            "gapVertical",
+                            "gapVerticalUnitsValue",
+                            parent_bounds.height,
+                        )?
+                    },
+                )
+            } else {
+                (0.0, 0.0, 0.0, 0.0, 0.0)
+            };
+        let main_available = if parent_is_row {
+            parent_bounds.width - padding_left - padding_right
+        } else {
+            parent_bounds.height - padding_top - padding_bottom
+        }
+        .max(0.0);
+        let cross_available = if parent_is_row {
+            parent_bounds.height - padding_top - padding_bottom
+        } else {
+            parent_bounds.width - padding_left - padding_right
+        }
+        .max(0.0);
+        let total_gap = gap * layout_children.len().saturating_sub(1) as f32;
+        let main_available_after_gap = (main_available - total_gap).max(0.0);
+
+        let mut fixed_total = 0.0;
+        let mut fill_total = 0.0;
+        let mut main_sizes = Vec::with_capacity(layout_children.len());
+        for child_local in &layout_children {
+            let style_local = self.runtime_layout_component_style_local(*child_local)?;
+            let scale = self.runtime_layout_axis_scale(style_local, parent_is_row);
+            let size = match scale {
+                0 => {
+                    let size = self.runtime_layout_component_axis_length(
+                        *child_local,
+                        style_local,
+                        parent_is_row,
+                        main_available_after_gap,
+                    )?;
+                    fixed_total += size;
+                    Some(size)
+                }
+                1 => {
+                    fill_total += self.runtime_layout_axis_fraction(*child_local, parent_is_row);
+                    None
+                }
+                2 => {
+                    let size =
+                        self.runtime_layout_component_hug_size(*child_local, graph, parent_is_row)?;
+                    fixed_total += size;
+                    Some(size)
+                }
+                _ => return None,
+            };
+            main_sizes.push(size);
+        }
+
+        let remaining = (main_available_after_gap - fixed_total).max(0.0);
+        let mut cursor = if parent_is_row {
+            parent_bounds.x + padding_left
+        } else {
+            parent_bounds.y + padding_top
+        };
+        for (index, child_local) in layout_children.iter().enumerate() {
+            let style_local = self.runtime_layout_component_style_local(*child_local)?;
+            let main_size = main_sizes[index].unwrap_or_else(|| {
+                if fill_total <= f32::EPSILON {
+                    0.0
+                } else {
+                    remaining * self.runtime_layout_axis_fraction(*child_local, parent_is_row)
+                        / fill_total
+                }
+            });
+            let cross_size = self.runtime_layout_cross_axis_size(
+                *child_local,
+                style_local,
+                !parent_is_row,
+                cross_available,
+                graph,
+            )?;
+            if *child_local == layout_local {
+                return Some(if parent_is_row {
+                    RuntimeLayoutBounds {
+                        x: cursor,
+                        y: parent_bounds.y + padding_top,
+                        width: main_size,
+                        height: cross_size,
+                    }
+                } else {
+                    RuntimeLayoutBounds {
+                        x: parent_bounds.x + padding_left,
+                        y: cursor,
+                        width: cross_size,
+                        height: main_size,
+                    }
+                });
+            }
+            cursor += main_size + gap;
+        }
+        None
     }
 
     fn runtime_nested_fill_hug_layout_bounds(
@@ -949,6 +1152,20 @@ impl ArtboardInstance {
     fn runtime_layout_style_double(&self, style_local: usize, name: &str) -> Option<f32> {
         property_key_for_name("LayoutComponentStyle", name)
             .and_then(|key| self.double_property(style_local, key))
+    }
+
+    fn runtime_layout_style_length(
+        &self,
+        style_local: usize,
+        value_name: &str,
+        unit_name: &str,
+        reference: f32,
+    ) -> Option<f32> {
+        let value = self
+            .runtime_layout_style_double(style_local, value_name)
+            .unwrap_or(0.0);
+        let unit = self.runtime_layout_style_uint_default(style_local, unit_name, 0);
+        self.runtime_layout_length_for_unit(value, unit, reference)
     }
 
     fn runtime_layout_style_bool(&self, style_local: usize, name: &str) -> Option<bool> {
@@ -1090,10 +1307,103 @@ impl ArtboardInstance {
             .and_then(|key| self.uint_property(style_local, key))
     }
 
+    fn runtime_layout_style_uint_default(
+        &self,
+        style_local: usize,
+        name: &str,
+        default: u64,
+    ) -> u64 {
+        self.runtime_layout_style_uint(style_local, name)
+            .unwrap_or(default)
+    }
+
     fn runtime_layout_component_dimension(&self, layout_local: usize, name: &str) -> f32 {
         property_key_for_name("LayoutComponent", name)
             .and_then(|key| self.double_property(layout_local, key))
             .unwrap_or(0.0)
+    }
+
+    fn runtime_layout_axis_scale(&self, style_local: usize, width_axis: bool) -> u64 {
+        self.runtime_layout_style_uint_default(
+            style_local,
+            if width_axis {
+                "layoutWidthScaleType"
+            } else {
+                "layoutHeightScaleType"
+            },
+            0,
+        )
+    }
+
+    fn runtime_layout_axis_units(&self, style_local: usize, width_axis: bool) -> u64 {
+        self.runtime_layout_style_uint_default(
+            style_local,
+            if width_axis {
+                "widthUnitsValue"
+            } else {
+                "heightUnitsValue"
+            },
+            1,
+        )
+    }
+
+    fn runtime_layout_axis_fraction(&self, layout_local: usize, width_axis: bool) -> f32 {
+        let property_name = if width_axis {
+            "fractionalWidth"
+        } else {
+            "fractionalHeight"
+        };
+        property_key_for_name("LayoutComponent", property_name)
+            .and_then(|key| self.double_property(layout_local, key))
+            .unwrap_or(1.0)
+            .max(0.0)
+    }
+
+    fn runtime_layout_component_axis_length(
+        &self,
+        layout_local: usize,
+        style_local: usize,
+        width_axis: bool,
+        reference: f32,
+    ) -> Option<f32> {
+        let value = self.runtime_layout_component_dimension(
+            layout_local,
+            if width_axis { "width" } else { "height" },
+        );
+        self.runtime_layout_length_for_unit(
+            value,
+            self.runtime_layout_axis_units(style_local, width_axis),
+            reference,
+        )
+    }
+
+    fn runtime_layout_cross_axis_size(
+        &self,
+        layout_local: usize,
+        style_local: usize,
+        width_axis: bool,
+        available: f32,
+        graph: &ArtboardGraph,
+    ) -> Option<f32> {
+        match self.runtime_layout_axis_scale(style_local, width_axis) {
+            0 => self.runtime_layout_component_axis_length(
+                layout_local,
+                style_local,
+                width_axis,
+                available,
+            ),
+            1 => Some(available),
+            2 => self.runtime_layout_component_hug_size(layout_local, graph, width_axis),
+            _ => None,
+        }
+    }
+
+    fn runtime_layout_length_for_unit(&self, value: f32, unit: u64, reference: f32) -> Option<f32> {
+        match unit {
+            2 => Some(value / 100.0 * reference),
+            0 | 1 | 3 => Some(value),
+            _ => None,
+        }
     }
 
     fn runtime_shape_paint_path_commands(

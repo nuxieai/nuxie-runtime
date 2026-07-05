@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 458 across 137 exact files
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=115 gated=7 harness=36
+- Exact segments (file × sample): 459 across 138 exact files
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=114 gated=7 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -22,18 +22,14 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Start `modifier_to_run.riv`: it is tied for the smallest remaining
-   `rust-runner-unsupported:text` corpus entry and now fails first on
-   `TextModifierRange` units `2` after the same-style authored-line-break
-   multi-run slice. The implementation slice should port the minimal C++
-   `src/text/text_modifier_range.cpp` range-map path for word/line units over
-   the current static shaped-line model, then re-evaluate runId targeting and
-   `test_modifier_run.riv`.
-2. Keep `test_modifier_run.riv` parked behind the same modifier/range-map
-   family: it currently fails on multi-run text without authored line breaks,
-   and earlier inspection showed runId-targeted ranges plus multi-run/
-   multi-style behavior. Reopen it immediately after `modifier_to_run.riv`
-   establishes the required range semantics.
+1. Start `test_modifier_run.riv`: after the range-map/runId slice promoted
+   `modifier_to_run.riv`, this fixture now fails first on
+   `TextModifierGroup.modifierFlags = 8` (`modifyRotation`). The next narrow
+   C++ source is still `src/text/text_modifier_group.cpp`, but scoped to the
+   static glyph transform path for rotation over the current line/range model.
+2. Keep `text_opacity_modifier.riv` parked behind later modifier flags:
+   opacity/invert-opacity should reopen after rotation/scale/origin transform
+   modifiers establish the non-translation glyph transform path.
 3. Keep `vertical_align_ellipsis.riv` parked for now: temporarily admitting
    sibling `Stroke` reaches draw but diverges on fixed-size vertical
    align/ellipsis placement, so it should reopen with vertical-align text
@@ -126,12 +122,13 @@ the only memory the next session has. Update it every commit.
   default view-model trigger target-to-source writes. Full C++ ListenerGroup
   drag/opaque behavior and input-driven nested align-target/list/text/layout
   targets are still not supported.
-- Static text support currently covers one style, static same-style
-  authored-line-break multi-run text, and translation-only
-  `TextModifierGroup` over character-unit `TextModifierRange` coverage with an
-  optional `CubicInterpolatorComponent`. Word/line units, range maps, runId
-  targeting, no-break multi-run/multi-style text, shape/follow-path/rotation/
-  scale/origin/opacity modifiers, and text input/editing remain M6 text
+- Static text support currently covers one style or matching-metric
+  multi-style text, static authored-line-break and no-break multi-run text,
+  and translation-only `TextModifierGroup` over C++-style
+  `TextModifierRange` character, character-excluding-space, word, and static
+  line range maps with runId targeting and an optional
+  `CubicInterpolatorComponent`. Shape/follow-path/rotation/scale/origin/
+  opacity modifiers, richer layout, and text input/editing remain M6 text
   diagnostics.
 - `TransformConstraint` currently covers Text constraint bounds for the
   supported static Text subset plus the default empty
@@ -352,3 +349,11 @@ the only memory the next session has. Update it every commit.
   `exact-segments=458`, `unsupported-feature=158`, and parked
   `M6=115 gated=7 harness=36`; next reopen `modifier_to_run.riv`, which now
   fails first on `TextModifierRange` word/line range-map units.
+- 2026-07-04: [M6] Promoted `modifier_to_run.riv` by translating the static
+  range-map path from C++ `src/text/text_modifier_range.cpp`: word/line and
+  character-excluding-space units, runId clipping, matching-metric multi-style
+  no-break runs, and per-style text paint allocation ordering. `make
+  golden-compare` moved to `exact=138`, `exact-segments=459`,
+  `unsupported-feature=157`, and parked `M6=114 gated=7 harness=36`; next
+  reopen `test_modifier_run.riv`, which now fails first on rotation modifier
+  flags.

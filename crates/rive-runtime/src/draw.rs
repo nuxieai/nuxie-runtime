@@ -1714,9 +1714,9 @@ fn runtime_draw_command(
         if saved && paint.needs_save_operation {
             renderer.restore();
         }
-    }
-    if draws_text && !shape_paints.is_empty() {
-        let _ = factory.make_render_paint();
+        if draws_text {
+            let _ = factory.make_render_paint();
+        }
     }
     if draws_text && command.needs_save_operation {
         renderer.restore();

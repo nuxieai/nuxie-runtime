@@ -54,8 +54,11 @@ pub(crate) fn runtime_text_shape_paint_commands(
         .local_id
         .context("text draw command missing local id")?;
     let slice = StaticTextSlice::from_graph(runtime, graph, text_local)?;
-    let path_commands = slice.path_commands(runtime, instance)?;
-    if path_commands.is_empty() {
+    let path_commands_by_style = slice.path_commands_by_style(runtime, instance)?;
+    if path_commands_by_style
+        .iter()
+        .all(|path_commands| path_commands.is_empty())
+    {
         return Ok(Vec::new());
     }
     let render_opacity = instance
@@ -70,15 +73,16 @@ pub(crate) fn runtime_text_shape_paint_commands(
     // elides the drawable-level save.
     let needs_save_operation = true;
 
-    Ok(slice
-        .container
-        .paints
-        .iter()
-        .filter_map(|paint| {
+    let mut commands = Vec::new();
+    for (style, path_commands) in slice.styles.iter().zip(path_commands_by_style) {
+        if path_commands.is_empty() {
+            continue;
+        }
+        commands.extend(style.container.paints.iter().filter_map(|paint| {
             let mut command = runtime_shape_paint_command(
                 instance,
                 paint,
-                slice.container.blend_mode_value,
+                style.container.blend_mode_value,
                 needs_save_operation,
                 render_opacity,
                 shape_world,
@@ -88,19 +92,16 @@ pub(crate) fn runtime_text_shape_paint_commands(
                 command.path_kind = RuntimeShapePaintPathKind::LocalClockwise;
             }
             Some(command)
-        })
-        .collect())
+        }));
+    }
+    Ok(commands)
 }
 
 struct StaticTextSlice<'a> {
     text_local: usize,
     text_global: u32,
     runs: Vec<StaticTextRun>,
-    style_local: usize,
-    style_global: u32,
-    container: &'a ShapePaintContainerNode,
-    font_bytes: Option<&'a [u8]>,
-    variations: Vec<(u32, f32)>,
+    styles: Vec<StaticTextStyle<'a>>,
     modifiers: Vec<StaticTextModifierGroup>,
 }
 
@@ -108,6 +109,34 @@ struct StaticTextSlice<'a> {
 struct StaticTextRun {
     local_id: usize,
     global_id: u32,
+    style_local: usize,
+}
+
+#[derive(Debug, Clone)]
+struct StaticResolvedRun {
+    local_id: usize,
+    global_id: u32,
+    style_local: usize,
+    char_start: usize,
+    char_len: usize,
+    text: String,
+}
+
+#[derive(Debug, Clone)]
+struct StaticTextStyle<'a> {
+    local_id: usize,
+    global_id: u32,
+    container: &'a ShapePaintContainerNode,
+    font_bytes: Option<&'a [u8]>,
+    variations: Vec<(u32, f32)>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct StaticTextStyleMetricSignature {
+    font_asset_id: u64,
+    font_size_bits: u32,
+    letter_spacing_bits: u32,
+    variations: Vec<(u32, u32)>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -129,6 +158,12 @@ struct StaticTextModifierRange {
     local_id: usize,
     global_id: u32,
     interpolator: Option<StaticCubicInterpolator>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct StaticRangeUnit {
+    start: usize,
+    len: usize,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -273,15 +308,13 @@ impl<'a> StaticTextSlice<'a> {
                 run_locals.len()
             );
         }
-        if style_locals.len() != 1 {
+        if style_locals.is_empty() {
             bail!(
-                "static text subset requires exactly one TextStylePaint child, found {}",
+                "static text subset requires at least one TextStylePaint child, found {}",
                 style_locals.len()
             );
         }
-        let style_local = style_locals[0];
         let text_global = global_for_local(graph, text_local)?;
-        let style_global = global_for_local(graph, style_local)?;
         let mut runs = Vec::new();
         let mut authored_text = String::new();
         for run_local in run_locals {
@@ -289,9 +322,12 @@ impl<'a> StaticTextSlice<'a> {
             let run = runtime
                 .object(run_global as usize)
                 .with_context(|| format!("missing TextValueRun global {run_global}"))?;
-            if run.uint_property("styleId") != Some(style_local as u64) {
+            let style_local = run
+                .uint_property("styleId")
+                .context("TextValueRun missing styleId")? as usize;
+            if !style_locals.contains(&style_local) {
                 bail!(
-                    "static text subset requires every TextValueRun to reference the only TextStylePaint"
+                    "static text subset requires every TextValueRun to reference a TextStylePaint child"
                 );
             }
             let bytes = run
@@ -302,78 +338,15 @@ impl<'a> StaticTextSlice<'a> {
             runs.push(StaticTextRun {
                 local_id: run_local,
                 global_id: run_global,
+                style_local,
             });
         }
-        if runs.len() > 1 && !has_forced_text_break(&authored_text) {
-            bail!(
-                "static text subset only supports multiple TextValueRun children for authored line breaks"
-            );
+        let mut styles = Vec::new();
+        for style_local in style_locals {
+            styles.push(StaticTextStyle::from_graph(runtime, graph, style_local)?);
         }
-
-        let container = graph
-            .shape_paint_containers
-            .iter()
-            .find(|container| container.local_id == style_local)
-            .context("TextStylePaint shape paint container is missing")?;
-        if container.paints.len() != 1 {
-            bail!(
-                "static text subset requires one TextStylePaint paint, found {}",
-                container.paints.len()
-            );
-        }
-        let paint = &container.paints[0];
-        if paint.paint_type != ShapePaintKind::Fill {
-            bail!("static text subset only supports Fill text paints");
-        }
-        if !matches!(
-            paint.paint_state,
-            Some(ShapePaintStateNode::SolidColor { .. })
-        ) {
-            bail!("static text subset only supports solid text fill");
-        }
-        if paint.feather.is_some() || !paint.effects.is_empty() {
-            bail!("static text subset does not support text paint effects");
-        }
-
-        let style = runtime
-            .object(style_global as usize)
-            .with_context(|| format!("missing TextStylePaint global {style_global}"))?;
-        let font_asset_index = style
-            .uint_property("fontAssetId")
-            .context("TextStylePaint missing fontAssetId")?;
-        let font_asset = runtime
-            .file_asset(usize::try_from(font_asset_index).context("font asset id is too large")?)
-            .context("TextStylePaint fontAssetId did not resolve to a file asset")?;
-        if font_asset.type_name != "FontAsset" {
-            bail!(
-                "static text subset expected FontAsset, found {} global {}",
-                font_asset.type_name,
-                font_asset.id
-            );
-        }
-        let font_bytes = embedded_file_asset_bytes(runtime, font_asset.id);
-        let style_component = graph
-            .components
-            .iter()
-            .find(|component| component.local_id == style_local)
-            .context("TextStylePaint component is missing")?;
-        let mut variations = Vec::new();
-        for axis_local in style_component
-            .children
-            .iter()
-            .copied()
-            .filter(|local| child_type(*local) == Some("TextStyleAxis"))
-        {
-            let axis_global = global_for_local(graph, axis_local)?;
-            let axis = runtime
-                .object(axis_global as usize)
-                .with_context(|| format!("missing TextStyleAxis global {axis_global}"))?;
-            let tag = axis
-                .uint_property("tag")
-                .with_context(|| format!("TextStyleAxis global {axis_global} missing tag"))?
-                as u32;
-            let axis_value = axis.double_property("axisValue").unwrap_or(0.0);
-            variations.push((tag, axis_value));
+        if !has_forced_text_break(&authored_text) {
+            Self::ensure_matching_style_metrics(runtime, &styles)?;
         }
         let modifiers = text_component
             .children
@@ -387,35 +360,37 @@ impl<'a> StaticTextSlice<'a> {
             text_local,
             text_global,
             runs,
-            style_local,
-            style_global,
-            container,
-            font_bytes,
-            variations,
+            styles,
             modifiers,
         })
     }
 
-    fn path_commands(
+    fn path_commands_by_style(
         &self,
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
-    ) -> Result<Vec<RuntimePathCommand>> {
-        let text = self.text_value(runtime, instance)?;
-        let font_size = self.font_size(runtime, instance)?;
+    ) -> Result<Vec<Vec<RuntimePathCommand>>> {
+        let resolved_runs = self.resolved_runs(runtime, instance)?;
+        let text = resolved_runs
+            .iter()
+            .map(|run| run.text.as_str())
+            .collect::<String>();
+        let base_style = self.base_style()?;
+        let font_size = self.style_font_size(runtime, instance, base_style)?;
         if text.is_empty() || font_size <= 0.0 {
-            return Ok(Vec::new());
+            return Ok(vec![Vec::new(); self.styles.len()]);
         }
         let letter_spacing = self.letter_spacing(runtime, instance);
-        let Some(font_bytes) = self.font_bytes else {
+        let Some(font_bytes) = base_style.font_bytes else {
             // Mirrors src/importers/file_asset_importer.cpp: with no
             // FileAssetLoader and no in-band contents, a hosted FontAsset
             // resolves successfully but has no decoded font.
-            return Ok(Vec::new());
+            return Ok(vec![Vec::new(); self.styles.len()]);
         };
 
         let harf_font = HarfFontRef::new(font_bytes).context("failed to parse font for shaping")?;
         let harf_variations = self
+            .base_style()?
             .variations
             .iter()
             .map(|(tag, value)| (HarfTag::from_u32(*tag), *value))
@@ -438,6 +413,7 @@ impl<'a> StaticTextSlice<'a> {
             SkrifaFontRef::new(font_bytes).context("failed to parse font for outlines")?;
         let disable_legacy_kern = disable_legacy_kern_for_advances(&skrifa_font);
         let skrifa_variations = self
+            .base_style()?
             .variations
             .iter()
             .map(|(tag, value)| VariationSetting::new(SkrifaTag::from_u32(*tag), *value))
@@ -452,15 +428,30 @@ impl<'a> StaticTextSlice<'a> {
         let outlines = skrifa_font.outline_glyphs();
         let scale = font_size / TEXT_SHAPE_SCALE_F32;
         let apply_ellipsis = self.should_apply_static_ellipsis(runtime, instance)?;
-        let lines = split_static_text_lines(&text);
+        let lines = if apply_ellipsis {
+            split_static_text_lines(&text)
+        } else {
+            self.layout_static_text_lines(
+                runtime,
+                instance,
+                &text,
+                &shaper,
+                disable_legacy_kern,
+                scale,
+                letter_spacing,
+            )?
+        };
         if apply_ellipsis && lines.len() > 1 {
             bail!("static text subset does not support ellipsis across multiple authored lines");
         }
-        let mut commands = Vec::new();
+        let mut commands_by_style = vec![Vec::new(); self.styles.len()];
+        let style_by_character = self.style_by_character(&text, &resolved_runs)?;
         let modifier_coverages = self
             .modifiers
             .iter()
-            .map(|modifier| modifier.coverage_by_character(runtime, instance, &text))
+            .map(|modifier| {
+                modifier.coverage_by_character(runtime, instance, &text, &resolved_runs, &lines)
+            })
             .collect::<Result<Vec<_>>>()?;
         for line in lines {
             if line.text.is_empty() {
@@ -526,13 +517,14 @@ impl<'a> StaticTextSlice<'a> {
                     outline
                         .draw(draw_settings, &mut pen)
                         .with_context(|| format!("failed to draw glyph {}", glyph.glyph_id))?;
-                    commands.extend(pen.commands);
+                    let style_index = style_by_character.get(char_index).copied().unwrap_or(0);
+                    commands_by_style[style_index].extend(pen.commands);
                 }
                 cursor_x += glyph.advance * scale + letter_spacing;
             }
         }
 
-        Ok(commands)
+        Ok(commands_by_style)
     }
 
     fn local_bounds(
@@ -541,16 +533,18 @@ impl<'a> StaticTextSlice<'a> {
         instance: &ArtboardInstance,
     ) -> Result<Option<(f32, f32, f32, f32)>> {
         let text = self.text_value(runtime, instance)?;
-        let font_size = self.font_size(runtime, instance)?;
+        let base_style = self.base_style()?;
+        let font_size = self.style_font_size(runtime, instance, base_style)?;
         if text.is_empty() || font_size <= 0.0 {
             return Ok(Some((0.0, 0.0, 0.0, 0.0)));
         }
-        let Some(font_bytes) = self.font_bytes else {
+        let Some(font_bytes) = base_style.font_bytes else {
             return Ok(Some((0.0, 0.0, 0.0, 0.0)));
         };
 
         let harf_font = HarfFontRef::new(font_bytes).context("failed to parse font for shaping")?;
         let harf_variations = self
+            .base_style()?
             .variations
             .iter()
             .map(|(tag, value)| (HarfTag::from_u32(*tag), *value))
@@ -573,6 +567,7 @@ impl<'a> StaticTextSlice<'a> {
             SkrifaFontRef::new(font_bytes).context("failed to parse font for metrics")?;
         let disable_legacy_kern = disable_legacy_kern_for_advances(&skrifa_font);
         let skrifa_variations = self
+            .base_style()?
             .variations
             .iter()
             .map(|(tag, value)| VariationSetting::new(SkrifaTag::from_u32(*tag), *value))
@@ -611,9 +606,22 @@ impl<'a> StaticTextSlice<'a> {
     }
 
     fn text_value(&self, runtime: &RuntimeFile, instance: &ArtboardInstance) -> Result<String> {
+        Ok(self
+            .resolved_runs(runtime, instance)?
+            .into_iter()
+            .map(|run| run.text)
+            .collect())
+    }
+
+    fn resolved_runs(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+    ) -> Result<Vec<StaticResolvedRun>> {
         let property_key = property_key_for_name("TextValueRun", "text")
             .context("missing TextValueRun.text key")?;
-        let mut text = String::new();
+        let mut runs = Vec::new();
+        let mut char_start = 0;
         for run in &self.runs {
             let bytes = instance
                 .string_property(run.local_id, property_key)
@@ -623,19 +631,36 @@ impl<'a> StaticTextSlice<'a> {
                         .and_then(|object| object.string_property_bytes("text"))
                 })
                 .context("TextValueRun missing text")?;
-            text.push_str(std::str::from_utf8(bytes).context("TextValueRun text is not UTF-8")?);
+            let text = std::str::from_utf8(bytes)
+                .context("TextValueRun text is not UTF-8")?
+                .to_owned();
+            let char_len = text.chars().count();
+            runs.push(StaticResolvedRun {
+                local_id: run.local_id,
+                global_id: run.global_id,
+                style_local: run.style_local,
+                char_start,
+                char_len,
+                text,
+            });
+            char_start += char_len;
         }
-        Ok(text)
+        Ok(runs)
     }
 
-    fn font_size(&self, runtime: &RuntimeFile, instance: &ArtboardInstance) -> Result<f32> {
+    fn style_font_size(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        style: &StaticTextStyle<'_>,
+    ) -> Result<f32> {
         let property_key = property_key_for_name("TextStyle", "fontSize")
             .context("missing TextStyle.fontSize key")?;
         Ok(instance
-            .double_property(self.style_local, property_key)
+            .double_property(style.local_id, property_key)
             .or_else(|| {
                 runtime
-                    .object(self.style_global as usize)
+                    .object(style.global_id as usize)
                     .and_then(|object| object.double_property("fontSize"))
             })
             .unwrap_or(12.0))
@@ -645,14 +670,23 @@ impl<'a> StaticTextSlice<'a> {
         let Some(property_key) = property_key_for_name("TextStyle", "letterSpacing") else {
             return 0.0;
         };
+        let Ok(style) = self.base_style() else {
+            return 0.0;
+        };
         instance
-            .double_property(self.style_local, property_key)
+            .double_property(style.local_id, property_key)
             .or_else(|| {
                 runtime
-                    .object(self.style_global as usize)
+                    .object(style.global_id as usize)
                     .and_then(|object| object.double_property("letterSpacing"))
             })
             .unwrap_or(0.0)
+    }
+
+    fn base_style(&self) -> Result<&StaticTextStyle<'a>> {
+        self.styles
+            .first()
+            .context("static text subset requires a base TextStylePaint")
     }
 
     fn text_width(&self, runtime: &RuntimeFile, instance: &ArtboardInstance) -> Result<f32> {
@@ -777,6 +811,118 @@ impl<'a> StaticTextSlice<'a> {
         Ok(glyphs.len())
     }
 
+    fn layout_static_text_lines<'text>(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        text: &'text str,
+        shaper: &harfrust::Shaper<'_>,
+        disable_legacy_kern: bool,
+        scale: f32,
+        letter_spacing: f32,
+    ) -> Result<Vec<StaticTextLine<'text>>> {
+        let authored_lines = split_static_text_lines(text);
+        let sizing = self.text_uint_property(runtime, instance, "sizingValue")?;
+        let wrap = self.text_uint_property(runtime, instance, "wrapValue")?;
+        let max_width = self.text_width(runtime, instance)?;
+        if sizing == 0 || wrap != 0 || max_width <= 0.0 {
+            return Ok(authored_lines);
+        }
+
+        let mut lines = Vec::new();
+        let mut line_index = 0;
+        for authored_line in authored_lines {
+            if authored_line.text.is_empty() {
+                lines.push(StaticTextLine {
+                    text: authored_line.text,
+                    char_start: authored_line.char_start,
+                    line_index,
+                });
+                line_index += 1;
+                continue;
+            }
+
+            let mut remaining = authored_line.text;
+            let mut char_start = authored_line.char_start;
+            while !remaining.is_empty() {
+                let glyphs = shape_text_glyphs(shaper, remaining, disable_legacy_kern);
+                let glyph_end = self.first_static_wrapped_line_end(
+                    runtime,
+                    instance,
+                    remaining,
+                    &glyphs,
+                    max_width,
+                    scale,
+                    letter_spacing,
+                )?;
+                let mut byte_end = byte_index_for_glyph_end(remaining, &glyphs, glyph_end);
+                if byte_end == 0 {
+                    byte_end = remaining
+                        .char_indices()
+                        .nth(1)
+                        .map(|(index, _)| index)
+                        .unwrap_or(remaining.len());
+                }
+
+                let line_text = &remaining[..byte_end];
+                lines.push(StaticTextLine {
+                    text: line_text,
+                    char_start,
+                    line_index,
+                });
+                line_index += 1;
+
+                if byte_end >= remaining.len() {
+                    break;
+                }
+                let skipped = leading_whitespace_bytes(&remaining[byte_end..]);
+                char_start += remaining[..byte_end + skipped].chars().count();
+                remaining = &remaining[byte_end + skipped..];
+            }
+        }
+
+        Ok(lines)
+    }
+
+    fn style_by_character(&self, text: &str, runs: &[StaticResolvedRun]) -> Result<Vec<usize>> {
+        let mut style_by_character = vec![0; text.chars().count()];
+        for run in runs {
+            let style_index = self.style_index_for_local(run.style_local)?;
+            let end = run.char_start + run.char_len;
+            if end > style_by_character.len() {
+                bail!("TextValueRun character range extends past text length");
+            }
+            style_by_character[run.char_start..end].fill(style_index);
+        }
+        Ok(style_by_character)
+    }
+
+    fn style_index_for_local(&self, style_local: usize) -> Result<usize> {
+        self.styles
+            .iter()
+            .position(|style| style.local_id == style_local)
+            .with_context(|| format!("TextValueRun references missing style local {style_local}"))
+    }
+
+    fn ensure_matching_style_metrics(
+        runtime: &RuntimeFile,
+        styles: &[StaticTextStyle<'_>],
+    ) -> Result<()> {
+        let Some(first) = styles.first() else {
+            return Ok(());
+        };
+        let first_signature = StaticTextStyleMetricSignature::from_runtime(runtime, first)?;
+        for style in &styles[1..] {
+            let signature = StaticTextStyleMetricSignature::from_runtime(runtime, style)?;
+            if signature != first_signature {
+                bail!(
+                    "static text subset requires matching TextStylePaint metrics for no-break multi-run text"
+                );
+            }
+        }
+        Ok(())
+    }
+
     fn static_fixed_height_shows_first_line_only(
         &self,
         runtime: &RuntimeFile,
@@ -785,6 +931,119 @@ impl<'a> StaticTextSlice<'a> {
     ) -> Result<bool> {
         let height = self.text_height(runtime, instance)?;
         Ok(line_height > 0.0 && height > 0.0 && height < line_height * 2.0)
+    }
+}
+
+impl<'a> StaticTextStyle<'a> {
+    fn from_graph(
+        runtime: &'a RuntimeFile,
+        graph: &'a ArtboardGraph,
+        style_local: usize,
+    ) -> Result<Self> {
+        let style_global = global_for_local(graph, style_local)?;
+        let container = graph
+            .shape_paint_containers
+            .iter()
+            .find(|container| container.local_id == style_local)
+            .context("TextStylePaint shape paint container is missing")?;
+        if container.paints.len() != 1 {
+            bail!(
+                "static text subset requires one TextStylePaint paint, found {}",
+                container.paints.len()
+            );
+        }
+        let paint = &container.paints[0];
+        if paint.paint_type != ShapePaintKind::Fill {
+            bail!("static text subset only supports Fill text paints");
+        }
+        if !matches!(
+            paint.paint_state,
+            Some(ShapePaintStateNode::SolidColor { .. })
+        ) {
+            bail!("static text subset only supports solid text fill");
+        }
+        if paint.feather.is_some() || !paint.effects.is_empty() {
+            bail!("static text subset does not support text paint effects");
+        }
+
+        let style = runtime
+            .object(style_global as usize)
+            .with_context(|| format!("missing TextStylePaint global {style_global}"))?;
+        let font_asset_index = style
+            .uint_property("fontAssetId")
+            .context("TextStylePaint missing fontAssetId")?;
+        let font_asset = runtime
+            .file_asset(usize::try_from(font_asset_index).context("font asset id is too large")?)
+            .context("TextStylePaint fontAssetId did not resolve to a file asset")?;
+        if font_asset.type_name != "FontAsset" {
+            bail!(
+                "static text subset expected FontAsset, found {} global {}",
+                font_asset.type_name,
+                font_asset.id
+            );
+        }
+        let font_bytes = embedded_file_asset_bytes(runtime, font_asset.id);
+
+        let style_component = graph
+            .components
+            .iter()
+            .find(|component| component.local_id == style_local)
+            .context("TextStylePaint component is missing")?;
+        let mut variations = Vec::new();
+        for axis_local in style_component.children.iter().copied().filter(|local| {
+            graph
+                .local_objects
+                .iter()
+                .find(|object| object.local_id == *local)
+                .and_then(|object| object.type_name)
+                == Some("TextStyleAxis")
+        }) {
+            let axis_global = global_for_local(graph, axis_local)?;
+            let axis = runtime
+                .object(axis_global as usize)
+                .with_context(|| format!("missing TextStyleAxis global {axis_global}"))?;
+            let tag = axis
+                .uint_property("tag")
+                .with_context(|| format!("TextStyleAxis global {axis_global} missing tag"))?
+                as u32;
+            let axis_value = axis.double_property("axisValue").unwrap_or(0.0);
+            variations.push((tag, axis_value));
+        }
+
+        Ok(Self {
+            local_id: style_local,
+            global_id: style_global,
+            container,
+            font_bytes,
+            variations,
+        })
+    }
+}
+
+impl StaticTextStyleMetricSignature {
+    fn from_runtime(runtime: &RuntimeFile, style: &StaticTextStyle<'_>) -> Result<Self> {
+        let object = runtime
+            .object(style.global_id as usize)
+            .with_context(|| format!("missing TextStylePaint global {}", style.global_id))?;
+        let font_asset_id = object
+            .uint_property("fontAssetId")
+            .context("TextStylePaint missing fontAssetId")?;
+        let font_size_bits = object.double_property("fontSize").unwrap_or(12.0).to_bits();
+        let letter_spacing_bits = object
+            .double_property("letterSpacing")
+            .unwrap_or(0.0)
+            .to_bits();
+        let variations = style
+            .variations
+            .iter()
+            .map(|(tag, value)| (*tag, value.to_bits()))
+            .collect();
+        Ok(Self {
+            font_asset_id,
+            font_size_bits,
+            letter_spacing_bits,
+            variations,
+        })
     }
 }
 
@@ -877,10 +1136,12 @@ impl StaticTextModifierGroup {
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
         text: &str,
+        runs: &[StaticResolvedRun],
+        lines: &[StaticTextLine<'_>],
     ) -> Result<Vec<f32>> {
         let mut coverage = vec![0.0; text.chars().count()];
         for range in &self.ranges {
-            range.apply_coverage(runtime, instance, &mut coverage)?;
+            range.apply_coverage(runtime, instance, text, runs, lines, &mut coverage)?;
         }
         Ok(coverage)
     }
@@ -893,14 +1154,8 @@ impl StaticTextModifierRange {
             .object(global_id as usize)
             .with_context(|| format!("missing TextModifierRange global {global_id}"))?;
         let units = object.uint_property("unitsValue").unwrap_or(0);
-        if units != 0 {
-            bail!(
-                "static text subset only supports character TextModifierRange units, found {units}"
-            );
-        }
-        let run_id = object.uint_property("runId").unwrap_or(u32::MAX as u64);
-        if run_id != u32::MAX as u64 {
-            bail!("static text subset does not support TextModifierRange runId");
+        if units > 3 {
+            bail!("static text subset does not support TextModifierRange units {units}");
         }
 
         let component = component_for_local(graph, local_id)
@@ -937,12 +1192,21 @@ impl StaticTextModifierRange {
         &self,
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
+        text: &str,
+        runs: &[StaticResolvedRun],
+        lines: &[StaticTextLine<'_>],
         coverage: &mut [f32],
     ) -> Result<()> {
         if coverage.is_empty() {
             return Ok(());
         }
-        let unit_count = coverage.len() as f32;
+        let (start, end) = self.character_range(runtime, instance, runs, coverage.len())?;
+        let units_value = self.uint_property(runtime, instance, "unitsValue", 0)?;
+        let units = self.range_units(units_value, text, start, end, lines)?;
+        if units.is_empty() {
+            return Ok(());
+        }
+        let unit_count = units.len() as f32;
         let offset = self.double_property(runtime, instance, "offset", 0.0)?;
         let range_type = self.uint_property(runtime, instance, "typeValue", 0)?;
         let (index_from, index_to, falloff_from, falloff_to) = match range_type {
@@ -965,7 +1229,7 @@ impl StaticTextModifierRange {
         let mode = self.uint_property(runtime, instance, "modeValue", 0)?;
         let clamp = self.bool_property(runtime, instance, "clamp", false)?;
 
-        for (unit_index, current) in coverage.iter_mut().enumerate() {
+        for (unit_index, unit) in units.iter().enumerate() {
             let t = unit_index as f32 + 0.5;
             let c = strength
                 * self.coverage_at(
@@ -977,21 +1241,119 @@ impl StaticTextModifierRange {
                     falloff_from,
                     falloff_to,
                 )?;
-            let next = match mode {
-                0 => *current + c,
-                1 => *current - c,
-                2 => *current * c,
-                3 => current.min(c),
-                4 => current.max(c),
-                5 => (*current - c).abs(),
-                other => {
-                    bail!("static text subset does not support TextModifierRange mode {other}")
-                }
-            };
-            *current = if clamp { next.clamp(0.0, 1.0) } else { next };
+            for character_index in unit.start..unit.start + unit.len {
+                let current = coverage[character_index];
+                let next = match mode {
+                    0 => current + c,
+                    1 => current - c,
+                    2 => current * c,
+                    3 => current.min(c),
+                    4 => current.max(c),
+                    5 => (current - c).abs(),
+                    other => {
+                        bail!("static text subset does not support TextModifierRange mode {other}")
+                    }
+                };
+                coverage[character_index] = if clamp { next.clamp(0.0, 1.0) } else { next };
+            }
+
+            let next_start = units
+                .get(unit_index + 1)
+                .map(|next| next.start)
+                .unwrap_or(end);
+            for character_index in unit.start + unit.len..next_start {
+                coverage[character_index] = 0.0;
+            }
         }
 
         Ok(())
+    }
+
+    fn character_range(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        runs: &[StaticResolvedRun],
+        text_len: usize,
+    ) -> Result<(usize, usize)> {
+        let run_id = self.uint_property(runtime, instance, "runId", u32::MAX as u64)?;
+        if run_id == u32::MAX as u64 {
+            return Ok((0, text_len));
+        }
+        let run = runs
+            .iter()
+            .find(|run| run.local_id as u64 == run_id || run.global_id as u64 == run_id)
+            .with_context(|| format!("TextModifierRange runId {run_id} did not resolve"))?;
+        Ok((run.char_start, run.char_start + run.char_len))
+    }
+
+    fn range_units(
+        &self,
+        units_value: u64,
+        text: &str,
+        start: usize,
+        end: usize,
+        lines: &[StaticTextLine<'_>],
+    ) -> Result<Vec<StaticRangeUnit>> {
+        match units_value {
+            0 => Ok((start..end)
+                .map(|index| StaticRangeUnit {
+                    start: index,
+                    len: 1,
+                })
+                .collect()),
+            1 => Ok(text
+                .chars()
+                .enumerate()
+                .skip(start)
+                .take(end.saturating_sub(start))
+                .filter_map(|(index, ch)| {
+                    (!ch.is_whitespace()).then_some(StaticRangeUnit {
+                        start: index,
+                        len: 1,
+                    })
+                })
+                .collect()),
+            2 => Ok(Self::word_range_units(text, start, end)),
+            3 => Ok(Self::line_range_units(lines, start, end)),
+            other => bail!("static text subset does not support TextModifierRange units {other}"),
+        }
+    }
+
+    fn word_range_units(text: &str, start: usize, end: usize) -> Vec<StaticRangeUnit> {
+        let mut units = Vec::new();
+        let mut word_start = None;
+        for (index, ch) in text.chars().enumerate() {
+            if ch.is_whitespace() {
+                if let Some(index_from) = word_start.take() {
+                    add_range_unit(&mut units, index_from, index, start, end);
+                }
+            } else if word_start.is_none() {
+                word_start = Some(index);
+            }
+        }
+        if let Some(index_from) = word_start {
+            add_range_unit(&mut units, index_from, text.chars().count(), start, end);
+        }
+        units
+    }
+
+    fn line_range_units(
+        lines: &[StaticTextLine<'_>],
+        start: usize,
+        end: usize,
+    ) -> Vec<StaticRangeUnit> {
+        let mut units = Vec::new();
+        for line in lines {
+            add_range_unit(
+                &mut units,
+                line.char_start,
+                line.char_start + line.text.chars().count(),
+                start,
+                end,
+            );
+        }
+        units
     }
 
     fn coverage_at(
@@ -1250,6 +1612,46 @@ fn split_static_text_lines(text: &str) -> Vec<StaticTextLine<'_>> {
         line_index,
     });
     lines
+}
+
+fn add_range_unit(
+    units: &mut Vec<StaticRangeUnit>,
+    index_from: usize,
+    index_to: usize,
+    start_offset: usize,
+    end_offset: usize,
+) {
+    if index_to > start_offset && end_offset > index_from {
+        let actual_start = start_offset.max(index_from);
+        let actual_end = end_offset.min(index_to);
+        if actual_end > actual_start {
+            units.push(StaticRangeUnit {
+                start: actual_start,
+                len: actual_end - actual_start,
+            });
+        }
+    }
+}
+
+fn byte_index_for_glyph_end(text: &str, glyphs: &[TextGlyph], glyph_end: usize) -> usize {
+    if glyph_end >= glyphs.len() {
+        return text.len();
+    }
+    let target = (glyphs[glyph_end].cluster as usize).min(text.len());
+    if text.is_char_boundary(target) {
+        return target;
+    }
+    text.char_indices()
+        .map(|(index, _)| index)
+        .take_while(|index| *index <= target)
+        .last()
+        .unwrap_or(0)
+}
+
+fn leading_whitespace_bytes(text: &str) -> usize {
+    text.char_indices()
+        .find_map(|(index, ch)| (!ch.is_whitespace()).then_some(index))
+        .unwrap_or(text.len())
 }
 
 fn cubic_interpolator_calc_bezier(t: f32, a1: f32, a2: f32) -> f32 {

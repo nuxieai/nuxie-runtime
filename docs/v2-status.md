@@ -5,9 +5,9 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 495 across 174 exact files
-- Current compare: `make golden-compare` reports diverges=12, unsupported-feature=109, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=65 gated=8 harness=36
+- Exact segments (file × sample): 496 across 175 exact files
+- Current compare: `make golden-compare` reports diverges=12, unsupported-feature=108, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=64 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -23,7 +23,7 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Probe `hit_test_nested.riv` as the next
+1. Probe `interpolate_to_end.riv` as the next
    `rust-runner-unsupported:text` M6 gate: compare direct C++/Rust streams,
    remove only stale static-text gates needed to reach draw, and fix or retag
    the first real text/data-bind blocker. Do not start a general text layout
@@ -202,11 +202,14 @@ the only memory the next session has. Update it every commit.
   `TextModifierRange` character, character-excluding-space, word, and static
   line range maps with runId targeting and optional cubic range
   interpolation, including C++-ordered opacity buckets, plus solid fill/stroke
-  `TextStylePaint` drawing with DashPath stroke effects, and
+  `TextStylePaint` drawing with DashPath stroke effects, text under `Shape`
+  parent transforms, and
   source-to-target `TextValueRun.text` / `Text.alignValue` /
   `Text.overflowValue` / `TextStylePaint.fontSize` /
   `LayoutComponent.height` / `SolidColor.colorValue` / `Shape.rotation` via
   `DataConverterSystemDegsToRads` data binds around static text.
+  Static text can coexist with authored nested bool input controls beside
+  nested state-machine hosts.
   Shape/follow-path/scale/origin modifiers,
   gradient/feather/other text effects, richer layout, broader `Text` property
   data binds, and text input/editing remain M6 text diagnostics.
@@ -824,3 +827,11 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=109`, `not-yet=0`, and parked
   `M6=65 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
   `hit_test_nested.riv`.
+- 2026-07-05: [M6] Promoted `hit_test_nested.riv` by admitting authored
+  `NestedBool` siblings through the static text gate and allowing static text
+  under `Shape` parent transforms. Focused direct streams then matched C++ under
+  numeric-token epsilon, and the full corpus promoted the file to exact.
+  `make golden-compare` reports `exact=175`, `exact-segments=496`,
+  `diverges=12`, `unsupported-feature=108`, `not-yet=0`, and parked
+  `M6=64 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
+  `interpolate_to_end.riv`.

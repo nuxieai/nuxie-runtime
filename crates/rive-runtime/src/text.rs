@@ -310,6 +310,7 @@ impl<'a> StaticTextSlice<'a> {
                         | "Backboard"
                         | "NestedArtboard"
                         | "NestedStateMachine"
+                        | "NestedBool"
                         | "ArtboardComponentList"
                         | "RootBone"
                         | "Skin"
@@ -400,7 +401,7 @@ impl<'a> StaticTextSlice<'a> {
             .context("text component is missing")?;
         if !static_text_parent_chain_supported(graph, text_component.parent_local) {
             bail!(
-                "static text subset only supports top-level Text or Text under Node/LayoutComponent transforms"
+                "static text subset only supports top-level Text or Text under Node/Shape/LayoutComponent transforms"
             );
         }
 
@@ -2547,7 +2548,7 @@ fn static_text_parent_chain_supported(
         }
         if !matches!(
             type_for_local(graph, local_id),
-            Some("Node" | "LayoutComponent" | "Solo")
+            Some("Node" | "Shape" | "LayoutComponent" | "Solo")
         ) {
             return false;
         }

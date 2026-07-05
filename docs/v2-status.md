@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 488 across 167 exact files
-- Current compare: `make golden-compare` reports diverges=3, unsupported-feature=125, not-yet=0
+- Exact segments (file × sample): 489 across 168 exact files
+- Current compare: `make golden-compare` reports diverges=2, unsupported-feature=125, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=81 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
@@ -37,9 +37,8 @@ the only memory the next session has. Update it every commit.
 3. The compact `LayoutComponent`/list bounds divergence queue is closed for
    the current corpus. The M6 text queue is now the active line: `new_text.riv`
    remains the pure outline contour-order divergence, and the data-bound text
-   bucket is down to two real divergences. Start next with a focused direct
-   C++/Rust stream diff for `replace_vm_instance.riv`, then
-   `transition_actions.riv`.
+   bucket is down to one real divergence. Start next with a focused direct
+   C++/Rust stream diff for `transition_actions.riv`.
 4. Keep `new_text.riv` parked as a known M6 divergence until a dedicated text
    outline backend/canonicalization slice: gradient sibling admission now
    reaches draw, but Rust/Skrifa and C++ HarfBuzz emit a glyph contour with a
@@ -69,15 +68,13 @@ the only memory the next session has. Update it every commit.
   Skrifa outlines. The first stream diff is path verb/point ordering, not a
   paint/gradient mismatch.
 - Data-bound static text/converter bucket:
-  `replace_vm_instance.riv` and `transition_actions.riv` now reach draw after
-  the narrow source-to-target string/color bind admission, but still differ
-  from C++ and carry `rust-runner-divergence:data-bound-text`. A focused bucket
-  re-check promoted `format_number_with_commas.riv`,
-  `listener_view_model.riv`, `trigger_fires_single_change.riv`, and
-  `rebind_with_nested_viewmodel.riv`; `replace_vm_instance.riv` now has a
-  matching stream line count but shifted text outlines after the artboard
-  default view-model fix, while `transition_actions.riv` still differs by
-  stream line count.
+  `transition_actions.riv` now reaches draw after the narrow source-to-target
+  string/color bind admission, but still differs from C++ and carries
+  `rust-runner-divergence:data-bound-text`. The focused bucket re-checks
+  promoted `format_number_with_commas.riv`, `listener_view_model.riv`,
+  `trigger_fires_single_change.riv`, `rebind_with_nested_viewmodel.riv`, and
+  `replace_vm_instance.riv`; `transition_actions.riv` still differs by stream
+  line count.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -617,3 +614,10 @@ the only memory the next session has. Update it every commit.
   `not-yet=0`, and parked `M6=81 gated=8 harness=36`; next target:
   `replace_vm_instance.riv`, which now has matching stream line count but
   shifted text outlines.
+- 2026-07-05: [M6] Promoted `replace_vm_instance.riv` after mirroring C++
+  static text horizontal alignment for `Text.alignValue` in the Rust text
+  renderer. The focused C++/Rust streams are epsilon-equivalent after the
+  center-aligned header text starts from the C++ line offset; `make
+  golden-compare` reports `exact=168`, `exact-segments=489`, `diverges=2`,
+  `unsupported-feature=125`, `not-yet=0`, and parked
+  `M6=81 gated=8 harness=36`; next target: `transition_actions.riv`.

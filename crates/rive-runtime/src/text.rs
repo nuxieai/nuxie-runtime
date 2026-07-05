@@ -161,6 +161,8 @@ struct StaticTextLine<'a> {
 struct StaticTextLayoutInfo {
     ellipsis_line: Option<usize>,
     is_ellipsis_line_last: bool,
+    paragraph_width: f32,
+    align_value: u64,
     x_offset: f32,
     y_offset: f32,
 }
@@ -216,6 +218,16 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
             property_key_for_name("SolidColor", "colorValue") == Some(property_key)
         }
         _ => false,
+    }
+}
+
+impl StaticTextLayoutInfo {
+    fn line_start_x(self, line_width: f32) -> f32 {
+        match self.align_value {
+            1 => self.paragraph_width - line_width,
+            2 => self.paragraph_width / 2.0 - line_width / 2.0,
+            _ => 0.0,
+        }
     }
 }
 
@@ -578,7 +590,8 @@ impl<'a> StaticTextSlice<'a> {
                 apply_static_ellipsis(&mut glyphs, ellipsis, max_width, force_ellipsis);
             }
 
-            let mut cursor_x = 0.0f32;
+            let line_width = glyphs.iter().map(|glyph| glyph.advance).sum();
+            let mut cursor_x = layout_info.line_start_x(line_width);
             let line_baseline = baseline + line.line_index as f32 * line_height;
             for glyph in &glyphs {
                 let mut glyph_transform = Mat2D::IDENTITY;
@@ -1147,6 +1160,7 @@ impl<'a> StaticTextSlice<'a> {
         };
         let origin_x = self.text_double_property(runtime, instance, "originX", 0.0)?;
         let origin_y = self.text_double_property(runtime, instance, "originY", 0.0)?;
+        let align_value = self.text_uint_property(runtime, instance, "alignValue")?;
         let last_line_index = lines.last().map(|line| line.line_index).unwrap_or(0);
         let full_height = line_height * (last_line_index + 1) as f32;
         let mut total_height = full_height;
@@ -1187,6 +1201,8 @@ impl<'a> StaticTextSlice<'a> {
         Ok(StaticTextLayoutInfo {
             ellipsis_line,
             is_ellipsis_line_last,
+            paragraph_width: bounds_width,
+            align_value,
             x_offset: -bounds_width * origin_x,
             y_offset,
         })

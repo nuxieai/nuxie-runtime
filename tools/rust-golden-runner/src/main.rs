@@ -4,7 +4,7 @@ use rive_graph::{ArtboardGraph, GraphFile};
 use rive_render_api::RecordingFactory;
 use rive_runtime::{
     ArtboardInstance, RuntimeRenderPathCache, StateMachineInstance,
-    preallocate_render_paint_cache_for_artboard_tree,
+    preallocate_render_paint_cache_for_artboard_tree, static_text_support_error,
 };
 use std::collections::BTreeSet;
 use std::env;
@@ -634,13 +634,17 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
-    if let Some(text) = artboard
+    if let Some((text, reason)) = artboard
         .local_objects
         .iter()
         .find(|object| object.type_name == Some("Text"))
+        .and_then(|object| {
+            static_text_support_error(runtime, artboard, object.local_id)
+                .map(|reason| (object, reason))
+        })
     {
         bail!(
-            "unsupported: text in Rust golden runner (global {})",
+            "unsupported: text in Rust golden runner (global {}, {reason})",
             text.global_id
         );
     }

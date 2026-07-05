@@ -60,7 +60,8 @@ Rust already imports and projects a useful amount of text structure:
   for `TextStylePaint`.
 - `rive-render-api` already has `RawPath`, render path creation, path builders,
   and recording output compatible with the C++ golden stream.
-- `rive-runtime` has no text runtime module yet.
+- `rive-runtime` now has a private text runtime module for the first static
+  embedded-font tracer.
 - `tools/rust-golden-runner` currently gates any artboard-local `Text` with
   `unsupported: text`, and gates nested child data binds targeting `Text`,
   `TextValueRun`, or `TextStylePaint` as text.
@@ -152,6 +153,16 @@ Expected metric movement for that slice:
 - `exact-segments`: +1
 - `unsupported-feature`: -1
 - M6 parked queue: -1
+
+## Result
+
+Landed 2026-07-04. `hello_world.riv` is exact through a deliberately narrow
+static text path: one top-level `Text`, one `TextValueRun`, one solid-fill
+`TextStylePaint`, embedded `FontAsset` bytes, no modifiers/layout/input/data
+binding/color glyphs. The next low-risk widening target is `new_text.riv`,
+which currently stops on the single-`Text` guard. `hosted_font_file.riv` is a
+later static-text variant because it already requires `TextStyleAxis` handling
+and hosted font asset loading.
 
 ## Follow-Up Order
 

@@ -8,6 +8,7 @@ mod draw;
 mod objects;
 mod properties;
 mod state_machine;
+mod text;
 mod view_model;
 
 pub use animation::{
@@ -46,6 +47,7 @@ pub(crate) use state_machine::{
     StateMachineBindableNumberInstance, StateMachineBindableStringInstance,
     StateMachineBindableTriggerInstance, StateMachineBindableViewModelInstance,
 };
+pub use text::static_text_support_error;
 pub use view_model::{
     RuntimeDataContext, RuntimeDataContextInstanceRef, RuntimeDataContextLookupKind,
     RuntimeDataContextLookupReport, RuntimeDataContextValueRef,

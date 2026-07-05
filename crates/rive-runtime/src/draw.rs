@@ -17,6 +17,7 @@ use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 use crate::properties::{
     property_key_for_name, shape_paint_is_visible_property_key, solid_color_value_property_key,
 };
+use crate::text::runtime_text_shape_paint_commands;
 use crate::{ArtboardInstance, Mat2D, RuntimeComponent};
 
 impl ArtboardInstance {
@@ -1642,8 +1643,23 @@ fn runtime_draw_command(
         .map(|component| component.transform.world_transform)
         .unwrap_or(Mat2D::IDENTITY);
 
+    let draws_text = command.type_name == "Text";
+    let text_shape_paints = if draws_text {
+        runtime_text_shape_paint_commands(runtime, instance, graph, &command)?
+    } else {
+        Vec::new()
+    };
+    let shape_paints = if draws_text {
+        text_shape_paints.as_slice()
+    } else {
+        command.shape_paints.as_slice()
+    };
+    if draws_text && command.needs_save_operation && !shape_paints.is_empty() {
+        renderer.save();
+    }
+
     let mut draw_path_slots = Vec::<Vec<RuntimePathCommand>>::new();
-    for paint in &command.shape_paints {
+    for paint in shape_paints {
         let global_id = *local_to_global
             .get(&paint.paint_local)
             .with_context(|| format!("missing paint local {}", paint.paint_local))?;
@@ -1685,7 +1701,9 @@ fn runtime_draw_command(
             path_commands,
             RenderFillRule::Clockwise,
         );
-        runtime_configure_fill_rule(path.as_mut(), object);
+        if !draws_text {
+            runtime_configure_fill_rule(path.as_mut(), object);
+        }
         renderer.draw_path(
             path.as_ref(),
             paint_by_global
@@ -1696,6 +1714,12 @@ fn runtime_draw_command(
         if saved && paint.needs_save_operation {
             renderer.restore();
         }
+    }
+    if draws_text && !shape_paints.is_empty() {
+        let _ = factory.make_render_paint();
+    }
+    if draws_text && command.needs_save_operation && !shape_paints.is_empty() {
+        renderer.restore();
     }
 
     Ok(())
@@ -2233,7 +2257,7 @@ fn runtime_stroke_join(value: u64) -> Result<RenderStrokeJoin> {
     })
 }
 
-fn runtime_shape_paint_command(
+pub(crate) fn runtime_shape_paint_command(
     artboard: &ArtboardInstance,
     paint: &ShapePaintNode,
     container_blend_mode_value: u32,

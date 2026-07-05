@@ -7,10 +7,12 @@ repository.workspace = true
 
 [dependencies]
 anyhow = "1"
+harfrust = "0.12"
 rive-binary = { path = "../rive-binary" }
 rive-graph = { path = "../rive-graph" }
 rive-render-api = { path = "../rive-render-api" }
 rive-schema = { path = "../rive-schema" }
+skrifa = "0.44"
 
 [build-dependencies]
 rive-schema = { path = "../rive-schema" }

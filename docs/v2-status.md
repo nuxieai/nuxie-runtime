@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 449 across 128 exact files
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=124 gated=7 harness=36
+- Exact segments (file × sample): 450 across 129 exact files
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=123 gated=7 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -22,17 +22,22 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Execute the first text tracer from
-   `docs/prototypes/m6-text-sizing-spike.md`: promote `hello_world.riv` by
-   supporting the narrow static top-level `Text` subset (one `TextValueRun`,
-   one `TextStylePaint` solid fill, one `FontAsset`, no modifiers/layout/input).
-2. `align_target.riv` is the first M6 entry by manifest order, but it has
+1. Widen the static text tracer from `hello_world.riv` to `new_text.riv`:
+   support multiple independent top-level `Text` draw commands using the same
+   embedded-font/static one-run/solid-fill subset, then promote `new_text.riv`
+   if the stream is exact.
+2. If `new_text.riv` exposes a later text-specific blocker, keep it parked with
+   the narrower diagnostic and move to the next static text manifest candidate.
+   `hosted_font_file.riv` currently stops on `TextStyleAxis` and has no
+   embedded `FileAssetContents`, so defer it until after axis/simple-variant
+   support.
+3. `align_target.riv` is the first M6 entry by manifest order, but it has
    listener align-target plus text modifier/axis objects. Keep it parked until
-   the static `hello_world.riv` path is exact.
-3. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
+   the static multi-text/axis path is exact.
+4. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
-4. Remaining exact entries pinned to sample `0` are static M1 holdovers:
+5. Remaining exact entries pinned to sample `0` are static M1 holdovers:
    `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
    them during M6 unless a related refactor needs a cheap draw-regression check.
 
@@ -271,3 +276,9 @@ the only memory the next session has. Update it every commit.
   shaping, line breaking, draw, and input/editing, and the first implementation
   slice is now pinned to `hello_world.riv` instead of manifest-first
   `align_target.riv` because it isolates static top-level text path emission.
+- 2026-07-04: [M6] Promoted `hello_world.riv` by adding a narrow embedded
+  static text draw path in `rive-runtime` with HarfRust/Skrifa shaping and
+  outlines, keeping richer text behind static-subset diagnostics. `make
+  golden-compare` moved to `exact=129`, `exact-segments=450`,
+  `unsupported-feature=166`, and parked `M6=123 gated=7 harness=36`; `cargo
+  test --workspace` passes.

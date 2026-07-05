@@ -6,8 +6,8 @@ the only memory the next session has. Update it every commit.
 ## Metric
 
 - Exact segments (file × sample): 502 across 181 exact files
-- Current compare: `make golden-compare` reports diverges=13, unsupported-feature=101, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=57 gated=8 harness=36
+- Current compare: `make golden-compare` reports diverges=12, unsupported-feature=102, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=58 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -24,12 +24,10 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the text draw-suppression M6 bucket that currently holds
-   `scripted_data_context.riv`, `state_transition_fire_trigger.riv`, and
-   `trigger_based_listeners.riv` as known divergences. Start with
-   `scripted_data_context.riv`: focused streams show Rust emits two
-   data-bound text payloads that C++ suppresses at sample 0 after the C++
-   golden runner fails to import object type 106 script contents, so inspect
-   draw suppression/runtime gating before changing glyph behavior.
+   `state_transition_fire_trigger.riv` and `trigger_based_listeners.riv` as
+   known divergences. Start with `state_transition_fire_trigger.riv`: the same
+   `Event` admission cleared its stale text diagnostic, but Rust emits extra
+   event/listener text draw calls that C++ suppresses at sample 0.
 2. Keep `new_text.riv`, `follow_path_path.riv`, and
    `data_bind_test_cmdq.riv` parked as known M6
    divergences until a dedicated text outline backend/canonicalization slice.
@@ -101,12 +99,6 @@ the only memory the next session has. Update it every commit.
   extra event/listener text draw calls that C++ suppresses at sample 0. Keep
   them parked under `rust-runner-divergence:event-trigger-extra-text-draw`
   until the text draw-suppression/runtime slice opens.
-- `scripted_data_context.riv`: after admitting passive `ScriptedDrawable`
-  siblings through the static text gate, Rust reaches draw but emits two
-  data-bound text payloads that C++ suppresses at sample 0 after the golden
-  runner fails to import object type 106 script contents. First diff is extra
-  text at transform `[1,0,0,1,0,90.4004059]`. Parked under
-  `rust-runner-divergence:scripted-data-context-extra-text-draw`.
 - `spotify_kids_app_icon.riv`: after cubic path vertex sibling admission, Rust
   reaches draw but emits a full-artboard background before C++'s centered
   rounded icon stream. First blocker is draw-order/background parity, not text
@@ -136,6 +128,13 @@ the only memory the next session has. Update it every commit.
 
 - Golden runner view-model mutation scripts; `--view-model-script` is reserved
   but rejected until a future external data-binding corpus file requires it.
+- Scripted data-context execution is gated until the `mlua`/Luau scripting
+  glue lands: `scripted_data_context.riv` now emits
+  `rust-runner-unsupported:scripted-data-context` when a `ScriptedDrawable`
+  combines `DataBindContext` text with nested view-model context. The focused
+  C++ runner printed `Failed to import object of type 106` before suppressing
+  the text, so this is an M6 scripting diagnostic rather than text
+  draw-suppression work.
 - Rust golden draw path currently supports sorted absolute-time samples,
   artboard clip/background, selected-artboard origins, solid fills/strokes, and
   `ClippingShape` clip paths, skinned `PointsPath` deformation, plus empty and
@@ -421,6 +420,12 @@ the only memory the next session has. Update it every commit.
   from C++ Yoga and Rust Taffy before adding more renderer/text behavior. Draw
   suppression and layout participation are separate facts; do not infer one
   from the other without a focused C++ probe.
+- 2026-07-05: Scripted data-context files are M6 scripting gates, not text
+  draw-suppression targets, when the selected artboard combines a
+  `ScriptedDrawable`, `DataBindContext` text, and nested view-model context.
+  The Rust runner emits `unsupported: scripted-data-context` for that surface
+  until the #V2-7 `mlua`/Luau glue lands; passive script fixtures that already
+  match C++ remain eligible for exact comparison.
 
 ## Log
 
@@ -1019,3 +1024,15 @@ the only memory the next session has. Update it every commit.
   `make golden-compare` reports `exact=181`, `exact-segments=502`,
   `diverges=13`, `unsupported-feature=101`, `not-yet=0`, and parked
   `M6=57 gated=8 harness=36`; next target is `scripted_data_context.riv`.
+- 2026-07-05: [M6] Reclassified `scripted_data_context.riv` as an explicit
+  scripting gate after focused streams showed the C++ runner printing
+  `Failed to import object of type 106` and suppressing two script-driven
+  data-context text draws. The Rust runner now emits
+  `unsupported: scripted-data-context` only for selected artboards with a
+  `ScriptedDrawable`, `DataBindContext` text, and nested view-model context;
+  checked exact script fixtures `list_index_script_access.riv` and
+  `scripting_root_viewmodel.riv` still stream. `make golden-compare` reports
+  `exact=181`, `exact-segments=502`, `diverges=12`,
+  `unsupported-feature=102`, `not-yet=0`, and parked
+  `M6=58 gated=8 harness=36`; next target is
+  `state_transition_fire_trigger.riv`.

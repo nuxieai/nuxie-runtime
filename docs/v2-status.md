@@ -6,8 +6,8 @@ the only memory the next session has. Update it every commit.
 ## Metric
 
 - Exact segments (file × sample): 493 across 172 exact files
-- Current compare: `make golden-compare` reports diverges=4, unsupported-feature=119, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=75 gated=8 harness=36
+- Current compare: `make golden-compare` reports diverges=6, unsupported-feature=117, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=73 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -23,28 +23,31 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Probe `follow_path_path.riv` as the next small
+1. Probe `data_bind_test_cmdq.riv` as the next
    `rust-runner-unsupported:text` M6 gate: compare direct C++/Rust streams,
    remove only stale static-text gates needed to reach draw, and fix or retag
-   the first real follow-path/text blocker. Do not start a general text layout
+   the first real text/data-bind blocker. Do not start a general text layout
    rewrite unless the stream diff proves the corpus needs it.
-2. Keep `new_text.riv` parked as a known M6 divergence until a dedicated text
-   outline backend/canonicalization slice: gradient sibling admission now
-   reaches draw, but Rust/Skrifa and C++ HarfBuzz emit a glyph contour with a
-   different segment start/order, so exact stream comparison fails on path
-   verbs/points.
-3. Keep richer follow-path text files parked behind `TextFollowPathModifier`
+2. Keep `new_text.riv` and `follow_path_path.riv` parked as known M6
+   divergences until a dedicated text outline backend/canonicalization slice.
+   `follow_path_path.riv` now reaches draw after clearing stale
+   `FollowPathConstraint` and cubic vertex static-text gates, but its first
+   diff is the same glyph outline payload family.
+3. Keep `spotify_kids_app_icon.riv` parked as a known M6 draw-order/background
+   divergence: after cubic path vertex sibling admission, Rust reaches draw but
+   emits a full-artboard background before C++'s centered rounded icon stream.
+4. Keep richer follow-path text files parked behind `TextFollowPathModifier`
    and unsupported `Text` property data-bind targets;
    `text_follow_path_shape_length.riv` currently fails first on data binding
    target `Text` global 73 before it reaches follow-path drawing.
-4. Keep `text_vertical_trim_test.riv` parked behind text data-binding target
+5. Keep `text_vertical_trim_test.riv` parked behind text data-binding target
    support; after the layout-paint slice it now fails on unsupported `Text`
    property data bind target global 41 before reaching richer vertical-trim
    behavior.
-5. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
+6. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
-6. Remaining exact entries pinned to sample `0` are static M1 holdovers:
+7. Remaining exact entries pinned to sample `0` are static M1 holdovers:
    `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
    them during M6 unless a related refactor needs a cheap draw-regression check.
 
@@ -56,6 +59,15 @@ the only memory the next session has. Update it every commit.
   (`src/text/font_hb.cpp`) and `TextStylePaint::addPathClockwise`; Rust uses
   Skrifa outlines. The first stream diff is path verb/point ordering, not a
   paint/gradient mismatch.
+- `follow_path_path.riv`: after admitting static text siblings
+  `FollowPathConstraint`, `CubicDetachedVertex`, `CubicAsymmetricVertex`, and
+  `CubicMirroredVertex`, Rust reaches draw but the first diff is a text path
+  payload after the first text transform. This belongs with the text-outline
+  backend/canonicalization bucket, not follow-path constraint runtime.
+- `spotify_kids_app_icon.riv`: after cubic path vertex sibling admission, Rust
+  reaches draw but emits a full-artboard background before C++'s centered
+  rounded icon stream. First blocker is draw-order/background parity, not text
+  admission.
 - `computed_values_test.riv`: after admitting `ArtboardComponentList.listSource`,
   nested child `Shape.computedRootX/Y` binds, and empty component-list provider
   trees through the #V2-7 Taffy layout path, Rust reaches draw. The layout
@@ -329,6 +341,15 @@ the only memory the next session has. Update it every commit.
   entries, defaulting omitted entries to `exact`; `generate-corpus` preserves
   non-default verification modes across regeneration. This is the harness
   prerequisite for Taffy/HarfRust/image-decoder corpus admission.
+- 2026-07-05: #V2-7 verification language is interpreted by the current
+  comparator as accepted-under-declared-mode, not byte-identical for all
+  accepted files. `exact-segments` counts `status = "exact"` entries, including
+  entries that declare `verification = "tolerant(...)"`. Tolerant verification
+  relaxes numeric tokens only: call order, IDs, path verbs, non-numeric payloads,
+  and glyph contour ordering remain strict unless a future Decision introduces
+  a dedicated outline canonicalization or raster comparison mode. New Taffy
+  layout gates may not be promoted through hand-rolled fallback after the
+  #V2-7 layout adapter refuses a tree.
 
 ## Log
 
@@ -699,3 +720,13 @@ the only memory the next session has. Update it every commit.
   `exact=172`, `exact-segments=493`, `diverges=4`,
   `unsupported-feature=119`, `not-yet=0`, and parked
   `M6=75 gated=8 harness=36`; next target is `follow_path_path.riv`.
+- 2026-07-05: [M6] Reopened `follow_path_path.riv` by admitting static text
+  siblings `FollowPathConstraint`, `CubicDetachedVertex`,
+  `CubicAsymmetricVertex`, and `CubicMirroredVertex`. It now reaches draw and
+  is parked as `rust-runner-divergence:follow-path-text-outline`; the same
+  gate removal made `spotify_kids_app_icon.riv` reach draw, now parked as
+  `rust-runner-divergence:spotify-icon-draw-order`. `make golden-compare`
+  reports `exact=172`, `exact-segments=493`, `diverges=6`,
+  `unsupported-feature=117`, `not-yet=0`, and parked
+  `M6=73 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
+  `data_bind_test_cmdq.riv`.

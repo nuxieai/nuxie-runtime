@@ -18,8 +18,8 @@ use crate::properties::{
     RuntimeLayoutComputedProperty, property_key_for_name, shape_paint_is_visible_property_key,
     solid_color_value_property_key,
 };
-use crate::text::runtime_text_shape_paint_commands;
-use crate::{ArtboardInstance, Mat2D, RuntimeComponent};
+use crate::text::{runtime_text_shape_paint_commands, static_text_constraint_bounds};
+use crate::{ArtboardInstance, Mat2D};
 
 impl ArtboardInstance {
     pub fn draw_commands(&self, graph: &ArtboardGraph) -> Vec<RuntimeDrawCommand> {
@@ -383,10 +383,7 @@ impl ArtboardInstance {
         ]
         .into_iter()
         .flatten()
-        .any(|local_id| {
-            self.component(local_id)
-                .is_some_and(RuntimeComponent::is_collapsed)
-        })
+        .any(|local_id| self.runtime_component_is_effectively_collapsed(local_id))
     }
 
     pub fn draw_prepared_static_artboard(
@@ -569,11 +566,13 @@ impl ArtboardInstance {
                 if drawable.is_hidden {
                     return false;
                 }
-                if drawable
-                    .local_id
-                    .and_then(|local_id| self.component(local_id))
-                    .is_some_and(RuntimeComponent::is_collapsed)
-                {
+                let component_local = match drawable.kind {
+                    DrawableOrderKind::LayoutProxy => drawable.layout_local,
+                    _ => drawable.local_id,
+                };
+                if component_local.is_some_and(|local_id| {
+                    self.runtime_component_is_effectively_collapsed(local_id)
+                }) {
                     return false;
                 }
 
@@ -654,10 +653,27 @@ impl ArtboardInstance {
     }
 
     fn runtime_path_counts_for_clip(&self, path: &PathComposerPathNode) -> bool {
-        !path.is_hidden
-            && !self
-                .component(path.local_id)
-                .is_some_and(|component| component.is_collapsed())
+        !path.is_hidden && !self.runtime_component_is_effectively_collapsed(path.local_id)
+    }
+
+    fn runtime_component_is_effectively_collapsed(&self, local_id: usize) -> bool {
+        let mut current = Some(local_id);
+        let mut visited = BTreeSet::new();
+        while let Some(component_local) = current {
+            if !visited.insert(component_local) {
+                return false;
+            }
+            let Some(component) = self.component(component_local) else {
+                return false;
+            };
+            if component.is_collapsed()
+                || self.runtime_layout_component_is_display_none(component_local)
+            {
+                return true;
+            }
+            current = component.parent_local;
+        }
+        false
     }
 
     fn runtime_draw_command_for_node(
@@ -928,7 +944,10 @@ impl ArtboardInstance {
         cache: &mut BTreeMap<usize, RuntimeLayoutBounds>,
         visiting: &mut BTreeSet<usize>,
     ) -> Option<RuntimeLayoutBounds> {
-        self.runtime_simple_flex_layout_bounds_memo(layout_local, graph, cache, visiting)
+        self.runtime_absolute_layout_component_bounds_memo(layout_local, graph, cache, visiting)
+            .or_else(|| {
+                self.runtime_simple_flex_layout_bounds_memo(layout_local, graph, cache, visiting)
+            })
             .or_else(|| self.runtime_simple_root_row_fill_layout_bounds(layout_local, graph))
             .or_else(|| {
                 self.runtime_nested_fill_hug_layout_bounds_memo(
@@ -994,7 +1013,11 @@ impl ArtboardInstance {
             else {
                 continue;
             };
-            if child.type_name == "LayoutComponent" && !layout_children.contains(child_local) {
+            if child.type_name == "LayoutComponent"
+                && !self.runtime_component_is_effectively_collapsed(*child_local)
+                && !self.runtime_layout_component_is_absolute(*child_local)
+                && !layout_children.contains(child_local)
+            {
                 layout_children.push(*child_local);
             }
         }
@@ -1066,6 +1089,7 @@ impl ArtboardInstance {
         let mut fixed_total = 0.0;
         let mut fill_total = 0.0;
         let mut main_sizes = Vec::with_capacity(layout_children.len());
+        let mut fill_bases = Vec::with_capacity(layout_children.len());
         for child_local in &layout_children {
             let style_local = self.runtime_layout_component_style_local(*child_local)?;
             let scale = self.runtime_layout_axis_scale(style_local, parent_is_row);
@@ -1081,7 +1105,16 @@ impl ArtboardInstance {
                     Some(size)
                 }
                 1 => {
+                    let basis = self.runtime_layout_flex_basis_main_size(
+                        *child_local,
+                        style_local,
+                        parent_is_row,
+                        main_available_after_gap,
+                        graph,
+                    )?;
+                    fixed_total += basis;
                     fill_total += self.runtime_layout_axis_fraction(*child_local, parent_is_row);
+                    fill_bases.push(basis);
                     None
                 }
                 2 => {
@@ -1097,25 +1130,62 @@ impl ArtboardInstance {
                 }
                 _ => return None,
             };
+            if scale != 1 {
+                fill_bases.push(0.0);
+            }
             main_sizes.push(size);
         }
 
         let remaining = (main_available_after_gap - fixed_total).max(0.0);
-        let mut cursor = if parent_is_row {
-            parent_bounds.x + padding_left
+        let resolved_main_sizes = layout_children
+            .iter()
+            .zip(main_sizes)
+            .zip(fill_bases.iter().copied())
+            .map(|((child_local, size), basis)| {
+                size.unwrap_or_else(|| {
+                    if fill_total <= f32::EPSILON {
+                        basis
+                    } else {
+                        basis
+                            + remaining
+                                * self.runtime_layout_axis_fraction(*child_local, parent_is_row)
+                                / fill_total
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+        let alignment = parent_style
+            .map(|style_local| self.runtime_layout_alignment_type(style_local))
+            .unwrap_or(0);
+        let mut resolved_gap = gap;
+        if fill_total <= f32::EPSILON && runtime_layout_alignment_is_space_between(alignment) {
+            resolved_gap = if resolved_main_sizes.len() > 1 {
+                let occupied = resolved_main_sizes.iter().sum::<f32>();
+                ((main_available - occupied).max(0.0)) / (resolved_main_sizes.len() as f32 - 1.0)
+            } else {
+                0.0
+            };
+        }
+        let occupied_main = resolved_main_sizes.iter().sum::<f32>()
+            + resolved_gap * resolved_main_sizes.len().saturating_sub(1) as f32;
+        let main_offset = if fill_total <= f32::EPSILON {
+            runtime_layout_main_alignment_offset(
+                alignment,
+                parent_is_row,
+                main_available,
+                occupied_main,
+            )
         } else {
-            parent_bounds.y + padding_top
+            0.0
+        };
+        let mut cursor = if parent_is_row {
+            parent_bounds.x + padding_left + main_offset
+        } else {
+            parent_bounds.y + padding_top + main_offset
         };
         for (index, child_local) in layout_children.iter().enumerate() {
             let style_local = self.runtime_layout_component_style_local(*child_local)?;
-            let main_size = main_sizes[index].unwrap_or_else(|| {
-                if fill_total <= f32::EPSILON {
-                    0.0
-                } else {
-                    remaining * self.runtime_layout_axis_fraction(*child_local, parent_is_row)
-                        / fill_total
-                }
-            });
+            let main_size = resolved_main_sizes[index];
             let cross_size = self.runtime_layout_cross_axis_size(
                 *child_local,
                 style_local,
@@ -1125,26 +1195,112 @@ impl ArtboardInstance {
                 cache,
                 visiting,
             )?;
+            let cross_offset = runtime_layout_cross_alignment_offset(
+                alignment,
+                parent_is_row,
+                cross_available,
+                cross_size,
+            );
             if *child_local == layout_local {
                 return Some(if parent_is_row {
                     RuntimeLayoutBounds {
                         x: cursor,
-                        y: parent_bounds.y + padding_top,
+                        y: parent_bounds.y + padding_top + cross_offset,
                         width: main_size,
                         height: cross_size,
                     }
                 } else {
                     RuntimeLayoutBounds {
-                        x: parent_bounds.x + padding_left,
+                        x: parent_bounds.x + padding_left + cross_offset,
                         y: cursor,
                         width: cross_size,
                         height: main_size,
                     }
                 });
             }
-            cursor += main_size + gap;
+            cursor += main_size + resolved_gap;
         }
         None
+    }
+
+    fn runtime_absolute_layout_component_bounds_memo(
+        &self,
+        layout_local: usize,
+        graph: &ArtboardGraph,
+        cache: &mut BTreeMap<usize, RuntimeLayoutBounds>,
+        visiting: &mut BTreeSet<usize>,
+    ) -> Option<RuntimeLayoutBounds> {
+        let component = graph
+            .components
+            .iter()
+            .find(|component| component.local_id == layout_local)?;
+        if component.type_name != "LayoutComponent" {
+            return None;
+        }
+        if !self.runtime_layout_component_is_absolute(layout_local) {
+            return None;
+        }
+        let parent_local = component.parent_local?;
+        let parent = graph
+            .components
+            .iter()
+            .find(|component| component.local_id == parent_local)?;
+        if !matches!(parent.type_name, "Artboard" | "LayoutComponent") {
+            return None;
+        }
+
+        let parent_bounds = if parent_local == 0 {
+            RuntimeLayoutBounds {
+                x: 0.0,
+                y: 0.0,
+                width: self.width,
+                height: self.height,
+            }
+        } else {
+            self.runtime_layout_component_bounds_memo(parent_local, graph, cache, visiting)
+        };
+        let style_local = self.runtime_layout_component_style_local(layout_local)?;
+
+        // Ported from C++ `src/layout_component.cpp` `LayoutComponent::syncStyle`:
+        // absolute children trust their stored units for fixed/fill dimensions
+        // instead of mapping fill to Yoga auto, and Yoga removes them from flex flow.
+        let width = self.runtime_absolute_layout_axis_size(
+            layout_local,
+            style_local,
+            true,
+            parent_bounds.width,
+            graph,
+            cache,
+            visiting,
+        )?;
+        let height = self.runtime_absolute_layout_axis_size(
+            layout_local,
+            style_local,
+            false,
+            parent_bounds.height,
+            graph,
+            cache,
+            visiting,
+        )?;
+        let left = self.runtime_layout_style_length(
+            style_local,
+            "positionLeft",
+            "positionLeftUnitsValue",
+            parent_bounds.width,
+        )?;
+        let top = self.runtime_layout_style_length(
+            style_local,
+            "positionTop",
+            "positionTopUnitsValue",
+            parent_bounds.height,
+        )?;
+
+        Some(RuntimeLayoutBounds {
+            x: parent_bounds.x + left,
+            y: parent_bounds.y + top,
+            width,
+            height,
+        })
     }
 
     fn runtime_nested_fill_hug_layout_bounds_memo(
@@ -1245,6 +1401,9 @@ impl ArtboardInstance {
             else {
                 continue;
             };
+            if self.runtime_component_is_effectively_collapsed(*child_local) {
+                continue;
+            }
             match child.type_name {
                 "LayoutComponent" => {
                     let bounds = self.runtime_layout_component_bounds_memo(
@@ -1261,6 +1420,13 @@ impl ArtboardInstance {
                     // lists with no instantiated items retain the default
                     // zero layout size, which makes hug-sized parents collapse.
                     child_sizes.push((0.0, 0.0));
+                }
+                "Text" => {
+                    if let Some((_, _, width, height)) = self.runtime_file().and_then(|runtime| {
+                        static_text_constraint_bounds(runtime, graph, self, *child_local)
+                    }) {
+                        child_sizes.push((width, height));
+                    }
                 }
                 "Fill"
                 | "LinearGradient"
@@ -1401,6 +1567,11 @@ impl ArtboardInstance {
         if component.type_name != "LayoutComponent" || component.parent_local != Some(0) {
             return false;
         }
+        if self.runtime_component_is_effectively_collapsed(layout_local)
+            || self.runtime_layout_component_is_absolute(layout_local)
+        {
+            return false;
+        }
         let Some(style_local) = self.runtime_layout_component_style_local(layout_local) else {
             return false;
         };
@@ -1424,6 +1595,10 @@ impl ArtboardInstance {
                 .unwrap_or(2),
             2 | 3
         )
+    }
+
+    fn runtime_layout_alignment_type(&self, style_local: usize) -> u64 {
+        self.runtime_layout_style_uint_default(style_local, "layoutAlignmentType", 0)
     }
 
     fn runtime_layout_component_style_local(&self, layout_local: usize) -> Option<usize> {
@@ -1477,6 +1652,31 @@ impl ArtboardInstance {
         )
     }
 
+    fn runtime_layout_component_is_absolute(&self, layout_local: usize) -> bool {
+        let Some(style_local) = self.runtime_layout_component_style_local(layout_local) else {
+            return false;
+        };
+        const YG_POSITION_TYPE_ABSOLUTE: u64 = 2;
+        self.runtime_layout_style_uint_default(style_local, "positionTypeValue", 1)
+            == YG_POSITION_TYPE_ABSOLUTE
+    }
+
+    fn runtime_layout_component_is_display_none(&self, layout_local: usize) -> bool {
+        let Some(component) = self.component(layout_local) else {
+            return false;
+        };
+        if !matches!(component.type_name, "Artboard" | "LayoutComponent") {
+            return false;
+        }
+        let Some(style_local) = self.runtime_layout_component_style_local(layout_local) else {
+            return false;
+        };
+        const YG_DISPLAY_NONE: u64 = 1;
+        // Ported from C++ `src/layout_component.cpp`
+        // `LayoutComponent::styleDisplayHidden` / `displayChanged`.
+        self.runtime_layout_style_uint_default(style_local, "displayValue", 0) == YG_DISPLAY_NONE
+    }
+
     fn runtime_layout_axis_fraction(&self, layout_local: usize, width_axis: bool) -> f32 {
         let property_name = if width_axis {
             "fractionalWidth"
@@ -1507,6 +1707,55 @@ impl ArtboardInstance {
         )
     }
 
+    fn runtime_layout_flex_basis_main_size(
+        &self,
+        layout_local: usize,
+        style_local: usize,
+        width_axis: bool,
+        reference: f32,
+        graph: &ArtboardGraph,
+    ) -> Option<f32> {
+        let basis = self
+            .runtime_layout_style_double(style_local, "flexBasis")
+            .unwrap_or(0.0);
+        let units = self.runtime_layout_style_uint_default(style_local, "flexBasisUnitsValue", 3);
+        if units == 3 {
+            let mut intrinsic_visiting = BTreeSet::new();
+            return self
+                .runtime_layout_component_intrinsic_hug_size(
+                    layout_local,
+                    graph,
+                    width_axis,
+                    &mut intrinsic_visiting,
+                )
+                .or(Some(0.0));
+        }
+        self.runtime_layout_length_for_unit(basis, units, reference)
+    }
+
+    fn runtime_absolute_layout_axis_size(
+        &self,
+        layout_local: usize,
+        style_local: usize,
+        width_axis: bool,
+        reference: f32,
+        graph: &ArtboardGraph,
+        cache: &mut BTreeMap<usize, RuntimeLayoutBounds>,
+        visiting: &mut BTreeSet<usize>,
+    ) -> Option<f32> {
+        const LAYOUT_SCALE_TYPE_HUG: u64 = 2;
+        if self.runtime_layout_axis_scale(style_local, width_axis) == LAYOUT_SCALE_TYPE_HUG {
+            return self.runtime_layout_component_hug_size_memo(
+                layout_local,
+                graph,
+                width_axis,
+                cache,
+                visiting,
+            );
+        }
+        self.runtime_layout_component_axis_length(layout_local, style_local, width_axis, reference)
+    }
+
     fn runtime_layout_cross_axis_size(
         &self,
         layout_local: usize,
@@ -1530,6 +1779,119 @@ impl ArtboardInstance {
                 graph,
                 width_axis,
                 cache,
+                visiting,
+            ),
+            _ => None,
+        }
+    }
+
+    fn runtime_layout_component_intrinsic_hug_size(
+        &self,
+        layout_local: usize,
+        graph: &ArtboardGraph,
+        width_axis: bool,
+        visiting: &mut BTreeSet<usize>,
+    ) -> Option<f32> {
+        if !visiting.insert(layout_local) {
+            return Some(0.0);
+        }
+        let style_local = self.runtime_layout_component_style_local(layout_local)?;
+        let is_row = self.runtime_layout_style_is_row(style_local);
+        let gap = if is_row {
+            self.runtime_layout_style_double(style_local, "gapHorizontal")
+        } else {
+            self.runtime_layout_style_double(style_local, "gapVertical")
+        }
+        .unwrap_or(0.0);
+        let component = graph
+            .components
+            .iter()
+            .find(|component| component.local_id == layout_local)?;
+        let mut child_sizes = Vec::new();
+        for child_local in &component.children {
+            let Some(child) = graph
+                .components
+                .iter()
+                .find(|component| component.local_id == *child_local)
+            else {
+                continue;
+            };
+            if self.runtime_component_is_effectively_collapsed(*child_local) {
+                continue;
+            }
+            match child.type_name {
+                "LayoutComponent" => {
+                    let child_style = self.runtime_layout_component_style_local(*child_local)?;
+                    let width = self.runtime_layout_component_intrinsic_axis_size(
+                        *child_local,
+                        child_style,
+                        true,
+                        graph,
+                        visiting,
+                    )?;
+                    let height = self.runtime_layout_component_intrinsic_axis_size(
+                        *child_local,
+                        child_style,
+                        false,
+                        graph,
+                        visiting,
+                    )?;
+                    child_sizes.push((width, height));
+                }
+                "ArtboardComponentList" => child_sizes.push((0.0, 0.0)),
+                "Text" => {
+                    if let Some((_, _, width, height)) = self.runtime_file().and_then(|runtime| {
+                        static_text_constraint_bounds(runtime, graph, self, *child_local)
+                    }) {
+                        child_sizes.push((width, height));
+                    }
+                }
+                "Fill"
+                | "LinearGradient"
+                | "RadialGradient"
+                | "SolidColor"
+                | "Stroke"
+                | "LayoutComponentStyle" => {}
+                _ => {
+                    visiting.remove(&layout_local);
+                    return None;
+                }
+            }
+        }
+        visiting.remove(&layout_local);
+        Some(runtime_layout_hug_size(
+            &child_sizes,
+            gap,
+            is_row,
+            width_axis,
+        ))
+    }
+
+    fn runtime_layout_component_intrinsic_axis_size(
+        &self,
+        layout_local: usize,
+        style_local: usize,
+        width_axis: bool,
+        graph: &ArtboardGraph,
+        visiting: &mut BTreeSet<usize>,
+    ) -> Option<f32> {
+        match self.runtime_layout_axis_scale(style_local, width_axis) {
+            0 => {
+                let value = self.runtime_layout_component_dimension(
+                    layout_local,
+                    if width_axis { "width" } else { "height" },
+                );
+                let units = self.runtime_layout_axis_units(style_local, width_axis);
+                if units == 2 {
+                    Some(0.0)
+                } else {
+                    self.runtime_layout_length_for_unit(value, units, 0.0)
+                }
+            }
+            1 | 2 => self.runtime_layout_component_intrinsic_hug_size(
+                layout_local,
+                graph,
+                width_axis,
                 visiting,
             ),
             _ => None,
@@ -2023,6 +2385,57 @@ fn runtime_layout_hug_size(
             .map(|(width, _)| *width)
             .fold(0.0, f32::max),
         (false, false) => child_sizes.iter().map(|(_, height)| *height).sum::<f32>() + gap_total,
+    }
+}
+
+fn runtime_layout_alignment_is_space_between(alignment: u64) -> bool {
+    matches!(alignment, 9..=11)
+}
+
+fn runtime_layout_main_alignment_offset(
+    alignment: u64,
+    is_row: bool,
+    available: f32,
+    occupied: f32,
+) -> f32 {
+    if runtime_layout_alignment_is_space_between(alignment) {
+        return 0.0;
+    }
+    let remaining = (available - occupied).max(0.0);
+    if is_row {
+        match alignment {
+            1 | 4 | 7 => remaining / 2.0,
+            2 | 5 | 8 => remaining,
+            _ => 0.0,
+        }
+    } else {
+        match alignment {
+            3..=5 => remaining / 2.0,
+            6..=8 => remaining,
+            _ => 0.0,
+        }
+    }
+}
+
+fn runtime_layout_cross_alignment_offset(
+    alignment: u64,
+    is_row: bool,
+    available: f32,
+    size: f32,
+) -> f32 {
+    let remaining = (available - size).max(0.0);
+    if is_row {
+        match alignment {
+            3..=5 | 10 => remaining / 2.0,
+            6..=8 | 11 => remaining,
+            _ => 0.0,
+        }
+    } else {
+        match alignment {
+            1 | 4 | 7 | 10 => remaining / 2.0,
+            2 | 5 | 8 | 11 => remaining,
+            _ => 0.0,
+        }
     }
 }
 

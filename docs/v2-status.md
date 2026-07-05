@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 479 across 158 exact files
-- Current compare: `make golden-compare` reports diverges=12, unsupported-feature=125, not-yet=0
+- Exact segments (file × sample): 480 across 159 exact files
+- Current compare: `make golden-compare` reports diverges=11, unsupported-feature=125, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=81 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
@@ -30,17 +30,16 @@ the only memory the next session has. Update it every commit.
    `data_bind_test_cmdq.riv` -> `text`, `scroll_snap.riv` -> `text`, and
    `scroll_test.riv` -> `scroll-constraints`.
 2. `LayoutComponent.computed*` target-to-source data binds are no longer a
-   runner gate. `collapse_data_binds.riv`,
-   `data_binding_artboards_source_test.riv`, and
-   `hittest_collapsed_layouts.riv` now run and are M6
-   `layout-component-bounds` divergences.
+   runner gate. `collapse_data_binds.riv` is exact; the remaining siblings
+   `data_binding_artboards_source_test.riv` and `hittest_collapsed_layouts.riv`
+   now run and stay as M6 `layout-component-bounds` divergences.
 3. Highest priority is broader `LayoutComponent` bounds/positioning parity
    before opening more runtime surface. Work the compact divergence set:
-   `collapse_data_binds.riv`, `data_binding_artboards_source_test.riv`,
-   `hittest_collapsed_layouts.riv`, `number_to_list_nested_children.riv`, and
-   `transition_duration_bind_list.riv`. Start with `collapse_data_binds.riv`
-   because it combines computed layout polling with a crisp root/right layout
-   rect diff.
+   `data_binding_artboards_source_test.riv`, `hittest_collapsed_layouts.riv`,
+   `number_to_list_nested_children.riv`, and
+   `transition_duration_bind_list.riv`. Start with
+   `data_binding_artboards_source_test.riv` because it is the closest remaining
+   sibling to the solved computed-layout/data-bind path.
 4. Keep `new_text.riv` parked as a known M6 divergence until a dedicated text
    outline backend/canonicalization slice: gradient sibling admission now
    reaches draw, but Rust/Skrifa and C++ HarfBuzz emit a glyph contour with a
@@ -69,12 +68,13 @@ the only memory the next session has. Update it every commit.
   (`src/text/font_hb.cpp`) and `TextStylePaint::addPathClockwise`; Rust uses
   Skrifa outlines. The first stream diff is path verb/point ordering, not a
   paint/gradient mismatch.
-- `collapse_data_binds.riv`, `data_binding_artboards_source_test.riv`, and
+- `data_binding_artboards_source_test.riv` and
   `hittest_collapsed_layouts.riv`: after layout computed target-to-source
   binding and Text-under-LayoutComponent admission, Rust reaches draw but
-  differs on layout bounds/positioning. The first inspected
-  `collapse_data_binds.riv` diff has C++ drawing settled root/right layout
-  rects while Rust falls back to zero-width rects translated to x=`500`.
+  differs on layout bounds/positioning. `collapse_data_binds.riv` cleared after
+  adding effective-collapse handling, absolute positioning, alignment,
+  intrinsic flex-basis sizing, and narrow `ToString` default admission for
+  text property binds.
 - `number_to_list_nested_children.riv`: after the root layout paint admission,
   Rust reaches draw but differs on the first layout background rect: Rust
   emits height `500` where C++ emits `260`. This is a layout/list bounds
@@ -572,3 +572,13 @@ the only memory the next session has. Update it every commit.
   `M6=81 gated=8 harness=36`; `cargo test --workspace` passes. Next target:
   broader `LayoutComponent` bounds/positioning parity, starting with
   `collapse_data_binds.riv`.
+- 2026-07-05: [M6] Promoted `collapse_data_binds.riv` by adding
+  effective-collapse checks through layout ancestors, display-none layout
+  handling, absolute layout bounds, space-between/alignment offsets, and
+  intrinsic flex-basis sizing that avoids computed-bounds feedback. Narrow
+  direct `DataConverterToString` default admission now lets numeric view-model
+  values bind to `TextValueRun.text` without waking unrelated formula or
+  interpolator defaults. `make golden-compare` reports `exact=159`,
+  `exact-segments=480`, `diverges=11`, `unsupported-feature=125`,
+  `not-yet=0`, and parked `M6=81 gated=8 harness=36`; next target:
+  `data_binding_artboards_source_test.riv`.

@@ -199,7 +199,13 @@ pub(super) fn build_artboard_property_bindings(
                 .data_context_view_model_property_for_instance(default_instance.object, &path)
                 .and_then(|source| runtime_created_view_model_value_for_source(file, source))
                 .unwrap_or(RuntimeDataBindGraphValue::Number(0.0));
-            if !artboard_property_binding_value_matches_kind(&default_value, property_kind) {
+            if !artboard_property_binding_value_matches_kind(&default_value, property_kind)
+                && !artboard_property_binding_allows_converted_default(
+                    converter.as_ref(),
+                    &default_value,
+                    property_kind,
+                )
+            {
                 return None;
             }
 
@@ -229,6 +235,22 @@ fn artboard_property_binding_value_matches_kind(
         ) | (RuntimeDataBindGraphValue::Color(_), FieldKind::Color)
             | (RuntimeDataBindGraphValue::String(_), FieldKind::String)
     )
+}
+
+fn artboard_property_binding_allows_converted_default(
+    converter: Option<&RuntimeDataBindGraphConverter>,
+    default_value: &RuntimeDataBindGraphValue,
+    property_kind: FieldKind,
+) -> bool {
+    if property_kind != FieldKind::String {
+        return false;
+    }
+    let Some(converter @ RuntimeDataBindGraphConverter::ToString { .. }) = converter else {
+        return false;
+    };
+    runtime_data_bind_graph_convert_value(converter, default_value)
+        .as_ref()
+        .is_some_and(|value| artboard_property_binding_value_matches_kind(value, property_kind))
 }
 
 pub(super) fn build_artboard_nested_host_bindings(

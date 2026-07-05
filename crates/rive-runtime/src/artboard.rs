@@ -1634,7 +1634,9 @@ fn build_runtime_nested_artboard_instance(
         build_context,
     )?);
     child.bind_default_view_model_artboard_list_context(file);
-    child.clear_default_text_property_context();
+    if !child_has_state_machine_data_binds(file, child_graph) {
+        child.clear_default_text_property_context();
+    }
     let animations = runtime_nested_animation_instances(file, parent_graph, host_local_id, &child);
     Ok(RuntimeNestedArtboardInstance {
         child,
@@ -1643,6 +1645,14 @@ fn build_runtime_nested_artboard_instance(
         speed,
         quantize,
         cumulated_seconds: 0.0,
+    })
+}
+
+fn child_has_state_machine_data_binds(file: &RuntimeFile, graph: &ArtboardGraph) -> bool {
+    crate::properties::artboard_index_for_graph(file, graph).is_some_and(|artboard_index| {
+        file.artboard_state_machine_graphs(artboard_index)
+            .into_iter()
+            .any(|state_machine| !state_machine.data_binds.is_empty())
     })
 }
 

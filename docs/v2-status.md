@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 502 across 181 exact files
-- Current compare: `make golden-compare` reports diverges=12, unsupported-feature=102, not-yet=0
+- Exact segments (file × sample): 504 across 183 exact files
+- Current compare: `make golden-compare` reports diverges=10, unsupported-feature=102, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=58 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
@@ -23,14 +23,13 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue the text draw-suppression M6 bucket that currently holds
-   `state_transition_fire_trigger.riv` and `trigger_based_listeners.riv` as
-   known divergences. Start with `state_transition_fire_trigger.riv`: the same
-   `Event` admission cleared its stale text diagnostic, but Rust emits extra
-   event/listener text draw calls that C++ suppresses at sample 0.
+1. Start the dedicated text outline backend/canonicalization slice with
+   `new_text.riv`, then recheck `follow_path_path.riv`,
+   `data_bind_test_cmdq.riv`, and `saturation.riv`. These now reach draw and
+   differ first on glyph path payloads rather than paint, transform, or
+   data-binding ownership.
 2. Keep `new_text.riv`, `follow_path_path.riv`, and
-   `data_bind_test_cmdq.riv` parked as known M6
-   divergences until a dedicated text outline backend/canonicalization slice.
+   `data_bind_test_cmdq.riv` parked as known M6 divergences until that slice.
    `follow_path_path.riv` now reaches draw after clearing stale
    `FollowPathConstraint` and cubic vertex static-text gates, but its first
    diff is the same glyph outline payload family. `data_bind_test_cmdq.riv`
@@ -94,11 +93,6 @@ the only memory the next session has. Update it every commit.
   transform `[1,0,0,1,64.5,26.5]`, while the later numeric/color text path is
   only float drift. Parked under
   `rust-runner-divergence:saturation-color-to-string-text`.
-- `state_transition_fire_trigger.riv` and `trigger_based_listeners.riv`: the
-  same `Event` admission clears their stale text diagnostics, but Rust emits
-  extra event/listener text draw calls that C++ suppresses at sample 0. Keep
-  them parked under `rust-runner-divergence:event-trigger-extra-text-draw`
-  until the text draw-suppression/runtime slice opens.
 - `spotify_kids_app_icon.riv`: after cubic path vertex sibling admission, Rust
   reaches draw but emits a full-artboard background before C++'s centered
   rounded icon stream. First blocker is draw-order/background parity, not text
@@ -1036,3 +1030,12 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=102`, `not-yet=0`, and parked
   `M6=58 gated=8 harness=36`; next target is
   `state_transition_fire_trigger.riv`.
+- 2026-07-05: [M6] Promoted `state_transition_fire_trigger.riv` and
+  `trigger_based_listeners.riv` by preserving nested child default text
+  contexts when the child artboard owns state-machine data binds, while
+  retaining serialized-text fallback for plain nested text hosts. Focused
+  sample-0 streams match C++; `make golden-compare` reports `exact=183`,
+  `exact-segments=504`, `diverges=10`, `unsupported-feature=102`,
+  `not-yet=0`, and parked `M6=58 gated=8 harness=36`; `cargo test
+  --workspace` passes. Next target is the text-outline
+  backend/canonicalization slice starting with `new_text.riv`.

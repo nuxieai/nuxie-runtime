@@ -794,9 +794,11 @@ impl ArtboardInstance {
                 layout_bounds,
             )
         } else {
-            self.component(container_local)
-                .map(|component| component.transform.world_transform)
-                .unwrap_or(Mat2D::IDENTITY)
+            self.runtime_component_world_transform_with_bounds(
+                container_local,
+                graph,
+                layout_bounds,
+            )
         };
 
         container
@@ -804,9 +806,12 @@ impl ArtboardInstance {
             .iter()
             .filter_map(|paint| {
                 let path_commands = match container.type_name {
-                    "Shape" => {
-                        self.runtime_shape_paint_path_commands(container_local, paint, graph)
-                    }
+                    "Shape" => self.runtime_shape_paint_path_commands(
+                        container_local,
+                        paint,
+                        graph,
+                        layout_bounds,
+                    ),
                     "LayoutComponent" => self.runtime_layout_component_paint_path_commands(
                         container_local,
                         paint,
@@ -962,7 +967,8 @@ impl ArtboardInstance {
         let Some(parent_local) = component.parent_local else {
             return component.transform.world_transform;
         };
-        if layout_bounds.is_none() || !self.runtime_parent_chain_has_layout_component(parent_local) {
+        if layout_bounds.is_none() || !self.runtime_parent_chain_has_layout_component(parent_local)
+        {
             return component.transform.world_transform;
         }
         self.runtime_component_world_transform_with_bounds(parent_local, graph, layout_bounds)
@@ -2210,6 +2216,7 @@ impl ArtboardInstance {
         shape_local: usize,
         paint: &ShapePaintNode,
         graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) -> Vec<RuntimePathCommand> {
         let Some(path_kind) = paint.path_kind else {
             return Vec::new();
@@ -2222,10 +2229,8 @@ impl ArtboardInstance {
             return Vec::new();
         };
 
-        let shape_world = self
-            .component(shape_local)
-            .map(|component| component.transform.world_transform)
-            .unwrap_or(Mat2D::IDENTITY);
+        let shape_world =
+            self.runtime_component_world_transform_with_bounds(shape_local, graph, layout_bounds);
         let inverse_shape_world = shape_world.invert_or_identity();
         let mut commands = Vec::new();
 
@@ -2240,13 +2245,12 @@ impl ArtboardInstance {
             else {
                 continue;
             };
-            let Some(path_world) = self
-                .component(path.local_id)
-                .map(|component| component.transform.world_transform)
-            else {
-                continue;
-            };
-            let runtime_path = runtime_path_geometry(self, path);
+            let path_world = self.runtime_component_world_transform_with_bounds(
+                path.local_id,
+                graph,
+                layout_bounds,
+            );
+            let runtime_path = self.runtime_path_geometry_with_layout_control(path, layout_bounds);
             let weighted_context = self.runtime_weighted_path_context(&runtime_path, graph);
             let path_transform = if weighted_context.is_some() {
                 Mat2D::IDENTITY
@@ -2291,6 +2295,7 @@ impl ArtboardInstance {
         &self,
         clipping_shape: &ClippingShapeNode,
         graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) -> Vec<RuntimePathCommand> {
         let mut commands = Vec::new();
         for shape_local in &clipping_shape.shape_locals {
@@ -2319,7 +2324,8 @@ impl ArtboardInstance {
                 else {
                     continue;
                 };
-                let runtime_path = runtime_path_geometry(self, path);
+                let runtime_path =
+                    self.runtime_path_geometry_with_layout_control(path, layout_bounds);
                 let weighted_context = self.runtime_weighted_path_context(&runtime_path, graph);
                 let path_transform = if weighted_context.is_some() {
                     Mat2D::IDENTITY
@@ -2338,6 +2344,55 @@ impl ArtboardInstance {
         }
 
         commands
+    }
+
+    fn runtime_path_geometry_with_layout_control(
+        &self,
+        path: &PathGeometryNode,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    ) -> PathGeometryNode {
+        let mut runtime_path = runtime_path_geometry(self, path);
+        let Some(layout_bounds) = layout_bounds else {
+            return runtime_path;
+        };
+        let Some(control_size) =
+            self.runtime_layout_control_size_for_path(path.local_id, layout_bounds)
+        else {
+            return runtime_path;
+        };
+        if let Some(parametric) = runtime_path.parametric.take() {
+            runtime_path.parametric = Some(parametric_path_with_control_size(
+                parametric,
+                control_size.width,
+                control_size.height,
+            ));
+        }
+        runtime_path
+    }
+
+    fn runtime_layout_control_size_for_path(
+        &self,
+        path_local: usize,
+        layout_bounds: &BTreeMap<usize, RuntimeLayoutBounds>,
+    ) -> Option<RuntimeLayoutBounds> {
+        // Ported from C++ `src/layout_component.cpp::propagateSizeToChildren`
+        // and `src/shapes/parametric_path.cpp::controlSize`: solved layout
+        // width/height are pushed through non-Node containers into parametric
+        // paths before those paths build render geometry.
+        let mut current_local = self.component(path_local)?.parent_local?;
+        loop {
+            let component = self.component(current_local)?;
+            match component.type_name {
+                "LayoutComponent" => {
+                    self.runtime_layout_component_style_local(current_local)?;
+                    return layout_bounds.get(&current_local).copied();
+                }
+                "Artboard" | "Node" => return None,
+                _ => {
+                    current_local = component.parent_local?;
+                }
+            }
+        }
     }
 
     fn runtime_weighted_path_context(
@@ -3625,12 +3680,14 @@ fn runtime_rounded_layout_rect_path_commands(
             virtual_straight_vertex(0.0, bounds.height, corners.bottom_left),
         ],
     };
-    points_path_commands(
+    let mut commands = points_path_commands(
         &virtual_path,
         ShapePaintPathKind::Local,
         Mat2D::IDENTITY,
         None,
-    )
+    );
+    prune_empty_path_segments(&mut commands);
+    commands
 }
 
 fn runtime_layout_hug_size(
@@ -4265,7 +4322,15 @@ fn runtime_draw_command(
 ) -> Result<()> {
     match command.kind {
         RuntimeDrawCommandKind::ClipStart => {
-            runtime_draw_clip_start(instance, graph, command, factory, renderer, path_cache);
+            runtime_draw_clip_start(
+                instance,
+                graph,
+                command,
+                layout_bounds,
+                factory,
+                renderer,
+                path_cache,
+            );
             return Ok(());
         }
         RuntimeDrawCommandKind::ClipEnd => {
@@ -4317,8 +4382,9 @@ fn runtime_draw_command(
 
     let shape_world = command
         .local_id
-        .and_then(|local_id| instance.component(local_id))
-        .map(|component| component.transform.world_transform)
+        .map(|local_id| {
+            instance.runtime_component_world_transform_with_bounds(local_id, graph, layout_bounds)
+        })
         .unwrap_or(Mat2D::IDENTITY);
 
     let draws_text = command.type_name == "Text";
@@ -4605,6 +4671,7 @@ fn runtime_draw_clip_start(
     instance: &ArtboardInstance,
     graph: &ArtboardGraph,
     command: RuntimeDrawCommand,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     factory: &mut dyn RenderFactory,
     renderer: &mut dyn Renderer,
     path_cache: &mut RuntimeRenderPathCache,
@@ -4621,7 +4688,8 @@ fn runtime_draw_clip_start(
     if command.needs_save_operation {
         renderer.save();
     }
-    let path_commands = instance.runtime_clipping_shape_path_commands(clipping_shape, graph);
+    let path_commands =
+        instance.runtime_clipping_shape_path_commands(clipping_shape, graph, layout_bounds);
     if path_commands.is_empty() {
         return;
     }
@@ -6876,6 +6944,81 @@ fn measure_parametric_path_layout(
         | ParametricPathNode::Triangle { width, height, .. } => (*width, *height),
     };
     Some((max_width.min(width), max_height.min(height)))
+}
+
+fn parametric_path_with_control_size(
+    parametric: ParametricPathNode,
+    width: f32,
+    height: f32,
+) -> ParametricPathNode {
+    match parametric {
+        ParametricPathNode::Ellipse {
+            origin_x, origin_y, ..
+        } => ParametricPathNode::Ellipse {
+            width,
+            height,
+            origin_x,
+            origin_y,
+        },
+        ParametricPathNode::Polygon {
+            origin_x,
+            origin_y,
+            points,
+            corner_radius,
+            ..
+        } => ParametricPathNode::Polygon {
+            width,
+            height,
+            origin_x,
+            origin_y,
+            points,
+            corner_radius,
+        },
+        ParametricPathNode::Star {
+            origin_x,
+            origin_y,
+            points,
+            corner_radius,
+            inner_radius,
+            ..
+        } => ParametricPathNode::Star {
+            width,
+            height,
+            origin_x,
+            origin_y,
+            points,
+            corner_radius,
+            inner_radius,
+        },
+        ParametricPathNode::Triangle {
+            origin_x, origin_y, ..
+        } => ParametricPathNode::Triangle {
+            width,
+            height,
+            origin_x,
+            origin_y,
+        },
+        ParametricPathNode::Rectangle {
+            origin_x,
+            origin_y,
+            link_corner_radius,
+            corner_radius_tl,
+            corner_radius_tr,
+            corner_radius_bl,
+            corner_radius_br,
+            ..
+        } => ParametricPathNode::Rectangle {
+            width,
+            height,
+            origin_x,
+            origin_y,
+            link_corner_radius,
+            corner_radius_tl,
+            corner_radius_tr,
+            corner_radius_bl,
+            corner_radius_br,
+        },
+    }
 }
 
 fn runtime_path_double_property(

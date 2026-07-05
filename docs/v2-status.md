@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 506 across 185 exact files
-- Current compare: `make golden-compare` reports diverges=8, unsupported-feature=102, not-yet=0
+- Exact segments (file × sample): 507 across 186 exact files
+- Current compare: `make golden-compare` reports diverges=7, unsupported-feature=102, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=58 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
@@ -23,33 +23,28 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue the dedicated text/layout draw slice by rechecking
-   `data_bind_test_cmdq.riv`, then `saturation.riv`. `follow_path_path.riv`
-   promoted after text draw started respecting constraint-written world
-   transforms when no layout ancestor is involved.
-2. Keep `data_bind_test_cmdq.riv` parked as a known M6 divergence until that
-   slice. It now has matching local-id layout boxes and matching command-queue
-   text transform; its remaining diff is the glyph payload for
-   `Update Random Vals`.
-3. Keep `spotify_kids_app_icon.riv` parked as a known M6 draw-order/background
+1. Continue the dedicated text/layout draw slice with `saturation.riv`.
+   `data_bind_test_cmdq.riv` promoted after layout-controlled parametric paths
+   started drawing with C++ `controlSize` dimensions.
+2. Keep `spotify_kids_app_icon.riv` parked as a known M6 draw-order/background
    divergence: after cubic path vertex sibling admission, Rust reaches draw but
    emits a full-artboard background before C++'s centered rounded icon stream.
-4. Keep `text_follow_path_shape_length.riv` parked behind
+3. Keep `text_follow_path_shape_length.riv` parked behind
    `TextFollowPathModifier`: after admitting source-to-target `Text.width`
    binds with no converter or `DataConverterFormula`, direct Rust now stops on
    data-binding target `TextFollowPathModifier` global 168.
-5. Keep `text_vertical_trim_test.riv` parked behind `text-vertical-trim`:
+4. Keep `text_vertical_trim_test.riv` parked behind `text-vertical-trim`:
    property keys 1027/1028 are `Text.verticalTrimTopValue` /
    `Text.verticalTrimBottomValue` bitmask passthroughs into
    `verticalTrimValue`, and C++ applies them in `Text::computeVerticalTrim`
    to rendered/measured text bounds.
-6. Generic `rust-runner-unsupported:text` is empty in the current corpus; the
+5. Generic `rust-runner-unsupported:text` is empty in the current corpus; the
    remaining sharper text gates are `text-follow-path-modifier` and
    `text-vertical-trim`.
-7. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
+6. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
-8. Remaining exact entries pinned to sample `0` are static M1 holdovers:
+7. Remaining exact entries pinned to sample `0` are static M1 holdovers:
    `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
    them during M6 unless a related refactor needs a cheap draw-regression check.
 
@@ -62,14 +57,6 @@ the only memory the next session has. Update it every commit.
   diff: C++ wraps/fits the right-column text where Rust keeps advancing on a
   wider line (`x=7.71484375` versus `x=212.890625`), and C++ emits a
   zero-sized middle text path that Rust suppresses.
-- `data_bind_test_cmdq.riv`: after admitting inert `Event` siblings through the
-  static text gate and measuring only intrinsic static leaves through the Taffy
-  adapter, Rust reaches draw and layout-bounds reports all 19 local-id boxes
-  matching C++ within float drift; local 98/101 now land at y=`434.35657` /
-  y=`444.35657`. The first focused diff is the `Update Random Vals` text path
-  payload at the matched transform, with both sides emitting 25 move contours,
-  333 cubics, and 113 lines. Parked under the text-outline
-  backend/canonicalization bucket.
 - `saturation.riv`: after admitting `Shape.x/y` source-to-target binds through
   static text for no-converter and `DataConverterGroup` paths, Rust reaches
   draw but the first data-bound text path differs. Debugged bindings show
@@ -1042,3 +1029,13 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=102`, `not-yet=0`, and parked
   `M6=57 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
   `data_bind_test_cmdq.riv`.
+- 2026-07-05: [M6] Promoted `data_bind_test_cmdq.riv` by mirroring C++
+  `LayoutComponent::propagateSizeToChildren` / `ParametricPath::controlSize`
+  for layout-controlled parametric shape draw. The focused command-queue
+  sample now keeps matching local-id layout boxes and expands the inner
+  authored `20x18` trigger ellipse to the solved `24x24` layout size before
+  draw, matching C++ under the golden epsilon. `make golden-compare` reports
+  `exact=186`, `exact-segments=507`, `diverges=7`,
+  `unsupported-feature=102`, `not-yet=0`, and parked
+  `M6=58 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
+  `saturation.riv`.

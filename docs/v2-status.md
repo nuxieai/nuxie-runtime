@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 457 across 136 exact files
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=116 gated=7 harness=36
+- Exact segments (file × sample): 458 across 137 exact files
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=115 gated=7 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -22,15 +22,18 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Start `double_line.riv`: it is the smallest remaining
-   `rust-runner-unsupported:text` corpus entry and isolates same-style
-   multi-run text with explicit line separators/newline. The implementation
-   slice should port minimal run aggregation plus static multi-line placement
-   from C++ text layout before reopening modifier run/range-map files.
-2. Keep `modifier_to_run.riv` and `test_modifier_run.riv` parked for now:
-   inspection shows word/line `TextModifierRange` units, runId-targeted ranges,
-   and multi-run/multi-style text, so these are follow-ups after the multi-run
-   layout slice rather than the next modifier-only task.
+1. Start `modifier_to_run.riv`: it is tied for the smallest remaining
+   `rust-runner-unsupported:text` corpus entry and now fails first on
+   `TextModifierRange` units `2` after the same-style authored-line-break
+   multi-run slice. The implementation slice should port the minimal C++
+   `src/text/text_modifier_range.cpp` range-map path for word/line units over
+   the current static shaped-line model, then re-evaluate runId targeting and
+   `test_modifier_run.riv`.
+2. Keep `test_modifier_run.riv` parked behind the same modifier/range-map
+   family: it currently fails on multi-run text without authored line breaks,
+   and earlier inspection showed runId-targeted ranges plus multi-run/
+   multi-style behavior. Reopen it immediately after `modifier_to_run.riv`
+   establishes the required range semantics.
 3. Keep `vertical_align_ellipsis.riv` parked for now: temporarily admitting
    sibling `Stroke` reaches draw but diverges on fixed-size vertical
    align/ellipsis placement, so it should reopen with vertical-align text
@@ -123,13 +126,15 @@ the only memory the next session has. Update it every commit.
   default view-model trigger target-to-source writes. Full C++ ListenerGroup
   drag/opaque behavior and input-driven nested align-target/list/text/layout
   targets are still not supported.
-- Static text modifier support currently covers translation-only
+- Static text support currently covers one style, static same-style
+  authored-line-break multi-run text, and translation-only
   `TextModifierGroup` over character-unit `TextModifierRange` coverage with an
   optional `CubicInterpolatorComponent`. Word/line units, range maps, runId
-  targeting, multi-run/multi-style text, shape/follow-path/rotation/scale/
-  origin/opacity modifiers, and text input/editing remain M6 text diagnostics.
+  targeting, no-break multi-run/multi-style text, shape/follow-path/rotation/
+  scale/origin/opacity modifiers, and text input/editing remain M6 text
+  diagnostics.
 - `TransformConstraint` currently covers Text constraint bounds for the
-  supported static one-run Text subset plus the default empty
+  supported static Text subset plus the default empty
   `TransformComponent::constraintBounds()` path. LayoutComponent bounds remain
   parked behind M6 layout diagnostics.
 - Scroll-constraint corpus files are parked behind M6 layout/runtime support
@@ -340,3 +345,10 @@ the only memory the next session has. Update it every commit.
   first on fixed-size vertical align/ellipsis text placement. The next narrow
   implementation slice is `double_line.riv`, which isolates same-style
   multi-run text and explicit line breaks before the modifier range-map files.
+- 2026-07-04: [M6] Promoted `double_line.riv` by aggregating same-style
+  authored-line-break `TextValueRun` children and placing shaped non-empty
+  lines at C++-style static line-height baselines while preserving empty forced
+  line breaks. `make golden-compare` moved to `exact=137`,
+  `exact-segments=458`, `unsupported-feature=158`, and parked
+  `M6=115 gated=7 harness=36`; next reopen `modifier_to_run.riv`, which now
+  fails first on `TextModifierRange` word/line range-map units.

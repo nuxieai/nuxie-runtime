@@ -95,14 +95,26 @@ pub(crate) fn runtime_text_shape_paint_commands(
 struct StaticTextSlice<'a> {
     text_local: usize,
     text_global: u32,
-    run_local: usize,
-    run_global: u32,
+    runs: Vec<StaticTextRun>,
     style_local: usize,
     style_global: u32,
     container: &'a ShapePaintContainerNode,
     font_bytes: Option<&'a [u8]>,
     variations: Vec<(u32, f32)>,
     modifiers: Vec<StaticTextModifierGroup>,
+}
+
+#[derive(Debug, Clone)]
+struct StaticTextRun {
+    local_id: usize,
+    global_id: u32,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct StaticTextLine<'a> {
+    text: &'a str,
+    char_start: usize,
+    line_index: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -255,9 +267,9 @@ impl<'a> StaticTextSlice<'a> {
             .copied()
             .filter(|local| child_type(*local) == Some("TextStylePaint"))
             .collect::<Vec<_>>();
-        if run_locals.len() != 1 {
+        if run_locals.is_empty() {
             bail!(
-                "static text subset requires exactly one TextValueRun child, found {}",
+                "static text subset requires at least one TextValueRun child, found {}",
                 run_locals.len()
             );
         }
@@ -267,19 +279,35 @@ impl<'a> StaticTextSlice<'a> {
                 style_locals.len()
             );
         }
-        let run_local = run_locals[0];
         let style_local = style_locals[0];
         let text_global = global_for_local(graph, text_local)?;
-        let run_global = global_for_local(graph, run_local)?;
         let style_global = global_for_local(graph, style_local)?;
-        let run = runtime
-            .object(run_global as usize)
-            .with_context(|| format!("missing TextValueRun global {run_global}"))?;
-        if run.uint_property("styleId") != Some(style_local as u64) {
-            bail!("static text subset requires the run to reference the only TextStylePaint");
+        let mut runs = Vec::new();
+        let mut authored_text = String::new();
+        for run_local in run_locals {
+            let run_global = global_for_local(graph, run_local)?;
+            let run = runtime
+                .object(run_global as usize)
+                .with_context(|| format!("missing TextValueRun global {run_global}"))?;
+            if run.uint_property("styleId") != Some(style_local as u64) {
+                bail!(
+                    "static text subset requires every TextValueRun to reference the only TextStylePaint"
+                );
+            }
+            let bytes = run
+                .string_property_bytes("text")
+                .context("static text subset requires serialized TextValueRun.text")?;
+            let text = std::str::from_utf8(bytes).context("TextValueRun text is not UTF-8")?;
+            authored_text.push_str(text);
+            runs.push(StaticTextRun {
+                local_id: run_local,
+                global_id: run_global,
+            });
         }
-        if run.string_property_bytes("text").is_none() {
-            bail!("static text subset requires serialized TextValueRun.text");
+        if runs.len() > 1 && !has_forced_text_break(&authored_text) {
+            bail!(
+                "static text subset only supports multiple TextValueRun children for authored line breaks"
+            );
         }
 
         let container = graph
@@ -358,8 +386,7 @@ impl<'a> StaticTextSlice<'a> {
         Ok(Self {
             text_local,
             text_global,
-            run_local,
-            run_global,
+            runs,
             style_local,
             style_global,
             container,
@@ -424,68 +451,85 @@ impl<'a> StaticTextSlice<'a> {
         let line_height = (ascent - descent) * font_size / TEXT_SHAPE_SCALE_F32;
         let outlines = skrifa_font.outline_glyphs();
         let scale = font_size / TEXT_SHAPE_SCALE_F32;
-        let mut glyphs = shape_text_glyphs(&shaper, &text, disable_legacy_kern);
         let apply_ellipsis = self.should_apply_static_ellipsis(runtime, instance)?;
-        if apply_ellipsis {
-            let max_width = self.text_width(runtime, instance)?;
-            let ellipsis = shape_text_glyphs(&shaper, "...", disable_legacy_kern);
-            let line_end = self.first_static_wrapped_line_end(
-                runtime,
-                instance,
-                &text,
-                &glyphs,
-                max_width,
-                scale,
-                letter_spacing,
-            )?;
-            let mut force_ellipsis = false;
-            if line_end < glyphs.len()
-                && self.static_fixed_height_shows_first_line_only(runtime, instance, line_height)?
-            {
-                glyphs.truncate(line_end);
-                force_ellipsis = true;
-            }
-            apply_static_ellipsis(
-                &mut glyphs,
-                ellipsis,
-                max_width,
-                scale,
-                letter_spacing,
-                force_ellipsis,
-            );
+        let lines = split_static_text_lines(&text);
+        if apply_ellipsis && lines.len() > 1 {
+            bail!("static text subset does not support ellipsis across multiple authored lines");
         }
         let mut commands = Vec::new();
-        let mut cursor_x = 0.0f32;
         let modifier_coverages = self
             .modifiers
             .iter()
             .map(|modifier| modifier.coverage_by_character(runtime, instance, &text))
             .collect::<Result<Vec<_>>>()?;
-        for glyph in glyphs {
-            let char_index = character_index_for_cluster(&text, glyph.cluster);
-            let mut offset_x = 0.0;
-            let mut offset_y = 0.0;
-            for (modifier, coverage) in self.modifiers.iter().zip(&modifier_coverages) {
-                let amount = coverage.get(char_index).copied().unwrap_or(0.0);
-                if amount == 0.0 {
-                    continue;
+        for line in lines {
+            if line.text.is_empty() {
+                continue;
+            }
+            let mut glyphs = shape_text_glyphs(&shaper, line.text, disable_legacy_kern);
+            if apply_ellipsis {
+                let max_width = self.text_width(runtime, instance)?;
+                let ellipsis = shape_text_glyphs(&shaper, "...", disable_legacy_kern);
+                let line_end = self.first_static_wrapped_line_end(
+                    runtime,
+                    instance,
+                    line.text,
+                    &glyphs,
+                    max_width,
+                    scale,
+                    letter_spacing,
+                )?;
+                let mut force_ellipsis = false;
+                if line_end < glyphs.len()
+                    && self.static_fixed_height_shows_first_line_only(
+                        runtime,
+                        instance,
+                        line_height,
+                    )?
+                {
+                    glyphs.truncate(line_end);
+                    force_ellipsis = true;
                 }
-                let (x, y) = modifier.translation(runtime, instance)?;
-                offset_x += x * amount;
-                offset_y += y * amount;
+                apply_static_ellipsis(
+                    &mut glyphs,
+                    ellipsis,
+                    max_width,
+                    scale,
+                    letter_spacing,
+                    force_ellipsis,
+                );
             }
-            let glyph_id = GlyphId::new(glyph.glyph_id);
-            if let Some(outline) = outlines.get(glyph_id) {
-                let mut pen = TextOutlinePen::new(cursor_x + offset_x, baseline + offset_y, scale);
-                let draw_settings =
-                    DrawSettings::unhinted(Size::new(TEXT_SHAPE_SCALE_F32), location_ref)
-                        .with_path_style(PathStyle::HarfBuzz);
-                outline
-                    .draw(draw_settings, &mut pen)
-                    .with_context(|| format!("failed to draw glyph {}", glyph.glyph_id))?;
-                commands.extend(pen.commands);
+
+            let mut cursor_x = 0.0f32;
+            let line_baseline = baseline + line.line_index as f32 * line_height;
+            for glyph in glyphs {
+                let char_index =
+                    line.char_start + character_index_for_cluster(line.text, glyph.cluster);
+                let mut offset_x = 0.0;
+                let mut offset_y = 0.0;
+                for (modifier, coverage) in self.modifiers.iter().zip(&modifier_coverages) {
+                    let amount = coverage.get(char_index).copied().unwrap_or(0.0);
+                    if amount == 0.0 {
+                        continue;
+                    }
+                    let (x, y) = modifier.translation(runtime, instance)?;
+                    offset_x += x * amount;
+                    offset_y += y * amount;
+                }
+                let glyph_id = GlyphId::new(glyph.glyph_id);
+                if let Some(outline) = outlines.get(glyph_id) {
+                    let mut pen =
+                        TextOutlinePen::new(cursor_x + offset_x, line_baseline + offset_y, scale);
+                    let draw_settings =
+                        DrawSettings::unhinted(Size::new(TEXT_SHAPE_SCALE_F32), location_ref)
+                            .with_path_style(PathStyle::HarfBuzz);
+                    outline
+                        .draw(draw_settings, &mut pen)
+                        .with_context(|| format!("failed to draw glyph {}", glyph.glyph_id))?;
+                    commands.extend(pen.commands);
+                }
+                cursor_x += glyph.advance * scale + letter_spacing;
             }
-            cursor_x += glyph.advance * scale + letter_spacing;
         }
 
         Ok(commands)
@@ -539,20 +583,26 @@ impl<'a> StaticTextSlice<'a> {
         let location_ref = LocationRef::from(&location);
         let (ascent, descent) = harfbuzz_line_metrics(&skrifa_font, location_ref);
         let line_height = (ascent - descent) * font_size / TEXT_SHAPE_SCALE_F32;
-        let glyphs = shape_text_glyphs(&shaper, &text, disable_legacy_kern);
-        let measured_width = text_glyph_width(
-            &glyphs,
-            font_size / TEXT_SHAPE_SCALE_F32,
-            self.letter_spacing(runtime, instance),
-        );
+        let scale = font_size / TEXT_SHAPE_SCALE_F32;
+        let letter_spacing = self.letter_spacing(runtime, instance);
+        let lines = split_static_text_lines(&text);
+        let measured_width = lines
+            .iter()
+            .filter(|line| !line.text.is_empty())
+            .map(|line| {
+                let glyphs = shape_text_glyphs(&shaper, line.text, disable_legacy_kern);
+                text_glyph_width(&glyphs, scale, letter_spacing)
+            })
+            .fold(0.0f32, f32::max);
         let sizing = self.text_uint_property(runtime, instance, "sizingValue")?;
         let width = match sizing {
             1 | 2 => self.text_width(runtime, instance)?,
             _ => measured_width,
         };
+        let measured_height = line_height * lines.len().max(1) as f32;
         let height = match sizing {
             2 => self.text_height(runtime, instance)?,
-            _ => line_height,
+            _ => measured_height,
         };
         let origin_x = self.text_double_property(runtime, instance, "originX", 0.0)?;
         let origin_y = self.text_double_property(runtime, instance, "originY", 0.0)?;
@@ -563,15 +613,19 @@ impl<'a> StaticTextSlice<'a> {
     fn text_value(&self, runtime: &RuntimeFile, instance: &ArtboardInstance) -> Result<String> {
         let property_key = property_key_for_name("TextValueRun", "text")
             .context("missing TextValueRun.text key")?;
-        let bytes = instance
-            .string_property(self.run_local, property_key)
-            .or_else(|| {
-                runtime
-                    .object(self.run_global as usize)
-                    .and_then(|object| object.string_property_bytes("text"))
-            })
-            .context("TextValueRun missing text")?;
-        String::from_utf8(bytes.to_vec()).context("TextValueRun text is not UTF-8")
+        let mut text = String::new();
+        for run in &self.runs {
+            let bytes = instance
+                .string_property(run.local_id, property_key)
+                .or_else(|| {
+                    runtime
+                        .object(run.global_id as usize)
+                        .and_then(|object| object.string_property_bytes("text"))
+                })
+                .context("TextValueRun missing text")?;
+            text.push_str(std::str::from_utf8(bytes).context("TextValueRun text is not UTF-8")?);
+        }
+        Ok(text)
     }
 
     fn font_size(&self, runtime: &RuntimeFile, instance: &ArtboardInstance) -> Result<f32> {
@@ -1150,6 +1204,52 @@ fn character_index_for_cluster(text: &str, cluster: u32) -> usize {
         .take_while(|(byte_index, _)| *byte_index <= cluster)
         .count()
         .saturating_sub(1)
+}
+
+fn has_forced_text_break(text: &str) -> bool {
+    text.chars()
+        .any(|ch| matches!(ch, '\n' | '\r' | '\u{2028}'))
+}
+
+fn split_static_text_lines(text: &str) -> Vec<StaticTextLine<'_>> {
+    let mut lines = Vec::new();
+    let mut line_start_byte = 0;
+    let mut line_start_char = 0;
+    let mut line_index = 0;
+    let mut iter = text.char_indices().peekable();
+
+    while let Some((byte_index, ch)) = iter.next() {
+        if !matches!(ch, '\n' | '\r' | '\u{2028}') {
+            continue;
+        }
+
+        lines.push(StaticTextLine {
+            text: &text[line_start_byte..byte_index],
+            char_start: line_start_char,
+            line_index,
+        });
+
+        let mut next_start_byte = byte_index + ch.len_utf8();
+        let mut separator_chars = 1;
+        if ch == '\r'
+            && let Some((next_byte_index, '\n')) = iter.peek().copied()
+        {
+            iter.next();
+            next_start_byte = next_byte_index + '\n'.len_utf8();
+            separator_chars = 2;
+        }
+
+        line_start_char += text[line_start_byte..byte_index].chars().count() + separator_chars;
+        line_start_byte = next_start_byte;
+        line_index += 1;
+    }
+
+    lines.push(StaticTextLine {
+        text: &text[line_start_byte..],
+        char_start: line_start_char,
+        line_index,
+    });
+    lines
 }
 
 fn cubic_interpolator_calc_bezier(t: f32, a1: f32, a2: f32) -> f32 {

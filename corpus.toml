@@ -385,9 +385,8 @@ features = ["type-key:106:FileAssetContents", "type-key:114:StateMachineListener
 id = "data_binding_artboards_source_test"
 path = "tests/unit_tests/assets/data_binding_artboards_source_test.riv"
 samples = [0.0]
-status = "diverges"
-milestone = "M6"
-features = ["type-key:106:FileAssetContents", "type-key:134:Text", "type-key:135:TextValueRun", "type-key:137:TextStylePaint", "type-key:141:FontAsset", "type-key:144:TextStyleAxis", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:409:LayoutComponent", "type-key:420:LayoutComponentStyle", "type-key:435:ViewModel", "type-key:443:ViewModelPropertyString", "type-key:447:DataBindContext", "type-key:479:TransitionPropertyViewModelComparator", "type-key:482:TransitionViewModelCondition", "type-key:502:ViewModelPropertyTrigger", "type-key:503:BindablePropertyTrigger", "type-key:505:TransitionValueTriggerComparator", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition", "rust-runner-divergence:layout-component-bounds"]
+status = "exact"
+features = ["type-key:106:FileAssetContents", "type-key:134:Text", "type-key:135:TextValueRun", "type-key:137:TextStylePaint", "type-key:141:FontAsset", "type-key:144:TextStyleAxis", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:25:KeyedObject", "type-key:26:KeyedProperty", "type-key:31:LinearAnimation", "type-key:37:KeyFrameColor", "type-key:409:LayoutComponent", "type-key:420:LayoutComponentStyle", "type-key:435:ViewModel", "type-key:443:ViewModelPropertyString", "type-key:447:DataBindContext", "type-key:479:TransitionPropertyViewModelComparator", "type-key:482:TransitionViewModelCondition", "type-key:502:ViewModelPropertyTrigger", "type-key:503:BindablePropertyTrigger", "type-key:505:TransitionValueTriggerComparator", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:61:AnimationState", "type-key:62:AnyState", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition"]
 
 [[file]]
 id = "data_binding_artboards_test"

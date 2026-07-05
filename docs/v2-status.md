@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 480 across 159 exact files
-- Current compare: `make golden-compare` reports diverges=11, unsupported-feature=125, not-yet=0
+- Exact segments (file × sample): 481 across 160 exact files
+- Current compare: `make golden-compare` reports diverges=10, unsupported-feature=125, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=81 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
@@ -30,16 +30,16 @@ the only memory the next session has. Update it every commit.
    `data_bind_test_cmdq.riv` -> `text`, `scroll_snap.riv` -> `text`, and
    `scroll_test.riv` -> `scroll-constraints`.
 2. `LayoutComponent.computed*` target-to-source data binds are no longer a
-   runner gate. `collapse_data_binds.riv` is exact; the remaining siblings
-   `data_binding_artboards_source_test.riv` and `hittest_collapsed_layouts.riv`
-   now run and stay as M6 `layout-component-bounds` divergences.
+   runner gate. `collapse_data_binds.riv` and
+   `data_binding_artboards_source_test.riv` are exact; the remaining closest
+   sibling `hittest_collapsed_layouts.riv` now runs and stays as an M6
+   `layout-component-bounds` divergence.
 3. Highest priority is broader `LayoutComponent` bounds/positioning parity
    before opening more runtime surface. Work the compact divergence set:
-   `data_binding_artboards_source_test.riv`, `hittest_collapsed_layouts.riv`,
-   `number_to_list_nested_children.riv`, and
+   `hittest_collapsed_layouts.riv`, `number_to_list_nested_children.riv`, and
    `transition_duration_bind_list.riv`. Start with
-   `data_binding_artboards_source_test.riv` because it is the closest remaining
-   sibling to the solved computed-layout/data-bind path.
+   `hittest_collapsed_layouts.riv` because it is the closest remaining sibling
+   to the solved computed-layout/data-bind and root-hug background path.
 4. Keep `new_text.riv` parked as a known M6 divergence until a dedicated text
    outline backend/canonicalization slice: gradient sibling admission now
    reaches draw, but Rust/Skrifa and C++ HarfBuzz emit a glyph contour with a
@@ -68,13 +68,13 @@ the only memory the next session has. Update it every commit.
   (`src/text/font_hb.cpp`) and `TextStylePaint::addPathClockwise`; Rust uses
   Skrifa outlines. The first stream diff is path verb/point ordering, not a
   paint/gradient mismatch.
-- `data_binding_artboards_source_test.riv` and
-  `hittest_collapsed_layouts.riv`: after layout computed target-to-source
-  binding and Text-under-LayoutComponent admission, Rust reaches draw but
-  differs on layout bounds/positioning. `collapse_data_binds.riv` cleared after
-  adding effective-collapse handling, absolute positioning, alignment,
-  intrinsic flex-basis sizing, and narrow `ToString` default admission for
-  text property binds.
+- `hittest_collapsed_layouts.riv`: after layout computed target-to-source
+  binding, Text-under-LayoutComponent admission, and default-less declared
+  view-model source values, Rust reaches draw but differs on layout
+  bounds/positioning. `collapse_data_binds.riv` cleared after effective
+  collapse, absolute positioning, alignment, intrinsic flex-basis sizing, and
+  narrow `ToString` default admission; `data_binding_artboards_source_test.riv`
+  cleared after declared-path defaults plus root-hug Artboard background bounds.
 - `number_to_list_nested_children.riv`: after the root layout paint admission,
   Rust reaches draw but differs on the first layout background rect: Rust
   emits height `500` where C++ emits `260`. This is a layout/list bounds
@@ -582,3 +582,10 @@ the only memory the next session has. Update it every commit.
   `exact-segments=480`, `diverges=11`, `unsupported-feature=125`,
   `not-yet=0`, and parked `M6=81 gated=8 harness=36`; next target:
   `data_binding_artboards_source_test.riv`.
+- 2026-07-05: [M6] Promoted `data_binding_artboards_source_test.riv` by
+  creating C++-style default view-model values from declared paths when no
+  serialized default instance exists and using root-hug Artboard layout bounds
+  for background drawing. `make golden-compare` reports `exact=160`,
+  `exact-segments=481`, `diverges=10`, `unsupported-feature=125`,
+  `not-yet=0`, and parked `M6=81 gated=8 harness=36`; `cargo test
+  --workspace` passes. Next target: `hittest_collapsed_layouts.riv`.

@@ -157,9 +157,7 @@ pub(super) fn build_artboard_property_bindings(
     let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
         return Vec::new();
     };
-    let Some(default_instance) = file.view_model_default_instance(0) else {
-        return Vec::new();
-    };
+    let default_instance = file.view_model_default_instance(0);
 
     file.artboard_data_binds(artboard_index)
         .into_iter()
@@ -195,9 +193,24 @@ pub(super) fn build_artboard_property_bindings(
                 return None;
             }
             let path = file.data_bind_context_source_path_ids_for_object(data_bind.object)?;
-            let default_value = file
-                .data_context_view_model_property_for_instance(default_instance.object, &path)
-                .and_then(|source| runtime_created_view_model_value_for_source(file, source))
+            let default_value = default_instance
+                .as_ref()
+                .and_then(|default_instance| {
+                    file.data_context_view_model_property_for_instance(
+                        default_instance.object,
+                        &path,
+                    )
+                    .and_then(|source| runtime_created_view_model_value_for_source(file, source))
+                })
+                .or_else(|| {
+                    if file
+                        .data_bind_is_name_based_for_object(data_bind.object)
+                        .unwrap_or(false)
+                    {
+                        return None;
+                    }
+                    runtime_created_view_model_value_for_declared_path(file, &path)
+                })
                 .unwrap_or(RuntimeDataBindGraphValue::Number(0.0));
             if !artboard_property_binding_value_matches_kind(&default_value, property_kind)
                 && !artboard_property_binding_allows_converted_default(
@@ -306,17 +319,27 @@ pub(super) fn build_artboard_default_view_model_values(
     let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
         return BTreeMap::new();
     };
-    let Some(default_instance) = file.view_model_default_instance(0) else {
-        return BTreeMap::new();
-    };
+    let default_instance = file.view_model_default_instance(0);
 
     let mut values = BTreeMap::new();
     for data_bind in file.artboard_data_binds(artboard_index) {
         let Some(path) = file.data_bind_context_source_path_ids_for_object(data_bind.object) else {
             continue;
         };
-        let Some(value) =
-            runtime_created_view_model_value_for_path(file, default_instance.object, &path)
+        let Some(value) = default_instance
+            .as_ref()
+            .and_then(|default_instance| {
+                runtime_created_view_model_value_for_path(file, default_instance.object, &path)
+            })
+            .or_else(|| {
+                if file
+                    .data_bind_is_name_based_for_object(data_bind.object)
+                    .unwrap_or(false)
+                {
+                    return None;
+                }
+                runtime_created_view_model_value_for_declared_path(file, &path)
+            })
         else {
             continue;
         };
@@ -515,6 +538,53 @@ fn runtime_created_view_model_value_for_source(
         RuntimeDataType::SymbolListIndex => Some(RuntimeDataBindGraphValue::SymbolListIndex(0)),
         RuntimeDataType::AssetImage => Some(RuntimeDataBindGraphValue::Asset(u64::from(u32::MAX))),
         RuntimeDataType::Artboard => Some(RuntimeDataBindGraphValue::Artboard(u64::from(u32::MAX))),
+        _ => None,
+    }
+}
+
+fn runtime_created_view_model_value_for_declared_path(
+    file: &RuntimeFile,
+    path: &[u32],
+) -> Option<RuntimeDataBindGraphValue> {
+    let (view_model_index, property_path) = path.split_first()?;
+    let mut view_model_index = usize::try_from(*view_model_index).ok()?;
+
+    for (index, property_id) in property_path.iter().enumerate() {
+        let view_model = file.view_model(view_model_index)?;
+        let property_index = usize::try_from(*property_id).ok()?;
+        let property = *view_model.properties.get(property_index)?;
+        if index == property_path.len() - 1 {
+            return runtime_created_view_model_value_for_declared_property(property);
+        }
+        if property.type_name != "ViewModelPropertyViewModel" {
+            return None;
+        }
+        view_model_index = usize::try_from(property.uint_property("viewModelId")?).ok()?;
+    }
+
+    None
+}
+
+fn runtime_created_view_model_value_for_declared_property(
+    property: &RuntimeObject,
+) -> Option<RuntimeDataBindGraphValue> {
+    match property.type_name {
+        "ViewModelPropertyNumber" => Some(RuntimeDataBindGraphValue::Number(0.0)),
+        "ViewModelPropertyBoolean" => Some(RuntimeDataBindGraphValue::Boolean(false)),
+        "ViewModelPropertyString" => Some(RuntimeDataBindGraphValue::String(Vec::new())),
+        "ViewModelPropertyColor" => Some(RuntimeDataBindGraphValue::Color(0xFF000000)),
+        "ViewModelPropertyEnum" | "ViewModelPropertyEnumCustom" | "ViewModelPropertyEnumSystem" => {
+            Some(RuntimeDataBindGraphValue::Enum(0))
+        }
+        "ViewModelPropertyTrigger" => Some(RuntimeDataBindGraphValue::Trigger(0)),
+        "ViewModelPropertyList" => Some(RuntimeDataBindGraphValue::List { item_count: 0 }),
+        "ViewModelPropertySymbolListIndex" => Some(RuntimeDataBindGraphValue::SymbolListIndex(0)),
+        "ViewModelPropertyAssetImage" => {
+            Some(RuntimeDataBindGraphValue::Asset(u64::from(u32::MAX)))
+        }
+        "ViewModelPropertyArtboard" => {
+            Some(RuntimeDataBindGraphValue::Artboard(u64::from(u32::MAX)))
+        }
         _ => None,
     }
 }

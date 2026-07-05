@@ -502,12 +502,20 @@ impl ArtboardInstance {
             .iter()
             .find(|container| container.local_id == 0)
         {
+            let background_bounds =
+                self.runtime_root_artboard_layout_bounds(graph)
+                    .unwrap_or(RuntimeLayoutBounds {
+                        x: 0.0,
+                        y: 0.0,
+                        width: self.width,
+                        height: self.height,
+                    });
             runtime_draw_background(
                 runtime,
                 self,
                 background,
-                self.width,
-                self.height,
+                background_bounds.width,
+                background_bounds.height,
                 self.origin_x,
                 self.origin_y,
                 factory,
@@ -944,7 +952,15 @@ impl ArtboardInstance {
         cache: &mut BTreeMap<usize, RuntimeLayoutBounds>,
         visiting: &mut BTreeSet<usize>,
     ) -> Option<RuntimeLayoutBounds> {
-        self.runtime_absolute_layout_component_bounds_memo(layout_local, graph, cache, visiting)
+        self.runtime_root_artboard_layout_bounds_memo(layout_local, graph, cache, visiting)
+            .or_else(|| {
+                self.runtime_absolute_layout_component_bounds_memo(
+                    layout_local,
+                    graph,
+                    cache,
+                    visiting,
+                )
+            })
             .or_else(|| {
                 self.runtime_simple_flex_layout_bounds_memo(layout_local, graph, cache, visiting)
             })
@@ -957,6 +973,68 @@ impl ArtboardInstance {
                     visiting,
                 )
             })
+    }
+
+    fn runtime_root_artboard_layout_bounds(
+        &self,
+        graph: &ArtboardGraph,
+    ) -> Option<RuntimeLayoutBounds> {
+        let mut cache = BTreeMap::new();
+        let mut visiting = BTreeSet::new();
+        self.runtime_root_artboard_layout_bounds_memo(0, graph, &mut cache, &mut visiting)
+    }
+
+    fn runtime_root_artboard_layout_bounds_memo(
+        &self,
+        layout_local: usize,
+        graph: &ArtboardGraph,
+        cache: &mut BTreeMap<usize, RuntimeLayoutBounds>,
+        visiting: &mut BTreeSet<usize>,
+    ) -> Option<RuntimeLayoutBounds> {
+        if layout_local != 0 {
+            return None;
+        }
+        let component = graph
+            .components
+            .iter()
+            .find(|component| component.local_id == layout_local)?;
+        if component.type_name != "Artboard" {
+            return None;
+        }
+        let style_local = self.runtime_layout_component_style_local(layout_local)?;
+
+        const LAYOUT_SCALE_TYPE_HUG: u64 = 2;
+        let width_is_hug =
+            self.runtime_layout_axis_scale(style_local, true) == LAYOUT_SCALE_TYPE_HUG;
+        let height_is_hug =
+            self.runtime_layout_axis_scale(style_local, false) == LAYOUT_SCALE_TYPE_HUG;
+        if !width_is_hug && !height_is_hug {
+            return None;
+        }
+
+        let width = if width_is_hug {
+            self.runtime_layout_component_hug_size_memo(layout_local, graph, true, cache, visiting)?
+        } else {
+            self.width
+        };
+        let height = if height_is_hug {
+            self.runtime_layout_component_hug_size_memo(
+                layout_local,
+                graph,
+                false,
+                cache,
+                visiting,
+            )?
+        } else {
+            self.height
+        };
+
+        Some(RuntimeLayoutBounds {
+            x: 0.0,
+            y: 0.0,
+            width,
+            height,
+        })
     }
 
     fn runtime_simple_flex_layout_bounds_memo(

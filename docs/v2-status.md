@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 484 across 163 exact files
-- Current compare: `make golden-compare` reports diverges=7, unsupported-feature=125, not-yet=0
+- Exact segments (file × sample): 487 across 166 exact files
+- Current compare: `make golden-compare` reports diverges=4, unsupported-feature=125, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=81 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
@@ -35,11 +35,12 @@ the only memory the next session has. Update it every commit.
    is also exact after matching C++ fresh artboard view-model contexts in the
    golden runner.
 3. The compact `LayoutComponent`/list bounds divergence queue is closed for
-   the current corpus. Next priority is the M6 text divergence queue:
-   re-check `new_text.riv` first because it is the pure text outline-order
-   case, then work the six-file data-bound text bucket. Start each with a
-   focused direct C++/Rust stream compare before assuming the manifest
-   divergence is still live.
+   the current corpus. The M6 text queue is now the active line: `new_text.riv`
+   remains the pure outline contour-order divergence, and the data-bound text
+   bucket is down to three real line-count divergences. Start next with a
+   focused direct C++/Rust stream diff for
+   `rebind_with_nested_viewmodel.riv`, then `replace_vm_instance.riv`, then
+   `transition_actions.riv`.
 4. Keep `new_text.riv` parked as a known M6 divergence until a dedicated text
    outline backend/canonicalization slice: gradient sibling admission now
    reaches draw, but Rust/Skrifa and C++ HarfBuzz emit a glyph contour with a
@@ -69,14 +70,13 @@ the only memory the next session has. Update it every commit.
   Skrifa outlines. The first stream diff is path verb/point ordering, not a
   paint/gradient mismatch.
 - Data-bound static text/converter bucket:
-  `format_number_with_commas.riv`, `listener_view_model.riv`,
-  `rebind_with_nested_viewmodel.riv`, `replace_vm_instance.riv`,
-  `transition_actions.riv`, and `trigger_fires_single_change.riv` now reach
-  draw after the narrow source-to-target string/color bind admission, but
-  differ from C++ and carry
-  `rust-runner-divergence:data-bound-text`. The first observed diff for
-  `format_number_with_commas.riv` is the first text `drawPath` geometry, not
-  an unsupported diagnostic.
+  `rebind_with_nested_viewmodel.riv`, `replace_vm_instance.riv`, and
+  `transition_actions.riv` now reach draw after the narrow source-to-target
+  string/color bind admission, but still differ from C++ and carry
+  `rust-runner-divergence:data-bound-text`. A focused bucket re-check promoted
+  `format_number_with_commas.riv`, `listener_view_model.riv`, and
+  `trigger_fires_single_change.riv`; the remaining three diverge by stream
+  line count, not just float epsilon.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -599,3 +599,12 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=125`, `not-yet=0`, and parked
   `M6=81 gated=8 harness=36`; next target: `new_text.riv`, then the
   data-bound text divergence bucket.
+- 2026-07-05: [M6] Rechecked the M6 text divergence queue with direct
+  C++/Rust streams. `new_text.riv` remains a real text-outline contour-order
+  divergence, but `format_number_with_commas.riv`,
+  `listener_view_model.riv`, and `trigger_fires_single_change.riv` are now
+  epsilon-equivalent and were promoted to exact. `make golden-compare`
+  reports `exact=166`, `exact-segments=487`, `diverges=4`,
+  `unsupported-feature=125`, `not-yet=0`, and parked
+  `M6=81 gated=8 harness=36`; next target:
+  `rebind_with_nested_viewmodel.riv`.

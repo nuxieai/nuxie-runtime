@@ -5,9 +5,9 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 491 across 170 exact files
-- Current compare: `make golden-compare` reports diverges=1, unsupported-feature=124, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=80 gated=8 harness=36
+- Exact segments (file × sample): 492 across 171 exact files
+- Current compare: `make golden-compare` reports diverges=3, unsupported-feature=121, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=77 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -25,10 +25,10 @@ the only memory the next session has. Update it every commit.
 
 1. The M6 text unsupported queue is the active line now that the compact
    layout/list/data-bound-text divergence queues are closed. Query it with
-   `grep -B6 'milestone = "M6"' corpus.toml | rg -B6 'rust-runner-unsupported:text'`.
-   Start with `component_stateful.riv` unless a smaller text-only entry
-   is identified first; run the direct C++/Rust stream pair to verify the
-   first unsupported gate before porting.
+   `grep -A1 -B6 'milestone = "M6"' corpus.toml | rg -B7 -A1 'rust-runner-unsupported:text'`.
+   Start with `component_stateful_vm_instance_2.riv` unless a smaller
+   text-only entry is identified first; run the direct C++/Rust stream pair to
+   verify the first unsupported gate before porting.
 2. Keep `new_text.riv` parked as a known M6 divergence until a dedicated text
    outline backend/canonicalization slice: gradient sibling admission now
    reaches draw, but Rust/Skrifa and C++ HarfBuzz emit a glyph contour with a
@@ -57,6 +57,13 @@ the only memory the next session has. Update it every commit.
   (`src/text/font_hb.cpp`) and `TextStylePaint::addPathClockwise`; Rust uses
   Skrifa outlines. The first stream diff is path verb/point ordering, not a
   paint/gradient mismatch.
+- `relative_data_binding.riv`: after nested `TextValueRun.text` support, Rust
+  reaches draw but activates a nested text/relative-position branch that C++
+  suppresses at sample 0. First stream diff: a rectangle transform has x=96.5
+  in Rust vs x=0 in C++, followed by extra text draw calls.
+- `shared_viewmodel_instance.riv`: same newly-rendering shared-view-model text
+  family; Rust emits extra nested text draw calls before the rectangle stream
+  that C++ produces at sample 0.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -104,7 +111,8 @@ the only memory the next session has. Update it every commit.
   listeners, nested child `Node.opacity` and `Rectangle.width/height`
   source-to-target number binds with child artboard data-bind advancement,
   nested child `CustomPropertyString.propertyValue` string binds and
-  `Rectangle.width/height` 20/21 binds,
+  `Rectangle.width/height` 20/21 binds, nested child `TextValueRun.text`
+  string binds backed by stateful child view-model values,
   authored-transparent Backboard/background draw suppression,
   custom-property trigger keyed-callback target-to-source binding,
   custom-property enum target-to-source binding, live data-bound nested host
@@ -260,6 +268,12 @@ the only memory the next session has. Update it every commit.
   breakdown, so each milestone's work-list is queryable from `corpus.toml`
   instead of backlog prose. Completed-milestone log entries are archived in
   `docs/v2-log-archive.md` to keep this file small.
+- 2026-07-05: `component_stateful.riv` is exact after admitting nested
+  `TextValueRun.text` string binds from stateful child view-model values and
+  clearing created default nested text contexts. `relative_data_binding.riv`
+  and `shared_viewmodel_instance.riv` now render but are parked as M6
+  divergences because Rust draws nested/shared text that C++ does not at
+  sample 0.
 - 2026-07-04: Remaining scroll-constraint files are M6, not M3: the C++
   implementation is coupled to layout dimensions, layout-provider child
   bounds, physics, and component-list virtualization. Use the explicit

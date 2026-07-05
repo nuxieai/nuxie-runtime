@@ -1450,6 +1450,11 @@ fn nested_child_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> boo
             && data_bind.property_key == 246
             && (data_bind.converter_global.is_none()
                 || data_bind.converter_type_name == Some("DataConverterToString")))
+        || (data_bind.target_type_name == Some("TextValueRun")
+            // TextValueRunBase::textPropertyKey in C++ generated/text/text_value_run_base.hpp.
+            && data_bind.property_key == 268
+            && (data_bind.converter_global.is_none()
+                || data_bind.converter_type_name == Some("DataConverterToString")))
 }
 
 fn solid_color_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> bool {

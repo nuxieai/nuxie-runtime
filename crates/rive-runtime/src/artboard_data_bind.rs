@@ -614,6 +614,26 @@ impl ArtboardInstance {
         self.bind_artboard_data_context(file, default_instance.object)
     }
 
+    pub(crate) fn clear_default_text_property_context(&mut self) -> bool {
+        let Some(text_property_key) = property_key_for_name("TextValueRun", "text") else {
+            return false;
+        };
+        let mut changed = false;
+        let paths = self
+            .artboard_property_bindings
+            .iter()
+            .filter(|binding| binding.property_key == text_property_key)
+            .map(|binding| binding.path.clone())
+            .collect::<Vec<_>>();
+        for path in paths {
+            if self.artboard_data_bind_values.remove(&path).is_some() {
+                self.reset_artboard_property_formula_random_state_for_path(&path);
+                changed = true;
+            }
+        }
+        changed
+    }
+
     fn bind_artboard_data_context(
         &mut self,
         file: &RuntimeFile,
@@ -1001,13 +1021,22 @@ impl ArtboardInstance {
         host_local_id: usize,
         binding: &RuntimeArtboardPropertyBindingInstance,
     ) -> Option<RuntimeDataBindGraphValue> {
-        if !matches!(binding.default_value, RuntimeDataBindGraphValue::Number(_)) {
-            return None;
-        }
         let source_local = self.stateful_nested_host_value_local(host_local_id, &binding.path)?;
-        let property_value_key = property_key_for_name("ViewModelInstanceNumber", "propertyValue")?;
-        self.double_property(source_local, property_value_key)
-            .map(RuntimeDataBindGraphValue::Number)
+        match binding.default_value {
+            RuntimeDataBindGraphValue::Number(_) => {
+                let property_value_key =
+                    property_key_for_name("ViewModelInstanceNumber", "propertyValue")?;
+                self.double_property(source_local, property_value_key)
+                    .map(RuntimeDataBindGraphValue::Number)
+            }
+            RuntimeDataBindGraphValue::String(_) => {
+                let property_value_key =
+                    property_key_for_name("ViewModelInstanceString", "propertyValue")?;
+                self.string_property(source_local, property_value_key)
+                    .map(|value| RuntimeDataBindGraphValue::String(value.to_vec()))
+            }
+            _ => None,
+        }
     }
 
     fn stateful_nested_host_value_local(

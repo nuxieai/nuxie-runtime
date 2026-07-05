@@ -1630,6 +1630,7 @@ fn build_runtime_nested_artboard_instance(
         build_context,
     )?);
     child.bind_default_view_model_artboard_list_context(file);
+    child.clear_default_text_property_context();
     let animations = runtime_nested_animation_instances(file, parent_graph, host_local_id, &child);
     Ok(RuntimeNestedArtboardInstance {
         child,

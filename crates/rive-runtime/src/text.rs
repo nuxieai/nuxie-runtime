@@ -227,8 +227,16 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
         Some("ArtboardComponentList") => {
             property_key_for_name("ArtboardComponentList", "listSource") == Some(property_key)
         }
+        Some("LayoutComponent") => {
+            property_key_for_name("LayoutComponent", "height") == Some(property_key)
+        }
         Some("Solo") => property_key_for_name("Solo", "activeComponentId") == Some(property_key),
-        Some("Text") => property_key_for_name("Text", "alignValue") == Some(property_key),
+        Some("TextStylePaint") => {
+            property_key_for_name("TextStyle", "fontSize") == Some(property_key)
+        }
+        Some("Text") => ["alignValue", "overflowValue"]
+            .into_iter()
+            .any(|name| property_key_for_name("Text", name) == Some(property_key)),
         _ => false,
     }
 }

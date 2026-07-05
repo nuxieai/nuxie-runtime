@@ -6,8 +6,8 @@ the only memory the next session has. Update it every commit.
 ## Metric
 
 - Exact segments (file × sample): 495 across 174 exact files
-- Current compare: `make golden-compare` reports diverges=11, unsupported-feature=110, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=66 gated=8 harness=36
+- Current compare: `make golden-compare` reports diverges=12, unsupported-feature=109, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=65 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -23,7 +23,7 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Probe `fit_font_size_test.riv` as the next
+1. Probe `hit_test_nested.riv` as the next
    `rust-runner-unsupported:text` M6 gate: compare direct C++/Rust streams,
    remove only stale static-text gates needed to reach draw, and fix or retag
    the first real text/data-bind blocker. Do not start a general text layout
@@ -69,6 +69,13 @@ the only memory the next session has. Update it every commit.
   `CubicMirroredVertex`, Rust reaches draw but the first diff is a text path
   payload after the first text transform. This belongs with the text-outline
   backend/canonicalization bucket, not follow-path constraint runtime.
+- `fit_font_size_test.riv`: after admitting source-to-target
+  `TextStylePaint.fontSize`, `Text.overflowValue`, and
+  `LayoutComponent.height` binds through static text, Rust reaches draw but
+  differs on fit-font-size text layout under layout-controlled bounds. Focused
+  diff: C++ wraps/fits the right-column text where Rust keeps advancing on a
+  wider line (`x=7.71484375` versus `x=212.890625`), and C++ emits a
+  zero-sized middle text path that Rust suppresses.
 - `data_bind_test_cmdq.riv`: after admitting inert `Event` siblings through the
   static text gate, Rust reaches draw but the bottom command-queue text/layout
   block diverges. First focused diff: C++ transforms the block at
@@ -196,9 +203,11 @@ the only memory the next session has. Update it every commit.
   line range maps with runId targeting and optional cubic range
   interpolation, including C++-ordered opacity buckets, plus solid fill/stroke
   `TextStylePaint` drawing with DashPath stroke effects, and
-  source-to-target `TextValueRun.text` / `SolidColor.colorValue` /
-  `Shape.rotation` via `DataConverterSystemDegsToRads` data binds around
-  static text. Shape/follow-path/scale/origin modifiers,
+  source-to-target `TextValueRun.text` / `Text.alignValue` /
+  `Text.overflowValue` / `TextStylePaint.fontSize` /
+  `LayoutComponent.height` / `SolidColor.colorValue` / `Shape.rotation` via
+  `DataConverterSystemDegsToRads` data binds around static text.
+  Shape/follow-path/scale/origin modifiers,
   gradient/feather/other text effects, richer layout, broader `Text` property
   data binds, and text input/editing remain M6 text diagnostics.
 - `TransformConstraint` currently covers Text constraint bounds for the
@@ -294,20 +303,23 @@ the only memory the next session has. Update it every commit.
   constraints and clipping shapes inherit the Solo's collapse value, while
   participating children collapse unless they match the imported
   `activeComponentId` resolved through the artboard-local object table.
-- 2026-07-02: Delegated subsystems (#V2-7) use Rust-native libraries instead
-  of FFI, chosen by "spec-defined may swap engines; implementation-defined may
-  not": Taffy (layout, behind a trait, Yoga-FFI as untriggered fallback),
-  HarfRust + read-fonts/skrifa (shaping/font parsing), unicode-bidi (bidi),
-  `image`-ecosystem crates (decoders), cpal/rodio (audio), and mlua+`luau`
-  vendoring the official Luau VM (scripting — same VM as C++, so scripted
-  files stay `exact`). `corpus.toml` gains per-entry verification modes
-  `exact | tolerant(ε) | structural`; files exercising Taffy layout, HarfRust
-  text, or lossy image decoding verify `tolerant`, everything else stays
-  `exact`. Cross-runtime image comparison must use decoded dimensions +
-  tolerant pixel sampling, never payload hashes (supersedes the size/hash
-  recording decision above once Rust image support lands). Do not pin Taffy
-  against Yoga behavior-by-behavior. Taffy CSS Grid is a post-M7 enhancement
-  idea, not port scope.
+- 2026-07-02: Delegated subsystems (#V2-7) use Rust-native libraries where the
+  delegated behavior is spec-defined, chosen by "spec-defined may swap engines;
+  implementation-defined may not": Taffy (layout, behind a trait, Yoga-FFI as
+  untriggered fallback), HarfRust + read-fonts/skrifa (shaping/font parsing),
+  unicode-bidi (bidi), `image`-ecosystem crates (decoders), cpal/rodio
+  (audio), and mlua+`luau` vendoring the official Luau VM (scripting uses the
+  same VM as C++, so scripted files stay `exact`). `corpus.toml` gains
+  per-entry verification modes `exact | tolerant(ε) | structural`; files
+  exercising Taffy layout, HarfRust shaping/font numeric drift, or lossy image
+  decoding verify `tolerant`, everything else stays `exact`. Rive-owned text
+  layout, wrapping, fit-font-size, draw suppression, call order, and glyph
+  contour ordering are ported behavior, not tolerant delegated-engine drift.
+  Cross-runtime image comparison must use decoded dimensions + tolerant pixel
+  sampling, never payload hashes (supersedes the size/hash recording decision
+  above once Rust image support lands). Do not pin Taffy against Yoga
+  behavior-by-behavior. Taffy CSS Grid is a post-M7 enhancement idea, not port
+  scope.
 - 2026-07-03: Metric is now segments-weighted: `golden-compare` reports
   `exact-segments` (sum of samples across exact entries) alongside the file
   count, so M2 sample widening registers as metric movement. Gated corpus
@@ -376,9 +388,10 @@ the only memory the next session has. Update it every commit.
   entries that declare `verification = "tolerant(...)"`. Tolerant verification
   relaxes numeric tokens only: call order, IDs, path verbs, non-numeric payloads,
   and glyph contour ordering remain strict unless a future Decision introduces
-  a dedicated outline canonicalization or raster comparison mode. New Taffy
-  layout gates may not be promoted through hand-rolled fallback after the
-  #V2-7 layout adapter refuses a tree.
+  a dedicated outline canonicalization or raster comparison mode. It does not
+  hide missing Rive text layout behavior such as wrapping, fit-font-size, or
+  layout-controlled text bounds. New Taffy layout gates may not be promoted
+  through hand-rolled fallback after the #V2-7 layout adapter refuses a tree.
 
 ## Log
 
@@ -799,3 +812,15 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=110`, `not-yet=0`, and parked
   `M6=66 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
   `fit_font_size_test.riv`.
+- 2026-07-05: [M6] Reopened `fit_font_size_test.riv` by admitting
+  source-to-target `TextStylePaint.fontSize`, `Text.overflowValue`, and
+  `LayoutComponent.height` binds through the static text gate. The file reaches
+  draw and is parked as
+  `rust-runner-divergence:text-fit-font-size-layout-bounds`: focused streams
+  show C++ wrapping/fitting the right-column text where Rust keeps advancing on
+  a wider line (`x=7.71484375` versus `x=212.890625`), and C++ emits a
+  zero-sized middle text path that Rust suppresses. `make golden-compare`
+  reports `exact=174`, `exact-segments=495`, `diverges=12`,
+  `unsupported-feature=109`, `not-yet=0`, and parked
+  `M6=65 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
+  `hit_test_nested.riv`.

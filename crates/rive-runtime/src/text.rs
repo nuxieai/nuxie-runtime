@@ -217,6 +217,10 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
         Some("SolidColor") => {
             property_key_for_name("SolidColor", "colorValue") == Some(property_key)
         }
+        Some("Shape") => {
+            property_key_for_name("TransformComponent", "rotation") == Some(property_key)
+                && data_bind.converter_type_name == Some("DataConverterSystemDegsToRads")
+        }
         Some("NestedArtboard") => ["artboardId", "isPaused", "speed", "quantize"]
             .into_iter()
             .any(|name| property_key_for_name("NestedArtboard", name) == Some(property_key)),
@@ -278,6 +282,7 @@ impl<'a> StaticTextSlice<'a> {
                         | "Triangle"
                         | "Ellipse"
                         | "Rectangle"
+                        | "Star"
                         | "ClippingShape"
                         | "SolidColor"
                         | "LinearGradient"

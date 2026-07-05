@@ -1035,6 +1035,12 @@ impl ArtboardInstance {
                 self.string_property(source_local, property_value_key)
                     .map(|value| RuntimeDataBindGraphValue::String(value.to_vec()))
             }
+            RuntimeDataBindGraphValue::Color(_) => {
+                let property_value_key =
+                    property_key_for_name("ViewModelInstanceColor", "propertyValue")?;
+                self.color_property(source_local, property_value_key)
+                    .map(RuntimeDataBindGraphValue::Color)
+            }
             _ => None,
         }
     }

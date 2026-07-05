@@ -5,9 +5,9 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 492 across 171 exact files
-- Current compare: `make golden-compare` reports diverges=3, unsupported-feature=121, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=77 gated=8 harness=36
+- Exact segments (file × sample): 493 across 172 exact files
+- Current compare: `make golden-compare` reports diverges=3, unsupported-feature=120, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=76 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -26,7 +26,7 @@ the only memory the next session has. Update it every commit.
 1. The M6 text unsupported queue is the active line now that the compact
    layout/list/data-bound-text divergence queues are closed. Query it with
    `grep -A1 -B6 'milestone = "M6"' corpus.toml | rg -B7 -A1 'rust-runner-unsupported:text'`.
-   Start with `component_stateful_vm_instance_2.riv` unless a smaller
+   Start with `computed_values_test.riv` unless a smaller
    text-only entry is identified first; run the direct C++/Rust stream pair to
    verify the first unsupported gate before porting.
 2. Keep `new_text.riv` parked as a known M6 divergence until a dedicated text
@@ -112,7 +112,8 @@ the only memory the next session has. Update it every commit.
   source-to-target number binds with child artboard data-bind advancement,
   nested child `CustomPropertyString.propertyValue` string binds and
   `Rectangle.width/height` 20/21 binds, nested child `TextValueRun.text`
-  string binds backed by stateful child view-model values,
+  string, `SolidColor.colorValue` color, and converted `Shape.rotation` binds
+  backed by stateful child view-model values,
   authored-transparent Backboard/background draw suppression,
   custom-property trigger keyed-callback target-to-source binding,
   custom-property enum target-to-source binding, live data-bound nested host
@@ -149,8 +150,9 @@ the only memory the next session has. Update it every commit.
   line range maps with runId targeting and optional cubic range
   interpolation, including C++-ordered opacity buckets, plus solid fill/stroke
   `TextStylePaint` drawing with DashPath stroke effects, and
-  source-to-target `TextValueRun.text` / `SolidColor.colorValue` data binds
-  around static text. Shape/follow-path/scale/origin modifiers,
+  source-to-target `TextValueRun.text` / `SolidColor.colorValue` /
+  `Shape.rotation` via `DataConverterSystemDegsToRads` data binds around
+  static text. Shape/follow-path/scale/origin modifiers,
   gradient/feather/other text effects, richer layout, broader `Text` property
   data binds, and text input/editing remain M6 text diagnostics.
 - `TransformConstraint` currently covers Text constraint bounds for the
@@ -633,3 +635,11 @@ the only memory the next session has. Update it every commit.
   reports `exact=170`, `exact-segments=491`, `diverges=1`,
   `unsupported-feature=124`, `not-yet=0`, and parked
   `M6=80 gated=8 harness=36`; next target is `component_stateful.riv`.
+- 2026-07-05: [M6] Promoted `component_stateful_vm_instance_2.riv` by
+  allowing static text to coexist with `Star` siblings, admitting stateful
+  nested child `Shape.rotation` binds through `DataConverterSystemDegsToRads`,
+  and propagating child `ViewModelInstanceColor.propertyValue` into nested
+  `SolidColor.colorValue`. `make golden-compare` reports `exact=172`,
+  `exact-segments=493`, `diverges=3`, `unsupported-feature=120`,
+  `not-yet=0`, and parked `M6=76 gated=8 harness=36`; `cargo test
+  --workspace` passes. Next target is `computed_values_test.riv`.

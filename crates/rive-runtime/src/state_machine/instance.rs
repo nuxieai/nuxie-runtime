@@ -3,14 +3,14 @@
 use super::*;
 use crate::{
     ArtboardInstance, RuntimeDataBindGraph, RuntimeDataBindGraphApplyPhase,
-    RuntimeDataBindGraphTargetsMut, RuntimeDefaultViewModelArtboardSourceHandle,
-    RuntimeDefaultViewModelAssetSourceHandle, RuntimeDefaultViewModelBooleanSourceHandle,
-    RuntimeDefaultViewModelColorSourceHandle, RuntimeDefaultViewModelEnumSourceHandle,
-    RuntimeDefaultViewModelListSourceHandle, RuntimeDefaultViewModelNumberSourceHandle,
-    RuntimeDefaultViewModelStringSourceHandle, RuntimeDefaultViewModelSymbolListIndexSourceHandle,
-    RuntimeDefaultViewModelTriggerSourceHandle, RuntimeDefaultViewModelViewModelSourceHandle,
-    RuntimeImportedViewModelInstanceContext, RuntimeOwnedViewModelInstance,
-    runtime_default_view_model_artboard_property_path_for_name,
+    RuntimeDataBindGraphTargetsMut, RuntimeDataBindGraphValue,
+    RuntimeDefaultViewModelArtboardSourceHandle, RuntimeDefaultViewModelAssetSourceHandle,
+    RuntimeDefaultViewModelBooleanSourceHandle, RuntimeDefaultViewModelColorSourceHandle,
+    RuntimeDefaultViewModelEnumSourceHandle, RuntimeDefaultViewModelListSourceHandle,
+    RuntimeDefaultViewModelNumberSourceHandle, RuntimeDefaultViewModelStringSourceHandle,
+    RuntimeDefaultViewModelSymbolListIndexSourceHandle, RuntimeDefaultViewModelTriggerSourceHandle,
+    RuntimeDefaultViewModelViewModelSourceHandle, RuntimeImportedViewModelInstanceContext,
+    RuntimeOwnedViewModelInstance, runtime_default_view_model_artboard_property_path_for_name,
     runtime_default_view_model_artboard_property_path_for_name_path,
     runtime_default_view_model_asset_property_path_for_name,
     runtime_default_view_model_asset_property_path_for_name_path,
@@ -621,6 +621,84 @@ impl StateMachineInstance {
             self.needs_advance = true;
         }
         changed
+    }
+
+    fn perform_scheduled_view_model_actions(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        listener_actions: &[RuntimeScheduledListenerAction],
+    ) -> bool {
+        let mut changed = false;
+        for action in listener_actions {
+            if let RuntimeScheduledListenerAction::ViewModelChange {
+                data_bind_index,
+                value,
+                ..
+            } = action
+            {
+                changed |= self.perform_scheduled_listener_view_model_change(
+                    artboard,
+                    *data_bind_index,
+                    value,
+                );
+            }
+        }
+        if changed {
+            self.apply_default_view_model_bindings(true, RuntimeDataBindGraphApplyPhase::Immediate);
+            self.needs_advance = true;
+        }
+        changed
+    }
+
+    fn perform_scheduled_listener_view_model_change(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        data_bind_index: usize,
+        value: &RuntimeListenerViewModelChangeValue,
+    ) -> bool {
+        let value = match value {
+            RuntimeListenerViewModelChangeValue::Number(value) => {
+                RuntimeDataBindGraphValue::Number(*value)
+            }
+            RuntimeListenerViewModelChangeValue::Integer(value) => {
+                RuntimeDataBindGraphValue::SymbolListIndex(*value)
+            }
+            RuntimeListenerViewModelChangeValue::Color(value) => {
+                RuntimeDataBindGraphValue::Color(*value)
+            }
+            RuntimeListenerViewModelChangeValue::String(value) => {
+                RuntimeDataBindGraphValue::String(value.clone())
+            }
+            RuntimeListenerViewModelChangeValue::Enum(value) => {
+                RuntimeDataBindGraphValue::Enum(*value)
+            }
+            RuntimeListenerViewModelChangeValue::Asset(value) => {
+                RuntimeDataBindGraphValue::Asset(*value)
+            }
+            RuntimeListenerViewModelChangeValue::Artboard(value) => {
+                RuntimeDataBindGraphValue::Artboard(*value)
+            }
+            RuntimeListenerViewModelChangeValue::Trigger(value) => {
+                RuntimeDataBindGraphValue::Trigger(*value)
+            }
+            RuntimeListenerViewModelChangeValue::Boolean(value) => {
+                RuntimeDataBindGraphValue::Boolean(*value)
+            }
+        };
+        let path = self
+            .data_bind_graph
+            .source_path_for_data_bind(data_bind_index);
+        if !self
+            .data_bind_graph
+            .set_active_view_model_source_for_data_bind(data_bind_index, value.clone())
+        {
+            return false;
+        }
+        if let Some(path) = path {
+            artboard.set_artboard_data_bind_value_for_path(&path, value);
+        }
+        self.needs_advance = true;
+        true
     }
 
     fn perform_listener_view_model_change(
@@ -2936,37 +3014,44 @@ impl StateMachineInstance {
         let data_context_present = self.data_bind_graph.data_context_present();
         let data_context_view_model_bound = self.data_bind_graph.default_view_model_context_bound();
         let mut keep_going = false;
-        for (layer_index, (layer_instance, layer)) in self
+        for (layer_index, layer) in state_machine
             .layers
-            .iter_mut()
-            .zip(&state_machine.layers)
+            .iter()
             .enumerate()
+            .take(self.layers.len())
         {
-            let layer_result = layer_instance.advance(
-                artboard,
-                layer,
-                elapsed_seconds,
-                layer_index,
-                &mut self.inputs,
-                &self.bindable_numbers,
-                &self.bindable_integers,
-                &self.bindable_colors,
-                &self.bindable_strings,
-                &self.bindable_enums,
-                &self.bindable_assets,
-                &self.bindable_artboards,
-                &self.bindable_triggers,
-                &self.bindable_view_models,
-                &self.bindable_booleans,
-                data_context_present,
-                data_context_view_model_bound,
-                &mut self.view_model_triggers,
-                &mut self.reported_events,
-            );
+            let layer_result = {
+                let layer_instance = &mut self.layers[layer_index];
+                layer_instance.advance(
+                    artboard,
+                    layer,
+                    elapsed_seconds,
+                    layer_index,
+                    &mut self.inputs,
+                    &self.bindable_numbers,
+                    &self.bindable_integers,
+                    &self.bindable_colors,
+                    &self.bindable_strings,
+                    &self.bindable_enums,
+                    &self.bindable_assets,
+                    &self.bindable_artboards,
+                    &self.bindable_triggers,
+                    &self.bindable_view_models,
+                    &self.bindable_booleans,
+                    data_context_present,
+                    data_context_view_model_bound,
+                    &mut self.view_model_triggers,
+                    &mut self.reported_events,
+                )
+            };
             if layer_result.changed_state {
                 self.changed_state_count += 1;
             }
             keep_going |= layer_result.keep_going;
+            keep_going |= self.perform_scheduled_view_model_actions(
+                artboard,
+                &layer_result.pending_view_model_actions,
+            );
         }
         for input in &mut self.inputs {
             input.advanced();

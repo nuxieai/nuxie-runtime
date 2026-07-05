@@ -695,6 +695,19 @@ impl ArtboardInstance {
         self.advance_artboard_data_binds_with_elapsed(0.0)
     }
 
+    pub(crate) fn set_artboard_data_bind_value_for_path(
+        &mut self,
+        path: &[u32],
+        value: RuntimeDataBindGraphValue,
+    ) -> bool {
+        if self.artboard_data_bind_values.get(path) == Some(&value) {
+            return false;
+        }
+        self.artboard_data_bind_values.insert(path.to_vec(), value);
+        self.reset_artboard_property_formula_random_state_for_path(path);
+        true
+    }
+
     pub fn advance_artboard_data_binds_with_elapsed(&mut self, elapsed_seconds: f32) -> bool {
         let mut changed = false;
         for binding in self.artboard_custom_property_bindings.clone() {

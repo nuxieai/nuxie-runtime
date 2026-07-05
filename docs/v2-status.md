@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 489 across 168 exact files
-- Current compare: `make golden-compare` reports diverges=2, unsupported-feature=125, not-yet=0
+- Exact segments (file × sample): 490 across 169 exact files
+- Current compare: `make golden-compare` reports diverges=1, unsupported-feature=125, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=81 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
@@ -23,39 +23,29 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. The painted `LayoutComponent` queue is closed for the current corpus:
-   rounded solid backgrounds, stroked layout backgrounds, invisible layout
-   paints, and gradient layout fills now clear the runner gate. The last
-   three entries were retagged to their true first blockers:
-   `data_bind_test_cmdq.riv` -> `text`, `scroll_snap.riv` -> `text`, and
-   `scroll_test.riv` -> `scroll-constraints`.
-2. `LayoutComponent.computed*` target-to-source data binds are no longer a
-   runner gate. `collapse_data_binds.riv` and
-   `data_binding_artboards_source_test.riv` are exact; `hittest_collapsed_layouts.riv`
-   is also exact after matching C++ fresh artboard view-model contexts in the
-   golden runner.
-3. The compact `LayoutComponent`/list bounds divergence queue is closed for
-   the current corpus. The M6 text queue is now the active line: `new_text.riv`
-   remains the pure outline contour-order divergence, and the data-bound text
-   bucket is down to one real divergence. Start next with a focused direct
-   C++/Rust stream diff for `transition_actions.riv`.
-4. Keep `new_text.riv` parked as a known M6 divergence until a dedicated text
+1. The M6 text unsupported queue is the active line now that the compact
+   layout/list/data-bound-text divergence queues are closed. Query it with
+   `grep -B6 'milestone = "M6"' corpus.toml | rg -B6 'rust-runner-unsupported:text'`.
+   Start with `bindable_artboard_nesty.riv` unless a smaller text-only entry
+   is identified first; run the direct C++/Rust stream pair to verify the
+   first unsupported gate before porting.
+2. Keep `new_text.riv` parked as a known M6 divergence until a dedicated text
    outline backend/canonicalization slice: gradient sibling admission now
    reaches draw, but Rust/Skrifa and C++ HarfBuzz emit a glyph contour with a
    different segment start/order, so exact stream comparison fails on path
    verbs/points.
-5. Keep follow-path text files parked behind `TextFollowPathModifier` and
+3. Keep follow-path text files parked behind `TextFollowPathModifier` and
    unsupported `Text` property data-bind targets;
    `text_follow_path_shape_length.riv` currently fails first on data binding
    target `Text` global 73 before it reaches follow-path drawing.
-6. Keep `text_vertical_trim_test.riv` parked behind text data-binding target
+4. Keep `text_vertical_trim_test.riv` parked behind text data-binding target
    support; after the layout-paint slice it now fails on unsupported `Text`
    property data bind target global 41 before reaching richer vertical-trim
    behavior.
-7. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
+5. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
-8. Remaining exact entries pinned to sample `0` are static M1 holdovers:
+6. Remaining exact entries pinned to sample `0` are static M1 holdovers:
    `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
    them during M6 unless a related refactor needs a cheap draw-regression check.
 
@@ -67,14 +57,6 @@ the only memory the next session has. Update it every commit.
   (`src/text/font_hb.cpp`) and `TextStylePaint::addPathClockwise`; Rust uses
   Skrifa outlines. The first stream diff is path verb/point ordering, not a
   paint/gradient mismatch.
-- Data-bound static text/converter bucket:
-  `transition_actions.riv` now reaches draw after the narrow source-to-target
-  string/color bind admission, but still differs from C++ and carries
-  `rust-runner-divergence:data-bound-text`. The focused bucket re-checks
-  promoted `format_number_with_commas.riv`, `listener_view_model.riv`,
-  `trigger_fires_single_change.riv`, `rebind_with_nested_viewmodel.riv`, and
-  `replace_vm_instance.riv`; `transition_actions.riv` still differs by stream
-  line count.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -621,3 +603,12 @@ the only memory the next session has. Update it every commit.
   golden-compare` reports `exact=168`, `exact-segments=489`, `diverges=2`,
   `unsupported-feature=125`, `not-yet=0`, and parked
   `M6=81 gated=8 harness=36`; next target: `transition_actions.riv`.
+- 2026-07-05: [M6] Promoted `transition_actions.riv` by carrying scheduled
+  state-machine `ListenerViewModelChange` actions through layer advancement,
+  applying them to the bound view-model data-bind graph, and mirroring the
+  changed source path into artboard-side data-bind values before static text
+  draw. `make golden-compare` reports `exact=169`,
+  `exact-segments=490`, `diverges=1`, `unsupported-feature=125`,
+  `not-yet=0`, and parked `M6=81 gated=8 harness=36`; next target is the M6
+  `rust-runner-unsupported:text` manifest queue, starting with
+  `bindable_artboard_nesty.riv` unless a smaller text-only entry is found.

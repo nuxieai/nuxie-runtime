@@ -2961,6 +2961,58 @@ impl RuntimeDataBindGraph {
         self.set_default_view_model_number_source_for_path(&path, value)
     }
 
+    pub(crate) fn set_active_view_model_source_for_data_bind(
+        &mut self,
+        data_bind_index: usize,
+        value: RuntimeDataBindGraphValue,
+    ) -> bool {
+        if !self.default_view_model_context_bound() {
+            return false;
+        }
+        let Some(path) = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .map(|binding| binding.source)
+            .and_then(|source| self.sources.get(source.0))
+            .map(|source| source.path.clone())
+        else {
+            return false;
+        };
+
+        let update_default = self.default_view_model_source_context_bound();
+        let mut changed = false;
+        for source in self.sources.iter_mut().filter(|source| {
+            source.path == path
+                && std::mem::discriminant(&source.default_value) == std::mem::discriminant(&value)
+        }) {
+            if update_default && source.default_value != value {
+                source.default_value = value.clone();
+                changed = true;
+            }
+            if !source.bound || source.value != value {
+                source.value = value.clone();
+                source.bound = true;
+                source.reset_formula_random_state_for_source_change();
+                changed = true;
+            }
+        }
+        if !changed {
+            return false;
+        }
+        self.mark_default_view_model_bindings_dirty();
+        true
+    }
+
+    pub(crate) fn source_path_for_data_bind(&self, data_bind_index: usize) -> Option<Vec<u32>> {
+        self.default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .map(|binding| binding.source)
+            .and_then(|source| self.sources.get(source.0))
+            .map(|source| source.path.clone())
+    }
+
     pub(crate) fn set_default_view_model_number_source_for_path(
         &mut self,
         path: &[u32],

@@ -713,12 +713,14 @@ impl RuntimeLayerState {
         occurrence: StateMachineFireOccurrence,
         inputs: &mut [StateMachineInputInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
+        pending_view_model_actions: &mut Vec<RuntimeScheduledListenerAction>,
     ) -> bool {
         perform_scheduled_listener_actions(
             &self.listener_actions,
             occurrence,
             inputs,
             reported_events,
+            pending_view_model_actions,
         )
     }
 }
@@ -857,12 +859,14 @@ impl RuntimeStateTransition {
         occurrence: StateMachineFireOccurrence,
         inputs: &mut [StateMachineInputInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
+        pending_view_model_actions: &mut Vec<RuntimeScheduledListenerAction>,
     ) -> bool {
         perform_scheduled_listener_actions(
             &self.listener_actions,
             occurrence,
             inputs,
             reported_events,
+            pending_view_model_actions,
         )
     }
 
@@ -1731,6 +1735,7 @@ pub(crate) fn perform_scheduled_listener_actions(
     occurrence: StateMachineFireOccurrence,
     inputs: &mut [StateMachineInputInstance],
     reported_events: &mut Vec<StateMachineReportedEvent>,
+    pending_view_model_actions: &mut Vec<RuntimeScheduledListenerAction>,
 ) -> bool {
     let mut changed_input = false;
     for action in listener_actions {
@@ -1767,7 +1772,9 @@ pub(crate) fn perform_scheduled_listener_actions(
                     changed_input |= input.fire_trigger();
                 }
             }
-            RuntimeScheduledListenerAction::ViewModelChange { .. } => {}
+            RuntimeScheduledListenerAction::ViewModelChange { .. } => {
+                pending_view_model_actions.push(action.clone());
+            }
         }
     }
     changed_input
@@ -2005,10 +2012,11 @@ pub(crate) struct StateMachineLayerInstance {
     waiting_for_exit: bool,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub(crate) struct StateMachineLayerAdvance {
     pub(crate) changed_state: bool,
     pub(crate) keep_going: bool,
+    pub(crate) pending_view_model_actions: Vec<RuntimeScheduledListenerAction>,
 }
 
 #[derive(Debug, Clone)]
@@ -2138,6 +2146,7 @@ impl StateMachineLayerInstance {
         view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
     ) -> StateMachineLayerAdvance {
+        let mut pending_view_model_actions = Vec::new();
         self.advance_current_animation(
             artboard,
             layer,
@@ -2152,6 +2161,7 @@ impl StateMachineLayerInstance {
             data_context_view_model_bound,
             view_model_triggers,
             reported_events,
+            &mut pending_view_model_actions,
         );
         self.advance_transition_source_animation(
             artboard,
@@ -2184,6 +2194,7 @@ impl StateMachineLayerInstance {
                 data_context_view_model_bound,
                 view_model_triggers,
                 reported_events,
+                &mut pending_view_model_actions,
             ) {
                 break;
             }
@@ -2195,9 +2206,11 @@ impl StateMachineLayerInstance {
             changed_state,
             keep_going: changed_state
                 || input_changed
+                || !pending_view_model_actions.is_empty()
                 || self.is_transitioning()
                 || self.waiting_for_exit
                 || self.current_animation_keep_going,
+            pending_view_model_actions,
         }
     }
 
@@ -2221,6 +2234,7 @@ impl StateMachineLayerInstance {
         data_context_view_model_bound: bool,
         view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
+        pending_view_model_actions: &mut Vec<RuntimeScheduledListenerAction>,
     ) -> bool {
         if self.is_transitioning() && !self.transition_enable_early_exit {
             return false;
@@ -2246,6 +2260,7 @@ impl StateMachineLayerInstance {
             data_context_view_model_bound,
             view_model_triggers,
             reported_events,
+            pending_view_model_actions,
         ) {
             return true;
         }
@@ -2269,6 +2284,7 @@ impl StateMachineLayerInstance {
             data_context_view_model_bound,
             view_model_triggers,
             reported_events,
+            pending_view_model_actions,
         )
     }
 
@@ -2293,6 +2309,7 @@ impl StateMachineLayerInstance {
         data_context_view_model_bound: bool,
         view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
+        pending_view_model_actions: &mut Vec<RuntimeScheduledListenerAction>,
     ) -> bool {
         let Some(state_index) = state_index else {
             return false;
@@ -2336,6 +2353,7 @@ impl StateMachineLayerInstance {
                 data_context_view_model_bound,
                 view_model_triggers,
                 reported_events,
+                pending_view_model_actions,
             );
             return true;
         }
@@ -2394,6 +2412,7 @@ impl StateMachineLayerInstance {
                 data_context_view_model_bound,
                 view_model_triggers,
                 reported_events,
+                pending_view_model_actions,
             );
             return true;
         }
@@ -2544,6 +2563,7 @@ impl StateMachineLayerInstance {
         data_context_view_model_bound: bool,
         view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
+        pending_view_model_actions: &mut Vec<RuntimeScheduledListenerAction>,
     ) {
         let previous_state_index = self.current_state_index;
         let mut previous_animation = self.current_animation.clone();
@@ -2567,6 +2587,7 @@ impl StateMachineLayerInstance {
                 StateMachineFireOccurrence::AtEnd,
                 inputs,
                 reported_events,
+                pending_view_model_actions,
             );
         }
 
@@ -2600,6 +2621,7 @@ impl StateMachineLayerInstance {
                 StateMachineFireOccurrence::AtStart,
                 inputs,
                 reported_events,
+                pending_view_model_actions,
             );
         }
         transition.perform_fire_actions(
@@ -2612,6 +2634,7 @@ impl StateMachineLayerInstance {
             StateMachineFireOccurrence::AtStart,
             inputs,
             reported_events,
+            pending_view_model_actions,
         );
         if previous_spilled_time != 0.0 {
             self.advance_current_animation(
@@ -2635,6 +2658,7 @@ impl StateMachineLayerInstance {
                 StateMachineFireOccurrence::AtEnd,
                 inputs,
                 reported_events,
+                pending_view_model_actions,
             );
             self.clear_transition_source();
             return;
@@ -2676,6 +2700,7 @@ impl StateMachineLayerInstance {
                 data_context_view_model_bound,
                 view_model_triggers,
                 reported_events,
+                pending_view_model_actions,
             );
         } else {
             self.clear_transition_source();
@@ -2718,6 +2743,7 @@ impl StateMachineLayerInstance {
         data_context_view_model_bound: bool,
         view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
+        pending_view_model_actions: &mut Vec<RuntimeScheduledListenerAction>,
     ) -> bool {
         if !self.has_transition_source() || self.transition_duration_seconds == 0.0 {
             self.transition_mix = 1.0;
@@ -2741,6 +2767,7 @@ impl StateMachineLayerInstance {
                 StateMachineFireOccurrence::AtEnd,
                 inputs,
                 reported_events,
+                pending_view_model_actions,
             )
         } else {
             false

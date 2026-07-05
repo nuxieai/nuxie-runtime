@@ -22,18 +22,26 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Inspect `modifier_to_run.riv`: the generic text gate is gone and the first
-   blocker is now `TextModifierRange.unitsValue = 2`, which means the next
-   decision is whether to port word/line range maps plus run-scoped/multi-run
-   text now, or keep that broader text-layout slice parked with a sharper
-   diagnostic.
-2. Keep `new_text.riv` parked for now: it has five
+1. Start `double_line.riv`: it is the smallest remaining
+   `rust-runner-unsupported:text` corpus entry and isolates same-style
+   multi-run text with explicit line separators/newline. The implementation
+   slice should port minimal run aggregation plus static multi-line placement
+   from C++ text layout before reopening modifier run/range-map files.
+2. Keep `modifier_to_run.riv` and `test_modifier_run.riv` parked for now:
+   inspection shows word/line `TextModifierRange` units, runId-targeted ranges,
+   and multi-run/multi-style text, so these are follow-ups after the multi-run
+   layout slice rather than the next modifier-only task.
+3. Keep `vertical_align_ellipsis.riv` parked for now: temporarily admitting
+   sibling `Stroke` reaches draw but diverges on fixed-size vertical
+   align/ellipsis placement, so it should reopen with vertical-align text
+   layout, not as a stroke-only change.
+4. Keep `new_text.riv` parked for now: it has five
    `Text` objects, multiple runs/styles, gradients/strokes, clipping, and text
    keyframes, so it is not the next narrow static tracer.
-3. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
+5. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
-4. Remaining exact entries pinned to sample `0` are static M1 holdovers:
+6. Remaining exact entries pinned to sample `0` are static M1 holdovers:
    `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
    them during M6 unless a related refactor needs a cheap draw-regression check.
 
@@ -325,3 +333,10 @@ the only memory the next session has. Update it every commit.
   `exact-segments=457`, `unsupported-feature=159`, and parked
   `M6=116 gated=7 harness=36`; `modifier_to_run.riv` remains parked on
   word/line range mapping plus run-scoped/multi-run text.
+- 2026-07-04: [M6] Rechecked the post-modifier text queue. `modifier_to_run`
+  is not a narrow modifier follow-up: it has four Text objects plus word/line
+  range units, runId targeting, and multi-run text. `vertical_align_ellipsis`
+  reaches draw if sibling `Stroke` is admitted, but exact comparison diverges
+  first on fixed-size vertical align/ellipsis text placement. The next narrow
+  implementation slice is `double_line.riv`, which isolates same-style
+  multi-run text and explicit line breaks before the modifier range-map files.

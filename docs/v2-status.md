@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 504 across 183 exact files
-- Current compare: `make golden-compare` reports diverges=10, unsupported-feature=102, not-yet=0
+- Exact segments (file × sample): 505 across 184 exact files
+- Current compare: `make golden-compare` reports diverges=9, unsupported-feature=102, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=58 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
@@ -23,16 +23,16 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Start the dedicated text outline backend/canonicalization slice with
-   `new_text.riv`, then recheck `follow_path_path.riv`,
-   `data_bind_test_cmdq.riv`, and `saturation.riv`. These now reach draw and
-   differ first on glyph path payloads rather than paint, transform, or
-   data-binding ownership.
-2. Keep `new_text.riv`, `follow_path_path.riv`, and
-   `data_bind_test_cmdq.riv` parked as known M6 divergences until that slice.
+1. Continue the dedicated text/layout draw slice with `follow_path_path.riv`,
+   then recheck `data_bind_test_cmdq.riv` and `saturation.riv`. `new_text.riv`
+   promoted after static-font outline extraction matched C++ under epsilon,
+   but `follow_path_path.riv` now first diverges on a follow-path text
+   transform, not the static-font contour start.
+2. Keep `follow_path_path.riv` and `data_bind_test_cmdq.riv` parked as known
+   M6 divergences until that slice.
    `follow_path_path.riv` now reaches draw after clearing stale
    `FollowPathConstraint` and cubic vertex static-text gates, but its first
-   diff is the same glyph outline payload family. `data_bind_test_cmdq.riv`
+   diff is the follow-path text transform. `data_bind_test_cmdq.riv`
    now has matching local-id layout boxes and matching command-queue text
    transform; its remaining diff is the glyph payload for `Update Random Vals`.
 3. Keep `spotify_kids_app_icon.riv` parked as a known M6 draw-order/background
@@ -59,17 +59,13 @@ the only memory the next session has. Update it every commit.
 
 ## Known Divergences
 
-- `new_text.riv`: after admitting static text sibling `LinearGradient` /
-  `GradientStop` and gradient text paints, Rust reaches draw but differs from
-  C++ on glyph outline contour ordering. C++ uses HarfBuzz draw callbacks
-  (`src/text/font_hb.cpp`) and `TextStylePaint::addPathClockwise`; Rust uses
-  Skrifa outlines. The first stream diff is path verb/point ordering, not a
-  paint/gradient mismatch.
 - `follow_path_path.riv`: after admitting static text siblings
   `FollowPathConstraint`, `CubicDetachedVertex`, `CubicAsymmetricVertex`, and
-  `CubicMirroredVertex`, Rust reaches draw but the first diff is a text path
-  payload after the first text transform. This belongs with the text-outline
-  backend/canonicalization bucket, not follow-path constraint runtime.
+  `CubicMirroredVertex`, Rust reaches draw. After static-font outline
+  extraction was corrected, the first focused diff is now a follow-path text
+  transform (`[0.647144794,0.76236707,-0.76236707,0.647144794,41.1679688,131.449219]`
+  in C++ versus an unrotated lower transform in Rust), so the next slice is
+  text-follow-path placement, not static outline contour ordering.
 - `fit_font_size_test.riv`: after admitting source-to-target
   `TextStylePaint.fontSize`, `Text.overflowValue`, and
   `LayoutComponent.height` binds through static text, Rust reaches draw but
@@ -1039,3 +1035,13 @@ the only memory the next session has. Update it every commit.
   `not-yet=0`, and parked `M6=58 gated=8 harness=36`; `cargo test
   --workspace` passes. Next target is the text-outline
   backend/canonicalization slice starting with `new_text.riv`.
+- 2026-07-05: [M6] Promoted `new_text.riv` by using Skrifa FreeType-style
+  outline extraction for static fonts while retaining HarfBuzz-style outlines
+  for variable fonts, matching C++'s HarfBuzz callback contour starts without
+  regressing Inter variable-font text fixtures. Focused streams for
+  `new_text.riv` and sampled exact text fixtures match under the golden
+  epsilon; `make golden-compare` reports `exact=184`,
+  `exact-segments=505`, `diverges=9`, `unsupported-feature=102`,
+  `not-yet=0`, and parked `M6=58 gated=8 harness=36`; `cargo test
+  --workspace` passes. Next target is `follow_path_path.riv`'s follow-path
+  text transform.

@@ -762,9 +762,17 @@ impl<'a> StaticTextSlice<'a> {
                             line_baseline,
                             glyph_transform,
                         );
+                        // C++ `src/text/font_hb.cpp` records static glyf contours
+                        // at the font's authored start points; Skrifa's
+                        // HarfBuzz-style conversion can rotate those starts.
+                        let path_style = if style_font.axes().is_empty() {
+                            PathStyle::FreeType
+                        } else {
+                            PathStyle::HarfBuzz
+                        };
                         let draw_settings =
                             DrawSettings::unhinted(Size::new(TEXT_SHAPE_SCALE_F32), location_ref)
-                                .with_path_style(PathStyle::HarfBuzz);
+                                .with_path_style(path_style);
                         outline
                             .draw(draw_settings, &mut pen)
                             .with_context(|| format!("failed to draw glyph {}", glyph.glyph_id))?;

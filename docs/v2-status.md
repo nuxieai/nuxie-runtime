@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 473 across 152 exact files
-- Current compare: `make golden-compare` reports diverges=8, unsupported-feature=135, not-yet=0
+- Exact segments (file × sample): 474 across 153 exact files
+- Current compare: `make golden-compare` reports diverges=7, unsupported-feature=135, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=92 gated=7 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
@@ -23,16 +23,15 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue the painted `LayoutComponent` slice: simple root full-artboard
-   solid layout fills are now exact for `viewmodel_list_trigger.riv`,
-   `transition_index_condition.riv`, `viewmodel_from_context.riv`,
-   `list_to_length_test.riv`, and `reset_phase.riv`. The next narrow blocker
-   is `artboard_list_map_rules.riv`, which now reaches draw but diverges
-   because C++ computes two 250x500 component-list/map-rule layout halves
-   while Rust still draws full 500x500 layout backgrounds. Port the computed
-   list-child bounds/map-rule layout path from C++
-   `src/layout_component.cpp` / `src/artboard_component_list.cpp` before
-   widening the `layout-component-paint` runner gate further.
+1. Continue the painted `LayoutComponent` slice: root row/fill layout
+   backgrounds are now exact through `artboard_list_map_rules.riv`, including
+   per-layout path-cache identity. There are 20 remaining M6
+   `rust-runner-unsupported:layout-component-paint` entries. Start with
+   `artboard_list_overrides.riv`, which stops on nested clipped
+   `LayoutComponent` global 21 and includes `ArtboardComponentListOverride`
+   instance width/height scale behavior; port that computed nested layout
+   bounds/override path from C++ `src/layout_component.cpp` /
+   `src/artboard_component_list.cpp`.
 2. Keep `new_text.riv` parked as a known M6 divergence until a dedicated text
    outline backend/canonicalization slice: gradient sibling admission now
    reaches draw, but Rust/Skrifa and C++ HarfBuzz emit a glyph contour with a
@@ -60,10 +59,6 @@ the only memory the next session has. Update it every commit.
   (`src/text/font_hb.cpp`) and `TextStylePaint::addPathClockwise`; Rust uses
   Skrifa outlines. The first stream diff is path verb/point ordering, not a
   paint/gradient mismatch.
-- `artboard_list_map_rules.riv`: simple root `LayoutComponent` paint now
-  reaches draw, but component-list/map-rule layout bounds are not ported yet.
-  C++ draws two 250x500 layout backgrounds at x=250 and x=0; Rust currently
-  draws two full 500x500 backgrounds at identity.
 - Data-bound static text/converter bucket:
   `format_number_with_commas.riv`, `listener_view_model.riv`,
   `rebind_with_nested_viewmodel.riv`, `replace_vm_instance.riv`,
@@ -469,3 +464,12 @@ the only memory the next session has. Update it every commit.
   golden-compare` moved to `exact=152`, `exact-segments=473`,
   `diverges=8`, `unsupported-feature=135`, and parked
   `M6=92 gated=7 harness=36`; `cargo test --workspace` passes.
+- 2026-07-04: [M6] Promoted `artboard_list_map_rules.riv` by translating the
+  first C++ `LayoutComponent` root-row fill sizing path: sibling root layout
+  children split the artboard width, layout proxy draw commands use the
+  computed layout transform, and layout proxies keep per-layout path-cache
+  identity. `make golden-compare` moved to `exact=153`,
+  `exact-segments=474`, `diverges=7`, `unsupported-feature=135`, and parked
+  `M6=92 gated=7 harness=36`; `cargo test --workspace` passes. Next target:
+  `artboard_list_overrides.riv`, which stops on nested clipped layout global
+  21 with `ArtboardComponentListOverride` sizing.

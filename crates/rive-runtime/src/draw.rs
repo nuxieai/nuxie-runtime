@@ -672,7 +672,10 @@ impl ArtboardInstance {
                     RuntimeDrawCommandKind::Draw
                 }
             },
-            local_id: drawable.local_id,
+            local_id: match drawable.kind {
+                DrawableOrderKind::LayoutProxy => drawable.layout_local,
+                _ => drawable.local_id,
+            },
             global_id: drawable.global_id,
             type_name: drawable.type_name,
             referenced_artboard_global: drawable.referenced_artboard_global,
@@ -710,10 +713,13 @@ impl ArtboardInstance {
             .component(shape_local)
             .map(|component| component.transform.render_opacity)
             .unwrap_or(1.0);
-        let shape_world = self
-            .component(shape_local)
-            .map(|component| component.transform.world_transform)
-            .unwrap_or(Mat2D::IDENTITY);
+        let shape_world = if container.type_name == "LayoutComponent" {
+            self.runtime_layout_component_world_transform(shape_local, graph)
+        } else {
+            self.component(shape_local)
+                .map(|component| component.transform.world_transform)
+                .unwrap_or(Mat2D::IDENTITY)
+        };
 
         container
             .paints
@@ -722,7 +728,7 @@ impl ArtboardInstance {
                 let path_commands = match container.type_name {
                     "Shape" => self.runtime_shape_paint_path_commands(shape_local, paint, graph),
                     "LayoutComponent" => {
-                        self.runtime_layout_component_paint_path_commands(shape_local, paint)
+                        self.runtime_layout_component_paint_path_commands(shape_local, paint, graph)
                     }
                     _ => Vec::new(),
                 };
@@ -747,6 +753,7 @@ impl ArtboardInstance {
         &self,
         layout_local: usize,
         paint: &ShapePaintNode,
+        graph: &ArtboardGraph,
     ) -> Vec<RuntimePathCommand> {
         if paint.path_kind.is_none() {
             return Vec::new();
@@ -756,7 +763,7 @@ impl ArtboardInstance {
         // shape paints against a background rectangle built from computed
         // layout bounds. TODO(golden): route all layout components through the
         // M6 layout engine and apply style corner radii.
-        let bounds = self.runtime_layout_component_bounds(layout_local);
+        let bounds = self.runtime_layout_component_bounds(layout_local, graph);
         vec![
             RuntimePathCommand::Move { x: 0.0, y: 0.0 },
             RuntimePathCommand::Line {
@@ -776,7 +783,29 @@ impl ArtboardInstance {
         ]
     }
 
-    fn runtime_layout_component_bounds(&self, layout_local: usize) -> RuntimeLayoutBounds {
+    fn runtime_layout_component_world_transform(
+        &self,
+        layout_local: usize,
+        graph: &ArtboardGraph,
+    ) -> Mat2D {
+        let Some(bounds) = self.runtime_simple_root_row_fill_layout_bounds(layout_local, graph)
+        else {
+            return self
+                .component(layout_local)
+                .map(|component| component.transform.world_transform)
+                .unwrap_or(Mat2D::IDENTITY);
+        };
+        Mat2D([1.0, 0.0, 0.0, 1.0, bounds.x, bounds.y])
+    }
+
+    fn runtime_layout_component_bounds(
+        &self,
+        layout_local: usize,
+        graph: &ArtboardGraph,
+    ) -> RuntimeLayoutBounds {
+        if let Some(bounds) = self.runtime_simple_root_row_fill_layout_bounds(layout_local, graph) {
+            return bounds;
+        }
         let width = self.runtime_layout_component_dimension(layout_local, "width");
         let height = self.runtime_layout_component_dimension(layout_local, "height");
         if self
@@ -784,11 +813,99 @@ impl ArtboardInstance {
             .is_some_and(|component| component.parent_local == Some(0))
         {
             return RuntimeLayoutBounds {
+                x: 0.0,
+                y: 0.0,
                 width: if width == 0.0 { self.width } else { width },
                 height: if height == 0.0 { self.height } else { height },
             };
         }
-        RuntimeLayoutBounds { width, height }
+        RuntimeLayoutBounds {
+            x: 0.0,
+            y: 0.0,
+            width,
+            height,
+        }
+    }
+
+    fn runtime_simple_root_row_fill_layout_bounds(
+        &self,
+        layout_local: usize,
+        graph: &ArtboardGraph,
+    ) -> Option<RuntimeLayoutBounds> {
+        if !self.runtime_layout_component_is_root_row_fill_child(layout_local) {
+            return None;
+        }
+        if !self.runtime_root_layout_style_is_row() {
+            return None;
+        }
+        let root = graph
+            .components
+            .iter()
+            .find(|component| component.local_id == 0)?;
+        let layout_children = root
+            .children
+            .iter()
+            .copied()
+            .filter(|child_local| {
+                self.runtime_layout_component_is_root_row_fill_child(*child_local)
+            })
+            .collect::<Vec<_>>();
+        if layout_children.len() < 2 {
+            return None;
+        }
+        let child_index = layout_children
+            .iter()
+            .position(|child_local| *child_local == layout_local)?;
+        let width = self.width / layout_children.len() as f32;
+        Some(RuntimeLayoutBounds {
+            x: width * child_index as f32,
+            y: 0.0,
+            width,
+            height: self.height,
+        })
+    }
+
+    fn runtime_layout_component_is_root_row_fill_child(&self, layout_local: usize) -> bool {
+        let Some(component) = self.component(layout_local) else {
+            return false;
+        };
+        if component.type_name != "LayoutComponent" || component.parent_local != Some(0) {
+            return false;
+        }
+        let Some(style_local) = self.runtime_layout_component_style_local(layout_local) else {
+            return false;
+        };
+
+        const LAYOUT_SCALE_TYPE_FILL: u64 = 1;
+        self.runtime_layout_style_uint(style_local, "layoutWidthScaleType")
+            == Some(LAYOUT_SCALE_TYPE_FILL)
+            && self.runtime_layout_style_uint(style_local, "layoutHeightScaleType")
+                == Some(LAYOUT_SCALE_TYPE_FILL)
+    }
+
+    fn runtime_root_layout_style_is_row(&self) -> bool {
+        self.runtime_layout_component_style_local(0)
+            .is_none_or(|style_local| self.runtime_layout_style_is_row(style_local))
+    }
+
+    fn runtime_layout_style_is_row(&self, style_local: usize) -> bool {
+        // Ported from C++ `src/layout_component.cpp` `mainAxisIsRow`.
+        matches!(
+            self.runtime_layout_style_uint(style_local, "flexDirectionValue")
+                .unwrap_or(2),
+            2 | 3
+        )
+    }
+
+    fn runtime_layout_component_style_local(&self, layout_local: usize) -> Option<usize> {
+        property_key_for_name("LayoutComponent", "styleId")
+            .and_then(|key| self.uint_property(layout_local, key))
+            .and_then(|style| usize::try_from(style).ok())
+    }
+
+    fn runtime_layout_style_uint(&self, style_local: usize, name: &str) -> Option<u64> {
+        property_key_for_name("LayoutComponentStyle", name)
+            .and_then(|key| self.uint_property(style_local, key))
     }
 
     fn runtime_layout_component_dimension(&self, layout_local: usize, name: &str) -> f32 {
@@ -1155,6 +1272,8 @@ pub struct RuntimeDrawCommand {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct RuntimeLayoutBounds {
+    x: f32,
+    y: f32,
     width: f32,
     height: f32,
 }

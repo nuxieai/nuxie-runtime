@@ -317,6 +317,7 @@ impl<'a> StaticTextSlice<'a> {
                         | "FollowPathConstraint"
                         | "LayoutComponent"
                         | "LayoutComponentStyle"
+                        | "ForegroundLayoutDrawable"
                         | "Feather"
                         | "ViewModel"
                         | "ViewModelInstance"
@@ -364,7 +365,6 @@ impl<'a> StaticTextSlice<'a> {
                         | "TextFollowPathModifier"
                         | "NestedArtboardLayout"
                         | "NestedArtboardLeaf"
-                        | "ForegroundLayoutDrawable"
                 )
             )
         }) {

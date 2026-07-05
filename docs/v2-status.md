@@ -6,8 +6,8 @@ the only memory the next session has. Update it every commit.
 ## Metric
 
 - Exact segments (file × sample): 494 across 173 exact files
-- Current compare: `make golden-compare` reports diverges=9, unsupported-feature=113, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=69 gated=8 harness=36
+- Current compare: `make golden-compare` reports diverges=10, unsupported-feature=112, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=68 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -23,15 +23,15 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Probe `data_binding_test.riv` as the next
+1. Probe `data_converter_to_number.riv` as the next
    `rust-runner-unsupported:text` M6 gate: compare direct C++/Rust streams,
    remove only stale static-text gates needed to reach draw, and fix or retag
    the first real text/data-bind blocker. Do not start a general text layout
    rewrite unless the stream diff proves the corpus needs it.
-2. Keep `data_bind_test_cmdq.riv`, `state_transition_fire_trigger.riv`, and
-   `trigger_based_listeners.riv` parked as known M6 text/data-bind
-   divergences until a text layout/draw-suppression slice addresses their
-   extra/misaligned text streams.
+2. Keep `data_bind_test_cmdq.riv`, `data_binding_test.riv`,
+   `state_transition_fire_trigger.riv`, and `trigger_based_listeners.riv`
+   parked as known M6 text/data-bind divergences until a text
+   layout/draw-suppression slice addresses their extra/misaligned text streams.
 3. Keep `new_text.riv` and `follow_path_path.riv` parked as known M6
    divergences until a dedicated text outline backend/canonicalization slice.
    `follow_path_path.riv` now reaches draw after clearing stale
@@ -73,6 +73,11 @@ the only memory the next session has. Update it every commit.
   block diverges. First focused diff: C++ transforms the block at
   y=`434.356567` while Rust emits it at y=`460.671631`, with different
   background/clip path heights.
+- `data_binding_test.riv`: after admitting `ForegroundLayoutDrawable` through
+  the static text gate, Rust reaches draw but foreground-layout-backed text is
+  emitted at identity transform where C++ uses the layout position. First
+  focused diff: C++ transform `[1,0,0,1,400,468.925781]` versus Rust
+  `[1,0,0,1,0,0]`, followed by a shorter Rust stream.
 - `state_transition_fire_trigger.riv` and `trigger_based_listeners.riv`: the
   same `Event` admission clears their stale text diagnostics, but Rust emits
   extra event/listener text draw calls that C++ suppresses at sample 0. Keep
@@ -755,3 +760,14 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=113`, `not-yet=0`, and parked
   `M6=69 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
   `data_binding_test.riv`.
+- 2026-07-05: [M6] Reopened `data_binding_test.riv` by admitting
+  `ForegroundLayoutDrawable` through the static text gate; that C++ class is
+  already modeled in graph/draw ordering as layout foreground paint glue. The
+  file reaches draw and is parked as
+  `rust-runner-divergence:foreground-layout-text-transform` after the focused
+  stream diff showed C++ placing text at `[1,0,0,1,400,468.925781]` while Rust
+  emits identity transform and a shorter stream. `make golden-compare` reports
+  `exact=173`, `exact-segments=494`, `diverges=10`,
+  `unsupported-feature=112`, `not-yet=0`, and parked
+  `M6=68 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
+  `data_converter_to_number.riv`.

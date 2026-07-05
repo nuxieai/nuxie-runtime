@@ -5,9 +5,9 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 474 across 153 exact files
-- Current compare: `make golden-compare` reports diverges=7, unsupported-feature=135, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=92 gated=7 harness=36
+- Exact segments (file × sample): 475 across 154 exact files
+- Current compare: `make golden-compare` reports diverges=7, unsupported-feature=134, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=91 gated=7 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -24,14 +24,12 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the painted `LayoutComponent` slice: root row/fill layout
-   backgrounds are now exact through `artboard_list_map_rules.riv`, including
-   per-layout path-cache identity. There are 20 remaining M6
+   backgrounds and the empty nested clipped component-list override case are
+   now exact through `artboard_list_overrides.riv`. There are 19 remaining M6
    `rust-runner-unsupported:layout-component-paint` entries. Start with
-   `artboard_list_overrides.riv`, which stops on nested clipped
-   `LayoutComponent` global 21 and includes `ArtboardComponentListOverride`
-   instance width/height scale behavior; port that computed nested layout
-   bounds/override path from C++ `src/layout_component.cpp` /
-   `src/artboard_component_list.cpp`.
+   `bankcard.riv`, which still stops on `LayoutComponent` paint global 21;
+   inspect whether it needs real child/list layout bounds, rounded layout
+   corners, or a broader layout style path before removing the gate.
 2. Keep `new_text.riv` parked as a known M6 divergence until a dedicated text
    outline backend/canonicalization slice: gradient sibling admission now
    reaches draw, but Rust/Skrifa and C++ HarfBuzz emit a glyph contour with a
@@ -473,3 +471,11 @@ the only memory the next session has. Update it every commit.
   `M6=92 gated=7 harness=36`; `cargo test --workspace` passes. Next target:
   `artboard_list_overrides.riv`, which stops on nested clipped layout global
   21 with `ArtboardComponentListOverride` sizing.
+- 2026-07-04: [M6] Promoted `artboard_list_overrides.riv` by mirroring C++
+  clipped `LayoutComponent::drawProxy` save/clip/restore ordering, giving
+  layout clips their own render-path cache, and collapsing the nested fill/hug
+  component-list override layout to the C++ empty-list zero-size bounds. `make
+  golden-compare` moved to `exact=154`, `exact-segments=475`,
+  `diverges=7`, `unsupported-feature=134`, and parked
+  `M6=91 gated=7 harness=36`; next target: `bankcard.riv`, still gated on
+  `layout-component-paint` global 21.

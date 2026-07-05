@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, anyhow, bail};
-use rive_binary::{RuntimeFile, read_runtime_file};
+use rive_binary::{RuntimeFile, RuntimeObject, read_runtime_file};
 use rive_graph::{
     ArtboardGraph, GraphFile, ShapePaintContainerNode, ShapePaintKind, ShapePaintPathKind,
     ShapePaintStateNode,
@@ -808,8 +808,17 @@ fn unsupported_layout_component_paint<'a>(
     artboard.shape_paint_containers.iter().find(|container| {
         container.type_name == "LayoutComponent"
             && !container.paints.is_empty()
-            && !simple_root_layout_component_paint_supported(runtime, artboard, container)
+            && !layout_component_paint_supported(runtime, artboard, container)
     })
+}
+
+fn layout_component_paint_supported(
+    runtime: &RuntimeFile,
+    artboard: &ArtboardGraph,
+    container: &ShapePaintContainerNode,
+) -> bool {
+    simple_root_layout_component_paint_supported(runtime, artboard, container)
+        || clipped_nested_empty_list_layout_component_paint_supported(runtime, artboard, container)
 }
 
 fn simple_root_layout_component_paint_supported(
@@ -900,6 +909,174 @@ fn simple_root_layout_component_paint_supported(
         .paints
         .iter()
         .all(simple_layout_background_paint_supported)
+}
+
+fn clipped_nested_empty_list_layout_component_paint_supported(
+    runtime: &RuntimeFile,
+    artboard: &ArtboardGraph,
+    container: &ShapePaintContainerNode,
+) -> bool {
+    let Some(component) = artboard
+        .components
+        .iter()
+        .find(|component| component.local_id == container.local_id)
+    else {
+        return false;
+    };
+    let Some(parent_local) = component.parent_local else {
+        return false;
+    };
+    let Some(parent) = artboard
+        .components
+        .iter()
+        .find(|component| component.local_id == parent_local)
+    else {
+        return false;
+    };
+    if parent.type_name != "LayoutComponent" || parent.parent_local != Some(0) {
+        return false;
+    }
+
+    let Some(layout_object) = runtime.object(container.global_id as usize) else {
+        return false;
+    };
+    let Some(parent_object) = runtime.object(parent.global_id as usize) else {
+        return false;
+    };
+    if !layout_object.bool_property("clip").unwrap_or(false)
+        || !parent_object.bool_property("clip").unwrap_or(false)
+    {
+        return false;
+    }
+
+    let Some(artboard_object) = runtime.object(artboard.global_id as usize) else {
+        return false;
+    };
+    if !nearly_equal(
+        parent_object.double_property("width").unwrap_or(0.0),
+        artboard_object.double_property("width").unwrap_or(0.0),
+    ) || !nearly_equal(
+        parent_object.double_property("height").unwrap_or(0.0),
+        artboard_object.double_property("height").unwrap_or(0.0),
+    ) {
+        return false;
+    }
+
+    let Some(style_object) = layout_style_object(runtime, artboard, layout_object) else {
+        return false;
+    };
+    const LAYOUT_SCALE_TYPE_FILL: u64 = 1;
+    const LAYOUT_SCALE_TYPE_HUG: u64 = 2;
+    let width_scale = style_object
+        .uint_property("layoutWidthScaleType")
+        .unwrap_or(0);
+    let height_scale = style_object
+        .uint_property("layoutHeightScaleType")
+        .unwrap_or(0);
+    if !matches!(
+        (width_scale, height_scale),
+        (LAYOUT_SCALE_TYPE_FILL, LAYOUT_SCALE_TYPE_HUG)
+            | (LAYOUT_SCALE_TYPE_HUG, LAYOUT_SCALE_TYPE_FILL)
+    ) {
+        return false;
+    }
+    if !style_object
+        .bool_property("intrinsicallySizedValue")
+        .unwrap_or(false)
+    {
+        return false;
+    }
+    if !layout_style_has_zero_corners(style_object) {
+        return false;
+    }
+
+    let list_children = component
+        .children
+        .iter()
+        .filter_map(|child_local| {
+            artboard
+                .components
+                .iter()
+                .find(|component| component.local_id == *child_local)
+        })
+        .filter(|child| child.type_name == "ArtboardComponentList")
+        .collect::<Vec<_>>();
+    let [list_child] = list_children.as_slice() else {
+        return false;
+    };
+    if artboard
+        .component_lists
+        .iter()
+        .find(|list| list.local_id == list_child.local_id)
+        .is_none_or(|list| !list.map_rules.is_empty())
+    {
+        return false;
+    }
+
+    let override_matches_fill_axis = list_child.children.iter().any(|override_local| {
+        let Some(override_object) = runtime_object_for_local(
+            runtime,
+            artboard,
+            *override_local,
+            "ArtboardComponentListOverride",
+        ) else {
+            return false;
+        };
+        (width_scale == LAYOUT_SCALE_TYPE_FILL
+            && override_object
+                .uint_property("instanceWidthScaleType")
+                .unwrap_or(0)
+                == LAYOUT_SCALE_TYPE_FILL)
+            || (height_scale == LAYOUT_SCALE_TYPE_FILL
+                && override_object
+                    .uint_property("instanceHeightScaleType")
+                    .unwrap_or(0)
+                    == LAYOUT_SCALE_TYPE_FILL)
+    });
+    if !override_matches_fill_axis {
+        return false;
+    }
+
+    container
+        .paints
+        .iter()
+        .all(simple_layout_background_paint_supported)
+}
+
+fn layout_style_object<'a>(
+    runtime: &'a RuntimeFile,
+    artboard: &ArtboardGraph,
+    layout_object: &RuntimeObject,
+) -> Option<&'a RuntimeObject> {
+    let style_local = layout_object
+        .uint_property("styleId")
+        .and_then(|style| usize::try_from(style).ok())?;
+    runtime_object_for_local(runtime, artboard, style_local, "LayoutComponentStyle")
+}
+
+fn runtime_object_for_local<'a>(
+    runtime: &'a RuntimeFile,
+    artboard: &ArtboardGraph,
+    local_id: usize,
+    type_name: &'static str,
+) -> Option<&'a RuntimeObject> {
+    let global_id = artboard
+        .local_objects
+        .iter()
+        .find(|object| object.local_id == local_id && object.type_name == Some(type_name))?
+        .global_id;
+    runtime.object(global_id as usize)
+}
+
+fn layout_style_has_zero_corners(style_object: &RuntimeObject) -> bool {
+    [
+        "cornerRadiusTL",
+        "cornerRadiusTR",
+        "cornerRadiusBL",
+        "cornerRadiusBR",
+    ]
+    .into_iter()
+    .all(|property| nearly_equal(style_object.double_property(property).unwrap_or(0.0), 0.0))
 }
 
 fn simple_layout_background_paint_supported(paint: &rive_graph::ShapePaintNode) -> bool {

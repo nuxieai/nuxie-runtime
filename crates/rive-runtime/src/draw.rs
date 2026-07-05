@@ -764,23 +764,22 @@ impl ArtboardInstance {
         // layout bounds. TODO(golden): route all layout components through the
         // M6 layout engine and apply style corner radii.
         let bounds = self.runtime_layout_component_bounds(layout_local, graph);
-        vec![
-            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
-            RuntimePathCommand::Line {
-                x: bounds.width,
-                y: 0.0,
-            },
-            RuntimePathCommand::Line {
-                x: bounds.width,
-                y: bounds.height,
-            },
-            RuntimePathCommand::Line {
-                x: 0.0,
-                y: bounds.height,
-            },
-            RuntimePathCommand::Line { x: 0.0, y: 0.0 },
-            RuntimePathCommand::Close,
-        ]
+        runtime_layout_rect_path_commands(bounds)
+    }
+
+    fn runtime_layout_component_clip_path_commands(
+        &self,
+        layout_local: usize,
+        graph: &ArtboardGraph,
+    ) -> Vec<RuntimePathCommand> {
+        let bounds = self.runtime_layout_component_bounds(layout_local, graph);
+        runtime_layout_rect_path_commands(bounds)
+    }
+
+    fn runtime_layout_component_clip_enabled(&self, layout_local: usize) -> bool {
+        property_key_for_name("LayoutComponent", "clip")
+            .and_then(|key| self.bool_property(layout_local, key))
+            .unwrap_or(false)
     }
 
     fn runtime_layout_component_world_transform(
@@ -788,14 +787,15 @@ impl ArtboardInstance {
         layout_local: usize,
         graph: &ArtboardGraph,
     ) -> Mat2D {
-        let Some(bounds) = self.runtime_simple_root_row_fill_layout_bounds(layout_local, graph)
-        else {
-            return self
-                .component(layout_local)
-                .map(|component| component.transform.world_transform)
-                .unwrap_or(Mat2D::IDENTITY);
-        };
-        Mat2D([1.0, 0.0, 0.0, 1.0, bounds.x, bounds.y])
+        let bounds = self
+            .runtime_simple_root_row_fill_layout_bounds(layout_local, graph)
+            .or_else(|| self.runtime_nested_fill_hug_layout_bounds(layout_local, graph));
+        if let Some(bounds) = bounds {
+            return Mat2D([1.0, 0.0, 0.0, 1.0, bounds.x, bounds.y]);
+        }
+        self.component(layout_local)
+            .map(|component| component.transform.world_transform)
+            .unwrap_or(Mat2D::IDENTITY)
     }
 
     fn runtime_layout_component_bounds(
@@ -804,6 +804,9 @@ impl ArtboardInstance {
         graph: &ArtboardGraph,
     ) -> RuntimeLayoutBounds {
         if let Some(bounds) = self.runtime_simple_root_row_fill_layout_bounds(layout_local, graph) {
+            return bounds;
+        }
+        if let Some(bounds) = self.runtime_nested_fill_hug_layout_bounds(layout_local, graph) {
             return bounds;
         }
         let width = self.runtime_layout_component_dimension(layout_local, "width");
@@ -825,6 +828,125 @@ impl ArtboardInstance {
             width,
             height,
         }
+    }
+
+    fn runtime_nested_fill_hug_layout_bounds(
+        &self,
+        layout_local: usize,
+        graph: &ArtboardGraph,
+    ) -> Option<RuntimeLayoutBounds> {
+        let component = graph
+            .components
+            .iter()
+            .find(|component| component.local_id == layout_local)?;
+        if component.type_name != "LayoutComponent" {
+            return None;
+        }
+        let parent_local = component.parent_local?;
+        let parent = graph
+            .components
+            .iter()
+            .find(|component| component.local_id == parent_local)?;
+        if parent.type_name != "LayoutComponent" {
+            return None;
+        }
+        let style_local = self.runtime_layout_component_style_local(layout_local)?;
+
+        const LAYOUT_SCALE_TYPE_FILL: u64 = 1;
+        const LAYOUT_SCALE_TYPE_HUG: u64 = 2;
+        let width_scale = self.runtime_layout_style_uint(style_local, "layoutWidthScaleType")?;
+        let height_scale = self.runtime_layout_style_uint(style_local, "layoutHeightScaleType")?;
+        if !matches!(width_scale, LAYOUT_SCALE_TYPE_FILL | LAYOUT_SCALE_TYPE_HUG)
+            || !matches!(height_scale, LAYOUT_SCALE_TYPE_FILL | LAYOUT_SCALE_TYPE_HUG)
+        {
+            return None;
+        }
+
+        let parent_bounds = self.runtime_layout_component_bounds(parent_local, graph);
+        let authored_width = self.runtime_layout_component_dimension(layout_local, "width");
+        let authored_height = self.runtime_layout_component_dimension(layout_local, "height");
+        let width = match width_scale {
+            LAYOUT_SCALE_TYPE_FILL => parent_bounds.width,
+            LAYOUT_SCALE_TYPE_HUG => {
+                self.runtime_layout_component_hug_size(layout_local, graph, true)?
+            }
+            _ => authored_width,
+        };
+        let height = match height_scale {
+            LAYOUT_SCALE_TYPE_FILL => parent_bounds.height,
+            LAYOUT_SCALE_TYPE_HUG => {
+                self.runtime_layout_component_hug_size(layout_local, graph, false)?
+            }
+            _ => authored_height,
+        };
+
+        Some(RuntimeLayoutBounds {
+            x: 0.0,
+            y: 0.0,
+            width,
+            height,
+        })
+    }
+
+    fn runtime_layout_component_hug_size(
+        &self,
+        layout_local: usize,
+        graph: &ArtboardGraph,
+        width_axis: bool,
+    ) -> Option<f32> {
+        let style_local = self.runtime_layout_component_style_local(layout_local)?;
+        let is_row = self.runtime_layout_style_is_row(style_local);
+        let gap = if is_row {
+            self.runtime_layout_style_double(style_local, "gapHorizontal")
+        } else {
+            self.runtime_layout_style_double(style_local, "gapVertical")
+        }
+        .unwrap_or(0.0);
+        let component = graph
+            .components
+            .iter()
+            .find(|component| component.local_id == layout_local)?;
+        let mut child_sizes = Vec::new();
+        for child_local in &component.children {
+            let Some(child) = graph
+                .components
+                .iter()
+                .find(|component| component.local_id == *child_local)
+            else {
+                continue;
+            };
+            match child.type_name {
+                "LayoutComponent" => {
+                    let bounds = self.runtime_layout_component_bounds(*child_local, graph);
+                    child_sizes.push((bounds.width, bounds.height));
+                }
+                "ArtboardComponentList" => {
+                    // Ported from C++ `src/artboard_component_list.cpp`
+                    // `ArtboardComponentList::layoutBounds`: non-virtualized
+                    // lists with no instantiated items retain the default
+                    // zero layout size, which makes hug-sized parents collapse.
+                    child_sizes.push((0.0, 0.0));
+                }
+                "Fill"
+                | "LinearGradient"
+                | "RadialGradient"
+                | "SolidColor"
+                | "Stroke"
+                | "LayoutComponentStyle" => {}
+                _ => return None,
+            }
+        }
+        Some(runtime_layout_hug_size(
+            &child_sizes,
+            gap,
+            is_row,
+            width_axis,
+        ))
+    }
+
+    fn runtime_layout_style_double(&self, style_local: usize, name: &str) -> Option<f32> {
+        property_key_for_name("LayoutComponentStyle", name)
+            .and_then(|key| self.double_property(style_local, key))
     }
 
     fn runtime_simple_root_row_fill_layout_bounds(
@@ -1278,6 +1400,74 @@ struct RuntimeLayoutBounds {
     height: f32,
 }
 
+fn runtime_layout_rect_path_commands(bounds: RuntimeLayoutBounds) -> Vec<RuntimePathCommand> {
+    let width_is_zero = bounds.width.abs() <= f32::EPSILON;
+    let height_is_zero = bounds.height.abs() <= f32::EPSILON;
+    if height_is_zero {
+        return vec![
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Line {
+                x: bounds.width,
+                y: 0.0,
+            },
+            RuntimePathCommand::Line { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Close,
+        ];
+    }
+    if width_is_zero {
+        return vec![
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Line {
+                x: 0.0,
+                y: bounds.height,
+            },
+            RuntimePathCommand::Line { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Close,
+        ];
+    }
+    vec![
+        RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+        RuntimePathCommand::Line {
+            x: bounds.width,
+            y: 0.0,
+        },
+        RuntimePathCommand::Line {
+            x: bounds.width,
+            y: bounds.height,
+        },
+        RuntimePathCommand::Line {
+            x: 0.0,
+            y: bounds.height,
+        },
+        RuntimePathCommand::Line { x: 0.0, y: 0.0 },
+        RuntimePathCommand::Close,
+    ]
+}
+
+fn runtime_layout_hug_size(
+    child_sizes: &[(f32, f32)],
+    gap: f32,
+    is_row: bool,
+    width_axis: bool,
+) -> f32 {
+    if child_sizes.is_empty() {
+        return 0.0;
+    }
+    let gap_total = gap * child_sizes.len().saturating_sub(1) as f32;
+    match (is_row, width_axis) {
+        (true, true) => child_sizes.iter().map(|(width, _)| *width).sum::<f32>() + gap_total,
+        (true, false) => child_sizes
+            .iter()
+            .map(|(_, height)| *height)
+            .fold(0.0, f32::max),
+        (false, true) => child_sizes
+            .iter()
+            .map(|(width, _)| *width)
+            .fold(0.0, f32::max),
+        (false, false) => child_sizes.iter().map(|(_, height)| *height).sum::<f32>() + gap_total,
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RuntimeShapePaintKind {
     Fill,
@@ -1361,6 +1551,7 @@ pub struct RuntimeRenderPathCache {
     artboard_clip: Option<Box<dyn RenderPath>>,
     background_paths: BTreeMap<usize, Box<dyn RenderPath>>,
     clip_paths: BTreeMap<usize, Box<dyn RenderPath>>,
+    layout_clip_paths: BTreeMap<usize, Box<dyn RenderPath>>,
     draw_paths: BTreeMap<RuntimeDrawPathCacheKey, Box<dyn RenderPath>>,
     gradient_shaders: BTreeMap<u32, RuntimeGradientShaderCacheEntry>,
     nested_artboards: BTreeMap<u32, RuntimeRenderPathCache>,
@@ -1400,6 +1591,21 @@ impl RuntimeRenderPathCache {
         fill_rule: RenderFillRule,
     ) -> &mut Box<dyn RenderPath> {
         let path = match self.clip_paths.entry(local_id) {
+            Entry::Occupied(entry) => entry.into_mut(),
+            Entry::Vacant(entry) => entry.insert(runtime_make_path(factory, commands, fill_rule)),
+        };
+        runtime_rebuild_path(path.as_mut(), commands, fill_rule);
+        path
+    }
+
+    fn layout_clip_path(
+        &mut self,
+        local_id: usize,
+        factory: &mut dyn RenderFactory,
+        commands: &[RuntimePathCommand],
+        fill_rule: RenderFillRule,
+    ) -> &mut Box<dyn RenderPath> {
+        let path = match self.layout_clip_paths.entry(local_id) {
             Entry::Occupied(entry) => entry.into_mut(),
             Entry::Vacant(entry) => entry.insert(runtime_make_path(factory, commands, fill_rule)),
         };
@@ -1826,6 +2032,32 @@ fn runtime_draw_command(
             return Ok(());
         }
         RuntimeDrawCommandKind::Draw => {}
+    }
+
+    if command.type_name == "DrawableProxy"
+        && let Some(layout_local) = command.local_id
+        && instance.runtime_layout_component_clip_enabled(layout_local)
+    {
+        renderer.save();
+        let path_commands =
+            instance.runtime_layout_component_clip_path_commands(layout_local, graph);
+        if !path_commands.is_empty() {
+            let path = path_cache.layout_clip_path(
+                layout_local,
+                factory,
+                &path_commands,
+                RenderFillRule::Clockwise,
+            );
+            renderer.clip_path(path.as_ref());
+        }
+    }
+
+    if command.type_name == "LayoutComponent"
+        && let Some(layout_local) = command.local_id
+        && instance.runtime_layout_component_clip_enabled(layout_local)
+    {
+        renderer.restore();
+        return Ok(());
     }
 
     if sorted_drawable_is_nested_artboard(command.type_name) {

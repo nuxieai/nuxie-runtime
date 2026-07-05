@@ -6,8 +6,8 @@ the only memory the next session has. Update it every commit.
 ## Metric
 
 - Exact segments (file × sample): 498 across 177 exact files
-- Current compare: `make golden-compare` reports diverges=14, unsupported-feature=104, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=60 gated=8 harness=36
+- Current compare: `make golden-compare` reports diverges=15, unsupported-feature=103, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=59 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -23,12 +23,11 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Probe `saturation.riv` as the next `rust-runner-unsupported:text` M6
-   gate: the first direct Rust stop is a static-text data-binding target
-   `Shape` global 34. Compare direct C++/Rust streams, remove only stale
-   static-text gates needed to reach draw, and fix or retag the first real
-   text/data-bind blocker. Do not start a general text layout rewrite unless
-   the stream diff proves the corpus needs it.
+1. Probe `scroll_snap.riv` as the next `rust-runner-unsupported:text` M6
+   gate. Confirm whether the first direct Rust stop is really static text or
+   whether the file should move to the existing scroll/layout runtime queue;
+   remove only stale static-text gates needed to reach draw, then fix or retag
+   the first real blocker.
 2. Keep `data_bind_test_cmdq.riv`, `data_binding_test.riv`,
    `data_converter_to_number.riv`, `scripted_data_context.riv`,
    `state_transition_fire_trigger.riv`, and `trigger_based_listeners.riv`
@@ -95,6 +94,14 @@ the only memory the next session has. Update it every commit.
   path at transform `[1,0,0,1,34.473156,389.39209]`; C++ has 17 `move`
   contours versus Rust's 15. Parked under
   `rust-runner-divergence:data-converter-to-number-text-values`.
+- `saturation.riv`: after admitting `Shape.x/y` source-to-target binds through
+  static text for no-converter and `DataConverterGroup` paths, Rust reaches
+  draw but the first data-bound text path differs. Debugged bindings show
+  target local 6 `TextValueRun.text` receives `"100"` and the paired `Shape.x`
+  bind reaches x=`500`; focused streams first diverge at text path id 3 under
+  transform `[1,0,0,1,64.5,26.5]`, while the later numeric/color text path is
+  only float drift. Parked under
+  `rust-runner-divergence:saturation-color-to-string-text`.
 - `state_transition_fire_trigger.riv` and `trigger_based_listeners.riv`: the
   same `Event` admission clears their stale text diagnostics, but Rust emits
   extra event/listener text draw calls that C++ suppresses at sample 0. Keep
@@ -222,7 +229,8 @@ the only memory the next session has. Update it every commit.
   parent transforms, and
   source-to-target `TextValueRun.text` / `Text.alignValue` /
   `Text.overflowValue` / `TextStylePaint.fontSize` /
-  `LayoutComponent.height` / `SolidColor.colorValue` / `Shape.rotation` via
+  `LayoutComponent.height` / `SolidColor.colorValue` / `Shape.x/y` through
+  no-converter and `DataConverterGroup` paths / `Shape.rotation` via
   `DataConverterSystemDegsToRads` data binds around static text.
   Static text can coexist with authored nested bool input controls beside
   nested state-machine hosts and passive sample-0 `FocusData` /
@@ -884,3 +892,14 @@ the only memory the next session has. Update it every commit.
   `diverges=14`, `unsupported-feature=104`, `not-yet=0`, and parked
   `M6=60 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
   `saturation.riv`.
+- 2026-07-05: [M6] Reopened `saturation.riv` by admitting static-text
+  `Shape.x/y` source-to-target binds with no converter or a
+  `DataConverterGroup`, clearing the stale `rust-runner-unsupported:text`
+  stop. The file reaches draw and is parked as
+  `rust-runner-divergence:saturation-color-to-string-text`: focused streams
+  first differ at text path id 3 under `[1,0,0,1,64.5,26.5]`, while the later
+  numeric/color text path is only float drift. `make golden-compare` reports
+  `exact=177`, `exact-segments=498`, `diverges=15`,
+  `unsupported-feature=103`, `not-yet=0`, and parked
+  `M6=59 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
+  `scroll_snap.riv`.

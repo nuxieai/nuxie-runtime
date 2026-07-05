@@ -218,8 +218,13 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
             property_key_for_name("SolidColor", "colorValue") == Some(property_key)
         }
         Some("Shape") => {
-            property_key_for_name("TransformComponent", "rotation") == Some(property_key)
-                && data_bind.converter_type_name == Some("DataConverterSystemDegsToRads")
+            (["x", "y"]
+                .into_iter()
+                .any(|name| property_key_for_name("Node", name) == Some(property_key))
+                && (data_bind.converter_global.is_none()
+                    || data_bind.converter_type_name == Some("DataConverterGroup")))
+                || (property_key_for_name("TransformComponent", "rotation") == Some(property_key)
+                    && data_bind.converter_type_name == Some("DataConverterSystemDegsToRads"))
         }
         Some("NestedArtboard") => ["artboardId", "isPaused", "speed", "quantize"]
             .into_iter()

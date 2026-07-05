@@ -22,22 +22,23 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Widen the static text tracer from `hello_world.riv` to `new_text.riv`:
-   support multiple independent top-level `Text` draw commands using the same
-   embedded-font/static one-run/solid-fill subset, then promote `new_text.riv`
-   if the stream is exact.
-2. If `new_text.riv` exposes a later text-specific blocker, keep it parked with
-   the narrower diagnostic and move to the next static text manifest candidate.
-   `hosted_font_file.riv` currently stops on `TextStyleAxis` and has no
-   embedded `FileAssetContents`, so defer it until after axis/simple-variant
-   support.
-3. `align_target.riv` is the first M6 entry by manifest order, but it has
+1. Open the next static text widening with `ellipsis.riv`: support the
+   `TextStyleAxis`/variation setup enough to reach text layout, then port the
+   smallest C++ line/ellipsis path needed for its one-Text/one-run/solid-fill
+   stream. A trial axis-only bypass rendered but diverged because C++ emits the
+   ellipsized layout path.
+2. Keep `new_text.riv` parked until after the one-run layout slice: it has five
+   `Text` objects, multiple runs/styles, gradients/strokes, clipping, and text
+   keyframes, so it is not the next narrow static tracer.
+3. `hosted_font_file.riv` stops on `TextStyleAxis` and has no embedded
+   `FileAssetContents`, so defer it until after axis/simple-variant support.
+4. `align_target.riv` is the first M6 entry by manifest order, but it has
    listener align-target plus text modifier/axis objects. Keep it parked until
    the static multi-text/axis path is exact.
-4. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
+5. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
-5. Remaining exact entries pinned to sample `0` are static M1 holdovers:
+6. Remaining exact entries pinned to sample `0` are static M1 holdovers:
    `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
    them during M6 unless a related refactor needs a cheap draw-regression check.
 
@@ -282,3 +283,9 @@ the only memory the next session has. Update it every commit.
   golden-compare` moved to `exact=129`, `exact-segments=450`,
   `unsupported-feature=166`, and parked `M6=123 gated=7 harness=36`; `cargo
   test --workspace` passes.
+- 2026-07-04: [M6] Rechecked the post-`hello_world` text queue. `new_text.riv`
+  is too broad for the next slice (five texts plus multi-run/style,
+  gradient/stroke, clipping, and keyframed text). `ellipsis.riv` is the
+  smallest one-run axis/layout target; axis-only bypass reaches draw but
+  diverges on C++ ellipsis layout, so the next implementation must port that
+  layout path rather than simply admitting axes.

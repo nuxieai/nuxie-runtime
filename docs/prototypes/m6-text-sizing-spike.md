@@ -159,10 +159,12 @@ Expected metric movement for that slice:
 Landed 2026-07-04. `hello_world.riv` is exact through a deliberately narrow
 static text path: one top-level `Text`, one `TextValueRun`, one solid-fill
 `TextStylePaint`, embedded `FontAsset` bytes, no modifiers/layout/input/data
-binding/color glyphs. The next low-risk widening target is `new_text.riv`,
-which currently stops on the single-`Text` guard. `hosted_font_file.riv` is a
-later static-text variant because it already requires `TextStyleAxis` handling
-and hosted font asset loading.
+binding/color glyphs. A follow-up scan showed `new_text.riv` is too broad for
+the next narrow slice (five texts plus multi-run/style, gradient/stroke,
+clipping, and keyframed text). Use `ellipsis.riv` next: it is the smallest
+one-run `TextStyleAxis` fixture and proves the first required line/ellipsis
+layout port. `hosted_font_file.riv` remains a later static-text variant because
+it also requires hosted font asset loading.
 
 ## Follow-Up Order
 

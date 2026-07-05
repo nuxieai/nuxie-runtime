@@ -5,9 +5,9 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 496 across 175 exact files
-- Current compare: `make golden-compare` reports diverges=13, unsupported-feature=107, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=63 gated=8 harness=36
+- Exact segments (file × sample): 497 across 176 exact files
+- Current compare: `make golden-compare` reports diverges=13, unsupported-feature=106, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=62 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -23,7 +23,7 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Probe `keyboard_listener.riv` as the next
+1. Probe `list_index_script_access.riv` as the next
    `rust-runner-unsupported:text` M6 gate: compare direct C++/Rust streams,
    remove only stale static-text gates needed to reach draw, and fix or retag
    the first real text/data-bind blocker. Do not start a general text layout
@@ -217,7 +217,8 @@ the only memory the next session has. Update it every commit.
   `LayoutComponent.height` / `SolidColor.colorValue` / `Shape.rotation` via
   `DataConverterSystemDegsToRads` data binds around static text.
   Static text can coexist with authored nested bool input controls beside
-  nested state-machine hosts.
+  nested state-machine hosts and passive sample-0 `FocusData` /
+  `KeyboardInput` metadata.
   Shape/follow-path/scale/origin modifiers,
   gradient/feather/other text effects, richer layout, broader `Text` property
   data binds, and text input/editing remain M6 text diagnostics.
@@ -855,3 +856,12 @@ the only memory the next session has. Update it every commit.
   `exact-segments=496`, `diverges=13`, `unsupported-feature=107`,
   `not-yet=0`, and parked `M6=63 gated=8 harness=36`; `cargo test
   --workspace` passes. Next target is `keyboard_listener.riv`.
+- 2026-07-05: [M6] Promoted `keyboard_listener.riv` by admitting passive
+  `FocusData` and `KeyboardInput` siblings through the static text subset for
+  sample-0 rendering. The file's direct C++/Rust streams have the same call
+  sequence and pass golden numeric-token comparison, so the stale
+  `rust-runner-unsupported:text` manifest gate is removed. `make
+  golden-compare` reports `exact=176`, `exact-segments=497`, `diverges=13`,
+  `unsupported-feature=106`, `not-yet=0`, and parked
+  `M6=62 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
+  `list_index_script_access.riv`.

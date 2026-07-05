@@ -330,6 +330,8 @@ impl<'a> StaticTextSlice<'a> {
                         | "LayoutComponent"
                         | "LayoutComponentStyle"
                         | "ForegroundLayoutDrawable"
+                        | "FocusData"
+                        | "KeyboardInput"
                         | "Feather"
                         | "CustomPropertyGroup"
                         | "CustomPropertyNumber"

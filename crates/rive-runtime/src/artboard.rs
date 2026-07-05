@@ -13,10 +13,11 @@ use crate::artboard_data_bind::{
     RuntimeArtboardCustomPropertyBindingInstance, RuntimeArtboardLayoutComputedBindingInstance,
     RuntimeArtboardListBindingInstance, RuntimeArtboardNestedHostBindingInstance,
     RuntimeArtboardPropertyBindingInstance, RuntimeArtboardSoloBindingInstance,
-    apply_artboard_unbound_color_data_bind_defaults, build_artboard_custom_property_bindings,
-    build_artboard_default_view_model_values, build_artboard_layout_computed_bindings,
-    build_artboard_list_bindings, build_artboard_nested_host_bindings,
-    build_artboard_property_bindings, build_artboard_solo_bindings,
+    RuntimeArtboardSoloSourceBindingInstance, apply_artboard_unbound_color_data_bind_defaults,
+    build_artboard_custom_property_bindings, build_artboard_default_view_model_values,
+    build_artboard_layout_computed_bindings, build_artboard_list_bindings,
+    build_artboard_nested_host_bindings, build_artboard_property_bindings,
+    build_artboard_solo_bindings, build_artboard_solo_source_bindings,
 };
 use crate::components::{
     AuthoredTransform, ComponentDirt, Mat2D, RuntimeComponent, RuntimeSolo, TransformProperty,
@@ -70,6 +71,7 @@ pub struct ArtboardInstance {
     pub(crate) artboard_custom_property_bindings: Vec<RuntimeArtboardCustomPropertyBindingInstance>,
     pub(crate) artboard_layout_computed_bindings: Vec<RuntimeArtboardLayoutComputedBindingInstance>,
     pub(crate) artboard_solo_bindings: Vec<RuntimeArtboardSoloBindingInstance>,
+    pub(crate) artboard_solo_source_bindings: Vec<RuntimeArtboardSoloSourceBindingInstance>,
     pub(crate) artboard_nested_host_bindings: Vec<RuntimeArtboardNestedHostBindingInstance>,
     pub(crate) artboard_list_bindings: Vec<RuntimeArtboardListBindingInstance>,
     pub(crate) dirt: ComponentDirt,
@@ -209,6 +211,7 @@ impl ArtboardInstance {
         let artboard_layout_computed_bindings =
             build_artboard_layout_computed_bindings(file, graph);
         let artboard_solo_bindings = build_artboard_solo_bindings(file, graph);
+        let artboard_solo_source_bindings = build_artboard_solo_source_bindings(file, graph);
         let artboard_nested_host_bindings = build_artboard_nested_host_bindings(file, graph);
         let artboard_list_bindings = build_artboard_list_bindings(file, graph);
         apply_initial_solo_collapses(&objects, &solos, &mut components, &component_by_local);
@@ -257,6 +260,7 @@ impl ArtboardInstance {
             artboard_custom_property_bindings,
             artboard_layout_computed_bindings,
             artboard_solo_bindings,
+            artboard_solo_source_bindings,
             artboard_nested_host_bindings,
             artboard_list_bindings,
             dirt: ComponentDirt::COMPONENTS,
@@ -1866,6 +1870,7 @@ mod tests {
             artboard_custom_property_bindings: Vec::new(),
             artboard_layout_computed_bindings: Vec::new(),
             artboard_solo_bindings: Vec::new(),
+            artboard_solo_source_bindings: Vec::new(),
             artboard_nested_host_bindings: Vec::new(),
             artboard_list_bindings: Vec::new(),
             dirt: ComponentDirt::COMPONENTS,

@@ -227,6 +227,8 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
         Some("ArtboardComponentList") => {
             property_key_for_name("ArtboardComponentList", "listSource") == Some(property_key)
         }
+        Some("Solo") => property_key_for_name("Solo", "activeComponentId") == Some(property_key),
+        Some("Text") => property_key_for_name("Text", "alignValue") == Some(property_key),
         _ => false,
     }
 }
@@ -278,6 +280,7 @@ impl<'a> StaticTextSlice<'a> {
                         | "TextStyleAxis"
                         | "TextModifierGroup"
                         | "TextModifierRange"
+                        | "Solo"
                         | "CubicInterpolatorComponent"
                         | "Shape"
                         | "PointsPath"
@@ -2536,7 +2539,7 @@ fn static_text_parent_chain_supported(
         }
         if !matches!(
             type_for_local(graph, local_id),
-            Some("Node" | "LayoutComponent")
+            Some("Node" | "LayoutComponent" | "Solo")
         ) {
             return false;
         }

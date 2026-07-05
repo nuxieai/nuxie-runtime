@@ -22,6 +22,7 @@ pub(super) struct RuntimeArtboardPropertyBindingInstance {
     target_local_id: usize,
     property_key: u16,
     path: Vec<u32>,
+    enum_value_names: Vec<Vec<u8>>,
     converter: Option<RuntimeDataBindGraphConverter>,
     converter_state: RuntimeDataBindGraphConverterState,
     default_value: RuntimeDataBindGraphValue,
@@ -46,6 +47,14 @@ pub(super) struct RuntimeArtboardLayoutComputedBindingInstance {
 pub(super) struct RuntimeArtboardSoloBindingInstance {
     target_local_id: usize,
     path: Vec<u32>,
+    enum_value_names: Vec<Vec<u8>>,
+}
+
+#[derive(Debug, Clone)]
+pub(super) struct RuntimeArtboardSoloSourceBindingInstance {
+    target_local_id: usize,
+    path: Vec<u32>,
+    enum_value_names: Vec<Vec<u8>>,
 }
 
 #[derive(Debug, Clone)]
@@ -195,6 +204,12 @@ pub(super) fn build_artboard_property_bindings(
                 return None;
             }
             let path = file.data_bind_context_source_path_ids_for_object(data_bind.object)?;
+            let enum_value_names = runtime_enum_value_names_for_data_bind_path(
+                file,
+                default_instance.as_ref(),
+                data_bind.object,
+                &path,
+            );
             let default_value = default_instance
                 .as_ref()
                 .and_then(|default_instance| {
@@ -228,6 +243,7 @@ pub(super) fn build_artboard_property_bindings(
                 target_local_id,
                 property_key,
                 path: path.to_vec(),
+                enum_value_names,
                 converter_state: RuntimeDataBindGraphConverterState::for_converter(
                     converter.as_ref(),
                 ),
@@ -249,6 +265,7 @@ fn artboard_property_binding_value_matches_kind(
             FieldKind::Double | FieldKind::Uint
         ) | (RuntimeDataBindGraphValue::Color(_), FieldKind::Color)
             | (RuntimeDataBindGraphValue::String(_), FieldKind::String)
+            | (RuntimeDataBindGraphValue::Enum(_), FieldKind::Uint)
     )
 }
 
@@ -498,6 +515,7 @@ pub(super) fn build_artboard_solo_bindings(
     let Some(active_component_id_key) = solo_active_component_id_property_key() else {
         return Vec::new();
     };
+    let default_instance = artboard_default_view_model_instance(file, artboard_index);
 
     file.artboard_data_binds(artboard_index)
         .into_iter()
@@ -516,12 +534,146 @@ pub(super) fn build_artboard_solo_bindings(
             {
                 return None;
             }
+            let path = file.data_bind_context_source_path_ids_for_object(data_bind.object)?;
+            let enum_value_names = runtime_enum_value_names_for_data_bind_path(
+                file,
+                default_instance.as_ref(),
+                data_bind.object,
+                &path,
+            );
             Some(RuntimeArtboardSoloBindingInstance {
                 target_local_id: data_bind.target_local_id?,
-                path: file.data_bind_context_source_path_ids_for_object(data_bind.object)?,
+                path,
+                enum_value_names,
             })
         })
         .collect()
+}
+
+pub(super) fn build_artboard_solo_source_bindings(
+    file: &RuntimeFile,
+    graph: &ArtboardGraph,
+) -> Vec<RuntimeArtboardSoloSourceBindingInstance> {
+    let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
+        return Vec::new();
+    };
+    let Some(active_component_id_key) = solo_active_component_id_property_key() else {
+        return Vec::new();
+    };
+    let default_instance = artboard_default_view_model_instance(file, artboard_index);
+
+    file.artboard_data_binds(artboard_index)
+        .into_iter()
+        .filter_map(|data_bind| {
+            if !data_bind_flags_apply_target_to_source(
+                data_bind.object.uint_property("flags").unwrap_or(0),
+            ) {
+                return None;
+            }
+            let target = data_bind.target?;
+            if target.type_name != "Solo" {
+                return None;
+            }
+            if u16::try_from(data_bind.object.uint_property("propertyKey")?).ok()?
+                != active_component_id_key
+            {
+                return None;
+            }
+            let path = file.data_bind_context_source_path_ids_for_object(data_bind.object)?;
+            let enum_value_names = runtime_enum_value_names_for_data_bind_path(
+                file,
+                default_instance.as_ref(),
+                data_bind.object,
+                &path,
+            );
+            if enum_value_names.is_empty() {
+                return None;
+            }
+            Some(RuntimeArtboardSoloSourceBindingInstance {
+                target_local_id: data_bind.target_local_id?,
+                path,
+                enum_value_names,
+            })
+        })
+        .collect()
+}
+
+fn runtime_enum_value_names_for_data_bind_path(
+    file: &RuntimeFile,
+    default_instance: Option<&rive_binary::RuntimeViewModelInstanceReference<'_>>,
+    data_bind: &RuntimeObject,
+    path: &[u32],
+) -> Vec<Vec<u8>> {
+    default_instance
+        .and_then(|default_instance| {
+            file.data_context_view_model_property_for_instance(default_instance.object, path)
+        })
+        .and_then(|source| runtime_enum_value_names_for_source(file, source))
+        .or_else(|| {
+            if file
+                .data_bind_is_name_based_for_object(data_bind)
+                .unwrap_or(false)
+            {
+                return None;
+            }
+            runtime_enum_value_names_for_declared_path(file, path)
+        })
+        .unwrap_or_default()
+}
+
+fn runtime_enum_value_names_for_source(
+    file: &RuntimeFile,
+    source: &RuntimeObject,
+) -> Option<Vec<Vec<u8>>> {
+    let data_enum = file.data_enum_for_view_model_instance_enum_value_object(source)?;
+    Some(
+        data_enum
+            .values
+            .into_iter()
+            .map(runtime_data_enum_value_name)
+            .collect(),
+    )
+}
+
+fn runtime_enum_value_names_for_declared_path(
+    file: &RuntimeFile,
+    path: &[u32],
+) -> Option<Vec<Vec<u8>>> {
+    let (view_model_index, property_path) = path.split_first()?;
+    let mut view_model_index = usize::try_from(*view_model_index).ok()?;
+
+    for (index, property_id) in property_path.iter().enumerate() {
+        let view_model = file.view_model(view_model_index)?;
+        let property_index = usize::try_from(*property_id).ok()?;
+        let property = *view_model.properties.get(property_index)?;
+        if index == property_path.len() - 1 {
+            let data_enum = file.data_enum_for_view_model_property_object(property)?;
+            return Some(
+                data_enum
+                    .values
+                    .into_iter()
+                    .map(runtime_data_enum_value_name)
+                    .collect(),
+            );
+        }
+        if property.type_name != "ViewModelPropertyViewModel" {
+            return None;
+        }
+        view_model_index = usize::try_from(property.uint_property("viewModelReferenceId")?).ok()?;
+    }
+
+    None
+}
+
+fn runtime_data_enum_value_name(value: &RuntimeObject) -> Vec<u8> {
+    let resolved_value = value.string_property_bytes("value").unwrap_or_default();
+    if resolved_value.is_empty() {
+        return value
+            .string_property_bytes("key")
+            .unwrap_or_default()
+            .to_vec();
+    }
+    resolved_value.to_vec()
 }
 
 fn runtime_created_view_model_value_for_path(
@@ -669,6 +821,11 @@ impl ArtboardInstance {
                     .map(|binding| binding.path.clone()),
             )
             .chain(
+                self.artboard_solo_source_bindings
+                    .iter()
+                    .map(|binding| binding.path.clone()),
+            )
+            .chain(
                 self.artboard_nested_host_bindings
                     .iter()
                     .map(|binding| binding.path.clone()),
@@ -748,6 +905,7 @@ impl ArtboardInstance {
             changed |= self.update_artboard_custom_property_binding(&binding);
         }
         changed |= self.update_artboard_layout_computed_bindings();
+        changed |= self.update_artboard_solo_source_bindings();
         changed |= self.apply_artboard_property_bindings();
         changed |= self.advance_artboard_property_binding_converters(elapsed_seconds);
         changed |= self.apply_artboard_property_bindings();
@@ -827,6 +985,21 @@ impl ArtboardInstance {
         let binding = self.artboard_property_bindings.get_mut(index)?;
         let value = self.artboard_data_bind_values.get(&binding.path).cloned()?;
         let converted = match binding.converter.as_ref() {
+            Some(RuntimeDataBindGraphConverter::ToString { .. }) => match value {
+                RuntimeDataBindGraphValue::Enum(value) => {
+                    let index = usize::try_from(value).ok()?;
+                    binding
+                        .enum_value_names
+                        .get(index)
+                        .cloned()
+                        .map(RuntimeDataBindGraphValue::String)
+                }
+                _ => binding.converter_state.convert_value_with_formula_randoms(
+                    binding.converter.as_ref()?,
+                    &value,
+                    &mut self.artboard_formula_random_source,
+                ),
+            },
             Some(converter) => binding.converter_state.convert_value_with_formula_randoms(
                 converter,
                 &value,
@@ -861,6 +1034,50 @@ impl ArtboardInstance {
         changed
     }
 
+    fn update_artboard_solo_source_bindings(&mut self) -> bool {
+        let mut changed = false;
+        for binding in self.artboard_solo_source_bindings.clone() {
+            let Some(value) = self.artboard_solo_source_binding_value(&binding) else {
+                continue;
+            };
+            if self.artboard_data_bind_values.get(&binding.path) == Some(&value) {
+                continue;
+            }
+            self.artboard_data_bind_values
+                .insert(binding.path.clone(), value);
+            self.reset_artboard_property_formula_random_state_for_path(&binding.path);
+            changed = true;
+        }
+        changed
+    }
+
+    fn artboard_solo_source_binding_value(
+        &self,
+        binding: &RuntimeArtboardSoloSourceBindingInstance,
+    ) -> Option<RuntimeDataBindGraphValue> {
+        let solo = self
+            .solos
+            .iter()
+            .find(|solo| solo.local_id == binding.target_local_id)?;
+        let active_component_id = usize::try_from(
+            self.uint_property(binding.target_local_id, solo.active_component_property_key)?,
+        )
+        .ok()?;
+        let active_local_id = solo
+            .runtime_local_by_cpp_local
+            .get(&active_component_id)
+            .copied()?;
+        let active_name = self
+            .slot(active_local_id)
+            .and_then(|slot| slot.name.as_deref())?
+            .as_bytes();
+        let index = binding
+            .enum_value_names
+            .iter()
+            .position(|name| name.as_slice() == active_name)?;
+        Some(RuntimeDataBindGraphValue::Enum(u64::try_from(index).ok()?))
+    }
+
     fn apply_artboard_property_binding_value(
         &mut self,
         target_local_id: usize,
@@ -877,6 +1094,9 @@ impl ArtboardInstance {
             (Some(FieldKind::Uint), Some(RuntimeDataBindGraphValue::Number(value))) => {
                 let rounded = if value < 0.0 { 0 } else { value.round() as u64 };
                 self.set_uint_property(target_local_id, property_key, rounded)
+            }
+            (Some(FieldKind::Uint), Some(RuntimeDataBindGraphValue::Enum(value))) => {
+                self.set_uint_property(target_local_id, property_key, value)
             }
             (Some(FieldKind::Color), Some(RuntimeDataBindGraphValue::Color(value))) => {
                 // Mirrors C++ src/data_bind/context/context_value_color.cpp.
@@ -947,6 +1167,15 @@ impl ArtboardInstance {
             }
             RuntimeDataBindGraphValue::String(value) => {
                 self.set_solo_active_child_by_name(binding.target_local_id, value)
+            }
+            RuntimeDataBindGraphValue::Enum(value) => {
+                let Ok(index) = usize::try_from(*value) else {
+                    return false;
+                };
+                let Some(name) = binding.enum_value_names.get(index) else {
+                    return false;
+                };
+                self.set_solo_active_child_by_name(binding.target_local_id, name)
             }
             _ => false,
         }

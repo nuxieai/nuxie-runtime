@@ -5,9 +5,9 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 494 across 173 exact files
-- Current compare: `make golden-compare` reports diverges=11, unsupported-feature=111, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=67 gated=8 harness=36
+- Exact segments (file × sample): 495 across 174 exact files
+- Current compare: `make golden-compare` reports diverges=11, unsupported-feature=110, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=66 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -23,7 +23,7 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Probe `databind_solo_to_enum.riv` as the next
+1. Probe `fit_font_size_test.riv` as the next
    `rust-runner-unsupported:text` M6 gate: compare direct C++/Rust streams,
    remove only stale static-text gates needed to reach draw, and fix or retag
    the first real text/data-bind blocker. Do not start a general text layout
@@ -118,7 +118,9 @@ the only memory the next session has. Update it every commit.
   `ClippingShape` clip paths, skinned `PointsPath` deformation, plus empty and
   multi-contour TrimPath effects, DashPath stroke effects, and linear/radial
   gradient shader creation, default state-machine frame-0 application for
-  color/bool/uint/string keyframes, Solo active-child refresh, and
+  color/bool/uint/string keyframes, Solo active-child refresh, source-to-target
+  and target-to-source `Solo.activeComponentId` enum binds, enum-to-string
+  artboard property conversion, `Text.alignValue` enum/uint binds, and
   before-update joystick animation application, keyed double/color
   interpolation for CubicEase/CubicValue/Elastic keyframe interpolators, and
   `DistanceConstraint` world-translation application and
@@ -789,3 +791,11 @@ the only memory the next session has. Update it every commit.
   `exact=173`, `exact-segments=494`, `diverges=11`,
   `unsupported-feature=111`, `not-yet=0`, and parked
   `M6=67 gated=8 harness=36`; next target is `databind_solo_to_enum.riv`.
+- 2026-07-05: [M6] Promoted `databind_solo_to_enum.riv` by admitting Solo
+  parent/sibling text, mapping enum source-to-target Solo binds through
+  DataEnum labels, mirroring target-to-source Solo active-child enum writes,
+  and applying `Text.alignValue` enum/uint binds. `make golden-compare`
+  reports `exact=174`, `exact-segments=495`, `diverges=11`,
+  `unsupported-feature=110`, `not-yet=0`, and parked
+  `M6=66 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
+  `fit_font_size_test.riv`.

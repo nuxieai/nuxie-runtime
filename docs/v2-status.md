@@ -302,6 +302,17 @@ the only memory the next session has. Update it every commit.
   focus/layout-component-paint paths. This opens M5 without hiding the later
   text/layout/list work.
 
+- 2026-07-05: Layout engine fence: the hand-rolled flex math that closed
+  the simple root row/column layout-paint queue is capped at exactly that
+  scope. The next layout gate that needs wrapping, grow/shrink ratios,
+  percent/auto sizing, alignment beyond start/center/end, gaps, or nested
+  layout containers MUST trigger the #V2-7 decision instead: integrate
+  Taffy behind the layout trait and route the existing simple cases
+  through it. Extending the hand-rolled math case-by-case is re-porting
+  Yoga behavior-by-behavior — the V1 pattern — and is a tripwire. Files
+  whose layouts diverge under Taffy verify in `tolerant` mode per the
+  V2 map; do not pin Taffy against Yoga.
+
 ## Log
 
 - Completed-milestone entries (M0 through M5) are archived verbatim in

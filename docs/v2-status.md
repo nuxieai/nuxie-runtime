@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 482 across 161 exact files
-- Current compare: `make golden-compare` reports diverges=9, unsupported-feature=125, not-yet=0
+- Exact segments (file × sample): 483 across 162 exact files
+- Current compare: `make golden-compare` reports diverges=8, unsupported-feature=125, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=81 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
@@ -35,12 +35,10 @@ the only memory the next session has. Update it every commit.
    is also exact after matching C++ fresh artboard view-model contexts in the
    golden runner.
 3. Highest priority is broader `LayoutComponent` bounds/positioning parity
-   before opening more runtime surface. Work the compact divergence set:
-   `number_to_list_nested_children.riv` and
-   `transition_duration_bind_list.riv`. Start with
-   `number_to_list_nested_children.riv` because it is the next smallest
-   layout/list bounds divergence after the collapsed/default-view-model branch
-   cleared.
+   before opening more runtime surface. Continue with
+   `transition_duration_bind_list.riv`, the remaining compact layout/list
+   bounds divergence after `number_to_list_nested_children.riv` proved exact
+   under the current direct C++/Rust stream compare.
 4. Keep `new_text.riv` parked as a known M6 divergence until a dedicated text
    outline backend/canonicalization slice: gradient sibling admission now
    reaches draw, but Rust/Skrifa and C++ HarfBuzz emit a glyph contour with a
@@ -69,10 +67,6 @@ the only memory the next session has. Update it every commit.
   (`src/text/font_hb.cpp`) and `TextStylePaint::addPathClockwise`; Rust uses
   Skrifa outlines. The first stream diff is path verb/point ordering, not a
   paint/gradient mismatch.
-- `number_to_list_nested_children.riv`: after the root layout paint admission,
-  Rust reaches draw but differs on the first layout background rect: Rust
-  emits height `500` where C++ emits `260`. This is a layout/list bounds
-  divergence, not an unsupported diagnostic.
 - `transition_duration_bind_list.riv`: after admitting root layout padding/gap
   and clockwise layout backgrounds, Rust reaches draw but differs on the first
   child layout background rect height (`2617` vs C++ `2000`), same
@@ -593,3 +587,10 @@ the only memory the next session has. Update it every commit.
   `diverges=9`, `unsupported-feature=125`, `not-yet=0`, and parked
   `M6=81 gated=8 harness=36`; `cargo test --workspace` passes. Next target:
   `number_to_list_nested_children.riv`.
+- 2026-07-05: [M6] Promoted `number_to_list_nested_children.riv` after the
+  focused C++/Rust golden stream compare showed the stale
+  `layout-component-bounds` divergence was already closed by the previous
+  layout/default-context work. `make golden-compare` reports `exact=162`,
+  `exact-segments=483`, `diverges=8`, `unsupported-feature=125`,
+  `not-yet=0`, and parked `M6=81 gated=8 harness=36`; next target:
+  `transition_duration_bind_list.riv`.

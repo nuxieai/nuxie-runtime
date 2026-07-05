@@ -70,10 +70,7 @@ pub(crate) fn runtime_text_shape_paint_commands(
         .component(text_local)
         .map(|component| component.transform.render_opacity)
         .unwrap_or(1.0);
-    let shape_world = instance
-        .component(text_local)
-        .map(|component| component.transform.world_transform)
-        .unwrap_or(Mat2D::IDENTITY);
+    let shape_world = instance.runtime_component_world_transform(text_local, graph);
     let shape_world = shape_world.multiply(render_data.local_transform);
     // C++ text draw isolates the glyph path transform even when clipping
     // elides the drawable-level save.
@@ -351,7 +348,7 @@ impl<'a> StaticTextSlice<'a> {
             .context("text component is missing")?;
         if !static_text_parent_chain_supported(graph, text_component.parent_local) {
             bail!(
-                "static text subset only supports top-level Text or Text under plain Node transforms"
+                "static text subset only supports top-level Text or Text under Node/LayoutComponent transforms"
             );
         }
 
@@ -2492,7 +2489,10 @@ fn static_text_parent_chain_supported(
         if local_id == 0 {
             return true;
         }
-        if type_for_local(graph, local_id) != Some("Node") {
+        if !matches!(
+            type_for_local(graph, local_id),
+            Some("Node" | "LayoutComponent")
+        ) {
             return false;
         }
         let Some(component) = component_for_local(graph, local_id) else {

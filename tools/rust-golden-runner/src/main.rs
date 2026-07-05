@@ -648,14 +648,6 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
-    if let Some((data_bind_global, property_key, target_global)) =
-        layout_computed_value_data_bind(artboard)
-    {
-        bail!(
-            "unsupported: layout-computed-values in Rust golden runner (data bind global {data_bind_global} target global {target_global:?} property key {property_key})"
-        );
-    }
-
     if let Some(container) = unsupported_layout_component_paint(runtime, artboard) {
         bail!(
             "unsupported: layout-component-paint in Rust golden runner (global {})",
@@ -1235,27 +1227,6 @@ fn simple_flex_layout_spacing_supported(style_object: &RuntimeObject, parent_is_
             0 | 1 | 2 | 3
         )
     })
-}
-
-fn layout_computed_value_data_bind(artboard: &ArtboardGraph) -> Option<(u32, u64, Option<u32>)> {
-    artboard
-        .data_binds
-        .iter()
-        .find(|data_bind| {
-            data_bind.target_type_name == Some("LayoutComponent")
-                && layout_computed_property_key(data_bind.property_key)
-        })
-        .map(|data_bind| {
-            (
-                data_bind.global_id,
-                data_bind.property_key,
-                data_bind.target_global,
-            )
-        })
-}
-
-fn layout_computed_property_key(property_key: u64) -> bool {
-    matches!(property_key, 806 | 807 | 808 | 809 | 810 | 811 | 864 | 865)
 }
 
 fn layout_style_object<'a>(

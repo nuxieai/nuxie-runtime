@@ -5,8 +5,8 @@ use crate::data_bind_graph::{
 };
 use crate::objects::InstanceObjectArena;
 use crate::properties::{
-    artboard_index_for_graph, property_key_for_name, solid_color_value_property_key,
-    solo_active_component_id_property_key,
+    RuntimeLayoutComputedProperty, artboard_index_for_graph, layout_computed_property_for_key,
+    property_key_for_name, solid_color_value_property_key, solo_active_component_id_property_key,
 };
 use crate::{
     ArtboardInstance, RuntimeDataBindGraphConverter, RuntimeDataBindGraphValue,
@@ -33,6 +33,13 @@ pub(super) struct RuntimeArtboardCustomPropertyBindingInstance {
     property_key: u16,
     path: Vec<u32>,
     value_kind: RuntimeArtboardDataBindValueKind,
+}
+
+#[derive(Debug, Clone)]
+pub(super) struct RuntimeArtboardLayoutComputedBindingInstance {
+    target_local_id: usize,
+    property: RuntimeLayoutComputedProperty,
+    path: Vec<u32>,
 }
 
 #[derive(Debug, Clone)]
@@ -391,6 +398,37 @@ pub(super) fn build_artboard_custom_property_bindings(
         .collect()
 }
 
+pub(super) fn build_artboard_layout_computed_bindings(
+    file: &RuntimeFile,
+    graph: &ArtboardGraph,
+) -> Vec<RuntimeArtboardLayoutComputedBindingInstance> {
+    let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
+        return Vec::new();
+    };
+
+    file.artboard_data_binds(artboard_index)
+        .into_iter()
+        .filter_map(|data_bind| {
+            if !data_bind_flags_apply_target_to_source(
+                data_bind.object.uint_property("flags").unwrap_or(0),
+            ) {
+                return None;
+            }
+            let target = data_bind.target?;
+            if target.type_name != "LayoutComponent" {
+                return None;
+            }
+            let property_key =
+                u16::try_from(data_bind.object.uint_property("propertyKey")?).ok()?;
+            Some(RuntimeArtboardLayoutComputedBindingInstance {
+                target_local_id: data_bind.target_local_id?,
+                property: layout_computed_property_for_key(property_key)?,
+                path: file.data_bind_context_source_path_ids_for_object(data_bind.object)?,
+            })
+        })
+        .collect()
+}
+
 pub(super) fn build_artboard_solo_bindings(
     file: &RuntimeFile,
     graph: &ArtboardGraph,
@@ -553,6 +591,7 @@ impl ArtboardInstance {
         for binding in self.artboard_custom_property_bindings.clone() {
             changed |= self.update_artboard_custom_property_binding(&binding);
         }
+        changed |= self.update_artboard_layout_computed_bindings();
         changed |= self.apply_artboard_property_bindings();
         changed |= self.advance_artboard_property_binding_converters(elapsed_seconds);
         changed |= self.apply_artboard_property_bindings();
@@ -576,6 +615,39 @@ impl ArtboardInstance {
         changed |= self.apply_artboard_nested_host_bindings();
         changed |= self.sync_nested_child_artboard_data_contexts();
         changed
+    }
+
+    fn update_artboard_layout_computed_bindings(&mut self) -> bool {
+        let Some(graph) = self.runtime_graph().cloned() else {
+            return false;
+        };
+        let mut changed = false;
+        for binding in self.artboard_layout_computed_bindings.clone() {
+            changed |= self.update_artboard_layout_computed_binding(&binding, &graph);
+        }
+        changed
+    }
+
+    fn update_artboard_layout_computed_binding(
+        &mut self,
+        binding: &RuntimeArtboardLayoutComputedBindingInstance,
+        graph: &ArtboardGraph,
+    ) -> bool {
+        // Mirrors C++ `src/data_bind/data_bind.cpp` targetSupportsPush:
+        // Node computed* data binds are polled after layout settles.
+        let Some(value) =
+            self.runtime_layout_computed_property(binding.target_local_id, binding.property, graph)
+        else {
+            return false;
+        };
+        let value = RuntimeDataBindGraphValue::Number(value);
+        if self.artboard_data_bind_values.get(&binding.path) == Some(&value) {
+            return false;
+        }
+        self.artboard_data_bind_values
+            .insert(binding.path.clone(), value);
+        self.reset_artboard_property_formula_random_state_for_path(&binding.path);
+        true
     }
 
     fn apply_artboard_property_bindings(&mut self) -> bool {

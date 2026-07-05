@@ -141,6 +141,37 @@ pub(crate) fn solo_active_component_id_property_key() -> Option<u16> {
     property_key_for_name("Solo", "activeComponentId")
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RuntimeLayoutComputedProperty {
+    LocalX,
+    LocalY,
+    WorldX,
+    WorldY,
+    RootX,
+    RootY,
+    Width,
+    Height,
+}
+
+pub(crate) fn layout_computed_property_for_key(
+    property_key: u16,
+) -> Option<RuntimeLayoutComputedProperty> {
+    [
+        ("computedLocalX", RuntimeLayoutComputedProperty::LocalX),
+        ("computedLocalY", RuntimeLayoutComputedProperty::LocalY),
+        ("computedWorldX", RuntimeLayoutComputedProperty::WorldX),
+        ("computedWorldY", RuntimeLayoutComputedProperty::WorldY),
+        ("computedRootX", RuntimeLayoutComputedProperty::RootX),
+        ("computedRootY", RuntimeLayoutComputedProperty::RootY),
+        ("computedWidth", RuntimeLayoutComputedProperty::Width),
+        ("computedHeight", RuntimeLayoutComputedProperty::Height),
+    ]
+    .into_iter()
+    .find_map(|(property_name, property)| {
+        (property_key_for_name("Node", property_name) == Some(property_key)).then_some(property)
+    })
+}
+
 pub(crate) const JOYSTICK_FLAG_INVERT_X: u64 = 1 << 0;
 pub(crate) const JOYSTICK_FLAG_INVERT_Y: u64 = 1 << 1;
 

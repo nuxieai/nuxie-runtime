@@ -10,10 +10,11 @@ use crate::animation::{
     build_linear_animations, build_runtime_joysticks,
 };
 use crate::artboard_data_bind::{
-    RuntimeArtboardCustomPropertyBindingInstance, RuntimeArtboardListBindingInstance,
-    RuntimeArtboardNestedHostBindingInstance, RuntimeArtboardPropertyBindingInstance,
-    RuntimeArtboardSoloBindingInstance, apply_artboard_unbound_color_data_bind_defaults,
-    build_artboard_custom_property_bindings, build_artboard_default_view_model_values,
+    RuntimeArtboardCustomPropertyBindingInstance, RuntimeArtboardLayoutComputedBindingInstance,
+    RuntimeArtboardListBindingInstance, RuntimeArtboardNestedHostBindingInstance,
+    RuntimeArtboardPropertyBindingInstance, RuntimeArtboardSoloBindingInstance,
+    apply_artboard_unbound_color_data_bind_defaults, build_artboard_custom_property_bindings,
+    build_artboard_default_view_model_values, build_artboard_layout_computed_bindings,
     build_artboard_list_bindings, build_artboard_nested_host_bindings,
     build_artboard_property_bindings, build_artboard_solo_bindings,
 };
@@ -67,6 +68,7 @@ pub struct ArtboardInstance {
     pub(crate) artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource,
     pub(crate) artboard_property_bindings: Vec<RuntimeArtboardPropertyBindingInstance>,
     pub(crate) artboard_custom_property_bindings: Vec<RuntimeArtboardCustomPropertyBindingInstance>,
+    pub(crate) artboard_layout_computed_bindings: Vec<RuntimeArtboardLayoutComputedBindingInstance>,
     pub(crate) artboard_solo_bindings: Vec<RuntimeArtboardSoloBindingInstance>,
     pub(crate) artboard_nested_host_bindings: Vec<RuntimeArtboardNestedHostBindingInstance>,
     pub(crate) artboard_list_bindings: Vec<RuntimeArtboardListBindingInstance>,
@@ -112,7 +114,12 @@ enum RuntimeNestedAnimationInstance {
 
 impl ArtboardInstance {
     pub fn from_graph(file: &RuntimeFile, graph: &ArtboardGraph) -> Result<Self> {
-        Self::from_graph_inner(file, graph, &[], &mut BTreeSet::new(), None)
+        let artboards = vec![graph.clone()];
+        let context = RuntimeArtboardBuildContext {
+            file: Arc::new(file.clone()),
+            artboards: Arc::new(artboards.clone()),
+        };
+        Self::from_graph_inner(file, graph, &artboards, &mut BTreeSet::new(), Some(context))
     }
 
     pub fn from_graph_with_artboards(
@@ -199,6 +206,8 @@ impl ArtboardInstance {
         let artboard_property_bindings = build_artboard_property_bindings(file, graph);
         let artboard_custom_property_bindings =
             build_artboard_custom_property_bindings(file, graph);
+        let artboard_layout_computed_bindings =
+            build_artboard_layout_computed_bindings(file, graph);
         let artboard_solo_bindings = build_artboard_solo_bindings(file, graph);
         let artboard_nested_host_bindings = build_artboard_nested_host_bindings(file, graph);
         let artboard_list_bindings = build_artboard_list_bindings(file, graph);
@@ -246,6 +255,7 @@ impl ArtboardInstance {
             artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource::default(),
             artboard_property_bindings,
             artboard_custom_property_bindings,
+            artboard_layout_computed_bindings,
             artboard_solo_bindings,
             artboard_nested_host_bindings,
             artboard_list_bindings,
@@ -1853,6 +1863,7 @@ mod tests {
             artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource::default(),
             artboard_property_bindings: Vec::new(),
             artboard_custom_property_bindings: Vec::new(),
+            artboard_layout_computed_bindings: Vec::new(),
             artboard_solo_bindings: Vec::new(),
             artboard_nested_host_bindings: Vec::new(),
             artboard_list_bindings: Vec::new(),

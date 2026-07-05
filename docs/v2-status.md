@@ -6,8 +6,8 @@ the only memory the next session has. Update it every commit.
 ## Metric
 
 - Exact segments (file × sample): 479 across 158 exact files
-- Current compare: `make golden-compare` reports diverges=9, unsupported-feature=128, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=84 gated=8 harness=36
+- Current compare: `make golden-compare` reports diverges=12, unsupported-feature=125, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=81 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -29,15 +29,18 @@ the only memory the next session has. Update it every commit.
    three entries were retagged to their true first blockers:
    `data_bind_test_cmdq.riv` -> `text`, `scroll_snap.riv` -> `text`, and
    `scroll_test.riv` -> `scroll-constraints`.
-2. Start with `collapse_data_binds.riv`, which is parked behind
-   `layout-computed-values`: it data-binds `LayoutComponent.computedLocalX`
-   into text, so the missing work is computed layout geometry/data-bind
-   propagation rather than plain layout paint.
-3. Keep `number_to_list_nested_children.riv` and
-   `transition_duration_bind_list.riv` as the current M6 layout divergences:
-   Rust now runs them, but the first diffs are layout background rect heights
-   (`500` vs C++ `260`; `2617` vs C++ `2000`), tagged
-   `rust-runner-divergence:layout-component-bounds`.
+2. `LayoutComponent.computed*` target-to-source data binds are no longer a
+   runner gate. `collapse_data_binds.riv`,
+   `data_binding_artboards_source_test.riv`, and
+   `hittest_collapsed_layouts.riv` now run and are M6
+   `layout-component-bounds` divergences.
+3. Highest priority is broader `LayoutComponent` bounds/positioning parity
+   before opening more runtime surface. Work the compact divergence set:
+   `collapse_data_binds.riv`, `data_binding_artboards_source_test.riv`,
+   `hittest_collapsed_layouts.riv`, `number_to_list_nested_children.riv`, and
+   `transition_duration_bind_list.riv`. Start with `collapse_data_binds.riv`
+   because it combines computed layout polling with a crisp root/right layout
+   rect diff.
 4. Keep `new_text.riv` parked as a known M6 divergence until a dedicated text
    outline backend/canonicalization slice: gradient sibling admission now
    reaches draw, but Rust/Skrifa and C++ HarfBuzz emit a glyph contour with a
@@ -66,6 +69,12 @@ the only memory the next session has. Update it every commit.
   (`src/text/font_hb.cpp`) and `TextStylePaint::addPathClockwise`; Rust uses
   Skrifa outlines. The first stream diff is path verb/point ordering, not a
   paint/gradient mismatch.
+- `collapse_data_binds.riv`, `data_binding_artboards_source_test.riv`, and
+  `hittest_collapsed_layouts.riv`: after layout computed target-to-source
+  binding and Text-under-LayoutComponent admission, Rust reaches draw but
+  differs on layout bounds/positioning. The first inspected
+  `collapse_data_binds.riv` diff has C++ drawing settled root/right layout
+  rects while Rust falls back to zero-width rects translated to x=`500`.
 - `number_to_list_nested_children.riv`: after the root layout paint admission,
   Rust reaches draw but differs on the first layout background rect: Rust
   emits height `500` where C++ emits `260`. This is a layout/list bounds
@@ -548,3 +557,18 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=128`, and parked `M6=84 gated=8 harness=36`; `cargo
   test --workspace` passes. Next target: `collapse_data_binds.riv` on
   `layout-computed-values`.
+- 2026-07-05: [M6] Closed the `layout-computed-values` runner gate by polling
+  target-to-source `LayoutComponent.computed*` data binds from runtime layout
+  geometry, building a graph-aware artboard context for `from_graph()`, and
+  drawing static `Text` under `LayoutComponent` through runtime component
+  world transforms. The layout bounds resolver is now memoized to avoid
+  recursive fill/hug overflow. `collapse_data_binds.riv`,
+  `data_binding_artboards_source_test.riv`, and
+  `hittest_collapsed_layouts.riv` now run and are retagged as
+  `rust-runner-divergence:layout-component-bounds`; the first inspected diff
+  is the broader solver gap, not computed data-bind plumbing. `make
+  golden-compare` reports `exact=158`, `exact-segments=479`, `diverges=12`,
+  `unsupported-feature=125`, `not-yet=0`, and parked
+  `M6=81 gated=8 harness=36`; `cargo test --workspace` passes. Next target:
+  broader `LayoutComponent` bounds/positioning parity, starting with
+  `collapse_data_binds.riv`.

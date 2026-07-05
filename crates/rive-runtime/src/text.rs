@@ -247,6 +247,8 @@ impl<'a> StaticTextSlice<'a> {
                         | "Fill"
                         | "Stroke"
                         | "Backboard"
+                        | "NestedArtboard"
+                        | "NestedStateMachine"
                         | "RootBone"
                         | "Skin"
                         | "Tendon"

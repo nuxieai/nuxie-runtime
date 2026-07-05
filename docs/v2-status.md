@@ -5,9 +5,9 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 464 across 143 exact files
-- Current compare: `make golden-compare` reports diverges=1, unsupported-feature=151, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=108 gated=7 harness=36
+- Exact segments (file × sample): 465 across 144 exact files
+- Current compare: `make golden-compare` reports diverges=1, unsupported-feature=150, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=107 gated=7 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -23,11 +23,12 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Start `runtime_nested_text_runs.riv`: it is the next narrow text queue item
-   checked after `new_text.riv`; current first blocker is
-   `static text subset does not support sibling NestedArtboard global 26`.
-   Keep the slice to passive nested-artboard sibling admission around static
-   text and stop at the next concrete gate or divergence.
+1. Start the static text data-binding slice with `bankcard.riv`: it is the
+   first corpus-order M6 text blocker after the nested text promotion, and it
+   currently fails on `static text subset does not support text data binding`.
+   Keep the slice to data-bound static `TextValueRun` text/style values that
+   already flow through the runtime data-bind graph; stop at the next concrete
+   gate or divergence.
 2. Keep `new_text.riv` parked as a known M6 divergence until a dedicated text
    outline backend/canonicalization slice: gradient sibling admission now
    reaches draw, but Rust/Skrifa and C++ HarfBuzz emit a glyph contour with a
@@ -413,3 +414,11 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=151`, `not-yet=0`, and parked
   `M6=108 gated=7 harness=36`; next start `runtime_nested_text_runs.riv`,
   which fails first on sibling `NestedArtboard`.
+- 2026-07-04: [M6] Promoted `runtime_nested_text_runs.riv` by admitting
+  passive `NestedArtboard`/`NestedStateMachine` siblings around static text;
+  the existing nested artboard draw path and text paint preallocation already
+  matched C++ structurally once the text gate was removed. `make
+  golden-compare` moved to `exact=144`, `exact-segments=465`,
+  `unsupported-feature=150`, and parked `M6=107 gated=7 harness=36`; next
+  start the high-frequency static text data-binding blocker with
+  `bankcard.riv`.

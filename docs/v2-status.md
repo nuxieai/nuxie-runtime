@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 461 across 140 exact files
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=112 gated=7 harness=36
+- Exact segments (file × sample): 462 across 141 exact files
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=111 gated=7 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -22,18 +22,17 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Start `text_stroke_test.riv`: after the opacity slice promoted
-   `text_opacity_modifier.riv`, this fixture now fails first on a static-text
-   sibling `DashPath` global 10. Reopen it through the existing shape
-   stroke/dash paint path, then continue to text `Stroke` paint behavior if
-   exposed.
+1. Start `vertical_align_ellipsis.riv`: after the text-stroke slice promoted
+   `text_stroke_test.riv`, this fixture now reaches the static text layout
+   gate `ellipsis across multiple authored lines`. Reopen it through the
+   fixed-size vertical-align/ellipsis placement path; do not treat it as a
+   stroke follow-up.
 2. Keep follow-path text files parked behind `TextFollowPathModifier` and text
    data-binding blockers; `text_follow_path_shape_length.riv` currently fails
    first on text data binding before it reaches follow-path drawing.
-3. Keep `vertical_align_ellipsis.riv` parked for now: temporarily admitting
-   sibling `Stroke` reaches draw but diverges on fixed-size vertical
-   align/ellipsis placement, so it should reopen with vertical-align text
-   layout, not as a stroke-only change.
+3. Keep `text_vertical_trim_test.riv` parked behind text data binding; it
+   currently fails first on `static text subset does not support text data
+   binding`.
 4. Keep `new_text.riv` parked for now: it has five
    `Text` objects, multiple runs/styles, gradients/strokes, clipping, and text
    keyframes, so it is not the next narrow static tracer.
@@ -127,9 +126,10 @@ the only memory the next session has. Update it every commit.
   and translation/rotation/opacity `TextModifierGroup` over C++-style
   `TextModifierRange` character, character-excluding-space, word, and static
   line range maps with runId targeting and optional cubic range
-  interpolation, including C++-ordered opacity buckets. Shape/follow-path/
-  scale/origin modifiers, text strokes/effects, richer layout, and text
-  input/editing remain M6 text
+  interpolation, including C++-ordered opacity buckets, plus solid fill/stroke
+  `TextStylePaint` drawing with DashPath stroke effects. Shape/follow-path/
+  scale/origin modifiers, gradient/feather/other text effects, richer layout,
+  and text input/editing remain M6 text
   diagnostics.
 - `TransformConstraint` currently covers Text constraint bounds for the
   supported static Text subset plus the default empty
@@ -372,3 +372,10 @@ the only memory the next session has. Update it every commit.
   `exact=140`, `exact-segments=461`, `unsupported-feature=155`, and parked
   `M6=112 gated=7 harness=36`; next reopen `text_stroke_test.riv`, which now
   fails first on a static-text sibling `DashPath`.
+- 2026-07-04: [M6] Promoted `text_stroke_test.riv` by admitting solid
+  `Stroke` paints on `TextStylePaint`, routing DashPath effects through the
+  existing shape stroke-effect path, and matching C++'s per-style text
+  paint-pool allocation. `make golden-compare` moved to `exact=141`,
+  `exact-segments=462`, `unsupported-feature=154`, and parked
+  `M6=111 gated=7 harness=36`; next reopen `vertical_align_ellipsis.riv`,
+  which now fails first on ellipsis across multiple authored lines.

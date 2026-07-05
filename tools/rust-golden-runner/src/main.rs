@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use rive_binary::{RuntimeFile, read_runtime_file};
 use rive_graph::{ArtboardGraph, GraphFile};
 use rive_render_api::RecordingFactory;
@@ -119,19 +119,30 @@ fn run() -> Result<String> {
             &mut path_cache,
         )?;
         factory.add_sample(*sample);
-        instance.draw_prepared_static_artboard_with_render_cache(
-            &runtime,
-            artboard,
-            &graph.artboards,
-            &mut factory,
-            &mut renderer,
-            &mut paint_cache,
-            &mut path_cache,
-        )?;
+        instance
+            .draw_prepared_static_artboard_with_render_cache(
+                &runtime,
+                artboard,
+                &graph.artboards,
+                &mut factory,
+                &mut renderer,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .map_err(unsupported_static_text_draw_error)?;
         factory.add_frame();
     }
 
     Ok(factory.stream())
+}
+
+fn unsupported_static_text_draw_error(error: anyhow::Error) -> anyhow::Error {
+    let message = format!("{error:#}");
+    if message.contains("static text subset") {
+        anyhow!("unsupported: text in Rust golden runner ({message})")
+    } else {
+        error
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

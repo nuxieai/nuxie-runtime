@@ -4,7 +4,9 @@ use harfrust::{
     Tag as HarfTag, UnicodeBuffer,
 };
 use rive_binary::RuntimeFile;
-use rive_graph::{ArtboardGraph, ShapePaintContainerNode, ShapePaintKind, ShapePaintStateNode};
+use rive_graph::{
+    ArtboardGraph, ShapePaintContainerNode, ShapePaintKind, ShapePaintPathKind, ShapePaintStateNode,
+};
 use skrifa::instance::{LocationRef, Size};
 use skrifa::outline::pen::PathStyle;
 use skrifa::outline::{DrawSettings, OutlinePen};
@@ -75,11 +77,16 @@ pub(crate) fn runtime_text_shape_paint_commands(
 
     let mut commands = Vec::new();
     for (style, path_buckets) in slice.styles.iter().zip(path_buckets_by_style) {
+        let mut allocated_text_paint_pool = false;
         for path_bucket in order_opacity_buckets_like_cpp(path_buckets) {
             if path_bucket.commands.is_empty() {
                 continue;
             }
             commands.extend(style.container.paints.iter().filter_map(|paint| {
+                let mut path_commands = path_bucket.commands.clone();
+                if paint.path_kind == Some(ShapePaintPathKind::World) {
+                    transform_path_commands(&mut path_commands, shape_world);
+                }
                 let mut command = runtime_shape_paint_command(
                     instance,
                     paint,
@@ -87,12 +94,16 @@ pub(crate) fn runtime_text_shape_paint_commands(
                     needs_save_operation,
                     render_opacity * path_bucket.opacity,
                     shape_world,
-                    path_bucket.commands.clone(),
+                    path_commands,
                 )?;
                 if command.paint_type == RuntimeShapePaintKind::Fill {
                     command.path_kind = RuntimeShapePaintPathKind::LocalClockwise;
                 }
                 command.uses_temporary_paint = path_bucket.opacity != 1.0;
+                if !command.uses_temporary_paint && !allocated_text_paint_pool {
+                    command.allocates_text_paint_pool = true;
+                    allocated_text_paint_pool = true;
+                }
                 Some(command)
             }));
         }
@@ -219,6 +230,7 @@ impl<'a> StaticTextSlice<'a> {
                         | "ClippingShape"
                         | "SolidColor"
                         | "Fill"
+                        | "Stroke"
                         | "Backboard"
                         | "RootBone"
                         | "Skin"
@@ -228,6 +240,8 @@ impl<'a> StaticTextSlice<'a> {
                         | "KeyedProperty"
                         | "LinearAnimation"
                         | "CubicEaseInterpolator"
+                        | "DashPath"
+                        | "Dash"
                         | "KeyFrameColor"
                         | "KeyFrameBool"
                         | "TransformConstraint"
@@ -971,24 +985,35 @@ impl<'a> StaticTextStyle<'a> {
             .iter()
             .find(|container| container.local_id == style_local)
             .context("TextStylePaint shape paint container is missing")?;
-        if container.paints.len() != 1 {
+        if container.paints.is_empty() {
             bail!(
-                "static text subset requires one TextStylePaint paint, found {}",
+                "static text subset requires at least one TextStylePaint paint, found {}",
                 container.paints.len()
             );
         }
-        let paint = &container.paints[0];
-        if paint.paint_type != ShapePaintKind::Fill {
-            bail!("static text subset only supports Fill text paints");
-        }
-        if !matches!(
-            paint.paint_state,
-            Some(ShapePaintStateNode::SolidColor { .. })
-        ) {
-            bail!("static text subset only supports solid text fill");
-        }
-        if paint.feather.is_some() || !paint.effects.is_empty() {
-            bail!("static text subset does not support text paint effects");
+        for paint in &container.paints {
+            if !matches!(
+                paint.paint_type,
+                ShapePaintKind::Fill | ShapePaintKind::Stroke
+            ) {
+                bail!("static text subset only supports Fill/Stroke text paints");
+            }
+            if !matches!(
+                paint.paint_state,
+                Some(ShapePaintStateNode::SolidColor { .. })
+            ) {
+                bail!("static text subset only supports solid text fill/stroke");
+            }
+            if paint.feather.is_some() {
+                bail!("static text subset does not support text paint feather");
+            }
+            if paint
+                .effects
+                .iter()
+                .any(|effect| effect.type_name != "DashPath")
+            {
+                bail!("static text subset only supports DashPath text paint effects");
+            }
         }
 
         let style = runtime
@@ -1696,6 +1721,29 @@ fn append_opacity_bucket(
         bucket.commands.extend(commands);
     } else {
         buckets.push(StaticTextPathBucket { opacity, commands });
+    }
+}
+
+fn transform_path_commands(commands: &mut [RuntimePathCommand], transform: Mat2D) {
+    for command in commands {
+        match command {
+            RuntimePathCommand::Move { x, y } | RuntimePathCommand::Line { x, y } => {
+                (*x, *y) = transform.transform_point(*x, *y);
+            }
+            RuntimePathCommand::Cubic {
+                x1,
+                y1,
+                x2,
+                y2,
+                x3,
+                y3,
+            } => {
+                (*x1, *y1) = transform.transform_point(*x1, *y1);
+                (*x2, *y2) = transform.transform_point(*x2, *y2);
+                (*x3, *y3) = transform.transform_point(*x3, *y3);
+            }
+            RuntimePathCommand::Close => {}
+        }
     }
 }
 

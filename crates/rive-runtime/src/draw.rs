@@ -1112,6 +1112,7 @@ pub struct RuntimeShapePaintCommand {
     pub has_effect_path: bool,
     pub needs_save_operation: bool,
     pub uses_temporary_paint: bool,
+    pub allocates_text_paint_pool: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1566,6 +1567,7 @@ fn runtime_background_shape_paint_command(
         has_effect_path: false,
         needs_save_operation: true,
         uses_temporary_paint: false,
+        allocates_text_paint_pool: false,
     })
 }
 
@@ -1598,6 +1600,7 @@ fn runtime_prepare_gradient_paint_command(
         has_effect_path: false,
         needs_save_operation: false,
         uses_temporary_paint: false,
+        allocates_text_paint_pool: false,
     }
 }
 
@@ -1746,7 +1749,7 @@ fn runtime_draw_command(
         if saved && paint.needs_save_operation {
             renderer.restore();
         }
-        if draws_text && !paint.uses_temporary_paint {
+        if draws_text && paint.allocates_text_paint_pool {
             let _ = factory.make_render_paint();
         }
     }
@@ -2320,6 +2323,7 @@ pub(crate) fn runtime_shape_paint_command(
         has_effect_path,
         needs_save_operation,
         uses_temporary_paint: false,
+        allocates_text_paint_pool: false,
     })
 }
 

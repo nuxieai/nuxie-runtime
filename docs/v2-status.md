@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 505 across 184 exact files
-- Current compare: `make golden-compare` reports diverges=9, unsupported-feature=102, not-yet=0
+- Exact segments (file × sample): 506 across 185 exact files
+- Current compare: `make golden-compare` reports diverges=8, unsupported-feature=102, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=58 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
@@ -23,18 +23,14 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue the dedicated text/layout draw slice with `follow_path_path.riv`,
-   then recheck `data_bind_test_cmdq.riv` and `saturation.riv`. `new_text.riv`
-   promoted after static-font outline extraction matched C++ under epsilon,
-   but `follow_path_path.riv` now first diverges on a follow-path text
-   transform, not the static-font contour start.
-2. Keep `follow_path_path.riv` and `data_bind_test_cmdq.riv` parked as known
-   M6 divergences until that slice.
-   `follow_path_path.riv` now reaches draw after clearing stale
-   `FollowPathConstraint` and cubic vertex static-text gates, but its first
-   diff is the follow-path text transform. `data_bind_test_cmdq.riv`
-   now has matching local-id layout boxes and matching command-queue text
-   transform; its remaining diff is the glyph payload for `Update Random Vals`.
+1. Continue the dedicated text/layout draw slice by rechecking
+   `data_bind_test_cmdq.riv`, then `saturation.riv`. `follow_path_path.riv`
+   promoted after text draw started respecting constraint-written world
+   transforms when no layout ancestor is involved.
+2. Keep `data_bind_test_cmdq.riv` parked as a known M6 divergence until that
+   slice. It now has matching local-id layout boxes and matching command-queue
+   text transform; its remaining diff is the glyph payload for
+   `Update Random Vals`.
 3. Keep `spotify_kids_app_icon.riv` parked as a known M6 draw-order/background
    divergence: after cubic path vertex sibling admission, Rust reaches draw but
    emits a full-artboard background before C++'s centered rounded icon stream.
@@ -59,13 +55,6 @@ the only memory the next session has. Update it every commit.
 
 ## Known Divergences
 
-- `follow_path_path.riv`: after admitting static text siblings
-  `FollowPathConstraint`, `CubicDetachedVertex`, `CubicAsymmetricVertex`, and
-  `CubicMirroredVertex`, Rust reaches draw. After static-font outline
-  extraction was corrected, the first focused diff is now a follow-path text
-  transform (`[0.647144794,0.76236707,-0.76236707,0.647144794,41.1679688,131.449219]`
-  in C++ versus an unrotated lower transform in Rust), so the next slice is
-  text-follow-path placement, not static outline contour ordering.
 - `fit_font_size_test.riv`: after admitting source-to-target
   `TextStylePaint.fontSize`, `Text.overflowValue`, and
   `LayoutComponent.height` binds through static text, Rust reaches draw but
@@ -950,7 +939,7 @@ the only memory the next session has. Update it every commit.
   text/layout behavior must stay visible as diagnostics or divergences.
   `make golden-compare` reports `exact=178`, `exact-segments=499`,
   `diverges=16`, `unsupported-feature=101`, `not-yet=0`, and parked
-  `M6=57 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
+  `M6=58 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
   `transition_duration_bind_nested.riv` as a focused nested
   transition-duration/data-bind divergence.
 - 2026-07-05: [M6] Promoted `transition_duration_bind_nested.riv` by mirroring
@@ -1045,3 +1034,11 @@ the only memory the next session has. Update it every commit.
   `not-yet=0`, and parked `M6=58 gated=8 harness=36`; `cargo test
   --workspace` passes. Next target is `follow_path_path.riv`'s follow-path
   text transform.
+- 2026-07-05: [M6] Promoted `follow_path_path.riv` by letting text draw use
+  constraint-written component world transforms unless a layout ancestor needs
+  the #V2-7 layout-bounds path. Focused streams now match all four follow-path
+  text transforms under the golden epsilon. `make golden-compare` reports
+  `exact=185`, `exact-segments=506`, `diverges=8`,
+  `unsupported-feature=102`, `not-yet=0`, and parked
+  `M6=57 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
+  `data_bind_test_cmdq.riv`.

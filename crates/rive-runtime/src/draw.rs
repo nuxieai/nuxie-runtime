@@ -962,8 +962,24 @@ impl ArtboardInstance {
         let Some(parent_local) = component.parent_local else {
             return component.transform.world_transform;
         };
+        if layout_bounds.is_none() || !self.runtime_parent_chain_has_layout_component(parent_local) {
+            return component.transform.world_transform;
+        }
         self.runtime_component_world_transform_with_bounds(parent_local, graph, layout_bounds)
             .multiply(component.transform.local_transform)
+    }
+
+    fn runtime_parent_chain_has_layout_component(&self, mut local_id: usize) -> bool {
+        while let Some(component) = self.component(local_id) {
+            if component.type_name == "LayoutComponent" {
+                return true;
+            }
+            let Some(parent_local) = component.parent_local else {
+                return false;
+            };
+            local_id = parent_local;
+        }
+        false
     }
 
     fn runtime_layout_component_world_transform(

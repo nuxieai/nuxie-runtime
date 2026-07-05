@@ -733,6 +733,17 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
+    if let Some(scroll_constraint) = artboard
+        .local_objects
+        .iter()
+        .find(|object| object.type_name == Some("ScrollConstraint"))
+    {
+        bail!(
+            "unsupported: scroll-constraints in Rust golden runner (global {})",
+            scroll_constraint.global_id
+        );
+    }
+
     if let Some((text, reason)) = artboard
         .local_objects
         .iter()
@@ -811,17 +822,6 @@ fn ensure_static_draw_supported_for_artboard(
     {
         bail!(
             "unsupported: scripted-path-effects in Rust golden runner ({path_effect_type} global {global_id})"
-        );
-    }
-
-    if let Some(scroll_constraint) = artboard
-        .local_objects
-        .iter()
-        .find(|object| object.type_name == Some("ScrollConstraint"))
-    {
-        bail!(
-            "unsupported: scroll-constraints in Rust golden runner (global {})",
-            scroll_constraint.global_id
         );
     }
 

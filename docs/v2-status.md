@@ -23,11 +23,11 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Probe `scroll_snap.riv` as the next `rust-runner-unsupported:text` M6
-   gate. Confirm whether the first direct Rust stop is really static text or
-   whether the file should move to the existing scroll/layout runtime queue;
-   remove only stale static-text gates needed to reach draw, then fix or retag
-   the first real blocker.
+1. Probe `stateful_source_switch.riv` as the next
+   `rust-runner-unsupported:text` M6 gate: direct Rust currently stops on a
+   static-text data-binding target `Ellipse` global 54. Compare the target
+   property against C++ import/draw behavior, admit only if it is a finite
+   import-time/static draw fact, then fix or retag the first real blocker.
 2. Keep `data_bind_test_cmdq.riv`, `data_binding_test.riv`,
    `data_converter_to_number.riv`, `scripted_data_context.riv`,
    `state_transition_fire_trigger.riv`, and `trigger_based_listeners.riv`
@@ -243,7 +243,8 @@ the only memory the next session has. Update it every commit.
   `TransformComponent::constraintBounds()` path. LayoutComponent bounds remain
   parked behind M6 layout diagnostics.
 - Scroll-constraint corpus files are parked behind M6 layout/runtime support
-  via `rust-runner-unsupported:scroll-constraints`. C++
+  via `rust-runner-unsupported:scroll-constraints`; `scroll_snap.riv` joined
+  this queue after its stale static-text sibling diagnostic was corrected. C++
   `src/constraints/scrolling/scroll_constraint.cpp` reads
   `LayoutComponent` dimensions, layout-provider child bounds, physics state,
   and optional component-list virtualization, so the current corpus has no
@@ -903,3 +904,12 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=103`, `not-yet=0`, and parked
   `M6=59 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
   `scroll_snap.riv`.
+- 2026-07-05: [M6] Reclassified `scroll_snap.riv` by moving the existing
+  `ScrollConstraint` runner preflight ahead of the static-text gate, so the
+  first Rust diagnostic is now `rust-runner-unsupported:scroll-constraints`
+  for global 93 instead of a stale sibling-text error. This confirms the file
+  belongs with the scroll/layout runtime queue, not the text-layout queue.
+  `make golden-compare` reports `exact=177`, `exact-segments=498`,
+  `diverges=15`, `unsupported-feature=103`, `not-yet=0`, and parked
+  `M6=59 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
+  `stateful_source_switch.riv`.

@@ -13,6 +13,12 @@ use rive_render_api::{
 };
 use rive_schema::definition_by_name;
 use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
+use taffy::prelude::{
+    AlignContent, AlignItems, AlignSelf, AvailableSpace, Dimension, Display as TaffyDisplay,
+    FlexDirection, FlexWrap, JustifyContent, LengthPercentage, LengthPercentageAuto, NodeId,
+    Position, Rect, Size, Style, TaffyTree,
+};
+use taffy::style::Direction as TaffyDirection;
 
 use crate::properties::{
     RuntimeLayoutComputedProperty, property_key_for_name, shape_paint_is_visible_property_key,
@@ -952,6 +958,15 @@ impl ArtboardInstance {
         cache: &mut BTreeMap<usize, RuntimeLayoutBounds>,
         visiting: &mut BTreeSet<usize>,
     ) -> Option<RuntimeLayoutBounds> {
+        if let Some(bounds) = TaffyRuntimeLayoutEngine.compute_bounds(self, graph) {
+            for (local, bounds) in &bounds {
+                cache.entry(*local).or_insert(*bounds);
+            }
+            if let Some(bounds) = bounds.get(&layout_local).copied() {
+                return Some(bounds);
+            }
+        }
+
         self.runtime_root_artboard_layout_bounds_memo(layout_local, graph, cache, visiting)
             .or_else(|| {
                 self.runtime_absolute_layout_component_bounds_memo(
@@ -2346,6 +2361,740 @@ struct RuntimeLayoutBounds {
     y: f32,
     width: f32,
     height: f32,
+}
+
+trait RuntimeLayoutEngine {
+    fn compute_bounds(
+        &self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+    ) -> Option<BTreeMap<usize, RuntimeLayoutBounds>>;
+}
+
+struct TaffyRuntimeLayoutEngine;
+
+#[derive(Default)]
+struct TaffyLayoutBuild {
+    nodes_by_local: BTreeMap<usize, NodeId>,
+    children_by_local: BTreeMap<usize, Vec<usize>>,
+}
+
+impl RuntimeLayoutEngine for TaffyRuntimeLayoutEngine {
+    fn compute_bounds(
+        &self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+    ) -> Option<BTreeMap<usize, RuntimeLayoutBounds>> {
+        // Ported from C++ `src/layout_component.cpp`
+        // `syncStyle`/`syncLayoutChildren`/`calculateLayoutInternal`: translate
+        // Rive layout style into the delegated layout engine, then expose the
+        // settled layout boxes back to draw/world/computed-value code.
+        let root = graph
+            .components
+            .iter()
+            .find(|component| component.local_id == 0)?;
+        if root.type_name != "Artboard" {
+            return None;
+        }
+        if self.root_uses_hug_size(instance)? {
+            return None;
+        }
+
+        let mut taffy = TaffyTree::new();
+        let mut build = TaffyLayoutBuild::default();
+        let root_node = self.build_node(instance, graph, 0, true, &mut taffy, &mut build)?;
+        taffy
+            .compute_layout(
+                root_node,
+                Size {
+                    width: AvailableSpace::Definite(instance.width),
+                    height: AvailableSpace::Definite(instance.height),
+                },
+            )
+            .ok()?;
+
+        let mut bounds = BTreeMap::new();
+        self.collect_bounds(0, 0.0, 0.0, &taffy, &build, &mut bounds)?;
+        Some(bounds)
+    }
+}
+
+impl TaffyRuntimeLayoutEngine {
+    fn root_uses_hug_size(&self, instance: &ArtboardInstance) -> Option<bool> {
+        let Some(style_local) = instance.runtime_layout_component_style_local(0) else {
+            return Some(false);
+        };
+        const LAYOUT_SCALE_TYPE_HUG: u64 = 2;
+        Some(
+            instance.runtime_layout_axis_scale(style_local, true) == LAYOUT_SCALE_TYPE_HUG
+                || instance.runtime_layout_axis_scale(style_local, false) == LAYOUT_SCALE_TYPE_HUG,
+        )
+    }
+
+    fn build_node(
+        &self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        local: usize,
+        parent_is_row: bool,
+        taffy: &mut TaffyTree,
+        build: &mut TaffyLayoutBuild,
+    ) -> Option<NodeId> {
+        let component = graph
+            .components
+            .iter()
+            .find(|component| component.local_id == local)?;
+        if !matches!(component.type_name, "Artboard" | "LayoutComponent") {
+            return None;
+        }
+        if self.needs_unimplemented_measure(instance, graph, local)? {
+            return None;
+        }
+
+        let style = self.style_for_node(instance, graph, local, parent_is_row)?;
+        let is_row = instance
+            .runtime_layout_component_style_local(local)
+            .is_none_or(|style_local| instance.runtime_layout_style_is_row(style_local));
+        let mut child_nodes = Vec::new();
+        let mut child_locals = Vec::new();
+        for child_local in &component.children {
+            if instance.runtime_component_is_effectively_collapsed(*child_local) {
+                continue;
+            }
+            let Some(child) = graph
+                .components
+                .iter()
+                .find(|component| component.local_id == *child_local)
+            else {
+                continue;
+            };
+            match child.type_name {
+                "LayoutComponent" => {
+                    let child_node =
+                        self.build_node(instance, graph, *child_local, is_row, taffy, build)?;
+                    child_nodes.push(child_node);
+                    child_locals.push(*child_local);
+                }
+                "NestedArtboardLayout" | "ArtboardComponentList" => return None,
+                _ => {}
+            }
+        }
+
+        let node = if child_nodes.is_empty() {
+            taffy.new_leaf(style).ok()?
+        } else {
+            taffy.new_with_children(style, &child_nodes).ok()?
+        };
+        build.nodes_by_local.insert(local, node);
+        build.children_by_local.insert(local, child_locals);
+        Some(node)
+    }
+
+    fn collect_bounds(
+        &self,
+        local: usize,
+        parent_x: f32,
+        parent_y: f32,
+        taffy: &TaffyTree,
+        build: &TaffyLayoutBuild,
+        bounds: &mut BTreeMap<usize, RuntimeLayoutBounds>,
+    ) -> Option<()> {
+        let node = *build.nodes_by_local.get(&local)?;
+        let layout = taffy.layout(node).ok()?;
+        let x = parent_x + layout.location.x;
+        let y = parent_y + layout.location.y;
+        bounds.insert(
+            local,
+            RuntimeLayoutBounds {
+                x,
+                y,
+                width: layout.size.width,
+                height: layout.size.height,
+            },
+        );
+        for child_local in build.children_by_local.get(&local)? {
+            self.collect_bounds(*child_local, x, y, taffy, build, bounds)?;
+        }
+        Some(())
+    }
+
+    fn style_for_node(
+        &self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        local: usize,
+        parent_is_row: bool,
+    ) -> Option<Style> {
+        let is_root = local == 0;
+        let style_local = instance.runtime_layout_component_style_local(local);
+        if style_local.is_none() && !is_root {
+            return None;
+        }
+
+        let mut style = Style {
+            display: if style_local.is_some_and(|style_local| {
+                instance.runtime_layout_style_uint_default(style_local, "displayValue", 0) == 1
+            }) {
+                TaffyDisplay::None
+            } else {
+                TaffyDisplay::Flex
+            },
+            size: if is_root {
+                Size::from_lengths(instance.width, instance.height)
+            } else {
+                let style_local = style_local?;
+                Size {
+                    width: self.axis_dimension(instance, graph, local, style_local, true)?,
+                    height: self.axis_dimension(instance, graph, local, style_local, false)?,
+                }
+            },
+            ..Default::default()
+        };
+
+        let Some(style_local) = style_local else {
+            return Some(style);
+        };
+
+        style.position =
+            if instance.runtime_layout_style_uint_default(style_local, "positionTypeValue", 1) == 2
+            {
+                Position::Absolute
+            } else {
+                Position::Relative
+            };
+        style.direction =
+            match instance.runtime_layout_style_uint_default(style_local, "directionValue", 0) {
+                2 => TaffyDirection::Rtl,
+                _ => TaffyDirection::Ltr,
+            };
+        style.flex_direction = match instance.runtime_layout_style_uint_default(
+            style_local,
+            "flexDirectionValue",
+            2,
+        ) {
+            0 => FlexDirection::Column,
+            1 => FlexDirection::ColumnReverse,
+            3 => FlexDirection::RowReverse,
+            _ => FlexDirection::Row,
+        };
+        style.flex_wrap =
+            match instance.runtime_layout_style_uint_default(style_local, "flexWrapValue", 0) {
+                1 => FlexWrap::Wrap,
+                2 => FlexWrap::WrapReverse,
+                _ => FlexWrap::NoWrap,
+            };
+        style.gap = Size {
+            width: self.length_percentage_style(
+                instance,
+                style_local,
+                "gapHorizontal",
+                "gapHorizontalUnitsValue",
+            )?,
+            height: self.length_percentage_style(
+                instance,
+                style_local,
+                "gapVertical",
+                "gapVerticalUnitsValue",
+            )?,
+        };
+        style.padding = Rect {
+            left: self.length_percentage_style(
+                instance,
+                style_local,
+                "paddingLeft",
+                "paddingLeftUnitsValue",
+            )?,
+            right: self.length_percentage_style(
+                instance,
+                style_local,
+                "paddingRight",
+                "paddingRightUnitsValue",
+            )?,
+            top: self.length_percentage_style(
+                instance,
+                style_local,
+                "paddingTop",
+                "paddingTopUnitsValue",
+            )?,
+            bottom: self.length_percentage_style(
+                instance,
+                style_local,
+                "paddingBottom",
+                "paddingBottomUnitsValue",
+            )?,
+        };
+        style.border = Rect {
+            left: self.length_percentage_style(
+                instance,
+                style_local,
+                "borderLeft",
+                "borderLeftUnitsValue",
+            )?,
+            right: self.length_percentage_style(
+                instance,
+                style_local,
+                "borderRight",
+                "borderRightUnitsValue",
+            )?,
+            top: self.length_percentage_style(
+                instance,
+                style_local,
+                "borderTop",
+                "borderTopUnitsValue",
+            )?,
+            bottom: self.length_percentage_style(
+                instance,
+                style_local,
+                "borderBottom",
+                "borderBottomUnitsValue",
+            )?,
+        };
+        style.margin = Rect {
+            left: self.length_percentage_auto_style(
+                instance,
+                style_local,
+                "marginLeft",
+                "marginLeftUnitsValue",
+            )?,
+            right: self.length_percentage_auto_style(
+                instance,
+                style_local,
+                "marginRight",
+                "marginRightUnitsValue",
+            )?,
+            top: self.length_percentage_auto_style(
+                instance,
+                style_local,
+                "marginTop",
+                "marginTopUnitsValue",
+            )?,
+            bottom: self.length_percentage_auto_style(
+                instance,
+                style_local,
+                "marginBottom",
+                "marginBottomUnitsValue",
+            )?,
+        };
+        style.inset = Rect {
+            left: self.length_percentage_auto_style(
+                instance,
+                style_local,
+                "positionLeft",
+                "positionLeftUnitsValue",
+            )?,
+            right: self.length_percentage_auto_style(
+                instance,
+                style_local,
+                "positionRight",
+                "positionRightUnitsValue",
+            )?,
+            top: self.length_percentage_auto_style(
+                instance,
+                style_local,
+                "positionTop",
+                "positionTopUnitsValue",
+            )?,
+            bottom: self.length_percentage_auto_style(
+                instance,
+                style_local,
+                "positionBottom",
+                "positionBottomUnitsValue",
+            )?,
+        };
+        style.min_size = Size {
+            width: self.dimension_style(
+                instance,
+                style_local,
+                "minWidth",
+                "minWidthUnitsValue",
+                false,
+            )?,
+            height: self.dimension_style(
+                instance,
+                style_local,
+                "minHeight",
+                "minHeightUnitsValue",
+                false,
+            )?,
+        };
+        style.max_size = Size {
+            width: self.dimension_style(
+                instance,
+                style_local,
+                "maxWidth",
+                "maxWidthUnitsValue",
+                true,
+            )?,
+            height: self.dimension_style(
+                instance,
+                style_local,
+                "maxHeight",
+                "maxHeightUnitsValue",
+                true,
+            )?,
+        };
+        let aspect_ratio = instance
+            .runtime_layout_style_double(style_local, "aspectRatio")
+            .unwrap_or(0.0);
+        if aspect_ratio > 0.0 {
+            style.aspect_ratio = Some(aspect_ratio);
+        }
+
+        self.apply_alignment(instance, style_local, &mut style);
+        self.apply_flex_item_style(instance, local, style_local, parent_is_row, &mut style)?;
+        Some(style)
+    }
+
+    fn axis_dimension(
+        &self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        layout_local: usize,
+        style_local: usize,
+        width_axis: bool,
+    ) -> Option<Dimension> {
+        let value = instance.runtime_layout_component_dimension(
+            layout_local,
+            if width_axis { "width" } else { "height" },
+        );
+        let units = self.effective_units(instance, graph, layout_local, style_local, width_axis)?;
+        self.dimension_from_unit(value.max(0.0), units)
+    }
+
+    fn effective_units(
+        &self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        layout_local: usize,
+        style_local: usize,
+        width_axis: bool,
+    ) -> Option<u64> {
+        let scale = instance.runtime_layout_axis_scale(style_local, width_axis);
+        let stored = instance.runtime_layout_axis_units(style_local, width_axis);
+        let absolute = instance.runtime_layout_component_is_absolute(layout_local);
+        if absolute && scale != 2 {
+            return Some(stored);
+        }
+        if scale != 0 {
+            return Some(3);
+        }
+        if matches!(stored, 1 | 2) {
+            return Some(stored);
+        }
+        if self.is_legacy_hug_encoding(instance, graph, layout_local, style_local)? {
+            Some(3)
+        } else {
+            Some(1)
+        }
+    }
+
+    fn is_legacy_hug_encoding(
+        &self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        layout_local: usize,
+        style_local: usize,
+    ) -> Option<bool> {
+        let width_fixed = instance.runtime_layout_axis_scale(style_local, true) == 0;
+        let height_fixed = instance.runtime_layout_axis_scale(style_local, false) == 0;
+        let intrinsic = instance
+            .runtime_layout_style_bool(style_local, "intrinsicallySizedValue")
+            .unwrap_or(false);
+        Some(
+            width_fixed
+                && height_fixed
+                && intrinsic
+                && self
+                    .layout_provider_children(instance, graph, layout_local)?
+                    .is_empty(),
+        )
+    }
+
+    fn apply_flex_item_style(
+        &self,
+        instance: &ArtboardInstance,
+        layout_local: usize,
+        style_local: usize,
+        parent_is_row: bool,
+        style: &mut Style,
+    ) -> Option<()> {
+        let width_scale = instance.runtime_layout_axis_scale(style_local, true);
+        let height_scale = instance.runtime_layout_axis_scale(style_local, false);
+        let main_scale = if parent_is_row {
+            width_scale
+        } else {
+            height_scale
+        };
+        let cross_scale = if parent_is_row {
+            height_scale
+        } else {
+            width_scale
+        };
+
+        match main_scale {
+            0 | 2 => {
+                style.flex_grow = 0.0;
+                style.flex_shrink = 0.0;
+                style.flex_basis = Dimension::auto();
+            }
+            1 => {
+                style.flex_grow =
+                    instance.runtime_layout_axis_fraction(layout_local, parent_is_row);
+                style.flex_shrink = style.flex_grow;
+                let basis = instance
+                    .runtime_layout_style_double(style_local, "flexBasis")
+                    .unwrap_or(0.0);
+                let units = instance.runtime_layout_style_uint_default(
+                    style_local,
+                    "flexBasisUnitsValue",
+                    3,
+                );
+                style.flex_basis = self.dimension_from_unit(basis, units)?;
+            }
+            _ => return None,
+        }
+        style.align_self = match cross_scale {
+            1 => Some(AlignSelf::STRETCH),
+            0 | 2 => None,
+            _ => return None,
+        };
+        Some(())
+    }
+
+    fn apply_alignment(&self, instance: &ArtboardInstance, style_local: usize, style: &mut Style) {
+        let alignment = instance.runtime_layout_alignment_type(style_local);
+        let is_row = instance.runtime_layout_style_is_row(style_local);
+
+        match alignment {
+            0 | 1 | 2 => {
+                if is_row {
+                    style.align_items = Some(AlignItems::FLEX_START);
+                    style.align_content = Some(AlignContent::FLEX_START);
+                } else {
+                    style.justify_content = Some(JustifyContent::FLEX_START);
+                }
+            }
+            3 | 4 | 5 => {
+                if is_row {
+                    style.align_items = Some(AlignItems::CENTER);
+                    style.align_content = Some(AlignContent::CENTER);
+                } else {
+                    style.justify_content = Some(JustifyContent::CENTER);
+                }
+            }
+            6 | 7 | 8 => {
+                if is_row {
+                    style.align_items = Some(AlignItems::FLEX_END);
+                    style.align_content = Some(AlignContent::FLEX_END);
+                } else {
+                    style.justify_content = Some(JustifyContent::FLEX_END);
+                }
+            }
+            _ => {}
+        }
+
+        match alignment {
+            0 | 3 | 6 => {
+                if is_row {
+                    style.justify_content = Some(JustifyContent::FLEX_START);
+                } else {
+                    style.align_items = Some(AlignItems::FLEX_START);
+                    style.align_content = Some(AlignContent::FLEX_START);
+                }
+            }
+            1 | 4 | 7 => {
+                if is_row {
+                    style.justify_content = Some(JustifyContent::CENTER);
+                } else {
+                    style.align_items = Some(AlignItems::CENTER);
+                    style.align_content = Some(AlignContent::CENTER);
+                }
+            }
+            2 | 5 | 8 => {
+                if is_row {
+                    style.justify_content = Some(JustifyContent::FLEX_END);
+                } else {
+                    style.align_items = Some(AlignItems::FLEX_END);
+                    style.align_content = Some(AlignContent::FLEX_END);
+                }
+            }
+            9 => {
+                style.align_items = Some(AlignItems::FLEX_START);
+                style.align_content = Some(AlignContent::FLEX_START);
+                style.justify_content = Some(JustifyContent::SPACE_BETWEEN);
+            }
+            10 => {
+                style.align_items = Some(AlignItems::CENTER);
+                style.align_content = Some(AlignContent::CENTER);
+                style.justify_content = Some(JustifyContent::SPACE_BETWEEN);
+            }
+            11 => {
+                style.align_items = Some(AlignItems::FLEX_END);
+                style.align_content = Some(AlignContent::FLEX_END);
+                style.justify_content = Some(JustifyContent::SPACE_BETWEEN);
+            }
+            _ => {}
+        }
+    }
+
+    fn needs_unimplemented_measure(
+        &self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        layout_local: usize,
+    ) -> Option<bool> {
+        let Some(style_local) = instance.runtime_layout_component_style_local(layout_local) else {
+            return Some(false);
+        };
+        if !self
+            .layout_provider_children(instance, graph, layout_local)?
+            .is_empty()
+        {
+            return Some(false);
+        }
+        let intrinsic = instance
+            .runtime_layout_style_bool(style_local, "intrinsicallySizedValue")
+            .unwrap_or(false);
+        let hugs_content = instance.runtime_layout_axis_scale(style_local, true) == 2
+            || instance.runtime_layout_axis_scale(style_local, false) == 2;
+        if !intrinsic && !hugs_content {
+            return Some(false);
+        }
+        let component = graph
+            .components
+            .iter()
+            .find(|component| component.local_id == layout_local)?;
+        Some(component.children.iter().any(|child_local| {
+            let child_type = graph
+                .components
+                .iter()
+                .find(|component| component.local_id == *child_local)
+                .map(|child| child.type_name);
+            !matches!(
+                child_type,
+                Some(
+                    "Fill"
+                        | "LinearGradient"
+                        | "RadialGradient"
+                        | "SolidColor"
+                        | "Stroke"
+                        | "LayoutComponentStyle"
+                )
+            )
+        }))
+    }
+
+    fn layout_provider_children(
+        &self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        layout_local: usize,
+    ) -> Option<Vec<usize>> {
+        let component = graph
+            .components
+            .iter()
+            .find(|component| component.local_id == layout_local)?;
+        Some(
+            component
+                .children
+                .iter()
+                .copied()
+                .filter(|child_local| {
+                    !instance.runtime_component_is_effectively_collapsed(*child_local)
+                })
+                .filter(|child_local| {
+                    graph
+                        .components
+                        .iter()
+                        .find(|component| component.local_id == *child_local)
+                        .is_some_and(|child| {
+                            matches!(
+                                child.type_name,
+                                "LayoutComponent"
+                                    | "NestedArtboardLayout"
+                                    | "ArtboardComponentList"
+                            )
+                        })
+                })
+                .collect(),
+        )
+    }
+
+    fn dimension_style(
+        &self,
+        instance: &ArtboardInstance,
+        style_local: usize,
+        value_name: &str,
+        unit_name: &str,
+        zero_undefined_is_auto: bool,
+    ) -> Option<Dimension> {
+        let value = instance
+            .runtime_layout_style_double(style_local, value_name)
+            .unwrap_or(0.0);
+        let units = instance.runtime_layout_style_uint_default(style_local, unit_name, 0);
+        if zero_undefined_is_auto && units == 0 && value.abs() <= f32::EPSILON {
+            return Some(Dimension::auto());
+        }
+        self.dimension_from_unit(value.max(0.0), units)
+    }
+
+    fn length_percentage_style(
+        &self,
+        instance: &ArtboardInstance,
+        style_local: usize,
+        value_name: &str,
+        unit_name: &str,
+    ) -> Option<LengthPercentage> {
+        let value = instance
+            .runtime_layout_style_double(style_local, value_name)
+            .unwrap_or(0.0);
+        let units = instance.runtime_layout_style_uint_default(style_local, unit_name, 0);
+        self.length_percentage_from_unit(value, units)
+    }
+
+    fn length_percentage_auto_style(
+        &self,
+        instance: &ArtboardInstance,
+        style_local: usize,
+        value_name: &str,
+        unit_name: &str,
+    ) -> Option<LengthPercentageAuto> {
+        let value = instance
+            .runtime_layout_style_double(style_local, value_name)
+            .unwrap_or(0.0);
+        let units = instance.runtime_layout_style_uint_default(style_local, unit_name, 0);
+        self.length_percentage_auto_from_unit(value, units)
+    }
+
+    fn dimension_from_unit(&self, value: f32, units: u64) -> Option<Dimension> {
+        match units {
+            2 => Some(Dimension::percent(value / 100.0)),
+            3 => Some(Dimension::auto()),
+            0 | 1 => Some(Dimension::length(value)),
+            _ => None,
+        }
+    }
+
+    fn length_percentage_from_unit(&self, value: f32, units: u64) -> Option<LengthPercentage> {
+        match units {
+            2 => Some(LengthPercentage::percent(value / 100.0)),
+            0 | 1 | 3 => Some(LengthPercentage::length(value)),
+            _ => None,
+        }
+    }
+
+    fn length_percentage_auto_from_unit(
+        &self,
+        value: f32,
+        units: u64,
+    ) -> Option<LengthPercentageAuto> {
+        match units {
+            2 => Some(LengthPercentageAuto::percent(value / 100.0)),
+            3 => Some(LengthPercentageAuto::auto()),
+            0 | 1 => Some(LengthPercentageAuto::length(value)),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]

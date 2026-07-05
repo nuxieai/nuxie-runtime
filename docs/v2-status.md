@@ -23,12 +23,12 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Implement the #V2-7 layout engine slice before reopening
-   `computed_values_test.riv`: add Taffy behind a layout trait, route the
-   existing simple root row/column cases through it, then use
-   `computed_values_test.riv` as the first corpus exerciser for nested
-   layout/computed-value text. Do not extend the hand-rolled flex math to
-   clear this file.
+1. Reopen `computed_values_test.riv` through the #V2-7 Taffy layout trait:
+   remove only the stale gates needed to reach draw, compare the direct
+   C++/Rust streams, and fix or retag the first real nested layout /
+   computed-value text blocker. Do not extend hand-rolled flex math; expand
+   the Taffy adapter only when the diff proves missing Rive style/provider
+   plumbing.
 2. Keep `new_text.riv` parked as a known M6 divergence until a dedicated text
    outline backend/canonicalization slice: gradient sibling admission now
    reaches draw, but Rust/Skrifa and C++ HarfBuzz emit a glyph contour with a
@@ -312,6 +312,13 @@ the only memory the next session has. Update it every commit.
   Yoga behavior-by-behavior — the V1 pattern — and is a tripwire. Files
   whose layouts diverge under Taffy verify in `tolerant` mode per the
   V2 map; do not pin Taffy against Yoga.
+- 2026-07-05: Layout trait contract: the #V2-7 layout adapter computes a
+  coherent whole-artboard layout snapshot from Rive style/component data and
+  either returns all supported `LayoutComponent` bounds for that snapshot or
+  refuses the tree. Runtime draw, world-transform, and computed-value code
+  consume those bounds; they must not mix Taffy-solved nodes with ad hoc
+  per-node flex fixes inside the same layout tree. `tolerant` verification
+  covers swapped-engine numeric geometry drift, not missing style plumbing.
 - 2026-07-05: `golden-compare` implements the #V2-7 manifest field
   `verification = "exact" | "tolerant(ε)" | "structural"` for exact corpus
   entries, defaulting omitted entries to `exact`; `generate-corpus` preserves
@@ -667,3 +674,13 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=120`, `not-yet=0`, and parked
   `M6=76 gated=8 harness=36`; next target is the Taffy-backed layout trait
   slice for `computed_values_test.riv`.
+- 2026-07-05: [M6] Routed supported `LayoutComponent` bounds through a
+  #V2-7 Taffy layout trait that computes coherent whole-artboard snapshots
+  from Rive style data, refuses nested artboard/component-list provider trees
+  this slice cannot model yet, and leaves the old hand-rolled helpers as
+  fallback only for refused trees. The existing simple root row/column layout
+  cases stay exact under the snapshot-first resolver. `make golden-compare`
+  remains `exact=172`, `exact-segments=493`, `diverges=3`,
+  `unsupported-feature=120`, `not-yet=0`, and parked
+  `M6=76 gated=8 harness=36`; `cargo test --workspace` passes. Next target:
+  reopen `computed_values_test.riv` through the Taffy-backed layout path.

@@ -6,8 +6,8 @@ the only memory the next session has. Update it every commit.
 ## Metric
 
 - Exact segments (file × sample): 496 across 175 exact files
-- Current compare: `make golden-compare` reports diverges=12, unsupported-feature=108, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=64 gated=8 harness=36
+- Current compare: `make golden-compare` reports diverges=13, unsupported-feature=107, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=63 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -23,7 +23,7 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Probe `interpolate_to_end.riv` as the next
+1. Probe `keyboard_listener.riv` as the next
    `rust-runner-unsupported:text` M6 gate: compare direct C++/Rust streams,
    remove only stale static-text gates needed to reach draw, and fix or retag
    the first real text/data-bind blocker. Do not start a general text layout
@@ -115,6 +115,14 @@ the only memory the next session has. Update it every commit.
 - `shared_viewmodel_instance.riv`: same newly-rendering shared-view-model text
   family; Rust emits extra nested text draw calls before the rectangle stream
   that C++ produces at sample 0.
+- `interpolate_to_end.riv`: after admitting nested child `TextValueRun.text`
+  converter groups through the runner gate and validating artboard property
+  bindings with stateful converter defaults, Rust reaches draw but keeps the
+  serialized fallback child text where C++ renders the data-bound/interpolated
+  numeric string. Focused first diff is the nested text path at transform
+  `[1,0,0,1,245.207031,58.4726562]`; C++ emits a longer cubic-heavy numeric
+  text path while Rust emits the shorter fallback `text` glyph payload. Parked
+  under `rust-runner-divergence:nested-child-text-converter-context`.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -835,3 +843,15 @@ the only memory the next session has. Update it every commit.
   `diverges=12`, `unsupported-feature=108`, `not-yet=0`, and parked
   `M6=64 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
   `interpolate_to_end.riv`.
+- 2026-07-05: [M6] Reopened `interpolate_to_end.riv` by admitting nested child
+  `TextValueRun.text` converter groups through the golden-runner gate and
+  letting artboard property-binding admission validate stateful converter
+  groups with `RuntimeDataBindGraphConverterState`. The file now reaches draw
+  and is parked as
+  `rust-runner-divergence:nested-child-text-converter-context`: focused streams
+  show C++ rendering the nested data-bound/interpolated numeric text at
+  `[1,0,0,1,245.207031,58.4726562]` while Rust still emits the serialized
+  fallback text glyph payload. `make golden-compare` reports `exact=175`,
+  `exact-segments=496`, `diverges=13`, `unsupported-feature=107`,
+  `not-yet=0`, and parked `M6=63 gated=8 harness=36`; `cargo test
+  --workspace` passes. Next target is `keyboard_listener.riv`.

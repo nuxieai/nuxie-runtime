@@ -274,13 +274,12 @@ fn artboard_property_binding_allows_converted_default(
     default_value: &RuntimeDataBindGraphValue,
     property_kind: FieldKind,
 ) -> bool {
-    if property_kind != FieldKind::String {
-        return false;
-    }
-    let Some(converter @ RuntimeDataBindGraphConverter::ToString { .. }) = converter else {
+    let Some(converter) = converter else {
         return false;
     };
-    runtime_data_bind_graph_convert_value(converter, default_value)
+    let mut state = RuntimeDataBindGraphConverterState::for_converter(Some(converter));
+    state
+        .convert_value(converter, default_value)
         .as_ref()
         .is_some_and(|value| artboard_property_binding_value_matches_kind(value, property_kind))
 }

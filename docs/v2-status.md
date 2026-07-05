@@ -26,30 +26,34 @@ the only memory the next session has. Update it every commit.
 1. Continue the painted `LayoutComponent` slice: root row/fill layout
    backgrounds and the empty nested clipped component-list override case are
    now exact through `artboard_list_overrides.riv`; `bankcard.riv` clears this
-   gate and is parked on `feather`. There are 17 remaining M6
+   gate and is parked on `feather`. There are 16 remaining M6
    `rust-runner-unsupported:layout-component-paint` entries. Start with
-   `collapse_data_binds.riv`, which stops on `LayoutComponent` paint global
-   31.
-2. Keep `number_to_list_nested_children.riv` as the current M6 layout
+   `component_list_child_origin.riv`, which stops on `LayoutComponent` paint
+   global 19.
+2. Keep `collapse_data_binds.riv` parked behind
+   `layout-computed-values`: it data-binds `LayoutComponent.computedLocalX`
+   into text, so the missing work is computed layout geometry/data-bind
+   propagation rather than plain layout paint.
+3. Keep `number_to_list_nested_children.riv` as the current M6 layout
    divergence: Rust now runs it, but the first diff is a layout background
    rect height (`500` vs C++ `260`), tagged
    `rust-runner-divergence:layout-component-bounds`.
-3. Keep `new_text.riv` parked as a known M6 divergence until a dedicated text
+4. Keep `new_text.riv` parked as a known M6 divergence until a dedicated text
    outline backend/canonicalization slice: gradient sibling admission now
    reaches draw, but Rust/Skrifa and C++ HarfBuzz emit a glyph contour with a
    different segment start/order, so exact stream comparison fails on path
    verbs/points.
-4. Keep follow-path text files parked behind `TextFollowPathModifier` and
+5. Keep follow-path text files parked behind `TextFollowPathModifier` and
    unsupported `Text` property data-bind targets;
    `text_follow_path_shape_length.riv` currently fails first on data binding
    target `Text` global 73 before it reaches follow-path drawing.
-5. Keep `text_vertical_trim_test.riv` parked behind
+6. Keep `text_vertical_trim_test.riv` parked behind
    `layout-component-paint`; it now fails there before reaching any richer
    vertical-trim text behavior.
-6. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
+7. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
-7. Remaining exact entries pinned to sample `0` are static M1 holdovers:
+8. Remaining exact entries pinned to sample `0` are static M1 holdovers:
    `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
    them during M6 unless a related refactor needs a cheap draw-regression check.
 
@@ -500,3 +504,11 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=131`, and parked `M6=87 gated=8 harness=36`; next
   target: `collapse_data_binds.riv`, still gated on `layout-component-paint`
   global 31.
+- 2026-07-04: [M6] Reclassified `collapse_data_binds.riv` from generic
+  `layout-component-paint` to `layout-computed-values` after finding
+  data-bound `LayoutComponent.computedLocalX` values feeding text. `make
+  golden-compare` stayed at `exact=156`, `exact-segments=477`,
+  `diverges=8`, `unsupported-feature=131`, and parked
+  `M6=87 gated=8 harness=36`; next target:
+  `component_list_child_origin.riv`, still gated on `layout-component-paint`
+  global 19.

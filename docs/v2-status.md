@@ -23,16 +23,13 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue the painted `LayoutComponent` slice: simple root row/fill,
-   clipped empty-list override, and non-reverse row/column fixed-percent/fill
-   backgrounds are now exact through `computed_root_transform.riv` and
-   `list_items.riv`. Seven stale layout-paint entries were retagged to
-   `rust-runner-unsupported:text` after clearing this gate. There are 3
-   remaining M6 `rust-runner-unsupported:layout-component-paint` entries:
-   `data_bind_test_cmdq.riv`, `scroll_snap.riv`, and `scroll_test.riv`. Start
-   with `data_bind_test_cmdq.riv`, which stops on `LayoutComponent` paint
-   global 162.
-2. Keep `collapse_data_binds.riv` parked behind
+1. The painted `LayoutComponent` queue is closed for the current corpus:
+   rounded solid backgrounds, stroked layout backgrounds, invisible layout
+   paints, and gradient layout fills now clear the runner gate. The last
+   three entries were retagged to their true first blockers:
+   `data_bind_test_cmdq.riv` -> `text`, `scroll_snap.riv` -> `text`, and
+   `scroll_test.riv` -> `scroll-constraints`.
+2. Start with `collapse_data_binds.riv`, which is parked behind
    `layout-computed-values`: it data-binds `LayoutComponent.computedLocalX`
    into text, so the missing work is computed layout geometry/data-bind
    propagation rather than plain layout paint.
@@ -540,3 +537,14 @@ the only memory the next session has. Update it every commit.
   on `layout-component-paint`. `make golden-compare` reports `exact=158`,
   `exact-segments=479`, `diverges=9`, `unsupported-feature=128`, and parked
   `M6=84 gated=8 harness=36`; `cargo test --workspace` passes.
+- 2026-07-04: [M6] Closed the remaining layout-component-paint manifest queue
+  by admitting rounded simple flex backgrounds plus invisible, stroked, and
+  gradient layout background paints already handled by the runtime draw path.
+  `data_bind_test_cmdq.riv` now parks on `text`,
+  `scroll_snap.riv` parks on `text`, and `scroll_test.riv` parks on
+  `scroll-constraints`; `grep -n ... corpus.toml` for
+  `rust-runner-unsupported:layout-component-paint` is empty. `make
+  golden-compare` reports `exact=158`, `exact-segments=479`, `diverges=9`,
+  `unsupported-feature=128`, and parked `M6=84 gated=8 harness=36`; `cargo
+  test --workspace` passes. Next target: `collapse_data_binds.riv` on
+  `layout-computed-values`.

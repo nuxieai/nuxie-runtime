@@ -1121,10 +1121,7 @@ fn simple_flex_layout_component_paint_supported(
     if layout_object.bool_property("clip").unwrap_or(false) {
         return false;
     }
-    let Some(style_object) = layout_style_object(runtime, artboard, layout_object) else {
-        return false;
-    };
-    if !layout_style_has_zero_corners(style_object) {
+    if layout_style_object(runtime, artboard, layout_object).is_none() {
         return false;
     }
 
@@ -1316,19 +1313,24 @@ fn root_layout_background_paint_supported(paint: &rive_graph::ShapePaintNode) ->
 }
 
 fn simple_layout_background_paint_supported(paint: &rive_graph::ShapePaintNode) -> bool {
-    paint.is_visible
-        && paint.paint_type == ShapePaintKind::Fill
-        && matches!(
-            paint.path_kind,
-            Some(ShapePaintPathKind::Local | ShapePaintPathKind::LocalClockwise)
+    if !paint.is_visible {
+        return paint.feather.is_none() && paint.effects.is_empty();
+    }
+    matches!(
+        paint.paint_type,
+        ShapePaintKind::Fill | ShapePaintKind::Stroke
+    ) && matches!(
+        paint.path_kind,
+        Some(ShapePaintPathKind::Local | ShapePaintPathKind::LocalClockwise)
+    ) && matches!(
+        paint.paint_state.as_ref(),
+        Some(
+            ShapePaintStateNode::SolidColor { .. }
+                | ShapePaintStateNode::LinearGradient { .. }
+                | ShapePaintStateNode::RadialGradient { .. }
         )
-        && matches!(
-            paint.paint_state.as_ref(),
-            Some(ShapePaintStateNode::SolidColor { .. })
-        )
-        && paint.feather.is_none()
+    ) && paint.feather.is_none()
         && paint.effects.is_empty()
-        && paint.gradient_stops.is_empty()
 }
 
 fn nearly_equal(a: f32, b: f32) -> bool {

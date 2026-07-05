@@ -156,28 +156,32 @@ Expected metric movement for that slice:
 
 ## Result
 
-Landed 2026-07-04. `hello_world.riv` is exact through a deliberately narrow
-static text path: one top-level `Text`, one `TextValueRun`, one solid-fill
+`hello_world.riv` landed 2026-07-04 through a deliberately narrow static text
+path: one top-level `Text`, one `TextValueRun`, one solid-fill
 `TextStylePaint`, embedded `FontAsset` bytes, no modifiers/layout/input/data
-binding/color glyphs. A follow-up scan showed `new_text.riv` is too broad for
-the next narrow slice (five texts plus multi-run/style, gradient/stroke,
-clipping, and keyframed text). Use `ellipsis.riv` next: it is the smallest
-one-run `TextStyleAxis` fixture and proves the first required line/ellipsis
-layout port. `hosted_font_file.riv` remains a later static-text variant because
-it also requires hosted font asset loading.
+binding/color glyphs.
+
+`ellipsis.riv` also landed 2026-07-04. It widened the slice to static
+`TextStyleAxis` variations and the smallest one-run fixed-height
+wrap/ellipsis path needed by the corpus. A follow-up scan showed
+`new_text.riv` is still too broad for the next slice (five texts plus
+multi-run/style, gradient/stroke, clipping, and keyframed text). Use
+`hosted_font_file.riv` next: it keeps the same one-text shape and now isolates
+hosted font asset loading.
 
 ## Follow-Up Order
 
-After `hello_world.riv`, widen in this order:
+After `ellipsis.riv`, widen in this order:
 
-1. More static text without modifiers, especially hosted font and simple style
-   variants.
+1. Hosted font assets for the same one-text/static-style path, starting with
+   `hosted_font_file.riv`.
 2. Text sizing/overflow/trim cases that only need the same line breaker.
-3. `TextStyleAxis` / `TextStyleFeature` and variable-font helper behavior.
-4. Text modifiers and follow-path text.
-5. Text participating in layout measurement.
-6. `TextInput`, selection/cursor paths, and focus/input behavior.
-7. Color glyphs and image-backed font/color glyph paths.
+3. Multi-text or multi-run static cases without modifiers or layout coupling.
+4. `TextStyleFeature` and broader variable-font helper behavior.
+5. Text modifiers and follow-path text.
+6. Text participating in layout measurement.
+7. `TextInput`, selection/cursor paths, and focus/input behavior.
+8. Color glyphs and image-backed font/color glyph paths.
 
 ## Stop Rules
 
@@ -191,7 +195,8 @@ M6 diagnostic:
 - input focus;
 - text layout provider behavior;
 - scroll constraints;
-- variable fonts;
+- variable-font behavior beyond the static `TextStyleAxis` path already proven
+  by `ellipsis.riv`;
 - modifiers;
 - follow-path;
 - color glyphs;

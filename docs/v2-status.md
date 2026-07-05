@@ -23,12 +23,13 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Start the painted `LayoutComponent` slice with `bankcard.riv`: after
-   admitting source-to-target `SolidColor.colorValue` and `TextValueRun.text`
-   data binds, its default artboard now fails first on sibling
-   `LayoutComponent` global 21, which is also a painted
-   `LayoutComponent` container. Treat this as layout work, not another text
-   data-binding expansion.
+1. Continue the painted `LayoutComponent` slice: Rust now has the first
+   background-rect draw hook and `bankcard.riv` plus ten other stale text
+   blockers are retagged as `rust-runner-unsupported:layout-component-paint`.
+   The runner gate stays until Rust ports computed `LayoutComponent` bounds,
+   style/corner-radius plumbing, and layout-world transforms from C++
+   `src/layout_component.cpp`; start there, using the 26
+   `layout-component-paint` corpus entries as the queue.
 2. Keep `new_text.riv` parked as a known M6 divergence until a dedicated text
    outline backend/canonicalization slice: gradient sibling admission now
    reaches draw, but Rust/Skrifa and C++ HarfBuzz emit a glyph contour with a
@@ -442,3 +443,12 @@ the only memory the next session has. Update it every commit.
   moved to `exact=147`, `exact-segments=468`, `diverges=7`,
   `unsupported-feature=141`, and parked `M6=98 gated=7 harness=36`; next
   start the painted `LayoutComponent` slice with `bankcard.riv`.
+- 2026-07-04: [M6] Started the painted `LayoutComponent` slice by routing
+  `LayoutComponent` shape paints through the runtime draw-command path with
+  serialized background-rect commands, moving the explicit
+  `layout-component-paint` runner gate ahead of static text, and retagging
+  `bankcard.riv` plus ten similar files from stale `text` diagnostics to
+  `layout-component-paint`. `make golden-compare` stayed at `exact=147`,
+  `exact-segments=468`, `diverges=7`, `unsupported-feature=141`, and parked
+  `M6=98 gated=7 harness=36`; next port computed layout bounds/style plumbing
+  before removing the gate.

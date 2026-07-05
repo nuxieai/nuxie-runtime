@@ -687,7 +687,9 @@ impl ArtboardInstance {
         drawable: &SortedDrawableNode,
         graph: &ArtboardGraph,
     ) -> Vec<RuntimeShapePaintCommand> {
-        if drawable.kind != DrawableOrderKind::Drawable || drawable.type_name != "Shape" {
+        if drawable.kind != DrawableOrderKind::Drawable
+            || !matches!(drawable.type_name, "Shape" | "LayoutComponent")
+        {
             return Vec::new();
         }
         let Some(shape_local) = drawable.local_id else {
@@ -714,8 +716,13 @@ impl ArtboardInstance {
             .paints
             .iter()
             .filter_map(|paint| {
-                let path_commands =
-                    self.runtime_shape_paint_path_commands(shape_local, paint, graph);
+                let path_commands = match drawable.type_name {
+                    "Shape" => self.runtime_shape_paint_path_commands(shape_local, paint, graph),
+                    "LayoutComponent" => {
+                        self.runtime_layout_component_paint_path_commands(shape_local, paint)
+                    }
+                    _ => Vec::new(),
+                };
                 runtime_shape_paint_command(
                     self,
                     paint,
@@ -727,6 +734,30 @@ impl ArtboardInstance {
                 )
             })
             .collect()
+    }
+
+    fn runtime_layout_component_paint_path_commands(
+        &self,
+        layout_local: usize,
+        paint: &ShapePaintNode,
+    ) -> Vec<RuntimePathCommand> {
+        if paint.path_kind.is_none() {
+            return Vec::new();
+        }
+        // Ported from C++ `src/layout_component.cpp`
+        // `LayoutComponent::drawProxy/updateRenderPath`: layout components draw
+        // their shape paints against a background rectangle. TODO(golden): use
+        // the computed layout size and style corner radii once the M6 layout
+        // engine is ported; this first slice uses serialized dimensions.
+        let width = self.runtime_layout_component_dimension(layout_local, "width");
+        let height = self.runtime_layout_component_dimension(layout_local, "height");
+        runtime_rect_commands(0.0, 0.0, width, height)
+    }
+
+    fn runtime_layout_component_dimension(&self, layout_local: usize, name: &str) -> f32 {
+        property_key_for_name("LayoutComponent", name)
+            .and_then(|key| self.double_property(layout_local, key))
+            .unwrap_or(0.0)
     }
 
     fn runtime_shape_paint_path_commands(

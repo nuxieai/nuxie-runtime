@@ -645,6 +645,17 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
+    if let Some(container) = artboard
+        .shape_paint_containers
+        .iter()
+        .find(|container| container.type_name == "LayoutComponent" && !container.paints.is_empty())
+    {
+        bail!(
+            "unsupported: layout-component-paint in Rust golden runner (global {})",
+            container.global_id
+        );
+    }
+
     if let Some((text, reason)) = artboard
         .local_objects
         .iter()
@@ -668,17 +679,6 @@ fn ensure_static_draw_supported_for_artboard(
         bail!(
             "unsupported: n-slice in Rust golden runner (global {})",
             n_sliced_node.global_id
-        );
-    }
-
-    if let Some(container) = artboard
-        .shape_paint_containers
-        .iter()
-        .find(|container| container.type_name == "LayoutComponent" && !container.paints.is_empty())
-    {
-        bail!(
-            "unsupported: layout-component-paint in Rust golden runner (global {})",
-            container.global_id
         );
     }
 

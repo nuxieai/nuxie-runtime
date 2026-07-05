@@ -3537,6 +3537,79 @@ impl RuntimeDataBindGraph {
         true
     }
 
+    pub(crate) fn fire_owned_view_model_context_trigger_source_for_data_bind(
+        &mut self,
+        context: &mut RuntimeOwnedViewModelInstance,
+        data_bind_index: usize,
+        value: u64,
+    ) -> bool {
+        if self.context_kind != RuntimeDataBindGraphContextKind::OwnedViewModel {
+            return false;
+        }
+        let Some(binding) = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+        else {
+            return false;
+        };
+        let Some(target) = self.targets.get(binding.target.0) else {
+            return false;
+        };
+        if !matches!(target.target, RuntimeDataBindGraphTarget::Trigger { .. }) {
+            return false;
+        }
+        let Some(source) = self.sources.get_mut(binding.source.0) else {
+            return false;
+        };
+        if !matches!(&source.default_value, RuntimeDataBindGraphValue::Trigger(_)) {
+            return false;
+        }
+        let path = source.path.clone();
+        let Some(value) = source.trigger_target_to_source_value(value) else {
+            return false;
+        };
+        let RuntimeDataBindGraphValue::Trigger(value) = value else {
+            return false;
+        };
+        source.target_to_source_dirty = false;
+        source.source_to_target_dirty_after_immediate = false;
+
+        let Some(property_path) =
+            runtime_owned_view_model_property_path_from_source_path(context, &path)
+        else {
+            return false;
+        };
+        let Some(current_context_value) =
+            runtime_owned_view_model_trigger_value_for_source_path(context, &path)
+        else {
+            return false;
+        };
+
+        if current_context_value != value
+            && !context.set_trigger_by_property_path(&property_path, value)
+        {
+            return false;
+        }
+
+        for source in self.sources.iter_mut().filter(|source| {
+            source.path == path
+                && matches!(source.default_value, RuntimeDataBindGraphValue::Trigger(_))
+        }) {
+            let changed = !source.bound
+                || !matches!(&source.value, RuntimeDataBindGraphValue::Trigger(current) if *current == value);
+            source.value = RuntimeDataBindGraphValue::Trigger(value);
+            source.bound = true;
+            source.source_to_target_dirty_after_target_to_source = true;
+            if changed {
+                source.reset_formula_random_state_for_source_change();
+            }
+        }
+
+        self.mark_default_view_model_bindings_dirty();
+        true
+    }
+
     pub(crate) fn set_owned_view_model_context_list_source_item_count_for_data_bind(
         &mut self,
         context: &mut RuntimeOwnedViewModelInstance,

@@ -6,7 +6,7 @@ use rive_graph::{
 };
 use rive_render_api::RecordingFactory;
 use rive_runtime::{
-    ArtboardInstance, RuntimeRenderPathCache, StateMachineInstance,
+    ArtboardInstance, RuntimeOwnedViewModelInstance, RuntimeRenderPathCache, StateMachineInstance,
     preallocate_render_paint_cache_for_artboard_tree, static_text_support_error,
 };
 use std::collections::BTreeSet;
@@ -58,9 +58,15 @@ fn run() -> Result<String> {
                 .with_context(|| format!("failed to instantiate state machine index {index}"))
         })
         .transpose()?;
+    let mut owned_view_model_context = selected_artboard_view_model_index(&runtime, artboard_index)
+        .and_then(|view_model_index| {
+            RuntimeOwnedViewModelInstance::new(&runtime, view_model_index)
+        });
     instance.bind_default_view_model_artboard_list_context(&runtime);
     if let Some(state_machine) = state_machine.as_mut() {
-        state_machine.bind_default_view_model_context();
+        if let Some(context) = owned_view_model_context.as_ref() {
+            state_machine.bind_owned_view_model_context(context);
+        }
         state_machine.advance_data_context();
     }
 
@@ -97,7 +103,12 @@ fn run() -> Result<String> {
                 event.seconds,
                 &mut current_seconds,
             )?;
-            apply_input_event(event, &instance, state_machine.as_mut());
+            apply_input_event(
+                event,
+                &instance,
+                state_machine.as_mut(),
+                owned_view_model_context.as_mut(),
+            );
             factory.add_input_event(
                 event.kind.name(),
                 event.seconds,
@@ -146,6 +157,14 @@ fn unsupported_static_text_draw_error(error: anyhow::Error) -> anyhow::Error {
     } else {
         error
     }
+}
+
+fn selected_artboard_view_model_index(
+    runtime: &RuntimeFile,
+    artboard_index: usize,
+) -> Option<usize> {
+    let artboard = runtime.artboard(artboard_index)?;
+    usize::try_from(artboard.uint_property("viewModelId")?).ok()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -254,22 +273,70 @@ fn apply_input_event(
     event: &InputEvent,
     instance: &ArtboardInstance,
     state_machine: Option<&mut StateMachineInstance>,
+    owned_view_model_context: Option<&mut RuntimeOwnedViewModelInstance>,
 ) {
     let Some(state_machine) = state_machine else {
         return;
     };
     match event.kind {
         InputKind::PointerDown => {
-            state_machine.pointer_down(instance, event.x, event.y, event.pointer_id);
+            if let Some(context) = owned_view_model_context {
+                state_machine.pointer_down_with_owned_view_model_context(
+                    instance,
+                    event.x,
+                    event.y,
+                    event.pointer_id,
+                    context,
+                );
+            } else {
+                state_machine.pointer_down(instance, event.x, event.y, event.pointer_id);
+            }
         }
         InputKind::PointerMove => {
-            state_machine.pointer_move(instance, event.x, event.y, event.seconds, event.pointer_id);
+            if let Some(context) = owned_view_model_context {
+                state_machine.pointer_move_with_owned_view_model_context(
+                    instance,
+                    event.x,
+                    event.y,
+                    event.seconds,
+                    event.pointer_id,
+                    context,
+                );
+            } else {
+                state_machine.pointer_move(
+                    instance,
+                    event.x,
+                    event.y,
+                    event.seconds,
+                    event.pointer_id,
+                );
+            }
         }
         InputKind::PointerUp => {
-            state_machine.pointer_up(instance, event.x, event.y, event.pointer_id);
+            if let Some(context) = owned_view_model_context {
+                state_machine.pointer_up_with_owned_view_model_context(
+                    instance,
+                    event.x,
+                    event.y,
+                    event.pointer_id,
+                    context,
+                );
+            } else {
+                state_machine.pointer_up(instance, event.x, event.y, event.pointer_id);
+            }
         }
         InputKind::PointerExit => {
-            state_machine.pointer_exit(instance, event.x, event.y, event.pointer_id);
+            if let Some(context) = owned_view_model_context {
+                state_machine.pointer_exit_with_owned_view_model_context(
+                    instance,
+                    event.x,
+                    event.y,
+                    event.pointer_id,
+                    context,
+                );
+            } else {
+                state_machine.pointer_exit(instance, event.x, event.y, event.pointer_id);
+            }
         }
     }
 }

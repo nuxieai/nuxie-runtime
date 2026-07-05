@@ -256,6 +256,28 @@ impl StateMachineInstance {
         y: f32,
         pointer_id: i32,
     ) -> bool {
+        self.pointer_down_with_context(artboard, x, y, pointer_id, None)
+    }
+
+    pub fn pointer_down_with_owned_view_model_context(
+        &mut self,
+        artboard: &ArtboardInstance,
+        x: f32,
+        y: f32,
+        pointer_id: i32,
+        context: &mut RuntimeOwnedViewModelInstance,
+    ) -> bool {
+        self.pointer_down_with_context(artboard, x, y, pointer_id, Some(context))
+    }
+
+    fn pointer_down_with_context(
+        &mut self,
+        artboard: &ArtboardInstance,
+        x: f32,
+        y: f32,
+        pointer_id: i32,
+        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+    ) -> bool {
         self.pointer_down_listener_hits
             .retain(|hit| hit.pointer_id != pointer_id);
         let Some(state_machine) = artboard.state_machine(self.state_machine_index) else {
@@ -285,7 +307,12 @@ impl StateMachineInstance {
             if listener_hit && (click_action || direct_action || hover_action.is_some()) {
                 hit = true;
             }
-            if action_type.is_some() && self.perform_listener_actions(&listener.listener_actions) {
+            if action_type.is_some()
+                && self.perform_listener_actions(
+                    &listener.listener_actions,
+                    owned_context.as_deref_mut(),
+                )
+            {
                 self.needs_advance = true;
             }
         }
@@ -300,7 +327,27 @@ impl StateMachineInstance {
         _seconds: f32,
         pointer_id: i32,
     ) -> bool {
-        self.update_pointer_listeners(artboard, RuntimeListenerType::Move, x, y, pointer_id)
+        self.update_pointer_listeners(artboard, RuntimeListenerType::Move, x, y, pointer_id, None)
+    }
+
+    pub fn pointer_move_with_owned_view_model_context(
+        &mut self,
+        artboard: &ArtboardInstance,
+        x: f32,
+        y: f32,
+        seconds: f32,
+        pointer_id: i32,
+        context: &mut RuntimeOwnedViewModelInstance,
+    ) -> bool {
+        let _ = seconds;
+        self.update_pointer_listeners(
+            artboard,
+            RuntimeListenerType::Move,
+            x,
+            y,
+            pointer_id,
+            Some(context),
+        )
     }
 
     pub fn pointer_up(
@@ -309,6 +356,28 @@ impl StateMachineInstance {
         x: f32,
         y: f32,
         pointer_id: i32,
+    ) -> bool {
+        self.pointer_up_with_context(artboard, x, y, pointer_id, None)
+    }
+
+    pub fn pointer_up_with_owned_view_model_context(
+        &mut self,
+        artboard: &ArtboardInstance,
+        x: f32,
+        y: f32,
+        pointer_id: i32,
+        context: &mut RuntimeOwnedViewModelInstance,
+    ) -> bool {
+        self.pointer_up_with_context(artboard, x, y, pointer_id, Some(context))
+    }
+
+    fn pointer_up_with_context(
+        &mut self,
+        artboard: &ArtboardInstance,
+        x: f32,
+        y: f32,
+        pointer_id: i32,
+        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
     ) -> bool {
         let Some(state_machine) = artboard.state_machine(self.state_machine_index) else {
             self.pointer_down_listener_hits
@@ -336,7 +405,12 @@ impl StateMachineInstance {
             if listener_hit && (click_matched || direct_action || hover_action.is_some()) {
                 hit = true;
             }
-            if action_type.is_some() && self.perform_listener_actions(&listener.listener_actions) {
+            if action_type.is_some()
+                && self.perform_listener_actions(
+                    &listener.listener_actions,
+                    owned_context.as_deref_mut(),
+                )
+            {
                 self.needs_advance = true;
             }
         }
@@ -352,8 +426,35 @@ impl StateMachineInstance {
         y: f32,
         pointer_id: i32,
     ) -> bool {
-        let hit =
-            self.update_pointer_listeners(artboard, RuntimeListenerType::Exit, x, y, pointer_id);
+        let hit = self.update_pointer_listeners(
+            artboard,
+            RuntimeListenerType::Exit,
+            x,
+            y,
+            pointer_id,
+            None,
+        );
+        self.pointer_listener_states
+            .retain(|state| state.pointer_id != pointer_id);
+        hit
+    }
+
+    pub fn pointer_exit_with_owned_view_model_context(
+        &mut self,
+        artboard: &ArtboardInstance,
+        x: f32,
+        y: f32,
+        pointer_id: i32,
+        context: &mut RuntimeOwnedViewModelInstance,
+    ) -> bool {
+        let hit = self.update_pointer_listeners(
+            artboard,
+            RuntimeListenerType::Exit,
+            x,
+            y,
+            pointer_id,
+            Some(context),
+        );
         self.pointer_listener_states
             .retain(|state| state.pointer_id != pointer_id);
         hit
@@ -366,6 +467,7 @@ impl StateMachineInstance {
         x: f32,
         y: f32,
         pointer_id: i32,
+        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
     ) -> bool {
         let Some(state_machine) = artboard.state_machine(self.state_machine_index) else {
             return false;
@@ -386,7 +488,12 @@ impl StateMachineInstance {
             if listener_hit && (direct_action || hover_action.is_some()) {
                 hit = true;
             }
-            if action_type.is_some() && self.perform_listener_actions(&listener.listener_actions) {
+            if action_type.is_some()
+                && self.perform_listener_actions(
+                    &listener.listener_actions,
+                    owned_context.as_deref_mut(),
+                )
+            {
                 self.needs_advance = true;
             }
         }
@@ -421,7 +528,7 @@ impl StateMachineInstance {
                     .event_local_indices
                     .contains(&event.event_local_index())
             }) {
-                changed |= self.perform_listener_actions(&listener.listener_actions);
+                changed |= self.perform_listener_actions(&listener.listener_actions, None);
             }
         }
         if changed {
@@ -469,6 +576,7 @@ impl StateMachineInstance {
     fn perform_listener_actions(
         &mut self,
         listener_actions: &[RuntimeScheduledListenerAction],
+        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
     ) -> bool {
         let mut changed = false;
         for action in listener_actions {
@@ -501,7 +609,11 @@ impl StateMachineInstance {
                     value,
                     ..
                 } => {
-                    changed |= self.perform_listener_view_model_change(*data_bind_index, value);
+                    changed |= self.perform_listener_view_model_change(
+                        *data_bind_index,
+                        value,
+                        owned_context.as_deref_mut(),
+                    );
                 }
             }
         }
@@ -515,37 +627,97 @@ impl StateMachineInstance {
         &mut self,
         data_bind_index: usize,
         value: &RuntimeListenerViewModelChangeValue,
+        owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
     ) -> bool {
         match value {
-            RuntimeListenerViewModelChangeValue::Number(value) => {
-                self.set_default_view_model_number_source_for_data_bind(data_bind_index, *value)
-            }
-            RuntimeListenerViewModelChangeValue::Integer(value) => self
-                .set_default_view_model_symbol_list_index_source_for_data_bind(
+            RuntimeListenerViewModelChangeValue::Number(value) => match owned_context {
+                Some(context) => self.set_owned_view_model_context_number_source_for_data_bind(
+                    context,
                     data_bind_index,
                     *value,
                 ),
-            RuntimeListenerViewModelChangeValue::Color(value) => {
-                self.set_default_view_model_color_source_for_data_bind(data_bind_index, *value)
-            }
-            RuntimeListenerViewModelChangeValue::String(value) => {
-                self.set_default_view_model_string_source_for_data_bind(data_bind_index, value)
-            }
-            RuntimeListenerViewModelChangeValue::Enum(value) => {
-                self.set_default_view_model_enum_source_for_data_bind(data_bind_index, *value)
-            }
-            RuntimeListenerViewModelChangeValue::Asset(value) => {
-                self.set_default_view_model_asset_source_for_data_bind(data_bind_index, *value)
-            }
-            RuntimeListenerViewModelChangeValue::Artboard(value) => {
-                self.set_default_view_model_artboard_source_for_data_bind(data_bind_index, *value)
-            }
-            RuntimeListenerViewModelChangeValue::Trigger(value) => {
-                self.perform_listener_trigger_view_model_change(data_bind_index, *value)
-            }
-            RuntimeListenerViewModelChangeValue::Boolean(value) => {
-                self.set_default_view_model_boolean_source_for_data_bind(data_bind_index, *value)
-            }
+                None => {
+                    self.set_default_view_model_number_source_for_data_bind(data_bind_index, *value)
+                }
+            },
+            RuntimeListenerViewModelChangeValue::Integer(value) => match owned_context {
+                Some(context) => self
+                    .set_owned_view_model_context_symbol_list_index_source_for_data_bind(
+                        context,
+                        data_bind_index,
+                        *value,
+                    ),
+                None => self.set_default_view_model_symbol_list_index_source_for_data_bind(
+                    data_bind_index,
+                    *value,
+                ),
+            },
+            RuntimeListenerViewModelChangeValue::Color(value) => match owned_context {
+                Some(context) => self.set_owned_view_model_context_color_source_for_data_bind(
+                    context,
+                    data_bind_index,
+                    *value,
+                ),
+                None => {
+                    self.set_default_view_model_color_source_for_data_bind(data_bind_index, *value)
+                }
+            },
+            RuntimeListenerViewModelChangeValue::String(value) => match owned_context {
+                Some(context) => self.set_owned_view_model_context_string_source_for_data_bind(
+                    context,
+                    data_bind_index,
+                    value,
+                ),
+                None => {
+                    self.set_default_view_model_string_source_for_data_bind(data_bind_index, value)
+                }
+            },
+            RuntimeListenerViewModelChangeValue::Enum(value) => match owned_context {
+                Some(context) => self.set_owned_view_model_context_enum_source_for_data_bind(
+                    context,
+                    data_bind_index,
+                    *value,
+                ),
+                None => {
+                    self.set_default_view_model_enum_source_for_data_bind(data_bind_index, *value)
+                }
+            },
+            RuntimeListenerViewModelChangeValue::Asset(value) => match owned_context {
+                Some(context) => self.set_owned_view_model_context_asset_source_for_data_bind(
+                    context,
+                    data_bind_index,
+                    *value,
+                ),
+                None => {
+                    self.set_default_view_model_asset_source_for_data_bind(data_bind_index, *value)
+                }
+            },
+            RuntimeListenerViewModelChangeValue::Artboard(value) => match owned_context {
+                Some(context) => self.set_owned_view_model_context_artboard_source_for_data_bind(
+                    context,
+                    data_bind_index,
+                    *value,
+                ),
+                None => self
+                    .set_default_view_model_artboard_source_for_data_bind(data_bind_index, *value),
+            },
+            RuntimeListenerViewModelChangeValue::Trigger(value) => match owned_context {
+                Some(context) => self.fire_owned_view_model_context_trigger_source_for_data_bind(
+                    context,
+                    data_bind_index,
+                    *value,
+                ),
+                None => self.perform_listener_trigger_view_model_change(data_bind_index, *value),
+            },
+            RuntimeListenerViewModelChangeValue::Boolean(value) => match owned_context {
+                Some(context) => self.set_owned_view_model_context_boolean_source_for_data_bind(
+                    context,
+                    data_bind_index,
+                    *value,
+                ),
+                None => self
+                    .set_default_view_model_boolean_source_for_data_bind(data_bind_index, *value),
+            },
         }
     }
 
@@ -2156,6 +2328,51 @@ impl StateMachineInstance {
             )
         {
             return false;
+        }
+        self.needs_advance = true;
+        true
+    }
+
+    fn fire_owned_view_model_context_trigger_source_for_data_bind(
+        &mut self,
+        context: &mut RuntimeOwnedViewModelInstance,
+        data_bind_index: usize,
+        value: u64,
+    ) -> bool {
+        let Some(bindable_trigger) = self
+            .bindable_triggers
+            .iter_mut()
+            .find(|bindable_trigger| bindable_trigger.has_data_bind_index(data_bind_index))
+        else {
+            return false;
+        };
+
+        bindable_trigger.set_value(value);
+        let trigger_property_id = self
+            .data_bind_graph
+            .default_view_model_trigger_source_property_id_for_data_bind(data_bind_index);
+        if !self
+            .data_bind_graph
+            .fire_owned_view_model_context_trigger_source_for_data_bind(
+                context,
+                data_bind_index,
+                value,
+            )
+        {
+            return false;
+        }
+        if let Some((trigger_property_id, value)) =
+            trigger_property_id.and_then(|trigger_property_id| {
+                let property_index = usize::try_from(trigger_property_id).ok()?;
+                let value = context.trigger_value_by_property_index(property_index)?;
+                Some((trigger_property_id, value))
+            })
+            && let Some(trigger) = self
+                .view_model_triggers
+                .iter_mut()
+                .find(|trigger| trigger.view_model_property_id() == trigger_property_id)
+        {
+            trigger.set_value(value);
         }
         self.needs_advance = true;
         true

@@ -1145,7 +1145,10 @@ fn layout_style_has_zero_corners(style_object: &RuntimeObject) -> bool {
 fn root_layout_background_paint_supported(paint: &rive_graph::ShapePaintNode) -> bool {
     paint.is_visible
         && paint.paint_type == ShapePaintKind::Fill
-        && matches!(paint.path_kind, Some(ShapePaintPathKind::Local))
+        && matches!(
+            paint.path_kind,
+            Some(ShapePaintPathKind::Local | ShapePaintPathKind::LocalClockwise)
+        )
         && matches!(
             paint.paint_state.as_ref(),
             Some(
@@ -1160,7 +1163,10 @@ fn root_layout_background_paint_supported(paint: &rive_graph::ShapePaintNode) ->
 fn simple_layout_background_paint_supported(paint: &rive_graph::ShapePaintNode) -> bool {
     paint.is_visible
         && paint.paint_type == ShapePaintKind::Fill
-        && matches!(paint.path_kind, Some(ShapePaintPathKind::Local))
+        && matches!(
+            paint.path_kind,
+            Some(ShapePaintPathKind::Local | ShapePaintPathKind::LocalClockwise)
+        )
         && matches!(
             paint.paint_state.as_ref(),
             Some(ShapePaintStateNode::SolidColor { .. })

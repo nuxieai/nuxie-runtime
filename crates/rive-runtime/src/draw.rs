@@ -1017,12 +1017,33 @@ impl ArtboardInstance {
         let child_index = layout_children
             .iter()
             .position(|child_local| *child_local == layout_local)?;
-        let width = self.width / layout_children.len() as f32;
+        let (padding_left, padding_right, padding_top, padding_bottom, gap) = self
+            .runtime_layout_component_style_local(0)
+            .map(|style_local| {
+                (
+                    self.runtime_layout_style_double(style_local, "paddingLeft")
+                        .unwrap_or(0.0),
+                    self.runtime_layout_style_double(style_local, "paddingRight")
+                        .unwrap_or(0.0),
+                    self.runtime_layout_style_double(style_local, "paddingTop")
+                        .unwrap_or(0.0),
+                    self.runtime_layout_style_double(style_local, "paddingBottom")
+                        .unwrap_or(0.0),
+                    self.runtime_layout_style_double(style_local, "gapHorizontal")
+                        .unwrap_or(0.0),
+                )
+            })
+            .unwrap_or((0.0, 0.0, 0.0, 0.0, 0.0));
+        let child_count = layout_children.len() as f32;
+        let available_width =
+            (self.width - padding_left - padding_right - gap * (child_count - 1.0)).max(0.0);
+        let available_height = (self.height - padding_top - padding_bottom).max(0.0);
+        let width = available_width / child_count;
         Some(RuntimeLayoutBounds {
-            x: width * child_index as f32,
-            y: 0.0,
+            x: padding_left + (width + gap) * child_index as f32,
+            y: padding_top,
             width,
-            height: self.height,
+            height: available_height,
         })
     }
 

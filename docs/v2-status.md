@@ -6,8 +6,8 @@ the only memory the next session has. Update it every commit.
 ## Metric
 
 - Exact segments (file × sample): 477 across 156 exact files
-- Current compare: `make golden-compare` reports diverges=8, unsupported-feature=131, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=87 gated=8 harness=36
+- Current compare: `make golden-compare` reports diverges=9, unsupported-feature=130, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=86 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -26,17 +26,18 @@ the only memory the next session has. Update it every commit.
 1. Continue the painted `LayoutComponent` slice: root row/fill layout
    backgrounds and the empty nested clipped component-list override case are
    now exact through `artboard_list_overrides.riv`; `bankcard.riv` clears this
-   gate and is parked on `feather`. There are 16 remaining M6
+   gate and is parked on `feather`. There are 12 remaining M6
    `rust-runner-unsupported:layout-component-paint` entries. Start with
-   `component_list_child_origin.riv`, which stops on `LayoutComponent` paint
-   global 19.
+   `computed_root_transform.riv`, which stops on `LayoutComponent` paint
+   global 32.
 2. Keep `collapse_data_binds.riv` parked behind
    `layout-computed-values`: it data-binds `LayoutComponent.computedLocalX`
    into text, so the missing work is computed layout geometry/data-bind
    propagation rather than plain layout paint.
-3. Keep `number_to_list_nested_children.riv` as the current M6 layout
-   divergence: Rust now runs it, but the first diff is a layout background
-   rect height (`500` vs C++ `260`), tagged
+3. Keep `number_to_list_nested_children.riv` and
+   `transition_duration_bind_list.riv` as the current M6 layout divergences:
+   Rust now runs them, but the first diffs are layout background rect heights
+   (`500` vs C++ `260`; `2617` vs C++ `2000`), tagged
    `rust-runner-divergence:layout-component-bounds`.
 4. Keep `new_text.riv` parked as a known M6 divergence until a dedicated text
    outline backend/canonicalization slice: gradient sibling admission now
@@ -69,6 +70,10 @@ the only memory the next session has. Update it every commit.
   Rust reaches draw but differs on the first layout background rect: Rust
   emits height `500` where C++ emits `260`. This is a layout/list bounds
   divergence, not an unsupported diagnostic.
+- `transition_duration_bind_list.riv`: after admitting root layout padding/gap
+  and clockwise layout backgrounds, Rust reaches draw but differs on the first
+  child layout background rect height (`2617` vs C++ `2000`), same
+  `layout-component-bounds` divergence family.
 - Data-bound static text/converter bucket:
   `format_number_with_commas.riv`, `listener_view_model.riv`,
   `rebind_with_nested_viewmodel.riv`, `replace_vm_instance.riv`,
@@ -512,3 +517,13 @@ the only memory the next session has. Update it every commit.
   `M6=87 gated=8 harness=36`; next target:
   `component_list_child_origin.riv`, still gated on `layout-component-paint`
   global 19.
+- 2026-07-04: [M6] Narrowed the root row layout paint gate by admitting
+  clockwise layout background paths and root padding/gap sizing. This retags
+  `component_list_child_origin.riv`, `component_list_virtualized.riv`, and
+  `virtualized_artboard_databound_children.riv` to `scroll-constraints`, and
+  moves `transition_duration_bind_list.riv` to the existing
+  `layout-component-bounds` divergence (`2617` vs C++ `2000` height). `make
+  golden-compare` reports `exact=156`, `exact-segments=477`, `diverges=9`,
+  `unsupported-feature=130`, and parked `M6=86 gated=8 harness=36`; next
+  target: `computed_root_transform.riv`, still gated on
+  `layout-component-paint` global 32.

@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 459 across 138 exact files
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=114 gated=7 harness=36
+- Exact segments (file × sample): 460 across 139 exact files
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=113 gated=7 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -22,14 +22,14 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Start `test_modifier_run.riv`: after the range-map/runId slice promoted
-   `modifier_to_run.riv`, this fixture now fails first on
-   `TextModifierGroup.modifierFlags = 8` (`modifyRotation`). The next narrow
-   C++ source is still `src/text/text_modifier_group.cpp`, but scoped to the
-   static glyph transform path for rotation over the current line/range model.
-2. Keep `text_opacity_modifier.riv` parked behind later modifier flags:
-   opacity/invert-opacity should reopen after rotation/scale/origin transform
-   modifiers establish the non-translation glyph transform path.
+1. Start `text_opacity_modifier.riv`: after the rotation slice promoted
+   `test_modifier_run.riv`, this fixture now fails first on a static-text
+   sibling `CubicEaseInterpolator` global 16. Admit that already-supported
+   keyframe interpolator shape through the static text whitelist, then continue
+   to the expected `TextModifierGroup` opacity/invert-opacity flags if exposed.
+2. Keep scale/origin text modifier files parked behind the same
+   `src/text/text_modifier_group.cpp` transform path: rotation is now exact,
+   but scale/origin still need explicit corpus-driven promotion.
 3. Keep `vertical_align_ellipsis.riv` parked for now: temporarily admitting
    sibling `Stroke` reaches draw but diverges on fixed-size vertical
    align/ellipsis placement, so it should reopen with vertical-align text
@@ -124,11 +124,11 @@ the only memory the next session has. Update it every commit.
   targets are still not supported.
 - Static text support currently covers one style or matching-metric
   multi-style text, static authored-line-break and no-break multi-run text,
-  and translation-only `TextModifierGroup` over C++-style
+  and translation/rotation-only `TextModifierGroup` over C++-style
   `TextModifierRange` character, character-excluding-space, word, and static
   line range maps with runId targeting and an optional
-  `CubicInterpolatorComponent`. Shape/follow-path/rotation/scale/origin/
-  opacity modifiers, richer layout, and text input/editing remain M6 text
+  `CubicInterpolatorComponent`. Shape/follow-path/scale/origin/opacity
+  modifiers, richer layout, and text input/editing remain M6 text
   diagnostics.
 - `TransformConstraint` currently covers Text constraint bounds for the
   supported static Text subset plus the default empty
@@ -357,3 +357,10 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=157`, and parked `M6=114 gated=7 harness=36`; next
   reopen `test_modifier_run.riv`, which now fails first on rotation modifier
   flags.
+- 2026-07-04: [M6] Promoted `test_modifier_run.riv` by translating the static
+  glyph rotation path from C++ `src/text/text_modifier_group.cpp`, including
+  per-glyph center transforms and averaged glyph coverage for multi-codepoint
+  glyphs. `make golden-compare` moved to `exact=139`,
+  `exact-segments=460`, `unsupported-feature=156`, and parked
+  `M6=113 gated=7 harness=36`; next reopen `text_opacity_modifier.riv`, which
+  now fails first on a static-text sibling `CubicEaseInterpolator`.

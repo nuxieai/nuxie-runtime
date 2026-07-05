@@ -493,24 +493,31 @@ impl<'a> StaticTextSlice<'a> {
 
             let mut cursor_x = 0.0f32;
             let line_baseline = baseline + line.line_index as f32 * line_height;
-            for glyph in glyphs {
+            for (glyph_index, glyph) in glyphs.iter().enumerate() {
                 let char_index =
                     line.char_start + character_index_for_cluster(line.text, glyph.cluster);
-                let mut offset_x = 0.0;
-                let mut offset_y = 0.0;
+                let char_len = glyph_character_len(line.text, &glyphs, glyph_index);
+                let mut glyph_transform = Mat2D::IDENTITY;
                 for (modifier, coverage) in self.modifiers.iter().zip(&modifier_coverages) {
-                    let amount = coverage.get(char_index).copied().unwrap_or(0.0);
+                    let amount = glyph_coverage(coverage, char_index, char_len);
                     if amount == 0.0 {
                         continue;
                     }
-                    let (x, y) = modifier.translation(runtime, instance)?;
-                    offset_x += x * amount;
-                    offset_y += y * amount;
+                    glyph_transform = modifier
+                        .transform(runtime, instance, amount)?
+                        .multiply(glyph_transform);
                 }
                 let glyph_id = GlyphId::new(glyph.glyph_id);
                 if let Some(outline) = outlines.get(glyph_id) {
-                    let mut pen =
-                        TextOutlinePen::new(cursor_x + offset_x, line_baseline + offset_y, scale);
+                    let advance = glyph.advance * scale + letter_spacing;
+                    let mut pen = TextOutlinePen::new(
+                        cursor_x,
+                        line_baseline,
+                        scale,
+                        cursor_x + advance * 0.5,
+                        line_baseline,
+                        glyph_transform,
+                    );
                     let draw_settings =
                         DrawSettings::unhinted(Size::new(TEXT_SHAPE_SCALE_F32), location_ref)
                             .with_path_style(PathStyle::HarfBuzz);
@@ -1057,9 +1064,10 @@ impl StaticTextModifierGroup {
             .with_context(|| format!("missing TextModifierGroup global {global_id}"))?;
         let flags = object.uint_property("modifierFlags").unwrap_or(0);
         const MODIFY_TRANSLATION: u64 = 1 << 2;
-        if flags & !MODIFY_TRANSLATION != 0 {
+        const MODIFY_ROTATION: u64 = 1 << 3;
+        if flags & !(MODIFY_TRANSLATION | MODIFY_ROTATION) != 0 {
             bail!(
-                "static text subset only supports translation TextModifierGroup flags, found {flags}"
+                "static text subset only supports translation/rotation TextModifierGroup flags, found {flags}"
             );
         }
 
@@ -1091,11 +1099,12 @@ impl StaticTextModifierGroup {
         })
     }
 
-    fn translation(
+    fn transform(
         &self,
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
-    ) -> Result<(f32, f32)> {
+        amount: f32,
+    ) -> Result<Mat2D> {
         let flags = runtime_uint_property(
             runtime,
             instance,
@@ -1106,29 +1115,48 @@ impl StaticTextModifierGroup {
             0,
         )?;
         const MODIFY_TRANSLATION: u64 = 1 << 2;
-        if flags & MODIFY_TRANSLATION == 0 {
-            return Ok((0.0, 0.0));
-        }
-        Ok((
+        const MODIFY_ROTATION: u64 = 1 << 3;
+        let (x, y) = if flags & MODIFY_TRANSLATION != 0 {
+            (
+                runtime_double_property(
+                    runtime,
+                    instance,
+                    "TextModifierGroup",
+                    self.local_id,
+                    self.global_id,
+                    "x",
+                    0.0,
+                )? * amount,
+                runtime_double_property(
+                    runtime,
+                    instance,
+                    "TextModifierGroup",
+                    self.local_id,
+                    self.global_id,
+                    "y",
+                    0.0,
+                )? * amount,
+            )
+        } else {
+            (0.0, 0.0)
+        };
+        let rotation = if flags & MODIFY_ROTATION != 0 {
             runtime_double_property(
                 runtime,
                 instance,
                 "TextModifierGroup",
                 self.local_id,
                 self.global_id,
-                "x",
+                "rotation",
                 0.0,
-            )?,
-            runtime_double_property(
-                runtime,
-                instance,
-                "TextModifierGroup",
-                self.local_id,
-                self.global_id,
-                "y",
-                0.0,
-            )?,
-        ))
+            )? * amount
+        } else {
+            0.0
+        };
+        let mut transform = Mat2D::from_rotation(rotation);
+        transform.0[4] = x;
+        transform.0[5] = y;
+        Ok(transform)
     }
 
     fn coverage_by_character(
@@ -1568,6 +1596,27 @@ fn character_index_for_cluster(text: &str, cluster: u32) -> usize {
         .saturating_sub(1)
 }
 
+fn glyph_character_len(text: &str, glyphs: &[TextGlyph], glyph_index: usize) -> usize {
+    let char_index = character_index_for_cluster(text, glyphs[glyph_index].cluster);
+    let next_char_index = glyphs
+        .iter()
+        .skip(glyph_index + 1)
+        .find_map(|glyph| {
+            (glyph.cluster != glyphs[glyph_index].cluster)
+                .then_some(character_index_for_cluster(text, glyph.cluster))
+        })
+        .unwrap_or_else(|| text.chars().count());
+    next_char_index.saturating_sub(char_index).max(1)
+}
+
+fn glyph_coverage(coverage: &[f32], char_index: usize, char_len: usize) -> f32 {
+    let end = (char_index + char_len).min(coverage.len());
+    if char_index >= end {
+        return 0.0;
+    }
+    coverage[char_index..end].iter().copied().sum::<f32>() / (end - char_index) as f32
+}
+
 fn has_forced_text_break(text: &str) -> bool {
     text.chars()
         .any(|ch| matches!(ch, '\n' | '\r' | '\u{2028}'))
@@ -1847,24 +1896,34 @@ struct TextOutlinePen {
     x: f32,
     y: f32,
     scale: f32,
+    center_x: f32,
+    center_y: f32,
+    transform: Mat2D,
     current: Option<(f32, f32)>,
     contour_start: Option<(f32, f32)>,
 }
 
 impl TextOutlinePen {
-    fn new(x: f32, y: f32, scale: f32) -> Self {
+    fn new(x: f32, y: f32, scale: f32, center_x: f32, center_y: f32, transform: Mat2D) -> Self {
         Self {
             commands: Vec::new(),
             x,
             y,
             scale,
+            center_x,
+            center_y,
+            transform,
             current: None,
             contour_start: None,
         }
     }
 
     fn map(&self, x: f32, y: f32) -> (f32, f32) {
-        (self.x + x * self.scale, self.y - y * self.scale)
+        let point = (self.x + x * self.scale, self.y - y * self.scale);
+        let transformed = self
+            .transform
+            .transform_point(point.0 - self.center_x, point.1 - self.center_y);
+        (self.center_x + transformed.0, self.center_y + transformed.1)
     }
 }
 

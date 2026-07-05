@@ -66,7 +66,9 @@ enum RuntimeArtboardNestedHostProperty {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RuntimeArtboardDataBindValueKind {
     Number,
+    Boolean,
     String,
+    Color,
     Enum,
     Trigger,
 }
@@ -413,11 +415,23 @@ pub(super) fn build_artboard_custom_property_bindings(
                 {
                     RuntimeArtboardDataBindValueKind::Number
                 }
+                "CustomPropertyBoolean"
+                    if property_key_for_name("CustomPropertyBoolean", "propertyValue")
+                        == Some(property_key) =>
+                {
+                    RuntimeArtboardDataBindValueKind::Boolean
+                }
                 "CustomPropertyString"
                     if property_key_for_name("CustomPropertyString", "propertyValue")
                         == Some(property_key) =>
                 {
                     RuntimeArtboardDataBindValueKind::String
+                }
+                "CustomPropertyColor"
+                    if property_key_for_name("CustomPropertyColor", "propertyValue")
+                        == Some(property_key) =>
+                {
+                    RuntimeArtboardDataBindValueKind::Color
                 }
                 "CustomPropertyEnum"
                     if property_key_for_name("CustomPropertyEnum", "propertyValue")
@@ -883,9 +897,15 @@ impl ArtboardInstance {
             RuntimeArtboardDataBindValueKind::Number => self
                 .double_property(binding.target_local_id, binding.property_key)
                 .map(RuntimeDataBindGraphValue::Number),
+            RuntimeArtboardDataBindValueKind::Boolean => self
+                .bool_property(binding.target_local_id, binding.property_key)
+                .map(RuntimeDataBindGraphValue::Boolean),
             RuntimeArtboardDataBindValueKind::String => self
                 .string_property(binding.target_local_id, binding.property_key)
                 .map(|value| RuntimeDataBindGraphValue::String(value.to_vec())),
+            RuntimeArtboardDataBindValueKind::Color => self
+                .color_property(binding.target_local_id, binding.property_key)
+                .map(RuntimeDataBindGraphValue::Color),
             RuntimeArtboardDataBindValueKind::Enum => self
                 .uint_property(binding.target_local_id, binding.property_key)
                 .map(RuntimeDataBindGraphValue::Enum),

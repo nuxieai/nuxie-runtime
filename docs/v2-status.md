@@ -6,8 +6,8 @@ the only memory the next session has. Update it every commit.
 ## Metric
 
 - Exact segments (file × sample): 494 across 173 exact files
-- Current compare: `make golden-compare` reports diverges=10, unsupported-feature=112, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=68 gated=8 harness=36
+- Current compare: `make golden-compare` reports diverges=11, unsupported-feature=111, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=67 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -23,14 +23,15 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Probe `data_converter_to_number.riv` as the next
+1. Probe `databind_solo_to_enum.riv` as the next
    `rust-runner-unsupported:text` M6 gate: compare direct C++/Rust streams,
    remove only stale static-text gates needed to reach draw, and fix or retag
    the first real text/data-bind blocker. Do not start a general text layout
    rewrite unless the stream diff proves the corpus needs it.
 2. Keep `data_bind_test_cmdq.riv`, `data_binding_test.riv`,
-   `state_transition_fire_trigger.riv`, and `trigger_based_listeners.riv`
-   parked as known M6 text/data-bind divergences until a text
+   `data_converter_to_number.riv`, `state_transition_fire_trigger.riv`, and
+   `trigger_based_listeners.riv` parked as known M6 text/data-bind divergences
+   until a text
    layout/draw-suppression slice addresses their extra/misaligned text streams.
 3. Keep `new_text.riv` and `follow_path_path.riv` parked as known M6
    divergences until a dedicated text outline backend/canonicalization slice.
@@ -78,6 +79,13 @@ the only memory the next session has. Update it every commit.
   emitted at identity transform where C++ uses the layout position. First
   focused diff: C++ transform `[1,0,0,1,400,468.925781]` versus Rust
   `[1,0,0,1,0,0]`, followed by a shorter Rust stream.
+- `data_converter_to_number.riv`: after admitting custom-property siblings
+  through static text and adding `CustomPropertyBoolean` /
+  `CustomPropertyColor` target-to-source values, Rust reaches draw but the
+  first data-bound text run is shorter than C++. Focused first diff: first text
+  path at transform `[1,0,0,1,34.473156,389.39209]`; C++ has 17 `move`
+  contours versus Rust's 15. Parked under
+  `rust-runner-divergence:data-converter-to-number-text-values`.
 - `state_transition_fire_trigger.riv` and `trigger_based_listeners.riv`: the
   same `Event` admission clears their stale text diagnostics, but Rust emits
   extra event/listener text draw calls that C++ suppresses at sample 0. Keep
@@ -152,9 +160,9 @@ the only memory the next session has. Update it every commit.
   backed by stateful child view-model values,
   authored-transparent Backboard/background draw suppression,
   custom-property trigger keyed-callback target-to-source binding,
-  custom-property enum target-to-source binding, live data-bound nested host
-  `isPaused` mutation, plus no-input recursive nested `ListenerAlignTarget`
-  fixtures where the action is unexercised.
+  custom-property enum/boolean/color target-to-source binding, live data-bound
+  nested host `isPaused` mutation, plus no-input recursive nested
+  `ListenerAlignTarget` fixtures where the action is unexercised.
   Custom handle-source world-space math, data-bound nested host controls beyond
   generated defaults (external/live pause/speed/quantize mutation), remaining
   nested child data-bind targets beyond the current number/color/default bind
@@ -771,3 +779,13 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=112`, `not-yet=0`, and parked
   `M6=68 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
   `data_converter_to_number.riv`.
+- 2026-07-05: [M6] Reopened `data_converter_to_number.riv` by admitting
+  custom-property siblings through static text and adding
+  `CustomPropertyBoolean`/`CustomPropertyColor` target-to-source binding
+  values. The file reaches draw and is parked as
+  `rust-runner-divergence:data-converter-to-number-text-values` after focused
+  streams showed the first text path at `[1,0,0,1,34.473156,389.39209]` had 17
+  C++ contours versus 15 Rust contours. `make golden-compare` reports
+  `exact=173`, `exact-segments=494`, `diverges=11`,
+  `unsupported-feature=111`, `not-yet=0`, and parked
+  `M6=67 gated=8 harness=36`; next target is `databind_solo_to_enum.riv`.

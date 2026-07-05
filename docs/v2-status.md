@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 455 across 134 exact files
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=118 gated=7 harness=36
+- Exact segments (file × sample): 457 across 136 exact files
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=116 gated=7 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -22,21 +22,18 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Inspect `modifier_to_run.riv` first, then `modifier_test.riv` if needed:
-   these are the narrowest remaining explicit text-modifier fixtures, isolating
-   `TextModifierRange`/`TextModifierGroup` without the nested/list/layout
-   breadth in earlier manifest entries.
-2. Keep `align_target.riv` parked for now: it is the first M6 entry by
-   manifest order, but combines listener align-target, text modifiers/axis,
-   nested hosts, and shape hit targets. It should reopen only after the narrow
-   modifier fixtures are understood.
-3. Keep `new_text.riv` parked for now: it has five
+1. Inspect `modifier_to_run.riv`: the generic text gate is gone and the first
+   blocker is now `TextModifierRange.unitsValue = 2`, which means the next
+   decision is whether to port word/line range maps plus run-scoped/multi-run
+   text now, or keep that broader text-layout slice parked with a sharper
+   diagnostic.
+2. Keep `new_text.riv` parked for now: it has five
    `Text` objects, multiple runs/styles, gradients/strokes, clipping, and text
    keyframes, so it is not the next narrow static tracer.
-4. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
+3. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
-5. Remaining exact entries pinned to sample `0` are static M1 holdovers:
+4. Remaining exact entries pinned to sample `0` are static M1 holdovers:
    `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
    them during M6 unless a related refactor needs a cheap draw-regression check.
 
@@ -108,9 +105,9 @@ the only memory the next session has. Update it every commit.
   and layout-backed or virtualized component-list instancing remain M6 or
   later diagnostics.
   Golden runner sample lists now advance by sorted absolute-time deltas and
-  reuse render paths across samples; no images, text, live data-bound nested
-  host controls/artboard swaps, nested layout/leaf, scroll constraints, or
-  layout-backed/virtualized component-list instancing.
+  reuse render paths across samples; no images, richer text layout/editing,
+  live data-bound nested host controls/artboard swaps, nested layout/leaf,
+  scroll constraints, or layout-backed/virtualized component-list instancing.
   Harness-level scripted input replay dispatches
   pointerDown/pointerMove/pointerUp/pointerExit markers into direct rectangle
   state-machine listeners with listener input actions, direct rectangle
@@ -118,6 +115,11 @@ the only memory the next session has. Update it every commit.
   default view-model trigger target-to-source writes. Full C++ ListenerGroup
   drag/opaque behavior and input-driven nested align-target/list/text/layout
   targets are still not supported.
+- Static text modifier support currently covers translation-only
+  `TextModifierGroup` over character-unit `TextModifierRange` coverage with an
+  optional `CubicInterpolatorComponent`. Word/line units, range maps, runId
+  targeting, multi-run/multi-style text, shape/follow-path/rotation/scale/
+  origin/opacity modifiers, and text input/editing remain M6 text diagnostics.
 - `TransformConstraint` currently covers Text constraint bounds for the
   supported static one-run Text subset plus the default empty
   `TransformComponent::constraintBounds()` path. LayoutComponent bounds remain
@@ -316,3 +318,10 @@ the only memory the next session has. Update it every commit.
   `hello_world.riv`. `make golden-compare` moved to `exact=134`,
   `exact-segments=455`, `unsupported-feature=161`, and parked
   `M6=118 gated=7 harness=36`; next inspect the narrow text-modifier fixtures.
+- 2026-07-04: [M6] Promoted `modifier_test.riv` and `align_target.riv` by
+  adding the first static text-modifier slice: translation-only
+  `TextModifierGroup`, character-unit `TextModifierRange` coverage, and cubic
+  range falloff. `make golden-compare` moved to `exact=136`,
+  `exact-segments=457`, `unsupported-feature=159`, and parked
+  `M6=116 gated=7 harness=36`; `modifier_to_run.riv` remains parked on
+  word/line range mapping plus run-scoped/multi-run text.

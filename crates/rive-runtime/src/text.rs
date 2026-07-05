@@ -102,6 +102,27 @@ struct StaticTextSlice<'a> {
     container: &'a ShapePaintContainerNode,
     font_bytes: Option<&'a [u8]>,
     variations: Vec<(u32, f32)>,
+    modifiers: Vec<StaticTextModifierGroup>,
+}
+
+#[derive(Debug, Clone)]
+struct StaticTextModifierGroup {
+    local_id: usize,
+    global_id: u32,
+    ranges: Vec<StaticTextModifierRange>,
+}
+
+#[derive(Debug, Clone)]
+struct StaticTextModifierRange {
+    local_id: usize,
+    global_id: u32,
+    interpolator: Option<StaticCubicInterpolator>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct StaticCubicInterpolator {
+    local_id: usize,
+    global_id: u32,
 }
 
 impl<'a> StaticTextSlice<'a> {
@@ -110,14 +131,6 @@ impl<'a> StaticTextSlice<'a> {
         graph: &'a ArtboardGraph,
         text_local: usize,
     ) -> Result<Self> {
-        let text_count = graph
-            .local_objects
-            .iter()
-            .filter(|object| object.type_name == Some("Text"))
-            .count();
-        if text_count != 1 {
-            bail!("static text subset requires exactly one Text object, found {text_count}");
-        }
         let text_object = graph
             .local_objects
             .iter()
@@ -138,6 +151,9 @@ impl<'a> StaticTextSlice<'a> {
                         | "TextValueRun"
                         | "TextStylePaint"
                         | "TextStyleAxis"
+                        | "TextModifierGroup"
+                        | "TextModifierRange"
+                        | "CubicInterpolatorComponent"
                         | "Shape"
                         | "PointsPath"
                         | "StraightVertex"
@@ -191,8 +207,6 @@ impl<'a> StaticTextSlice<'a> {
                         | "TextInputSelection"
                         | "TextInputSelectedText"
                         | "TextStyleFeature"
-                        | "TextModifierRange"
-                        | "TextModifierGroup"
                         | "TextModifier"
                         | "TextShapeModifier"
                         | "TextVariationModifier"
@@ -333,6 +347,13 @@ impl<'a> StaticTextSlice<'a> {
             let axis_value = axis.double_property("axisValue").unwrap_or(0.0);
             variations.push((tag, axis_value));
         }
+        let modifiers = text_component
+            .children
+            .iter()
+            .copied()
+            .filter(|local| child_type(*local) == Some("TextModifierGroup"))
+            .map(|group_local| StaticTextModifierGroup::from_graph(runtime, graph, group_local))
+            .collect::<Result<Vec<_>>>()?;
 
         Ok(Self {
             text_local,
@@ -344,6 +365,7 @@ impl<'a> StaticTextSlice<'a> {
             container,
             font_bytes,
             variations,
+            modifiers,
         })
     }
 
@@ -434,9 +456,24 @@ impl<'a> StaticTextSlice<'a> {
         }
         let mut commands = Vec::new();
         let mut cursor_x = 0.0f32;
+        let modifier_coverages = self
+            .modifiers
+            .iter()
+            .map(|modifier| modifier.coverage_by_character(runtime, instance, &text))
+            .collect::<Result<Vec<_>>>()?;
         for glyph in glyphs {
-            let offset_x = 0.0;
-            let offset_y = 0.0;
+            let char_index = character_index_for_cluster(&text, glyph.cluster);
+            let mut offset_x = 0.0;
+            let mut offset_y = 0.0;
+            for (modifier, coverage) in self.modifiers.iter().zip(&modifier_coverages) {
+                let amount = coverage.get(char_index).copied().unwrap_or(0.0);
+                if amount == 0.0 {
+                    continue;
+                }
+                let (x, y) = modifier.translation(runtime, instance)?;
+                offset_x += x * amount;
+                offset_y += y * amount;
+            }
             let glyph_id = GlyphId::new(glyph.glyph_id);
             if let Some(outline) = outlines.get(glyph_id) {
                 let mut pen = TextOutlinePen::new(cursor_x + offset_x, baseline + offset_y, scale);
@@ -697,6 +734,489 @@ impl<'a> StaticTextSlice<'a> {
     }
 }
 
+// Mirrors the static coverage/translation subset from C++
+// src/text/text_modifier_group.cpp and src/text/text_modifier_range.cpp.
+impl StaticTextModifierGroup {
+    fn from_graph(runtime: &RuntimeFile, graph: &ArtboardGraph, local_id: usize) -> Result<Self> {
+        let global_id = global_for_local(graph, local_id)?;
+        let object = runtime
+            .object(global_id as usize)
+            .with_context(|| format!("missing TextModifierGroup global {global_id}"))?;
+        let flags = object.uint_property("modifierFlags").unwrap_or(0);
+        const MODIFY_TRANSLATION: u64 = 1 << 2;
+        if flags & !MODIFY_TRANSLATION != 0 {
+            bail!(
+                "static text subset only supports translation TextModifierGroup flags, found {flags}"
+            );
+        }
+
+        let component = component_for_local(graph, local_id)
+            .with_context(|| format!("TextModifierGroup local {local_id} component is missing"))?;
+        let mut ranges = Vec::new();
+        for child_local in &component.children {
+            match type_for_local(graph, *child_local) {
+                Some("TextModifierRange") => {
+                    ranges.push(StaticTextModifierRange::from_graph(
+                        runtime,
+                        graph,
+                        *child_local,
+                    )?);
+                }
+                Some(type_name) => {
+                    bail!("static text subset does not support TextModifierGroup child {type_name}")
+                }
+                None => bail!(
+                    "static text subset does not support unknown TextModifierGroup child local {child_local}"
+                ),
+            }
+        }
+
+        Ok(Self {
+            local_id,
+            global_id,
+            ranges,
+        })
+    }
+
+    fn translation(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+    ) -> Result<(f32, f32)> {
+        let flags = runtime_uint_property(
+            runtime,
+            instance,
+            "TextModifierGroup",
+            self.local_id,
+            self.global_id,
+            "modifierFlags",
+            0,
+        )?;
+        const MODIFY_TRANSLATION: u64 = 1 << 2;
+        if flags & MODIFY_TRANSLATION == 0 {
+            return Ok((0.0, 0.0));
+        }
+        Ok((
+            runtime_double_property(
+                runtime,
+                instance,
+                "TextModifierGroup",
+                self.local_id,
+                self.global_id,
+                "x",
+                0.0,
+            )?,
+            runtime_double_property(
+                runtime,
+                instance,
+                "TextModifierGroup",
+                self.local_id,
+                self.global_id,
+                "y",
+                0.0,
+            )?,
+        ))
+    }
+
+    fn coverage_by_character(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        text: &str,
+    ) -> Result<Vec<f32>> {
+        let mut coverage = vec![0.0; text.chars().count()];
+        for range in &self.ranges {
+            range.apply_coverage(runtime, instance, &mut coverage)?;
+        }
+        Ok(coverage)
+    }
+}
+
+impl StaticTextModifierRange {
+    fn from_graph(runtime: &RuntimeFile, graph: &ArtboardGraph, local_id: usize) -> Result<Self> {
+        let global_id = global_for_local(graph, local_id)?;
+        let object = runtime
+            .object(global_id as usize)
+            .with_context(|| format!("missing TextModifierRange global {global_id}"))?;
+        let units = object.uint_property("unitsValue").unwrap_or(0);
+        if units != 0 {
+            bail!(
+                "static text subset only supports character TextModifierRange units, found {units}"
+            );
+        }
+        let run_id = object.uint_property("runId").unwrap_or(u32::MAX as u64);
+        if run_id != u32::MAX as u64 {
+            bail!("static text subset does not support TextModifierRange runId");
+        }
+
+        let component = component_for_local(graph, local_id)
+            .with_context(|| format!("TextModifierRange local {local_id} component is missing"))?;
+        let mut interpolator = None;
+        for child_local in &component.children {
+            match type_for_local(graph, *child_local) {
+                Some("CubicInterpolatorComponent") => {
+                    if interpolator.is_some() {
+                        bail!("static text subset supports one TextModifierRange interpolator");
+                    }
+                    interpolator = Some(StaticCubicInterpolator {
+                        local_id: *child_local,
+                        global_id: global_for_local(graph, *child_local)?,
+                    });
+                }
+                Some(type_name) => {
+                    bail!("static text subset does not support TextModifierRange child {type_name}")
+                }
+                None => bail!(
+                    "static text subset does not support unknown TextModifierRange child local {child_local}"
+                ),
+            }
+        }
+
+        Ok(Self {
+            local_id,
+            global_id,
+            interpolator,
+        })
+    }
+
+    fn apply_coverage(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        coverage: &mut [f32],
+    ) -> Result<()> {
+        if coverage.is_empty() {
+            return Ok(());
+        }
+        let unit_count = coverage.len() as f32;
+        let offset = self.double_property(runtime, instance, "offset", 0.0)?;
+        let range_type = self.uint_property(runtime, instance, "typeValue", 0)?;
+        let (index_from, index_to, falloff_from, falloff_to) = match range_type {
+            0 => (
+                unit_count * (self.double_property(runtime, instance, "modifyFrom", 0.0)? + offset),
+                unit_count * (self.double_property(runtime, instance, "modifyTo", 1.0)? + offset),
+                unit_count
+                    * (self.double_property(runtime, instance, "falloffFrom", 0.0)? + offset),
+                unit_count * (self.double_property(runtime, instance, "falloffTo", 1.0)? + offset),
+            ),
+            1 => (
+                self.double_property(runtime, instance, "modifyFrom", 0.0)? + offset,
+                self.double_property(runtime, instance, "modifyTo", 1.0)? + offset,
+                self.double_property(runtime, instance, "falloffFrom", 0.0)? + offset,
+                self.double_property(runtime, instance, "falloffTo", 1.0)? + offset,
+            ),
+            other => bail!("static text subset does not support TextModifierRange type {other}"),
+        };
+        let strength = self.double_property(runtime, instance, "strength", 1.0)?;
+        let mode = self.uint_property(runtime, instance, "modeValue", 0)?;
+        let clamp = self.bool_property(runtime, instance, "clamp", false)?;
+
+        for (unit_index, current) in coverage.iter_mut().enumerate() {
+            let t = unit_index as f32 + 0.5;
+            let c = strength
+                * self.coverage_at(
+                    runtime,
+                    instance,
+                    t,
+                    index_from,
+                    index_to,
+                    falloff_from,
+                    falloff_to,
+                )?;
+            let next = match mode {
+                0 => *current + c,
+                1 => *current - c,
+                2 => *current * c,
+                3 => current.min(c),
+                4 => current.max(c),
+                5 => (*current - c).abs(),
+                other => {
+                    bail!("static text subset does not support TextModifierRange mode {other}")
+                }
+            };
+            *current = if clamp { next.clamp(0.0, 1.0) } else { next };
+        }
+
+        Ok(())
+    }
+
+    fn coverage_at(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        t: f32,
+        index_from: f32,
+        index_to: f32,
+        falloff_from: f32,
+        falloff_to: f32,
+    ) -> Result<f32> {
+        let mut c = if index_to < index_from || t < index_from || t > index_to {
+            0.0
+        } else if t < falloff_from {
+            let range = (falloff_from - index_from).max(0.0);
+            if range == 0.0 {
+                1.0
+            } else {
+                ((t - index_from).max(0.0) / range).max(0.0)
+            }
+        } else if t > falloff_to {
+            let range = (index_to - falloff_to).max(0.0);
+            if range == 0.0 {
+                1.0
+            } else {
+                1.0 - ((t - falloff_to) / range).min(1.0)
+            }
+        } else {
+            1.0
+        };
+        if c != 0.0
+            && c != 1.0
+            && let Some(interpolator) = self.interpolator
+        {
+            c = interpolator.transform(runtime, instance, c)?;
+        }
+        Ok(c)
+    }
+
+    fn double_property(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        property_name: &str,
+        default: f32,
+    ) -> Result<f32> {
+        runtime_double_property(
+            runtime,
+            instance,
+            "TextModifierRange",
+            self.local_id,
+            self.global_id,
+            property_name,
+            default,
+        )
+    }
+
+    fn uint_property(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        property_name: &str,
+        default: u64,
+    ) -> Result<u64> {
+        runtime_uint_property(
+            runtime,
+            instance,
+            "TextModifierRange",
+            self.local_id,
+            self.global_id,
+            property_name,
+            default,
+        )
+    }
+
+    fn bool_property(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        property_name: &str,
+        default: bool,
+    ) -> Result<bool> {
+        runtime_bool_property(
+            runtime,
+            instance,
+            "TextModifierRange",
+            self.local_id,
+            self.global_id,
+            property_name,
+            default,
+        )
+    }
+}
+
+impl StaticCubicInterpolator {
+    fn transform(
+        self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        factor: f32,
+    ) -> Result<f32> {
+        let x1 = runtime_double_property(
+            runtime,
+            instance,
+            "CubicInterpolatorComponent",
+            self.local_id,
+            self.global_id,
+            "x1",
+            0.42,
+        )?;
+        let y1 = runtime_double_property(
+            runtime,
+            instance,
+            "CubicInterpolatorComponent",
+            self.local_id,
+            self.global_id,
+            "y1",
+            0.0,
+        )?;
+        let x2 = runtime_double_property(
+            runtime,
+            instance,
+            "CubicInterpolatorComponent",
+            self.local_id,
+            self.global_id,
+            "x2",
+            0.58,
+        )?;
+        let y2 = runtime_double_property(
+            runtime,
+            instance,
+            "CubicInterpolatorComponent",
+            self.local_id,
+            self.global_id,
+            "y2",
+            1.0,
+        )?;
+        let t = cubic_interpolator_get_t(factor, x1, x2);
+        Ok(cubic_interpolator_calc_bezier(t, y1, y2))
+    }
+}
+
+fn runtime_double_property(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    type_name: &str,
+    local_id: usize,
+    global_id: u32,
+    property_name: &str,
+    default: f32,
+) -> Result<f32> {
+    let property_key = property_key_for_name(type_name, property_name)
+        .with_context(|| format!("missing {type_name}.{property_name} key"))?;
+    Ok(instance
+        .double_property(local_id, property_key)
+        .or_else(|| {
+            runtime
+                .object(global_id as usize)
+                .and_then(|object| object.double_property(property_name))
+        })
+        .unwrap_or(default))
+}
+
+fn runtime_uint_property(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    type_name: &str,
+    local_id: usize,
+    global_id: u32,
+    property_name: &str,
+    default: u64,
+) -> Result<u64> {
+    let property_key = property_key_for_name(type_name, property_name)
+        .with_context(|| format!("missing {type_name}.{property_name} key"))?;
+    Ok(instance
+        .uint_property(local_id, property_key)
+        .or_else(|| {
+            runtime
+                .object(global_id as usize)
+                .and_then(|object| object.uint_property(property_name))
+        })
+        .unwrap_or(default))
+}
+
+fn runtime_bool_property(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    type_name: &str,
+    local_id: usize,
+    global_id: u32,
+    property_name: &str,
+    default: bool,
+) -> Result<bool> {
+    let property_key = property_key_for_name(type_name, property_name)
+        .with_context(|| format!("missing {type_name}.{property_name} key"))?;
+    Ok(instance
+        .bool_property(local_id, property_key)
+        .or_else(|| {
+            runtime
+                .object(global_id as usize)
+                .and_then(|object| object.bool_property(property_name))
+        })
+        .unwrap_or(default))
+}
+
+fn character_index_for_cluster(text: &str, cluster: u32) -> usize {
+    let cluster = cluster as usize;
+    text.char_indices()
+        .take_while(|(byte_index, _)| *byte_index <= cluster)
+        .count()
+        .saturating_sub(1)
+}
+
+fn cubic_interpolator_calc_bezier(t: f32, a1: f32, a2: f32) -> f32 {
+    (((1.0 - 3.0 * a2 + 3.0 * a1) * t + (3.0 * a2 - 6.0 * a1)) * t + (3.0 * a1)) * t
+}
+
+fn cubic_interpolator_slope(t: f32, a1: f32, a2: f32) -> f32 {
+    3.0 * (1.0 - 3.0 * a2 + 3.0 * a1) * t * t + 2.0 * (3.0 * a2 - 6.0 * a1) * t + (3.0 * a1)
+}
+
+fn cubic_interpolator_get_t(x: f32, x1: f32, x2: f32) -> f32 {
+    const SPLINE_TABLE_SIZE: usize = 11;
+    const SAMPLE_STEP_SIZE: f32 = 1.0 / (SPLINE_TABLE_SIZE as f32 - 1.0);
+    const NEWTON_ITERATIONS: usize = 4;
+    const NEWTON_MIN_SLOPE: f32 = 0.001;
+    const SUBDIVISION_PRECISION: f32 = 0.0000001;
+    const SUBDIVISION_MAX_ITERATIONS: usize = 10;
+
+    let mut values = [0.0; SPLINE_TABLE_SIZE];
+    for (i, value) in values.iter_mut().enumerate() {
+        *value = cubic_interpolator_calc_bezier(i as f32 * SAMPLE_STEP_SIZE, x1, x2);
+    }
+
+    let mut interval_start = 0.0;
+    let mut current_sample = 1;
+    let last_sample = SPLINE_TABLE_SIZE - 1;
+    while current_sample != last_sample && values[current_sample] <= x {
+        interval_start += SAMPLE_STEP_SIZE;
+        current_sample += 1;
+    }
+    current_sample -= 1;
+
+    let dist = (x - values[current_sample]) / (values[current_sample + 1] - values[current_sample]);
+    let mut guess_for_t = interval_start + dist * SAMPLE_STEP_SIZE;
+    let initial_slope = cubic_interpolator_slope(guess_for_t, x1, x2);
+    if initial_slope >= NEWTON_MIN_SLOPE {
+        for _ in 0..NEWTON_ITERATIONS {
+            let current_slope = cubic_interpolator_slope(guess_for_t, x1, x2);
+            if current_slope == 0.0 {
+                return guess_for_t;
+            }
+            let current_x = cubic_interpolator_calc_bezier(guess_for_t, x1, x2) - x;
+            guess_for_t -= current_x / current_slope;
+        }
+        guess_for_t
+    } else if initial_slope == 0.0 {
+        guess_for_t
+    } else {
+        let mut upper_bound = interval_start + SAMPLE_STEP_SIZE;
+        let mut iterations = 0;
+        loop {
+            let current_t = interval_start + (upper_bound - interval_start) / 2.0;
+            let current_x = cubic_interpolator_calc_bezier(current_t, x1, x2) - x;
+            if current_x > 0.0 {
+                upper_bound = current_t;
+            } else {
+                interval_start = current_t;
+            }
+            iterations += 1;
+            if current_x.abs() <= SUBDIVISION_PRECISION || iterations >= SUBDIVISION_MAX_ITERATIONS
+            {
+                return current_t;
+            }
+        }
+    }
+}
+
 #[derive(Clone)]
 struct TextGlyph {
     glyph_id: u32,
@@ -925,6 +1445,24 @@ fn global_for_local(graph: &ArtboardGraph, local_id: usize) -> Result<u32> {
         .find(|object| object.local_id == local_id)
         .map(|object| object.global_id)
         .with_context(|| format!("missing local object {local_id}"))
+}
+
+fn type_for_local(graph: &ArtboardGraph, local_id: usize) -> Option<&str> {
+    graph
+        .local_objects
+        .iter()
+        .find(|object| object.local_id == local_id)
+        .and_then(|object| object.type_name)
+}
+
+fn component_for_local(
+    graph: &ArtboardGraph,
+    local_id: usize,
+) -> Option<&rive_graph::ComponentNode> {
+    graph
+        .components
+        .iter()
+        .find(|component| component.local_id == local_id)
 }
 
 fn embedded_file_asset_bytes(runtime: &RuntimeFile, asset_global: u32) -> Option<&[u8]> {

@@ -637,8 +637,8 @@ fn ensure_static_draw_supported_for_artboard(
     if let Some((text, reason)) = artboard
         .local_objects
         .iter()
-        .find(|object| object.type_name == Some("Text"))
-        .and_then(|object| {
+        .filter(|object| object.type_name == Some("Text"))
+        .find_map(|object| {
             static_text_support_error(runtime, artboard, object.local_id)
                 .map(|reason| (object, reason))
         })

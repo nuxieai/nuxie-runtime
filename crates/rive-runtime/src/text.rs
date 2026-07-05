@@ -224,6 +224,9 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
         Some("NestedArtboard") => ["artboardId", "isPaused", "speed", "quantize"]
             .into_iter()
             .any(|name| property_key_for_name("NestedArtboard", name) == Some(property_key)),
+        Some("ArtboardComponentList") => {
+            property_key_for_name("ArtboardComponentList", "listSource") == Some(property_key)
+        }
         _ => false,
     }
 }
@@ -293,6 +296,7 @@ impl<'a> StaticTextSlice<'a> {
                         | "Backboard"
                         | "NestedArtboard"
                         | "NestedStateMachine"
+                        | "ArtboardComponentList"
                         | "RootBone"
                         | "Skin"
                         | "Tendon"
@@ -355,7 +359,6 @@ impl<'a> StaticTextSlice<'a> {
                         | "TextFollowPathModifier"
                         | "NestedArtboardLayout"
                         | "NestedArtboardLeaf"
-                        | "ArtboardComponentList"
                         | "ForegroundLayoutDrawable"
                 )
             )

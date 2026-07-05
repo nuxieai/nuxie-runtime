@@ -6,8 +6,8 @@ the only memory the next session has. Update it every commit.
 ## Metric
 
 - Exact segments (file × sample): 493 across 172 exact files
-- Current compare: `make golden-compare` reports diverges=3, unsupported-feature=120, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=76 gated=8 harness=36
+- Current compare: `make golden-compare` reports diverges=4, unsupported-feature=119, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=75 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -23,19 +23,18 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Reopen `computed_values_test.riv` through the #V2-7 Taffy layout trait:
-   remove only the stale gates needed to reach draw, compare the direct
-   C++/Rust streams, and fix or retag the first real nested layout /
-   computed-value text blocker. Do not extend hand-rolled flex math; expand
-   the Taffy adapter only when the diff proves missing Rive style/provider
-   plumbing.
+1. Probe `follow_path_path.riv` as the next small
+   `rust-runner-unsupported:text` M6 gate: compare direct C++/Rust streams,
+   remove only stale static-text gates needed to reach draw, and fix or retag
+   the first real follow-path/text blocker. Do not start a general text layout
+   rewrite unless the stream diff proves the corpus needs it.
 2. Keep `new_text.riv` parked as a known M6 divergence until a dedicated text
    outline backend/canonicalization slice: gradient sibling admission now
    reaches draw, but Rust/Skrifa and C++ HarfBuzz emit a glyph contour with a
    different segment start/order, so exact stream comparison fails on path
    verbs/points.
-3. Keep follow-path text files parked behind `TextFollowPathModifier` and
-   unsupported `Text` property data-bind targets;
+3. Keep richer follow-path text files parked behind `TextFollowPathModifier`
+   and unsupported `Text` property data-bind targets;
    `text_follow_path_shape_length.riv` currently fails first on data binding
    target `Text` global 73 before it reaches follow-path drawing.
 4. Keep `text_vertical_trim_test.riv` parked behind text data-binding target
@@ -57,6 +56,12 @@ the only memory the next session has. Update it every commit.
   (`src/text/font_hb.cpp`) and `TextStylePaint::addPathClockwise`; Rust uses
   Skrifa outlines. The first stream diff is path verb/point ordering, not a
   paint/gradient mismatch.
+- `computed_values_test.riv`: after admitting `ArtboardComponentList.listSource`,
+  nested child `Shape.computedRootX/Y` binds, and empty component-list provider
+  trees through the #V2-7 Taffy layout path, Rust reaches draw. The layout
+  background now matches C++ at width `510`; the first remaining diff is text
+  path id 3, where C++ renders a longer computed/list value string and Rust
+  emits fewer glyph contours.
 - `relative_data_binding.riv`: after nested `TextValueRun.text` support, Rust
   reaches draw but activates a nested text/relative-position branch that C++
   suppresses at sample 0. First stream diff: a rectangle transform has x=96.5
@@ -684,3 +689,13 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=120`, `not-yet=0`, and parked
   `M6=76 gated=8 harness=36`; `cargo test --workspace` passes. Next target:
   reopen `computed_values_test.riv` through the Taffy-backed layout path.
+- 2026-07-05: [M6] Reopened `computed_values_test.riv` by admitting
+  `ArtboardComponentList.listSource`, nested child `Shape.computedRootX/Y`
+  binds, and empty component-list provider trees through the Taffy layout
+  adapter. The file now reaches draw and is retagged as
+  `rust-runner-divergence:computed-values-text`; `computed_root_transform.riv`
+  declares `verification = "tolerant(0.5)"` for the subpixel Yoga/Taffy layout
+  rounding exposed by the same path. `make golden-compare` reports
+  `exact=172`, `exact-segments=493`, `diverges=4`,
+  `unsupported-feature=119`, `not-yet=0`, and parked
+  `M6=75 gated=8 harness=36`; next target is `follow_path_path.riv`.

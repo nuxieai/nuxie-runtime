@@ -817,32 +817,47 @@ impl ArtboardInstance {
 
     pub(crate) fn runtime_layout_computed_property(
         &self,
-        layout_local: usize,
+        local_id: usize,
         property: RuntimeLayoutComputedProperty,
         graph: &ArtboardGraph,
     ) -> Option<f32> {
-        if self
-            .slot(layout_local)
-            .is_none_or(|slot| slot.type_name != Some("LayoutComponent"))
-        {
-            return None;
+        let component = self.component(local_id)?;
+        if component.type_name != "LayoutComponent" {
+            let world = self.runtime_component_world_transform(local_id, graph);
+            return match property {
+                RuntimeLayoutComputedProperty::LocalX => {
+                    Some(component.transform.local_transform.0[4])
+                }
+                RuntimeLayoutComputedProperty::LocalY => {
+                    Some(component.transform.local_transform.0[5])
+                }
+                RuntimeLayoutComputedProperty::WorldX | RuntimeLayoutComputedProperty::RootX => {
+                    Some(world.0[4])
+                }
+                RuntimeLayoutComputedProperty::WorldY | RuntimeLayoutComputedProperty::RootY => {
+                    Some(world.0[5])
+                }
+                RuntimeLayoutComputedProperty::Width | RuntimeLayoutComputedProperty::Height => {
+                    Some(0.0)
+                }
+            };
         }
 
         // Ported from C++ `include/rive/layout_component.hpp`: LayoutComponent
         // overrides Node's local x/y and width/height computed accessors with
         // settled layout bounds.
-        let bounds = self.runtime_layout_component_bounds(layout_local, graph);
+        let bounds = self.runtime_layout_component_bounds(local_id, graph);
         match property {
             RuntimeLayoutComputedProperty::LocalX => Some(bounds.x),
             RuntimeLayoutComputedProperty::LocalY => Some(bounds.y),
             RuntimeLayoutComputedProperty::Width => Some(bounds.width),
             RuntimeLayoutComputedProperty::Height => Some(bounds.height),
             RuntimeLayoutComputedProperty::WorldX | RuntimeLayoutComputedProperty::RootX => Some(
-                self.runtime_layout_component_world_transform(layout_local, graph)
+                self.runtime_layout_component_world_transform(local_id, graph)
                     .0[4],
             ),
             RuntimeLayoutComputedProperty::WorldY | RuntimeLayoutComputedProperty::RootY => Some(
-                self.runtime_layout_component_world_transform(layout_local, graph)
+                self.runtime_layout_component_world_transform(local_id, graph)
                     .0[5],
             ),
         }
@@ -2475,7 +2490,12 @@ impl TaffyRuntimeLayoutEngine {
                     child_nodes.push(child_node);
                     child_locals.push(*child_local);
                 }
-                "NestedArtboardLayout" | "ArtboardComponentList" => return None,
+                "ArtboardComponentList" => {
+                    if !self.empty_component_list_supported(graph, *child_local)? {
+                        return None;
+                    }
+                }
+                "NestedArtboardLayout" => return None,
                 _ => {}
             }
         }
@@ -2488,6 +2508,18 @@ impl TaffyRuntimeLayoutEngine {
         build.nodes_by_local.insert(local, node);
         build.children_by_local.insert(local, child_locals);
         Some(node)
+    }
+
+    fn empty_component_list_supported(&self, graph: &ArtboardGraph, local: usize) -> Option<bool> {
+        let component = graph
+            .components
+            .iter()
+            .find(|component| component.local_id == local)?;
+        let list = graph
+            .component_lists
+            .iter()
+            .find(|list| list.local_id == local)?;
+        Some(component.children.is_empty() && list.map_rules.is_empty())
     }
 
     fn collect_bounds(

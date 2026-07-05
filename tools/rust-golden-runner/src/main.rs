@@ -1435,6 +1435,11 @@ fn nested_child_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> boo
             && matches!(data_bind.property_key, 13 | 14)
             && data_bind.converter_global.is_none())
         || (data_bind.target_type_name == Some("Shape")
+            // NodeBase::computedRootXPropertyKey/computedRootYPropertyKey in
+            // C++ generated/node_base.hpp.
+            && matches!(data_bind.property_key, 864 | 865)
+            && data_bind.converter_global.is_none())
+        || (data_bind.target_type_name == Some("Shape")
             // TransformComponentBase::rotationPropertyKey in C++ generated/transform_component_base.hpp.
             && data_bind.property_key == 15
             && data_bind.converter_type_name == Some("DataConverterSystemDegsToRads"))

@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 460 across 139 exact files
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=113 gated=7 harness=36
+- Exact segments (file × sample): 461 across 140 exact files
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=112 gated=7 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -22,14 +22,14 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Start `text_opacity_modifier.riv`: after the rotation slice promoted
-   `test_modifier_run.riv`, this fixture now fails first on a static-text
-   sibling `CubicEaseInterpolator` global 16. Admit that already-supported
-   keyframe interpolator shape through the static text whitelist, then continue
-   to the expected `TextModifierGroup` opacity/invert-opacity flags if exposed.
-2. Keep scale/origin text modifier files parked behind the same
-   `src/text/text_modifier_group.cpp` transform path: rotation is now exact,
-   but scale/origin still need explicit corpus-driven promotion.
+1. Start `text_stroke_test.riv`: after the opacity slice promoted
+   `text_opacity_modifier.riv`, this fixture now fails first on a static-text
+   sibling `DashPath` global 10. Reopen it through the existing shape
+   stroke/dash paint path, then continue to text `Stroke` paint behavior if
+   exposed.
+2. Keep follow-path text files parked behind `TextFollowPathModifier` and text
+   data-binding blockers; `text_follow_path_shape_length.riv` currently fails
+   first on text data binding before it reaches follow-path drawing.
 3. Keep `vertical_align_ellipsis.riv` parked for now: temporarily admitting
    sibling `Stroke` reaches draw but diverges on fixed-size vertical
    align/ellipsis placement, so it should reopen with vertical-align text
@@ -124,11 +124,12 @@ the only memory the next session has. Update it every commit.
   targets are still not supported.
 - Static text support currently covers one style or matching-metric
   multi-style text, static authored-line-break and no-break multi-run text,
-  and translation/rotation-only `TextModifierGroup` over C++-style
+  and translation/rotation/opacity `TextModifierGroup` over C++-style
   `TextModifierRange` character, character-excluding-space, word, and static
-  line range maps with runId targeting and an optional
-  `CubicInterpolatorComponent`. Shape/follow-path/scale/origin/opacity
-  modifiers, richer layout, and text input/editing remain M6 text
+  line range maps with runId targeting and optional cubic range
+  interpolation, including C++-ordered opacity buckets. Shape/follow-path/
+  scale/origin modifiers, text strokes/effects, richer layout, and text
+  input/editing remain M6 text
   diagnostics.
 - `TransformConstraint` currently covers Text constraint bounds for the
   supported static Text subset plus the default empty
@@ -364,3 +365,10 @@ the only memory the next session has. Update it every commit.
   `exact-segments=460`, `unsupported-feature=156`, and parked
   `M6=113 gated=7 harness=36`; next reopen `text_opacity_modifier.riv`, which
   now fails first on a static-text sibling `CubicEaseInterpolator`.
+- 2026-07-04: [M6] Promoted `text_opacity_modifier.riv` by translating C++
+  `TextModifierGroup::computeOpacity` and `TextStylePaint` opacity buckets,
+  including temporary render-paint allocation order and libc++ float bucket
+  iteration for exact stream ordering. `make golden-compare` moved to
+  `exact=140`, `exact-segments=461`, `unsupported-feature=155`, and parked
+  `M6=112 gated=7 harness=36`; next reopen `text_stroke_test.riv`, which now
+  fails first on a static-text sibling `DashPath`.

@@ -1111,6 +1111,7 @@ pub struct RuntimeShapePaintCommand {
     pub effect_path_commands: Vec<RuntimePathCommand>,
     pub has_effect_path: bool,
     pub needs_save_operation: bool,
+    pub uses_temporary_paint: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1564,6 +1565,7 @@ fn runtime_background_shape_paint_command(
         effect_path_commands: Vec::new(),
         has_effect_path: false,
         needs_save_operation: true,
+        uses_temporary_paint: false,
     })
 }
 
@@ -1595,6 +1597,7 @@ fn runtime_prepare_gradient_paint_command(
         effect_path_commands: Vec::new(),
         has_effect_path: false,
         needs_save_operation: false,
+        uses_temporary_paint: false,
     }
 }
 
@@ -1658,6 +1661,22 @@ fn runtime_draw_command(
         renderer.save();
     }
 
+    let mut text_temporary_paints = Vec::new();
+    if draws_text {
+        text_temporary_paints.reserve(
+            shape_paints
+                .iter()
+                .filter(|paint| paint.uses_temporary_paint)
+                .count(),
+        );
+        for _ in shape_paints
+            .iter()
+            .filter(|paint| paint.uses_temporary_paint)
+        {
+            text_temporary_paints.push(factory.make_render_paint());
+        }
+    }
+    let mut text_temporary_paint_index = 0;
     let mut draw_path_slots = Vec::<Vec<RuntimePathCommand>>::new();
     for paint in shape_paints {
         let global_id = *local_to_global
@@ -1671,15 +1690,26 @@ fn runtime_draw_command(
         } else {
             &paint.path_commands
         };
-        runtime_configure_paint(
-            paint_by_global
-                .get_mut(&global_id)
-                .with_context(|| format!("missing render paint for global {global_id}"))?
-                .as_mut(),
-            object,
-            paint,
-            None,
-        )?;
+        let temporary_paint_index = if draws_text && paint.uses_temporary_paint {
+            let render_paint = text_temporary_paints
+                .get_mut(text_temporary_paint_index)
+                .context("missing temporary text render paint")?;
+            let index = text_temporary_paint_index;
+            text_temporary_paint_index += 1;
+            runtime_configure_paint(render_paint.as_mut(), object, paint, None)?;
+            Some(index)
+        } else {
+            runtime_configure_paint(
+                paint_by_global
+                    .get_mut(&global_id)
+                    .with_context(|| format!("missing render paint for global {global_id}"))?
+                    .as_mut(),
+                object,
+                paint,
+                None,
+            )?;
+            None
+        };
         let path_index = runtime_cached_path_slot_index(&mut draw_path_slots, path_commands);
         let mut saved = !paint.needs_save_operation;
         if matches!(
@@ -1704,17 +1734,19 @@ fn runtime_draw_command(
         if !draws_text {
             runtime_configure_fill_rule(path.as_mut(), object);
         }
-        renderer.draw_path(
-            path.as_ref(),
+        let render_paint = if let Some(index) = temporary_paint_index {
+            text_temporary_paints[index].as_ref()
+        } else {
             paint_by_global
                 .get(&global_id)
                 .with_context(|| format!("missing render paint for global {global_id}"))?
-                .as_ref(),
-        );
+                .as_ref()
+        };
+        renderer.draw_path(path.as_ref(), render_paint);
         if saved && paint.needs_save_operation {
             renderer.restore();
         }
-        if draws_text {
+        if draws_text && !paint.uses_temporary_paint {
             let _ = factory.make_render_paint();
         }
     }
@@ -2287,6 +2319,7 @@ pub(crate) fn runtime_shape_paint_command(
         effect_path_commands: effect_path_commands.unwrap_or_default(),
         has_effect_path,
         needs_save_operation,
+        uses_temporary_paint: false,
     })
 }
 

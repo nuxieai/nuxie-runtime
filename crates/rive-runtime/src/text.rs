@@ -54,10 +54,10 @@ pub(crate) fn runtime_text_shape_paint_commands(
         .local_id
         .context("text draw command missing local id")?;
     let slice = StaticTextSlice::from_graph(runtime, graph, text_local)?;
-    let path_commands_by_style = slice.path_commands_by_style(runtime, instance)?;
-    if path_commands_by_style
+    let path_buckets_by_style = slice.path_commands_by_style(runtime, instance)?;
+    if path_buckets_by_style
         .iter()
-        .all(|path_commands| path_commands.is_empty())
+        .all(|buckets| buckets.iter().all(|bucket| bucket.commands.is_empty()))
     {
         return Ok(Vec::new());
     }
@@ -74,25 +74,28 @@ pub(crate) fn runtime_text_shape_paint_commands(
     let needs_save_operation = true;
 
     let mut commands = Vec::new();
-    for (style, path_commands) in slice.styles.iter().zip(path_commands_by_style) {
-        if path_commands.is_empty() {
-            continue;
-        }
-        commands.extend(style.container.paints.iter().filter_map(|paint| {
-            let mut command = runtime_shape_paint_command(
-                instance,
-                paint,
-                style.container.blend_mode_value,
-                needs_save_operation,
-                render_opacity,
-                shape_world,
-                path_commands.clone(),
-            )?;
-            if command.paint_type == RuntimeShapePaintKind::Fill {
-                command.path_kind = RuntimeShapePaintPathKind::LocalClockwise;
+    for (style, path_buckets) in slice.styles.iter().zip(path_buckets_by_style) {
+        for path_bucket in order_opacity_buckets_like_cpp(path_buckets) {
+            if path_bucket.commands.is_empty() {
+                continue;
             }
-            Some(command)
-        }));
+            commands.extend(style.container.paints.iter().filter_map(|paint| {
+                let mut command = runtime_shape_paint_command(
+                    instance,
+                    paint,
+                    style.container.blend_mode_value,
+                    needs_save_operation,
+                    render_opacity * path_bucket.opacity,
+                    shape_world,
+                    path_bucket.commands.clone(),
+                )?;
+                if command.paint_type == RuntimeShapePaintKind::Fill {
+                    command.path_kind = RuntimeShapePaintPathKind::LocalClockwise;
+                }
+                command.uses_temporary_paint = path_bucket.opacity != 1.0;
+                Some(command)
+            }));
+        }
     }
     Ok(commands)
 }
@@ -166,6 +169,12 @@ struct StaticRangeUnit {
     len: usize,
 }
 
+#[derive(Debug, Clone)]
+struct StaticTextPathBucket {
+    opacity: f32,
+    commands: Vec<RuntimePathCommand>,
+}
+
 #[derive(Debug, Clone, Copy)]
 struct StaticCubicInterpolator {
     local_id: usize,
@@ -218,6 +227,7 @@ impl<'a> StaticTextSlice<'a> {
                         | "KeyedObject"
                         | "KeyedProperty"
                         | "LinearAnimation"
+                        | "CubicEaseInterpolator"
                         | "KeyFrameColor"
                         | "KeyFrameBool"
                         | "TransformConstraint"
@@ -369,7 +379,7 @@ impl<'a> StaticTextSlice<'a> {
         &self,
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
-    ) -> Result<Vec<Vec<RuntimePathCommand>>> {
+    ) -> Result<Vec<Vec<StaticTextPathBucket>>> {
         let resolved_runs = self.resolved_runs(runtime, instance)?;
         let text = resolved_runs
             .iter()
@@ -498,14 +508,18 @@ impl<'a> StaticTextSlice<'a> {
                     line.char_start + character_index_for_cluster(line.text, glyph.cluster);
                 let char_len = glyph_character_len(line.text, &glyphs, glyph_index);
                 let mut glyph_transform = Mat2D::IDENTITY;
+                let mut glyph_opacity = 1.0;
                 for (modifier, coverage) in self.modifiers.iter().zip(&modifier_coverages) {
                     let amount = glyph_coverage(coverage, char_index, char_len);
-                    if amount == 0.0 {
-                        continue;
+                    if amount != 0.0 {
+                        glyph_transform = modifier
+                            .transform(runtime, instance, amount)?
+                            .multiply(glyph_transform);
                     }
-                    glyph_transform = modifier
-                        .transform(runtime, instance, amount)?
-                        .multiply(glyph_transform);
+                    if modifier.modifies_opacity(runtime, instance)? {
+                        glyph_opacity =
+                            modifier.opacity(runtime, instance, glyph_opacity, amount)?;
+                    }
                 }
                 let glyph_id = GlyphId::new(glyph.glyph_id);
                 if let Some(outline) = outlines.get(glyph_id) {
@@ -525,7 +539,11 @@ impl<'a> StaticTextSlice<'a> {
                         .draw(draw_settings, &mut pen)
                         .with_context(|| format!("failed to draw glyph {}", glyph.glyph_id))?;
                     let style_index = style_by_character.get(char_index).copied().unwrap_or(0);
-                    commands_by_style[style_index].extend(pen.commands);
+                    append_opacity_bucket(
+                        &mut commands_by_style[style_index],
+                        glyph_opacity,
+                        pen.commands,
+                    );
                 }
                 cursor_x += glyph.advance * scale + letter_spacing;
             }
@@ -1065,9 +1083,11 @@ impl StaticTextModifierGroup {
         let flags = object.uint_property("modifierFlags").unwrap_or(0);
         const MODIFY_TRANSLATION: u64 = 1 << 2;
         const MODIFY_ROTATION: u64 = 1 << 3;
-        if flags & !(MODIFY_TRANSLATION | MODIFY_ROTATION) != 0 {
+        const MODIFY_OPACITY: u64 = 1 << 5;
+        const INVERT_OPACITY: u64 = 1 << 6;
+        if flags & !(MODIFY_TRANSLATION | MODIFY_ROTATION | MODIFY_OPACITY | INVERT_OPACITY) != 0 {
             bail!(
-                "static text subset only supports translation/rotation TextModifierGroup flags, found {flags}"
+                "static text subset only supports translation/rotation/opacity TextModifierGroup flags, found {flags}"
             );
         }
 
@@ -1157,6 +1177,53 @@ impl StaticTextModifierGroup {
         transform.0[4] = x;
         transform.0[5] = y;
         Ok(transform)
+    }
+
+    fn modifies_opacity(&self, runtime: &RuntimeFile, instance: &ArtboardInstance) -> Result<bool> {
+        let flags = runtime_uint_property(
+            runtime,
+            instance,
+            "TextModifierGroup",
+            self.local_id,
+            self.global_id,
+            "modifierFlags",
+            0,
+        )?;
+        const MODIFY_OPACITY: u64 = 1 << 5;
+        Ok(flags & MODIFY_OPACITY != 0)
+    }
+
+    fn opacity(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        current: f32,
+        amount: f32,
+    ) -> Result<f32> {
+        let flags = runtime_uint_property(
+            runtime,
+            instance,
+            "TextModifierGroup",
+            self.local_id,
+            self.global_id,
+            "modifierFlags",
+            0,
+        )?;
+        let opacity = runtime_double_property(
+            runtime,
+            instance,
+            "TextModifierGroup",
+            self.local_id,
+            self.global_id,
+            "opacity",
+            1.0,
+        )?;
+        const INVERT_OPACITY: u64 = 1 << 6;
+        if flags & INVERT_OPACITY != 0 {
+            Ok(current * (1.0 - amount) + opacity * amount)
+        } else {
+            Ok(current * opacity * amount)
+        }
     }
 
     fn coverage_by_character(
@@ -1615,6 +1682,85 @@ fn glyph_coverage(coverage: &[f32], char_index: usize, char_len: usize) -> f32 {
         return 0.0;
     }
     coverage[char_index..end].iter().copied().sum::<f32>() / (end - char_index) as f32
+}
+
+fn append_opacity_bucket(
+    buckets: &mut Vec<StaticTextPathBucket>,
+    opacity: f32,
+    commands: Vec<RuntimePathCommand>,
+) {
+    if opacity <= 0.0 || commands.is_empty() {
+        return;
+    }
+    if let Some(bucket) = buckets.iter_mut().find(|bucket| bucket.opacity == opacity) {
+        bucket.commands.extend(commands);
+    } else {
+        buckets.push(StaticTextPathBucket { opacity, commands });
+    }
+}
+
+fn order_opacity_buckets_like_cpp(buckets: Vec<StaticTextPathBucket>) -> Vec<StaticTextPathBucket> {
+    if buckets.len() < 2 {
+        return buckets;
+    }
+
+    // C++ TextStylePaint buckets opacity paths in std::unordered_map<float,
+    // ShapePaintPath>. The golden stream observes libc++'s small-map insertion
+    // order: new empty buckets are linked at the front, while collisions are
+    // inserted before the first node in that bucket.
+    let mut bucket_count = 0usize;
+    let mut ordered_indices = Vec::<usize>::new();
+    for index in 0..buckets.len() {
+        let size_after_insert = index + 1;
+        if size_after_insert > bucket_count {
+            bucket_count = next_cpp_unordered_bucket_count(bucket_count, size_after_insert);
+        }
+        let bucket_index = cpp_float_hash_bucket(buckets[index].opacity, bucket_count);
+        let insertion_index = ordered_indices
+            .iter()
+            .position(|existing| {
+                cpp_float_hash_bucket(buckets[*existing].opacity, bucket_count) == bucket_index
+            })
+            .unwrap_or(0);
+        ordered_indices.insert(insertion_index, index);
+    }
+
+    ordered_indices
+        .into_iter()
+        .map(|index| buckets[index].clone())
+        .collect()
+}
+
+fn cpp_float_hash_bucket(value: f32, bucket_count: usize) -> usize {
+    (value.to_bits() as usize) % bucket_count
+}
+
+fn next_cpp_unordered_bucket_count(current: usize, desired: usize) -> usize {
+    if current == 0 {
+        return 2;
+    }
+    next_prime((current * 2).max(desired))
+}
+
+fn next_prime(mut value: usize) -> usize {
+    while !is_prime(value) {
+        value += 1;
+    }
+    value
+}
+
+fn is_prime(value: usize) -> bool {
+    if value < 2 {
+        return false;
+    }
+    let mut divisor = 2;
+    while divisor * divisor <= value {
+        if value % divisor == 0 {
+            return false;
+        }
+        divisor += 1;
+    }
+    true
 }
 
 fn has_forced_text_break(text: &str) -> bool {

@@ -27,10 +27,11 @@ the only memory the next session has. Update it every commit.
    `data_bind_test_cmdq.riv`, `data_binding_test.riv`,
    `data_converter_to_number.riv`, `scripted_data_context.riv`,
    `state_transition_fire_trigger.riv`, and `trigger_based_listeners.riv`
-   as known divergences. Start with `data_binding_test.riv` because its first
-   diff is foreground-layout-backed text emitted at identity transform where
-   C++ uses the layout position, then check whether the same text
-   bounds/suppression path moves the other five files.
+   as known divergences. Continue `data_binding_test.riv`: foreground-layout
+   drawing, layout-backed text control size, and stream length are now wired,
+   but C++/Rust still diverge on the wrapped Taffy/Yoga row break between
+   `Row 26` and `Row 25`. Expose/compare layout boxes by local id before
+   changing more runtime behavior.
 2. Keep `new_text.riv` and `follow_path_path.riv` parked as known M6
    divergences until a dedicated text outline backend/canonicalization slice.
    `follow_path_path.riv` now reaches draw after clearing stale
@@ -83,11 +84,14 @@ the only memory the next session has. Update it every commit.
   block diverges. First focused diff: C++ transforms the block at
   y=`434.356567` while Rust emits it at y=`460.671631`, with different
   background/clip path heights.
-- `data_binding_test.riv`: after admitting `ForegroundLayoutDrawable` through
-  the static text gate, Rust reaches draw but foreground-layout-backed text is
-  emitted at identity transform where C++ uses the layout position. First
-  focused diff: C++ transform `[1,0,0,1,400,468.925781]` versus Rust
-  `[1,0,0,1,0,0]`, followed by a shorter Rust stream.
+- `data_binding_test.riv`: foreground-layout-backed text now uses the parent
+  layout transform/path, static text receives layout control size, and focused
+  C++/Rust streams both have 1230 lines. The remaining first diff is row-wrap
+  geometry: C++ emits the first text block at
+  `[1,0,0,1,400,468.925781]` while Rust/Taffy emits
+  `[1,0,0,1,400,444.716797]`. The visible gap occurs between drawn
+  `Row 26` and `Row 25`, so the next step is local-id layout-box comparison
+  against C++ Yoga, not more text admission.
 - `data_converter_to_number.riv`: after admitting custom-property siblings
   through static text and adding `CustomPropertyBoolean` /
   `CustomPropertyColor` target-to-source values, Rust reaches draw but the
@@ -423,6 +427,11 @@ the only memory the next session has. Update it every commit.
   hide missing Rive text layout behavior such as wrapping, fit-font-size, or
   layout-controlled text bounds. New Taffy layout gates may not be promoted
   through hand-rolled fallback after the #V2-7 layout adapter refuses a tree.
+- 2026-07-05: M6 layout/text diagnostic rule: when a Taffy-backed file reaches
+  draw but diverges on wrapped layout placement, expose local-id layout boxes
+  from C++ Yoga and Rust Taffy before adding more renderer/text behavior. Draw
+  suppression and layout participation are separate facts; do not infer one
+  from the other without a focused C++ probe.
 
 ## Log
 
@@ -971,3 +980,15 @@ the only memory the next session has. Update it every commit.
   `M6=57 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
   the M6 text layout/draw-suppression bucket, starting with
   `data_binding_test.riv`.
+- 2026-07-05: [M6] Narrowed `data_binding_test.riv` by routing
+  `ForegroundLayoutDrawable` paints through their parent `LayoutComponent`
+  path/transform, threading the coherent Taffy layout snapshot into draw/text,
+  disabling Taffy rounding to mirror Yoga point-scale `0`, measuring static
+  Text leaves for layout control size, and using controlled layout width for
+  auto-width text alignment under non-artboard layout parents. Focused streams
+  now have matching length and no identity-transform failure; the first
+  remaining diff is the Taffy/Yoga wrapped row offset described above.
+  `make golden-compare` remains `exact=179`, `exact-segments=500`,
+  `diverges=15`, `unsupported-feature=101`, `not-yet=0`, and parked
+  `M6=57 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
+  a C++/Rust local-id layout-box probe for `data_binding_test.riv`.

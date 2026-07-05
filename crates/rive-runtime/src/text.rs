@@ -18,13 +18,18 @@ use skrifa::{FontRef as SkrifaFontRef, GlyphId, MetadataProvider, Tag as SkrifaT
 use std::collections::BTreeSet;
 
 use crate::data_bind_flags_apply_source_to_target;
-use crate::draw::runtime_shape_paint_command;
+use crate::draw::{RuntimeLayoutBounds, runtime_shape_paint_command};
 use crate::properties::property_key_for_name;
 use crate::{ArtboardInstance, Mat2D, RuntimeDrawCommand, RuntimePathCommand};
 use crate::{RuntimeShapePaintCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind};
+use std::collections::BTreeMap;
 
 const TEXT_SHAPE_SCALE: i32 = 2048;
 const TEXT_SHAPE_SCALE_F32: f32 = TEXT_SHAPE_SCALE as f32;
+const TEXT_SIZING_AUTO_WIDTH: u64 = 0;
+const TEXT_SIZING_AUTO_HEIGHT: u64 = 1;
+const TEXT_SIZING_FIXED: u64 = 2;
+const LAYOUT_SCALE_TYPE_HUG: u64 = 2;
 
 pub fn static_text_support_error(
     runtime: &RuntimeFile,
@@ -54,12 +59,14 @@ pub(crate) fn runtime_text_shape_paint_commands(
     instance: &ArtboardInstance,
     graph: &ArtboardGraph,
     command: &RuntimeDrawCommand,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    layout_constraint: Option<RuntimeTextLayoutConstraint>,
 ) -> Result<Vec<RuntimeShapePaintCommand>> {
     let text_local = command
         .local_id
         .context("text draw command missing local id")?;
     let slice = StaticTextSlice::from_graph(runtime, graph, text_local)?;
-    let render_data = slice.render_data(runtime, instance)?;
+    let render_data = slice.render_data(runtime, instance, layout_constraint)?;
     if render_data
         .path_buckets_by_style
         .iter()
@@ -71,7 +78,8 @@ pub(crate) fn runtime_text_shape_paint_commands(
         .component(text_local)
         .map(|component| component.transform.render_opacity)
         .unwrap_or(1.0);
-    let shape_world = instance.runtime_component_world_transform(text_local, graph);
+    let shape_world =
+        instance.runtime_component_world_transform_with_bounds(text_local, graph, layout_bounds);
     let shape_world = shape_world.multiply(render_data.local_transform);
     // C++ text draw isolates the glyph path transform even when clipping
     // elides the drawable-level save.
@@ -172,6 +180,28 @@ struct StaticTextLayoutInfo {
 struct StaticTextRenderData {
     path_buckets_by_style: Vec<Vec<StaticTextPathBucket>>,
     local_transform: Mat2D,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct RuntimeTextLayoutConstraint {
+    pub(crate) width: f32,
+    pub(crate) height: f32,
+    pub(crate) width_scale_type: u64,
+    pub(crate) height_scale_type: u64,
+}
+
+impl RuntimeTextLayoutConstraint {
+    fn effective_sizing(self, authored_sizing: u64) -> u64 {
+        // Ported from C++ `src/text/text.cpp` `Text::effectiveSizing`:
+        // non-hug parent layout control sizes make text lay out as fixed.
+        if self.width_scale_type == LAYOUT_SCALE_TYPE_HUG
+            || self.height_scale_type == LAYOUT_SCALE_TYPE_HUG
+        {
+            authored_sizing
+        } else {
+            TEXT_SIZING_FIXED
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -524,6 +554,7 @@ impl<'a> StaticTextSlice<'a> {
         &self,
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
+        layout_constraint: Option<RuntimeTextLayoutConstraint>,
     ) -> Result<StaticTextRenderData> {
         let resolved_runs = self.resolved_runs(runtime, instance)?;
         let text = resolved_runs
@@ -593,10 +624,12 @@ impl<'a> StaticTextSlice<'a> {
                 )
             });
         let scale = font_size / TEXT_SHAPE_SCALE_F32;
-        let apply_ellipsis = self.should_apply_static_ellipsis(runtime, instance)?;
+        let apply_ellipsis =
+            self.should_apply_static_ellipsis(runtime, instance, layout_constraint)?;
         let lines = self.layout_static_text_lines(
             runtime,
             instance,
+            layout_constraint,
             &text,
             &shaper,
             disable_legacy_kern,
@@ -616,6 +649,7 @@ impl<'a> StaticTextSlice<'a> {
             line_height,
             measured_width,
             apply_ellipsis,
+            layout_constraint,
         )?;
         let mut commands_by_style = vec![Vec::new(); self.styles.len()];
         let modifier_coverages = self
@@ -636,7 +670,7 @@ impl<'a> StaticTextSlice<'a> {
             }
             let mut glyphs = self.styled_line_glyphs(runtime, instance, &line, &resolved_runs)?;
             if layout_info.ellipsis_line == Some(line.line_index) {
-                let max_width = self.text_width(runtime, instance)?;
+                let max_width = self.effective_width(runtime, instance, layout_constraint)?;
                 let ellipsis_style = glyphs.last().map(|glyph| glyph.style_index).unwrap_or(0);
                 let ellipsis = self.styled_text_glyphs_for_style(
                     runtime,
@@ -660,6 +694,7 @@ impl<'a> StaticTextSlice<'a> {
                     && self.static_fixed_height_shows_first_line_only(
                         runtime,
                         instance,
+                        layout_constraint,
                         line_height,
                     )?
                 {
@@ -1050,6 +1085,42 @@ impl<'a> StaticTextSlice<'a> {
             .unwrap_or(0.0))
     }
 
+    fn effective_sizing(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        layout_constraint: Option<RuntimeTextLayoutConstraint>,
+    ) -> Result<u64> {
+        let authored = self.text_uint_property(runtime, instance, "sizingValue")?;
+        Ok(layout_constraint
+            .map(|constraint| constraint.effective_sizing(authored))
+            .unwrap_or(authored))
+    }
+
+    fn effective_width(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        layout_constraint: Option<RuntimeTextLayoutConstraint>,
+    ) -> Result<f32> {
+        match layout_constraint {
+            Some(constraint) => Ok(constraint.width),
+            None => self.text_width(runtime, instance),
+        }
+    }
+
+    fn effective_height(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        layout_constraint: Option<RuntimeTextLayoutConstraint>,
+    ) -> Result<f32> {
+        match layout_constraint {
+            Some(constraint) => Ok(constraint.height),
+            None => self.text_height(runtime, instance),
+        }
+    }
+
     fn text_double_property(
         &self,
         runtime: &RuntimeFile,
@@ -1091,10 +1162,13 @@ impl<'a> StaticTextSlice<'a> {
         &self,
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
+        layout_constraint: Option<RuntimeTextLayoutConstraint>,
     ) -> Result<bool> {
-        let sizing = self.text_uint_property(runtime, instance, "sizingValue")?;
+        let sizing = self.effective_sizing(runtime, instance, layout_constraint)?;
         let overflow = self.text_uint_property(runtime, instance, "overflowValue")?;
-        Ok(sizing == 2 && overflow == 3 && self.text_width(runtime, instance)? > 0.0)
+        Ok(sizing == TEXT_SIZING_FIXED
+            && overflow == 3
+            && self.effective_width(runtime, instance, layout_constraint)? > 0.0)
     }
 
     fn first_static_wrapped_line_end(
@@ -1150,6 +1224,7 @@ impl<'a> StaticTextSlice<'a> {
         &self,
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
+        layout_constraint: Option<RuntimeTextLayoutConstraint>,
         text: &'text str,
         shaper: &harfrust::Shaper<'_>,
         disable_legacy_kern: bool,
@@ -1157,10 +1232,14 @@ impl<'a> StaticTextSlice<'a> {
         letter_spacing: f32,
     ) -> Result<Vec<StaticTextLine<'text>>> {
         let authored_lines = split_static_text_lines(text);
-        let sizing = self.text_uint_property(runtime, instance, "sizingValue")?;
+        let sizing = self.effective_sizing(runtime, instance, layout_constraint)?;
         let wrap = self.text_uint_property(runtime, instance, "wrapValue")?;
-        let max_width = self.text_width(runtime, instance)?;
-        if sizing == 0 || wrap != 0 || max_width <= 0.0 {
+        let max_width = self.effective_width(runtime, instance, layout_constraint)?;
+        let parent_is_layout_not_artboard = layout_constraint.is_some();
+        if (sizing == TEXT_SIZING_AUTO_WIDTH && !parent_is_layout_not_artboard)
+            || wrap != 0
+            || max_width <= 0.0
+        {
             return Ok(authored_lines);
         }
 
@@ -1227,14 +1306,26 @@ impl<'a> StaticTextSlice<'a> {
         line_height: f32,
         measured_width: f32,
         apply_ellipsis: bool,
+        layout_constraint: Option<RuntimeTextLayoutConstraint>,
     ) -> Result<StaticTextLayoutInfo> {
-        let sizing = self.text_uint_property(runtime, instance, "sizingValue")?;
+        let sizing = self.effective_sizing(runtime, instance, layout_constraint)?;
         let bounds_width = match sizing {
-            1 | 2 => self.text_width(runtime, instance)?,
+            TEXT_SIZING_AUTO_HEIGHT | TEXT_SIZING_FIXED => {
+                self.effective_width(runtime, instance, layout_constraint)?
+            }
             _ => measured_width,
         };
+        let paragraph_width = if layout_constraint.is_some() {
+            // Ported from C++ `src/text/text.cpp` `Text::update` /
+            // `buildRenderStyles`: a Text parented by a non-artboard
+            // LayoutComponent keeps auto-width bounds based on measured text,
+            // but line breaking/alignment uses the controlled layout width.
+            self.effective_width(runtime, instance, layout_constraint)?
+        } else {
+            bounds_width
+        };
         let bounds_height = match sizing {
-            2 => self.text_height(runtime, instance)?,
+            TEXT_SIZING_FIXED => self.effective_height(runtime, instance, layout_constraint)?,
             _ => line_height * lines.len().max(1) as f32,
         };
         let origin_x = self.text_double_property(runtime, instance, "originX", 0.0)?;
@@ -1267,7 +1358,7 @@ impl<'a> StaticTextSlice<'a> {
         }
 
         let mut y_offset = -bounds_height * origin_y;
-        if sizing == 2 {
+        if sizing == TEXT_SIZING_FIXED {
             // Mirrors src/text/text.cpp::buildRenderStyles fixed-size vertical
             // alignment transform for top/bottom/middle text.
             match self.text_uint_property(runtime, instance, "verticalAlignValue")? {
@@ -1280,7 +1371,7 @@ impl<'a> StaticTextSlice<'a> {
         Ok(StaticTextLayoutInfo {
             ellipsis_line,
             is_ellipsis_line_last,
-            paragraph_width: bounds_width,
+            paragraph_width,
             align_value,
             x_offset: -bounds_width * origin_x,
             y_offset,
@@ -1298,9 +1389,10 @@ impl<'a> StaticTextSlice<'a> {
         &self,
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
+        layout_constraint: Option<RuntimeTextLayoutConstraint>,
         line_height: f32,
     ) -> Result<bool> {
-        let height = self.text_height(runtime, instance)?;
+        let height = self.effective_height(runtime, instance, layout_constraint)?;
         Ok(line_height > 0.0 && height > 0.0 && height < line_height * 2.0)
     }
 }

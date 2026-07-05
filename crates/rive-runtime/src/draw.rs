@@ -24,11 +24,22 @@ use crate::properties::{
     RuntimeLayoutComputedProperty, property_key_for_name, shape_paint_is_visible_property_key,
     solid_color_value_property_key,
 };
-use crate::text::{runtime_text_shape_paint_commands, static_text_constraint_bounds};
+use crate::text::{
+    RuntimeTextLayoutConstraint, runtime_text_shape_paint_commands, static_text_constraint_bounds,
+};
 use crate::{ArtboardInstance, Mat2D};
 
 impl ArtboardInstance {
     pub fn draw_commands(&self, graph: &ArtboardGraph) -> Vec<RuntimeDrawCommand> {
+        let layout_bounds = self.runtime_taffy_layout_bounds(graph, None);
+        self.draw_commands_with_layout_bounds(graph, layout_bounds.as_ref())
+    }
+
+    fn draw_commands_with_layout_bounds(
+        &self,
+        graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    ) -> Vec<RuntimeDrawCommand> {
         let mut commands = Vec::new();
         let mut pending_clip_operations = Vec::<&SortedDrawableNode>::new();
         let mut empty_clips = 0i32;
@@ -49,14 +60,12 @@ impl ArtboardInstance {
                     continue;
                 }
 
-                commands.extend(
-                    pending_clip_operations.drain(..).map(|pending_clip| {
-                        self.runtime_draw_command_for_node(pending_clip, graph)
-                    }),
-                );
+                commands.extend(pending_clip_operations.drain(..).map(|pending_clip| {
+                    self.runtime_draw_command_for_node(pending_clip, graph, layout_bounds)
+                }));
             }
 
-            commands.push(self.runtime_draw_command_for_node(drawable, graph));
+            commands.push(self.runtime_draw_command_for_node(drawable, graph, layout_bounds));
         }
 
         commands
@@ -281,7 +290,8 @@ impl ArtboardInstance {
             render_cache,
         )?;
 
-        for command in self.draw_commands(graph) {
+        let layout_bounds = self.runtime_taffy_layout_bounds(graph, Some(runtime));
+        for command in self.draw_commands_with_layout_bounds(graph, layout_bounds.as_ref()) {
             if !sorted_drawable_is_nested_artboard(command.type_name) {
                 continue;
             }
@@ -537,7 +547,8 @@ impl ArtboardInstance {
             .map(|object| (object.local_id, object.global_id))
             .collect::<BTreeMap<_, _>>();
 
-        for command in self.draw_commands(graph) {
+        let layout_bounds = self.runtime_taffy_layout_bounds(graph, Some(runtime));
+        for command in self.draw_commands_with_layout_bounds(graph, layout_bounds.as_ref()) {
             runtime_draw_command(
                 runtime,
                 self,
@@ -545,6 +556,7 @@ impl ArtboardInstance {
                 artboards,
                 &local_to_global,
                 command,
+                layout_bounds.as_ref(),
                 factory,
                 renderer,
                 paint_by_global,
@@ -694,6 +706,7 @@ impl ArtboardInstance {
         &self,
         drawable: &SortedDrawableNode,
         graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) -> RuntimeDrawCommand {
         RuntimeDrawCommand {
             kind: match drawable.kind {
@@ -712,7 +725,7 @@ impl ArtboardInstance {
             referenced_artboard_global: drawable.referenced_artboard_global,
             clipping_shape_local: drawable.clipping_shape_local,
             needs_save_operation: drawable.needs_save_operation,
-            shape_paints: self.runtime_shape_paint_commands(drawable, graph),
+            shape_paints: self.runtime_shape_paint_commands(drawable, graph, layout_bounds),
         }
     }
 
@@ -720,34 +733,67 @@ impl ArtboardInstance {
         &self,
         drawable: &SortedDrawableNode,
         graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) -> Vec<RuntimeShapePaintCommand> {
-        let shape_local = match drawable.kind {
-            DrawableOrderKind::Drawable if drawable.type_name == "Shape" => drawable.local_id,
-            DrawableOrderKind::LayoutProxy => drawable.layout_local,
-            _ => None,
+        let (container_local, layout_path_local) = match drawable.kind {
+            DrawableOrderKind::Drawable if drawable.type_name == "Shape" => {
+                (drawable.local_id, None)
+            }
+            DrawableOrderKind::Drawable if drawable.type_name == "ForegroundLayoutDrawable" => {
+                let Some(foreground_local) = drawable.local_id else {
+                    return Vec::new();
+                };
+                let Some(parent_layout_local) = self
+                    .component(foreground_local)
+                    .and_then(|component| component.parent_local)
+                    .filter(|parent_local| {
+                        self.component(*parent_local)
+                            .is_some_and(|component| component.type_name == "LayoutComponent")
+                    })
+                else {
+                    return Vec::new();
+                };
+                (Some(foreground_local), Some(parent_layout_local))
+            }
+            DrawableOrderKind::LayoutProxy => (drawable.layout_local, drawable.layout_local),
+            _ => (None, None),
         };
-        let Some(shape_local) = shape_local else {
+        let Some(container_local) = container_local else {
             return Vec::new();
         };
         let Some(container) = graph
             .shape_paint_containers
             .iter()
-            .find(|container| container.local_id == shape_local)
+            .find(|container| container.local_id == container_local)
         else {
             return Vec::new();
         };
-        if !matches!(container.type_name, "Shape" | "LayoutComponent") {
+        if !matches!(
+            container.type_name,
+            "Shape" | "LayoutComponent" | "ForegroundLayoutDrawable"
+        ) {
             return Vec::new();
         }
         let needs_save_operation = drawable.needs_save_operation || container.paints.len() > 1;
+        let transform_local = layout_path_local.unwrap_or(container_local);
         let render_opacity = self
-            .component(shape_local)
+            .component(transform_local)
             .map(|component| component.transform.render_opacity)
             .unwrap_or(1.0);
-        let shape_world = if container.type_name == "LayoutComponent" {
-            self.runtime_layout_component_world_transform(shape_local, graph)
+        let shape_world = if let Some(layout_local) = layout_path_local {
+            self.runtime_layout_component_world_transform_with_bounds(
+                layout_local,
+                graph,
+                layout_bounds,
+            )
+        } else if container.type_name == "LayoutComponent" {
+            self.runtime_layout_component_world_transform_with_bounds(
+                container_local,
+                graph,
+                layout_bounds,
+            )
         } else {
-            self.component(shape_local)
+            self.component(container_local)
                 .map(|component| component.transform.world_transform)
                 .unwrap_or(Mat2D::IDENTITY)
         };
@@ -757,9 +803,27 @@ impl ArtboardInstance {
             .iter()
             .filter_map(|paint| {
                 let path_commands = match container.type_name {
-                    "Shape" => self.runtime_shape_paint_path_commands(shape_local, paint, graph),
-                    "LayoutComponent" => {
-                        self.runtime_layout_component_paint_path_commands(shape_local, paint, graph)
+                    "Shape" => {
+                        self.runtime_shape_paint_path_commands(container_local, paint, graph)
+                    }
+                    "LayoutComponent" => self.runtime_layout_component_paint_path_commands(
+                        container_local,
+                        paint,
+                        graph,
+                        layout_bounds,
+                    ),
+                    "ForegroundLayoutDrawable" => {
+                        // Ported from C++ `src/foreground_layout_drawable.cpp`:
+                        // foreground layout paints draw the parent
+                        // `LayoutComponent` path with the parent layout world
+                        // transform.
+                        let layout_local = layout_path_local?;
+                        self.runtime_layout_component_paint_path_commands(
+                            layout_local,
+                            paint,
+                            graph,
+                            layout_bounds,
+                        )
                     }
                     _ => Vec::new(),
                 };
@@ -772,7 +836,9 @@ impl ArtboardInstance {
                     shape_world,
                     path_commands,
                 )?;
-                if drawable.kind == DrawableOrderKind::LayoutProxy {
+                if drawable.kind == DrawableOrderKind::LayoutProxy
+                    || container.type_name == "ForegroundLayoutDrawable"
+                {
                     command.shape_world_override = Some(shape_world);
                 }
                 Some(command)
@@ -785,6 +851,7 @@ impl ArtboardInstance {
         layout_local: usize,
         paint: &ShapePaintNode,
         graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) -> Vec<RuntimePathCommand> {
         if paint.path_kind.is_none() {
             return Vec::new();
@@ -794,7 +861,8 @@ impl ArtboardInstance {
         // shape paints against a background rectangle built from computed
         // layout bounds. TODO(golden): route all layout components through the
         // M6 layout engine.
-        let bounds = self.runtime_layout_component_bounds(layout_local, graph);
+        let bounds =
+            self.runtime_layout_component_bounds_with_bounds(layout_local, graph, layout_bounds);
         let corners = self.runtime_layout_component_corners(layout_local);
         runtime_layout_rect_path_commands(bounds, corners)
     }
@@ -868,6 +936,15 @@ impl ArtboardInstance {
         local_id: usize,
         graph: &ArtboardGraph,
     ) -> Mat2D {
+        self.runtime_component_world_transform_with_bounds(local_id, graph, None)
+    }
+
+    pub(crate) fn runtime_component_world_transform_with_bounds(
+        &self,
+        local_id: usize,
+        graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    ) -> Mat2D {
         let Some(component) = self.component(local_id) else {
             return Mat2D::IDENTITY;
         };
@@ -875,12 +952,16 @@ impl ArtboardInstance {
             return component.transform.world_transform;
         }
         if component.type_name == "LayoutComponent" {
-            return self.runtime_layout_component_world_transform(local_id, graph);
+            return self.runtime_layout_component_world_transform_with_bounds(
+                local_id,
+                graph,
+                layout_bounds,
+            );
         }
         let Some(parent_local) = component.parent_local else {
             return component.transform.world_transform;
         };
-        self.runtime_component_world_transform(parent_local, graph)
+        self.runtime_component_world_transform_with_bounds(parent_local, graph, layout_bounds)
             .multiply(component.transform.local_transform)
     }
 
@@ -889,7 +970,18 @@ impl ArtboardInstance {
         layout_local: usize,
         graph: &ArtboardGraph,
     ) -> Mat2D {
-        let bounds = self.runtime_supported_layout_component_bounds(layout_local, graph);
+        self.runtime_layout_component_world_transform_with_bounds(layout_local, graph, None)
+    }
+
+    fn runtime_layout_component_world_transform_with_bounds(
+        &self,
+        layout_local: usize,
+        graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    ) -> Mat2D {
+        let bounds = layout_bounds
+            .and_then(|bounds| bounds.get(&layout_local).copied())
+            .or_else(|| self.runtime_supported_layout_component_bounds(layout_local, graph));
         if let Some(bounds) = bounds {
             return Mat2D([1.0, 0.0, 0.0, 1.0, bounds.x, bounds.y]);
         }
@@ -903,9 +995,50 @@ impl ArtboardInstance {
         layout_local: usize,
         graph: &ArtboardGraph,
     ) -> RuntimeLayoutBounds {
+        self.runtime_layout_component_bounds_with_bounds(layout_local, graph, None)
+    }
+
+    fn runtime_layout_component_bounds_with_bounds(
+        &self,
+        layout_local: usize,
+        graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    ) -> RuntimeLayoutBounds {
+        if let Some(bounds) = layout_bounds.and_then(|bounds| bounds.get(&layout_local).copied()) {
+            return bounds;
+        }
         let mut cache = BTreeMap::new();
         let mut visiting = BTreeSet::new();
         self.runtime_layout_component_bounds_memo(layout_local, graph, &mut cache, &mut visiting)
+    }
+
+    fn runtime_taffy_layout_bounds(
+        &self,
+        graph: &ArtboardGraph,
+        runtime: Option<&RuntimeFile>,
+    ) -> Option<BTreeMap<usize, RuntimeLayoutBounds>> {
+        TaffyRuntimeLayoutEngine.compute_bounds(self, graph, runtime)
+    }
+
+    fn runtime_text_layout_constraint(
+        &self,
+        text_local: usize,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    ) -> Option<RuntimeTextLayoutConstraint> {
+        let text = self.component(text_local)?;
+        let parent_local = text.parent_local?;
+        let parent = self.component(parent_local)?;
+        if parent.type_name != "LayoutComponent" {
+            return None;
+        }
+        let style_local = self.runtime_layout_component_style_local(parent_local)?;
+        let bounds = layout_bounds.and_then(|bounds| bounds.get(&parent_local).copied())?;
+        Some(RuntimeTextLayoutConstraint {
+            width: bounds.width,
+            height: bounds.height,
+            width_scale_type: self.runtime_layout_axis_scale(style_local, true),
+            height_scale_type: self.runtime_layout_axis_scale(style_local, false),
+        })
     }
 
     fn runtime_layout_component_bounds_memo(
@@ -973,7 +1106,7 @@ impl ArtboardInstance {
         cache: &mut BTreeMap<usize, RuntimeLayoutBounds>,
         visiting: &mut BTreeSet<usize>,
     ) -> Option<RuntimeLayoutBounds> {
-        if let Some(bounds) = TaffyRuntimeLayoutEngine.compute_bounds(self, graph) {
+        if let Some(bounds) = TaffyRuntimeLayoutEngine.compute_bounds(self, graph, None) {
             for (local, bounds) in &bounds {
                 cache.entry(*local).or_insert(*bounds);
             }
@@ -2371,7 +2504,7 @@ pub struct RuntimeDrawCommand {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-struct RuntimeLayoutBounds {
+pub(crate) struct RuntimeLayoutBounds {
     x: f32,
     y: f32,
     width: f32,
@@ -2383,6 +2516,7 @@ trait RuntimeLayoutEngine {
         &self,
         instance: &ArtboardInstance,
         graph: &ArtboardGraph,
+        runtime: Option<&RuntimeFile>,
     ) -> Option<BTreeMap<usize, RuntimeLayoutBounds>>;
 }
 
@@ -2399,6 +2533,7 @@ impl RuntimeLayoutEngine for TaffyRuntimeLayoutEngine {
         &self,
         instance: &ArtboardInstance,
         graph: &ArtboardGraph,
+        runtime: Option<&RuntimeFile>,
     ) -> Option<BTreeMap<usize, RuntimeLayoutBounds>> {
         // Ported from C++ `src/layout_component.cpp`
         // `syncStyle`/`syncLayoutChildren`/`calculateLayoutInternal`: translate
@@ -2415,15 +2550,31 @@ impl RuntimeLayoutEngine for TaffyRuntimeLayoutEngine {
             return None;
         }
 
-        let mut taffy = TaffyTree::new();
+        let mut taffy = TaffyTree::<usize>::new();
+        taffy.disable_rounding();
         let mut build = TaffyLayoutBuild::default();
-        let root_node = self.build_node(instance, graph, 0, true, &mut taffy, &mut build)?;
+        let root_node =
+            self.build_node(instance, graph, runtime, 0, true, &mut taffy, &mut build)?;
         taffy
-            .compute_layout(
+            .compute_layout_with_measure(
                 root_node,
                 Size {
                     width: AvailableSpace::Definite(instance.width),
                     height: AvailableSpace::Definite(instance.height),
+                },
+                |known_dimensions, available_space, _node_id, node_context, _style| {
+                    node_context
+                        .and_then(|layout_local| {
+                            self.measure_layout_component(
+                                runtime?,
+                                instance,
+                                graph,
+                                *layout_local,
+                                known_dimensions,
+                                available_space,
+                            )
+                        })
+                        .unwrap_or(Size::ZERO)
                 },
             )
             .ok()?;
@@ -2450,9 +2601,10 @@ impl TaffyRuntimeLayoutEngine {
         &self,
         instance: &ArtboardInstance,
         graph: &ArtboardGraph,
+        runtime: Option<&RuntimeFile>,
         local: usize,
         parent_is_row: bool,
-        taffy: &mut TaffyTree,
+        taffy: &mut TaffyTree<usize>,
         build: &mut TaffyLayoutBuild,
     ) -> Option<NodeId> {
         let component = graph
@@ -2462,7 +2614,7 @@ impl TaffyRuntimeLayoutEngine {
         if !matches!(component.type_name, "Artboard" | "LayoutComponent") {
             return None;
         }
-        if self.needs_unimplemented_measure(instance, graph, local)? {
+        if self.needs_unimplemented_measure(instance, graph, runtime, local)? {
             return None;
         }
 
@@ -2473,9 +2625,9 @@ impl TaffyRuntimeLayoutEngine {
         let mut child_nodes = Vec::new();
         let mut child_locals = Vec::new();
         for child_local in &component.children {
-            if instance.runtime_component_is_effectively_collapsed(*child_local) {
-                continue;
-            }
+            // C++ inserts layout-provider children into Yoga even when runtime
+            // collapse later suppresses drawing; display:none is represented
+            // by the child node's style.
             let Some(child) = graph
                 .components
                 .iter()
@@ -2485,8 +2637,15 @@ impl TaffyRuntimeLayoutEngine {
             };
             match child.type_name {
                 "LayoutComponent" => {
-                    let child_node =
-                        self.build_node(instance, graph, *child_local, is_row, taffy, build)?;
+                    let child_node = self.build_node(
+                        instance,
+                        graph,
+                        runtime,
+                        *child_local,
+                        is_row,
+                        taffy,
+                        build,
+                    )?;
                     child_nodes.push(child_node);
                     child_locals.push(*child_local);
                 }
@@ -2501,7 +2660,13 @@ impl TaffyRuntimeLayoutEngine {
         }
 
         let node = if child_nodes.is_empty() {
-            taffy.new_leaf(style).ok()?
+            if runtime.is_some()
+                && self.layout_component_has_static_text_measure(instance, graph, local)?
+            {
+                taffy.new_leaf_with_context(style, local).ok()?
+            } else {
+                taffy.new_leaf(style).ok()?
+            }
         } else {
             taffy.new_with_children(style, &child_nodes).ok()?
         };
@@ -2527,7 +2692,7 @@ impl TaffyRuntimeLayoutEngine {
         local: usize,
         parent_x: f32,
         parent_y: f32,
-        taffy: &TaffyTree,
+        taffy: &TaffyTree<usize>,
         build: &TaffyLayoutBuild,
         bounds: &mut BTreeMap<usize, RuntimeLayoutBounds>,
     ) -> Option<()> {
@@ -2973,6 +3138,7 @@ impl TaffyRuntimeLayoutEngine {
         &self,
         instance: &ArtboardInstance,
         graph: &ArtboardGraph,
+        runtime: Option<&RuntimeFile>,
         layout_local: usize,
     ) -> Option<bool> {
         let Some(style_local) = instance.runtime_layout_component_style_local(layout_local) else {
@@ -2992,6 +3158,11 @@ impl TaffyRuntimeLayoutEngine {
         if !intrinsic && !hugs_content {
             return Some(false);
         }
+        if runtime.is_some()
+            && self.layout_component_has_static_text_measure(instance, graph, layout_local)?
+        {
+            return Some(false);
+        }
         let component = graph
             .components
             .iter()
@@ -3005,7 +3176,8 @@ impl TaffyRuntimeLayoutEngine {
             !matches!(
                 child_type,
                 Some(
-                    "Fill"
+                    "LayoutComponent"
+                        | "Fill"
                         | "LinearGradient"
                         | "RadialGradient"
                         | "SolidColor"
@@ -3016,9 +3188,74 @@ impl TaffyRuntimeLayoutEngine {
         }))
     }
 
+    fn layout_component_has_static_text_measure(
+        &self,
+        _instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        layout_local: usize,
+    ) -> Option<bool> {
+        let component = graph
+            .components
+            .iter()
+            .find(|component| component.local_id == layout_local)?;
+        Some(component.children.iter().any(|child_local| {
+            graph
+                .components
+                .iter()
+                .find(|component| component.local_id == *child_local)
+                .is_some_and(|child| child.type_name == "Text")
+        }))
+    }
+
+    fn measure_layout_component(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        layout_local: usize,
+        known_dimensions: Size<Option<f32>>,
+        _available_space: Size<AvailableSpace>,
+    ) -> Option<Size<f32>> {
+        // Ported from C++ `src/layout_component.cpp`
+        // `LayoutComponent::measureLayout`: measure intrinsically sizeable
+        // non-layout children and take the max size. This first M6 slice wires
+        // static Text through the existing text-measurement subset.
+        let component = graph
+            .components
+            .iter()
+            .find(|component| component.local_id == layout_local)?;
+        let mut measured = Size::ZERO;
+        for child_local in &component.children {
+            // Mirrors C++ `LayoutComponent::measureLayout`: hidden/collapsed
+            // intrinsically sizeable children still participate in layout
+            // measurement; draw filtering happens later.
+            let Some(child) = graph
+                .components
+                .iter()
+                .find(|component| component.local_id == *child_local)
+            else {
+                continue;
+            };
+            if child.type_name != "Text" {
+                continue;
+            }
+            let Some((_x, _y, width, height)) =
+                static_text_constraint_bounds(runtime, graph, instance, child.local_id)
+            else {
+                continue;
+            };
+            measured.width = measured.width.max(width);
+            measured.height = measured.height.max(height);
+        }
+        Some(Size {
+            width: known_dimensions.width.unwrap_or(measured.width),
+            height: known_dimensions.height.unwrap_or(measured.height),
+        })
+    }
+
     fn layout_provider_children(
         &self,
-        instance: &ArtboardInstance,
+        _instance: &ArtboardInstance,
         graph: &ArtboardGraph,
         layout_local: usize,
     ) -> Option<Vec<usize>> {
@@ -3031,9 +3268,6 @@ impl TaffyRuntimeLayoutEngine {
                 .children
                 .iter()
                 .copied()
-                .filter(|child_local| {
-                    !instance.runtime_component_is_effectively_collapsed(*child_local)
-                })
                 .filter(|child_local| {
                     graph
                         .components
@@ -3846,6 +4080,7 @@ fn runtime_draw_command(
     artboards: &[ArtboardGraph],
     local_to_global: &BTreeMap<usize, u32>,
     command: RuntimeDrawCommand,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     factory: &mut dyn RenderFactory,
     renderer: &mut dyn Renderer,
     paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
@@ -3912,7 +4147,17 @@ fn runtime_draw_command(
 
     let draws_text = command.type_name == "Text";
     let text_shape_paints = if draws_text {
-        runtime_text_shape_paint_commands(runtime, instance, graph, &command)?
+        let layout_constraint = command.local_id.and_then(|text_local| {
+            instance.runtime_text_layout_constraint(text_local, layout_bounds)
+        });
+        runtime_text_shape_paint_commands(
+            runtime,
+            instance,
+            graph,
+            &command,
+            layout_bounds,
+            layout_constraint,
+        )?
     } else {
         Vec::new()
     };

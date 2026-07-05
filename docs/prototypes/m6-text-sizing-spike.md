@@ -163,18 +163,22 @@ binding/color glyphs.
 
 `ellipsis.riv` also landed 2026-07-04. It widened the slice to static
 `TextStyleAxis` variations and the smallest one-run fixed-height
-wrap/ellipsis path needed by the corpus. A follow-up scan showed
-`new_text.riv` is still too broad for the next slice (five texts plus
-multi-run/style, gradient/stroke, clipping, and keyframed text). Use
-`hosted_font_file.riv` next: it keeps the same one-text shape and now isolates
-hosted font asset loading.
+wrap/ellipsis path needed by the corpus. `hosted_font_file.riv` landed next:
+the C++ golden runner imports without a `FileAssetLoader`, so a hosted
+`FontAsset` with no in-band contents resolves successfully but has no decoded
+font and draws only the text drawable save/restore wrapper.
+
+A follow-up scan showed `new_text.riv` is still too broad for the next slice
+(five texts plus multi-run/style, gradient/stroke, clipping, and keyframed
+text). Use `animated_clipping.riv` next: it has one text and now isolates
+sibling Shape/ClippingShape admission around text draw order.
 
 ## Follow-Up Order
 
-After `ellipsis.riv`, widen in this order:
+After `hosted_font_file.riv`, widen in this order:
 
-1. Hosted font assets for the same one-text/static-style path, starting with
-   `hosted_font_file.riv`.
+1. Sibling Shape/ClippingShape draw-order cases around one supported Text,
+   starting with `animated_clipping.riv`.
 2. Text sizing/overflow/trim cases that only need the same line breaker.
 3. Multi-text or multi-run static cases without modifiers or layout coupling.
 4. `TextStyleFeature` and broader variable-font helper behavior.

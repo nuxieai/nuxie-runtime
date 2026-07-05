@@ -42,6 +42,9 @@ pub(crate) fn runtime_text_shape_paint_commands(
         .context("text draw command missing local id")?;
     let slice = StaticTextSlice::from_graph(runtime, graph, text_local)?;
     let path_commands = slice.path_commands(runtime, instance)?;
+    if path_commands.is_empty() {
+        return Ok(Vec::new());
+    }
     let render_opacity = instance
         .component(text_local)
         .map(|component| component.transform.render_opacity)
@@ -82,7 +85,7 @@ struct StaticTextSlice<'a> {
     style_local: usize,
     style_global: u32,
     container: &'a ShapePaintContainerNode,
-    font_bytes: &'a [u8],
+    font_bytes: Option<&'a [u8]>,
     variations: Vec<(u32, f32)>,
 }
 
@@ -269,8 +272,7 @@ impl<'a> StaticTextSlice<'a> {
                 font_asset.id
             );
         }
-        let font_bytes = embedded_file_asset_bytes(runtime, font_asset.id)
-            .context("static text subset requires embedded FontAsset bytes")?;
+        let font_bytes = embedded_file_asset_bytes(runtime, font_asset.id);
         let style_component = graph
             .components
             .iter()
@@ -319,9 +321,14 @@ impl<'a> StaticTextSlice<'a> {
             return Ok(Vec::new());
         }
         let letter_spacing = self.letter_spacing(runtime, instance);
+        let Some(font_bytes) = self.font_bytes else {
+            // Mirrors src/importers/file_asset_importer.cpp: with no
+            // FileAssetLoader and no in-band contents, a hosted FontAsset
+            // resolves successfully but has no decoded font.
+            return Ok(Vec::new());
+        };
 
-        let harf_font =
-            HarfFontRef::new(self.font_bytes).context("failed to parse font for shaping")?;
+        let harf_font = HarfFontRef::new(font_bytes).context("failed to parse font for shaping")?;
         let harf_variations = self
             .variations
             .iter()
@@ -342,7 +349,7 @@ impl<'a> StaticTextSlice<'a> {
             .build();
 
         let skrifa_font =
-            SkrifaFontRef::new(self.font_bytes).context("failed to parse font for outlines")?;
+            SkrifaFontRef::new(font_bytes).context("failed to parse font for outlines")?;
         let skrifa_variations = self
             .variations
             .iter()

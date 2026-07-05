@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 451 across 130 exact files
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=122 gated=7 harness=36
+- Exact segments (file × sample): 452 across 131 exact files
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=121 gated=7 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -22,17 +22,17 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Open the next static text widening with `hosted_font_file.riv`: it is the
-   narrowest remaining one-Text/one-run/static-style target after
-   `ellipsis.riv`, and now stops only because `FontAsset` has no embedded
-   `FileAssetContents`. Support hosted font asset loading enough for this
-   tracer before broadening into multi-text or modifier/layout cases.
-2. Keep `new_text.riv` parked until after the hosted-font slice: it has five
+1. Open the next text/clipping widening with `animated_clipping.riv`: it has
+   one `Text` plus sibling Shapes/ClippingShapes and currently stops because
+   the static text subset rejects sibling `Shape` global 6. Inspect and admit
+   only the draw-order/clipping shape path needed by this file before moving
+   into multi-text, modifiers, or layout measurement.
+2. Keep `new_text.riv` parked for now: it has five
    `Text` objects, multiple runs/styles, gradients/strokes, clipping, and text
    keyframes, so it is not the next narrow static tracer.
 3. `align_target.riv` is the first M6 entry by manifest order, but it has
    listener align-target plus text modifier/axis objects. Keep it parked until
-   the static multi-text/axis path is exact.
+   modifiers become the narrowest remaining text blocker.
 4. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
@@ -291,5 +291,12 @@ the only memory the next session has. Update it every commit.
   variation setup plus the smallest one-run fixed-height ellipsis/wrap path.
   `make golden-compare` moved to `exact=130`, `exact-segments=451`,
   `unsupported-feature=165`, and parked `M6=122 gated=7 harness=36`; the next
-  narrow text tracer is `hosted_font_file.riv`, which now stops on hosted font
-  asset loading rather than text layout.
+  narrow text tracer is `hosted_font_file.riv`, which isolates no-loader
+  hosted font resolution rather than text layout.
+- 2026-07-04: [M6] Promoted `hosted_font_file.riv` by mirroring C++
+  `FileAssetImporter` no-loader behavior: a hosted `FontAsset` with no
+  in-band contents resolves without a decoded font, so static text emits its
+  drawable save/restore wrapper but no text path. `make golden-compare` moved
+  to `exact=131`, `exact-segments=452`, `unsupported-feature=164`, and parked
+  `M6=121 gated=7 harness=36`; the next narrow text tracer is
+  `animated_clipping.riv`, which now stops on sibling shape/clipping admission.

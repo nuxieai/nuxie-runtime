@@ -1654,7 +1654,7 @@ fn runtime_draw_command(
     } else {
         command.shape_paints.as_slice()
     };
-    if draws_text && command.needs_save_operation && !shape_paints.is_empty() {
+    if draws_text && command.needs_save_operation {
         renderer.save();
     }
 
@@ -1718,7 +1718,7 @@ fn runtime_draw_command(
     if draws_text && !shape_paints.is_empty() {
         let _ = factory.make_render_paint();
     }
-    if draws_text && command.needs_save_operation && !shape_paints.is_empty() {
+    if draws_text && command.needs_save_operation {
         renderer.restore();
     }
 

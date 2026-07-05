@@ -5,9 +5,9 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 468 across 147 exact files
-- Current compare: `make golden-compare` reports diverges=7, unsupported-feature=141, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=98 gated=7 harness=36
+- Exact segments (file × sample): 473 across 152 exact files
+- Current compare: `make golden-compare` reports diverges=8, unsupported-feature=135, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=92 gated=7 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -23,13 +23,16 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue the painted `LayoutComponent` slice: Rust now has the first
-   background-rect draw hook and `bankcard.riv` plus ten other stale text
-   blockers are retagged as `rust-runner-unsupported:layout-component-paint`.
-   The runner gate stays until Rust ports computed `LayoutComponent` bounds,
-   style/corner-radius plumbing, and layout-world transforms from C++
-   `src/layout_component.cpp`; start there, using the 26
-   `layout-component-paint` corpus entries as the queue.
+1. Continue the painted `LayoutComponent` slice: simple root full-artboard
+   solid layout fills are now exact for `viewmodel_list_trigger.riv`,
+   `transition_index_condition.riv`, `viewmodel_from_context.riv`,
+   `list_to_length_test.riv`, and `reset_phase.riv`. The next narrow blocker
+   is `artboard_list_map_rules.riv`, which now reaches draw but diverges
+   because C++ computes two 250x500 component-list/map-rule layout halves
+   while Rust still draws full 500x500 layout backgrounds. Port the computed
+   list-child bounds/map-rule layout path from C++
+   `src/layout_component.cpp` / `src/artboard_component_list.cpp` before
+   widening the `layout-component-paint` runner gate further.
 2. Keep `new_text.riv` parked as a known M6 divergence until a dedicated text
    outline backend/canonicalization slice: gradient sibling admission now
    reaches draw, but Rust/Skrifa and C++ HarfBuzz emit a glyph contour with a
@@ -39,9 +42,9 @@ the only memory the next session has. Update it every commit.
    unsupported `Text` property data-bind targets;
    `text_follow_path_shape_length.riv` currently fails first on data binding
    target `Text` global 73 before it reaches follow-path drawing.
-4. Keep `text_vertical_trim_test.riv` parked behind unsupported `Text`
-   property data-bind targets; it currently fails first on data binding target
-   `Text` global 41.
+4. Keep `text_vertical_trim_test.riv` parked behind
+   `layout-component-paint`; it now fails there before reaching any richer
+   vertical-trim text behavior.
 5. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
@@ -57,6 +60,10 @@ the only memory the next session has. Update it every commit.
   (`src/text/font_hb.cpp`) and `TextStylePaint::addPathClockwise`; Rust uses
   Skrifa outlines. The first stream diff is path verb/point ordering, not a
   paint/gradient mismatch.
+- `artboard_list_map_rules.riv`: simple root `LayoutComponent` paint now
+  reaches draw, but component-list/map-rule layout bounds are not ported yet.
+  C++ draws two 250x500 layout backgrounds at x=250 and x=0; Rust currently
+  draws two full 500x500 backgrounds at identity.
 - Data-bound static text/converter bucket:
   `format_number_with_commas.riv`, `listener_view_model.riv`,
   `rebind_with_nested_viewmodel.riv`, `replace_vm_instance.riv`,
@@ -452,3 +459,13 @@ the only memory the next session has. Update it every commit.
   `exact-segments=468`, `diverges=7`, `unsupported-feature=141`, and parked
   `M6=98 gated=7 harness=36`; next port computed layout bounds/style plumbing
   before removing the gate.
+- 2026-07-04: [M6] Admitted the first exact painted `LayoutComponent` subset:
+  simple root full-artboard solid fills now draw through the layout-proxy
+  command path with C++-style background rect paths, promoting
+  `viewmodel_list_trigger.riv`, `transition_index_condition.riv`,
+  `viewmodel_from_context.riv`, `list_to_length_test.riv`, and
+  `reset_phase.riv`. `artboard_list_map_rules.riv` is reclassified as the
+  next M6 divergence on component-list/map-rule layout bounds. `make
+  golden-compare` moved to `exact=152`, `exact-segments=473`,
+  `diverges=8`, `unsupported-feature=135`, and parked
+  `M6=92 gated=7 harness=36`; `cargo test --workspace` passes.

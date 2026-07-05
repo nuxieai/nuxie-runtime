@@ -1,6 +1,9 @@
 use anyhow::{Context, Result, anyhow, bail};
 use rive_binary::{RuntimeFile, read_runtime_file};
-use rive_graph::{ArtboardGraph, GraphFile};
+use rive_graph::{
+    ArtboardGraph, GraphFile, ShapePaintContainerNode, ShapePaintKind, ShapePaintPathKind,
+    ShapePaintStateNode,
+};
 use rive_render_api::RecordingFactory;
 use rive_runtime::{
     ArtboardInstance, RuntimeRenderPathCache, StateMachineInstance,
@@ -645,11 +648,7 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
-    if let Some(container) = artboard
-        .shape_paint_containers
-        .iter()
-        .find(|container| container.type_name == "LayoutComponent" && !container.paints.is_empty())
-    {
+    if let Some(container) = unsupported_layout_component_paint(runtime, artboard) {
         bail!(
             "unsupported: layout-component-paint in Rust golden runner (global {})",
             container.global_id
@@ -800,6 +799,124 @@ fn ensure_static_draw_supported_for_artboard(
     }
 
     Ok(())
+}
+
+fn unsupported_layout_component_paint<'a>(
+    runtime: &RuntimeFile,
+    artboard: &'a ArtboardGraph,
+) -> Option<&'a ShapePaintContainerNode> {
+    artboard.shape_paint_containers.iter().find(|container| {
+        container.type_name == "LayoutComponent"
+            && !container.paints.is_empty()
+            && !simple_root_layout_component_paint_supported(runtime, artboard, container)
+    })
+}
+
+fn simple_root_layout_component_paint_supported(
+    runtime: &RuntimeFile,
+    artboard: &ArtboardGraph,
+    container: &ShapePaintContainerNode,
+) -> bool {
+    let Some(component) = artboard
+        .components
+        .iter()
+        .find(|component| component.local_id == container.local_id)
+    else {
+        return false;
+    };
+    if component.parent_local != Some(0) {
+        return false;
+    }
+
+    let Some(layout_object) = runtime.object(container.global_id as usize) else {
+        return false;
+    };
+    if layout_object.bool_property("clip").unwrap_or(false) {
+        return false;
+    }
+
+    let Some(artboard_object) = runtime.object(artboard.global_id as usize) else {
+        return false;
+    };
+    let width = layout_object.double_property("width").unwrap_or(0.0);
+    let height = layout_object.double_property("height").unwrap_or(0.0);
+    let artboard_width = artboard_object.double_property("width").unwrap_or(0.0);
+    let artboard_height = artboard_object.double_property("height").unwrap_or(0.0);
+    let origin_x = artboard_object.double_property("originX").unwrap_or(0.0);
+    let origin_y = artboard_object.double_property("originY").unwrap_or(0.0);
+    if !nearly_equal(width, artboard_width)
+        || !nearly_equal(height, artboard_height)
+        || !nearly_equal(origin_x, 0.0)
+        || !nearly_equal(origin_y, 0.0)
+    {
+        return false;
+    }
+
+    let Some(style_local) = layout_object
+        .uint_property("styleId")
+        .and_then(|style| usize::try_from(style).ok())
+    else {
+        return false;
+    };
+    let Some(style_global) = artboard
+        .local_objects
+        .iter()
+        .find(|object| {
+            object.local_id == style_local && object.type_name == Some("LayoutComponentStyle")
+        })
+        .map(|object| object.global_id)
+    else {
+        return false;
+    };
+    let Some(style_object) = runtime.object(style_global as usize) else {
+        return false;
+    };
+
+    const LAYOUT_SCALE_TYPE_FILL: u64 = 1;
+    if style_object
+        .uint_property("layoutWidthScaleType")
+        .unwrap_or(0)
+        != LAYOUT_SCALE_TYPE_FILL
+        || style_object
+            .uint_property("layoutHeightScaleType")
+            .unwrap_or(0)
+            != LAYOUT_SCALE_TYPE_FILL
+    {
+        return false;
+    }
+    if [
+        "cornerRadiusTL",
+        "cornerRadiusTR",
+        "cornerRadiusBL",
+        "cornerRadiusBR",
+    ]
+    .into_iter()
+    .any(|property| !nearly_equal(style_object.double_property(property).unwrap_or(0.0), 0.0))
+    {
+        return false;
+    }
+
+    container
+        .paints
+        .iter()
+        .all(simple_layout_background_paint_supported)
+}
+
+fn simple_layout_background_paint_supported(paint: &rive_graph::ShapePaintNode) -> bool {
+    paint.is_visible
+        && paint.paint_type == ShapePaintKind::Fill
+        && matches!(paint.path_kind, Some(ShapePaintPathKind::Local))
+        && matches!(
+            paint.paint_state.as_ref(),
+            Some(ShapePaintStateNode::SolidColor { .. })
+        )
+        && paint.feather.is_none()
+        && paint.effects.is_empty()
+        && paint.gradient_stops.is_empty()
+}
+
+fn nearly_equal(a: f32, b: f32) -> bool {
+    (a - b).abs() <= 0.0001
 }
 
 fn nested_stateful_view_model_object(

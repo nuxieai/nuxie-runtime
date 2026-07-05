@@ -687,12 +687,12 @@ impl ArtboardInstance {
         drawable: &SortedDrawableNode,
         graph: &ArtboardGraph,
     ) -> Vec<RuntimeShapePaintCommand> {
-        if drawable.kind != DrawableOrderKind::Drawable
-            || !matches!(drawable.type_name, "Shape" | "LayoutComponent")
-        {
-            return Vec::new();
-        }
-        let Some(shape_local) = drawable.local_id else {
+        let shape_local = match drawable.kind {
+            DrawableOrderKind::Drawable if drawable.type_name == "Shape" => drawable.local_id,
+            DrawableOrderKind::LayoutProxy => drawable.layout_local,
+            _ => None,
+        };
+        let Some(shape_local) = shape_local else {
             return Vec::new();
         };
         let Some(container) = graph
@@ -702,6 +702,9 @@ impl ArtboardInstance {
         else {
             return Vec::new();
         };
+        if !matches!(container.type_name, "Shape" | "LayoutComponent") {
+            return Vec::new();
+        }
         let needs_save_operation = drawable.needs_save_operation || container.paints.len() > 1;
         let render_opacity = self
             .component(shape_local)
@@ -716,14 +719,14 @@ impl ArtboardInstance {
             .paints
             .iter()
             .filter_map(|paint| {
-                let path_commands = match drawable.type_name {
+                let path_commands = match container.type_name {
                     "Shape" => self.runtime_shape_paint_path_commands(shape_local, paint, graph),
                     "LayoutComponent" => {
                         self.runtime_layout_component_paint_path_commands(shape_local, paint)
                     }
                     _ => Vec::new(),
                 };
-                runtime_shape_paint_command(
+                let mut command = runtime_shape_paint_command(
                     self,
                     paint,
                     container.blend_mode_value,
@@ -731,7 +734,11 @@ impl ArtboardInstance {
                     render_opacity,
                     shape_world,
                     path_commands,
-                )
+                )?;
+                if drawable.kind == DrawableOrderKind::LayoutProxy {
+                    command.shape_world_override = Some(shape_world);
+                }
+                Some(command)
             })
             .collect()
     }
@@ -746,12 +753,42 @@ impl ArtboardInstance {
         }
         // Ported from C++ `src/layout_component.cpp`
         // `LayoutComponent::drawProxy/updateRenderPath`: layout components draw
-        // their shape paints against a background rectangle. TODO(golden): use
-        // the computed layout size and style corner radii once the M6 layout
-        // engine is ported; this first slice uses serialized dimensions.
+        // shape paints against a background rectangle built from computed
+        // layout bounds. TODO(golden): route all layout components through the
+        // M6 layout engine and apply style corner radii.
+        let bounds = self.runtime_layout_component_bounds(layout_local);
+        vec![
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Line {
+                x: bounds.width,
+                y: 0.0,
+            },
+            RuntimePathCommand::Line {
+                x: bounds.width,
+                y: bounds.height,
+            },
+            RuntimePathCommand::Line {
+                x: 0.0,
+                y: bounds.height,
+            },
+            RuntimePathCommand::Line { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Close,
+        ]
+    }
+
+    fn runtime_layout_component_bounds(&self, layout_local: usize) -> RuntimeLayoutBounds {
         let width = self.runtime_layout_component_dimension(layout_local, "width");
         let height = self.runtime_layout_component_dimension(layout_local, "height");
-        runtime_rect_commands(0.0, 0.0, width, height)
+        if self
+            .component(layout_local)
+            .is_some_and(|component| component.parent_local == Some(0))
+        {
+            return RuntimeLayoutBounds {
+                width: if width == 0.0 { self.width } else { width },
+                height: if height == 0.0 { self.height } else { height },
+            };
+        }
+        RuntimeLayoutBounds { width, height }
     }
 
     fn runtime_layout_component_dimension(&self, layout_local: usize, name: &str) -> f32 {
@@ -1114,6 +1151,12 @@ pub struct RuntimeDrawCommand {
     pub clipping_shape_local: Option<usize>,
     pub needs_save_operation: bool,
     pub shape_paints: Vec<RuntimeShapePaintCommand>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct RuntimeLayoutBounds {
+    width: f32,
+    height: f32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -62,7 +62,7 @@ pub struct ArtboardInstance {
     pub(crate) state_machines: Vec<RuntimeStateMachine>,
     pub(crate) nested_artboards: BTreeMap<usize, RuntimeNestedArtboardInstance>,
     newly_uncollapsed_nested_artboards: BTreeSet<usize>,
-    graph_global_id: u32,
+    pub(crate) graph_global_id: u32,
     build_context: Option<RuntimeArtboardBuildContext>,
     pub(crate) artboard_data_bind_values: BTreeMap<Vec<u32>, RuntimeDataBindGraphValue>,
     pub(crate) artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource,

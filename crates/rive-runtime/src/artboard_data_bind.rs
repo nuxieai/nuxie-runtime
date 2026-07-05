@@ -91,7 +91,7 @@ pub(super) fn build_artboard_list_bindings(
     let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
         return Vec::new();
     };
-    let Some(default_instance) = file.view_model_default_instance(0) else {
+    let Some(default_instance) = artboard_default_view_model_instance(file, artboard_index) else {
         return Vec::new();
     };
 
@@ -157,7 +157,7 @@ pub(super) fn build_artboard_property_bindings(
     let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
         return Vec::new();
     };
-    let default_instance = file.view_model_default_instance(0);
+    let default_instance = artboard_default_view_model_instance(file, artboard_index);
 
     file.artboard_data_binds(artboard_index)
         .into_iter()
@@ -319,7 +319,7 @@ pub(super) fn build_artboard_default_view_model_values(
     let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
         return BTreeMap::new();
     };
-    let default_instance = file.view_model_default_instance(0);
+    let default_instance = artboard_default_view_model_instance(file, artboard_index);
 
     let mut values = BTreeMap::new();
     for data_bind in file.artboard_data_binds(artboard_index) {
@@ -519,6 +519,15 @@ fn runtime_created_view_model_value_for_path(
     runtime_created_view_model_value_for_source(file, source)
 }
 
+fn artboard_default_view_model_instance(
+    file: &RuntimeFile,
+    artboard_index: usize,
+) -> Option<rive_binary::RuntimeViewModelInstanceReference<'_>> {
+    let artboard = file.artboard(artboard_index)?;
+    let view_model_index = usize::try_from(artboard.uint_property("viewModelId")?).ok()?;
+    file.view_model_default_instance(view_model_index)
+}
+
 fn runtime_created_view_model_value_for_source(
     file: &RuntimeFile,
     source: &RuntimeObject,
@@ -559,7 +568,7 @@ fn runtime_created_view_model_value_for_declared_path(
         if property.type_name != "ViewModelPropertyViewModel" {
             return None;
         }
-        view_model_index = usize::try_from(property.uint_property("viewModelId")?).ok()?;
+        view_model_index = usize::try_from(property.uint_property("viewModelReferenceId")?).ok()?;
     }
 
     None
@@ -591,7 +600,15 @@ fn runtime_created_view_model_value_for_declared_property(
 
 impl ArtboardInstance {
     pub fn bind_default_view_model_artboard_list_context(&mut self, file: &RuntimeFile) -> bool {
-        let Some(default_instance) = file.view_model_default_instance(0) else {
+        let Some(artboard_index) = file
+            .artboards()
+            .into_iter()
+            .position(|artboard| artboard.id == self.graph_global_id)
+        else {
+            return false;
+        };
+        let Some(default_instance) = artboard_default_view_model_instance(file, artboard_index)
+        else {
             return false;
         };
         self.bind_artboard_data_context(file, default_instance.object)

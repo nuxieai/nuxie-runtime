@@ -9,7 +9,7 @@ use crate::properties::{
     property_key_for_name, solid_color_value_property_key, solo_active_component_id_property_key,
 };
 use crate::{
-    ArtboardInstance, RuntimeDataBindGraphConverter, RuntimeDataBindGraphValue,
+    ArtboardInstance, Mat2D, RuntimeDataBindGraphConverter, RuntimeDataBindGraphValue,
     data_bind_flags_apply_source_to_target, data_bind_flags_apply_target_to_source,
 };
 use rive_binary::{RuntimeDataType, RuntimeFile, RuntimeObject};
@@ -45,6 +45,12 @@ pub(super) struct RuntimeArtboardLayoutComputedBindingInstance {
     target_local_id: usize,
     property: RuntimeLayoutComputedProperty,
     path: Vec<u32>,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeArtboardContextSourceValue {
+    path: Vec<u32>,
+    value: RuntimeDataBindGraphValue,
 }
 
 #[derive(Debug, Clone)]
@@ -574,7 +580,8 @@ pub(super) fn build_artboard_layout_computed_bindings(
         return Vec::new();
     };
 
-    file.artboard_data_binds(artboard_index)
+    let bindings = file
+        .artboard_data_binds(artboard_index)
         .into_iter()
         .filter_map(|data_bind| {
             if !data_bind_flags_apply_target_to_source(
@@ -582,19 +589,18 @@ pub(super) fn build_artboard_layout_computed_bindings(
             ) {
                 return None;
             }
-            let target = data_bind.target?;
-            if target.type_name != "LayoutComponent" {
-                return None;
-            }
+            data_bind.target?;
             let property_key =
                 u16::try_from(data_bind.object.uint_property("propertyKey")?).ok()?;
+            let property = layout_computed_property_for_key(property_key)?;
             Some(RuntimeArtboardLayoutComputedBindingInstance {
                 target_local_id: data_bind.target_local_id?,
-                property: layout_computed_property_for_key(property_key)?,
+                property,
                 path: file.data_bind_context_source_path_ids_for_object(data_bind.object)?,
             })
         })
-        .collect()
+        .collect::<Vec<_>>();
+    bindings
 }
 
 pub(super) fn build_artboard_solo_bindings(
@@ -857,6 +863,93 @@ fn runtime_created_view_model_value_for_declared_property(
 }
 
 impl ArtboardInstance {
+    pub(crate) fn update_nested_artboard_data_binds_from_hosts(&mut self) -> bool {
+        let mut changed = false;
+        for source in self.collect_nested_artboard_context_source_values(Mat2D::IDENTITY) {
+            if self.artboard_data_bind_values.get(&source.path) == Some(&source.value) {
+                continue;
+            }
+            self.artboard_data_bind_values
+                .insert(source.path.clone(), source.value);
+            self.reset_artboard_property_formula_random_state_for_path(&source.path);
+            changed = true;
+        }
+        changed
+    }
+
+    fn collect_nested_artboard_context_source_values(
+        &mut self,
+        root_transform: Mat2D,
+    ) -> Vec<RuntimeArtboardContextSourceValue> {
+        let host_locals = self.nested_artboards.keys().copied().collect::<Vec<_>>();
+        let mut values = Vec::new();
+        for host_local_id in host_locals {
+            let host_world = self
+                .component(host_local_id)
+                .map(|component| component.transform.world_transform)
+                .unwrap_or(Mat2D::IDENTITY);
+            let child_root_transform = root_transform.multiply(host_world);
+            let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
+                continue;
+            };
+            let descendant_values = nested
+                .child
+                .collect_nested_artboard_context_source_values(child_root_transform);
+            values.extend(descendant_values.iter().cloned());
+            for source in descendant_values {
+                nested
+                    .child
+                    .set_artboard_data_bind_value_for_path(&source.path, source.value);
+            }
+            nested
+                .child
+                .advance_artboard_data_binds_with_root_transform(child_root_transform, 0.0);
+            values.extend(nested.child.artboard_context_source_values());
+        }
+        values
+    }
+
+    fn artboard_context_source_values(&self) -> Vec<RuntimeArtboardContextSourceValue> {
+        self.artboard_layout_computed_bindings
+            .iter()
+            .filter_map(|binding| {
+                self.artboard_data_bind_values
+                    .get(&binding.path)
+                    .cloned()
+                    .map(|value| RuntimeArtboardContextSourceValue {
+                        path: binding.path.clone(),
+                        value,
+                    })
+            })
+            .chain(
+                self.artboard_custom_property_bindings
+                    .iter()
+                    .filter_map(|binding| {
+                        self.artboard_data_bind_values
+                            .get(&binding.path)
+                            .cloned()
+                            .map(|value| RuntimeArtboardContextSourceValue {
+                                path: binding.path.clone(),
+                                value,
+                            })
+                    }),
+            )
+            .chain(
+                self.artboard_solo_source_bindings
+                    .iter()
+                    .filter_map(|binding| {
+                        self.artboard_data_bind_values
+                            .get(&binding.path)
+                            .cloned()
+                            .map(|value| RuntimeArtboardContextSourceValue {
+                                path: binding.path.clone(),
+                                value,
+                            })
+                    }),
+            )
+            .collect()
+    }
+
     pub fn bind_default_view_model_artboard_list_context(&mut self, file: &RuntimeFile) -> bool {
         let Some(artboard_index) = file
             .artboards()
@@ -992,11 +1085,19 @@ impl ArtboardInstance {
     }
 
     pub fn advance_artboard_data_binds_with_elapsed(&mut self, elapsed_seconds: f32) -> bool {
+        self.advance_artboard_data_binds_with_root_transform(Mat2D::IDENTITY, elapsed_seconds)
+    }
+
+    pub(crate) fn advance_artboard_data_binds_with_root_transform(
+        &mut self,
+        root_transform: Mat2D,
+        elapsed_seconds: f32,
+    ) -> bool {
         let mut changed = false;
         for index in 0..self.artboard_custom_property_bindings.len() {
             changed |= self.update_artboard_custom_property_binding(index);
         }
-        changed |= self.update_artboard_layout_computed_bindings();
+        changed |= self.update_artboard_layout_computed_bindings(root_transform);
         changed |= self.update_artboard_solo_source_bindings();
         changed |= self.apply_artboard_property_bindings();
         changed |= self.advance_artboard_property_binding_converters(elapsed_seconds);
@@ -1023,13 +1124,14 @@ impl ArtboardInstance {
         changed
     }
 
-    fn update_artboard_layout_computed_bindings(&mut self) -> bool {
+    fn update_artboard_layout_computed_bindings(&mut self, root_transform: Mat2D) -> bool {
         let Some(graph) = self.runtime_graph().cloned() else {
             return false;
         };
         let mut changed = false;
         for binding in self.artboard_layout_computed_bindings.clone() {
-            changed |= self.update_artboard_layout_computed_binding(&binding, &graph);
+            changed |=
+                self.update_artboard_layout_computed_binding(&binding, &graph, root_transform);
         }
         changed
     }
@@ -1038,12 +1140,16 @@ impl ArtboardInstance {
         &mut self,
         binding: &RuntimeArtboardLayoutComputedBindingInstance,
         graph: &ArtboardGraph,
+        root_transform: Mat2D,
     ) -> bool {
         // Mirrors C++ `src/data_bind/data_bind.cpp` targetSupportsPush:
         // Node computed* data binds are polled after layout settles.
-        let Some(value) =
-            self.runtime_layout_computed_property(binding.target_local_id, binding.property, graph)
-        else {
+        let Some(value) = self.artboard_layout_computed_binding_value(
+            binding.target_local_id,
+            binding.property,
+            graph,
+            root_transform,
+        ) else {
             return false;
         };
         let value = RuntimeDataBindGraphValue::Number(value);
@@ -1054,6 +1160,36 @@ impl ArtboardInstance {
             .insert(binding.path.clone(), value);
         self.reset_artboard_property_formula_random_state_for_path(&binding.path);
         true
+    }
+
+    fn artboard_layout_computed_binding_value(
+        &self,
+        target_local_id: usize,
+        property: RuntimeLayoutComputedProperty,
+        graph: &ArtboardGraph,
+        root_transform: Mat2D,
+    ) -> Option<f32> {
+        match property {
+            RuntimeLayoutComputedProperty::RootX | RuntimeLayoutComputedProperty::RootY => {
+                let x = self.runtime_layout_computed_property(
+                    target_local_id,
+                    RuntimeLayoutComputedProperty::WorldX,
+                    graph,
+                )?;
+                let y = self.runtime_layout_computed_property(
+                    target_local_id,
+                    RuntimeLayoutComputedProperty::WorldY,
+                    graph,
+                )?;
+                let (x, y) = root_transform.transform_point(x, y);
+                match property {
+                    RuntimeLayoutComputedProperty::RootX => Some(x),
+                    RuntimeLayoutComputedProperty::RootY => Some(y),
+                    _ => unreachable!(),
+                }
+            }
+            _ => self.runtime_layout_computed_property(target_local_id, property, graph),
+        }
     }
 
     fn apply_artboard_property_bindings(&mut self) -> bool {

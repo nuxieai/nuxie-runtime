@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 510 across 189 exact files
-- Current compare: `make golden-compare` reports diverges=4, unsupported-feature=102, not-yet=0
+- Exact segments (file × sample): 511 across 190 exact files
+- Current compare: `make golden-compare` reports diverges=3, unsupported-feature=102, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=58 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
@@ -23,13 +23,13 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Start `computed_values_test.riv`: it is the next known M6 text/layout
-   divergence. After admitting `ArtboardComponentList.listSource`, nested child
-   `Shape.computedRootX/Y` binds, and empty component-list provider trees
-   through the #V2-7 Taffy layout path, Rust reaches draw. The layout background
-   now matches C++ at width `510`; the first remaining diff is text path id 3,
-   where C++ renders a longer computed/list value string and Rust emits fewer
-   glyph contours.
+1. Start `relative_data_binding.riv`: it is the next known M6 nested/shared
+   text draw-suppression divergence. After nested `TextValueRun.text` support,
+   Rust reaches draw but activates a nested text/relative-position branch that
+   C++ suppresses at sample 0. First stream diff: a rectangle transform has
+   x=96.5 in Rust vs x=0 in C++, followed by extra text draw calls. Check it
+   alongside `shared_viewmodel_instance.riv`, which appears to be the same
+   family.
 2. Keep `text_follow_path_shape_length.riv` parked behind
    `TextFollowPathModifier`: after admitting source-to-target `Text.width`
    binds with no converter or `DataConverterFormula`, direct Rust now stops on
@@ -51,12 +51,6 @@ the only memory the next session has. Update it every commit.
 
 ## Known Divergences
 
-- `computed_values_test.riv`: after admitting `ArtboardComponentList.listSource`,
-  nested child `Shape.computedRootX/Y` binds, and empty component-list provider
-  trees through the #V2-7 Taffy layout path, Rust reaches draw. The layout
-  background now matches C++ at width `510`; the first remaining diff is text
-  path id 3, where C++ renders a longer computed/list value string and Rust
-  emits fewer glyph contours.
 - `relative_data_binding.riv`: after nested `TextValueRun.text` support, Rust
   reaches draw but activates a nested text/relative-position branch that C++
   suppresses at sample 0. First stream diff: a rectangle transform has x=96.5
@@ -1061,3 +1055,12 @@ the only memory the next session has. Update it every commit.
   `exact-segments=510`, `diverges=4`, `unsupported-feature=102`, `not-yet=0`,
   and parked `M6=58 gated=8 harness=36`; `cargo test --workspace` passes. Next
   target is `computed_values_test.riv`.
+- 2026-07-06: [M6] Promoted `computed_values_test.riv` by mirroring C++
+  host-first artboard data-bind updates and `Node::computedRootX/Y`
+  root-transform semantics through nested artboard hosts. Nested child
+  `Shape.computedRootX/Y` now publishes `238.5/205` in root artboard space
+  instead of child-local `39/49`; focused streams are exact under the normal
+  golden epsilon. `make golden-compare` reports `exact=190`,
+  `exact-segments=511`, `diverges=3`, `unsupported-feature=102`, `not-yet=0`,
+  and parked `M6=58 gated=8 harness=36`; `cargo test --workspace` passes. Next
+  target is `relative_data_binding.riv` with `shared_viewmodel_instance.riv`.

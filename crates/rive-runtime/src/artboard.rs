@@ -767,6 +767,10 @@ impl ArtboardInstance {
     }
 
     pub fn update_pass(&mut self) -> bool {
+        // Mirrors C++ src/artboard.cpp Artboard::updatePass: data binds run
+        // before components, with artboard-host children publishing first.
+        self.update_nested_artboard_data_binds_from_hosts();
+        self.advance_artboard_data_binds();
         let mut did_update = false;
         if self.joysticks_apply_before_update {
             did_update |= self.apply_joysticks(true);
@@ -809,6 +813,10 @@ impl ArtboardInstance {
                 did_update = true;
             }
             did_update |= nested_did_update;
+        }
+        if did_update {
+            self.update_nested_artboard_data_binds_from_hosts();
+            self.advance_artboard_data_binds();
         }
         did_update
     }

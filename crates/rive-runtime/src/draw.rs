@@ -956,6 +956,10 @@ impl ArtboardInstance {
                         container.type_name,
                         "LayoutComponent" | "ForegroundLayoutDrawable"
                     ),
+                    matches!(
+                        container.type_name,
+                        "LayoutComponent" | "ForegroundLayoutDrawable"
+                    ),
                 )?;
                 if drawable.kind == DrawableOrderKind::LayoutProxy
                     || container.type_name == "ForegroundLayoutDrawable"
@@ -6550,12 +6554,17 @@ pub(crate) fn runtime_shape_paint_command(
     render_opacity: f32,
     shape_world: Mat2D,
     path_commands: Vec<RuntimePathCommand>,
+    require_effective_visible: bool,
     suppress_authored_transparent: bool,
 ) -> Option<RuntimeShapePaintCommand> {
     if !runtime_shape_paint_is_visible(artboard, paint) {
         return None;
     }
     let paint_state = runtime_shape_paint_state(artboard, paint, render_opacity);
+    if require_effective_visible && !runtime_shape_paint_state_is_effectively_visible(&paint_state)
+    {
+        return None;
+    }
     if suppress_authored_transparent && !runtime_shape_paint_state_is_visible(&paint_state) {
         return None;
     }
@@ -6643,6 +6652,19 @@ fn runtime_shape_paint_state_is_visible(state: &Option<RuntimeShapePaintState>) 
     )
 }
 
+fn runtime_shape_paint_state_is_effectively_visible(
+    state: &Option<RuntimeShapePaintState>,
+) -> bool {
+    match state {
+        Some(RuntimeShapePaintState::SolidColor { render_color, .. }) => (render_color >> 24) != 0,
+        Some(RuntimeShapePaintState::LinearGradient { stops, .. })
+        | Some(RuntimeShapePaintState::RadialGradient { stops, .. }) => {
+            stops.iter().any(|stop| (stop.render_color >> 24) != 0)
+        }
+        None => true,
+    }
+}
+
 fn runtime_shape_paint_blend_mode_value(
     paint_blend_mode_value: u32,
     container_blend_mode_value: u32,
@@ -6697,6 +6719,18 @@ fn runtime_shape_paint_state(
             opacity,
             stops,
         } => {
+            let opacity = paint
+                .mutator_local
+                .map(|mutator_local| {
+                    runtime_gradient_double_property(
+                        artboard,
+                        mutator_local,
+                        "LinearGradient",
+                        "opacity",
+                        opacity,
+                    )
+                })
+                .unwrap_or(opacity);
             let (start_x, start_y, end_x, end_y) = runtime_gradient_endpoints(
                 artboard,
                 paint.mutator_local,
@@ -6724,6 +6758,18 @@ fn runtime_shape_paint_state(
             opacity,
             stops,
         } => {
+            let opacity = paint
+                .mutator_local
+                .map(|mutator_local| {
+                    runtime_gradient_double_property(
+                        artboard,
+                        mutator_local,
+                        "RadialGradient",
+                        "opacity",
+                        opacity,
+                    )
+                })
+                .unwrap_or(opacity);
             let (start_x, start_y, end_x, end_y) = runtime_gradient_endpoints(
                 artboard,
                 paint.mutator_local,

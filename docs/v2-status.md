@@ -25,10 +25,11 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. All remaining M6 diagnostics are one-file queues. Pick the freshest
-   adjacency first: `not-yet:gradient-opacity-propagation`
-   (`hunter_x_demo.riv`). The selected-root shader-order adjacency is closed:
-   `bullet_man.riv` now reaches the existing
-   `selected-root-skinned-clip-path` gate.
+   adjacency first: `not-yet:local-clockwise-contour-order`
+   (`hunter_x_demo.riv`). The selected-root shader-order and gradient opacity
+   adjacencies are closed: `bullet_man.riv` now reaches the existing
+   `selected-root-skinned-clip-path` gate, and `hunter_x_demo.riv` now first
+   differs at local-clockwise child contour verb ordering.
 2. Other parked one-file M6 queues are `scripted-data-context`,
    `focus-data` (`focus_traversal.riv`), `layout-component-paint`
    (`text_input.riv`), `viewmodel-asset-conditions`,
@@ -121,9 +122,10 @@ the only memory the next session has. Update it every commit.
   remaining M6 work is parked behind explicit unsupported-feature diagnostics
   or documented `not-yet` entries. `ai_assitant.riv` imports and draws but has
   a nested-feather gradient-space exact-parity gap. `hunter_x_demo.riv` now
-  matches C++ selected-root gradient shader allocation order, but its focused
-  stream first differs at child gradient stop alpha values, parked as
-  `not-yet:gradient-opacity-propagation`.
+  matches C++ selected-root gradient shader allocation and child gradient
+  opacity propagation, but its focused stream first differs at local-clockwise
+  child contour verb ordering, parked as
+  `not-yet:local-clockwise-contour-order`.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -368,6 +370,19 @@ the only memory the next session has. Update it every commit.
   `diverges=0`, `unsupported-feature=55`, `not-yet=2`, and parked
   `M6=14 gated=5 harness=36`; `cargo test --workspace` passes. Next target is
   `hunter_x_demo.riv` (`not-yet:gradient-opacity-propagation`).
+- 2026-07-06: [M6] Closed the `hunter_x_demo.riv` gradient-opacity adjacency
+  by live-reading `LinearGradient.opacity`/`RadialGradient.opacity` through
+  paint mutators and by matching C++ `shouldDraw()` effective-visibility
+  gating for layout, foreground layout, and text paints while preserving
+  ordinary Shape alpha-zero draw emission. Focused streams now match through
+  selected-root shader allocation and child gradient stop alpha propagation;
+  the first diff is local-clockwise child contour verb ordering, parked as
+  `not-yet:local-clockwise-contour-order`. Full `make golden-compare` reports
+  `exact=238`, `exact-segments=559`, `diverges=0`,
+  `unsupported-feature=55`, `not-yet=2`, and parked
+  `M6=14 gated=5 harness=36`; `cargo test --workspace` passes. Next target is
+  `hunter_x_demo.riv`
+  (`not-yet:local-clockwise-contour-order`).
 - 2026-07-02: `rive-runtime` owns static draw emission through
   `rive-render-api`; `rust-golden-runner` now only orchestrates import,
   artboard selection, stream markers, and recording output.

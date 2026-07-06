@@ -218,7 +218,7 @@ impl RuntimeTransitionCondition {
                 let input_index = usize::try_from(object.uint_property("inputId")?).ok()?;
                 Some(Self::Trigger { input_index })
             }
-            "TransitionViewModelCondition" => {
+            "TransitionViewModelCondition" | "TransitionArtboardCondition" => {
                 let comparators = file.transition_view_model_condition_comparators(object)?;
                 let left = comparators.left?;
                 let right = comparators.right?;

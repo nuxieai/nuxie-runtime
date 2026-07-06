@@ -32,6 +32,7 @@ use crate::constraints::{
     build_runtime_list_follow_path_constraints,
 };
 use crate::data_bind_graph::{RuntimeDataBindGraphFormulaRandomSource, RuntimeDataBindGraphValue};
+use crate::draw::RuntimeLayoutBounds;
 use crate::objects::{InstanceObjectArena, InstanceSlot};
 use crate::properties::{
     JOYSTICK_FLAG_INVERT_X, JOYSTICK_FLAG_INVERT_Y, RuntimeArtboardDimensions,
@@ -613,6 +614,7 @@ impl ArtboardInstance {
         elapsed_seconds: f32,
         nested_events: &mut Vec<(usize, Vec<StateMachineReportedEvent>)>,
     ) -> bool {
+        let layout_bounds = self.runtime_nested_artboard_layout_bounds();
         let host_locals = self.nested_artboards.keys().copied().collect::<Vec<_>>();
         let mut changed = false;
         for host_local in host_locals {
@@ -622,6 +624,7 @@ impl ArtboardInstance {
             {
                 continue;
             }
+            changed |= self.apply_nested_artboard_layout_bounds(host_local, layout_bounds.as_ref());
             let mut reported_events = Vec::new();
             let nested_needs_update = self
                 .nested_artboards
@@ -638,6 +641,60 @@ impl ArtboardInstance {
                 changed = true;
                 self.add_dirt(host_local, ComponentDirt::COMPONENTS, false);
             }
+        }
+        changed
+    }
+
+    fn runtime_nested_artboard_layout_bounds(
+        &self,
+    ) -> Option<BTreeMap<usize, RuntimeLayoutBounds>> {
+        if !self.nested_artboards.keys().any(|local_id| {
+            self.component(*local_id)
+                .is_some_and(|component| component.type_name == "NestedArtboardLayout")
+        }) {
+            return None;
+        }
+        let context = self.build_context.as_ref()?;
+        let runtime = context.file.clone();
+        let graph = context
+            .artboards
+            .iter()
+            .find(|graph| graph.global_id == self.graph_global_id)?
+            .clone();
+        self.runtime_taffy_layout_bounds(&graph, Some(runtime.as_ref()))
+    }
+
+    fn apply_nested_artboard_layout_bounds(
+        &mut self,
+        host_local_id: usize,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    ) -> bool {
+        if !self
+            .component(host_local_id)
+            .is_some_and(|component| component.type_name == "NestedArtboardLayout")
+        {
+            return false;
+        }
+        let Some(bounds) = layout_bounds.and_then(|bounds| bounds.get(&host_local_id).copied())
+        else {
+            return false;
+        };
+        let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
+            return false;
+        };
+        let mut changed = nested
+            .child
+            .set_artboard_dimensions(bounds.width, bounds.height);
+        if let Some(width_key) = property_key_for_name("LayoutComponent", "width") {
+            changed |= nested.child.set_double_property(0, width_key, bounds.width);
+        }
+        if let Some(height_key) = property_key_for_name("LayoutComponent", "height") {
+            changed |= nested
+                .child
+                .set_double_property(0, height_key, bounds.height);
+        }
+        if changed {
+            nested.child.update_pass();
         }
         changed
     }
@@ -1622,7 +1679,7 @@ fn build_runtime_nested_artboard_instances(
 
     let mut nested_artboards = BTreeMap::new();
     for host in &graph.nested_artboards {
-        if host.type_name != "NestedArtboard" {
+        if !matches!(host.type_name, "NestedArtboard" | "NestedArtboardLayout") {
             continue;
         }
 

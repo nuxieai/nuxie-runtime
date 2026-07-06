@@ -5,10 +5,10 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 526 across 205 files (strict
-  exact=523/202; tolerant=3/3; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=90, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=46 gated=8 harness=36
+- Exact-status segments (file × sample): 528 across 207 files (strict
+  exact=525/204; tolerant=3/3; structural=0/0)
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=88, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=44 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -24,9 +24,9 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Pivot to the largest remaining M6 bucket,
-   `rust-runner-unsupported:nested-artboard-layout` (18 entries), starting with
-   `artboard_width_test.riv` unless a focused run proves another entry is the
+1. Continue the largest remaining M6 bucket,
+   `rust-runner-unsupported:nested-artboard-layout` (16 entries), starting with
+   `collapsing_elements.riv` unless a focused run proves another entry is the
    smaller first slice. Keep `rust-runner-unsupported:images` (17 entries) as
    the next bucket; true `NSlicedNode`/mesh image work remains gated.
 2. Generic `rust-runner-unsupported:text` and the sharper
@@ -1220,3 +1220,15 @@ the only memory the next session has. Update it every commit.
   and parked `M6=46 gated=8 harness=36`; `cargo test --workspace` passes. Next
   target is the M6 nested-artboard-layout bucket, starting with
   `artboard_width_test.riv`.
+- 2026-07-06: [M6] Promoted `artboard_width_test.riv` and
+  `transition_artboard_condition_test.riv` by admitting layout-backed nested
+  artboard hosts into the Taffy snapshot, applying solved host dimensions to
+  persistent child artboards before nested state-machine advancement, drawing
+  `NestedArtboardLayout` hosts at their solved layout node position, and
+  parsing `TransitionArtboardCondition` through the existing artboard-number
+  comparator path. Focused streams for both fixtures are exact. Full
+  `make golden-compare` reports `exact=207`, `exact-segments=528`,
+  `diverges=0`, `unsupported-feature=88`, `not-yet=0`, and parked
+  `M6=44 gated=8 harness=36`; `cargo test --workspace` passes. Next target
+  remains the nested-artboard-layout bucket, starting with
+  `collapsing_elements.riv`.

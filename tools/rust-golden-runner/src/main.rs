@@ -1038,10 +1038,6 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
-    if let Some(global_id) = unsupported_feather_inner_multipaint_global(artboard) {
-        bail!("unsupported: feather-inner-multipaint in Rust golden runner (global {global_id})");
-    }
-
     for referenced_artboard_global in artboard
         .sorted_drawable_order
         .iter()
@@ -1867,6 +1863,9 @@ fn nested_child_data_bind_unsupported_feature(
         (Some("TrimPath"), 114 | 115 | 116) => "nested-trim-path-data-bind",
         (Some("Artboard"), 13 | 14) => "nested-artboard-root-transform",
         (Some("Artboard"), 196) => "nested-layout-clip-data-bind",
+        // TransformComponentBase::rotationPropertyKey can surface through a
+        // nested child Node target.
+        (Some("Node"), 15) => "nested-node-transform-data-bind",
         (
             Some(
                 "ViewModelInstanceBoolean"
@@ -2065,17 +2064,6 @@ fn runtime_has_type(runtime: &RuntimeFile, type_name: &str) -> bool {
         .iter()
         .flatten()
         .any(|object| object.type_name == type_name)
-}
-
-fn unsupported_feather_inner_multipaint_global(artboard: &ArtboardGraph) -> Option<u32> {
-    let mut inner_feathers = artboard
-        .shape_paint_containers
-        .iter()
-        .flat_map(|container| &container.paints)
-        .filter_map(|paint| paint.feather.as_ref())
-        .filter(|feather| feather.inner);
-    inner_feathers.next()?;
-    inner_feathers.next().map(|feather| feather.global_id)
 }
 
 fn unsupported_nested_feather_paints_global(

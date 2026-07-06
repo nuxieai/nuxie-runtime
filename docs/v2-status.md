@@ -5,10 +5,10 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 553 across 232 files (strict
-  exact=550/229; tolerant=3/3; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=63, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=19 gated=8 harness=36
+- Exact-status segments (file × sample): 554 across 233 files (strict
+  exact=551/230; tolerant=3/3; structural=0/0)
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=62, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=19 gated=7 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -24,16 +24,15 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Pick the largest remaining M6 bucket:
-   `rust-runner-unsupported:feather-inner-multipaint` (3:
-   `car_widgets_v01.riv`, `hunter_x_demo.riv`, `rewards_demo.riv`). The broad
-   `rust-runner-unsupported:text` queue is closed; the remaining text-adjacent
-   blockers are now explicit one-file diagnostics.
-2. Other M6 queues are `rust-runner-unsupported:mesh-images` (2:
-   `jellyfish_test.riv`, `tape.riv`), and
+1. Pick one of the tied largest remaining M6 buckets. Prefer
+   `rust-runner-unsupported:nested-feather-paints` (2: `hunter_x_demo.riv`,
+   `rewards_demo.riv`) first because it follows the just-closed inner-feather
+   path work. `rust-runner-unsupported:mesh-images` is the other two-file
+   bucket (`jellyfish_test.riv`, `tape.riv`).
+2. Other M6 queues are
    `rust-runner-unsupported:contour-mesh-metadata` (1: `bad_skin.riv`),
    `n-slice` (1 M6 plus 1 gated), `scripted-transition-condition` (2 gated),
-   `nested-feather-paints` (1 gated), `scripted-path-effects` (1 gated),
+   `nested-feather-paints` (2 M6 plus 1 gated), `scripted-path-effects` (1 gated),
    `scripted-data-context` (1), `focus-data` (1: `focus_traversal.riv`),
    `layout-component-paint` (1: `text_input.riv`),
    `viewmodel-asset-conditions` (1),
@@ -41,9 +40,10 @@ the only memory the next session has. Update it every commit.
    `nested-artboard-layout` (1: `superbowl.riv`),
    `selected-root-gradient-shader-order` (1: `bullet_man.riv`), and
    `selected-root-skinned-clip-path` (1: `spotify_kids_demo.riv`). The former
-   `data-binding-nested-child` queue is now four one-file diagnostics:
+   `data-binding-nested-child` queue is now five one-file diagnostics:
    `nested-trim-path-data-bind` (`db_health_tracker.riv`),
    `nested-artboard-root-transform` (`nested_hug.riv`),
+   `nested-node-transform-data-bind` (`car_widgets_v01.riv`),
    `nested-layout-clip-data-bind` (`stateful_multi_property.riv`), and
    `nested-stateful-view-model-property` (`stateful_nested.riv`). Gated
    one-file diagnostics include `text-polygon-sibling` (`bankcard.riv`).
@@ -140,8 +140,8 @@ the only memory the next session has. Update it every commit.
   clipped/draw-target image fixtures with metadata-only component-list nodes,
   plus an asset-only unresolved nested-library host that decodes its image
   asset but draws only the root background like C++, and simple
-  ShapePaint/Feather draws including outer feathers and single inner-feather
-  paint paths.
+  ShapePaint/Feather draws including outer feathers and repeated
+  inner-feather paints that share the original/effect clip path.
   Custom handle-source world-space math, data-bound nested host controls beyond
   generated defaults (external/live pause/speed/quantize mutation), remaining
   nested child data-bind targets beyond the current number/color/default bind
@@ -157,7 +157,7 @@ the only memory the next session has. Update it every commit.
   text-root single external-image predecode case,
   contour-mesh image files, remaining text
   layout/editing, selected-root gradient shader ordering, selected-root
-  skinned clip-path geometry, inner-feather multipaint, nested feather paint trees, live
+  skinned clip-path geometry, nested feather paint trees, live
   data-bound nested host controls/artboard swaps, nested layout/leaf, scroll
   constraints, or layout-backed/virtualized component-list instancing.
   Harness-level scripted input replay dispatches
@@ -222,11 +222,10 @@ the only memory the next session has. Update it every commit.
 - Entries tagged `cpp-runner-crash` (`milestone = "harness"`) stay parked
   until the C++ golden runner survives the FileAssetContents, scripting,
   and data-viz crash paths it currently aborts on.
-- `coin.riv` is no longer parked as an M3 constraints file after
-  `ScaleConstraint`; it reaches draw and is now `milestone = "gated"` on the
-  explicit `rust-runner-unsupported:feather-inner-multipaint` renderer
-  diagnostic. `bankcard.riv` now reaches the text diagnostic after clearing
-  its `layout-component-paint` and feather blockers.
+- `coin.riv` is no longer parked as an M3 constraints or gated feather file:
+  repeated inner-feather paints now share the C++ clip-path cache key and
+  `coin.riv` is exact at sample 0. `bankcard.riv` now reaches the text
+  diagnostic after clearing its `layout-component-paint` and feather blockers.
 - `solar-system.riv` stays gated on a Rust import gap: `blendModeValue = 5`
   rejected on Shape object 13.
 
@@ -1569,3 +1568,15 @@ the only memory the next session has. Update it every commit.
   `diverges=0`, `unsupported-feature=63`, `not-yet=0`, and parked
   `M6=19 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
   `rust-runner-unsupported:feather-inner-multipaint`.
+- 2026-07-06: [M6] Closed the
+  `rust-runner-unsupported:feather-inner-multipaint` queue by removing the
+  runner-only global inner-feather guard and keying repeated inner-feather
+  clip paths by the original draw command instead of by each paint-local
+  generated inner path. `coin.riv` is now exact, `car_widgets_v01.riv` now
+  verifies as `rust-runner-unsupported:nested-node-transform-data-bind`, and
+  `hunter_x_demo.riv` plus `rewards_demo.riv` now verify as
+  `rust-runner-unsupported:nested-feather-paints`. Full
+  `make golden-compare` reports `exact=233`, `exact-segments=554`,
+  `diverges=0`, `unsupported-feature=62`, `not-yet=0`, and parked
+  `M6=19 gated=7 harness=36`; next target is the tied largest M6 bucket
+  `rust-runner-unsupported:nested-feather-paints`.

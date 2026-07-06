@@ -4145,8 +4145,15 @@ struct RuntimeGradientShaderResources<'a> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 struct RuntimeDrawPathCacheKey {
+    kind: RuntimeDrawPathCacheKind,
     local_id: Option<usize>,
     path_index: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum RuntimeDrawPathCacheKind {
+    Draw,
+    InnerFeatherClip,
 }
 
 impl RuntimeRenderPathCache {
@@ -4910,7 +4917,7 @@ fn runtime_draw_command(
         let mut saved = !paint.needs_save_operation;
         let paint_shape_world = paint.shape_world_override.unwrap_or(shape_world);
         // Ported from C++ src/shapes/paint/shape_paint.cpp and feather.cpp.
-        let feather_path_cache_local = if paint
+        let inner_feather_path_cache_local = if paint
             .feather_state
             .as_ref()
             .is_some_and(|feather| feather.inner)
@@ -4955,7 +4962,8 @@ fn runtime_draw_command(
                 );
                 let clip_path = path_cache.draw_path(
                     RuntimeDrawPathCacheKey {
-                        local_id: feather_path_cache_local,
+                        kind: RuntimeDrawPathCacheKind::InnerFeatherClip,
+                        local_id: command.local_id,
                         path_index: clip_path_index,
                     },
                     factory,
@@ -4979,7 +4987,8 @@ fn runtime_draw_command(
         let path_index = runtime_cached_path_slot_index(&mut draw_path_slots, draw_path_commands);
         let path = path_cache.draw_path(
             RuntimeDrawPathCacheKey {
-                local_id: feather_path_cache_local,
+                kind: RuntimeDrawPathCacheKind::Draw,
+                local_id: inner_feather_path_cache_local,
                 path_index,
             },
             factory,

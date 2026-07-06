@@ -4314,14 +4314,12 @@ fn pre_source_image_decode_count(artboards: &[ArtboardGraph], image_asset_count:
             .iter()
             .any(|component| component.type_name == "LayoutComponent")
     });
-    let has_nested_artboard = artboards
-        .iter()
-        .any(|artboard| !artboard.nested_artboards.is_empty());
-    if has_asset_image_bind && has_nested_artboard && !has_layout_component {
-        // Mirrors the C++ `FileAssetImporter` ordering for nested
+    if has_asset_image_bind && !has_layout_component {
+        // Mirrors the C++ `FileAssetImporter` ordering for no-layout
         // asset-image data-context files: most embedded images resolve before
         // source paint allocation, while the final generated/private asset
-        // resolution happens after source paints.
+        // resolution happens after source paints. The current corpus exposes
+        // both plain scripted-property and nested-artboard variants.
         return image_asset_count.saturating_sub(1);
     }
 

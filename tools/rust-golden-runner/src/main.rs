@@ -862,6 +862,18 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
+    if let Some(asset_comparator) = runtime
+        .objects
+        .iter()
+        .flatten()
+        .find(|object| object.type_name == "TransitionValueAssetComparator")
+    {
+        bail!(
+            "unsupported: viewmodel-asset-conditions in Rust golden runner (global {})",
+            asset_comparator.id
+        );
+    }
+
     if let Some(global_id) = unsupported_image_global(runtime, graph, artboard) {
         bail!("unsupported: images in Rust golden runner (global {global_id})");
     }
@@ -1969,6 +1981,7 @@ fn simple_static_image_artboard_tree_supported_entered(
                     | "CustomPropertyNumber"
                     | "DrawRules"
                     | "DrawTarget"
+                    | "Event"
                     | "Ellipse"
                     | "Fill"
                     | "Image"
@@ -1982,6 +1995,7 @@ fn simple_static_image_artboard_tree_supported_entered(
                     | "AxisY"
                     | "Rectangle"
                     | "Shape"
+                    | "ScriptedDrawable"
                     | "SolidColor"
                     | "Text"
                     | "TextStyleAxis"

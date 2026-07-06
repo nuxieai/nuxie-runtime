@@ -5,10 +5,10 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 535 across 214 files (strict
-  exact=532/211; tolerant=3/3; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=81, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=37 gated=8 harness=36
+- Exact-status segments (file × sample): 536 across 215 files (strict
+  exact=533/212; tolerant=3/3; structural=0/0)
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=80, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=36 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -25,11 +25,12 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the largest remaining M6 bucket,
-   `rust-runner-unsupported:images` (12 entries), starting with
-   `bad_skin.riv` unless focused classification finds another smaller image
-   slice. `rust-runner-unsupported:nested-artboard-layout` is now 14 entries
-   after the `NestedArtboardLeaf` slice; true `NSlicedNode`/mesh image work
-   remains gated.
+   `rust-runner-unsupported:nested-artboard-layout` (14 entries), starting
+   with `db_health_tracker.riv` unless focused classification finds a smaller
+   nested-layout slice. `rust-runner-unsupported:images` is now 10 entries;
+   true `NSlicedNode`/mesh image work remains gated. The single
+   `rust-runner-unsupported:viewmodel-asset-conditions` entry is
+   `viewmodel_based_condition.riv`.
 2. Generic `rust-runner-unsupported:text` and the sharper
    `text-vertical-trim` gate are empty in the current corpus. Do not reopen
    text unless a newly added corpus entry exposes a first text diagnostic.
@@ -1297,3 +1298,18 @@ the only memory the next session has. Update it every commit.
   and parked `M6=37 gated=8 harness=36`; `cargo test --workspace` passes. Next
   target remains the M6 image bucket, starting with `bad_skin.riv` unless
   focused classification finds another smaller slice.
+- 2026-07-06: [M6] Promoted `scripted_property_image.riv` by admitting inert
+  `ScriptedDrawable`/`Event` metadata in the static image gate, preserving
+  C++'s no-layout asset-image decode/source-paint ordering, and relying on the
+  existing empty asset-image defaults to suppress the two image draws after the
+  C++ `FileAssetContents` import failure. `viewmodel_based_condition.riv`
+  moved from the generic image bucket to the sharper
+  `rust-runner-unsupported:viewmodel-asset-conditions` diagnostic after
+  focused streams showed wrong state-machine condition colors once admitted.
+  Full `make golden-compare` reports `exact=215`,
+  `exact-segments=536`, `diverges=0`, `unsupported-feature=80`,
+  `not-yet=0`, and parked `M6=36 gated=8 harness=36`; `cargo test
+  --workspace` passes. Next target is the largest M6 bucket,
+  `rust-runner-unsupported:nested-artboard-layout`, starting with
+  `db_health_tracker.riv` unless focused classification finds a smaller
+  nested-layout slice.

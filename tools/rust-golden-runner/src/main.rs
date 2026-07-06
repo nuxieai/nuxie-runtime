@@ -786,30 +786,15 @@ fn ensure_static_draw_supported_for_artboard(
         return Ok(());
     }
 
-    if let Some(nested) = artboard
-        .nested_artboards
-        .iter()
-        .find(|nested| !matches!(nested.type_name, "NestedArtboard" | "NestedArtboardLayout"))
-    {
-        if nested.type_name == "NestedArtboardLeaf" {
-            bail!(
-                "unsupported: nested-artboard-layout in Rust golden runner ({} global {})",
-                nested.type_name,
-                nested.global_id
-            );
-        }
+    if let Some(nested) = artboard.nested_artboards.iter().find(|nested| {
+        !matches!(
+            nested.type_name,
+            "NestedArtboard" | "NestedArtboardLayout" | "NestedArtboardLeaf"
+        )
+    }) {
         bail!(
             "unsupported: nested artboards in Rust golden runner ({})",
             nested.type_name
-        );
-    }
-
-    if let Some((type_name, global_id)) = artboard.local_objects.iter().find_map(|object| {
-        let type_name = object.type_name?;
-        (type_name == "NestedArtboardLeaf").then_some((type_name, object.global_id))
-    }) {
-        bail!(
-            "unsupported: nested-artboard-layout in Rust golden runner ({type_name} global {global_id})"
         );
     }
 

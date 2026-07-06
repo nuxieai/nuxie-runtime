@@ -3222,13 +3222,37 @@ impl TaffyRuntimeLayoutEngine {
                 let value = self.nested_artboard_layout_axis_length(instance, local, width_axis);
                 let units = self.nested_artboard_layout_axis_units(instance, local, width_axis);
                 if value < 0.0 {
-                    Some(Dimension::auto())
+                    Some(
+                        self.nested_artboard_layout_axis_intrinsic_dimension(
+                            instance, local, width_axis,
+                        )
+                        .unwrap_or_else(Dimension::auto),
+                    )
                 } else {
                     self.dimension_from_unit(value, units)
                 }
             }
             1 => Some(Dimension::auto()),
             _ => None,
+        }
+    }
+
+    fn nested_artboard_layout_axis_intrinsic_dimension(
+        &self,
+        instance: &ArtboardInstance,
+        local: usize,
+        width_axis: bool,
+    ) -> Option<Dimension> {
+        let nested = instance.nested_artboards.get(&local)?;
+        let value = if width_axis {
+            nested.child.width
+        } else {
+            nested.child.height
+        };
+        if value.is_finite() && value >= 0.0 {
+            Some(Dimension::length(value))
+        } else {
+            None
         }
     }
 
@@ -3530,6 +3554,7 @@ impl TaffyRuntimeLayoutEngine {
                         "LayoutComponent"
                             | "Fill"
                             | "LinearGradient"
+                            | "NestedArtboardLeaf"
                             | "NestedArtboardLayout"
                             | "RadialGradient"
                             | "SolidColor"
@@ -5084,8 +5109,12 @@ fn runtime_draw_nested_artboard(
         .local_id
         .and_then(|local_id| instance.component(local_id))
         .context("nested artboard host component is missing")?;
-    let host_world = if command.type_name == "NestedArtboardLayout" {
-        command
+    let persistent_child = command
+        .local_id
+        .and_then(|local_id| instance.nested_artboards.get(&local_id))
+        .map(|nested| nested.child.as_ref());
+    let host_world = match command.type_name {
+        "NestedArtboardLayout" => command
             .local_id
             .map(|local_id| {
                 instance.runtime_component_world_transform_with_bounds(
@@ -5094,9 +5123,29 @@ fn runtime_draw_nested_artboard(
                     layout_bounds,
                 )
             })
-            .unwrap_or(host_component.transform.world_transform)
-    } else {
-        host_component.transform.world_transform
+            .unwrap_or(host_component.transform.world_transform),
+        "NestedArtboardLeaf" => {
+            let local_id = command
+                .local_id
+                .context("nested artboard leaf command missing local id")?;
+            runtime_nested_artboard_leaf_world_transform(
+                instance,
+                graph,
+                local_id,
+                persistent_child,
+                layout_bounds,
+            )?
+        }
+        _ => command
+            .local_id
+            .map(|local_id| {
+                instance.runtime_component_world_transform_with_bounds(
+                    local_id,
+                    graph,
+                    layout_bounds,
+                )
+            })
+            .unwrap_or(host_component.transform.world_transform),
     };
     let host_opacity = host_component.transform.render_opacity;
 
@@ -5112,11 +5161,7 @@ fn runtime_draw_nested_artboard(
     );
     let child_cache = path_cache.nested_artboards.entry(cache_key).or_default();
 
-    if let Some(child) = command
-        .local_id
-        .and_then(|local_id| instance.nested_artboards.get(&local_id))
-        .map(|nested| nested.child.as_ref())
-    {
+    if let Some(child) = persistent_child {
         let layout_child;
         let child = if command.type_name == "NestedArtboardLayout" {
             let mut cloned = child.clone();
@@ -5241,6 +5286,170 @@ fn runtime_draw_nested_artboard(
         renderer.restore();
     }
     Ok(())
+}
+
+#[derive(Clone, Copy)]
+struct RuntimeAabb {
+    left: f32,
+    top: f32,
+    width: f32,
+    height: f32,
+}
+
+impl RuntimeAabb {
+    fn from_artboard(instance: &ArtboardInstance) -> Self {
+        Self {
+            left: -instance.width * instance.origin_x,
+            top: -instance.height * instance.origin_y,
+            width: instance.width,
+            height: instance.height,
+        }
+    }
+
+    fn from_local_layout_bounds(bounds: RuntimeLayoutBounds) -> Self {
+        Self {
+            left: 0.0,
+            top: 0.0,
+            width: bounds.width,
+            height: bounds.height,
+        }
+    }
+}
+
+fn runtime_nested_artboard_leaf_world_transform(
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    local_id: usize,
+    child: Option<&ArtboardInstance>,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+) -> Result<Mat2D> {
+    let host_world =
+        instance.runtime_component_world_transform_with_bounds(local_id, graph, layout_bounds);
+    let Some(child) = child else {
+        return Ok(host_world);
+    };
+
+    let frame =
+        runtime_nested_artboard_leaf_frame_bounds(instance, graph, local_id, child, layout_bounds)?;
+    let content = RuntimeAabb::from_artboard(child);
+    let fit_key = property_key_for_name("NestedArtboardLeaf", "fit")
+        .context("missing NestedArtboardLeaf.fit")?;
+    let alignment_x_key = property_key_for_name("NestedArtboardLeaf", "alignmentX")
+        .context("missing NestedArtboardLeaf.alignmentX")?;
+    let alignment_y_key = property_key_for_name("NestedArtboardLeaf", "alignmentY")
+        .context("missing NestedArtboardLeaf.alignmentY")?;
+    let fit = instance.uint_property(local_id, fit_key).unwrap_or(0);
+    let alignment_x = instance
+        .double_property(local_id, alignment_x_key)
+        .unwrap_or(0.0);
+    let alignment_y = instance
+        .double_property(local_id, alignment_y_key)
+        .unwrap_or(0.0);
+
+    Ok(host_world.multiply(runtime_compute_alignment(
+        fit,
+        alignment_x,
+        alignment_y,
+        frame,
+        content,
+    )))
+}
+
+fn runtime_nested_artboard_leaf_frame_bounds(
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    local_id: usize,
+    child: &ArtboardInstance,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+) -> Result<RuntimeAabb> {
+    let component = instance
+        .component(local_id)
+        .context("nested artboard leaf component is missing")?;
+    if let Some(parent_local) = component.parent_local
+        && instance
+            .component(parent_local)
+            .is_some_and(|parent| parent.type_name == "LayoutComponent")
+    {
+        let bounds = layout_bounds
+            .and_then(|bounds| bounds.get(&parent_local).copied())
+            .with_context(|| {
+                let global = graph
+                    .components
+                    .iter()
+                    .find(|component| component.local_id == parent_local)
+                    .map(|component| component.global_id)
+                    .unwrap_or_default();
+                format!(
+                    "nested artboard leaf local {local_id} missing parent layout bounds local {parent_local} global {global}"
+                )
+            })?;
+        return Ok(RuntimeAabb::from_local_layout_bounds(bounds));
+    }
+
+    Ok(RuntimeAabb::from_artboard(child))
+}
+
+fn runtime_compute_alignment(
+    fit: u64,
+    alignment_x: f32,
+    alignment_y: f32,
+    frame: RuntimeAabb,
+    content: RuntimeAabb,
+) -> Mat2D {
+    let content_width = content.width;
+    let content_height = content.height;
+    let x = -content.left - content_width * 0.5 - alignment_x * content_width * 0.5;
+    let y = -content.top - content_height * 0.5 - alignment_y * content_height * 0.5;
+
+    let mut scale_x = 1.0;
+    let mut scale_y = 1.0;
+    match fit {
+        0 => {
+            scale_x = frame.width / content_width;
+            scale_y = frame.height / content_height;
+        }
+        1 => {
+            let scale = (frame.width / content_width).min(frame.height / content_height);
+            scale_x = scale;
+            scale_y = scale;
+        }
+        2 => {
+            let scale = (frame.width / content_width).max(frame.height / content_height);
+            scale_x = scale;
+            scale_y = scale;
+        }
+        3 => {
+            let scale = frame.width / content_width;
+            scale_x = scale;
+            scale_y = scale;
+        }
+        4 => {
+            let scale = frame.height / content_height;
+            scale_x = scale;
+            scale_y = scale;
+        }
+        5 => {}
+        6 => {
+            let scale = (frame.width / content_width).min(frame.height / content_height);
+            let scale = if scale < 1.0 { scale } else { 1.0 };
+            scale_x = scale;
+            scale_y = scale;
+        }
+        7 => {}
+        _ => {}
+    }
+
+    let translation = Mat2D([
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        frame.left + frame.width * 0.5 + alignment_x * frame.width * 0.5,
+        frame.top + frame.height * 0.5 + alignment_y * frame.height * 0.5,
+    ]);
+    let scale = Mat2D([scale_x, 0.0, 0.0, scale_y, 0.0, 0.0]);
+    let translate_content = Mat2D([1.0, 0.0, 0.0, 1.0, x, y]);
+    translation.multiply(scale).multiply(translate_content)
 }
 
 fn runtime_apply_nested_artboard_layout_child_bounds(

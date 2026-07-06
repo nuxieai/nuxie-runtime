@@ -5,10 +5,10 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 528 across 207 files (strict
-  exact=525/204; tolerant=3/3; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=88, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=44 gated=8 harness=36
+- Exact-status segments (file × sample): 530 across 209 files (strict
+  exact=527/206; tolerant=3/3; structural=0/0)
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=86, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=42 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -25,10 +25,11 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the largest remaining M6 bucket,
-   `rust-runner-unsupported:nested-artboard-layout` (16 entries), starting with
-   `collapsing_elements.riv` unless a focused run proves another entry is the
-   smaller first slice. Keep `rust-runner-unsupported:images` (17 entries) as
-   the next bucket; true `NSlicedNode`/mesh image work remains gated.
+   `rust-runner-unsupported:images` (17 entries), starting with
+   `bad_skin.riv` unless a focused run proves another entry is the smaller
+   first slice. `rust-runner-unsupported:nested-artboard-layout` is now 14
+   entries after the `NestedArtboardLeaf` slice; true `NSlicedNode`/mesh image
+   work remains gated.
 2. Generic `rust-runner-unsupported:text` and the sharper
    `text-vertical-trim` gate are empty in the current corpus. Do not reopen
    text unless a newly added corpus entry exposes a first text diagnostic.
@@ -1232,3 +1233,13 @@ the only memory the next session has. Update it every commit.
   `M6=44 gated=8 harness=36`; `cargo test --workspace` passes. Next target
   remains the nested-artboard-layout bucket, starting with
   `collapsing_elements.riv`.
+- 2026-07-06: [M6] Promoted `collapsing_elements.riv` and
+  `multitouch_enter.riv` by admitting `NestedArtboardLeaf` as a persistent
+  nested artboard host, matching C++ leaf `computeAlignment` behavior, and
+  giving fixed/default `NestedArtboardLayout` nodes the referenced child
+  artboard's intrinsic size instead of collapsing to a zero-size Taffy leaf.
+  Focused C++/Rust stream diffs for both fixtures are exact. Full
+  `make golden-compare` reports `exact=209`, `exact-segments=530`,
+  `diverges=0`, `unsupported-feature=86`, `not-yet=0`, and parked
+  `M6=42 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
+  the M6 image bucket, starting with `bad_skin.riv`.

@@ -1679,7 +1679,10 @@ fn build_runtime_nested_artboard_instances(
 
     let mut nested_artboards = BTreeMap::new();
     for host in &graph.nested_artboards {
-        if !matches!(host.type_name, "NestedArtboard" | "NestedArtboardLayout") {
+        if !matches!(
+            host.type_name,
+            "NestedArtboard" | "NestedArtboardLayout" | "NestedArtboardLeaf"
+        ) {
             continue;
         }
 

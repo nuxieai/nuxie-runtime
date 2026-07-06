@@ -25,20 +25,22 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the largest remaining M6 bucket,
-   `rust-runner-unsupported:scroll-constraints` (7 entries), starting with
+   `rust-runner-unsupported:scroll-constraints` (6 entries), starting with
    `component_list_child_origin.riv` unless focused classification finds a
    smaller first gate. The stale `rust-runner-unsupported:images` bucket is now
-   6 entries after the `Feather`/`NSlicedNode` diagnostic-priority pass:
+   5 entries after the diagnostic-priority pass:
    `bad_skin.riv`, `bullet_man.riv`, `jellyfish_test.riv`,
-   `spotify_kids_demo.riv`, `superbowl.riv`, and `tape.riv`. Other M6 queues
+   `spotify_kids_demo.riv`, and `tape.riv`. Other M6 queues
    are `feather` (8 total: M6=5, gated=3),
    `data-binding-nested-stateful-view-model` (4), `focus-data` (3),
-   `data-binding-nested-child` (2), `scripted-transition-condition` (2 gated),
-   `n-slice` (2 total: M6=1, gated=1), `scripted-path-effects` (1 gated),
-   `scripted-data-context` (1), and `viewmodel-asset-conditions` (1).
-2. Generic `rust-runner-unsupported:text` and the sharper
-   `text-vertical-trim` gate are empty in the current corpus. Do not reopen
-   text unless a newly added corpus entry exposes a first text diagnostic.
+   `data-binding-nested-child` (3), `scripted-transition-condition` (2 gated),
+   `n-slice` (2 total: M6=1, gated=1), `rust-runner-unsupported:text` (1),
+   `scripted-path-effects` (1 gated), `scripted-data-context` (1), and
+   `viewmodel-asset-conditions` (1).
+2. Generic `rust-runner-unsupported:text` is reopened only for
+   `superbowl.riv`, whose first Rust diagnostic is the static text subset's
+   sibling `NestedArtboardLayout` limit. The sharper `text-vertical-trim` gate
+   remains empty.
 3. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
@@ -1412,3 +1414,15 @@ the only memory the next session has. Update it every commit.
   the largest M6 bucket, `rust-runner-unsupported:scroll-constraints`, starting
   with `component_list_child_origin.riv` unless focused classification finds a
   smaller first gate.
+- 2026-07-06: [M6] Tightened `golden-compare` unsupported diagnostics so a
+  manifest `rust-runner-unsupported:*` entry must match the Rust runner's
+  actual first diagnostic. The stricter check exposed two stale labels:
+  `db_health_tracker.riv` now verifies as
+  `rust-runner-unsupported:data-binding-nested-child`, and `superbowl.riv`
+  now verifies as `rust-runner-unsupported:text`. Full `make golden-compare`
+  reports `exact=221`, `exact-segments=542`, `diverges=0`,
+  `unsupported-feature=74`, `not-yet=0`, and parked
+  `M6=30 gated=8 harness=36`; `cargo test --workspace` passes. Next target
+  remains the largest true M6 bucket,
+  `rust-runner-unsupported:scroll-constraints`, starting with
+  `component_list_child_origin.riv`.

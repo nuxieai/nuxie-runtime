@@ -63,6 +63,7 @@ fn run() -> Result<(), String> {
                                 entry,
                                 &file,
                                 &corpus_dir,
+                                feature,
                             ) {
                                 Ok(()) => println!(
                                     "[unsupported-feature] {}: rust diagnostic ok ({feature})",
@@ -603,6 +604,10 @@ fn number_end(bytes: &[u8], start: usize) -> usize {
     index
 }
 
+fn unsupported_diagnostic_matches(stderr: &str, expected_feature: &str) -> bool {
+    stderr.contains(&format!("unsupported: {expected_feature}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -665,6 +670,18 @@ mod tests {
             !VerificationMode::Tolerant(0.005)
                 .streams_match("drawPath points=[(0,0)]\n", "clipPath points=[(0,0)]\n")
         );
+    }
+
+    #[test]
+    fn unsupported_diagnostic_must_match_manifest_feature() {
+        assert!(unsupported_diagnostic_matches(
+            "rust-golden-runner error: unsupported: scroll-constraints in Rust golden runner\n",
+            "scroll-constraints"
+        ));
+        assert!(!unsupported_diagnostic_matches(
+            "rust-golden-runner error: unsupported: data-binding-nested-child in Rust golden runner\n",
+            "scroll-constraints"
+        ));
     }
 
     #[test]
@@ -734,6 +751,7 @@ fn run_unsupported_diagnostic(
     entry: &CorpusEntry,
     file: &Path,
     corpus_dir: &Path,
+    expected_feature: &str,
 ) -> Result<(), String> {
     let mut command = stream_command(runner, entry, file, corpus_dir);
     let output = command
@@ -750,6 +768,14 @@ fn run_unsupported_diagnostic(
     if !stderr.contains("unsupported:") {
         return Err(format!(
             "{} did not emit an unsupported diagnostic\n{}",
+            runner.display(),
+            stderr
+        ));
+    }
+    if !unsupported_diagnostic_matches(&stderr, expected_feature) {
+        let expected_marker = format!("unsupported: {expected_feature}");
+        return Err(format!(
+            "{} emitted the wrong unsupported diagnostic; expected {expected_marker:?}\n{}",
             runner.display(),
             stderr
         ));

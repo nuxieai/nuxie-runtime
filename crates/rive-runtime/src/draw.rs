@@ -8,8 +8,9 @@ use rive_graph::{
 };
 use rive_render_api::{
     BlendMode as RenderBlendMode, Factory as RenderFactory, FillRule as RenderFillRule,
-    Mat2D as RenderMat2D, RenderPaint, RenderPaintStyle, RenderPath, RenderShader, Renderer,
-    StrokeCap as RenderStrokeCap, StrokeJoin as RenderStrokeJoin,
+    ImageSampler as RenderImageSampler, Mat2D as RenderMat2D, RenderImage, RenderPaint,
+    RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap as RenderStrokeCap,
+    StrokeJoin as RenderStrokeJoin,
 };
 use rive_schema::definition_by_name;
 use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
@@ -440,6 +441,7 @@ impl ArtboardInstance {
             factory,
             renderer,
             paint_by_global,
+            &BTreeMap::new(),
             path_cache,
             None,
             true,
@@ -463,6 +465,7 @@ impl ArtboardInstance {
             factory,
             renderer,
             &mut paint_cache.paints,
+            &paint_cache.images,
             path_cache,
             Some(&mut paint_cache.nested_artboards),
             true,
@@ -477,6 +480,7 @@ impl ArtboardInstance {
         factory: &mut dyn RenderFactory,
         renderer: &mut dyn Renderer,
         paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
+        image_by_global: &BTreeMap<u32, Box<dyn RenderImage>>,
         path_cache: &mut RuntimeRenderPathCache,
         mut nested_paint_caches: Option<&mut BTreeMap<u32, RuntimeRenderPaintCache>>,
         apply_origin_transform: bool,
@@ -561,6 +565,7 @@ impl ArtboardInstance {
                 factory,
                 renderer,
                 paint_by_global,
+                image_by_global,
                 path_cache,
                 match &mut nested_paint_caches {
                     Some(caches) => Some(&mut **caches),
@@ -724,6 +729,7 @@ impl ArtboardInstance {
             global_id: drawable.global_id,
             type_name: drawable.type_name,
             referenced_artboard_global: drawable.referenced_artboard_global,
+            resolved_image_asset_global: drawable.resolved_image_asset_global,
             clipping_shape_local: drawable.clipping_shape_local,
             needs_save_operation: drawable.needs_save_operation,
             shape_paints: self.runtime_shape_paint_commands(drawable, graph, layout_bounds),
@@ -2611,6 +2617,7 @@ pub struct RuntimeDrawCommand {
     pub global_id: Option<u32>,
     pub type_name: &'static str,
     pub referenced_artboard_global: Option<u32>,
+    pub resolved_image_asset_global: Option<u32>,
     pub clipping_shape_local: Option<usize>,
     pub needs_save_operation: bool,
     pub shape_paints: Vec<RuntimeShapePaintCommand>,
@@ -3834,12 +3841,17 @@ pub struct RuntimeGradientStop {
 #[derive(Default)]
 pub struct RuntimeRenderPaintCache {
     paints: BTreeMap<u32, Box<dyn RenderPaint>>,
+    images: BTreeMap<u32, Box<dyn RenderImage>>,
     nested_artboards: BTreeMap<u32, RuntimeRenderPaintCache>,
 }
 
 impl RuntimeRenderPaintCache {
     pub fn root_paints_mut(&mut self) -> &mut BTreeMap<u32, Box<dyn RenderPaint>> {
         &mut self.paints
+    }
+
+    pub fn root_images_mut(&mut self) -> &mut BTreeMap<u32, Box<dyn RenderImage>> {
+        &mut self.images
     }
 }
 
@@ -4000,7 +4012,50 @@ pub fn preallocate_render_paint_cache_for_artboard_tree(
     factory: &mut dyn RenderFactory,
 ) -> RuntimeRenderPaintCache {
     let _source_artboard_paints = preallocate_render_paint_batch(runtime, factory);
-    preallocate_artboard_render_paint_tree_batch(runtime, graph, artboards, factory)
+    let mut cache =
+        preallocate_artboard_render_paint_tree_batch(runtime, graph, artboards, factory);
+    cache.images = predecode_render_image_batch(runtime, factory);
+    cache
+}
+
+fn predecode_render_image_batch(
+    runtime: &RuntimeFile,
+    factory: &mut dyn RenderFactory,
+) -> BTreeMap<u32, Box<dyn RenderImage>> {
+    runtime
+        .file_assets()
+        .into_iter()
+        .filter(|asset| asset.type_name == "ImageAsset")
+        .filter_map(|asset| {
+            embedded_file_asset_bytes(runtime, asset.id)
+                .map(|bytes| (asset.id, factory.decode_image(bytes)))
+        })
+        .collect()
+}
+
+fn embedded_file_asset_bytes(runtime: &RuntimeFile, asset_global: u32) -> Option<&[u8]> {
+    let file_asset_globals = runtime
+        .file_assets()
+        .into_iter()
+        .map(|asset| asset.id)
+        .collect::<BTreeSet<_>>();
+    let mut after_asset = false;
+    for object in runtime.objects.iter().flatten() {
+        if object.id == asset_global {
+            after_asset = true;
+            continue;
+        }
+        if !after_asset {
+            continue;
+        }
+        if file_asset_globals.contains(&object.id) {
+            return None;
+        }
+        if object.type_name == "FileAssetContents" {
+            return object.bytes_property("bytes");
+        }
+    }
+    None
 }
 
 fn preallocate_render_paint_batch(
@@ -4320,6 +4375,7 @@ fn runtime_draw_command(
     factory: &mut dyn RenderFactory,
     renderer: &mut dyn Renderer,
     paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
+    image_by_global: &BTreeMap<u32, Box<dyn RenderImage>>,
     path_cache: &mut RuntimeRenderPathCache,
     nested_paint_caches: Option<&mut BTreeMap<u32, RuntimeRenderPaintCache>>,
 ) -> Result<()> {
@@ -4378,8 +4434,21 @@ fn runtime_draw_command(
             factory,
             renderer,
             paint_by_global,
+            image_by_global,
             path_cache,
             nested_paint_caches,
+        );
+    }
+
+    if command.type_name == "Image" {
+        return runtime_draw_image(
+            runtime,
+            instance,
+            graph,
+            command,
+            layout_bounds,
+            image_by_global,
+            renderer,
         );
     }
 
@@ -4512,6 +4581,82 @@ fn runtime_draw_command(
     Ok(())
 }
 
+fn runtime_draw_image(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    command: RuntimeDrawCommand,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    image_by_global: &BTreeMap<u32, Box<dyn RenderImage>>,
+    renderer: &mut dyn Renderer,
+) -> Result<()> {
+    // Ported from C++ `src/shapes/image.cpp::Image::draw` for the non-mesh
+    // image path. Mesh-backed images stay behind the runner's image gate.
+    let local_id = command.local_id.context("image command missing local id")?;
+    let image_object = command
+        .global_id
+        .and_then(|global_id| runtime.object(global_id as usize));
+    let Some(image) = command
+        .resolved_image_asset_global
+        .and_then(|asset_global| image_by_global.get(&asset_global))
+    else {
+        // C++ `Image::draw` returns before saving when the asset has no
+        // decoded RenderImage, e.g. hosted images with no loader.
+        return Ok(());
+    };
+
+    if command.needs_save_operation {
+        renderer.save();
+    }
+
+    let world =
+        instance.runtime_component_world_transform_with_bounds(local_id, graph, layout_bounds);
+    renderer.transform(runtime_render_mat(world));
+
+    let origin_x_key =
+        property_key_for_name("Image", "originX").context("missing Image.originX")?;
+    let origin_y_key =
+        property_key_for_name("Image", "originY").context("missing Image.originY")?;
+    let origin_x = instance
+        .double_property(local_id, origin_x_key)
+        .or_else(|| image_object.and_then(|object| object.double_property("originX")))
+        .unwrap_or(0.5);
+    let origin_y = instance
+        .double_property(local_id, origin_y_key)
+        .or_else(|| image_object.and_then(|object| object.double_property("originY")))
+        .unwrap_or(0.5);
+    renderer.transform(RenderMat2D([
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        -(image.width() as f32 * origin_x),
+        -(image.height() as f32 * origin_y),
+    ]));
+
+    let blend_mode_key = property_key_for_name("Drawable", "blendModeValue")
+        .context("missing Drawable.blendModeValue")?;
+    let blend_mode_value = instance
+        .uint_property(local_id, blend_mode_key)
+        .or_else(|| image_object.and_then(|object| object.uint_property("blendModeValue")))
+        .unwrap_or(3);
+    let opacity = instance
+        .component(local_id)
+        .map(|component| component.transform.render_opacity)
+        .unwrap_or(1.0);
+    renderer.draw_image(
+        Some(image.as_ref()),
+        RenderImageSampler::LINEAR_CLAMP,
+        runtime_blend_mode(u32::try_from(blend_mode_value).unwrap_or(3))?,
+        opacity,
+    );
+
+    if command.needs_save_operation {
+        renderer.restore();
+    }
+    Ok(())
+}
+
 fn runtime_draw_nested_artboard(
     runtime: &RuntimeFile,
     instance: &ArtboardInstance,
@@ -4520,6 +4665,7 @@ fn runtime_draw_nested_artboard(
     factory: &mut dyn RenderFactory,
     renderer: &mut dyn Renderer,
     paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
+    image_by_global: &BTreeMap<u32, Box<dyn RenderImage>>,
     path_cache: &mut RuntimeRenderPathCache,
     nested_paint_caches: Option<&mut BTreeMap<u32, RuntimeRenderPaintCache>>,
 ) -> Result<()> {
@@ -4581,6 +4727,7 @@ fn runtime_draw_nested_artboard(
                 factory,
                 renderer,
                 &mut child_paint_cache.paints,
+                image_by_global,
                 child_cache,
                 Some(&mut child_paint_cache.nested_artboards),
                 false,
@@ -4602,6 +4749,7 @@ fn runtime_draw_nested_artboard(
                 factory,
                 renderer,
                 paint_by_global,
+                image_by_global,
                 child_cache,
                 None,
                 false,
@@ -4637,6 +4785,7 @@ fn runtime_draw_nested_artboard(
             factory,
             renderer,
             &mut child_paint_cache.paints,
+            image_by_global,
             child_cache,
             Some(&mut child_paint_cache.nested_artboards),
             false,
@@ -4658,6 +4807,7 @@ fn runtime_draw_nested_artboard(
             factory,
             renderer,
             paint_by_global,
+            image_by_global,
             child_cache,
             None,
             false,

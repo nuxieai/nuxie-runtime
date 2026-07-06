@@ -881,26 +881,8 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
-    if let Some(image) = artboard
-        .local_objects
-        .iter()
-        .find(|object| object.type_name == Some("Image"))
-    {
-        bail!(
-            "unsupported: images in Rust golden runner (global {})",
-            image.global_id
-        );
-    }
-
-    if let Some(asset) = graph
-        .file_assets
-        .iter()
-        .find(|asset| asset.type_name == "ImageAsset")
-    {
-        bail!(
-            "unsupported: images in Rust golden runner (asset global {})",
-            asset.global_id
-        );
+    if let Some(global_id) = unsupported_image_global(runtime, graph, artboard) {
+        bail!("unsupported: images in Rust golden runner (global {global_id})");
     }
 
     if let Some(container) = unsupported_layout_component_paint(runtime, artboard) {
@@ -1857,6 +1839,97 @@ fn runtime_has_type(runtime: &RuntimeFile, type_name: &str) -> bool {
         .iter()
         .flatten()
         .any(|object| object.type_name == type_name)
+}
+
+fn unsupported_image_global(
+    runtime: &RuntimeFile,
+    graph: &GraphFile,
+    artboard: &ArtboardGraph,
+) -> Option<u32> {
+    let first_image_global = artboard
+        .local_objects
+        .iter()
+        .find(|object| object.type_name == Some("Image"))
+        .map(|object| object.global_id);
+    let first_image_asset_global = graph
+        .file_assets
+        .iter()
+        .find(|asset| asset.type_name == "ImageAsset")
+        .map(|asset| asset.global_id);
+    if first_image_global.is_none() && first_image_asset_global.is_none() {
+        return None;
+    }
+
+    (!simple_static_image_artboard_supported(runtime, graph, artboard))
+        .then_some(first_image_global.or(first_image_asset_global).unwrap_or(0))
+}
+
+fn simple_static_image_artboard_supported(
+    runtime: &RuntimeFile,
+    graph: &GraphFile,
+    artboard: &ArtboardGraph,
+) -> bool {
+    if !artboard
+        .local_objects
+        .iter()
+        .all(|object| matches!(object.type_name, Some("Artboard" | "Image")))
+    {
+        return false;
+    }
+    if !artboard.meshes.is_empty() || !artboard.n_slicer_details.is_empty() {
+        return false;
+    }
+
+    let image_asset_globals = graph
+        .file_assets
+        .iter()
+        .filter(|asset| asset.type_name == "ImageAsset")
+        .map(|asset| asset.global_id)
+        .collect::<BTreeSet<_>>();
+    if image_asset_globals.is_empty() {
+        return false;
+    }
+    if image_asset_globals
+        .iter()
+        .any(|asset_global| embedded_file_asset_bytes(runtime, *asset_global).is_none())
+    {
+        return false;
+    }
+
+    artboard
+        .sorted_drawable_order
+        .iter()
+        .filter(|drawable| drawable.type_name == "Image")
+        .all(|drawable| {
+            drawable
+                .resolved_image_asset_global
+                .is_some_and(|asset_global| image_asset_globals.contains(&asset_global))
+        })
+}
+
+fn embedded_file_asset_bytes(runtime: &RuntimeFile, asset_global: u32) -> Option<&[u8]> {
+    let file_asset_globals = runtime
+        .file_assets()
+        .into_iter()
+        .map(|asset| asset.id)
+        .collect::<BTreeSet<_>>();
+    let mut after_asset = false;
+    for object in runtime.objects.iter().flatten() {
+        if object.id == asset_global {
+            after_asset = true;
+            continue;
+        }
+        if !after_asset {
+            continue;
+        }
+        if file_asset_globals.contains(&object.id) {
+            return None;
+        }
+        if object.type_name == "FileAssetContents" {
+            return object.bytes_property("bytes");
+        }
+    }
+    None
 }
 
 fn frame_dimension(value: f32) -> u32 {

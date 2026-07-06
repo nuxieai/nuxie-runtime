@@ -5,9 +5,9 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 516 across 195 exact files
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=100, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=56 gated=8 harness=36
+- Exact segments (file × sample): 517 across 196 exact files
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=99, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=55 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -23,10 +23,11 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Start the M6 image bucket with `custom_image_name.riv`, the smallest
-   `rust-runner-unsupported:images` entry. Images are now the largest M6
-   bucket: 27 entries, versus 18 `nested-artboard-layout`, 9
-   `scroll-constraints`, 1 `focus-data`, and 1 `scripted-data-context`.
+1. Continue the M6 image bucket with `double_library_with_image.riv` and
+   `library_with_image.riv`, the next-smallest `rust-runner-unsupported:images`
+   entries. They add only `NestedArtboard` on top of the image trio, so inspect
+   whether the decoded global image cache already works through nested hosts or
+   whether library image asset resolution needs a narrow follow-up.
 2. Generic `rust-runner-unsupported:text` and the sharper
    `text-vertical-trim` gate are empty in the current corpus. Do not reopen
    text unless a newly added corpus entry exposes a first text diagnostic.
@@ -1083,3 +1084,12 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=100`, `not-yet=0`, and parked
   `M6=56 gated=8 harness=36`. Next target is the M6 image bucket, starting
   with `custom_image_name.riv`.
+- 2026-07-06: [M6] Promoted `custom_image_name.riv` by porting the first
+  non-mesh `Image::draw` slice from C++ `src/shapes/image.cpp`, decoding
+  in-band `ImageAsset` contents through the render factory before the stream
+  `source` marker, and keeping broader mesh/layout/data-bound image files
+  behind the existing image diagnostic. Focused C++ and Rust streams are
+  byte-identical. Full `make golden-compare` reports `exact=196`,
+  `exact-segments=517`, `diverges=0`, `unsupported-feature=99`, `not-yet=0`,
+  and parked `M6=55 gated=8 harness=36`. Next target is the nested-library
+  image pair: `double_library_with_image.riv` and `library_with_image.riv`.

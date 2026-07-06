@@ -337,9 +337,8 @@ features = ["type-key:138:CubicValueInterpolator", "type-key:18:SolidColor", "ty
 id = "custom_image_name"
 path = "tests/unit_tests/assets/custom_image_name.riv"
 samples = [0.0]
-status = "unsupported-feature"
-milestone = "M6"
-features = ["type-key:100:Image", "type-key:105:ImageAsset", "type-key:106:FileAssetContents", "type-key:1:Artboard", "type-key:23:Backboard", "rust-runner-unsupported:images"]
+status = "exact"
+features = ["type-key:100:Image", "type-key:105:ImageAsset", "type-key:106:FileAssetContents", "type-key:1:Artboard", "type-key:23:Backboard"]
 
 [[file]]
 id = "custom_property_enum"

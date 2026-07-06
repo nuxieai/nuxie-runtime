@@ -28,13 +28,13 @@ the only memory the next session has. Update it every commit.
    remaining unsupported/gated queue that is not scripting/audio:
    start with `scripted-data-context` only if it can be made a loud scripting
    gate, otherwise pick one of `focus-data` (`focus_traversal.riv`),
-   `layout-component-paint` (`text_input.riv`),
+   `text-input` (`text_input.riv`),
    `viewmodel-asset-conditions`, `text-joystick-data-bind`
    (`echo_show_demo.riv`), `nested-artboard-layout` (`superbowl.riv`), or
    `selected-root-skinned-clip-path` (`bullet_man.riv`,
    `spotify_kids_demo.riv`).
 2. Other parked one-file M6 queues include `scripted-data-context`,
-   `focus-data` (`focus_traversal.riv`), `layout-component-paint`
+   `focus-data` (`focus_traversal.riv`), `text-input`
    (`text_input.riv`), `viewmodel-asset-conditions`,
    `text-joystick-data-bind` (`echo_show_demo.riv`),
    `nested-artboard-layout` (`superbowl.riv`), and
@@ -53,6 +53,9 @@ the only memory the next session has. Update it every commit.
    (`bankcard.riv`). Keep these parked queues as explicit unsupported/gated
    work until a focused slice can either promote a file or replace the guard
    with a sharper diagnostic.
+   The old `layout-component-paint` manifest queue is empty again; the
+   `text_input.riv` blocker is the `TextInput` generated path/measurement
+   slice, not generic layout background paint.
 3. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
@@ -404,6 +407,17 @@ the only memory the next session has. Update it every commit.
   `exact=240`, `exact-segments=561`, `diverges=0`,
   `unsupported-feature=55`, `not-yet=0`, and parked
   `M6=14 gated=5 harness=36`. The active `not-yet` queue is empty.
+- 2026-07-06: [M6] Reclassified `text_input.riv` from the stale
+  `layout-component-paint` guard to a precise `text-input` diagnostic after a
+  focused C++ stream showed sample 0 draws the layout background plus
+  `TextInputCursor`, empty `TextInputSelection`, and shaped
+  `TextInputText` paths. The Taffy refusal was downstream of measuring a
+  `TextInput` child inside layout global 21, so the next implementation slice
+  is `RawTextInput`-style generated path/measurement support rather than more
+  generic layout paint admission. The metric is intentionally unchanged:
+  `exact=240`, `exact-segments=561`, `diverges=0`,
+  `unsupported-feature=55`, `not-yet=0`, parked
+  `M6=14 gated=5 harness=36`.
 - 2026-07-02: `rive-runtime` owns static draw emission through
   `rive-render-api`; `rust-golden-runner` now only orchestrates import,
   artboard selection, stream markers, and recording output.

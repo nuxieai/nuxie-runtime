@@ -5,7 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 519 across 198 exact files
+- Exact-status segments (file × sample): 519 across 198 files (strict
+  exact=516/195; tolerant=3/3; structural=0/0)
 - Current compare: `make golden-compare` reports diverges=0, unsupported-feature=97, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=53 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
@@ -1123,3 +1124,13 @@ the only memory the next session has. Update it every commit.
   `diverges=0`, `unsupported-feature=97`, `not-yet=0`, and parked
   `M6=53 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
   the top-level image pair: `hosted_image_file.riv` and `in_band_asset.riv`.
+- 2026-07-06: [M6] Closed the #V2-7 fallback-fence audit gap by treating
+  `ArtboardComponentList` `ListFollowPathConstraint` children as zero-sized
+  metadata in the Taffy adapter. `component_list_follow_path_distance.riv` now
+  computes a coherent layout snapshot instead of relying on legacy bounds
+  fallback, and a sweep of all 33 exact `LayoutComponent` entries reports zero
+  `--layout-bounds` failures. Full `make golden-compare` remains `exact=198`,
+  `exact-segments=519`, `diverges=0`, `unsupported-feature=97`, `not-yet=0`,
+  and parked `M6=53 gated=8 harness=36`; `cargo test --workspace` passes.
+  Next target remains the top-level image pair: `hosted_image_file.riv` and
+  `in_band_asset.riv`.

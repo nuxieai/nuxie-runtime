@@ -2824,7 +2824,9 @@ impl TaffyRuntimeLayoutEngine {
                 .is_some_and(|component| {
                     matches!(
                         component.type_name,
-                        "ArtboardListMapRule" | "ArtboardComponentListOverride"
+                        "ArtboardListMapRule"
+                            | "ArtboardComponentListOverride"
+                            | "ListFollowPathConstraint"
                     )
                 })
         }))

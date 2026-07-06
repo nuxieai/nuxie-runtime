@@ -5,9 +5,9 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 558 across 237 files (strict
-  exact=553/232; tolerant=5/5; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=55, not-yet=3
+- Exact-status segments (file × sample): 559 across 238 files (strict
+  exact=553/232; tolerant=6/6; structural=0/0)
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=55, not-yet=2
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=14 gated=5 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes**
 
@@ -25,15 +25,16 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. All remaining M6 diagnostics are one-file queues. Pick the freshest
-   adjacency first: `not-yet:image-predecode-order` (`local_bounds.riv`),
-   which is the nearest remaining image/paint-order divergence after the
-   mesh-image and live-stroke paint slices.
+   adjacency first: `not-yet:gradient-shader-order` (`hunter_x_demo.riv`),
+   paired with `selected-root-gradient-shader-order` (`bullet_man.riv`) if the
+   selected-root paint/shader ordering fix naturally covers both. This is the
+   nearest remaining ordering divergence after the image predecode and
+   live-stroke paint slices.
 2. Other parked one-file M6 queues are `scripted-data-context`,
    `focus-data` (`focus_traversal.riv`), `layout-component-paint`
    (`text_input.riv`), `viewmodel-asset-conditions`,
    `text-joystick-data-bind` (`echo_show_demo.riv`),
-   `nested-artboard-layout` (`superbowl.riv`),
-   `selected-root-gradient-shader-order` (`bullet_man.riv`), and
+   `nested-artboard-layout` (`superbowl.riv`), and
    `selected-root-skinned-clip-path` (`spotify_kids_demo.riv`). The former
    `data-binding-nested-child` queue is five one-file diagnostics:
    `nested-trim-path-data-bind` (`db_health_tracker.riv`),
@@ -44,9 +45,9 @@ the only memory the next session has. Update it every commit.
    `rewards_demo.riv` file now exposes the one-file
    `nested-layout-size-data-bind` diagnostic. Gated one-file diagnostics
    include `scripted-transition-condition` (2 gated),
-   `scripted-path-effects` (1 gated), `text-polygon-sibling` (`bankcard.riv`) and
-   `not-yet:nested-feather-gradient-space` (`ai_assitant.riv`);
-   `hunter_x_demo.riv` is the M6 `not-yet:gradient-shader-order` entry.
+   `scripted-path-effects` (1 gated), and `text-polygon-sibling`
+   (`bankcard.riv`). The other M6 `not-yet` entry is
+   `not-yet:nested-feather-gradient-space` (`ai_assitant.riv`).
 3. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
@@ -121,9 +122,7 @@ the only memory the next session has. Update it every commit.
   or documented `not-yet` entries. `ai_assitant.riv` imports and draws but has
   a nested-feather gradient-space exact-parity gap. `hunter_x_demo.riv` now
   runs after scale text modifiers, but Rust and C++ allocate gradients/shaders
-  in different selected-root order. `local_bounds.riv` now runs after
-  NSlicedNode path deformation, but Rust decodes the external image after early
-  paint allocation and also shows tiny static-text float residuals.
+  in different selected-root order.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -193,7 +192,9 @@ the only memory the next session has. Update it every commit.
   fit/alignment under Taffy bounds, metadata-only `NSlicer`/axis
   image-layout fixtures that render through existing `LayoutComponent` paints,
   and sample-0 asset-image listener files whose image decode/source-paint
-  ordering is exact while drawing only simple vector/text siblings, simple
+  ordering is exact while drawing only simple vector/text siblings, plus
+  import-stack-displaced pre-source embedded image decode ordering for mixed
+  file-asset imports, simple
   clipped/draw-target image fixtures with metadata-only component-list nodes,
   plus an asset-only unresolved nested-library host that decodes its image
   asset but draws only the root background like C++, simple
@@ -214,9 +215,10 @@ the only memory the next session has. Update it every commit.
   reported `Event` listeners, and layout-backed or virtualized component-list
   instancing remain M6 or later diagnostics.
   Golden runner sample lists now advance by sorted absolute-time deltas and
-  reuse render paths across samples; no NSliced image layout/predecode parity,
-  selected-root image paint/preallocation ordering beyond
-  the text-root single external-image predecode case, remaining text
+  reuse render paths across samples; no broader NSliced image layout parity,
+  selected-root image paint/preallocation ordering beyond ImportStack-displaced
+  embedded-image predecode and the text-root single external-image predecode
+  case, remaining text
   layout/editing, selected-root gradient shader ordering, selected-root
   skinned clip-path geometry, nested-feather gradient-space exact parity for
   `ai_assitant.riv`, live
@@ -343,6 +345,15 @@ the only memory the next session has. Update it every commit.
   `diverges=0`, `unsupported-feature=55`, `not-yet=3`, and parked
   `M6=14 gated=5 harness=36`; next target is `local_bounds.riv`
   (`not-yet:image-predecode-order`).
+- 2026-07-06: [M6] Promoted `local_bounds.riv` by mirroring C++
+  `ImportStack` file-asset importer displacement: when a pre-artboard
+  file-asset importer supersedes an embedded `ImageAsset` importer, Rust now
+  predecodes that image before source paint allocation. `local_bounds.riv` is
+  exact under `tolerant(0.00001)` for residual HarfRust/C++ text-outline float
+  drift. Full `make golden-compare` reports `exact=238`,
+  `exact-segments=559`, `diverges=0`, `unsupported-feature=55`,
+  `not-yet=2`, and parked `M6=14 gated=5 harness=36`; next target is
+  `hunter_x_demo.riv` (`not-yet:gradient-shader-order`).
 - 2026-07-02: `rive-runtime` owns static draw emission through
   `rive-render-api`; `rust-golden-runner` now only orchestrates import,
   artboard selection, stream markers, and recording output.

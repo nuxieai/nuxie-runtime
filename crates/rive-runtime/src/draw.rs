@@ -4344,16 +4344,22 @@ pub fn preallocate_render_paint_cache_for_artboard_tree(
         .filter(|asset| asset.type_name == "ImageAsset")
         .map(|asset| asset.id)
         .collect::<Vec<_>>();
-    let pre_source_count =
-        pre_source_image_decode_count(graph, artboards, image_asset_globals.len());
+    let pre_source_image_assets =
+        pre_source_image_asset_globals(runtime, graph, artboards, &image_asset_globals);
     let mut images = BTreeMap::new();
-    if pre_source_count > 0 {
-        for asset_global in image_asset_globals.iter().copied().take(pre_source_count) {
-            predecode_render_image(runtime, asset_global, factory, &mut images);
-        }
+    for asset_global in image_asset_globals
+        .iter()
+        .copied()
+        .filter(|asset_global| pre_source_image_assets.contains(asset_global))
+    {
+        predecode_render_image(runtime, asset_global, factory, &mut images);
     }
     let _source_artboard_paints = preallocate_render_paint_batch(runtime, factory);
-    for asset_global in image_asset_globals.iter().copied().skip(pre_source_count) {
+    for asset_global in image_asset_globals
+        .iter()
+        .copied()
+        .filter(|asset_global| !pre_source_image_assets.contains(asset_global))
+    {
         predecode_render_image(runtime, asset_global, factory, &mut images);
     }
     let mut source_meshes =
@@ -4380,7 +4386,60 @@ pub fn preallocate_render_paint_cache_for_artboard_tree(
     cache
 }
 
-fn pre_source_image_decode_count(
+fn pre_source_image_asset_globals(
+    runtime: &RuntimeFile,
+    graph: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+    image_asset_globals: &[u32],
+) -> BTreeSet<u32> {
+    let mut pre_source_assets = import_stack_pre_source_image_asset_globals(runtime)
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    let heuristic_count =
+        heuristic_pre_source_image_decode_count(graph, artboards, image_asset_globals.len());
+    pre_source_assets.extend(image_asset_globals.iter().copied().take(heuristic_count));
+    pre_source_assets
+}
+
+fn import_stack_pre_source_image_asset_globals(runtime: &RuntimeFile) -> Vec<u32> {
+    let mut pre_source_assets = Vec::new();
+    let mut latest_image_asset = None;
+
+    for object in runtime.objects.iter().flatten() {
+        if object.type_name == "Artboard" {
+            break;
+        }
+        if !runtime_object_is_file_asset(object) {
+            continue;
+        }
+
+        if let Some(asset_global) = latest_image_asset.take()
+            && embedded_file_asset_bytes(runtime, asset_global).is_some()
+        {
+            pre_source_assets.push(asset_global);
+        }
+        if object.type_name == "ImageAsset" {
+            latest_image_asset = Some(object.id);
+        }
+    }
+
+    pre_source_assets
+}
+
+fn runtime_object_is_file_asset(object: &RuntimeObject) -> bool {
+    matches!(
+        object.type_name,
+        "ImageAsset"
+            | "FontAsset"
+            | "AudioAsset"
+            | "BlobAsset"
+            | "ScriptAsset"
+            | "ShaderAsset"
+            | "ManifestAsset"
+    )
+}
+
+fn heuristic_pre_source_image_decode_count(
     graph: &ArtboardGraph,
     artboards: &[ArtboardGraph],
     image_asset_count: usize,

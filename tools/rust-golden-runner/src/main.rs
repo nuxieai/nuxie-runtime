@@ -885,10 +885,9 @@ fn ensure_static_draw_supported_for_artboard(
         bail!("unsupported: images in Rust golden runner (global {global_id})");
     }
 
-    if let Some(container) = taffy_refused_layout_component_paint(runtime, graph, artboard)? {
+    if let Some(global_id) = taffy_refused_layout_dependent_draw(runtime, graph, artboard)? {
         bail!(
-            "unsupported: layout-component-paint in Rust golden runner (Taffy refused layout tree for global {})",
-            container.global_id
+            "unsupported: layout-component-paint in Rust golden runner (Taffy refused layout tree for global {global_id})"
         );
     }
 
@@ -1064,16 +1063,12 @@ fn unsupported_layout_component_paint<'a>(
     })
 }
 
-fn taffy_refused_layout_component_paint<'a>(
+fn taffy_refused_layout_dependent_draw(
     runtime: &RuntimeFile,
     graph: &GraphFile,
-    artboard: &'a ArtboardGraph,
-) -> Result<Option<&'a ShapePaintContainerNode>> {
-    let Some(container) = artboard
-        .shape_paint_containers
-        .iter()
-        .find(|container| container.type_name == "LayoutComponent" && !container.paints.is_empty())
-    else {
+    artboard: &ArtboardGraph,
+) -> Result<Option<u32>> {
+    let Some(global_id) = first_layout_dependent_draw_global(artboard) else {
         return Ok(None);
     };
 
@@ -1083,10 +1078,62 @@ fn taffy_refused_layout_component_paint<'a>(
         .debug_taffy_layout_bounds_report(runtime, artboard)
         .is_none()
     {
-        return Ok(Some(container));
+        return Ok(Some(global_id));
     }
 
     Ok(None)
+}
+
+fn first_layout_dependent_draw_global(artboard: &ArtboardGraph) -> Option<u32> {
+    artboard
+        .shape_paint_containers
+        .iter()
+        .find(|container| container.type_name == "LayoutComponent" && !container.paints.is_empty())
+        .map(|container| container.global_id)
+        .or_else(|| {
+            artboard.sorted_drawable_order.iter().find_map(|drawable| {
+                drawable
+                    .layout_global
+                    .or(drawable.global_id)
+                    .filter(|_| layout_dependent_drawable(artboard, drawable))
+            })
+        })
+}
+
+fn layout_dependent_drawable(
+    artboard: &ArtboardGraph,
+    drawable: &rive_graph::SortedDrawableNode,
+) -> bool {
+    if drawable.layout_local.is_some() {
+        return true;
+    }
+    let Some(local_id) = drawable.local_id else {
+        return false;
+    };
+    component_parent_chain_has_layout_component(artboard, local_id)
+}
+
+fn component_parent_chain_has_layout_component(
+    artboard: &ArtboardGraph,
+    mut local_id: usize,
+) -> bool {
+    while let Some(component) = artboard
+        .components
+        .iter()
+        .find(|component| component.local_id == local_id)
+    {
+        if component.type_name == "LayoutComponent" {
+            return true;
+        }
+        let Some(parent_local) = component.parent_local else {
+            return false;
+        };
+        if parent_local == local_id {
+            return false;
+        }
+        local_id = parent_local;
+    }
+    false
 }
 
 fn layout_component_paint_supported(
@@ -1891,6 +1938,11 @@ fn unsupported_image_global(
     if first_image_global.is_none() && first_image_asset_global.is_none() {
         return None;
     }
+    if runtime_has_type(runtime, "ViewModelPropertyAssetImage")
+        || runtime_has_type(runtime, "ViewModelInstanceAssetImage")
+    {
+        return Some(first_image_global.or(first_image_asset_global).unwrap_or(0));
+    }
 
     (!simple_static_image_artboard_supported(runtime, graph, artboard))
         .then_some(first_image_global.or(first_image_asset_global).unwrap_or(0))
@@ -1929,7 +1981,16 @@ fn simple_static_image_artboard_tree_supported_entered(
     if !artboard.local_objects.iter().all(|object| {
         matches!(
             object.type_name,
-            Some("Artboard" | "Fill" | "Image" | "NestedArtboard" | "SolidColor")
+            Some(
+                "Artboard"
+                    | "CubicEaseInterpolator"
+                    | "Fill"
+                    | "Image"
+                    | "LayoutComponent"
+                    | "LayoutComponentStyle"
+                    | "NestedArtboard"
+                    | "SolidColor",
+            )
         )
     }) {
         return false;
@@ -1938,11 +1999,12 @@ fn simple_static_image_artboard_tree_supported_entered(
         return false;
     }
     if !artboard.shape_paint_containers.iter().all(|container| {
-        container.type_name == "Artboard"
-            && container
-                .paints
-                .iter()
-                .all(root_layout_background_paint_supported)
+        (container.type_name == "Artboard" || container.type_name == "LayoutComponent")
+            && container.paints.iter().all(|paint| {
+                root_layout_background_paint_supported(paint)
+                    && (container.type_name == "Artboard"
+                        || paint.path_kind == Some(ShapePaintPathKind::LocalClockwise))
+            })
     }) {
         return false;
     }

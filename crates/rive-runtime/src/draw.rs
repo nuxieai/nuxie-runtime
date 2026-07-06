@@ -4018,27 +4018,42 @@ pub fn preallocate_render_paint_cache_for_artboard_tree(
     artboards: &[ArtboardGraph],
     factory: &mut dyn RenderFactory,
 ) -> RuntimeRenderPaintCache {
+    let image_asset_globals = runtime
+        .file_assets()
+        .into_iter()
+        .filter(|asset| asset.type_name == "ImageAsset")
+        .map(|asset| asset.id)
+        .collect::<Vec<_>>();
+    let split_first_image_decode = image_asset_globals.len() > 1;
+    let mut images = BTreeMap::new();
+    if split_first_image_decode {
+        if let Some(asset_global) = image_asset_globals.first().copied() {
+            predecode_render_image(runtime, asset_global, factory, &mut images);
+        }
+    }
     let _source_artboard_paints = preallocate_render_paint_batch(runtime, factory);
-    let images = predecode_render_image_batch(runtime, factory);
+    for asset_global in image_asset_globals
+        .iter()
+        .copied()
+        .skip(usize::from(split_first_image_decode))
+    {
+        predecode_render_image(runtime, asset_global, factory, &mut images);
+    }
     let mut cache =
         preallocate_artboard_render_paint_tree_batch(runtime, graph, artboards, factory);
     cache.images = images;
     cache
 }
 
-fn predecode_render_image_batch(
+fn predecode_render_image(
     runtime: &RuntimeFile,
+    asset_global: u32,
     factory: &mut dyn RenderFactory,
-) -> BTreeMap<u32, Box<dyn RenderImage>> {
-    runtime
-        .file_assets()
-        .into_iter()
-        .filter(|asset| asset.type_name == "ImageAsset")
-        .filter_map(|asset| {
-            embedded_file_asset_bytes(runtime, asset.id)
-                .map(|bytes| (asset.id, factory.decode_image(bytes)))
-        })
-        .collect()
+    images: &mut BTreeMap<u32, Box<dyn RenderImage>>,
+) {
+    if let Some(bytes) = embedded_file_asset_bytes(runtime, asset_global) {
+        images.insert(asset_global, factory.decode_image(bytes));
+    }
 }
 
 fn embedded_file_asset_bytes(runtime: &RuntimeFile, asset_global: u32) -> Option<&[u8]> {
@@ -4617,10 +4632,6 @@ fn runtime_draw_image(
         renderer.save();
     }
 
-    let world =
-        instance.runtime_component_world_transform_with_bounds(local_id, graph, layout_bounds);
-    renderer.transform(runtime_render_mat(world));
-
     let origin_x_key =
         property_key_for_name("Image", "originX").context("missing Image.originX")?;
     let origin_y_key =
@@ -4633,6 +4644,21 @@ fn runtime_draw_image(
         .double_property(local_id, origin_y_key)
         .or_else(|| image_object.and_then(|object| object.double_property("originY")))
         .unwrap_or(0.5);
+    let world = runtime_image_world_transform(
+        instance,
+        graph,
+        local_id,
+        image_object,
+        image.as_ref(),
+        layout_bounds,
+        origin_x,
+        origin_y,
+    )?
+    .unwrap_or_else(|| {
+        instance.runtime_component_world_transform_with_bounds(local_id, graph, layout_bounds)
+    });
+    renderer.transform(runtime_render_mat(world));
+
     renderer.transform(RenderMat2D([
         1.0,
         0.0,
@@ -4663,6 +4689,112 @@ fn runtime_draw_image(
         renderer.restore();
     }
     Ok(())
+}
+
+fn runtime_image_world_transform(
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    local_id: usize,
+    image_object: Option<&RuntimeObject>,
+    image: &dyn RenderImage,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    origin_x: f32,
+    origin_y: f32,
+) -> Result<Option<Mat2D>> {
+    let Some(layout_bounds) = layout_bounds else {
+        return Ok(None);
+    };
+    let Some(component) = instance.component(local_id) else {
+        return Ok(None);
+    };
+    let Some(parent_local) = component.parent_local else {
+        return Ok(None);
+    };
+    if !instance
+        .component(parent_local)
+        .is_some_and(|parent| parent.type_name == "LayoutComponent")
+    {
+        return Ok(None);
+    }
+    let Some(parent_bounds) = layout_bounds.get(&parent_local) else {
+        return Ok(None);
+    };
+
+    let fit_key = property_key_for_name("Image", "fit").context("missing Image.fit")?;
+    let alignment_x_key =
+        property_key_for_name("Image", "alignmentX").context("missing Image.alignmentX")?;
+    let alignment_y_key =
+        property_key_for_name("Image", "alignmentY").context("missing Image.alignmentY")?;
+    let fit = instance
+        .uint_property(local_id, fit_key)
+        .or_else(|| image_object.and_then(|object| object.uint_property("fit")))
+        .unwrap_or(0);
+    let alignment_x = instance
+        .double_property(local_id, alignment_x_key)
+        .or_else(|| image_object.and_then(|object| object.double_property("alignmentX")))
+        .unwrap_or(0.0);
+    let alignment_y = instance
+        .double_property(local_id, alignment_y_key)
+        .or_else(|| image_object.and_then(|object| object.double_property("alignmentY")))
+        .unwrap_or(0.0);
+
+    let layout_width = parent_bounds.width;
+    let layout_height = parent_bounds.height;
+    let image_width = image.width() as f32;
+    let image_height = image.height() as f32;
+    let width_scale = layout_width / image_width;
+    let height_scale = layout_height / image_height;
+    let (mut scale_x, mut scale_y) = match fit {
+        1 => {
+            let scale = width_scale.min(height_scale);
+            (scale, scale)
+        }
+        2 => {
+            let scale = width_scale.max(height_scale);
+            (scale, scale)
+        }
+        3 => (width_scale, width_scale),
+        4 => (height_scale, height_scale),
+        5 => (1.0, 1.0),
+        6 => {
+            let scale = width_scale.min(height_scale);
+            let scale = if scale < 1.0 { scale } else { 1.0 };
+            (scale, scale)
+        }
+        0 | 7 => (width_scale, height_scale),
+        _ => (width_scale, height_scale),
+    };
+
+    if fit != 5 && fit != 6 && (!scale_x.is_finite() || !scale_y.is_finite()) {
+        scale_x = f32::NAN;
+        scale_y = f32::NAN;
+    }
+
+    let (mut offset_x, mut offset_y) = (0.0, 0.0);
+    if fit != 0 {
+        let bounds_left = -image_width * origin_x;
+        let bounds_top = -image_height * origin_y;
+        let x_align = (alignment_x + 1.0) * 0.5;
+        let y_align = (alignment_y + 1.0) * 0.5;
+        let scaled_left = bounds_left * scale_x;
+        let scaled_top = bounds_top * scale_y;
+        let width_remainder = layout_width - image_width * scale_x;
+        let height_remainder = layout_height - image_height * scale_y;
+        offset_x = -scaled_left + width_remainder * x_align;
+        offset_y = -scaled_top + height_remainder * y_align;
+    }
+
+    let mut components = component.transform.local_transform.decompose();
+    components.scale_x = scale_x;
+    components.scale_y = scale_y;
+    components.x += offset_x;
+    components.y += offset_y;
+    let parent_world = instance.runtime_component_world_transform_with_bounds(
+        parent_local,
+        graph,
+        Some(layout_bounds),
+    );
+    Ok(Some(parent_world.multiply(Mat2D::compose(components))))
 }
 
 fn runtime_draw_nested_artboard(

@@ -5,10 +5,10 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 521 across 200 files (strict
-  exact=518/197; tolerant=3/3; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=95, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=51 gated=8 harness=36
+- Exact-status segments (file × sample): 523 across 202 files (strict
+  exact=520/199; tolerant=3/3; structural=0/0)
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=93, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=49 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -24,11 +24,12 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue the M6 image bucket with `walle.riv` and
-   `image_fit_alignment_3.riv`, the next-smallest
-   `rust-runner-unsupported:images` entries. They should separate another
-   hosted no-loader image-only fixture from image fit/alignment under a
-   `LayoutComponent`.
+1. Continue the M6 image bucket with asset-image view-model binding/reset
+   semantics: `image_fit_alignment.riv` and `viewmodel_image_reset.riv` now
+   deliberately stay behind `rust-runner-unsupported:images` after successful
+   Rust image drawing proved non-exact against C++ draw suppression/rebinding.
+   After that, reopen `image_fit_alignment_2.riv` for the same fit/alignment
+   family plus `NSlicer`/axis layout behavior.
 2. Generic `rust-runner-unsupported:text` and the sharper
    `text-vertical-trim` gate are empty in the current corpus. Do not reopen
    text unless a newly added corpus entry exposes a first text diagnostic.
@@ -107,7 +108,9 @@ the only memory the next session has. Update it every commit.
   custom-property trigger keyed-callback target-to-source binding,
   custom-property enum/boolean/color target-to-source binding, live data-bound
   nested host `isPaused` mutation, plus no-input recursive nested
-  `ListenerAlignTarget` fixtures where the action is unexercised.
+  `ListenerAlignTarget` fixtures where the action is unexercised, plus plain
+  embedded/hosted non-mesh `Image::draw` including layout-controlled
+  fit/alignment under Taffy bounds.
   Custom handle-source world-space math, data-bound nested host controls beyond
   generated defaults (external/live pause/speed/quantize mutation), remaining
   nested child data-bind targets beyond the current number/color/default bind
@@ -119,7 +122,8 @@ the only memory the next session has. Update it every commit.
   and layout-backed or virtualized component-list instancing remain M6 or
   later diagnostics.
   Golden runner sample lists now advance by sorted absolute-time deltas and
-  reuse render paths across samples; no images, remaining text layout/editing,
+  reuse render paths across samples; no asset-image view-model binding/reset,
+  N-slice image layout, mesh/skinned images, remaining text layout/editing,
   live data-bound nested host controls/artboard swaps, nested layout/leaf,
   scroll constraints, or layout-backed/virtualized component-list instancing.
   Harness-level scripted input replay dispatches
@@ -343,10 +347,12 @@ the only memory the next session has. Update it every commit.
   through hand-rolled fallback after the #V2-7 layout adapter refuses a tree.
 - 2026-07-06: #V2-7 fallback fence: legacy hand-rolled layout helpers may
   remain inside `rive-runtime` as regression scaffolding for older exact
-  slices, but `rust-golden-runner` must reject any painted `LayoutComponent`
-  exact candidate when the Taffy adapter cannot produce a coherent
-  whole-artboard layout snapshot. Existing exact layout fixtures must either
-  compute Taffy bounds or return to an explicit unsupported-feature gate.
+  slices, but `rust-golden-runner` must reject any layout-dependent draw
+  candidate when the Taffy adapter cannot produce a coherent whole-artboard
+  layout snapshot. This includes painted `LayoutComponent` paths plus child
+  text/image/shape drawables whose parent chain passes through a
+  `LayoutComponent`. Existing exact layout fixtures must either compute Taffy
+  bounds or return to an explicit unsupported-feature gate.
 - 2026-07-05: M6 layout/text diagnostic rule: when a Taffy-backed file reaches
   draw but diverges on wrapped layout placement, expose local-id layout boxes
   from C++ Yoga and Rust Taffy before adding more renderer/text behavior. Draw
@@ -1146,3 +1152,20 @@ the only memory the next session has. Update it every commit.
   `exact-segments=521`, `diverges=0`, `unsupported-feature=95`, `not-yet=0`,
   and parked `M6=51 gated=8 harness=36`; `cargo test --workspace` passes.
   Next target is `walle.riv` and `image_fit_alignment_3.riv`.
+- 2026-07-06: [M6] Promoted `walle.riv` and `image_fit_alignment_3.riv`.
+  `walle.riv` admits inert image-artboard animation metadata and preserves C++
+  multi-image decode/source-paint ordering by splitting the first embedded
+  image decode before source paint allocation. `image_fit_alignment_3.riv`
+  ports the plain non-mesh `Image::controlSize` / `updateImageScale`
+  fit/alignment path for images under a Taffy-backed `LayoutComponent`,
+  including C++'s zero-sized recording-image NaN transform surface. The
+  #V2-7 fallback fence now rejects any layout-dependent draw candidate when
+  Taffy refuses the whole-artboard snapshot, not just painted
+  `LayoutComponent` paths. Asset-image view-model binding/reset files remain
+  explicitly gated after `image_fit_alignment.riv` and
+  `viewmodel_image_reset.riv` proved successful Rust image drawing is not
+  exact there. Full `make golden-compare` reports `exact=202`,
+  `exact-segments=523`, `diverges=0`, `unsupported-feature=93`, `not-yet=0`,
+  and parked `M6=49 gated=8 harness=36`; `cargo test --workspace` passes.
+  Next target is the asset-image view-model pair:
+  `image_fit_alignment.riv` and `viewmodel_image_reset.riv`.

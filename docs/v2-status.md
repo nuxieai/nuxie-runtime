@@ -5,10 +5,10 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 547 across 226 files (strict
-  exact=544/223; tolerant=3/3; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=69, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=25 gated=8 harness=36
+- Exact-status segments (file × sample): 549 across 228 files (strict
+  exact=546/225; tolerant=3/3; structural=0/0)
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=67, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=23 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -27,9 +27,7 @@ the only memory the next session has. Update it every commit.
 1. Pick one of the tied largest remaining M6 buckets:
    `rust-runner-unsupported:data-binding-nested-child` (4:
    `db_health_tracker.riv`, `nested_hug.riv`, `stateful_multi_property.riv`,
-   `stateful_nested.riv`), `rust-runner-unsupported:focus-data` (4:
-   `focus_collapsing.riv`, `focus_traversal.riv`, `focusable_element.riv`,
-   `text_input.riv`), or `rust-runner-unsupported:scroll-constraints` (4:
+   `stateful_nested.riv`) or `rust-runner-unsupported:scroll-constraints` (4:
    `component_list_virtualized.riv`, `draw_index_list.riv`,
    `hit_test_test.riv`, `virtualized_artboard_databound_children.riv`).
    If staying in the data-binding lane, start from the stateful Artboard/text
@@ -45,7 +43,9 @@ the only memory the next session has. Update it every commit.
    `n-slice` (1 M6 plus 1 gated), `feather-inner-multipaint` (1 M6 plus
    1 gated), `scripted-transition-condition` (2 gated),
    `nested-feather-paints` (1 gated), `scripted-path-effects` (1 gated),
-   `scripted-data-context` (1), and `viewmodel-asset-conditions` (1).
+   `scripted-data-context` (1), `focus-data` (1: `focus_traversal.riv`),
+   `layout-component-paint` (1: `text_input.riv`), and
+   `viewmodel-asset-conditions` (1).
 3. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
@@ -1502,3 +1502,13 @@ the only memory the next session has. Update it every commit.
   parked as `rust-runner-unsupported:data-binding-nested-child`. Next target is
   one of the tied four-file M6 buckets: data-binding nested child, focus data,
   or scroll constraints.
+- 2026-07-06: [M6] Promoted passive nested focus metadata for
+  `focus_collapsing.riv` and `focusable_element.riv`. The runner now admits
+  nested `FocusData` only for no-input, non-traversal files; `focus_traversal`
+  stays parked as `rust-runner-unsupported:focus-data` because the focused
+  stream renders but differs structurally in path allocation, and `text_input`
+  advances to `rust-runner-unsupported:layout-component-paint`. Full
+  `make golden-compare` reports `exact=228`, `exact-segments=549`,
+  `diverges=0`, `unsupported-feature=67`, `not-yet=0`, and parked
+  `M6=23 gated=8 harness=36`. Next target is one of the tied four-file M6
+  buckets: data-binding nested child or scroll constraints.

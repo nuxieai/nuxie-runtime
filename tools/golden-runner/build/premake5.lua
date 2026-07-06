@@ -46,7 +46,18 @@ cppdialect('C++17')
 targetdir('%{cfg.system}/bin/%{cfg.buildcfg}')
 objdir('%{cfg.system}/obj/%{cfg.buildcfg}')
 includedirs(include_dirs)
-defines({ '_RIVE_INTERNAL_' })
+-- Must match the defines librive was built with (see
+-- $RIVE_RUNTIME_DIR/out/debug/rive.make): several rive headers declare
+-- virtual member functions and data members conditionally on these, so
+-- compiling our translation units with different defines than the library
+-- would silently break the ABI (vtable layouts / object sizes).
+defines({
+    '_RIVE_INTERNAL_',
+    'WITH_RIVE_TEXT',
+    'WITH_RIVE_LAYOUT',
+    'RIVE_MACOSX',
+    'YOGA_EXPORT=',
+})
 
 files({
     '../main.cpp',

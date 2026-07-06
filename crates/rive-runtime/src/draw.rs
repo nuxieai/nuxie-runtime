@@ -245,6 +245,7 @@ impl ArtboardInstance {
                             format!("missing render paint for global {}", paint.global_id)
                         })?
                         .as_mut(),
+                    self,
                     object,
                     &runtime_paint,
                     Some(&mut gradient_resources),
@@ -4866,6 +4867,7 @@ fn runtime_draw_background(
                 .get_mut(&paint.global_id)
                 .with_context(|| format!("missing render paint for global {}", paint.global_id))?
                 .as_mut(),
+            instance,
             object,
             &runtime_paint,
             None,
@@ -5130,7 +5132,7 @@ fn runtime_draw_command(
                 .context("missing temporary text render paint")?;
             let index = text_temporary_paint_index;
             text_temporary_paint_index += 1;
-            runtime_configure_paint(render_paint.as_mut(), object, paint, None)?;
+            runtime_configure_paint(render_paint.as_mut(), instance, object, paint, None)?;
             Some(index)
         } else {
             runtime_configure_paint(
@@ -5138,6 +5140,7 @@ fn runtime_draw_command(
                     .get_mut(&global_id)
                     .with_context(|| format!("missing render paint for global {global_id}"))?
                     .as_mut(),
+                instance,
                 object,
                 paint,
                 None,
@@ -6076,6 +6079,7 @@ fn runtime_cached_path_slot_index(
 
 fn runtime_configure_paint(
     render_paint: &mut dyn RenderPaint,
+    instance: &ArtboardInstance,
     object: &RuntimeObject,
     paint: &RuntimeShapePaintCommand,
     gradient_resources: Option<&mut RuntimeGradientShaderResources<'_>>,
@@ -6086,13 +6090,25 @@ fn runtime_configure_paint(
         }
         RuntimeShapePaintKind::Stroke => {
             render_paint.style(RenderPaintStyle::Stroke);
-            render_paint.thickness(object.double_property("thickness").unwrap_or(1.0));
-            render_paint.cap(runtime_stroke_cap(
-                object.uint_property("cap").unwrap_or(0),
-            )?);
-            render_paint.join(runtime_stroke_join(
-                object.uint_property("join").unwrap_or(0),
-            )?);
+            render_paint.thickness(runtime_stroke_thickness(
+                instance,
+                object,
+                paint.paint_local,
+            ));
+            render_paint.cap(runtime_stroke_cap(runtime_stroke_uint_property(
+                instance,
+                object,
+                paint.paint_local,
+                "cap",
+                0,
+            ))?);
+            render_paint.join(runtime_stroke_join(runtime_stroke_uint_property(
+                instance,
+                object,
+                paint.paint_local,
+                "join",
+                0,
+            ))?);
         }
         RuntimeShapePaintKind::Unknown => anyhow::bail!("unsupported: unknown shape paint"),
     }
@@ -6449,11 +6465,42 @@ fn runtime_shape_paint_is_visible(artboard: &ArtboardInstance, paint: &ShapePain
         ShapePaintKind::Fill | ShapePaintKind::Unknown => artboard
             .bool_property(paint.local_id, property_key)
             .unwrap_or(paint.is_visible),
-        ShapePaintKind::Stroke => artboard
-            .bool_property(paint.local_id, property_key)
-            .map(|visible| paint.is_visible && visible)
-            .unwrap_or(paint.is_visible),
+        ShapePaintKind::Stroke => {
+            artboard
+                .bool_property(paint.local_id, property_key)
+                .map(|visible| paint.is_visible && visible)
+                .unwrap_or(paint.is_visible)
+                && runtime_stroke_thickness_for_local(artboard, paint.local_id).unwrap_or(1.0) > 0.0
+        }
     }
+}
+
+fn runtime_stroke_thickness(
+    instance: &ArtboardInstance,
+    object: &RuntimeObject,
+    local_id: usize,
+) -> f32 {
+    runtime_stroke_thickness_for_local(instance, local_id)
+        .or_else(|| object.double_property("thickness"))
+        .unwrap_or(1.0)
+}
+
+fn runtime_stroke_thickness_for_local(instance: &ArtboardInstance, local_id: usize) -> Option<f32> {
+    property_key_for_name("Stroke", "thickness")
+        .and_then(|key| instance.double_property(local_id, key))
+}
+
+fn runtime_stroke_uint_property(
+    instance: &ArtboardInstance,
+    object: &RuntimeObject,
+    local_id: usize,
+    property_name: &str,
+    fallback: u64,
+) -> u64 {
+    property_key_for_name("Stroke", property_name)
+        .and_then(|key| instance.uint_property(local_id, key))
+        .or_else(|| object.uint_property(property_name))
+        .unwrap_or(fallback)
 }
 
 fn runtime_shape_paint_state_is_visible(state: &Option<RuntimeShapePaintState>) -> bool {

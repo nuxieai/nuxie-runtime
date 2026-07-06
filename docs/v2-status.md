@@ -5,9 +5,9 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 557 across 236 files (strict
-  exact=553/232; tolerant=4/4; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=55, not-yet=4
+- Exact-status segments (file × sample): 558 across 237 files (strict
+  exact=553/232; tolerant=5/5; structural=0/0)
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=55, not-yet=3
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=14 gated=5 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes**
 
@@ -25,9 +25,9 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. All remaining M6 diagnostics are one-file queues. Pick the freshest
-   adjacency first: `not-yet:skinned-contour-transform-order`
-   (`bad_skin.riv`), which was uncovered by the mesh/contour admission slice
-   and differs later in the stream at a skinned transform.
+   adjacency first: `not-yet:image-predecode-order` (`local_bounds.riv`),
+   which is the nearest remaining image/paint-order divergence after the
+   mesh-image and live-stroke paint slices.
 2. Other parked one-file M6 queues are `scripted-data-context`,
    `focus-data` (`focus_traversal.riv`), `layout-component-paint`
    (`text_input.riv`), `viewmodel-asset-conditions`,
@@ -46,8 +46,7 @@ the only memory the next session has. Update it every commit.
    include `scripted-transition-condition` (2 gated),
    `scripted-path-effects` (1 gated), `text-polygon-sibling` (`bankcard.riv`) and
    `not-yet:nested-feather-gradient-space` (`ai_assitant.riv`);
-   `hunter_x_demo.riv` is the M6 `not-yet:gradient-shader-order` entry and
-   `local_bounds.riv` is the M6 `not-yet:image-predecode-order` entry.
+   `hunter_x_demo.riv` is the M6 `not-yet:gradient-shader-order` entry.
 3. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
@@ -125,9 +124,6 @@ the only memory the next session has. Update it every commit.
   in different selected-root order. `local_bounds.riv` now runs after
   NSlicedNode path deformation, but Rust decodes the external image after early
   paint allocation and also shows tiny static-text float residuals.
-  `bad_skin.riv` now runs after mesh/contour admission but is parked at
-  `not-yet:skinned-contour-transform-order` because a later skinned transform
-  differs structurally from C++.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -205,8 +201,9 @@ the only memory the next session has. Update it every commit.
   inner-feather paints that share the original/effect clip path, and
   NSlicedNode vector shape path deformation for local/world draw commands,
   plus mesh-backed `Image::draw`/`drawImageMesh` with file-wide source mesh
-  buffer preallocation, cloned dynamic vertex buffers, UV/index buffers, and
-  skinned mesh vertex updates.
+  buffer preallocation, cloned dynamic vertex buffers, UV/index buffers,
+  skinned mesh vertex updates, and live `Stroke.thickness` visibility/paint
+  application for state-machine-keyed paints.
   Custom handle-source world-space math, data-bound nested host controls beyond
   generated defaults (external/live pause/speed/quantize mutation), remaining
   nested child data-bind targets beyond the current number/color/default bind
@@ -219,8 +216,7 @@ the only memory the next session has. Update it every commit.
   Golden runner sample lists now advance by sorted absolute-time deltas and
   reuse render paths across samples; no NSliced image layout/predecode parity,
   selected-root image paint/preallocation ordering beyond
-  the text-root single external-image predecode case, skinned contour transform
-  ordering for `bad_skin.riv`, remaining text
+  the text-root single external-image predecode case, remaining text
   layout/editing, selected-root gradient shader ordering, selected-root
   skinned clip-path geometry, nested-feather gradient-space exact parity for
   `ai_assitant.riv`, live
@@ -337,6 +333,16 @@ the only memory the next session has. Update it every commit.
   `exact-segments=557`, `diverges=0`, `unsupported-feature=55`,
   `not-yet=4`, and parked `M6=14 gated=5 harness=36`; next target is
   `bad_skin.riv`.
+- 2026-07-06: [M6] Promoted `bad_skin.riv` by mirroring C++
+  `Stroke::isVisible()` against live instance `Stroke.thickness` and applying
+  live stroke thickness/cap/join during paint configuration, so the default
+  state machine's sample-0 keyed thickness suppresses the mask stroke instead
+  of drawing the authored width. `bad_skin.riv` is exact under
+  `tolerant(0.0004)` for residual skinned path float drift. Full
+  `make golden-compare` reports `exact=237`, `exact-segments=558`,
+  `diverges=0`, `unsupported-feature=55`, `not-yet=3`, and parked
+  `M6=14 gated=5 harness=36`; next target is `local_bounds.riv`
+  (`not-yet:image-predecode-order`).
 - 2026-07-02: `rive-runtime` owns static draw emission through
   `rive-render-api`; `rust-golden-runner` now only orchestrates import,
   artboard selection, stream markers, and recording output.

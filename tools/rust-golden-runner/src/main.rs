@@ -1969,7 +1969,11 @@ fn simple_static_image_artboard_tree_supported_entered(
                     | "AxisY"
                     | "Rectangle"
                     | "Shape"
-                    | "SolidColor",
+                    | "SolidColor"
+                    | "Text"
+                    | "TextStyleAxis"
+                    | "TextStylePaint"
+                    | "TextValueRun",
             )
         )
     }) {
@@ -1981,7 +1985,7 @@ fn simple_static_image_artboard_tree_supported_entered(
     if !artboard.shape_paint_containers.iter().all(|container| {
         matches!(
             container.type_name.as_ref(),
-            "Artboard" | "LayoutComponent" | "Shape"
+            "Artboard" | "LayoutComponent" | "Shape" | "TextStylePaint"
         ) && container.paints.iter().all(|paint| {
             root_layout_background_paint_supported(paint)
                 && (container.type_name != "LayoutComponent"

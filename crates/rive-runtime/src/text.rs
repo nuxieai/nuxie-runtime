@@ -440,6 +440,7 @@ impl<'a> StaticTextSlice<'a> {
                         | "Solo"
                         | "CubicInterpolatorComponent"
                         | "Shape"
+                        | "Image"
                         | "PointsPath"
                         | "StraightVertex"
                         | "CubicDetachedVertex"

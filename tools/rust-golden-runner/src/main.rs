@@ -882,17 +882,6 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
-    if let Some(n_sliced_node) = artboard
-        .local_objects
-        .iter()
-        .find(|object| object.type_name == Some("NSlicedNode"))
-    {
-        bail!(
-            "unsupported: n-slice in Rust golden runner (global {})",
-            n_sliced_node.global_id
-        );
-    }
-
     if let Some(global_id) = unsupported_mesh_image_global(graph, artboard) {
         bail!("unsupported: mesh-images in Rust golden runner (global {global_id})");
     }

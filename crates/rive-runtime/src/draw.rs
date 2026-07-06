@@ -2,9 +2,9 @@ use anyhow::{Context, Result};
 use rive_binary::{RuntimeFile, RuntimeObject};
 use rive_graph::{
     ArtboardGraph, ClippingShapeNode, DashNode, DrawableOrderKind, DrawableOrderNode, FeatherNode,
-    GradientStopNode, ParametricPathNode, PathComposerNode, PathComposerPathNode, PathGeometryNode,
-    PathVertexNode, ShapePaintContainerNode, ShapePaintKind, ShapePaintNode, ShapePaintPathKind,
-    ShapePaintStateNode, SortedDrawableNode, StrokeEffectNode,
+    GradientStopNode, NSlicerAxisNode, ParametricPathNode, PathComposerNode, PathComposerPathNode,
+    PathGeometryNode, PathVertexNode, ShapePaintContainerNode, ShapePaintKind, ShapePaintNode,
+    ShapePaintPathKind, ShapePaintStateNode, SortedDrawableNode, StrokeEffectNode,
 };
 use rive_render_api::{
     BlendMode as RenderBlendMode, Factory as RenderFactory, FillRule as RenderFillRule,
@@ -2287,6 +2287,8 @@ impl ArtboardInstance {
         let shape_world =
             self.runtime_component_world_transform_with_bounds(shape_local, graph, layout_bounds);
         let inverse_shape_world = shape_world.invert_or_identity();
+        let nsliced_context =
+            runtime_nsliced_node_context_for_shape(self, graph, shape_local, layout_bounds);
         let mut commands = Vec::new();
 
         for path_ref in &composer.paths {
@@ -2339,6 +2341,15 @@ impl ArtboardInstance {
                 transform,
                 weighted_context.as_ref(),
             );
+            if let Some(nsliced_context) = nsliced_context.as_ref() {
+                runtime_deform_path_commands_with_nsliced_node(
+                    &mut path_commands,
+                    nsliced_context,
+                    path_kind,
+                    shape_world,
+                    inverse_shape_world,
+                );
+            }
             prune_empty_path_segments(&mut path_commands);
             commands.extend(path_commands);
         }
@@ -8545,6 +8556,27 @@ struct WeightedPathContext {
     bone_transforms: Vec<Mat2D>,
 }
 
+#[derive(Debug, Clone)]
+struct RuntimeNSlicedNodeContext {
+    world: Mat2D,
+    inverse_world: Mat2D,
+    width: f32,
+    height: f32,
+    scale_x: f32,
+    scale_y: f32,
+    x_px_stops: Vec<f32>,
+    y_px_stops: Vec<f32>,
+    x_scale_info: RuntimeNSlicerScaleInfo,
+    y_scale_info: RuntimeNSlicerScaleInfo,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RuntimeNSlicerScaleInfo {
+    use_scale: bool,
+    scale_factor: f32,
+    fallback_size: f32,
+}
+
 impl WeightedPathContext {
     fn deform_point(&self, point: (f32, f32), indices: u32, weights: u32) -> Option<(f32, f32)> {
         let mut blended = [0.0; 6];
@@ -8565,6 +8597,404 @@ impl WeightedPathContext {
         let (x, y) = self.skin_world_transform.transform_point(point.0, point.1);
         Some(Mat2D(blended).transform_point(x, y))
     }
+}
+
+impl RuntimeNSlicedNodeContext {
+    fn deform_world_point(&self, x: f32, y: f32) -> (f32, f32) {
+        let (local_x, local_y) = self.inverse_world.transform_point(x, y);
+        let sliced_x = if self.scale_x == 0.0 {
+            0.0
+        } else {
+            runtime_nslicer_map_value(
+                &self.x_px_stops,
+                self.x_scale_info,
+                self.width.abs(),
+                local_x,
+            ) * runtime_copysign_one(self.scale_x)
+        };
+        let sliced_y = if self.scale_y == 0.0 {
+            0.0
+        } else {
+            runtime_nslicer_map_value(
+                &self.y_px_stops,
+                self.y_scale_info,
+                self.height.abs(),
+                local_y,
+            ) * runtime_copysign_one(self.scale_y)
+        };
+        self.world.transform_point(sliced_x, sliced_y)
+    }
+}
+
+fn runtime_nsliced_node_context_for_shape(
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    shape_local: usize,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+) -> Option<RuntimeNSlicedNodeContext> {
+    let runtime = instance.runtime_file()?;
+    let deformer = graph.shape_deformers.iter().find(|deformer| {
+        deformer.shape_local == shape_local && deformer.deformer_type_name == Some("NSlicedNode")
+    })?;
+    let deformer_local = deformer.deformer_local?;
+    let details = graph
+        .n_slicer_details
+        .iter()
+        .find(|details| details.local_id == deformer_local && details.type_name == "NSlicedNode")?;
+    let object = runtime.object(details.global_id as usize);
+    let initial_width = runtime_component_double_property(
+        runtime,
+        instance,
+        details.local_id,
+        details.global_id,
+        "NSlicedNode",
+        "initialWidth",
+        0.0,
+    );
+    let initial_height = runtime_component_double_property(
+        runtime,
+        instance,
+        details.local_id,
+        details.global_id,
+        "NSlicedNode",
+        "initialHeight",
+        0.0,
+    );
+    if initial_width <= 0.0 || initial_height <= 0.0 || object.is_none() {
+        return None;
+    }
+
+    let width = runtime_component_double_property(
+        runtime,
+        instance,
+        details.local_id,
+        details.global_id,
+        "NSlicedNode",
+        "width",
+        0.0,
+    );
+    let height = runtime_component_double_property(
+        runtime,
+        instance,
+        details.local_id,
+        details.global_id,
+        "NSlicedNode",
+        "height",
+        0.0,
+    );
+    let world = instance.runtime_component_world_transform_with_bounds(
+        details.local_id,
+        graph,
+        layout_bounds,
+    );
+    let inverse_world = runtime_mat2d_invert(world)?;
+    let scale_x = width / initial_width;
+    let scale_y = height / initial_height;
+    let x_px_stops = runtime_nslicer_px_stops(runtime, instance, &details.x_axes, initial_width);
+    let y_px_stops = runtime_nslicer_px_stops(runtime, instance, &details.y_axes, initial_height);
+    let x_uv_stops = runtime_nslicer_uv_stops(runtime, instance, &details.x_axes, initial_width);
+    let y_uv_stops = runtime_nslicer_uv_stops(runtime, instance, &details.y_axes, initial_height);
+
+    Some(RuntimeNSlicedNodeContext {
+        world,
+        inverse_world,
+        width,
+        height,
+        scale_x,
+        scale_y,
+        x_px_stops,
+        y_px_stops,
+        x_scale_info: runtime_nslicer_analyze_uv_stops(&x_uv_stops, initial_width, scale_x.abs()),
+        // Mirrors C++ NSlicedNode::updateMapWorldPoint, including the width
+        // argument used for Y scale analysis.
+        y_scale_info: runtime_nslicer_analyze_uv_stops(&y_uv_stops, initial_width, scale_y.abs()),
+    })
+}
+
+fn runtime_deform_path_commands_with_nsliced_node(
+    commands: &mut [RuntimePathCommand],
+    context: &RuntimeNSlicedNodeContext,
+    path_kind: ShapePaintPathKind,
+    shape_world: Mat2D,
+    inverse_shape_world: Mat2D,
+) {
+    for command in commands {
+        match command {
+            RuntimePathCommand::Move { x, y } | RuntimePathCommand::Line { x, y } => {
+                (*x, *y) = runtime_deform_path_point_with_nsliced_node(
+                    *x,
+                    *y,
+                    context,
+                    path_kind,
+                    shape_world,
+                    inverse_shape_world,
+                );
+            }
+            RuntimePathCommand::Cubic {
+                x1,
+                y1,
+                x2,
+                y2,
+                x3,
+                y3,
+            } => {
+                (*x1, *y1) = runtime_deform_path_point_with_nsliced_node(
+                    *x1,
+                    *y1,
+                    context,
+                    path_kind,
+                    shape_world,
+                    inverse_shape_world,
+                );
+                (*x2, *y2) = runtime_deform_path_point_with_nsliced_node(
+                    *x2,
+                    *y2,
+                    context,
+                    path_kind,
+                    shape_world,
+                    inverse_shape_world,
+                );
+                (*x3, *y3) = runtime_deform_path_point_with_nsliced_node(
+                    *x3,
+                    *y3,
+                    context,
+                    path_kind,
+                    shape_world,
+                    inverse_shape_world,
+                );
+            }
+            RuntimePathCommand::Close => {}
+        }
+    }
+}
+
+fn runtime_deform_path_point_with_nsliced_node(
+    x: f32,
+    y: f32,
+    context: &RuntimeNSlicedNodeContext,
+    path_kind: ShapePaintPathKind,
+    shape_world: Mat2D,
+    inverse_shape_world: Mat2D,
+) -> (f32, f32) {
+    if path_kind == ShapePaintPathKind::World {
+        return context.deform_world_point(x, y);
+    }
+    let (world_x, world_y) = shape_world.transform_point(x, y);
+    let (deformed_x, deformed_y) = context.deform_world_point(world_x, world_y);
+    inverse_shape_world.transform_point(deformed_x, deformed_y)
+}
+
+fn runtime_nslicer_uv_stops(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    axes: &[NSlicerAxisNode],
+    size: f32,
+) -> Vec<f32> {
+    let mut stops = vec![0.0];
+    for axis in axes {
+        let offset = runtime_axis_offset(runtime, instance, axis);
+        if runtime_axis_normalized(runtime, instance, axis) {
+            stops.push(offset.clamp(0.0, 1.0));
+        } else {
+            stops.push((offset / size).clamp(0.0, 1.0));
+        }
+    }
+    stops.push(1.0);
+    stops.sort_by(f32::total_cmp);
+    stops
+}
+
+fn runtime_nslicer_px_stops(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    axes: &[NSlicerAxisNode],
+    size: f32,
+) -> Vec<f32> {
+    let mut stops = vec![0.0];
+    for axis in axes {
+        let offset = runtime_axis_offset(runtime, instance, axis);
+        if runtime_axis_normalized(runtime, instance, axis) {
+            stops.push(offset.clamp(0.0, 1.0) * size);
+        } else {
+            stops.push(offset.clamp(0.0, size));
+        }
+    }
+    stops.push(size);
+    stops.sort_by(f32::total_cmp);
+    stops
+}
+
+fn runtime_nslicer_analyze_uv_stops(
+    stops: &[f32],
+    size: f32,
+    scale: f32,
+) -> RuntimeNSlicerScaleInfo {
+    let mut fixed_pct = 0.0;
+    let mut empty_patch_count = 0;
+    for index in 0..stops.len().saturating_sub(1) {
+        let range = stops[index + 1] - stops[index];
+        if runtime_nslicer_is_fixed_segment(index) {
+            fixed_pct += range;
+        } else if range == 0.0 {
+            empty_patch_count += 1;
+        }
+    }
+
+    let fixed_size = fixed_pct * size;
+    let scalable_size = size - fixed_size;
+    let use_scale = scalable_size != 0.0;
+    let scale_factor = if use_scale {
+        (size * scale - fixed_size) / scalable_size
+    } else {
+        0.0
+    };
+    let fallback_size = if !use_scale && empty_patch_count != 0 {
+        (size - fixed_size / scale) / empty_patch_count as f32
+    } else {
+        0.0
+    };
+    RuntimeNSlicerScaleInfo {
+        use_scale,
+        scale_factor,
+        fallback_size,
+    }
+}
+
+fn runtime_nslicer_map_value(
+    stops: &[f32],
+    scale_info: RuntimeNSlicerScaleInfo,
+    size: f32,
+    value: f32,
+) -> f32 {
+    let Some(first) = stops.first().copied() else {
+        return value;
+    };
+    let Some(last) = stops.last().copied() else {
+        return value;
+    };
+    if value < first - 0.01 {
+        return value;
+    }
+    if value > last + 0.01 {
+        return value - last + size;
+    }
+
+    let mut result = 0.0;
+    for index in 0..stops.len().saturating_sub(1) {
+        let found = value <= stops[index + 1];
+        let span = if found {
+            value - stops[index]
+        } else {
+            stops[index + 1] - stops[index]
+        };
+        if runtime_nslicer_is_fixed_segment(index) {
+            result += span;
+        } else if scale_info.use_scale {
+            result += scale_info.scale_factor * span;
+        } else {
+            result += scale_info.fallback_size;
+        }
+        if found {
+            break;
+        }
+    }
+    result
+}
+
+fn runtime_nslicer_is_fixed_segment(index: usize) -> bool {
+    index % 2 == 0
+}
+
+fn runtime_axis_offset(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    axis: &NSlicerAxisNode,
+) -> f32 {
+    runtime_component_double_property(
+        runtime,
+        instance,
+        axis.local_id,
+        axis.global_id,
+        "Axis",
+        "offset",
+        0.0,
+    )
+}
+
+fn runtime_axis_normalized(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    axis: &NSlicerAxisNode,
+) -> bool {
+    runtime_component_bool_property(
+        runtime,
+        instance,
+        axis.local_id,
+        axis.global_id,
+        "Axis",
+        "normalized",
+        false,
+    )
+}
+
+fn runtime_component_double_property(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    local_id: usize,
+    global_id: u32,
+    type_name: &str,
+    property_name: &str,
+    default: f32,
+) -> f32 {
+    property_key_for_name(type_name, property_name)
+        .and_then(|key| instance.double_property(local_id, key))
+        .or_else(|| {
+            runtime
+                .object(global_id as usize)
+                .and_then(|object| object.double_property(property_name))
+        })
+        .unwrap_or(default)
+}
+
+fn runtime_component_bool_property(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    local_id: usize,
+    global_id: u32,
+    type_name: &str,
+    property_name: &str,
+    default: bool,
+) -> bool {
+    property_key_for_name(type_name, property_name)
+        .and_then(|key| instance.bool_property(local_id, key))
+        .or_else(|| {
+            runtime
+                .object(global_id as usize)
+                .and_then(|object| object.bool_property(property_name))
+        })
+        .unwrap_or(default)
+}
+
+fn runtime_mat2d_invert(mat: Mat2D) -> Option<Mat2D> {
+    let determinant = mat.determinant();
+    if determinant == 0.0 {
+        return None;
+    }
+
+    let [a, b, c, d, e, f] = mat.0;
+    let determinant = 1.0 / determinant;
+    Some(Mat2D([
+        d * determinant,
+        -b * determinant,
+        -c * determinant,
+        a * determinant,
+        (c * f - d * e) * determinant,
+        (b * e - a * f) * determinant,
+    ]))
+}
+
+fn runtime_copysign_one(value: f32) -> f32 {
+    if value.is_sign_negative() { -1.0 } else { 1.0 }
 }
 
 fn deformed_points_path(

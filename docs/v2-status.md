@@ -5,10 +5,10 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 554 across 233 files (strict
-  exact=551/230; tolerant=3/3; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=61, not-yet=1
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=19 gated=6 harness=36
+- Exact-status segments (file × sample): 555 across 234 files (strict
+  exact=552/231; tolerant=3/3; structural=0/0)
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=59, not-yet=2
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=18 gated=5 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes**
 
 ## Milestones
@@ -25,11 +25,10 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Pick one of the tied largest remaining M6 buckets. Prefer
-   `rust-runner-unsupported:n-slice` first because it is layout-native M6 work
-   and `rewards_demo.riv` exposed it after the nested-feather umbrella was
-   removed. The two-file bucket is `local_bounds.riv` plus `rewards_demo.riv`.
-   `rust-runner-unsupported:mesh-images` is the other two-file bucket
-   (`jellyfish_test.riv`, `tape.riv`).
+   `rust-runner-unsupported:text-modifier-group-flags` first because
+   `hunter_x_demo.riv` and `rewards_demo.riv` now both expose it after the
+   nested-feather and N-slice gates were removed. The other two-file bucket is
+   `rust-runner-unsupported:mesh-images` (`jellyfish_test.riv`, `tape.riv`).
 2. Other parked queues are
    `rust-runner-unsupported:contour-mesh-metadata` (1: `bad_skin.riv`),
    `scripted-transition-condition` (2 gated), `scripted-path-effects` (1 gated),
@@ -37,7 +36,7 @@ the only memory the next session has. Update it every commit.
    `layout-component-paint` (1: `text_input.riv`),
    `viewmodel-asset-conditions` (1),
    `text-joystick-data-bind` (1: `echo_show_demo.riv`),
-   `text-modifier-group-flags` (1: `hunter_x_demo.riv`),
+   `text-modifier-group-flags` (2: `hunter_x_demo.riv`, `rewards_demo.riv`),
    `nested-artboard-layout` (1: `superbowl.riv`),
    `selected-root-gradient-shader-order` (1: `bullet_man.riv`), and
    `selected-root-skinned-clip-path` (1: `spotify_kids_demo.riv`). The former
@@ -48,7 +47,8 @@ the only memory the next session has. Update it every commit.
    `nested-layout-clip-data-bind` (`stateful_multi_property.riv`), and
    `nested-stateful-view-model-property` (`stateful_nested.riv`). Gated
    one-file diagnostics include `text-polygon-sibling` (`bankcard.riv`) and
-   `not-yet:nested-feather-gradient-space` (`ai_assitant.riv`).
+   `not-yet:nested-feather-gradient-space` (`ai_assitant.riv`);
+   `local_bounds.riv` is the M6 `not-yet:image-predecode-order` entry.
 3. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
@@ -68,9 +68,11 @@ the only memory the next session has. Update it every commit.
 ## Known Divergences
 
 - None in the active corpus. `make golden-compare` reports `diverges=0`; the
-  remaining M6 work is parked behind explicit unsupported-feature diagnostics.
-  The single `not-yet` entry is gated `ai_assitant.riv`, which now imports and
-  draws but has a nested-feather gradient-space exact-parity gap.
+  remaining M6 work is parked behind explicit unsupported-feature diagnostics
+  or documented `not-yet` entries. `ai_assitant.riv` imports and draws but has
+  a nested-feather gradient-space exact-parity gap. `local_bounds.riv` now
+  runs after NSlicedNode path deformation, but Rust decodes the external image
+  after early paint allocation and also shows tiny static-text float residuals.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -143,9 +145,10 @@ the only memory the next session has. Update it every commit.
   ordering is exact while drawing only simple vector/text siblings, simple
   clipped/draw-target image fixtures with metadata-only component-list nodes,
   plus an asset-only unresolved nested-library host that decodes its image
-  asset but draws only the root background like C++, and simple
+  asset but draws only the root background like C++, simple
   ShapePaint/Feather draws including outer feathers and repeated
-  inner-feather paints that share the original/effect clip path.
+  inner-feather paints that share the original/effect clip path, and
+  NSlicedNode vector shape path deformation for local/world draw commands.
   Custom handle-source world-space math, data-bound nested host controls beyond
   generated defaults (external/live pause/speed/quantize mutation), remaining
   nested child data-bind targets beyond the current number/color/default bind
@@ -156,9 +159,9 @@ the only memory the next session has. Update it every commit.
   reported `Event` listeners, and layout-backed or virtualized component-list
   instancing remain M6 or later diagnostics.
   Golden runner sample lists now advance by sorted absolute-time deltas and
-  reuse render paths across samples; no N-slice image layout, mesh image
-  drawing, selected-root image paint/preallocation ordering beyond the
-  text-root single external-image predecode case,
+  reuse render paths across samples; no NSliced image layout/predecode parity,
+  mesh image drawing, selected-root image paint/preallocation ordering beyond
+  the text-root single external-image predecode case,
   contour-mesh image files, remaining text
   layout/editing, selected-root gradient shader ordering, selected-root
   skinned clip-path geometry, nested-feather gradient-space exact parity for
@@ -1599,3 +1602,17 @@ the only memory the next session has. Update it every commit.
   preferring `rust-runner-unsupported:n-slice` over `mesh-images` because it
   is layout-facing and now blocks both `local_bounds.riv` and
   `rewards_demo.riv`.
+- 2026-07-06: [M6] Ported NSlicedNode vector path deformation by mirroring the
+  C++ N-slicer stop mapping for local/world shape draw commands, admitting
+  passive NSlicedNode/axis/draw-rule siblings through static text, and
+  removing the stale runner-level N-slice guard. `n_slice_triangle.riv` is now
+  exact, `rewards_demo.riv` now verifies as
+  `rust-runner-unsupported:text-modifier-group-flags`, and
+  `local_bounds.riv` is parked as `not-yet:image-predecode-order` because its
+  focused run now reaches Rust draw output but differs in external image
+  predecode ordering and tiny static-text float residuals. Full
+  `make golden-compare` reports `exact=234`, `exact-segments=555`,
+  `diverges=0`, `unsupported-feature=59`, `not-yet=2`, and parked
+  `M6=18 gated=5 harness=36`; next target is the tied largest M6 bucket,
+  preferring `rust-runner-unsupported:text-modifier-group-flags` over
+  `mesh-images`.

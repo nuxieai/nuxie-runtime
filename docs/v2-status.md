@@ -5,10 +5,10 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 561 across 240 files (strict
-  exact=554/233; tolerant=7/7; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=55, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=14 gated=5 harness=36
+- Exact-status segments (file × sample): 562 across 241 files (strict
+  exact=555/234; tolerant=7/7; structural=0/0)
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=54, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=13 gated=5 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes**
 
 ## Milestones
@@ -28,14 +28,12 @@ the only memory the next session has. Update it every commit.
    remaining unsupported/gated queue that is not scripting/audio:
    start with `scripted-data-context` only if it can be made a loud scripting
    gate, otherwise pick one of `focus-data` (`focus_traversal.riv`),
-   `text-input` (`text_input.riv`),
    `viewmodel-asset-conditions`, `text-joystick-data-bind`
    (`echo_show_demo.riv`), `nested-artboard-layout` (`superbowl.riv`), or
    `selected-root-skinned-clip-path` (`bullet_man.riv`,
    `spotify_kids_demo.riv`).
 2. Other parked one-file M6 queues include `scripted-data-context`,
-   `focus-data` (`focus_traversal.riv`), `text-input`
-   (`text_input.riv`), `viewmodel-asset-conditions`,
+   `focus-data` (`focus_traversal.riv`), `viewmodel-asset-conditions`,
    `text-joystick-data-bind` (`echo_show_demo.riv`),
    `nested-artboard-layout` (`superbowl.riv`), and
    `selected-root-skinned-clip-path` (`bullet_man.riv`,
@@ -53,9 +51,7 @@ the only memory the next session has. Update it every commit.
    (`bankcard.riv`). Keep these parked queues as explicit unsupported/gated
    work until a focused slice can either promote a file or replace the guard
    with a sharper diagnostic.
-   The old `layout-component-paint` manifest queue is empty again; the
-   `text_input.riv` blocker is the `TextInput` generated path/measurement
-   slice, not generic layout background paint.
+   The old `layout-component-paint` and `text-input` manifest queues are empty.
 3. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
@@ -208,8 +204,10 @@ the only memory the next session has. Update it every commit.
   NSlicedNode vector shape path deformation for local/world draw commands,
   plus mesh-backed `Image::draw`/`drawImageMesh` with file-wide source mesh
   buffer preallocation, cloned dynamic vertex buffers, UV/index buffers,
-  skinned mesh vertex updates, and live `Stroke.thickness` visibility/paint
-  application for state-machine-keyed paints.
+  skinned mesh vertex updates, live `Stroke.thickness` visibility/paint
+  application for state-machine-keyed paints, and frame-0 `TextInput`
+  multiline text/cursor/empty-selection generated paths with intrinsic
+  layout measurement.
   Custom handle-source world-space math, data-bound nested host controls beyond
   generated defaults (external/live pause/speed/quantize mutation), remaining
   nested child data-bind targets beyond the current number/color/default bind
@@ -224,7 +222,8 @@ the only memory the next session has. Update it every commit.
   selected-root image paint/preallocation ordering beyond ImportStack-displaced
   embedded-image predecode and the text-root single external-image predecode
   case, remaining text
-  layout/editing, selected-root gradient shader ordering, selected-root
+  layout/editing, full `TextInput` editing/selection/keyboard behavior,
+  selected-root gradient shader ordering, selected-root
   skinned clip-path geometry, nested-feather gradient-space exact parity for
   `ai_assitant.riv`, live
   data-bound nested host controls/artboard swaps, nested layout/leaf, scroll
@@ -418,6 +417,20 @@ the only memory the next session has. Update it every commit.
   `exact=240`, `exact-segments=561`, `diverges=0`,
   `unsupported-feature=55`, `not-yet=0`, parked
   `M6=14 gated=5 harness=36`.
+- 2026-07-06: [M6] Promoted `text_input.riv` by porting the frame-0
+  `TextInput` generated path/measurement slice: `TextInput` uses the existing
+  HarfRust/Skrifa static text shaper as RawTextInput-style text path
+  generation, measures multiline auto-height `TextInput` children through
+  Taffy, draws `TextInputCursor`, empty `TextInputSelection`, and
+  `TextInputText` with the parent `TextInput` world transform, and removes the
+  blanket runner `TextInput` gate. Full `make golden-compare` reports
+  `exact=241`, `exact-segments=562`, `diverges=0`,
+  `unsupported-feature=54`, `not-yet=0`, parked
+  `M6=13 gated=5 harness=36`; `cargo test --workspace` passes. Next target is
+  one of the remaining one-file M6 queues: `focus-data`,
+  `viewmodel-asset-conditions`, `text-joystick-data-bind`,
+  `nested-artboard-layout`, `selected-root-skinned-clip-path`, or the nested
+  data-bind diagnostics.
 - 2026-07-02: `rive-runtime` owns static draw emission through
   `rive-render-api`; `rust-golden-runner` now only orchestrates import,
   artboard selection, stream markers, and recording output.

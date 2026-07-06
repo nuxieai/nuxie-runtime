@@ -27,8 +27,9 @@ use crate::properties::{
     solid_color_value_property_key,
 };
 use crate::text::{
-    RuntimeTextLayoutConstraint, runtime_text_shape_paint_commands, static_text_constraint_bounds,
-    static_text_layout_measure_bounds,
+    RuntimeTextLayoutConstraint, runtime_text_input_shape_paint_commands,
+    runtime_text_shape_paint_commands, static_text_constraint_bounds,
+    static_text_layout_measure_bounds, text_input_layout_measure_bounds,
 };
 use crate::{ArtboardInstance, Mat2D};
 
@@ -862,6 +863,20 @@ impl ArtboardInstance {
         graph: &ArtboardGraph,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) -> Vec<RuntimeShapePaintCommand> {
+        if drawable.kind == DrawableOrderKind::Drawable
+            && is_text_input_drawable_type(drawable.type_name)
+            && let (Some(runtime), Some(drawable_local)) = (self.runtime_file(), drawable.local_id)
+        {
+            return runtime_text_input_shape_paint_commands(
+                runtime,
+                self,
+                graph,
+                drawable_local,
+                layout_bounds,
+            )
+            .unwrap_or_default();
+        }
+
         let (container_local, layout_path_local) = match drawable.kind {
             DrawableOrderKind::Drawable if drawable.type_name == "Shape" => {
                 (drawable.local_id, None)
@@ -1247,6 +1262,30 @@ impl ArtboardInstance {
         }
         let style_local = self.runtime_layout_component_style_local(parent_local)?;
         let bounds = layout_bounds.and_then(|bounds| bounds.get(&parent_local).copied())?;
+        Some(RuntimeTextLayoutConstraint {
+            width: bounds.width,
+            height: bounds.height,
+            width_scale_type: self.runtime_layout_axis_scale(style_local, true),
+            height_scale_type: self.runtime_layout_axis_scale(style_local, false),
+        })
+    }
+
+    pub(crate) fn runtime_text_input_layout_constraint(
+        &self,
+        text_input_local: usize,
+        graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    ) -> Option<RuntimeTextLayoutConstraint> {
+        let text_input = self.component(text_input_local)?;
+        let parent_local = text_input.parent_local?;
+        let parent = self.component(parent_local)?;
+        if parent.type_name != "LayoutComponent" {
+            return None;
+        }
+        let style_local = self.runtime_layout_component_style_local(parent_local)?;
+        let bounds = layout_bounds
+            .and_then(|bounds| bounds.get(&parent_local).copied())
+            .or_else(|| Some(self.runtime_layout_component_bounds(parent_local, graph)))?;
         Some(RuntimeTextLayoutConstraint {
             width: bounds.width,
             height: bounds.height,
@@ -1883,6 +1922,22 @@ impl ArtboardInstance {
                         child_sizes.push((width, height));
                     }
                 }
+                "TextInput" => {
+                    if let Some((_, _, width, height)) = self.runtime_file().and_then(|runtime| {
+                        self.runtime_text_input_layout_constraint(*child_local, graph, None)
+                            .and_then(|layout_constraint| {
+                                text_input_layout_measure_bounds(
+                                    runtime,
+                                    graph,
+                                    self,
+                                    *child_local,
+                                    layout_constraint,
+                                )
+                            })
+                    }) {
+                        child_sizes.push((width, height));
+                    }
+                }
                 "Fill"
                 | "LinearGradient"
                 | "RadialGradient"
@@ -2297,6 +2352,22 @@ impl ArtboardInstance {
                 "Text" => {
                     if let Some((_, _, width, height)) = self.runtime_file().and_then(|runtime| {
                         static_text_constraint_bounds(runtime, graph, self, *child_local)
+                    }) {
+                        child_sizes.push((width, height));
+                    }
+                }
+                "TextInput" => {
+                    if let Some((_, _, width, height)) = self.runtime_file().and_then(|runtime| {
+                        self.runtime_text_input_layout_constraint(*child_local, graph, None)
+                            .and_then(|layout_constraint| {
+                                text_input_layout_measure_bounds(
+                                    runtime,
+                                    graph,
+                                    self,
+                                    *child_local,
+                                    layout_constraint,
+                                )
+                            })
                     }) {
                         child_sizes.push((width, height));
                     }
@@ -3672,7 +3743,8 @@ impl TaffyRuntimeLayoutEngine {
                 .iter()
                 .find(|component| component.local_id == *child_local)
                 .map(|child| child.type_name);
-            let measured_child = runtime.is_some() && matches!(child_type, Some("Shape" | "Text"));
+            let measured_child =
+                runtime.is_some() && matches!(child_type, Some("Shape" | "Text" | "TextInput"));
             let zero_sized_component_list = matches!(child_type, Some("ArtboardComponentList"))
                 && self
                     .zero_sized_component_list_supported(graph, *child_local)
@@ -3718,7 +3790,7 @@ impl TaffyRuntimeLayoutEngine {
                 .components
                 .iter()
                 .find(|component| component.local_id == *child_local)
-                .is_some_and(|child| matches!(child.type_name, "Shape" | "Text"))
+                .is_some_and(|child| matches!(child.type_name, "Shape" | "Text" | "TextInput"))
         }))
     }
 
@@ -3793,6 +3865,38 @@ impl TaffyRuntimeLayoutEngine {
                         })
                         .or_else(|| {
                             static_text_constraint_bounds(runtime, graph, instance, child.local_id)
+                        });
+                    let Some((_x, _y, width, height)) = measured_bounds else {
+                        continue;
+                    };
+                    measured.width = measured.width.max(width);
+                    measured.height = measured.height.max(height);
+                }
+                "TextInput" => {
+                    let measured_bounds = instance
+                        .runtime_layout_component_style_local(layout_local)
+                        .and_then(|style_local| {
+                            let layout_constraint = RuntimeTextLayoutConstraint {
+                                width: known_dimensions
+                                    .width
+                                    .or_else(|| definite_available_space(available_space.width))
+                                    .unwrap_or(f32::MAX),
+                                height: known_dimensions
+                                    .height
+                                    .or_else(|| definite_available_space(available_space.height))
+                                    .unwrap_or(f32::MAX),
+                                width_scale_type: instance
+                                    .runtime_layout_axis_scale(style_local, true),
+                                height_scale_type: instance
+                                    .runtime_layout_axis_scale(style_local, false),
+                            };
+                            text_input_layout_measure_bounds(
+                                runtime,
+                                graph,
+                                instance,
+                                child.local_id,
+                                layout_constraint,
+                            )
                         });
                     let Some((_x, _y, width, height)) = measured_bounds else {
                         continue;
@@ -10178,6 +10282,13 @@ fn sorted_drawable_uses_render_opacity(type_name: &str) -> bool {
     definition_by_name(type_name).is_some_and(|definition| {
         definition.is_a("Shape") || matches!(definition.name, "TextInputDrawable")
     })
+}
+
+fn is_text_input_drawable_type(type_name: &str) -> bool {
+    matches!(
+        type_name,
+        "TextInputCursor" | "TextInputSelectedText" | "TextInputSelection" | "TextInputText"
+    )
 }
 
 fn sorted_drawable_is_nested_artboard(type_name: &str) -> bool {

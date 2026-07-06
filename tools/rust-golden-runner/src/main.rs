@@ -894,10 +894,6 @@ fn ensure_static_draw_supported_for_artboard(
         bail!("unsupported: images in Rust golden runner (global {global_id})");
     }
 
-    if let Some(global_id) = unsupported_text_input_global(artboard) {
-        bail!("unsupported: text-input in Rust golden runner (global {global_id})");
-    }
-
     if let Some(global_id) = taffy_refused_layout_dependent_draw(runtime, graph, artboard)? {
         bail!(
             "unsupported: layout-component-paint in Rust golden runner (Taffy refused layout tree for global {global_id})"
@@ -1050,22 +1046,6 @@ fn unsupported_layout_component_paint<'a>(
         container.type_name == "LayoutComponent"
             && !container.paints.is_empty()
             && !layout_component_paint_supported(runtime, artboard, container)
-    })
-}
-
-fn unsupported_text_input_global(artboard: &ArtboardGraph) -> Option<u32> {
-    artboard.local_objects.iter().find_map(|object| {
-        matches!(
-            object.type_name,
-            Some(
-                "TextInput"
-                    | "TextInputText"
-                    | "TextInputSelection"
-                    | "TextInputSelectedText"
-                    | "TextInputCursor"
-            )
-        )
-        .then_some(object.global_id)
     })
 }
 

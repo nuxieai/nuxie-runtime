@@ -5,10 +5,10 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 530 across 209 files (strict
-  exact=527/206; tolerant=3/3; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=86, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=42 gated=8 harness=36
+- Exact-status segments (file × sample): 531 across 210 files (strict
+  exact=528/207; tolerant=3/3; structural=0/0)
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=85, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=41 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -25,7 +25,7 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the largest remaining M6 bucket,
-   `rust-runner-unsupported:images` (17 entries), starting with
+   `rust-runner-unsupported:images` (16 entries), starting with
    `bad_skin.riv` unless a focused run proves another entry is the smaller
    first slice. `rust-runner-unsupported:nested-artboard-layout` is now 14
    entries after the `NestedArtboardLeaf` slice; true `NSlicedNode`/mesh image
@@ -110,8 +110,10 @@ the only memory the next session has. Update it every commit.
   nested host `isPaused` mutation, plus no-input recursive nested
   `ListenerAlignTarget` fixtures where the action is unexercised, plus plain
   embedded/hosted non-mesh `Image::draw` including layout-controlled
-  fit/alignment under Taffy bounds and metadata-only `NSlicer`/axis
-  image-layout fixtures that render through existing `LayoutComponent` paints.
+  fit/alignment under Taffy bounds, metadata-only `NSlicer`/axis
+  image-layout fixtures that render through existing `LayoutComponent` paints,
+  and sample-0 asset-image listener files whose image decode/source-paint
+  ordering is exact while drawing only simple vector siblings.
   Custom handle-source world-space math, data-bound nested host controls beyond
   generated defaults (external/live pause/speed/quantize mutation), remaining
   nested child data-bind targets beyond the current number/color/default bind
@@ -1243,3 +1245,12 @@ the only memory the next session has. Update it every commit.
   `diverges=0`, `unsupported-feature=86`, `not-yet=0`, and parked
   `M6=42 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
   the M6 image bucket, starting with `bad_skin.riv`.
+- 2026-07-06: [M6] Promoted `image_binding_with_listener.riv` by narrowing the
+  static image gate to admit simple Shape/Rectangle siblings beside image
+  drawables while keeping complex image files with skins, scripts, draw rules,
+  events, and constraints behind `rust-runner-unsupported:images`. A scratch
+  exact corpus proved only this one of the eight newly admitted image entries
+  matched C++; full `make golden-compare` reports `exact=210`,
+  `exact-segments=531`, `diverges=0`, `unsupported-feature=85`, `not-yet=0`,
+  and parked `M6=41 gated=8 harness=36`; `cargo test --workspace` passes.
+  Next target remains the M6 image bucket, starting with `bad_skin.riv`.

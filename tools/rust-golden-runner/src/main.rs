@@ -1967,6 +1967,8 @@ fn simple_static_image_artboard_tree_supported_entered(
                     | "NSlicer"
                     | "AxisX"
                     | "AxisY"
+                    | "Rectangle"
+                    | "Shape"
                     | "SolidColor",
             )
         )
@@ -1977,12 +1979,14 @@ fn simple_static_image_artboard_tree_supported_entered(
         return false;
     }
     if !artboard.shape_paint_containers.iter().all(|container| {
-        (container.type_name == "Artboard" || container.type_name == "LayoutComponent")
-            && container.paints.iter().all(|paint| {
-                root_layout_background_paint_supported(paint)
-                    && (container.type_name == "Artboard"
-                        || paint.path_kind == Some(ShapePaintPathKind::LocalClockwise))
-            })
+        matches!(
+            container.type_name.as_ref(),
+            "Artboard" | "LayoutComponent" | "Shape"
+        ) && container.paints.iter().all(|paint| {
+            root_layout_background_paint_supported(paint)
+                && (container.type_name != "LayoutComponent"
+                    || paint.path_kind == Some(ShapePaintPathKind::LocalClockwise))
+        })
     }) {
         return false;
     }

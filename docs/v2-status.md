@@ -5,10 +5,10 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 534 across 213 files (strict
-  exact=531/210; tolerant=3/3; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=82, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=38 gated=8 harness=36
+- Exact-status segments (file × sample): 535 across 214 files (strict
+  exact=532/211; tolerant=3/3; structural=0/0)
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=81, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=37 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -25,7 +25,7 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the largest remaining M6 bucket,
-   `rust-runner-unsupported:images` (13 entries), starting with
+   `rust-runner-unsupported:images` (12 entries), starting with
    `bad_skin.riv` unless focused classification finds another smaller image
    slice. `rust-runner-unsupported:nested-artboard-layout` is now 14 entries
    after the `NestedArtboardLeaf` slice; true `NSlicedNode`/mesh image work
@@ -1282,5 +1282,18 @@ the only memory the next session has. Update it every commit.
   are exact; full `make golden-compare` reports `exact=213`,
   `exact-segments=534`, `diverges=0`, `unsupported-feature=82`, `not-yet=0`,
   and parked `M6=38 gated=8 harness=36`; `cargo test --workspace` passes. Next
+  target remains the M6 image bucket, starting with `bad_skin.riv` unless
+  focused classification finds another smaller slice.
+- 2026-07-06: [M6] Promoted `data_binding_images_test.riv` by admitting
+  nested-state-machine metadata in the static image gate, allowing nested
+  child `Image.assetId` binds, and aligning generated owned asset-image
+  defaults with C++'s private empty asset sentinel. Nested asset-image context
+  imports now use the C++ decode/source-paint ordering where all but the final
+  embedded image resolve before source paint allocation. Focused streams for
+  the promoted fixture plus `viewmodel_image_reset.riv`,
+  `image_fit_alignment*.riv`, `walle.riv`, and `custom_image_name.riv` are
+  exact. Full `make golden-compare` reports `exact=214`,
+  `exact-segments=535`, `diverges=0`, `unsupported-feature=81`, `not-yet=0`,
+  and parked `M6=37 gated=8 harness=36`; `cargo test --workspace` passes. Next
   target remains the M6 image bucket, starting with `bad_skin.riv` unless
   focused classification finds another smaller slice.

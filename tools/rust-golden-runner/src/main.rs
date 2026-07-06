@@ -1713,6 +1713,10 @@ fn nested_child_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> boo
             // TextBase verticalTrimTopValue/verticalTrimBottomValue bitmask passthroughs.
             && matches!(data_bind.property_key, 1027 | 1028)
             && data_bind.converter_global.is_none())
+        || (data_bind.target_type_name == Some("Image")
+            // ImageBase::assetIdPropertyKey in C++ generated/shapes/image_base.hpp.
+            && data_bind.property_key == 206
+            && data_bind.converter_global.is_none())
 }
 
 fn solid_color_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> bool {
@@ -1971,6 +1975,7 @@ fn simple_static_image_artboard_tree_supported_entered(
                     | "LayoutComponent"
                     | "LayoutComponentStyle"
                     | "NestedArtboard"
+                    | "NestedStateMachine"
                     | "Node"
                     | "NSlicer"
                     | "AxisX"

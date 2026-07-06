@@ -4301,14 +4301,38 @@ fn pre_source_image_decode_count(artboards: &[ArtboardGraph], image_asset_count:
         return 0;
     }
 
+    let has_asset_image_bind = artboards.iter().any(|artboard| {
+        artboard.data_binds.iter().any(|data_bind| {
+            data_bind.target_type_name == Some("Image")
+                && property_key_for_name("Image", "assetId")
+                    .is_some_and(|key| data_bind.property_key == u64::from(key))
+        })
+    });
+    let has_layout_component = artboards.iter().any(|artboard| {
+        artboard
+            .components
+            .iter()
+            .any(|component| component.type_name == "LayoutComponent")
+    });
+    let has_nested_artboard = artboards
+        .iter()
+        .any(|artboard| !artboard.nested_artboards.is_empty());
+    if has_asset_image_bind && has_nested_artboard && !has_layout_component {
+        // Mirrors the C++ `FileAssetImporter` ordering for nested
+        // asset-image data-context files: most embedded images resolve before
+        // source paint allocation, while the final generated/private asset
+        // resolution happens after source paints.
+        return image_asset_count.saturating_sub(1);
+    }
+
     // Mirrors the C++ `src/importers/file_asset_importer.cpp` resolution
     // surface observed in asset-image-bound image/layout fixtures.
     let has_asset_image_layout = artboards.iter().any(|artboard| {
-        let has_layout_component = artboard
+        let has_artboard_layout_component = artboard
             .components
             .iter()
             .any(|component| component.type_name == "LayoutComponent");
-        if !has_layout_component {
+        if !has_artboard_layout_component {
             return false;
         }
 

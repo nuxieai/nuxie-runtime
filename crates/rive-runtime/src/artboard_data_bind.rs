@@ -2106,22 +2106,33 @@ impl ArtboardInstance {
         let host_locals = self.nested_artboards.keys().copied().collect::<Vec<_>>();
         let mut changed = false;
         for host_local_id in host_locals {
-            let Some(bindings) = self
-                .nested_artboards
-                .get(&host_local_id)
-                .map(|nested| nested.child.artboard_property_bindings.clone())
+            let Some((property_bindings, image_asset_bindings)) =
+                self.nested_artboards.get(&host_local_id).map(|nested| {
+                    (
+                        nested.child.artboard_property_bindings.clone(),
+                        nested.child.artboard_image_asset_bindings.clone(),
+                    )
+                })
             else {
                 continue;
             };
-            if bindings.is_empty() {
+            if property_bindings.is_empty() && image_asset_bindings.is_empty() {
                 continue;
             }
-            let updates = bindings
+            let updates = property_bindings
                 .iter()
                 .filter_map(|binding| {
                     self.stateful_nested_host_binding_value(host_local_id, binding)
                         .map(|value| (binding.path.clone(), value))
                 })
+                .chain(image_asset_bindings.iter().filter_map(|binding| {
+                    self.stateful_nested_host_binding_value_for(
+                        host_local_id,
+                        &binding.path,
+                        &binding.default_value,
+                    )
+                    .map(|value| (binding.path.clone(), value))
+                }))
                 .collect::<Vec<_>>();
             if updates.is_empty() {
                 continue;
@@ -2151,8 +2162,21 @@ impl ArtboardInstance {
         host_local_id: usize,
         binding: &RuntimeArtboardPropertyBindingInstance,
     ) -> Option<RuntimeDataBindGraphValue> {
-        let source_local = self.stateful_nested_host_value_local(host_local_id, &binding.path)?;
-        match binding.default_value {
+        self.stateful_nested_host_binding_value_for(
+            host_local_id,
+            &binding.path,
+            &binding.default_value,
+        )
+    }
+
+    fn stateful_nested_host_binding_value_for(
+        &self,
+        host_local_id: usize,
+        path: &[u32],
+        default_value: &RuntimeDataBindGraphValue,
+    ) -> Option<RuntimeDataBindGraphValue> {
+        let source_local = self.stateful_nested_host_value_local(host_local_id, path)?;
+        match default_value {
             RuntimeDataBindGraphValue::Number(_) => {
                 let property_value_key =
                     property_key_for_name("ViewModelInstanceNumber", "propertyValue")?;
@@ -2170,6 +2194,12 @@ impl ArtboardInstance {
                     property_key_for_name("ViewModelInstanceColor", "propertyValue")?;
                 self.color_property(source_local, property_value_key)
                     .map(RuntimeDataBindGraphValue::Color)
+            }
+            RuntimeDataBindGraphValue::Asset(_) => {
+                let property_value_key =
+                    property_key_for_name("ViewModelInstanceAssetImage", "propertyValue")?;
+                self.uint_property(source_local, property_value_key)
+                    .map(RuntimeDataBindGraphValue::Asset)
             }
             _ => None,
         }

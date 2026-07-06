@@ -3462,7 +3462,7 @@ fn runtime_owned_view_model_assets(
                     )
                     .then_some(RuntimeOwnedViewModelAsset {
                         property_index,
-                        value: 0,
+                        value: u64::from(u32::MAX),
                     })
                 })
                 .collect()
@@ -4073,7 +4073,7 @@ impl RuntimeOwnedViewModelInstance {
                 "ViewModelPropertyAsset" | "ViewModelPropertyAssetImage" => {
                     assets.push(RuntimeOwnedViewModelAsset {
                         property_index,
-                        value: 0,
+                        value: u64::from(u32::MAX),
                     })
                 }
                 "ViewModelPropertyArtboard" => artboards.push(RuntimeOwnedViewModelArtboard {

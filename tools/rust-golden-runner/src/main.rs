@@ -2014,7 +2014,9 @@ fn simple_static_image_artboard_tree_supported_entered(
                 .is_some_and(|asset_global| image_asset_globals.contains(&asset_global)),
             "NestedArtboard" => {
                 let Some(referenced_artboard_global) = drawable.referenced_artboard_global else {
-                    return false;
+                    // C++ suppresses unresolved nested hosts; there is no child
+                    // image tree to validate.
+                    return true;
                 };
                 let Some(child_artboard) = graph
                     .artboards

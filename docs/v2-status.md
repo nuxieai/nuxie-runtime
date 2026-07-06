@@ -5,10 +5,10 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 533 across 212 files (strict
-  exact=530/209; tolerant=3/3; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=83, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=39 gated=8 harness=36
+- Exact-status segments (file × sample): 534 across 213 files (strict
+  exact=531/210; tolerant=3/3; structural=0/0)
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=82, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=38 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -25,7 +25,7 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the largest remaining M6 bucket,
-   `rust-runner-unsupported:images` (14 entries), starting with
+   `rust-runner-unsupported:images` (13 entries), starting with
    `bad_skin.riv` unless focused classification finds another smaller image
    slice. `rust-runner-unsupported:nested-artboard-layout` is now 14 entries
    after the `NestedArtboardLeaf` slice; true `NSlicedNode`/mesh image work
@@ -113,9 +113,10 @@ the only memory the next session has. Update it every commit.
   fit/alignment under Taffy bounds, metadata-only `NSlicer`/axis
   image-layout fixtures that render through existing `LayoutComponent` paints,
   and sample-0 asset-image listener files whose image decode/source-paint
-  ordering is exact while drawing only simple vector/text siblings, plus an
-  asset-only unresolved nested-library host that decodes its image asset but
-  draws only the root background like C++.
+  ordering is exact while drawing only simple vector/text siblings, simple
+  clipped/draw-target image fixtures with metadata-only component-list nodes,
+  plus an asset-only unresolved nested-library host that decodes its image
+  asset but draws only the root background like C++.
   Custom handle-source world-space math, data-bound nested host controls beyond
   generated defaults (external/live pause/speed/quantize mutation), remaining
   nested child data-bind targets beyond the current number/color/default bind
@@ -1273,3 +1274,13 @@ the only memory the next session has. Update it every commit.
   and parked `M6=39 gated=8 harness=36`; `cargo test --workspace` passes. Next
   target is the M6 image bucket, starting with `bad_skin.riv` unless focused
   classification finds another smaller slice.
+- 2026-07-06: [M6] Promoted `clipping_and_draw_order.riv` by admitting simple
+  clipped/draw-target image artboards and by treating `ArtboardComponentList`
+  sorted drawable entries as metadata-only for draw-command generation, so
+  they no longer flush pending clipping shapes into empty clip operations.
+  Focused streams for the promoted fixture and component-list guard fixtures
+  are exact; full `make golden-compare` reports `exact=213`,
+  `exact-segments=534`, `diverges=0`, `unsupported-feature=82`, `not-yet=0`,
+  and parked `M6=38 gated=8 harness=36`; `cargo test --workspace` passes. Next
+  target remains the M6 image bucket, starting with `bad_skin.riv` unless
+  focused classification finds another smaller slice.

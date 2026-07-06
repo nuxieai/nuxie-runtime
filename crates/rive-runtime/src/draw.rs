@@ -627,6 +627,10 @@ impl ArtboardInstance {
                     return false;
                 }
 
+                if drawable.type_name == "ArtboardComponentList" {
+                    return false;
+                }
+
                 if drawable.type_name == "Image" {
                     return self
                         .resolved_image_asset_global(

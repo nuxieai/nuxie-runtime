@@ -1958,12 +1958,20 @@ fn simple_static_image_artboard_tree_supported_entered(
             object.type_name,
             Some(
                 "Artboard"
+                    | "ArtboardComponentList"
+                    | "ClippingShape"
                     | "CubicEaseInterpolator"
+                    | "CustomPropertyGroup"
+                    | "CustomPropertyNumber"
+                    | "DrawRules"
+                    | "DrawTarget"
+                    | "Ellipse"
                     | "Fill"
                     | "Image"
                     | "LayoutComponent"
                     | "LayoutComponentStyle"
                     | "NestedArtboard"
+                    | "Node"
                     | "NSlicer"
                     | "AxisX"
                     | "AxisY"
@@ -1987,7 +1995,7 @@ fn simple_static_image_artboard_tree_supported_entered(
             container.type_name.as_ref(),
             "Artboard" | "LayoutComponent" | "Shape" | "TextStylePaint"
         ) && container.paints.iter().all(|paint| {
-            root_layout_background_paint_supported(paint)
+            simple_static_image_paint_supported(paint)
                 && (container.type_name != "LayoutComponent"
                     || paint.path_kind == Some(ShapePaintPathKind::LocalClockwise))
         })
@@ -2034,6 +2042,13 @@ fn simple_static_image_artboard_tree_supported_entered(
             }
             _ => true,
         })
+}
+
+fn simple_static_image_paint_supported(paint: &rive_graph::ShapePaintNode) -> bool {
+    if !paint.is_visible {
+        return paint.feather.is_none() && paint.effects.is_empty();
+    }
+    root_layout_background_paint_supported(paint)
 }
 
 fn frame_dimension(value: f32) -> u32 {

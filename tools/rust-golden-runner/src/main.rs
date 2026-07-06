@@ -896,6 +896,20 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
+    if let Some(global_id) = unsupported_mesh_image_global(graph, artboard) {
+        bail!("unsupported: mesh-images in Rust golden runner (global {global_id})");
+    }
+
+    if let Some(global_id) = unsupported_contour_mesh_metadata_global(graph, artboard) {
+        bail!("unsupported: contour-mesh-metadata in Rust golden runner (global {global_id})");
+    }
+
+    if let Some(global_id) =
+        unsupported_selected_root_image_order_global(graph, artboard, !is_nested_child)
+    {
+        bail!("unsupported: selected-root-image-order in Rust golden runner (global {global_id})");
+    }
+
     if let Some(global_id) = unsupported_image_global(runtime, graph, artboard, !is_nested_child) {
         bail!("unsupported: images in Rust golden runner (global {global_id})");
     }
@@ -2039,27 +2053,69 @@ fn runtime_has_type(runtime: &RuntimeFile, type_name: &str) -> bool {
         .any(|object| object.type_name == type_name)
 }
 
+fn first_image_or_asset_global(graph: &GraphFile, artboard: &ArtboardGraph) -> Option<u32> {
+    artboard
+        .local_objects
+        .iter()
+        .find(|object| object.type_name == Some("Image"))
+        .map(|object| object.global_id)
+        .or_else(|| {
+            graph
+                .file_assets
+                .iter()
+                .find(|asset| asset.type_name == "ImageAsset")
+                .map(|asset| asset.global_id)
+        })
+}
+
+fn unsupported_mesh_image_global(graph: &GraphFile, artboard: &ArtboardGraph) -> Option<u32> {
+    first_image_or_asset_global(graph, artboard)?;
+    artboard.meshes.first().map(|mesh| mesh.global_id)
+}
+
+fn unsupported_contour_mesh_metadata_global(
+    graph: &GraphFile,
+    artboard: &ArtboardGraph,
+) -> Option<u32> {
+    first_image_or_asset_global(graph, artboard)?;
+    artboard
+        .local_objects
+        .iter()
+        .find(|object| object.type_name == Some("ContourMeshVertex"))
+        .map(|object| object.global_id)
+}
+
+fn unsupported_selected_root_image_order_global(
+    graph: &GraphFile,
+    artboard: &ArtboardGraph,
+    apply_selected_root_fence: bool,
+) -> Option<u32> {
+    if !apply_selected_root_fence || artboard_has_direct_image_drawable(artboard) {
+        return None;
+    }
+
+    let image_global = first_image_or_asset_global(graph, artboard)?;
+    artboard
+        .local_objects
+        .iter()
+        .any(|object| {
+            matches!(
+                object.type_name,
+                Some("LinearGradient" | "RadialGradient" | "Skin")
+            )
+        })
+        .then_some(image_global)
+}
+
 fn unsupported_image_global(
     runtime: &RuntimeFile,
     graph: &GraphFile,
     artboard: &ArtboardGraph,
     apply_selected_root_fence: bool,
 ) -> Option<u32> {
-    let first_image_global = artboard
-        .local_objects
-        .iter()
-        .find(|object| object.type_name == Some("Image"))
-        .map(|object| object.global_id);
-    let first_image_asset_global = graph
-        .file_assets
-        .iter()
-        .find(|asset| asset.type_name == "ImageAsset")
-        .map(|asset| asset.global_id);
-    if first_image_global.is_none() && first_image_asset_global.is_none() {
-        return None;
-    }
+    let image_global = first_image_or_asset_global(graph, artboard)?;
     (!simple_static_image_artboard_supported(runtime, graph, artboard, apply_selected_root_fence))
-        .then_some(first_image_global.or(first_image_asset_global).unwrap_or(0))
+        .then_some(image_global)
 }
 
 fn simple_static_image_artboard_supported(

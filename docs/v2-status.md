@@ -24,13 +24,16 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue one of the largest remaining M6 buckets. `feather` and
-   `rust-runner-unsupported:images` are tied at 5 M6 entries each; start with
-   `bad_skin.riv` in the image bucket unless focused classification finds a
-   smaller first gate. The true image queue is:
-   `bad_skin.riv`, `bullet_man.riv`, `jellyfish_test.riv`,
-   `spotify_kids_demo.riv`, and `tape.riv`. Other M6 queues are
-   `feather` (8 total: M6=5, gated=3),
+1. Continue the largest remaining M6 bucket, `feather` (8 total: M6=5,
+   gated=3): `car_widgets_v01.riv`, `echo_show_demo.riv`,
+   `feather_render_test.riv`, `hunter_x_demo.riv`, and `rewards_demo.riv`.
+   The former generic image queue is now split into
+   `rust-runner-unsupported:selected-root-image-order` (2:
+   `bullet_man.riv`, `spotify_kids_demo.riv`),
+   `rust-runner-unsupported:mesh-images` (2:
+   `jellyfish_test.riv`, `tape.riv`), and
+   `rust-runner-unsupported:contour-mesh-metadata` (1: `bad_skin.riv`).
+   Other M6 queues are
    `rust-runner-unsupported:scroll-constraints` (4:
    `component_list_virtualized.riv`, `draw_index_list.riv`,
    `scroll_snap.riv`, `virtualized_artboard_databound_children.riv`),
@@ -148,7 +151,8 @@ the only memory the next session has. Update it every commit.
   later diagnostics.
   Golden runner sample lists now advance by sorted absolute-time deltas and
   reuse render paths across samples; no N-slice image layout, mesh image
-  drawing, contour-mesh image files, remaining text
+  drawing, selected-root image paint/preallocation ordering,
+  contour-mesh image files, remaining text
   layout/editing, live data-bound nested host controls/artboard swaps, nested
   layout/leaf, scroll constraints, or layout-backed/virtualized component-list
   instancing.
@@ -1440,3 +1444,14 @@ the only memory the next session has. Update it every commit.
   `M6=28 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
   one of the tied largest M6 buckets, image or feather, starting with
   `bad_skin.riv` unless focused classification finds a smaller first gate.
+- 2026-07-06: [M6] Split the remaining generic image gate into first-blocker
+  diagnostics. `bad_skin.riv` now verifies as
+  `rust-runner-unsupported:contour-mesh-metadata`; `jellyfish_test.riv` and
+  `tape.riv` verify as `rust-runner-unsupported:mesh-images`;
+  `bullet_man.riv` and `spotify_kids_demo.riv` verify as
+  `rust-runner-unsupported:selected-root-image-order`. Full
+  `make golden-compare` reports `exact=223`, `exact-segments=544`,
+  `diverges=0`, `unsupported-feature=72`, `not-yet=0`, and parked
+  `M6=28 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
+  the largest M6 bucket, `feather`, starting with `car_widgets_v01.riv`
+  unless focused classification finds a smaller first gate.

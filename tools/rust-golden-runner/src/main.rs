@@ -817,8 +817,9 @@ fn ensure_static_draw_supported_for_artboard(
                     data_bind.target_type_name
                 );
             }
+            let unsupported_feature = nested_child_data_bind_unsupported_feature(data_bind);
             bail!(
-                "unsupported: data-binding-nested-child in Rust golden runner (data bind global {} target {:?})",
+                "unsupported: {unsupported_feature} in Rust golden runner (data bind global {} target {:?})",
                 data_bind.global_id,
                 data_bind.target_type_name
             );
@@ -1841,6 +1842,27 @@ fn nested_child_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> boo
             // ImageBase::assetIdPropertyKey in C++ generated/shapes/image_base.hpp.
             && data_bind.property_key == 206
             && data_bind.converter_global.is_none())
+}
+
+fn nested_child_data_bind_unsupported_feature(
+    data_bind: &rive_graph::DataBindNode,
+) -> &'static str {
+    match (data_bind.target_type_name, data_bind.property_key) {
+        (Some("TrimPath"), 114 | 115 | 116) => "nested-trim-path-data-bind",
+        (Some("Artboard"), 13 | 14) => "nested-artboard-root-transform",
+        (Some("Artboard"), 196) => "nested-layout-clip-data-bind",
+        (
+            Some(
+                "ViewModelInstanceBoolean"
+                | "ViewModelInstanceColor"
+                | "ViewModelInstanceString"
+                | "ViewModelInstanceEnum"
+                | "ViewModelInstanceNumber",
+            ),
+            555 | 560 | 561 | 575 | 593,
+        ) => "nested-stateful-view-model-property",
+        _ => "data-binding-nested-child",
+    }
 }
 
 fn solid_color_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> bool {

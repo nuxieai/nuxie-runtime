@@ -24,17 +24,14 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Pick the largest remaining M6 bucket,
-   `rust-runner-unsupported:data-binding-nested-child` (4:
-   `db_health_tracker.riv`, `nested_hug.riv`, `stateful_multi_property.riv`,
-   `stateful_nested.riv`). Start from the stateful Artboard/text transform
-   drift exposed by the focused compare below.
-2. Other M6 queues are
+1. Pick one of the tied largest remaining M6 buckets:
    `rust-runner-unsupported:selected-root-image-order` (3:
    `bullet_man.riv`, `car_widgets_v01.riv`, `spotify_kids_demo.riv`),
-   `rust-runner-unsupported:text` (3: `echo_show_demo.riv`,
-   `hunter_x_demo.riv`, `superbowl.riv`),
-   `rust-runner-unsupported:mesh-images` (2:
+   or `rust-runner-unsupported:text` (3: `echo_show_demo.riv`,
+   `hunter_x_demo.riv`, `superbowl.riv`). Prefer the image-order bucket first
+   if it stays a finite paint/preallocation ordering issue; otherwise return
+   to the text bucket because it is central to M6.
+2. Other M6 queues are `rust-runner-unsupported:mesh-images` (2:
    `jellyfish_test.riv`, `tape.riv`), and
    `rust-runner-unsupported:contour-mesh-metadata` (1: `bad_skin.riv`),
    `n-slice` (1 M6 plus 1 gated), `feather-inner-multipaint` (1 M6 plus
@@ -42,7 +39,12 @@ the only memory the next session has. Update it every commit.
    `nested-feather-paints` (1 gated), `scripted-path-effects` (1 gated),
    `scripted-data-context` (1), `focus-data` (1: `focus_traversal.riv`),
    `layout-component-paint` (1: `text_input.riv`), and
-   `viewmodel-asset-conditions` (1).
+   `viewmodel-asset-conditions` (1). The former
+   `data-binding-nested-child` queue is now four one-file diagnostics:
+   `nested-trim-path-data-bind` (`db_health_tracker.riv`),
+   `nested-artboard-root-transform` (`nested_hug.riv`),
+   `nested-layout-clip-data-bind` (`stateful_multi_property.riv`), and
+   `nested-stateful-view-model-property` (`stateful_nested.riv`).
 3. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
@@ -1520,3 +1522,18 @@ the only memory the next session has. Update it every commit.
   `M6=19 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
   the largest remaining M6 bucket,
   `rust-runner-unsupported:data-binding-nested-child`.
+- 2026-07-06: [M6] Split the remaining
+  `rust-runner-unsupported:data-binding-nested-child` bucket into four
+  sharper one-file diagnostics after focused probes showed that temporary
+  broad admissions render but still drift in nested layout transforms/clips.
+  `db_health_tracker.riv` now verifies as
+  `rust-runner-unsupported:nested-trim-path-data-bind`, `nested_hug.riv` as
+  `rust-runner-unsupported:nested-artboard-root-transform`,
+  `stateful_multi_property.riv` as
+  `rust-runner-unsupported:nested-layout-clip-data-bind`, and
+  `stateful_nested.riv` as
+  `rust-runner-unsupported:nested-stateful-view-model-property`. Full
+  `make golden-compare` reports `exact=232`, `exact-segments=553`,
+  `diverges=0`, `unsupported-feature=63`, `not-yet=0`, and parked
+  `M6=19 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
+  one of the tied largest M6 buckets, `selected-root-image-order` or `text`.

@@ -8,7 +8,7 @@ the only memory the next session has. Update it every commit.
 - Exact-status segments (file × sample): 562 across 241 files (strict
   exact=555/234; tolerant=7/7; structural=0/0)
 - Current compare: `make golden-compare` reports diverges=0, unsupported-feature=54, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=13 gated=5 harness=36
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=12 gated=6 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes**
 
 ## Milestones
@@ -25,15 +25,14 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. The active `not-yet` queue is empty. Continue M6 by picking the highest-value
-   remaining unsupported/gated queue that is not scripting/audio:
-   start with `scripted-data-context` only if it can be made a loud scripting
-   gate, otherwise pick one of `focus-data` (`focus_traversal.riv`),
-   `viewmodel-asset-conditions`, `text-joystick-data-bind`
-   (`echo_show_demo.riv`), `nested-artboard-layout` (`superbowl.riv`), or
+   remaining unsupported queue that is not scripting/audio: start with
+   `focus-data` (`focus_traversal.riv`), `viewmodel-asset-conditions`,
+   `text-joystick-data-bind` (`echo_show_demo.riv`),
+   `nested-artboard-layout` (`superbowl.riv`), or
    `selected-root-skinned-clip-path` (`bullet_man.riv`,
    `spotify_kids_demo.riv`).
-2. Other parked one-file M6 queues include `scripted-data-context`,
-   `focus-data` (`focus_traversal.riv`), `viewmodel-asset-conditions`,
+2. Other parked one-file M6 queues include `focus-data`
+   (`focus_traversal.riv`), `viewmodel-asset-conditions`,
    `text-joystick-data-bind` (`echo_show_demo.riv`),
    `nested-artboard-layout` (`superbowl.riv`), and
    `selected-root-skinned-clip-path` (`bullet_man.riv`,
@@ -46,7 +45,8 @@ the only memory the next session has. Update it every commit.
    `nested-stateful-view-model-property` (`stateful_nested.riv`). The
    `rewards_demo.riv` file now exposes the one-file
    `nested-layout-size-data-bind` diagnostic. Gated one-file diagnostics
-   include `scripted-transition-condition` (2 gated),
+   include `scripted-data-context` (`scripted_data_context.riv`),
+   `scripted-transition-condition` (2 gated),
    `scripted-path-effects` (1 gated), and `text-polygon-sibling`
    (`bankcard.riv`). Keep these parked queues as explicit unsupported/gated
    work until a focused slice can either promote a file or replace the guard
@@ -429,6 +429,17 @@ the only memory the next session has. Update it every commit.
   `M6=13 gated=5 harness=36`; `cargo test --workspace` passes. Next target is
   one of the remaining one-file M6 queues: `focus-data`,
   `viewmodel-asset-conditions`, `text-joystick-data-bind`,
+  `nested-artboard-layout`, `selected-root-skinned-clip-path`, or the nested
+  data-bind diagnostics.
+- 2026-07-06: [M6] Moved `scripted_data_context.riv` from M6 to gated after
+  confirming the Rust runner already emits the loud
+  `unsupported: scripted-data-context` diagnostic for the selected artboard's
+  `ScriptedDrawable` + nested-view-model `DataBindContext` text surface. This
+  is blocked on the #V2-7 Luau scripting lane, not layout/text runtime parity.
+  Metrics are intentionally unchanged at `exact=241`,
+  `exact-segments=562`, `diverges=0`, `unsupported-feature=54`,
+  `not-yet=0`; parked becomes `M6=12 gated=6 harness=36`. Next target is
+  `focus-data`, `viewmodel-asset-conditions`, `text-joystick-data-bind`,
   `nested-artboard-layout`, `selected-root-skinned-clip-path`, or the nested
   data-bind diagnostics.
 - 2026-07-02: `rive-runtime` owns static draw emission through

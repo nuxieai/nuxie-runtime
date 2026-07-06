@@ -5,10 +5,10 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 545 across 224 files (strict
-  exact=542/221; tolerant=3/3; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=71, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=27 gated=8 harness=36
+- Exact-status segments (file × sample): 546 across 225 files (strict
+  exact=543/222; tolerant=3/3; structural=0/0)
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=70, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=26 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -24,16 +24,16 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue one of the tied largest M6 buckets:
-   `rust-runner-unsupported:scroll-constraints` (4:
-   `component_list_virtualized.riv`, `draw_index_list.riv`,
-   `scroll_snap.riv`, `virtualized_artboard_databound_children.riv`) or
+1. Pick the largest remaining M6 bucket:
    `rust-runner-unsupported:data-binding-nested-stateful-view-model` (4:
    `focus_traversal.riv`, `stateful_keyed_trigger.riv`,
-   `stateful_multi_property.riv`, `stateful_nested.riv`). Prefer
-   `scroll-constraints` first because it continues the active M6 layout/runtime
-   slice and already has a partial passive implementation.
+   `stateful_multi_property.riv`, `stateful_nested.riv`). This advances the
+   remaining nested layout/data-binding runtime slice now that the scroll
+   bucket is no longer largest.
 2. Other M6 queues are
+   `rust-runner-unsupported:scroll-constraints` (3:
+   `component_list_virtualized.riv`, `draw_index_list.riv`,
+   `virtualized_artboard_databound_children.riv`),
    `rust-runner-unsupported:selected-root-image-order` (3:
    `bullet_man.riv`, `car_widgets_v01.riv`, `spotify_kids_demo.riv`),
    `rust-runner-unsupported:data-binding-nested-child` (3:
@@ -201,17 +201,18 @@ the only memory the next session has. Update it every commit.
   parked behind M6 layout diagnostics.
 - Passive sample-0 `ScrollConstraint` files with zero authored offset,
   percent, and index values, no input events, no state-machine listener target,
-  no snap/infinite behavior, registered layout-provider children, and a
-  coherent Taffy snapshot are admitted by the Rust runner. Empty virtualized
-  `ArtboardComponentList` layout providers are also admitted when they have no
-  children and no map rules, because they create no virtualized instances at
-  sample 0. Remaining scroll-constraint corpus files stay parked behind M6
+  registered layout-provider children, and a coherent Taffy snapshot are
+  admitted by the Rust runner, including at-rest snap metadata. Empty
+  virtualized `ArtboardComponentList` layout providers are also admitted when
+  they have no children and no map rules, because they create no virtualized
+  instances at sample 0. `scroll_snap.riv` is exact after applying the
+  accumulated Taffy layout bounds through artboard-origin-adjusted layout world
+  transforms. Remaining scroll-constraint corpus files stay parked behind M6
   layout/runtime support via `rust-runner-unsupported:scroll-constraints`;
-  `scroll_snap.riv` joined this queue after its stale static-text sibling
-  diagnostic was corrected. C++ `src/constraints/scrolling/scroll_constraint.cpp`
-  also reads `LayoutComponent` dimensions, layout-provider child bounds,
-  physics state, and non-empty component-list virtualization, so dynamic scroll
-  remains outside the passive initial slice.
+  C++ `src/constraints/scrolling/scroll_constraint.cpp` also reads
+  `LayoutComponent` dimensions, layout-provider child bounds, physics state,
+  infinite scroll state, and non-empty component-list virtualization, so
+  dynamic/virtualized scroll remains outside the passive initial slice.
 - Per-file parked reasons now live in `corpus.toml`: each gated entry
   carries `milestone = "M3|M4|M5|M6|gated|harness"` plus its diagnostic
   feature tags (`rust-runner-unsupported:*`, `cpp-runner-crash`,
@@ -1472,3 +1473,12 @@ the only memory the next session has. Update it every commit.
   `rust-runner-unsupported:scroll-constraints` bucket, starting with
   `component_list_virtualized.riv` unless focused classification finds a
   smaller first gate.
+- 2026-07-06: [M6] Promoted `scroll_snap.riv` by letting passive at-rest snap
+  metadata through the scroll gate and applying accumulated Taffy layout
+  bounds with artboard-origin-adjusted layout world transforms, matching C++
+  `LayoutComponent::update` placement for nested layout children under the
+  scroll viewport. Full `make golden-compare` reports `exact=225`,
+  `exact-segments=546`, `diverges=0`, `unsupported-feature=70`,
+  `not-yet=0`, and parked `M6=26 gated=8 harness=36`; `cargo test
+  --workspace` passes. Next target is the largest remaining M6 bucket,
+  `rust-runner-unsupported:data-binding-nested-stateful-view-model`.

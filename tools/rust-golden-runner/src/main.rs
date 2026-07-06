@@ -1190,7 +1190,6 @@ fn passive_initial_scroll_constraint_supported(
         || scroll.double_property("scrollPercentX").unwrap_or(0.0) != 0.0
         || scroll.double_property("scrollPercentY").unwrap_or(0.0) != 0.0
         || scroll.double_property("scrollIndex").unwrap_or(0.0) != 0.0
-        || scroll.bool_property("snap").unwrap_or(false)
         || (virtualize
             && !passive_virtualized_empty_component_lists_supported(artboard, scroll_local))
         || scroll.bool_property("infinite").unwrap_or(false)

@@ -1051,17 +1051,12 @@ impl ArtboardInstance {
             .and_then(|bounds| bounds.get(&layout_local).copied())
             .or_else(|| self.runtime_supported_layout_component_bounds(layout_local, graph));
         if let Some(bounds) = bounds {
-            let mut x = bounds.x;
-            let mut y = bounds.y;
-            if self
-                .component(layout_local)
-                .and_then(|component| component.parent_local)
-                .and_then(|parent_local| self.component(parent_local))
-                .is_some_and(|parent| parent.type_name == "Artboard")
-            {
-                x -= self.width * self.origin_x;
-                y -= self.height * self.origin_y;
-            }
+            // Rust layout bounds are accumulated into artboard space when we
+            // collect them from Taffy/fallback layout passes. C++ stores Yoga's
+            // left/top parent-local and composes through parent world
+            // transforms, so apply the artboard origin exactly once here.
+            let x = bounds.x - self.width * self.origin_x;
+            let y = bounds.y - self.height * self.origin_y;
             return Mat2D([1.0, 0.0, 0.0, 1.0, x, y]);
         }
         self.component(layout_local)

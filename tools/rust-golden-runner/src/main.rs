@@ -1929,12 +1929,21 @@ fn simple_static_image_artboard_tree_supported_entered(
     if !artboard.local_objects.iter().all(|object| {
         matches!(
             object.type_name,
-            Some("Artboard" | "Image" | "NestedArtboard")
+            Some("Artboard" | "Fill" | "Image" | "NestedArtboard" | "SolidColor")
         )
     }) {
         return false;
     }
     if !artboard.meshes.is_empty() || !artboard.n_slicer_details.is_empty() {
+        return false;
+    }
+    if !artboard.shape_paint_containers.iter().all(|container| {
+        container.type_name == "Artboard"
+            && container
+                .paints
+                .iter()
+                .all(root_layout_background_paint_supported)
+    }) {
         return false;
     }
 
@@ -1945,12 +1954,6 @@ fn simple_static_image_artboard_tree_supported_entered(
         .map(|asset| asset.global_id)
         .collect::<BTreeSet<_>>();
     if image_asset_globals.is_empty() {
-        return false;
-    }
-    if image_asset_globals
-        .iter()
-        .any(|asset_global| embedded_file_asset_bytes(runtime, *asset_global).is_none())
-    {
         return false;
     }
 
@@ -1981,31 +1984,6 @@ fn simple_static_image_artboard_tree_supported_entered(
             }
             _ => true,
         })
-}
-
-fn embedded_file_asset_bytes(runtime: &RuntimeFile, asset_global: u32) -> Option<&[u8]> {
-    let file_asset_globals = runtime
-        .file_assets()
-        .into_iter()
-        .map(|asset| asset.id)
-        .collect::<BTreeSet<_>>();
-    let mut after_asset = false;
-    for object in runtime.objects.iter().flatten() {
-        if object.id == asset_global {
-            after_asset = true;
-            continue;
-        }
-        if !after_asset {
-            continue;
-        }
-        if file_asset_globals.contains(&object.id) {
-            return None;
-        }
-        if object.type_name == "FileAssetContents" {
-            return object.bytes_property("bytes");
-        }
-    }
-    None
 }
 
 fn frame_dimension(value: f32) -> u32 {

@@ -4019,9 +4019,10 @@ pub fn preallocate_render_paint_cache_for_artboard_tree(
     factory: &mut dyn RenderFactory,
 ) -> RuntimeRenderPaintCache {
     let _source_artboard_paints = preallocate_render_paint_batch(runtime, factory);
+    let images = predecode_render_image_batch(runtime, factory);
     let mut cache =
         preallocate_artboard_render_paint_tree_batch(runtime, graph, artboards, factory);
-    cache.images = predecode_render_image_batch(runtime, factory);
+    cache.images = images;
     cache
 }
 

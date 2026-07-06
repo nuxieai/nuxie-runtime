@@ -5,10 +5,10 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 519 across 198 files (strict
-  exact=516/195; tolerant=3/3; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=97, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=53 gated=8 harness=36
+- Exact-status segments (file × sample): 521 across 200 files (strict
+  exact=518/197; tolerant=3/3; structural=0/0)
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=95, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=51 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -24,11 +24,11 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue the M6 image bucket with `hosted_image_file.riv` and
-   `in_band_asset.riv`, the next-smallest top-level
-   `rust-runner-unsupported:images` entries. They should separate the hosted
-   no-loader early-return path from an in-band image plus artboard
-   background/backboard siblings.
+1. Continue the M6 image bucket with `walle.riv` and
+   `image_fit_alignment_3.riv`, the next-smallest
+   `rust-runner-unsupported:images` entries. They should separate another
+   hosted no-loader image-only fixture from image fit/alignment under a
+   `LayoutComponent`.
 2. Generic `rust-runner-unsupported:text` and the sharper
    `text-vertical-trim` gate are empty in the current corpus. Do not reopen
    text unless a newly added corpus entry exposes a first text diagnostic.
@@ -1134,3 +1134,15 @@ the only memory the next session has. Update it every commit.
   and parked `M6=53 gated=8 harness=36`; `cargo test --workspace` passes.
   Next target remains the top-level image pair: `hosted_image_file.riv` and
   `in_band_asset.riv`.
+- 2026-07-06: [M6] Promoted `hosted_image_file.riv` and
+  `in_band_asset.riv` by admitting simple image artboards with root background
+  paints and hosted image assets that have no decoded `RenderImage`, matching
+  C++ `Image::draw`'s early return before save. Image predecode now runs after
+  source-file paint allocation but before selected-artboard clone paint
+  allocation, matching C++ paint/decode ID order for in-band image contents.
+  Focused streams for both fixtures plus `custom_image_name.riv`,
+  `library_with_image.riv`, and `double_library_with_image.riv` are
+  byte-identical. Full `make golden-compare` reports `exact=200`,
+  `exact-segments=521`, `diverges=0`, `unsupported-feature=95`, `not-yet=0`,
+  and parked `M6=51 gated=8 harness=36`; `cargo test --workspace` passes.
+  Next target is `walle.riv` and `image_fit_alignment_3.riv`.

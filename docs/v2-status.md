@@ -25,16 +25,16 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the largest remaining M6 bucket,
-   `rust-runner-unsupported:images` (10 entries), starting with
-   `bad_skin.riv` unless focused classification finds a smaller first gate.
-   The passive initial scroll slice promoted five files; the remaining
-   `rust-runner-unsupported:scroll-constraints` queue is now 7 entries, with
-   `component_list_child_origin.riv` as the first scroll target if choosing to
-   keep shrinking scroll before returning to images. Other M6 queues are
-   `feather` (5 total: M6=2, gated=3),
+   `rust-runner-unsupported:scroll-constraints` (7 entries), starting with
+   `component_list_child_origin.riv` unless focused classification finds a
+   smaller first gate. The stale `rust-runner-unsupported:images` bucket is now
+   6 entries after the `Feather`/`NSlicedNode` diagnostic-priority pass:
+   `bad_skin.riv`, `bullet_man.riv`, `jellyfish_test.riv`,
+   `spotify_kids_demo.riv`, `superbowl.riv`, and `tape.riv`. Other M6 queues
+   are `feather` (8 total: M6=5, gated=3),
    `data-binding-nested-stateful-view-model` (4), `focus-data` (3),
    `data-binding-nested-child` (2), `scripted-transition-condition` (2 gated),
-   `n-slice` (1 gated), `scripted-path-effects` (1 gated),
+   `n-slice` (2 total: M6=1, gated=1), `scripted-path-effects` (1 gated),
    `scripted-data-context` (1), and `viewmodel-asset-conditions` (1).
 2. Generic `rust-runner-unsupported:text` and the sharper
    `text-vertical-trim` gate are empty in the current corpus. Do not reopen
@@ -1398,3 +1398,17 @@ the only memory the next session has. Update it every commit.
   `M6=30 gated=8 harness=36`; `cargo test --workspace` passes. Next target
   remains the M6 image bucket, starting with `bad_skin.riv` unless focused
   classification finds another smaller first gate.
+- 2026-07-06: [M6] Reclassified stale image diagnostics by letting
+  `Feather`/`NSlicedNode` gates fire before the broad image fence.
+  `car_widgets_v01.riv`, `echo_show_demo.riv`, and
+  `feather_render_test.riv` now verify as `rust-runner-unsupported:feather`;
+  `local_bounds.riv` verifies as `rust-runner-unsupported:n-slice`. The image
+  queue is down to six true image-admission/mesh/paint-order candidates:
+  `bad_skin.riv`, `bullet_man.riv`, `jellyfish_test.riv`,
+  `spotify_kids_demo.riv`, `superbowl.riv`, and `tape.riv`. Full
+  `make golden-compare` reports `exact=221`, `exact-segments=542`,
+  `diverges=0`, `unsupported-feature=74`, `not-yet=0`, and parked
+  `M6=30 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
+  the largest M6 bucket, `rust-runner-unsupported:scroll-constraints`, starting
+  with `component_list_child_origin.riv` unless focused classification finds a
+  smaller first gate.

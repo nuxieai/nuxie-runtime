@@ -874,6 +874,28 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
+    if let Some(feather) = artboard
+        .local_objects
+        .iter()
+        .find(|object| object.type_name == Some("Feather"))
+    {
+        bail!(
+            "unsupported: feather in Rust golden runner (global {})",
+            feather.global_id
+        );
+    }
+
+    if let Some(n_sliced_node) = artboard
+        .local_objects
+        .iter()
+        .find(|object| object.type_name == Some("NSlicedNode"))
+    {
+        bail!(
+            "unsupported: n-slice in Rust golden runner (global {})",
+            n_sliced_node.global_id
+        );
+    }
+
     if let Some(global_id) = unsupported_image_global(runtime, graph, artboard, !is_nested_child) {
         bail!("unsupported: images in Rust golden runner (global {global_id})");
     }
@@ -888,17 +910,6 @@ fn ensure_static_draw_supported_for_artboard(
         bail!(
             "unsupported: layout-component-paint in Rust golden runner (global {})",
             container.global_id
-        );
-    }
-
-    if let Some(feather) = artboard
-        .local_objects
-        .iter()
-        .find(|object| object.type_name == Some("Feather"))
-    {
-        bail!(
-            "unsupported: feather in Rust golden runner (global {})",
-            feather.global_id
         );
     }
 
@@ -924,17 +935,6 @@ fn ensure_static_draw_supported_for_artboard(
         bail!(
             "unsupported: {feature} in Rust golden runner (global {}, {reason})",
             text.global_id
-        );
-    }
-
-    if let Some(n_sliced_node) = artboard
-        .local_objects
-        .iter()
-        .find(|object| object.type_name == Some("NSlicedNode"))
-    {
-        bail!(
-            "unsupported: n-slice in Rust golden runner (global {})",
-            n_sliced_node.global_id
         );
     }
 

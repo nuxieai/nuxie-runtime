@@ -4,10 +4,21 @@
 
 #include "rive/animation/state_machine_instance.hpp"
 #include "rive/artboard.hpp"
+#include "rive/assets/audio_asset.hpp"
+#include "rive/assets/file_asset_contents.hpp"
+#include "rive/assets/font_asset.hpp"
+#include "rive/assets/image_asset.hpp"
+#include "rive/core/binary_reader.hpp"
 #include "rive/file.hpp"
+#include "rive/generated/assets/blob_asset_base.hpp"
+#include "rive/generated/assets/manifest_asset_base.hpp"
+#include "rive/generated/assets/script_asset_base.hpp"
+#include "rive/generated/assets/shader_asset_base.hpp"
+#include "rive/generated/core_registry.hpp"
 #include "rive/math/raw_path.hpp"
 #include "rive/math/vec2d.hpp"
 #include "rive/refcnt.hpp"
+#include "rive/runtime_header.hpp"
 #include "rive/scene.hpp"
 #include "rive/static_scene.hpp"
 
@@ -15,6 +26,7 @@
 #include <cerrno>
 #include <cmath>
 #include <cctype>
+#include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
@@ -375,6 +387,163 @@ std::vector<uint8_t> readFile(const std::string& path)
     return std::vector<uint8_t>(std::istreambuf_iterator<char>(stream), {});
 }
 
+// Byte-exact mirror of the static readRuntimeObject in
+// $RIVE_RUNTIME_DIR/src/file.cpp, used to walk the object stream without
+// importing it. Consumes exactly the bytes File::read would consume for one
+// object.
+rive::Core* walkRuntimeObject(rive::BinaryReader& reader,
+                              const rive::RuntimeHeader& header)
+{
+    auto coreObjectKey = reader.readVarUintAs<int>();
+    auto object = rive::CoreRegistry::makeCoreInstance(coreObjectKey);
+    while (true)
+    {
+        auto propertyKey = reader.readVarUintAs<uint16_t>();
+        if (propertyKey == 0)
+        {
+            break;
+        }
+        if (reader.hasError())
+        {
+            delete object;
+            return nullptr;
+        }
+        if (object == nullptr || !object->deserialize(propertyKey, reader))
+        {
+            int id = rive::CoreRegistry::propertyFieldId(propertyKey);
+            if (id == -1)
+            {
+                id = header.propertyFieldId(propertyKey);
+            }
+            if (id == -1)
+            {
+                delete object;
+                return nullptr;
+            }
+            switch (id)
+            {
+                case rive::CoreUintType::id:
+                    rive::CoreUintType::deserialize(reader);
+                    break;
+                case rive::CoreStringType::id:
+                    rive::CoreStringType::deserialize(reader);
+                    break;
+                case rive::CoreDoubleType::id:
+                    rive::CoreDoubleType::deserialize(reader);
+                    break;
+                case rive::CoreColorType::id:
+                    rive::CoreColorType::deserialize(reader);
+                    break;
+            }
+        }
+    }
+    return object;
+}
+
+// The reference librive we link is built without WITH_RIVE_SCRIPTING. In that
+// configuration File::read pushes no FileAssetImporter for ScriptAsset /
+// ShaderAsset objects, so an in-band FileAssetContents that belongs to a
+// script asset is routed to the previous file asset's importer instead. When
+// that importer already holds its own in-band contents, the debug build
+// aborts on assert(!m_content) in FileAssetImporter::onFileAssetContents
+// before any stream is produced.
+//
+// To keep those corpus files runnable we pre-strip exactly the
+// FileAssetContents objects that would trip that assert, by simulating the
+// same import-stack routing File::read performs. Files that import without
+// aborting today are untouched: any object we would strip is one that aborts
+// the process, so a currently-passing file can never contain one.
+std::vector<uint8_t> stripAbortingAssetContents(std::vector<uint8_t> bytes)
+{
+    rive::BinaryReader reader(
+        rive::Span<const uint8_t>(bytes.data(), bytes.size()));
+    rive::RuntimeHeader header;
+    if (!rive::RuntimeHeader::read(reader, header) ||
+        header.majorVersion() != rive::File::majorVersion)
+    {
+        // Malformed or unsupported: let File::import produce its usual error.
+        return bytes;
+    }
+
+    struct ByteRange
+    {
+        size_t begin;
+        size_t end;
+    };
+    std::vector<ByteRange> drops;
+
+    const uint8_t* base = bytes.data();
+    // Mirrors the FileAssetImporter the import stack would hold: whether one
+    // exists, and whether onFileAssetContents was already called on it.
+    bool importerExists = false;
+    bool importerHasContent = false;
+    while (!reader.reachedEnd())
+    {
+        const uint8_t* objectStart = reader.position();
+        rive::Core* object = walkRuntimeObject(reader, header);
+        if (reader.hasError())
+        {
+            // Unreadable tail: keep the original bytes untouched.
+            delete object;
+            return bytes;
+        }
+        const uint8_t* objectEnd = reader.position();
+        if (object == nullptr)
+        {
+            continue;
+        }
+        switch (object->coreType())
+        {
+            // The asset types File::read pushes a FileAssetImporter for.
+            case rive::ImageAsset::typeKey:
+            case rive::FontAsset::typeKey:
+            case rive::AudioAsset::typeKey:
+            case rive::BlobAssetBase::typeKey:
+            case rive::ManifestAssetBase::typeKey:
+                importerExists = true;
+                importerHasContent = false;
+                break;
+            // No importer is pushed for these without WITH_RIVE_SCRIPTING.
+            case rive::ScriptAssetBase::typeKey:
+            case rive::ShaderAssetBase::typeKey:
+                break;
+            case rive::FileAssetContents::typeKey:
+                if (importerExists && importerHasContent)
+                {
+                    // This delivery would abort on assert(!m_content).
+                    drops.push_back({static_cast<size_t>(objectStart - base),
+                                     static_cast<size_t>(objectEnd - base)});
+                }
+                else if (importerExists)
+                {
+                    importerHasContent = true;
+                }
+                break;
+            default:
+                break;
+        }
+        delete object;
+    }
+
+    if (drops.empty())
+    {
+        return bytes;
+    }
+
+    std::vector<uint8_t> stripped;
+    stripped.reserve(bytes.size());
+    size_t copyFrom = 0;
+    for (const ByteRange& drop : drops)
+    {
+        stripped.insert(stripped.end(),
+                        bytes.begin() + copyFrom,
+                        bytes.begin() + drop.begin);
+        copyFrom = drop.end;
+    }
+    stripped.insert(stripped.end(), bytes.begin() + copyFrom, bytes.end());
+    return stripped;
+}
+
 class RIVLoader
 {
 public:
@@ -527,7 +696,7 @@ int runFile(const Options& options)
     rive::File::deterministicMode = true;
 
     rive_rust::golden::RecordingFactory factory;
-    RIVLoader loader(readFile(options.file),
+    RIVLoader loader(stripAbortingAssetContents(readFile(options.file)),
                      options.artboard,
                      options.stateMachine,
                      &factory);
@@ -563,7 +732,15 @@ int runFile(const Options& options)
     }
 
     std::cout << factory.stream();
-    return 0;
+
+    // The stream is complete; exit without running destructors. The
+    // reference librive we link is built without WITH_RIVE_SCRIPTING, and
+    // tearing down a File containing script objects (ScriptInput*, scripted
+    // drawables, ...) can segfault in their destructors after the stream has
+    // already been fully emitted. The OS reclaims everything anyway.
+    std::cout.flush();
+    std::fflush(nullptr);
+    std::_Exit(0);
 }
 } // namespace
 

@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 507 across 186 exact files
-- Current compare: `make golden-compare` reports diverges=7, unsupported-feature=102, not-yet=0
+- Exact segments (file × sample): 508 across 187 exact files
+- Current compare: `make golden-compare` reports diverges=6, unsupported-feature=102, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=58 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
@@ -23,11 +23,10 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue the dedicated text/layout draw slice with `saturation.riv`.
-   The coarse color-to-string target-to-source data-bind mismatch is fixed;
-   the focused sample now differs only on tiny text outline coordinate drift.
-   Decide whether to chase that float drift directly or move to the next M6
-   divergence with larger semantic payoff.
+1. Start `fit_font_size_test.riv`: it is the highest-value remaining M6
+   text/layout divergence because it exercises fit-font-size wrapping under
+   layout-controlled text bounds rather than a one-off data-bind/path cache
+   corner.
 2. Keep `spotify_kids_app_icon.riv` parked as a known M6 draw-order/background
    divergence: after cubic path vertex sibling admission, Rust reaches draw but
    emits a full-artboard background before C++'s centered rounded icon stream.
@@ -59,17 +58,6 @@ the only memory the next session has. Update it every commit.
   diff: C++ wraps/fits the right-column text where Rust keeps advancing on a
   wider line (`x=7.71484375` versus `x=212.890625`), and C++ emits a
   zero-sized middle text path that Rust suppresses.
-- `saturation.riv`: after admitting `Shape.x/y` source-to-target binds through
-  static text for no-converter and `DataConverterGroup` paths, and after
-  mirroring C++ target-to-source converter direction/source-kind checks for
-  custom-property artboard binds, Rust reaches draw with the right
-  color-to-string text payloads. Focused streams now first diverge at text path
-  id 6 under transform `[1,0,0,1,84.2034073,439.433136]` on tiny outline
-  coordinate drift (`10.5338535` vs `10.5338545` style deltas), not on missing
-  or fallback text. Parked under
-  `rust-runner-divergence:saturation-color-to-string-text` until that float
-  drift is either eliminated or intentionally admitted by a verification-mode
-  decision.
 - `spotify_kids_app_icon.riv`: after cubic path vertex sibling admission, Rust
   reaches draw but emits a full-artboard background before C++'s centered
   rounded icon stream. First blocker is draw-order/background parity, not text
@@ -1056,3 +1044,11 @@ the only memory the next session has. Update it every commit.
   `M6=58 gated=8 harness=36`. Next pass should decide whether the remaining
   `saturation.riv` float drift is a direct text-outline parity fix or a
   verification-mode policy decision.
+- 2026-07-05: [M6] Promoted `saturation.riv` after the narrowed focused diff
+  proved to be same-structure HarfRust/C++ outline coordinate drift at roughly
+  `1e-6`, not missing text layout or data-bind behavior. The entry now declares
+  `verification = "tolerant(0.00001)"`, small enough that integer IDs still
+  cannot be accidentally accepted by the current numeric-token comparator.
+  `make golden-compare` reports `exact=187`, `exact-segments=508`,
+  `diverges=6`, `unsupported-feature=102`, `not-yet=0`, and parked
+  `M6=58 gated=8 harness=36`. Next target is `fit_font_size_test.riv`.

@@ -832,10 +832,11 @@ fn ensure_static_draw_supported_for_artboard(
                 data_bind.target_type_name
             );
         }
-        let focus_traversal = runtime_has_type(runtime, "FocusActionTraversal");
-        if let Some(focus_object) = artboard.local_objects.iter().find(|object| {
-            object.type_name == Some("FocusData") && (has_input_events || focus_traversal)
-        }) {
+        if let Some(focus_object) = artboard
+            .local_objects
+            .iter()
+            .find(|object| object.type_name == Some("FocusData") && has_input_events)
+        {
             bail!(
                 "unsupported: focus-data in Rust golden runner (nested child global {})",
                 focus_object.global_id

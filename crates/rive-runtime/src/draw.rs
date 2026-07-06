@@ -885,13 +885,8 @@ impl ArtboardInstance {
                 let Some(foreground_local) = drawable.local_id else {
                     return Vec::new();
                 };
-                let Some(parent_layout_local) = self
-                    .component(foreground_local)
-                    .and_then(|component| component.parent_local)
-                    .filter(|parent_local| {
-                        self.component(*parent_local)
-                            .is_some_and(|component| component.type_name == "LayoutComponent")
-                    })
+                let Some(parent_layout_local) =
+                    runtime_foreground_layout_parent_local(self, foreground_local)
                 else {
                     return Vec::new();
                 };
@@ -5259,6 +5254,20 @@ fn runtime_shape_paint_container_world_transform(
     }
 }
 
+fn runtime_foreground_layout_parent_local(
+    instance: &ArtboardInstance,
+    foreground_local: usize,
+) -> Option<usize> {
+    instance
+        .component(foreground_local)
+        .and_then(|component| component.parent_local)
+        .filter(|parent_local| {
+            instance
+                .component(*parent_local)
+                .is_some_and(|component| component.type_name == "LayoutComponent")
+        })
+}
+
 fn runtime_draw_command(
     runtime: &RuntimeFile,
     instance: &ArtboardInstance,
@@ -5404,6 +5413,13 @@ fn runtime_draw_command(
     }
     let mut text_temporary_paint_index = 0;
     let mut draw_path_slots = Vec::<Vec<RuntimePathCommand>>::new();
+    let foreground_layout_path_cache_local = if command.type_name == "ForegroundLayoutDrawable" {
+        command
+            .local_id
+            .and_then(|local_id| runtime_foreground_layout_parent_local(instance, local_id))
+    } else {
+        None
+    };
     for paint in shape_paints {
         let global_id = *local_to_global
             .get(&paint.paint_local)
@@ -5446,6 +5462,11 @@ fn runtime_draw_command(
         let mut saved = !paint.needs_save_operation;
         let paint_shape_world = paint.shape_world_override.unwrap_or(shape_world);
         // Ported from C++ src/shapes/paint/shape_paint.cpp and feather.cpp.
+        // C++ reuses the parent layout render path for effect-free foreground
+        // layout paints.
+        let draw_path_cache_local = foreground_layout_path_cache_local
+            .filter(|_| !paint.has_effect_path && paint.feather_state.is_none())
+            .or(command.local_id);
         let inner_feather_path_cache_local = if paint
             .feather_state
             .as_ref()
@@ -5453,7 +5474,7 @@ fn runtime_draw_command(
         {
             Some(paint.paint_local)
         } else {
-            command.local_id
+            draw_path_cache_local
         };
         if let Some(feather) = paint.feather_state.as_ref()
             && runtime_feather_uses_world_space(feather)
@@ -5493,7 +5514,7 @@ fn runtime_draw_command(
                     RuntimeDrawPathCacheKey {
                         kind: RuntimeDrawPathCacheKind::Draw,
                         path_kind: runtime_draw_path_cache_path_kind(paint),
-                        local_id: command.local_id,
+                        local_id: draw_path_cache_local,
                         path_index: clip_path_index,
                     },
                     factory,

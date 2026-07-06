@@ -5,10 +5,10 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 562 across 241 files (strict
-  exact=555/234; tolerant=7/7; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=54, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=12 gated=6 harness=36
+- Exact-status segments (file × sample): 563 across 242 files (strict
+  exact=556/235; tolerant=7/7; structural=0/0)
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=53, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=11 gated=6 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes**
 
 ## Milestones
@@ -26,13 +26,11 @@ the only memory the next session has. Update it every commit.
 
 1. The active `not-yet` queue is empty. Continue M6 by picking the highest-value
    remaining unsupported queue that is not scripting/audio: start with
-   `focus-data` (`focus_traversal.riv`), `viewmodel-asset-conditions`,
-   `text-joystick-data-bind` (`echo_show_demo.riv`),
-   `nested-artboard-layout` (`superbowl.riv`), or
+   `viewmodel-asset-conditions`, `text-joystick-data-bind`
+   (`echo_show_demo.riv`), `nested-artboard-layout` (`superbowl.riv`), or
    `selected-root-skinned-clip-path` (`bullet_man.riv`,
    `spotify_kids_demo.riv`).
-2. Other parked one-file M6 queues include `focus-data`
-   (`focus_traversal.riv`), `viewmodel-asset-conditions`,
+2. Other parked one-file M6 queues include `viewmodel-asset-conditions`,
    `text-joystick-data-bind` (`echo_show_demo.riv`),
    `nested-artboard-layout` (`superbowl.riv`), and
    `selected-root-skinned-clip-path` (`bullet_man.riv`,
@@ -440,6 +438,19 @@ the only memory the next session has. Update it every commit.
   `exact-segments=562`, `diverges=0`, `unsupported-feature=54`,
   `not-yet=0`; parked becomes `M6=12 gated=6 harness=36`. Next target is
   `focus-data`, `viewmodel-asset-conditions`, `text-joystick-data-bind`,
+  `nested-artboard-layout`, `selected-root-skinned-clip-path`, or the nested
+  data-bind diagnostics.
+- 2026-07-06: [M6] Promoted `focus_traversal.riv` after narrowing the frame-0
+  blocker to foreground layout path identity instead of focus traversal
+  execution. Effect-free `ForegroundLayoutDrawable` paints now cache draw paths
+  under their parent `LayoutComponent`, allowing the stroke to reuse the layout
+  fill path just like the C++ stream. The runner still gates nested `FocusData`
+  when an input script is present, but no-input traversal metadata is now
+  admitted.
+  Full `make golden-compare` reports `exact=242`, `exact-segments=563`,
+  `diverges=0`, `unsupported-feature=53`, `not-yet=0`, parked
+  `M6=11 gated=6 harness=36`; `cargo test --workspace` passes. Next target is
+  `viewmodel-asset-conditions`, `text-joystick-data-bind`,
   `nested-artboard-layout`, `selected-root-skinned-clip-path`, or the nested
   data-bind diagnostics.
 - 2026-07-02: `rive-runtime` owns static draw emission through

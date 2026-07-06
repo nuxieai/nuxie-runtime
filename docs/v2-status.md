@@ -5,10 +5,10 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 536 across 215 files (strict
-  exact=533/212; tolerant=3/3; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=80, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=36 gated=8 harness=36
+- Exact-status segments (file × sample): 541 across 220 files (strict
+  exact=538/217; tolerant=3/3; structural=0/0)
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=75, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=31 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -25,14 +25,16 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the largest remaining M6 bucket,
-   `rust-runner-unsupported:scroll-constraints` (12 entries), starting with
-   `component_list_1.riv` unless focused classification finds a smaller scroll
-   slice. `rust-runner-unsupported:images` is 11 entries; true
-   `NSlicedNode`/mesh image work remains gated. The former
-   `nested-artboard-layout` bucket is empty after direct runner classification.
-   Other small M6 queues are `feather` (5),
-   `data-binding-nested-stateful-view-model` (4), `focus-data` (3),
-   `data-binding-nested-child` (2), and
+   `rust-runner-unsupported:images` (11 entries), starting with
+   `bad_skin.riv` unless focused classification finds a smaller first gate.
+   The passive initial scroll slice promoted five files; the remaining
+   `rust-runner-unsupported:scroll-constraints` queue is now 7 entries, with
+   `component_list_child_origin.riv` as the first scroll target if choosing to
+   keep shrinking scroll before returning to images. Other M6 queues are
+   `feather` (5), `data-binding-nested-stateful-view-model` (4),
+   `focus-data` (3), `data-binding-nested-child` (2),
+   `scripted-transition-condition` (2), `n-slice` (1),
+   `scripted-path-effects` (1), `scripted-data-context` (1), and
    `viewmodel-asset-conditions` (1).
 2. Generic `rust-runner-unsupported:text` and the sharper
    `text-vertical-trim` gate are empty in the current corpus. Do not reopen
@@ -177,13 +179,17 @@ the only memory the next session has. Update it every commit.
   supported static Text subset plus the default empty
   `TransformComponent::constraintBounds()` path. LayoutComponent bounds remain
   parked behind M6 layout diagnostics.
-- Scroll-constraint corpus files are parked behind M6 layout/runtime support
+- Passive sample-0 `ScrollConstraint` files with zero authored offset,
+  percent, and index values, no input events, no state-machine listener target,
+  no snap/infinite/virtualized behavior, registered layout-provider children,
+  and a coherent Taffy snapshot are admitted by the Rust runner. Remaining
+  scroll-constraint corpus files stay parked behind M6 layout/runtime support
   via `rust-runner-unsupported:scroll-constraints`; `scroll_snap.riv` joined
   this queue after its stale static-text sibling diagnostic was corrected. C++
-  `src/constraints/scrolling/scroll_constraint.cpp` reads
+  `src/constraints/scrolling/scroll_constraint.cpp` also reads
   `LayoutComponent` dimensions, layout-provider child bounds, physics state,
-  and optional component-list virtualization, so the current corpus has no
-  pure M3 scroll slice to port without pulling layout/list runtime forward.
+  and optional component-list virtualization, so dynamic scroll remains outside
+  the passive initial slice.
 - Per-file parked reasons now live in `corpus.toml`: each gated entry
   carries `milestone = "M3|M4|M5|M6|gated|harness"` plus its diagnostic
   feature tags (`rust-runner-unsupported:*`, `cpp-runner-crash`,
@@ -370,6 +376,15 @@ the only memory the next session has. Update it every commit.
   text/image/shape drawables whose parent chain passes through a
   `LayoutComponent`. Existing exact layout fixtures must either compute Taffy
   bounds or return to an explicit unsupported-feature gate.
+- 2026-07-06: #V2-7 scroll admission rule: `ScrollConstraint` is Rive-owned
+  runtime behavior, not delegated tolerant behavior. The runner may admit only
+  passive initial-state scroll constraints once Rust applies the C++
+  `constrain` / `constrainChild` transform slice over registered
+  layout-provider children and Taffy can compute a coherent whole-artboard
+  snapshot. Input-driven drag, nonzero offset/percent/index state, snap,
+  infinite scroll, virtualized lists, listener-targeted scroll, physics
+  advancement, and scroll-bar driving remain
+  `rust-runner-unsupported:scroll-constraints`.
 - 2026-07-05: M6 layout/text diagnostic rule: when a Taffy-backed file reaches
   draw but diverges on wrapped layout placement, expose local-id layout boxes
   from C++ Yoga and Rust Taffy before adding more renderer/text behavior. Draw
@@ -1341,3 +1356,16 @@ the only memory the next session has. Update it every commit.
   the largest M6 bucket, `rust-runner-unsupported:scroll-constraints`, starting
   with `component_list_1.riv` unless focused classification finds a smaller
   scroll slice.
+- 2026-07-06: [M6] Promoted `component_list_1.riv`,
+  `deterministic_mode.riv`, `interactive_scrolling.riv`, `scroll_test.riv`,
+  and `scroll_threshold.riv` by porting the passive initial
+  `ScrollConstraint::constrain` / `constrainChild` transform slice over
+  registered layout-provider children and admitting only zero-offset,
+  non-interactive, non-snap, non-virtualized scroll constraints behind a
+  coherent Taffy snapshot. Focused streams match exactly apart from signed-zero
+  matrix text accepted by `golden-compare` numeric-token comparison. Full
+  `make golden-compare` reports `exact=220`, `exact-segments=541`,
+  `diverges=0`, `unsupported-feature=75`, `not-yet=0`, and parked
+  `M6=31 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
+  the largest M6 bucket, `rust-runner-unsupported:images`, starting with
+  `bad_skin.riv` unless focused classification finds a smaller first gate.

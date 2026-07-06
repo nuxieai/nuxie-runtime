@@ -21,6 +21,13 @@ pub(crate) struct RuntimeListFollowPathConstraint {
     constraint: RuntimeFollowPathConstraint,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeScrollConstraint {
+    local_id: usize,
+    content_local: usize,
+    layout_child_locals: Vec<usize>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RuntimeFollowPathTargetKind {
     Shape,
@@ -97,6 +104,32 @@ pub(crate) fn build_runtime_list_follow_path_constraints(
                     graph,
                     registration.constraint_local,
                 )?,
+            })
+        })
+        .collect()
+}
+
+pub(crate) fn build_runtime_scroll_constraints(
+    file: &RuntimeFile,
+    graph: &ArtboardGraph,
+) -> Vec<RuntimeScrollConstraint> {
+    graph
+        .local_objects
+        .iter()
+        .filter(|object| object.type_name == Some("ScrollConstraint"))
+        .filter_map(|object| {
+            let constraint = file.object(object.global_id as usize)?;
+            let content_local = usize::try_from(constraint.uint_property("parentId")?).ok()?;
+            let layout_child_locals = graph
+                .layout_constraint_registrations
+                .iter()
+                .filter(|registration| registration.constraint_local == object.local_id)
+                .map(|registration| registration.layout_provider_local)
+                .collect::<Vec<_>>();
+            Some(RuntimeScrollConstraint {
+                local_id: object.local_id,
+                content_local,
+                layout_child_locals,
             })
         })
         .collect()
@@ -295,9 +328,75 @@ fn apply_constraint(
         Some("FollowPathConstraint") => {
             apply_follow_path_constraint(artboard, component_index, constraint_local)
         }
+        Some("ScrollConstraint") => {
+            apply_scroll_constraint(artboard, component_index, constraint_local)
+        }
         Some("IKConstraint") => apply_ik_constraint(artboard, component_index, constraint_local),
         _ => false,
     }
+}
+
+fn apply_scroll_constraint(
+    artboard: &mut ArtboardInstance,
+    component_index: usize,
+    constraint_local: usize,
+) -> bool {
+    // Ported from C++ `src/constraints/scrolling/scroll_constraint.cpp`
+    // `ScrollConstraint::constrain` / `constrainChild`.
+    let Some(scroll_constraint) = artboard
+        .scroll_constraints
+        .iter()
+        .find(|constraint| constraint.local_id == constraint_local)
+        .cloned()
+    else {
+        return false;
+    };
+    if artboard.components[component_index].local_id != scroll_constraint.content_local {
+        return false;
+    }
+
+    let direction = constraint_uint(
+        artboard,
+        constraint_local,
+        "DraggableConstraint",
+        "directionValue",
+        0,
+    );
+    let offset_x = if matches!(direction, 0 | 2) {
+        constraint_double(
+            artboard,
+            constraint_local,
+            "ScrollConstraint",
+            "scrollOffsetX",
+            0.0,
+        )
+    } else {
+        0.0
+    };
+    let offset_y = if matches!(direction, 1 | 2) {
+        constraint_double(
+            artboard,
+            constraint_local,
+            "ScrollConstraint",
+            "scrollOffsetY",
+            0.0,
+        )
+    } else {
+        0.0
+    };
+    let scroll_transform = Mat2D([1.0, 0.0, 0.0, 1.0, offset_x, offset_y]);
+    let strength = constraint_double(artboard, constraint_local, "Constraint", "strength", 1.0);
+
+    let mut changed = false;
+    for child_local in scroll_constraint.layout_child_locals {
+        let Some(child_index) = artboard.component_by_local.get(&child_local).copied() else {
+            continue;
+        };
+        let current = artboard.components[child_index].transform.world_transform;
+        let target = current.multiply(scroll_transform);
+        changed |= constrain_world(artboard, child_index, current, target, strength);
+    }
+    changed
 }
 
 fn apply_distance_constraint(

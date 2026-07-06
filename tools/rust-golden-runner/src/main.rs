@@ -902,14 +902,12 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
-    if let Some(scroll_constraint) = artboard
-        .local_objects
-        .iter()
-        .find(|object| object.type_name == Some("ScrollConstraint"))
+    if let Some(scroll_constraint) =
+        unsupported_scroll_constraint_global(runtime, graph, artboard, has_input_events)
     {
         bail!(
             "unsupported: scroll-constraints in Rust golden runner (global {})",
-            scroll_constraint.global_id
+            scroll_constraint
         );
     }
 
@@ -1012,6 +1010,7 @@ fn ensure_static_draw_supported_for_artboard(
             && type_name != "TransformConstraint"
             && type_name != "FollowPathConstraint"
             && type_name != "ListFollowPathConstraint"
+            && type_name != "ScrollConstraint"
             && type_name != "IKConstraint")
             .then_some((type_name, object.global_id))
     }) {
@@ -1127,6 +1126,87 @@ fn component_parent_chain_has_layout_component(
         local_id = parent_local;
     }
     false
+}
+
+fn unsupported_scroll_constraint_global(
+    runtime: &RuntimeFile,
+    graph: &GraphFile,
+    artboard: &ArtboardGraph,
+    has_input_events: bool,
+) -> Option<u32> {
+    for scroll_constraint in artboard
+        .local_objects
+        .iter()
+        .filter(|object| object.type_name == Some("ScrollConstraint"))
+    {
+        if has_input_events
+            || !passive_initial_scroll_constraint_supported(
+                runtime,
+                graph,
+                artboard,
+                scroll_constraint.local_id,
+                scroll_constraint.global_id,
+            )
+        {
+            return Some(scroll_constraint.global_id);
+        }
+    }
+    None
+}
+
+fn passive_initial_scroll_constraint_supported(
+    runtime: &RuntimeFile,
+    graph: &GraphFile,
+    artboard: &ArtboardGraph,
+    scroll_local: usize,
+    scroll_global: u32,
+) -> bool {
+    // C++ scroll is implementation-defined runtime behavior. This runner admits
+    // only the passive initial-state slice ported from
+    // `src/constraints/scrolling/scroll_constraint.cpp`: no pointer/input
+    // driving, no authored offset, no snap/infinite/virtualization, and a
+    // coherent Taffy layout snapshot for the scroll tree.
+    let Some(scroll) = runtime.object(scroll_global as usize) else {
+        return false;
+    };
+    if scroll.double_property("scrollOffsetX").unwrap_or(0.0) != 0.0
+        || scroll.double_property("scrollOffsetY").unwrap_or(0.0) != 0.0
+        || scroll.double_property("scrollPercentX").unwrap_or(0.0) != 0.0
+        || scroll.double_property("scrollPercentY").unwrap_or(0.0) != 0.0
+        || scroll.double_property("scrollIndex").unwrap_or(0.0) != 0.0
+        || scroll.bool_property("snap").unwrap_or(false)
+        || scroll.bool_property("virtualize").unwrap_or(false)
+        || scroll.bool_property("infinite").unwrap_or(false)
+    {
+        return false;
+    }
+
+    if artboard.state_machines.iter().any(|state_machine| {
+        state_machine.listeners.iter().any(|listener| {
+            usize::try_from(listener.target_id)
+                .ok()
+                .is_some_and(|target| target == scroll_local)
+        })
+    }) {
+        return false;
+    }
+
+    if !artboard
+        .layout_constraint_registrations
+        .iter()
+        .any(|registration| registration.constraint_local == scroll_local)
+    {
+        return false;
+    }
+
+    let Ok(instance) =
+        ArtboardInstance::from_graph_with_artboards(runtime, artboard, &graph.artboards)
+    else {
+        return false;
+    };
+    instance
+        .debug_taffy_layout_bounds_report(runtime, artboard)
+        .is_some()
 }
 
 fn layout_component_paint_supported(

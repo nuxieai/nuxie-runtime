@@ -28,8 +28,8 @@ use crate::components::{
 };
 use crate::constraints::{
     RuntimeFollowPathConstraint, RuntimeIkConstraint, RuntimeListFollowPathConstraint,
-    build_runtime_follow_path_constraints, build_runtime_ik_constraints,
-    build_runtime_list_follow_path_constraints,
+    RuntimeScrollConstraint, build_runtime_follow_path_constraints, build_runtime_ik_constraints,
+    build_runtime_list_follow_path_constraints, build_runtime_scroll_constraints,
 };
 use crate::data_bind_graph::{RuntimeDataBindGraphFormulaRandomSource, RuntimeDataBindGraphValue};
 use crate::draw::RuntimeLayoutBounds;
@@ -59,6 +59,7 @@ pub struct ArtboardInstance {
     pub(crate) joysticks: Vec<RuntimeJoystick>,
     pub(crate) follow_path_constraints: Vec<RuntimeFollowPathConstraint>,
     pub(crate) list_follow_path_constraints: Vec<RuntimeListFollowPathConstraint>,
+    pub(crate) scroll_constraints: Vec<RuntimeScrollConstraint>,
     pub(crate) component_list_item_transforms: BTreeMap<usize, Vec<Mat2D>>,
     pub(crate) ik_constraints: Vec<RuntimeIkConstraint>,
     pub(crate) joysticks_apply_before_update: bool,
@@ -210,6 +211,7 @@ impl ArtboardInstance {
         let joysticks = build_runtime_joysticks(graph, &linear_animations);
         let follow_path_constraints = build_runtime_follow_path_constraints(file, graph);
         let list_follow_path_constraints = build_runtime_list_follow_path_constraints(file, graph);
+        let scroll_constraints = build_runtime_scroll_constraints(file, graph);
         let ik_constraints = build_runtime_ik_constraints(file, graph);
         let state_machines = build_state_machines(file, graph, &linear_animations);
         let artboard_data_bind_values = build_artboard_default_view_model_values(file, graph);
@@ -255,6 +257,7 @@ impl ArtboardInstance {
             joysticks,
             follow_path_constraints,
             list_follow_path_constraints,
+            scroll_constraints,
             component_list_item_transforms: BTreeMap::new(),
             ik_constraints,
             joysticks_apply_before_update: graph.joysticks_apply_before_update,
@@ -1970,6 +1973,7 @@ mod tests {
             joysticks: Vec::new(),
             follow_path_constraints: Vec::new(),
             list_follow_path_constraints: Vec::new(),
+            scroll_constraints: Vec::new(),
             component_list_item_transforms: BTreeMap::new(),
             ik_constraints: Vec::new(),
             joysticks_apply_before_update: true,

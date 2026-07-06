@@ -131,8 +131,15 @@ impl InstanceObjectArena {
     }
 
     pub(crate) fn uint_property(&self, local_id: usize, property_key: u16) -> Option<u64> {
-        self.object(local_id)
-            .and_then(|object| object.uint_property(property_key))
+        let object = self.object(local_id)?;
+        let (_owner, property) = runtime_property_metadata_by_key(object.type_key(), property_key)?;
+        if let Some(bitmask) = property.bitmask_passthrough {
+            let (_owner, target) =
+                runtime_property_metadata_by_name(object.type_key(), bitmask.target)?;
+            let packed = object.uint_property(target.key.int).unwrap_or(0);
+            return Some((packed & bitmask_field_mask(bitmask.bit, bitmask.width)) >> bitmask.bit);
+        }
+        object.uint_property(property_key)
     }
 
     pub(crate) fn double_property(&self, local_id: usize, property_key: u16) -> Option<f32> {
@@ -236,6 +243,22 @@ impl InstanceObjectArena {
             return false;
         }
 
+        if let (Some(bitmask), FieldValue::Uint(value)) = (property.bitmask_passthrough, &value) {
+            let Some((_owner, target)) =
+                runtime_property_metadata_by_name(type_key, bitmask.target)
+            else {
+                return false;
+            };
+            let Some(object) = self.object_mut(local_id) else {
+                return false;
+            };
+            let mask = bitmask_field_mask(bitmask.bit, bitmask.width);
+            let current = object.uint_property(target.key.int).unwrap_or(0);
+            let shifted = value.checked_shl(bitmask.bit.into()).unwrap_or(0);
+            let next = (current & !mask) | (shifted & mask);
+            return object.set_uint_property(target.key.int, next);
+        }
+
         let Some(object) = self.object_mut(local_id) else {
             return false;
         };
@@ -250,6 +273,19 @@ impl InstanceObjectArena {
             FieldValue::Uint(value) => object.set_uint_property(property_key, value),
         }
     }
+}
+
+fn bitmask_field_mask(bit: u8, width: u8) -> u64 {
+    if bit >= 64 {
+        return 0;
+    }
+    let width = width.min(64 - bit);
+    let width_mask = if width >= 64 {
+        u64::MAX
+    } else {
+        (1u64 << width) - 1
+    };
+    width_mask << bit
 }
 
 fn runtime_property_metadata_by_key(

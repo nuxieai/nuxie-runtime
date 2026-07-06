@@ -1667,6 +1667,10 @@ fn nested_child_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> boo
             && matches!(data_bind.property_key, 779 | 782 | 783 | 784 | 785 | 786)
             && (data_bind.converter_global.is_none()
                 || data_bind.converter_type_name == Some("DataConverterFormula")))
+        || (data_bind.target_type_name == Some("Text")
+            // TextBase verticalTrimTopValue/verticalTrimBottomValue bitmask passthroughs.
+            && matches!(data_bind.property_key, 1027 | 1028)
+            && data_bind.converter_global.is_none())
 }
 
 fn solid_color_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> bool {

@@ -24,13 +24,11 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Pick one of the tied largest remaining M6 buckets:
-   `rust-runner-unsupported:selected-root-image-order` (3:
-   `bullet_man.riv`, `car_widgets_v01.riv`, `spotify_kids_demo.riv`),
-   or `rust-runner-unsupported:text` (3: `echo_show_demo.riv`,
-   `hunter_x_demo.riv`, `superbowl.riv`). Prefer the image-order bucket first
-   if it stays a finite paint/preallocation ordering issue; otherwise return
-   to the text bucket because it is central to M6.
+1. Pick the largest remaining M6 bucket:
+   `rust-runner-unsupported:text` (4: `car_widgets_v01.riv`,
+   `echo_show_demo.riv`, `hunter_x_demo.riv`, `superbowl.riv`). This is now
+   the central M6 queue after the former selected-root image-order bucket was
+   split into sharper diagnostics.
 2. Other M6 queues are `rust-runner-unsupported:mesh-images` (2:
    `jellyfish_test.riv`, `tape.riv`), and
    `rust-runner-unsupported:contour-mesh-metadata` (1: `bad_skin.riv`),
@@ -38,8 +36,10 @@ the only memory the next session has. Update it every commit.
    1 gated), `scripted-transition-condition` (2 gated),
    `nested-feather-paints` (1 gated), `scripted-path-effects` (1 gated),
    `scripted-data-context` (1), `focus-data` (1: `focus_traversal.riv`),
-   `layout-component-paint` (1: `text_input.riv`), and
-   `viewmodel-asset-conditions` (1). The former
+   `layout-component-paint` (1: `text_input.riv`),
+   `viewmodel-asset-conditions` (1),
+   `selected-root-gradient-shader-order` (1: `bullet_man.riv`), and
+   `selected-root-skinned-clip-path` (1: `spotify_kids_demo.riv`). The former
    `data-binding-nested-child` queue is now four one-file diagnostics:
    `nested-trim-path-data-bind` (`db_health_tracker.riv`),
    `nested-artboard-root-transform` (`nested_hug.riv`),
@@ -151,9 +151,11 @@ the only memory the next session has. Update it every commit.
   instancing remain M6 or later diagnostics.
   Golden runner sample lists now advance by sorted absolute-time deltas and
   reuse render paths across samples; no N-slice image layout, mesh image
-  drawing, selected-root image paint/preallocation ordering,
+  drawing, selected-root image paint/preallocation ordering beyond the
+  text-root single external-image predecode case,
   contour-mesh image files, remaining text
-  layout/editing, inner-feather multipaint, nested feather paint trees, live
+  layout/editing, selected-root gradient shader ordering, selected-root
+  skinned clip-path geometry, inner-feather multipaint, nested feather paint trees, live
   data-bound nested host controls/artboard swaps, nested layout/leaf, scroll
   constraints, or layout-backed/virtualized component-list instancing.
   Harness-level scripted input replay dispatches
@@ -1537,3 +1539,18 @@ the only memory the next session has. Update it every commit.
   `diverges=0`, `unsupported-feature=63`, `not-yet=0`, and parked
   `M6=19 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
   one of the tied largest M6 buckets, `selected-root-image-order` or `text`.
+- 2026-07-06: [M6] Split
+  `rust-runner-unsupported:selected-root-image-order` into three verified
+  first blockers. `car_widgets_v01.riv` now reaches the existing
+  `rust-runner-unsupported:text` gate on text paint feather,
+  `bullet_man.riv` now verifies as
+  `rust-runner-unsupported:selected-root-gradient-shader-order`, and
+  `spotify_kids_demo.riv` now verifies as
+  `rust-runner-unsupported:selected-root-skinned-clip-path` after adding the
+  selected-root single-image predecode ordering observed in the focused
+  compare and narrowing it against `feather_render_test.riv`'s exact paint
+  ordering. `golden-compare` now reports the first differing stream line for
+  failed exact comparisons. Full `make golden-compare` reports `exact=232`,
+  `exact-segments=553`, `diverges=0`, `unsupported-feature=63`, `not-yet=0`,
+  and parked `M6=19 gated=8 harness=36`; `cargo test --workspace` passes.
+  Next target is the `text` bucket.

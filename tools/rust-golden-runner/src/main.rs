@@ -894,12 +894,22 @@ fn ensure_static_draw_supported_for_artboard(
     }
 
     if let Some(global_id) =
-        unsupported_selected_root_image_order_global(graph, artboard, !is_nested_child)
+        unsupported_selected_root_gradient_shader_order_global(graph, artboard, !is_nested_child)
     {
-        bail!("unsupported: selected-root-image-order in Rust golden runner (global {global_id})");
+        bail!(
+            "unsupported: selected-root-gradient-shader-order in Rust golden runner (global {global_id})"
+        );
     }
 
-    if let Some(global_id) = unsupported_image_global(runtime, graph, artboard, !is_nested_child) {
+    if let Some(global_id) =
+        unsupported_selected_root_skinned_clip_path_global(graph, artboard, !is_nested_child)
+    {
+        bail!(
+            "unsupported: selected-root-skinned-clip-path in Rust golden runner (global {global_id})"
+        );
+    }
+
+    if let Some(global_id) = unsupported_image_global(runtime, graph, artboard) {
         bail!("unsupported: images in Rust golden runner (global {global_id})");
     }
 
@@ -2135,7 +2145,7 @@ fn unsupported_contour_mesh_metadata_global(
         .map(|object| object.global_id)
 }
 
-fn unsupported_selected_root_image_order_global(
+fn selected_root_external_image_global(
     graph: &GraphFile,
     artboard: &ArtboardGraph,
     apply_selected_root_fence: bool,
@@ -2144,44 +2154,61 @@ fn unsupported_selected_root_image_order_global(
         return None;
     }
 
-    let image_global = first_image_or_asset_global(graph, artboard)?;
-    artboard
+    first_image_or_asset_global(graph, artboard)
+}
+
+fn unsupported_selected_root_gradient_shader_order_global(
+    graph: &GraphFile,
+    artboard: &ArtboardGraph,
+    apply_selected_root_fence: bool,
+) -> Option<u32> {
+    let image_global =
+        selected_root_external_image_global(graph, artboard, apply_selected_root_fence)?;
+    let has_radial_gradient = artboard
         .local_objects
         .iter()
-        .any(|object| {
-            matches!(
-                object.type_name,
-                Some("LinearGradient" | "RadialGradient" | "Skin")
-            )
-        })
-        .then_some(image_global)
+        .any(|object| object.type_name == Some("RadialGradient"));
+    let has_skin = artboard
+        .local_objects
+        .iter()
+        .any(|object| object.type_name == Some("Skin"));
+    (has_radial_gradient && has_skin).then_some(image_global)
+}
+
+fn unsupported_selected_root_skinned_clip_path_global(
+    graph: &GraphFile,
+    artboard: &ArtboardGraph,
+    apply_selected_root_fence: bool,
+) -> Option<u32> {
+    let image_global =
+        selected_root_external_image_global(graph, artboard, apply_selected_root_fence)?;
+    let has_skin = artboard
+        .local_objects
+        .iter()
+        .any(|object| object.type_name == Some("Skin"));
+    let has_clipping_shape = artboard
+        .local_objects
+        .iter()
+        .any(|object| object.type_name == Some("ClippingShape"));
+    (has_skin && has_clipping_shape).then_some(image_global)
 }
 
 fn unsupported_image_global(
     runtime: &RuntimeFile,
     graph: &GraphFile,
     artboard: &ArtboardGraph,
-    apply_selected_root_fence: bool,
 ) -> Option<u32> {
     let image_global = first_image_or_asset_global(graph, artboard)?;
-    (!simple_static_image_artboard_supported(runtime, graph, artboard, apply_selected_root_fence))
-        .then_some(image_global)
+    (!simple_static_image_artboard_supported(runtime, graph, artboard)).then_some(image_global)
 }
 
 fn simple_static_image_artboard_supported(
     runtime: &RuntimeFile,
     graph: &GraphFile,
     artboard: &ArtboardGraph,
-    apply_selected_root_fence: bool,
 ) -> bool {
     let mut visiting = BTreeSet::new();
-    simple_static_image_artboard_tree_supported(
-        runtime,
-        graph,
-        artboard,
-        &mut visiting,
-        apply_selected_root_fence,
-    )
+    simple_static_image_artboard_tree_supported(runtime, graph, artboard, &mut visiting)
 }
 
 fn simple_static_image_artboard_tree_supported(
@@ -2189,18 +2216,12 @@ fn simple_static_image_artboard_tree_supported(
     graph: &GraphFile,
     artboard: &ArtboardGraph,
     visiting: &mut BTreeSet<u32>,
-    apply_selected_root_fence: bool,
 ) -> bool {
     if !visiting.insert(artboard.global_id) {
         return false;
     }
-    let supported = simple_static_image_artboard_tree_supported_entered(
-        runtime,
-        graph,
-        artboard,
-        visiting,
-        apply_selected_root_fence,
-    );
+    let supported =
+        simple_static_image_artboard_tree_supported_entered(runtime, graph, artboard, visiting);
     visiting.remove(&artboard.global_id);
     supported
 }
@@ -2210,7 +2231,6 @@ fn simple_static_image_artboard_tree_supported_entered(
     graph: &GraphFile,
     artboard: &ArtboardGraph,
     visiting: &mut BTreeSet<u32>,
-    apply_selected_root_fence: bool,
 ) -> bool {
     // Ported image drawing currently covers C++ `src/shapes/image.cpp`'s
     // non-mesh path. Keep complex image-bearing roots fenced until their
@@ -2234,19 +2254,6 @@ fn simple_static_image_artboard_tree_supported_entered(
     {
         return false;
     }
-    if apply_selected_root_fence
-        && visiting.len() == 1
-        && !artboard_has_direct_image_drawable(artboard)
-        && artboard.local_objects.iter().any(|object| {
-            matches!(
-                object.type_name,
-                Some("LinearGradient" | "RadialGradient" | "Skin")
-            )
-        })
-    {
-        return false;
-    }
-
     artboard
         .sorted_drawable_order
         .iter()
@@ -2272,7 +2279,6 @@ fn simple_static_image_artboard_tree_supported_entered(
                     graph,
                     child_artboard,
                     visiting,
-                    false,
                 )
             }
             _ => true,

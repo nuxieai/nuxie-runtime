@@ -4284,7 +4284,8 @@ pub fn preallocate_render_paint_cache_for_artboard_tree(
         .filter(|asset| asset.type_name == "ImageAsset")
         .map(|asset| asset.id)
         .collect::<Vec<_>>();
-    let pre_source_count = pre_source_image_decode_count(artboards, image_asset_globals.len());
+    let pre_source_count =
+        pre_source_image_decode_count(graph, artboards, image_asset_globals.len());
     let mut images = BTreeMap::new();
     if pre_source_count > 0 {
         for asset_global in image_asset_globals.iter().copied().take(pre_source_count) {
@@ -4301,9 +4302,38 @@ pub fn preallocate_render_paint_cache_for_artboard_tree(
     cache
 }
 
-fn pre_source_image_decode_count(artboards: &[ArtboardGraph], image_asset_count: usize) -> usize {
-    if image_asset_count <= 1 {
+fn pre_source_image_decode_count(
+    graph: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+    image_asset_count: usize,
+) -> usize {
+    if image_asset_count == 0 {
         return 0;
+    }
+
+    if image_asset_count == 1 {
+        // Mirrors the focused C++ ordering observed in spotify_kids_demo:
+        // a text-bearing selected root with one image only in a sibling
+        // artboard decodes before source paints, while feather_render_test
+        // remains source-paint-first.
+        let selected_has_direct_image = graph
+            .sorted_drawable_order
+            .iter()
+            .any(|drawable| drawable.type_name == "Image");
+        let selected_has_text = graph
+            .local_objects
+            .iter()
+            .any(|object| object.type_name == Some("Text"));
+        let image_is_only_in_non_selected_artboard = !selected_has_direct_image
+            && selected_has_text
+            && artboards.iter().any(|artboard| {
+                artboard.global_id != graph.global_id
+                    && artboard
+                        .sorted_drawable_order
+                        .iter()
+                        .any(|drawable| drawable.type_name == "Image")
+            });
+        return usize::from(image_is_only_in_non_selected_artboard);
     }
 
     let has_asset_image_bind = artboards.iter().any(|artboard| {

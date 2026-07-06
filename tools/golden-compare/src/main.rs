@@ -94,10 +94,12 @@ fn run() -> Result<(), String> {
                                 Some(rust_runner) => {
                                     let rust_stream =
                                         run_stream(rust_runner, entry, &file, &corpus_dir)?;
-                                    if !entry.verification.streams_match(&rust_stream, &cpp_stream)
+                                    if let Some(difference) = entry
+                                        .verification
+                                        .stream_difference(&rust_stream, &cpp_stream)
                                     {
                                         failures.push(format!(
-                                            "{}: stream differs from C++ under {} verification",
+                                            "{}: stream differs from C++ under {} verification: {difference}",
                                             entry.id, entry.verification
                                         ));
                                     }
@@ -333,11 +335,18 @@ impl VerificationMode {
         }
     }
 
+    #[cfg(test)]
     fn streams_match(self, left: &str, right: &str) -> bool {
+        self.stream_difference(left, right).is_none()
+    }
+
+    fn stream_difference(self, left: &str, right: &str) -> Option<String> {
         match self {
-            Self::Exact => streams_equivalent(left, right),
-            Self::Tolerant(epsilon) => streams_equivalent_with_epsilon(left, right, epsilon),
-            Self::Structural => streams_structurally_equivalent(left, right),
+            Self::Exact => stream_difference_with_epsilon(left, right, GOLDEN_FLOAT_EPSILON),
+            Self::Tolerant(epsilon) => stream_difference_with_epsilon(left, right, epsilon),
+            Self::Structural => {
+                stream_difference_with_epsilon(left, right, STRUCTURAL_FLOAT_EPSILON)
+            }
         }
     }
 }
@@ -492,31 +501,65 @@ fn resolve_script_path(path: &str, corpus_dir: &Path) -> PathBuf {
 const GOLDEN_FLOAT_EPSILON: f64 = 1.3e-4;
 const STRUCTURAL_FLOAT_EPSILON: f64 = GOLDEN_FLOAT_EPSILON;
 
+#[cfg(test)]
 fn streams_equivalent(left: &str, right: &str) -> bool {
     streams_equivalent_with_epsilon(left, right, GOLDEN_FLOAT_EPSILON)
 }
 
-fn streams_structurally_equivalent(left: &str, right: &str) -> bool {
-    streams_equivalent_with_epsilon(left, right, STRUCTURAL_FLOAT_EPSILON)
+#[cfg(test)]
+fn streams_equivalent_with_epsilon(left: &str, right: &str, epsilon: f64) -> bool {
+    stream_difference_with_epsilon(left, right, epsilon).is_none()
 }
 
-fn streams_equivalent_with_epsilon(left: &str, right: &str, epsilon: f64) -> bool {
+fn stream_difference_with_epsilon(left: &str, right: &str, epsilon: f64) -> Option<String> {
     if left == right {
-        return true;
+        return None;
     }
     if left.ends_with('\n') != right.ends_with('\n') {
-        return false;
+        return Some(format!(
+            "stream newline termination differs (rust ends with newline: {}, c++ ends with newline: {})",
+            left.ends_with('\n'),
+            right.ends_with('\n')
+        ));
     }
 
     let mut left_lines = left.lines();
     let mut right_lines = right.lines();
+    let mut line_number = 1usize;
     loop {
         match (left_lines.next(), right_lines.next()) {
             (Some(left), Some(right)) if line_equivalent(left, right, epsilon) => {}
-            (None, None) => return true,
-            _ => return false,
+            (Some(left), Some(right)) => {
+                return Some(format!(
+                    "line {line_number}: rust `{}` vs c++ `{}`",
+                    summarize_stream_line(left),
+                    summarize_stream_line(right)
+                ));
+            }
+            (Some(left), None) => {
+                return Some(format!(
+                    "line {line_number}: rust has extra `{}`",
+                    summarize_stream_line(left)
+                ));
+            }
+            (None, Some(right)) => {
+                return Some(format!(
+                    "line {line_number}: c++ has extra `{}`",
+                    summarize_stream_line(right)
+                ));
+            }
+            (None, None) => return None,
         }
+        line_number += 1;
     }
+}
+
+fn summarize_stream_line(line: &str) -> String {
+    const MAX_LEN: usize = 240;
+    if line.len() <= MAX_LEN {
+        return line.to_owned();
+    }
+    format!("{}...", &line[..MAX_LEN])
 }
 
 fn line_equivalent(left: &str, right: &str, epsilon: f64) -> bool {

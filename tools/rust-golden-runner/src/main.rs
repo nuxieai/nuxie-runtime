@@ -885,6 +885,13 @@ fn ensure_static_draw_supported_for_artboard(
         bail!("unsupported: images in Rust golden runner (global {global_id})");
     }
 
+    if let Some(container) = taffy_refused_layout_component_paint(runtime, graph, artboard)? {
+        bail!(
+            "unsupported: layout-component-paint in Rust golden runner (Taffy refused layout tree for global {})",
+            container.global_id
+        );
+    }
+
     if let Some(container) = unsupported_layout_component_paint(runtime, artboard) {
         bail!(
             "unsupported: layout-component-paint in Rust golden runner (global {})",
@@ -1055,6 +1062,31 @@ fn unsupported_layout_component_paint<'a>(
             && !container.paints.is_empty()
             && !layout_component_paint_supported(runtime, artboard, container)
     })
+}
+
+fn taffy_refused_layout_component_paint<'a>(
+    runtime: &RuntimeFile,
+    graph: &GraphFile,
+    artboard: &'a ArtboardGraph,
+) -> Result<Option<&'a ShapePaintContainerNode>> {
+    let Some(container) = artboard
+        .shape_paint_containers
+        .iter()
+        .find(|container| container.type_name == "LayoutComponent" && !container.paints.is_empty())
+    else {
+        return Ok(None);
+    };
+
+    let instance = ArtboardInstance::from_graph_with_artboards(runtime, artboard, &graph.artboards)
+        .context("failed to instantiate artboard for Taffy layout support check")?;
+    if instance
+        .debug_taffy_layout_bounds_report(runtime, artboard)
+        .is_none()
+    {
+        return Ok(Some(container));
+    }
+
+    Ok(None)
 }
 
 fn layout_component_paint_supported(

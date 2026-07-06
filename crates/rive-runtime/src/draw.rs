@@ -2689,10 +2689,6 @@ impl RuntimeLayoutEngine for TaffyRuntimeLayoutEngine {
         if root.type_name != "Artboard" {
             return None;
         }
-        if self.root_uses_hug_size(instance)? {
-            return None;
-        }
-
         let mut taffy = TaffyTree::<usize>::new();
         taffy.disable_rounding();
         let mut build = TaffyLayoutBuild::default();
@@ -2729,17 +2725,6 @@ impl RuntimeLayoutEngine for TaffyRuntimeLayoutEngine {
 }
 
 impl TaffyRuntimeLayoutEngine {
-    fn root_uses_hug_size(&self, instance: &ArtboardInstance) -> Option<bool> {
-        let Some(style_local) = instance.runtime_layout_component_style_local(0) else {
-            return Some(false);
-        };
-        const LAYOUT_SCALE_TYPE_HUG: u64 = 2;
-        Some(
-            instance.runtime_layout_axis_scale(style_local, true) == LAYOUT_SCALE_TYPE_HUG
-                || instance.runtime_layout_axis_scale(style_local, false) == LAYOUT_SCALE_TYPE_HUG,
-        )
-    }
-
     fn build_node(
         &self,
         instance: &ArtboardInstance,
@@ -2793,7 +2778,7 @@ impl TaffyRuntimeLayoutEngine {
                     child_locals.push(*child_local);
                 }
                 "ArtboardComponentList" => {
-                    if !self.empty_component_list_supported(graph, *child_local)? {
+                    if !self.zero_sized_component_list_supported(graph, *child_local)? {
                         return None;
                     }
                 }
@@ -2818,16 +2803,31 @@ impl TaffyRuntimeLayoutEngine {
         Some(node)
     }
 
-    fn empty_component_list_supported(&self, graph: &ArtboardGraph, local: usize) -> Option<bool> {
+    fn zero_sized_component_list_supported(
+        &self,
+        graph: &ArtboardGraph,
+        local: usize,
+    ) -> Option<bool> {
         let component = graph
             .components
             .iter()
             .find(|component| component.local_id == local)?;
-        let list = graph
+        graph
             .component_lists
             .iter()
             .find(|list| list.local_id == local)?;
-        Some(component.children.is_empty() && list.map_rules.is_empty())
+        Some(component.children.iter().all(|child_local| {
+            graph
+                .components
+                .iter()
+                .find(|component| component.local_id == *child_local)
+                .is_some_and(|component| {
+                    matches!(
+                        component.type_name,
+                        "ArtboardListMapRule" | "ArtboardComponentListOverride"
+                    )
+                })
+        }))
     }
 
     fn collect_bounds(
@@ -3317,7 +3317,12 @@ impl TaffyRuntimeLayoutEngine {
                 .find(|component| component.local_id == *child_local)
                 .map(|child| child.type_name);
             let measured_child = runtime.is_some() && matches!(child_type, Some("Shape" | "Text"));
+            let zero_sized_component_list = matches!(child_type, Some("ArtboardComponentList"))
+                && self
+                    .zero_sized_component_list_supported(graph, *child_local)
+                    .unwrap_or(false);
             !measured_child
+                && !zero_sized_component_list
                 && !matches!(
                     child_type,
                     Some(

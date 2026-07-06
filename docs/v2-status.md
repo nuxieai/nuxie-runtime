@@ -340,6 +340,12 @@ the only memory the next session has. Update it every commit.
   hide missing Rive text layout behavior such as wrapping, fit-font-size, or
   layout-controlled text bounds. New Taffy layout gates may not be promoted
   through hand-rolled fallback after the #V2-7 layout adapter refuses a tree.
+- 2026-07-06: #V2-7 fallback fence: legacy hand-rolled layout helpers may
+  remain inside `rive-runtime` as regression scaffolding for older exact
+  slices, but `rust-golden-runner` must reject any painted `LayoutComponent`
+  exact candidate when the Taffy adapter cannot produce a coherent
+  whole-artboard layout snapshot. Existing exact layout fixtures must either
+  compute Taffy bounds or return to an explicit unsupported-feature gate.
 - 2026-07-05: M6 layout/text diagnostic rule: when a Taffy-backed file reaches
   draw but diverges on wrapped layout placement, expose local-id layout boxes
   from C++ Yoga and Rust Taffy before adding more renderer/text behavior. Draw
@@ -1093,3 +1099,17 @@ the only memory the next session has. Update it every commit.
   `exact-segments=517`, `diverges=0`, `unsupported-feature=99`, `not-yet=0`,
   and parked `M6=55 gated=8 harness=36`. Next target is the nested-library
   image pair: `double_library_with_image.riv` and `library_with_image.riv`.
+- 2026-07-06: [M6] Reviewed the #V2-7 decision and enforced its fallback
+  boundary in `rust-golden-runner`: painted `LayoutComponent` corpus entries
+  now fail with a Taffy-refused diagnostic instead of promoting through the
+  legacy hand-rolled layout resolver. To keep existing exact list fixtures on
+  the snapshot path, the Taffy adapter now treats root artboards as definite
+  viewport nodes even when their style uses hug axes, and admits zero-sized
+  `ArtboardComponentList` metadata children such as map rules and overrides.
+  `transition_duration_bind_list.riv`, `artboard_list_map_rules.riv`, and
+  `artboard_list_overrides.riv` all compute Taffy layout bounds. Full
+  `make golden-compare` remains `exact=196`, `exact-segments=517`,
+  `diverges=0`, `unsupported-feature=99`, `not-yet=0`, and parked
+  `M6=55 gated=8 harness=36`; `cargo test --workspace` passes. Next target
+  remains the nested-library image pair: `double_library_with_image.riv` and
+  `library_with_image.riv`.

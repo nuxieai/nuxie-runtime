@@ -5,10 +5,10 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 524 across 203 files (strict
-  exact=521/200; tolerant=3/3; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=92, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=48 gated=8 harness=36
+- Exact-status segments (file × sample): 525 across 204 files (strict
+  exact=522/201; tolerant=3/3; structural=0/0)
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=91, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=47 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -24,13 +24,10 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue the M6 image bucket with `image_fit_alignment.riv`, now narrowed
-   to `rust-runner-unsupported:asset-image-layout` after asset-image
-   view-model reset/draw suppression made `viewmodel_image_reset.riv` exact.
-   The remaining focused diff is dimension-only image decode ordering plus
-   LayoutComponent Y placement (`272.5` in C++ vs `539.5` in Rust). After
-   that, reopen `image_fit_alignment_2.riv` for the same fit/alignment family
-   plus `NSlicer`/axis layout behavior.
+1. Continue the M6 image bucket with `image_fit_alignment_2.riv`, the same
+   fit/alignment family after `image_fit_alignment.riv` promoted, plus
+   `NSlicer`/axis layout behavior behind the current
+   `rust-runner-unsupported:images` diagnostic.
 2. Generic `rust-runner-unsupported:text` and the sharper
    `text-vertical-trim` gate are empty in the current corpus. Do not reopen
    text unless a newly added corpus entry exposes a first text diagnostic.
@@ -123,8 +120,8 @@ the only memory the next session has. Update it every commit.
   and layout-backed or virtualized component-list instancing remain M6 or
   later diagnostics.
   Golden runner sample lists now advance by sorted absolute-time deltas and
-  reuse render paths across samples; no asset-image layout/decode-order
-  parity, N-slice image layout, mesh/skinned images, remaining text
+  reuse render paths across samples; no N-slice image layout, mesh/skinned
+  images, remaining text
   layout/editing, live data-bound nested host controls/artboard swaps, nested
   layout/leaf, scroll constraints, or layout-backed/virtualized component-list
   instancing.
@@ -1198,4 +1195,16 @@ the only memory the next session has. Update it every commit.
   `exact-segments=524`, `diverges=0`, `unsupported-feature=92`, `not-yet=0`,
   and parked `M6=48 gated=8 harness=36`; `cargo test --workspace` passes.
   Next target remains `image_fit_alignment.riv`, then
+  `image_fit_alignment_2.riv`.
+- 2026-07-06: [M6] Promoted `image_fit_alignment.riv` by mapping Yoga
+  undefined position insets to Taffy auto in the #V2-7 layout adapter, matching
+  C++ `LayoutComponent::positionTypeChanged` for stale non-absolute
+  `positionTop` values, and by widening image predecode ordering for
+  asset-image-bound layout trees so the first two embedded images decode
+  before source paint allocation. Focused streams for
+  `image_fit_alignment.riv`, `viewmodel_image_reset.riv`, `walle.riv`, and
+  `image_fit_alignment_3.riv` are exact. Full `make golden-compare` reports
+  `exact=204`, `exact-segments=525`, `diverges=0`,
+  `unsupported-feature=91`, `not-yet=0`, and parked
+  `M6=47 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
   `image_fit_alignment_2.riv`.

@@ -18,7 +18,6 @@ use std::path::{Path, PathBuf};
 const TIME_EPSILON: f32 = 0.000001;
 const DATA_BIND_FLAG_DIRECTION_TO_SOURCE: u64 = 1 << 0;
 const DATA_BIND_FLAG_TWO_WAY: u64 = 1 << 1;
-const IMAGE_ASSET_ID_PROPERTY_KEY: u64 = 206;
 
 fn main() {
     match run() {
@@ -884,12 +883,6 @@ fn ensure_static_draw_supported_for_artboard(
 
     if let Some(global_id) = unsupported_image_global(runtime, graph, artboard) {
         bail!("unsupported: images in Rust golden runner (global {global_id})");
-    }
-
-    if let Some(global_id) = unsupported_asset_image_layout_global(artboard) {
-        bail!(
-            "unsupported: asset-image-layout in Rust golden runner (layout component global {global_id})"
-        );
     }
 
     if let Some(global_id) = taffy_refused_layout_dependent_draw(runtime, graph, artboard)? {
@@ -1947,22 +1940,6 @@ fn unsupported_image_global(
     }
     (!simple_static_image_artboard_supported(runtime, graph, artboard))
         .then_some(first_image_global.or(first_image_asset_global).unwrap_or(0))
-}
-
-fn unsupported_asset_image_layout_global(artboard: &ArtboardGraph) -> Option<u32> {
-    let has_asset_image_bind = artboard.data_binds.iter().any(|data_bind| {
-        data_bind.target_type_name == Some("Image")
-            && data_bind.property_key == IMAGE_ASSET_ID_PROPERTY_KEY
-    });
-    if !has_asset_image_bind {
-        return None;
-    }
-
-    artboard
-        .components
-        .iter()
-        .find(|component| component.type_name == "LayoutComponent")
-        .map(|component| component.global_id)
 }
 
 fn simple_static_image_artboard_supported(

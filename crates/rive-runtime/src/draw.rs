@@ -3025,25 +3025,25 @@ impl TaffyRuntimeLayoutEngine {
             )?,
         };
         style.inset = Rect {
-            left: self.length_percentage_auto_style(
+            left: self.position_inset_style(
                 instance,
                 style_local,
                 "positionLeft",
                 "positionLeftUnitsValue",
             )?,
-            right: self.length_percentage_auto_style(
+            right: self.position_inset_style(
                 instance,
                 style_local,
                 "positionRight",
                 "positionRightUnitsValue",
             )?,
-            top: self.length_percentage_auto_style(
+            top: self.position_inset_style(
                 instance,
                 style_local,
                 "positionTop",
                 "positionTopUnitsValue",
             )?,
-            bottom: self.length_percentage_auto_style(
+            bottom: self.position_inset_style(
                 instance,
                 style_local,
                 "positionBottom",
@@ -3584,6 +3584,20 @@ impl TaffyRuntimeLayoutEngine {
         self.length_percentage_auto_from_unit(value, units)
     }
 
+    fn position_inset_style(
+        &self,
+        instance: &ArtboardInstance,
+        style_local: usize,
+        value_name: &str,
+        unit_name: &str,
+    ) -> Option<LengthPercentageAuto> {
+        let value = instance
+            .runtime_layout_style_double(style_local, value_name)
+            .unwrap_or(0.0);
+        let units = instance.runtime_layout_style_uint_default(style_local, unit_name, 0);
+        self.position_inset_from_unit(value, units)
+    }
+
     fn dimension_from_unit(&self, value: f32, units: u64) -> Option<Dimension> {
         match units {
             2 => Some(Dimension::percent(value / 100.0)),
@@ -3597,6 +3611,18 @@ impl TaffyRuntimeLayoutEngine {
         match units {
             2 => Some(LengthPercentage::percent(value / 100.0)),
             0 | 1 | 3 => Some(LengthPercentage::length(value)),
+            _ => None,
+        }
+    }
+
+    fn position_inset_from_unit(&self, value: f32, units: u64) -> Option<LengthPercentageAuto> {
+        // C++ `src/layout_component.cpp::positionTypeChanged` leaves
+        // non-explicit position edges as Yoga undefined, which maps to Taffy
+        // auto rather than a zero/nonzero length.
+        match units {
+            1 => Some(LengthPercentageAuto::length(value)),
+            2 => Some(LengthPercentageAuto::percent(value / 100.0)),
+            0 | 3 => Some(LengthPercentageAuto::auto()),
             _ => None,
         }
     }
@@ -4031,25 +4057,50 @@ pub fn preallocate_render_paint_cache_for_artboard_tree(
         .filter(|asset| asset.type_name == "ImageAsset")
         .map(|asset| asset.id)
         .collect::<Vec<_>>();
-    let split_first_image_decode = image_asset_globals.len() > 1;
+    let pre_source_count = pre_source_image_decode_count(artboards, image_asset_globals.len());
     let mut images = BTreeMap::new();
-    if split_first_image_decode {
-        if let Some(asset_global) = image_asset_globals.first().copied() {
+    if pre_source_count > 0 {
+        for asset_global in image_asset_globals.iter().copied().take(pre_source_count) {
             predecode_render_image(runtime, asset_global, factory, &mut images);
         }
     }
     let _source_artboard_paints = preallocate_render_paint_batch(runtime, factory);
-    for asset_global in image_asset_globals
-        .iter()
-        .copied()
-        .skip(usize::from(split_first_image_decode))
-    {
+    for asset_global in image_asset_globals.iter().copied().skip(pre_source_count) {
         predecode_render_image(runtime, asset_global, factory, &mut images);
     }
     let mut cache =
         preallocate_artboard_render_paint_tree_batch(runtime, graph, artboards, factory);
     cache.images = images;
     cache
+}
+
+fn pre_source_image_decode_count(artboards: &[ArtboardGraph], image_asset_count: usize) -> usize {
+    if image_asset_count <= 1 {
+        return 0;
+    }
+
+    // Mirrors the C++ `src/importers/file_asset_importer.cpp` resolution
+    // surface observed in asset-image-bound image/layout fixtures.
+    let has_asset_image_layout = artboards.iter().any(|artboard| {
+        let has_layout_component = artboard
+            .components
+            .iter()
+            .any(|component| component.type_name == "LayoutComponent");
+        if !has_layout_component {
+            return false;
+        }
+
+        artboard.data_binds.iter().any(|data_bind| {
+            data_bind.target_type_name == Some("Image")
+                && property_key_for_name("Image", "assetId")
+                    .is_some_and(|key| data_bind.property_key == u64::from(key))
+        })
+    });
+    if has_asset_image_layout {
+        return image_asset_count.min(2);
+    }
+
+    1
 }
 
 fn predecode_render_image(

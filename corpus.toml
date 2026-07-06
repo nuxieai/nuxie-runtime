@@ -526,9 +526,8 @@ features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill",
 id = "double_library_with_image"
 path = "tests/unit_tests/assets/double_library_with_image.riv"
 samples = [0.0]
-status = "unsupported-feature"
-milestone = "M6"
-features = ["type-key:100:Image", "type-key:105:ImageAsset", "type-key:106:FileAssetContents", "type-key:1:Artboard", "type-key:23:Backboard", "type-key:92:NestedArtboard", "rust-runner-unsupported:images"]
+status = "exact"
+features = ["type-key:100:Image", "type-key:105:ImageAsset", "type-key:106:FileAssetContents", "type-key:1:Artboard", "type-key:23:Backboard", "type-key:92:NestedArtboard"]
 
 [[file]]
 id = "double_line"
@@ -985,9 +984,8 @@ features = ["type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill",
 id = "library_with_image"
 path = "tests/unit_tests/assets/library_with_image.riv"
 samples = [0.0]
-status = "unsupported-feature"
-milestone = "M6"
-features = ["type-key:100:Image", "type-key:105:ImageAsset", "type-key:106:FileAssetContents", "type-key:1:Artboard", "type-key:23:Backboard", "type-key:92:NestedArtboard", "rust-runner-unsupported:images"]
+status = "exact"
+features = ["type-key:100:Image", "type-key:105:ImageAsset", "type-key:106:FileAssetContents", "type-key:1:Artboard", "type-key:23:Backboard", "type-key:92:NestedArtboard"]
 
 [[file]]
 id = "library_with_text_and_image"

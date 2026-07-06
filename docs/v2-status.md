@@ -5,9 +5,9 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 517 across 196 exact files
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=99, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=55 gated=8 harness=36
+- Exact segments (file × sample): 519 across 198 exact files
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=97, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=53 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -23,11 +23,11 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue the M6 image bucket with `double_library_with_image.riv` and
-   `library_with_image.riv`, the next-smallest `rust-runner-unsupported:images`
-   entries. They add only `NestedArtboard` on top of the image trio, so inspect
-   whether the decoded global image cache already works through nested hosts or
-   whether library image asset resolution needs a narrow follow-up.
+1. Continue the M6 image bucket with `hosted_image_file.riv` and
+   `in_band_asset.riv`, the next-smallest top-level
+   `rust-runner-unsupported:images` entries. They should separate the hosted
+   no-loader early-return path from an in-band image plus artboard
+   background/backboard siblings.
 2. Generic `rust-runner-unsupported:text` and the sharper
    `text-vertical-trim` gate are empty in the current corpus. Do not reopen
    text unless a newly added corpus entry exposes a first text diagnostic.
@@ -1113,3 +1113,13 @@ the only memory the next session has. Update it every commit.
   `M6=55 gated=8 harness=36`; `cargo test --workspace` passes. Next target
   remains the nested-library image pair: `double_library_with_image.riv` and
   `library_with_image.riv`.
+- 2026-07-06: [M6] Promoted `double_library_with_image.riv` and
+  `library_with_image.riv` by widening the Rust runner's image admission from
+  a single image-only artboard to a static image artboard tree. The existing
+  runtime image cache already predecoded embedded `ImageAsset` contents and
+  threaded them through nested hosts; focused C++/Rust streams for both
+  fixtures and `custom_image_name.riv` are byte-identical. Full
+  `make golden-compare` reports `exact=198`, `exact-segments=519`,
+  `diverges=0`, `unsupported-feature=97`, `not-yet=0`, and parked
+  `M6=53 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
+  the top-level image pair: `hosted_image_file.riv` and `in_band_asset.riv`.

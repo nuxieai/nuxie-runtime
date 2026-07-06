@@ -1901,11 +1901,37 @@ fn simple_static_image_artboard_supported(
     graph: &GraphFile,
     artboard: &ArtboardGraph,
 ) -> bool {
-    if !artboard
-        .local_objects
-        .iter()
-        .all(|object| matches!(object.type_name, Some("Artboard" | "Image")))
-    {
+    let mut visiting = BTreeSet::new();
+    simple_static_image_artboard_tree_supported(runtime, graph, artboard, &mut visiting)
+}
+
+fn simple_static_image_artboard_tree_supported(
+    runtime: &RuntimeFile,
+    graph: &GraphFile,
+    artboard: &ArtboardGraph,
+    visiting: &mut BTreeSet<u32>,
+) -> bool {
+    if !visiting.insert(artboard.global_id) {
+        return false;
+    }
+    let supported =
+        simple_static_image_artboard_tree_supported_entered(runtime, graph, artboard, visiting);
+    visiting.remove(&artboard.global_id);
+    supported
+}
+
+fn simple_static_image_artboard_tree_supported_entered(
+    runtime: &RuntimeFile,
+    graph: &GraphFile,
+    artboard: &ArtboardGraph,
+    visiting: &mut BTreeSet<u32>,
+) -> bool {
+    if !artboard.local_objects.iter().all(|object| {
+        matches!(
+            object.type_name,
+            Some("Artboard" | "Image" | "NestedArtboard")
+        )
+    }) {
         return false;
     }
     if !artboard.meshes.is_empty() || !artboard.n_slicer_details.is_empty() {
@@ -1931,11 +1957,29 @@ fn simple_static_image_artboard_supported(
     artboard
         .sorted_drawable_order
         .iter()
-        .filter(|drawable| drawable.type_name == "Image")
-        .all(|drawable| {
-            drawable
+        .all(|drawable| match drawable.type_name {
+            "Image" => drawable
                 .resolved_image_asset_global
-                .is_some_and(|asset_global| image_asset_globals.contains(&asset_global))
+                .is_some_and(|asset_global| image_asset_globals.contains(&asset_global)),
+            "NestedArtboard" => {
+                let Some(referenced_artboard_global) = drawable.referenced_artboard_global else {
+                    return false;
+                };
+                let Some(child_artboard) = graph
+                    .artboards
+                    .iter()
+                    .find(|artboard| artboard.global_id == referenced_artboard_global)
+                else {
+                    return false;
+                };
+                simple_static_image_artboard_tree_supported(
+                    runtime,
+                    graph,
+                    child_artboard,
+                    visiting,
+                )
+            }
+            _ => true,
         })
 }
 

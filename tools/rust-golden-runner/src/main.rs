@@ -1983,13 +1983,16 @@ fn simple_static_image_artboard_tree_supported_entered(
                     | "LayoutComponent"
                     | "LayoutComponentStyle"
                     | "NestedArtboard"
+                    | "NSlicer"
+                    | "AxisX"
+                    | "AxisY"
                     | "SolidColor",
             )
         )
     }) {
         return false;
     }
-    if !artboard.meshes.is_empty() || !artboard.n_slicer_details.is_empty() {
+    if !artboard.meshes.is_empty() {
         return false;
     }
     if !artboard.shape_paint_containers.iter().all(|container| {

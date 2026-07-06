@@ -5,10 +5,10 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 525 across 204 files (strict
-  exact=522/201; tolerant=3/3; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=91, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=47 gated=8 harness=36
+- Exact-status segments (file × sample): 526 across 205 files (strict
+  exact=523/202; tolerant=3/3; structural=0/0)
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=90, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=46 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -24,10 +24,11 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue the M6 image bucket with `image_fit_alignment_2.riv`, the same
-   fit/alignment family after `image_fit_alignment.riv` promoted, plus
-   `NSlicer`/axis layout behavior behind the current
-   `rust-runner-unsupported:images` diagnostic.
+1. Pivot to the largest remaining M6 bucket,
+   `rust-runner-unsupported:nested-artboard-layout` (18 entries), starting with
+   `artboard_width_test.riv` unless a focused run proves another entry is the
+   smaller first slice. Keep `rust-runner-unsupported:images` (17 entries) as
+   the next bucket; true `NSlicedNode`/mesh image work remains gated.
 2. Generic `rust-runner-unsupported:text` and the sharper
    `text-vertical-trim` gate are empty in the current corpus. Do not reopen
    text unless a newly added corpus entry exposes a first text diagnostic.
@@ -108,7 +109,8 @@ the only memory the next session has. Update it every commit.
   nested host `isPaused` mutation, plus no-input recursive nested
   `ListenerAlignTarget` fixtures where the action is unexercised, plus plain
   embedded/hosted non-mesh `Image::draw` including layout-controlled
-  fit/alignment under Taffy bounds.
+  fit/alignment under Taffy bounds and metadata-only `NSlicer`/axis
+  image-layout fixtures that render through existing `LayoutComponent` paints.
   Custom handle-source world-space math, data-bound nested host controls beyond
   generated defaults (external/live pause/speed/quantize mutation), remaining
   nested child data-bind targets beyond the current number/color/default bind
@@ -1208,3 +1210,13 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=91`, `not-yet=0`, and parked
   `M6=47 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
   `image_fit_alignment_2.riv`.
+- 2026-07-06: [M6] Promoted `image_fit_alignment_2.riv` by admitting
+  metadata-only `NSlicer`/`AxisX`/`AxisY` image artboards through the static
+  image gate while keeping meshes and actual `NSlicedNode` draw behavior gated.
+  The existing runtime draw path already matched C++: the fixture decodes the
+  embedded images but renders only layout-component background paints. Focused
+  C++/Rust streams are exact. Full `make golden-compare` reports `exact=205`,
+  `exact-segments=526`, `diverges=0`, `unsupported-feature=90`, `not-yet=0`,
+  and parked `M6=46 gated=8 harness=36`; `cargo test --workspace` passes. Next
+  target is the M6 nested-artboard-layout bucket, starting with
+  `artboard_width_test.riv`.

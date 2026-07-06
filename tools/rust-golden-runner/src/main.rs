@@ -1817,6 +1817,22 @@ fn nested_child_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> boo
     if data_bind.target_type_name == Some("SolidColor") {
         return true;
     }
+    if data_bind.target_type_name == Some("ArtboardComponentList")
+        // ArtboardComponentListBase::listSourcePropertyKey in C++ generated/artboard_component_list_base.hpp.
+        && data_bind.property_key == 800
+        && (data_bind.converter_global.is_none()
+            || data_bind.converter_type_name == Some("DataConverterNumberToList"))
+    {
+        return true;
+    }
+    if data_bind.target_type_name == Some("CustomPropertyNumber")
+        // CustomPropertyNumberBase::propertyValuePropertyKey in C++ generated/custom_property_number_base.hpp.
+        && data_bind.property_key == 243
+        && (data_bind.converter_global.is_none()
+            || data_bind.converter_type_name == Some("DataConverterGroup"))
+    {
+        return true;
+    }
     (data_bind.target_type_name == Some("Ellipse")
         && matches!(data_bind.property_key, 20 | 21)
         && data_bind.converter_global.is_none())

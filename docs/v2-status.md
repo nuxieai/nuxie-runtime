@@ -24,19 +24,17 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Pick the largest remaining M6 bucket:
-   `rust-runner-unsupported:data-binding-nested-child` (5:
-   `db_health_tracker.riv`, `hit_test_test.riv`, `nested_hug.riv`,
-   `stateful_multi_property.riv`, `stateful_nested.riv`). This advances the
-   remaining nested child data-binding runtime slice now that layout-backed
-   stateful hosts are admitted.
-2. Other M6 queues are
-   `rust-runner-unsupported:focus-data` (4:
+1. Pick one of the tied largest remaining M6 buckets:
+   `rust-runner-unsupported:data-binding-nested-child` (4:
+   `db_health_tracker.riv`, `nested_hug.riv`, `stateful_multi_property.riv`,
+   `stateful_nested.riv`), `rust-runner-unsupported:focus-data` (4:
    `focus_collapsing.riv`, `focus_traversal.riv`, `focusable_element.riv`,
-   `text_input.riv`),
-   `rust-runner-unsupported:scroll-constraints` (3:
+   `text_input.riv`), or `rust-runner-unsupported:scroll-constraints` (4:
    `component_list_virtualized.riv`, `draw_index_list.riv`,
-   `virtualized_artboard_databound_children.riv`),
+   `hit_test_test.riv`, `virtualized_artboard_databound_children.riv`).
+   If staying in the data-binding lane, start from the stateful Artboard/text
+   transform drift exposed by the focused compare below.
+2. Other M6 queues are
    `rust-runner-unsupported:selected-root-image-order` (3:
    `bullet_man.riv`, `car_widgets_v01.riv`, `spotify_kids_demo.riv`),
    `rust-runner-unsupported:text` (3: `echo_show_demo.riv`,
@@ -1494,3 +1492,13 @@ the only memory the next session has. Update it every commit.
   `M6=25 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
   the largest remaining M6 bucket,
   `rust-runner-unsupported:data-binding-nested-child`.
+- 2026-07-06: [M6] Reclassified `hit_test_test.riv` after admitting nested
+  child `ArtboardComponentList.listSource` / `DataConverterNumberToList` binds
+  in the Rust runner; it now reaches
+  `rust-runner-unsupported:scroll-constraints`. Focused comparison also showed
+  that admitting the broader stateful Artboard/text/layout value path is not
+  exact yet: `nested_hug.riv`, `stateful_multi_property.riv`, and
+  `stateful_nested.riv` render but drift in nested transforms, so they remain
+  parked as `rust-runner-unsupported:data-binding-nested-child`. Next target is
+  one of the tied four-file M6 buckets: data-binding nested child, focus data,
+  or scroll constraints.

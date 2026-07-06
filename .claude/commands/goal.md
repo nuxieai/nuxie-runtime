@@ -107,6 +107,31 @@ milestone queue:
 Perfectionism about an individual behavior is not rigor here; it is scope
 failure. Shipped-and-diffed beats proven-in-isolation.
 
+## Threads (parallel work)
+
+The main loop stays a single writer in this worktree — never spawn a second
+thread that edits the same modules, `corpus.toml`, or this status file in
+place. Parallelism comes in exactly three shapes:
+
+1. **Scout threads (read-only fan-out).** Triage is parallel: spawn threads
+   to probe parked/queued corpus files for their first blocker and report
+   back, so queue ordering is data instead of guesswork. Scouts never write.
+2. **Lane threads (orthogonal work, own worktree).** Work that touches
+   nothing the main loop edits runs as a thread started in a new worktree,
+   merged back into this branch when done. A lane merge must pass the full
+   ratchet (`make golden-compare` + `cargo test --workspace`) before it
+   lands, and must not carry unrelated file changes. Current eligible lanes:
+   the C++ golden-runner crash repair (`milestone = "harness"`, 36 files —
+   touches only `tools/golden-runner`), M7 scaffolding (benchmark harness,
+   importer fuzz target, public API/C ABI drafts), and the feature-gated
+   scripting spike (mlua+Luau).
+3. **Never**: two threads porting adjacent runtime slices on the critical
+   path. The ratchet serializes verification anyway; parallel writers there
+   buy merge conflicts, not wall-clock.
+
+When you start a lane thread, record it in the status file (who owns what,
+which worktree); when it merges, log the merge like any other slice.
+
 ## Asking the user
 
 Work autonomously. Interrupt only for: destructive/irreversible actions,

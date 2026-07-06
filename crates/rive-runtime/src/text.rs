@@ -468,6 +468,7 @@ impl<'a> StaticTextSlice<'a> {
                         | "NestedArtboard"
                         | "NestedStateMachine"
                         | "NestedBool"
+                        | "NestedNumber"
                         | "ArtboardComponentList"
                         | "RootBone"
                         | "Skin"
@@ -2078,11 +2079,19 @@ impl StaticTextModifierGroup {
         let flags = object.uint_property("modifierFlags").unwrap_or(0);
         const MODIFY_TRANSLATION: u64 = 1 << 2;
         const MODIFY_ROTATION: u64 = 1 << 3;
+        const MODIFY_SCALE: u64 = 1 << 4;
         const MODIFY_OPACITY: u64 = 1 << 5;
         const INVERT_OPACITY: u64 = 1 << 6;
-        if flags & !(MODIFY_TRANSLATION | MODIFY_ROTATION | MODIFY_OPACITY | INVERT_OPACITY) != 0 {
+        if flags
+            & !(MODIFY_TRANSLATION
+                | MODIFY_ROTATION
+                | MODIFY_SCALE
+                | MODIFY_OPACITY
+                | INVERT_OPACITY)
+            != 0
+        {
             bail!(
-                "static text subset only supports translation/rotation/opacity TextModifierGroup flags, found {flags}"
+                "static text subset only supports translation/rotation/scale/opacity TextModifierGroup flags, found {flags}"
             );
         }
 
@@ -2141,6 +2150,7 @@ impl StaticTextModifierGroup {
         )?;
         const MODIFY_TRANSLATION: u64 = 1 << 2;
         const MODIFY_ROTATION: u64 = 1 << 3;
+        const MODIFY_SCALE: u64 = 1 << 4;
         let follows_path = !self.follow_path_modifiers.is_empty();
         if amount == 0.0 && !follows_path {
             return Ok(Mat2D::IDENTITY);
@@ -2149,6 +2159,8 @@ impl StaticTextModifierGroup {
         let mut x = 0.0;
         let mut y = 0.0;
         let mut rotation = 0.0;
+        let mut scale_x = 1.0;
+        let mut scale_y = 1.0;
 
         if follows_path {
             // Ported from C++ `src/text/text_modifier_group.cpp`
@@ -2220,9 +2232,33 @@ impl StaticTextModifierGroup {
                 0.0,
             )? * amount;
         }
+        if flags & MODIFY_SCALE != 0 {
+            let inverse_amount = 1.0 - amount;
+            scale_x = inverse_amount
+                + runtime_double_property(
+                    runtime,
+                    instance,
+                    "TextModifierGroup",
+                    self.local_id,
+                    self.global_id,
+                    "scaleX",
+                    1.0,
+                )? * amount;
+            scale_y = inverse_amount
+                + runtime_double_property(
+                    runtime,
+                    instance,
+                    "TextModifierGroup",
+                    self.local_id,
+                    self.global_id,
+                    "scaleY",
+                    1.0,
+                )? * amount;
+        }
         let mut transform = Mat2D::from_rotation(rotation);
         transform.0[4] = x;
         transform.0[5] = y;
+        transform.scale_by_values(scale_x, scale_y);
         Ok(transform)
     }
 

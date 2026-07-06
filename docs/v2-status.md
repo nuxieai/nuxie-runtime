@@ -7,8 +7,8 @@ the only memory the next session has. Update it every commit.
 
 - Exact-status segments (file × sample): 555 across 234 files (strict
   exact=552/231; tolerant=3/3; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=59, not-yet=2
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=18 gated=5 harness=36
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=58, not-yet=3
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=17 gated=5 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes**
 
 ## Milestones
@@ -24,11 +24,9 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Pick one of the tied largest remaining M6 buckets. Prefer
-   `rust-runner-unsupported:text-modifier-group-flags` first because
-   `hunter_x_demo.riv` and `rewards_demo.riv` now both expose it after the
-   nested-feather and N-slice gates were removed. The other two-file bucket is
+1. Pick the largest remaining M6 bucket:
    `rust-runner-unsupported:mesh-images` (`jellyfish_test.riv`, `tape.riv`).
+   This is now the only two-file M6 diagnostic bucket.
 2. Other parked queues are
    `rust-runner-unsupported:contour-mesh-metadata` (1: `bad_skin.riv`),
    `scripted-transition-condition` (2 gated), `scripted-path-effects` (1 gated),
@@ -36,7 +34,6 @@ the only memory the next session has. Update it every commit.
    `layout-component-paint` (1: `text_input.riv`),
    `viewmodel-asset-conditions` (1),
    `text-joystick-data-bind` (1: `echo_show_demo.riv`),
-   `text-modifier-group-flags` (2: `hunter_x_demo.riv`, `rewards_demo.riv`),
    `nested-artboard-layout` (1: `superbowl.riv`),
    `selected-root-gradient-shader-order` (1: `bullet_man.riv`), and
    `selected-root-skinned-clip-path` (1: `spotify_kids_demo.riv`). The former
@@ -45,9 +42,12 @@ the only memory the next session has. Update it every commit.
    `nested-artboard-root-transform` (`nested_hug.riv`),
    `nested-node-transform-data-bind` (`car_widgets_v01.riv`),
    `nested-layout-clip-data-bind` (`stateful_multi_property.riv`), and
-   `nested-stateful-view-model-property` (`stateful_nested.riv`). Gated
+   `nested-stateful-view-model-property` (`stateful_nested.riv`). The
+   `rewards_demo.riv` file now exposes the one-file
+   `nested-layout-size-data-bind` diagnostic. Gated
    one-file diagnostics include `text-polygon-sibling` (`bankcard.riv`) and
    `not-yet:nested-feather-gradient-space` (`ai_assitant.riv`);
+   `hunter_x_demo.riv` is the M6 `not-yet:gradient-shader-order` entry and
    `local_bounds.riv` is the M6 `not-yet:image-predecode-order` entry.
 3. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
@@ -70,9 +70,11 @@ the only memory the next session has. Update it every commit.
 - None in the active corpus. `make golden-compare` reports `diverges=0`; the
   remaining M6 work is parked behind explicit unsupported-feature diagnostics
   or documented `not-yet` entries. `ai_assitant.riv` imports and draws but has
-  a nested-feather gradient-space exact-parity gap. `local_bounds.riv` now
-  runs after NSlicedNode path deformation, but Rust decodes the external image
-  after early paint allocation and also shows tiny static-text float residuals.
+  a nested-feather gradient-space exact-parity gap. `hunter_x_demo.riv` now
+  runs after scale text modifiers, but Rust and C++ allocate gradients/shaders
+  in different selected-root order. `local_bounds.riv` now runs after
+  NSlicedNode path deformation, but Rust decodes the external image after early
+  paint allocation and also shows tiny static-text float residuals.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -179,7 +181,7 @@ the only memory the next session has. Update it every commit.
   multi-style text, static authored-line-break and no-break multi-run text,
   fixed-size ellipsis across multiple authored lines with bottom/middle
   vertical alignment, variation-aware no-break multi-run style outlines,
-  auto-width origin offsets, and translation/rotation/opacity
+  auto-width origin offsets, and translation/rotation/scale/opacity
   `TextModifierGroup` over C++-style
   `TextModifierRange` character, character-excluding-space, word, and static
   line range maps with runId targeting and optional cubic range
@@ -200,9 +202,9 @@ the only memory the next session has. Update it every commit.
   Ellipse/Polygon/Rectangle/Star/Triangle around static text.
   Static text can coexist with authored nested bool input controls beside
   nested state-machine hosts and passive sample-0 `FocusData` /
-  `KeyboardInput` metadata plus inert `ScriptedDrawable` siblings.
-  Shape/scale/origin modifiers,
-  gradient/other text effects, richer layout, broader `Text` property
+  `KeyboardInput` metadata, passive nested numeric controls, plus inert
+  `ScriptedDrawable` siblings. Shape/origin modifiers, gradient/other text
+  effects, richer layout, broader `Text` property
   data binds, and text input/editing remain M6 text diagnostics.
 - `TransformConstraint` currently covers Text constraint bounds for the
   supported static Text subset plus the default empty
@@ -258,6 +260,14 @@ the only memory the next session has. Update it every commit.
 - 2026-07-02: CI pins the reference C++ runtime to
   `7c778d13c5d903b3b74eec1dd6bb68a811dea5f2` and builds root
   `premake5_v2.lua` debug libraries before running `make golden-compare`.
+- 2026-07-06: [M6] Closed `text-modifier-group-flags` by adding C++-style
+  `TextModifierGroup` scale interpolation and passive `NestedNumber` static
+  text sibling admission. `hunter_x_demo.riv` now reaches a Rust stream and
+  parks as `not-yet:gradient-shader-order`; `rewards_demo.riv` now verifies as
+  `rust-runner-unsupported:nested-layout-size-data-bind` for LayoutComponent
+  width binding. `make golden-compare` reports exact-segments=555,
+  diverges=0, unsupported-feature=58, not-yet=3; next target is
+  `rust-runner-unsupported:mesh-images`. `cargo test --workspace` passes.
 - 2026-07-02: `rive-runtime` owns static draw emission through
   `rive-render-api`; `rust-golden-runner` now only orchestrates import,
   artboard selection, stream markers, and recording output.

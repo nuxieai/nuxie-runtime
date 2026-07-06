@@ -1848,6 +1848,7 @@ fn nested_child_data_bind_unsupported_feature(
         (Some("TrimPath"), 114 | 115 | 116) => "nested-trim-path-data-bind",
         (Some("Artboard"), 13 | 14) => "nested-artboard-root-transform",
         (Some("Artboard"), 196) => "nested-layout-clip-data-bind",
+        (Some("LayoutComponent"), 7 | 8) => "nested-layout-size-data-bind",
         // TransformComponentBase::rotationPropertyKey can surface through a
         // nested child Node target.
         (Some("Node"), 15) => "nested-node-transform-data-bind",

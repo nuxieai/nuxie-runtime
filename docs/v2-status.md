@@ -65,6 +65,19 @@ the only memory the next session has. Update it every commit.
    full ratchet passes. Recovered files enter as `not-yet` — denominator
    growth, zero conflict with M6 runtime work.
 
+6. Harness lane MERGED (e5941e7): the C++ golden-runner now survives 34 of
+   36 `milestone = "harness"` files (FileAssetContents stripping for the
+   non-scripting librive build, flush + `_Exit(0)` before teardown, ABI
+   define alignment). MAIN-LOOP FOLLOW-UP: flip those 34 corpus entries
+   from `milestone = "harness"` to `status = "not-yet"` (keep type-key
+   features, drop `cpp-runner-crash`), then triage them like any queue.
+   Residuals (2): `data_viz_demo` and `data_binding_artboards_test` crash
+   only because the runner binds a blank default view-model instance;
+   binding named instance 0 (like the reference unit tests) recovers both
+   but perturbs 66 currently-exact entries — treat as a coordinated
+   convention-change decision, not a harness fix. Keep them
+   `milestone = "harness"` until decided.
+
 ## Known Divergences
 
 - None in the active corpus. `make golden-compare` reports `diverges=0`; the

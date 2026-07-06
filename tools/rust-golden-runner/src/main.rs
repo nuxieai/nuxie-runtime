@@ -1769,7 +1769,12 @@ fn nested_stateful_view_model_object(
     let nested_host_locals = artboard
         .nested_artboards
         .iter()
-        .filter(|host| host.type_name == "NestedArtboard")
+        .filter(|host| {
+            matches!(
+                host.type_name,
+                "NestedArtboard" | "NestedArtboardLayout" | "NestedArtboardLeaf"
+            )
+        })
         .map(|host| host.local_id)
         .collect::<BTreeSet<_>>();
     let mut allowed_stateful_child_locals = BTreeSet::<usize>::new();

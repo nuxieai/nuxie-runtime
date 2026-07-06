@@ -5,10 +5,10 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 546 across 225 files (strict
-  exact=543/222; tolerant=3/3; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=70, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=26 gated=8 harness=36
+- Exact-status segments (file × sample): 547 across 226 files (strict
+  exact=544/223; tolerant=3/3; structural=0/0)
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=69, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=25 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -25,21 +25,22 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Pick the largest remaining M6 bucket:
-   `rust-runner-unsupported:data-binding-nested-stateful-view-model` (4:
-   `focus_traversal.riv`, `stateful_keyed_trigger.riv`,
+   `rust-runner-unsupported:data-binding-nested-child` (5:
+   `db_health_tracker.riv`, `hit_test_test.riv`, `nested_hug.riv`,
    `stateful_multi_property.riv`, `stateful_nested.riv`). This advances the
-   remaining nested layout/data-binding runtime slice now that the scroll
-   bucket is no longer largest.
+   remaining nested child data-binding runtime slice now that layout-backed
+   stateful hosts are admitted.
 2. Other M6 queues are
+   `rust-runner-unsupported:focus-data` (4:
+   `focus_collapsing.riv`, `focus_traversal.riv`, `focusable_element.riv`,
+   `text_input.riv`),
    `rust-runner-unsupported:scroll-constraints` (3:
    `component_list_virtualized.riv`, `draw_index_list.riv`,
    `virtualized_artboard_databound_children.riv`),
    `rust-runner-unsupported:selected-root-image-order` (3:
    `bullet_man.riv`, `car_widgets_v01.riv`, `spotify_kids_demo.riv`),
-   `rust-runner-unsupported:data-binding-nested-child` (3:
-   `db_health_tracker.riv`, `hit_test_test.riv`, `nested_hug.riv`),
    `rust-runner-unsupported:text` (3: `echo_show_demo.riv`,
-   `hunter_x_demo.riv`, `superbowl.riv`), `focus-data` (3),
+   `hunter_x_demo.riv`, `superbowl.riv`),
    `rust-runner-unsupported:mesh-images` (2:
    `jellyfish_test.riv`, `tape.riv`), and
    `rust-runner-unsupported:contour-mesh-metadata` (1: `bad_skin.riv`),
@@ -104,7 +105,7 @@ the only memory the next session has. Update it every commit.
   `NestedArtboard` host draw with child root opacity inheritance, default
   nested simple-animation/state-machine hosts backed by persistent child
   artboard instances, stateful child `ViewModelInstance` subtree admission
-  under plain nested hosts, nested child unbound SolidColor data-bind defaults,
+  under plain and layout/leaf nested hosts, nested child unbound SolidColor data-bind defaults,
   nested child Ellipse width/height, RootBone x/y, and Shape x/y
   source-to-target number binds backed by stateful child view-model values,
   direct no-converter Shape x/y number binds, direct SolidColor `colorValue`
@@ -145,13 +146,12 @@ the only memory the next session has. Update it every commit.
   Custom handle-source world-space math, data-bound nested host controls beyond
   generated defaults (external/live pause/speed/quantize mutation), remaining
   nested child data-bind targets beyond the current number/color/default bind
-  set, and broader bound stateful child view-model propagation remain
-  corpus-driven follow-up work if a future file exposes them. Focus data,
+  set, and broader nested child object/list/value propagation remain
+  corpus-driven follow-up work. Focus data,
   input-driven recursive
   `ListenerAlignTarget` and nested pointer/listener hit propagation beyond
-  reported `Event` listeners, `NestedArtboardLayout` / `NestedArtboardLeaf`,
-  and layout-backed or virtualized component-list instancing remain M6 or
-  later diagnostics.
+  reported `Event` listeners, and layout-backed or virtualized component-list
+  instancing remain M6 or later diagnostics.
   Golden runner sample lists now advance by sorted absolute-time deltas and
   reuse render paths across samples; no N-slice image layout, mesh image
   drawing, selected-root image paint/preallocation ordering,
@@ -1482,3 +1482,15 @@ the only memory the next session has. Update it every commit.
   `not-yet=0`, and parked `M6=26 gated=8 harness=36`; `cargo test
   --workspace` passes. Next target is the largest remaining M6 bucket,
   `rust-runner-unsupported:data-binding-nested-stateful-view-model`.
+- 2026-07-06: [M6] Promoted `stateful_keyed_trigger.riv` by admitting
+  `ViewModelInstance*` subtrees under `NestedArtboardLayout` and
+  `NestedArtboardLeaf` hosts. The old
+  `data-binding-nested-stateful-view-model` queue is closed:
+  `focus_traversal.riv` now verifies as `rust-runner-unsupported:focus-data`,
+  while `stateful_multi_property.riv` and `stateful_nested.riv` verify as
+  `rust-runner-unsupported:data-binding-nested-child`. Full
+  `make golden-compare` reports `exact=226`, `exact-segments=547`,
+  `diverges=0`, `unsupported-feature=69`, `not-yet=0`, and parked
+  `M6=25 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
+  the largest remaining M6 bucket,
+  `rust-runner-unsupported:data-binding-nested-child`.

@@ -72,6 +72,41 @@ pub(super) enum RuntimeTransitionCondition {
         op: TransitionConditionOp,
         value: u64,
     },
+    ViewModelNumberPair {
+        left: RuntimeViewModelNumberValue,
+        right: RuntimeViewModelNumberValue,
+        op: TransitionConditionOp,
+    },
+    ViewModelBooleanPair {
+        left_bindable_global_id: u32,
+        right_bindable_global_id: u32,
+        op: TransitionConditionOp,
+    },
+    ViewModelColorPair {
+        left_bindable_global_id: u32,
+        right_bindable_global_id: u32,
+        op: TransitionConditionOp,
+    },
+    ViewModelStringPair {
+        left_bindable_global_id: u32,
+        right_bindable_global_id: u32,
+        op: TransitionConditionOp,
+    },
+    ViewModelEnumPair {
+        left_bindable_global_id: u32,
+        right_bindable_global_id: u32,
+        op: TransitionConditionOp,
+    },
+    ViewModelAssetPair {
+        left_bindable_global_id: u32,
+        right_bindable_global_id: u32,
+        op: TransitionConditionOp,
+    },
+    ViewModelArtboardPair {
+        left_bindable_global_id: u32,
+        right_bindable_global_id: u32,
+        op: TransitionConditionOp,
+    },
     ViewModelTrigger {
         bindable_global_id: u32,
     },
@@ -273,15 +308,79 @@ impl RuntimeTransitionCondition {
                 if right.type_name == "TransitionPropertyViewModelComparator" {
                     let left_bindable = file.latest_bindable_property_for_object(left)?;
                     let right_bindable = file.latest_bindable_property_for_object(right)?;
+                    let op = TransitionConditionOp::from_value(
+                        object.uint_property("opValue").unwrap_or(0),
+                    );
+                    if left_bindable.type_name == "BindablePropertyNumber"
+                        || left_bindable.type_name == "BindablePropertyInteger"
+                    {
+                        return Some(Self::ViewModelNumberPair {
+                            left: RuntimeViewModelNumberValue::from_bindable(left_bindable)?,
+                            right: RuntimeViewModelNumberValue::from_bindable(right_bindable)?,
+                            op,
+                        });
+                    }
+                    if left_bindable.type_name == "BindablePropertyBoolean"
+                        && right_bindable.type_name == "BindablePropertyBoolean"
+                    {
+                        return Some(Self::ViewModelBooleanPair {
+                            left_bindable_global_id: left_bindable.id,
+                            right_bindable_global_id: right_bindable.id,
+                            op,
+                        });
+                    }
+                    if left_bindable.type_name == "BindablePropertyColor"
+                        && right_bindable.type_name == "BindablePropertyColor"
+                    {
+                        return Some(Self::ViewModelColorPair {
+                            left_bindable_global_id: left_bindable.id,
+                            right_bindable_global_id: right_bindable.id,
+                            op,
+                        });
+                    }
+                    if left_bindable.type_name == "BindablePropertyString"
+                        && right_bindable.type_name == "BindablePropertyString"
+                    {
+                        return Some(Self::ViewModelStringPair {
+                            left_bindable_global_id: left_bindable.id,
+                            right_bindable_global_id: right_bindable.id,
+                            op,
+                        });
+                    }
+                    if left_bindable.type_name == "BindablePropertyEnum"
+                        && right_bindable.type_name == "BindablePropertyEnum"
+                    {
+                        return Some(Self::ViewModelEnumPair {
+                            left_bindable_global_id: left_bindable.id,
+                            right_bindable_global_id: right_bindable.id,
+                            op,
+                        });
+                    }
+                    if left_bindable.type_name == "BindablePropertyAsset"
+                        && right_bindable.type_name == "BindablePropertyAsset"
+                    {
+                        return Some(Self::ViewModelAssetPair {
+                            left_bindable_global_id: left_bindable.id,
+                            right_bindable_global_id: right_bindable.id,
+                            op,
+                        });
+                    }
+                    if left_bindable.type_name == "BindablePropertyArtboard"
+                        && right_bindable.type_name == "BindablePropertyArtboard"
+                    {
+                        return Some(Self::ViewModelArtboardPair {
+                            left_bindable_global_id: left_bindable.id,
+                            right_bindable_global_id: right_bindable.id,
+                            op,
+                        });
+                    }
                     if left_bindable.type_name == "BindablePropertyViewModel"
                         && right_bindable.type_name == "BindablePropertyViewModel"
                     {
                         return Some(Self::ViewModelPointer {
                             left_bindable_global_id: left_bindable.id,
                             right_bindable_global_id: right_bindable.id,
-                            op: TransitionConditionOp::from_value(
-                                object.uint_property("opValue").unwrap_or(0),
-                            ),
+                            op,
                         });
                     }
                     return None;
@@ -962,6 +1061,99 @@ impl RuntimeTransitionCondition {
                 let input_value =
                     bindable_asset_value(bindable_assets, *bindable_global_id).unwrap_or(0);
                 op.compare_u64_equal_only(input_value, *value)
+            }
+            Self::ViewModelNumberPair { left, right, op } => {
+                if !data_context_present {
+                    return false;
+                }
+                op.compare(
+                    left.value(bindable_numbers, bindable_integers),
+                    right.value(bindable_numbers, bindable_integers),
+                )
+            }
+            Self::ViewModelBooleanPair {
+                left_bindable_global_id,
+                right_bindable_global_id,
+                op,
+            } => {
+                if !data_context_present {
+                    return false;
+                }
+                let left = bindable_boolean_value(bindable_booleans, *left_bindable_global_id)
+                    .unwrap_or(false);
+                let right = bindable_boolean_value(bindable_booleans, *right_bindable_global_id)
+                    .unwrap_or(false);
+                op.compare_bool(left, right)
+            }
+            Self::ViewModelColorPair {
+                left_bindable_global_id,
+                right_bindable_global_id,
+                op,
+            } => {
+                if !data_context_present {
+                    return false;
+                }
+                let left =
+                    bindable_color_value(bindable_colors, *left_bindable_global_id).unwrap_or(0);
+                let right =
+                    bindable_color_value(bindable_colors, *right_bindable_global_id).unwrap_or(0);
+                op.compare_u32_equal_only(left, right)
+            }
+            Self::ViewModelStringPair {
+                left_bindable_global_id,
+                right_bindable_global_id,
+                op,
+            } => {
+                if !data_context_present {
+                    return false;
+                }
+                let left = bindable_string_value(bindable_strings, *left_bindable_global_id)
+                    .unwrap_or(&[]);
+                let right = bindable_string_value(bindable_strings, *right_bindable_global_id)
+                    .unwrap_or(&[]);
+                op.compare_bytes_equal_only(left, right)
+            }
+            Self::ViewModelEnumPair {
+                left_bindable_global_id,
+                right_bindable_global_id,
+                op,
+            } => {
+                if !data_context_present {
+                    return false;
+                }
+                let left =
+                    bindable_enum_value(bindable_enums, *left_bindable_global_id).unwrap_or(0);
+                let right =
+                    bindable_enum_value(bindable_enums, *right_bindable_global_id).unwrap_or(0);
+                op.compare_u64_equal_only(left, right)
+            }
+            Self::ViewModelAssetPair {
+                left_bindable_global_id,
+                right_bindable_global_id,
+                op,
+            } => {
+                if !data_context_present {
+                    return false;
+                }
+                let left =
+                    bindable_asset_value(bindable_assets, *left_bindable_global_id).unwrap_or(0);
+                let right =
+                    bindable_asset_value(bindable_assets, *right_bindable_global_id).unwrap_or(0);
+                op.compare_u64_equal_only(left, right)
+            }
+            Self::ViewModelArtboardPair {
+                left_bindable_global_id,
+                right_bindable_global_id,
+                op,
+            } => {
+                if !data_context_present {
+                    return false;
+                }
+                let left = bindable_artboard_value(bindable_artboards, *left_bindable_global_id)
+                    .unwrap_or(0);
+                let right = bindable_artboard_value(bindable_artboards, *right_bindable_global_id)
+                    .unwrap_or(0);
+                op.compare_u64_equal_only(left, right)
             }
             Self::ViewModelTrigger { bindable_global_id } => {
                 if !data_context_present || !data_context_view_model_bound {

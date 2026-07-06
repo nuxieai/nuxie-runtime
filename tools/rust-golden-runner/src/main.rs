@@ -871,18 +871,6 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
-    if let Some(asset_comparator) = runtime
-        .objects
-        .iter()
-        .flatten()
-        .find(|object| object.type_name == "TransitionValueAssetComparator")
-    {
-        bail!(
-            "unsupported: viewmodel-asset-conditions in Rust golden runner (global {})",
-            asset_comparator.id
-        );
-    }
-
     if let Some(global_id) =
         unsupported_selected_root_skinned_clip_path_global(graph, artboard, !is_nested_child)
     {

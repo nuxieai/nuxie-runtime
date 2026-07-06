@@ -5,10 +5,10 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 563 across 242 files (strict
-  exact=556/235; tolerant=7/7; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=53, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=11 gated=6 harness=36
+- Exact-status segments (file × sample): 564 across 243 files (strict
+  exact=557/236; tolerant=7/7; structural=0/0)
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=52, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=10 gated=6 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes**
 
 ## Milestones
@@ -26,13 +26,11 @@ the only memory the next session has. Update it every commit.
 
 1. The active `not-yet` queue is empty. Continue M6 by picking the highest-value
    remaining unsupported queue that is not scripting/audio: start with
-   `viewmodel-asset-conditions`, `text-joystick-data-bind`
-   (`echo_show_demo.riv`), `nested-artboard-layout` (`superbowl.riv`), or
-   `selected-root-skinned-clip-path` (`bullet_man.riv`,
+   `text-joystick-data-bind` (`echo_show_demo.riv`), `nested-artboard-layout`
+   (`superbowl.riv`), or `selected-root-skinned-clip-path` (`bullet_man.riv`,
    `spotify_kids_demo.riv`).
-2. Other parked one-file M6 queues include `viewmodel-asset-conditions`,
-   `text-joystick-data-bind` (`echo_show_demo.riv`),
-   `nested-artboard-layout` (`superbowl.riv`), and
+2. Other parked one-file M6 queues include `text-joystick-data-bind`
+   (`echo_show_demo.riv`), `nested-artboard-layout` (`superbowl.riv`), and
    `selected-root-skinned-clip-path` (`bullet_man.riv`,
    `spotify_kids_demo.riv`). The former
    `data-binding-nested-child` queue is five one-file diagnostics:
@@ -142,7 +140,9 @@ the only memory the next session has. Update it every commit.
   gradient shader creation, default state-machine frame-0 application for
   color/bool/uint/string keyframes, Solo active-child refresh, source-to-target
   and target-to-source `Solo.activeComponentId` enum binds, enum-to-string
-  artboard property conversion, `Text.alignValue` enum/uint binds, and
+  artboard property conversion, `Text.alignValue` enum/uint binds,
+  ViewModel-vs-ViewModel transition comparators for number, bool, color,
+  string, enum, asset, and artboard bindables, and
   before-update joystick animation application, keyed double/color
   interpolation for CubicEase/CubicValue/Elastic keyframe interpolators, and
   `DistanceConstraint` world-translation application and
@@ -451,6 +451,18 @@ the only memory the next session has. Update it every commit.
   `diverges=0`, `unsupported-feature=53`, `not-yet=0`, parked
   `M6=11 gated=6 harness=36`; `cargo test --workspace` passes. Next target is
   `viewmodel-asset-conditions`, `text-joystick-data-bind`,
+  `nested-artboard-layout`, `selected-root-skinned-clip-path`, or the nested
+  data-bind diagnostics.
+- 2026-07-06: [M6] Promoted `viewmodel_based_condition.riv` by adding typed
+  `TransitionPropertyViewModelComparator` pair conditions for view-model
+  number, boolean, color, string, enum, asset, and artboard bindables. The
+  file's blocked transitions were ViewModel-vs-ViewModel asset/color/string
+  comparisons, not literal asset comparators, so the runner
+  `viewmodel-asset-conditions` guard was removed with the corpus entry.
+  Direct C++/Rust streams match, and full `make golden-compare` reports
+  `exact=243`, `exact-segments=564`, `diverges=0`,
+  `unsupported-feature=52`, `not-yet=0`, parked
+  `M6=10 gated=6 harness=36`. Next target is `text-joystick-data-bind`,
   `nested-artboard-layout`, `selected-root-skinned-clip-path`, or the nested
   data-bind diagnostics.
 - 2026-07-02: `rive-runtime` owns static draw emission through

@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 513 across 192 exact files
-- Current compare: `make golden-compare` reports diverges=1, unsupported-feature=102, not-yet=0
+- Exact segments (file × sample): 514 across 193 exact files
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=102, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=58 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
@@ -23,42 +23,29 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Start `interpolate_to_end.riv`: it is now the only active `diverges`
-   entry. After admitting nested child `TextValueRun.text` converter groups
-   through the runner gate and validating artboard property bindings with
-   stateful converter defaults, Rust reaches draw but keeps the serialized
-   fallback child text where C++ renders the data-bound/interpolated numeric
-   string. Focused first diff is the nested text path at transform
-   `[1,0,0,1,245.207031,58.4726562]`.
-2. Keep `text_follow_path_shape_length.riv` parked behind
-   `TextFollowPathModifier`: after admitting source-to-target `Text.width`
-   binds with no converter or `DataConverterFormula`, direct Rust now stops on
-   data-binding target `TextFollowPathModifier` global 168.
-3. Keep `text_vertical_trim_test.riv` parked behind `text-vertical-trim`:
+1. Start `text_follow_path_shape_length.riv`, the sharpest remaining text gate,
+   parked behind `TextFollowPathModifier`: after admitting source-to-target
+   `Text.width` binds with no converter or `DataConverterFormula`, direct Rust
+   now stops on data-binding target `TextFollowPathModifier` global 168.
+2. Keep `text_vertical_trim_test.riv` parked behind `text-vertical-trim`:
    property keys 1027/1028 are `Text.verticalTrimTopValue` /
    `Text.verticalTrimBottomValue` bitmask passthroughs into
    `verticalTrimValue`, and C++ applies them in `Text::computeVerticalTrim`
    to rendered/measured text bounds.
-4. Generic `rust-runner-unsupported:text` is empty in the current corpus; the
+3. Generic `rust-runner-unsupported:text` is empty in the current corpus; the
    remaining sharper text gates are `text-follow-path-modifier` and
    `text-vertical-trim`.
-5. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
+4. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
-6. Remaining exact entries pinned to sample `0` are static M1 holdovers:
+5. Remaining exact entries pinned to sample `0` are static M1 holdovers:
    `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
    them during M6 unless a related refactor needs a cheap draw-regression check.
 
 ## Known Divergences
 
-- `interpolate_to_end.riv`: after admitting nested child `TextValueRun.text`
-  converter groups through the runner gate and validating artboard property
-  bindings with stateful converter defaults, Rust reaches draw but keeps the
-  serialized fallback child text where C++ renders the data-bound/interpolated
-  numeric string. Focused first diff is the nested text path at transform
-  `[1,0,0,1,245.207031,58.4726562]`; C++ emits a longer cubic-heavy numeric
-  text path while Rust emits the shorter fallback `text` glyph payload. Parked
-  under `rust-runner-divergence:nested-child-text-converter-context`.
+- None in the active corpus. `make golden-compare` reports `diverges=0`; the
+  remaining M6 work is parked behind explicit unsupported-feature diagnostics.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -1069,3 +1056,11 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=102`, `not-yet=0`, and parked
   `M6=58 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
   `interpolate_to_end.riv`.
+- 2026-07-06: [M6] Promoted `interpolate_to_end.riv` after the previous nested
+  owned view-model/context work reduced its focused stream diff to numeric path
+  drift accepted by the standard exact comparator epsilon. A scratch exact
+  corpus for only this file passes, and full `make golden-compare` reports
+  `exact=193`, `exact-segments=514`, `diverges=0`,
+  `unsupported-feature=102`, `not-yet=0`, and parked
+  `M6=58 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
+  `text_follow_path_shape_length.riv`.

@@ -5,10 +5,10 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 555 across 234 files (strict
-  exact=552/231; tolerant=3/3; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=58, not-yet=3
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=17 gated=5 harness=36
+- Exact-status segments (file × sample): 557 across 236 files (strict
+  exact=553/232; tolerant=4/4; structural=0/0)
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=55, not-yet=4
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=14 gated=5 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes**
 
 ## Milestones
@@ -24,28 +24,27 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Pick the largest remaining M6 bucket:
-   `rust-runner-unsupported:mesh-images` (`jellyfish_test.riv`, `tape.riv`).
-   This is now the only two-file M6 diagnostic bucket.
-2. Other parked queues are
-   `rust-runner-unsupported:contour-mesh-metadata` (1: `bad_skin.riv`),
-   `scripted-transition-condition` (2 gated), `scripted-path-effects` (1 gated),
-   `scripted-data-context` (1), `focus-data` (1: `focus_traversal.riv`),
-   `layout-component-paint` (1: `text_input.riv`),
-   `viewmodel-asset-conditions` (1),
-   `text-joystick-data-bind` (1: `echo_show_demo.riv`),
-   `nested-artboard-layout` (1: `superbowl.riv`),
-   `selected-root-gradient-shader-order` (1: `bullet_man.riv`), and
-   `selected-root-skinned-clip-path` (1: `spotify_kids_demo.riv`). The former
-   `data-binding-nested-child` queue is now five one-file diagnostics:
+1. All remaining M6 diagnostics are one-file queues. Pick the freshest
+   adjacency first: `not-yet:skinned-contour-transform-order`
+   (`bad_skin.riv`), which was uncovered by the mesh/contour admission slice
+   and differs later in the stream at a skinned transform.
+2. Other parked one-file M6 queues are `scripted-data-context`,
+   `focus-data` (`focus_traversal.riv`), `layout-component-paint`
+   (`text_input.riv`), `viewmodel-asset-conditions`,
+   `text-joystick-data-bind` (`echo_show_demo.riv`),
+   `nested-artboard-layout` (`superbowl.riv`),
+   `selected-root-gradient-shader-order` (`bullet_man.riv`), and
+   `selected-root-skinned-clip-path` (`spotify_kids_demo.riv`). The former
+   `data-binding-nested-child` queue is five one-file diagnostics:
    `nested-trim-path-data-bind` (`db_health_tracker.riv`),
    `nested-artboard-root-transform` (`nested_hug.riv`),
    `nested-node-transform-data-bind` (`car_widgets_v01.riv`),
    `nested-layout-clip-data-bind` (`stateful_multi_property.riv`), and
    `nested-stateful-view-model-property` (`stateful_nested.riv`). The
    `rewards_demo.riv` file now exposes the one-file
-   `nested-layout-size-data-bind` diagnostic. Gated
-   one-file diagnostics include `text-polygon-sibling` (`bankcard.riv`) and
+   `nested-layout-size-data-bind` diagnostic. Gated one-file diagnostics
+   include `scripted-transition-condition` (2 gated),
+   `scripted-path-effects` (1 gated), `text-polygon-sibling` (`bankcard.riv`) and
    `not-yet:nested-feather-gradient-space` (`ai_assitant.riv`);
    `hunter_x_demo.riv` is the M6 `not-yet:gradient-shader-order` entry and
    `local_bounds.riv` is the M6 `not-yet:image-predecode-order` entry.
@@ -126,6 +125,9 @@ the only memory the next session has. Update it every commit.
   in different selected-root order. `local_bounds.riv` now runs after
   NSlicedNode path deformation, but Rust decodes the external image after early
   paint allocation and also shows tiny static-text float residuals.
+  `bad_skin.riv` now runs after mesh/contour admission but is parked at
+  `not-yet:skinned-contour-transform-order` because a later skinned transform
+  differs structurally from C++.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -201,7 +203,10 @@ the only memory the next session has. Update it every commit.
   asset but draws only the root background like C++, simple
   ShapePaint/Feather draws including outer feathers and repeated
   inner-feather paints that share the original/effect clip path, and
-  NSlicedNode vector shape path deformation for local/world draw commands.
+  NSlicedNode vector shape path deformation for local/world draw commands,
+  plus mesh-backed `Image::draw`/`drawImageMesh` with file-wide source mesh
+  buffer preallocation, cloned dynamic vertex buffers, UV/index buffers, and
+  skinned mesh vertex updates.
   Custom handle-source world-space math, data-bound nested host controls beyond
   generated defaults (external/live pause/speed/quantize mutation), remaining
   nested child data-bind targets beyond the current number/color/default bind
@@ -213,9 +218,9 @@ the only memory the next session has. Update it every commit.
   instancing remain M6 or later diagnostics.
   Golden runner sample lists now advance by sorted absolute-time deltas and
   reuse render paths across samples; no NSliced image layout/predecode parity,
-  mesh image drawing, selected-root image paint/preallocation ordering beyond
-  the text-root single external-image predecode case,
-  contour-mesh image files, remaining text
+  selected-root image paint/preallocation ordering beyond
+  the text-root single external-image predecode case, skinned contour transform
+  ordering for `bad_skin.riv`, remaining text
   layout/editing, selected-root gradient shader ordering, selected-root
   skinned clip-path geometry, nested-feather gradient-space exact parity for
   `ai_assitant.riv`, live
@@ -319,6 +324,19 @@ the only memory the next session has. Update it every commit.
   width binding. `make golden-compare` reports exact-segments=555,
   diverges=0, unsupported-feature=58, not-yet=3; next target is
   `rust-runner-unsupported:mesh-images`. `cargo test --workspace` passes.
+- 2026-07-06: [M6] Closed the `mesh-images` runner guard by porting
+  mesh-backed `Image::draw` from C++ `src/shapes/image.cpp` /
+  `src/shapes/mesh.cpp`: source mesh vertex/UV/index buffers are allocated
+  file-wide before clone dynamic vertex buffers, `drawImageMesh` uses dynamic
+  skinned vertices, and `golden-compare` treats vertex `bufferData` as
+  semantic f32 data while keeping index buffers exact. `jellyfish_test.riv`
+  is exact under `tolerant(0.0004)` for skinned vertex-buffer float residuals,
+  `tape.riv` is strict exact, and `bad_skin.riv` is parked as
+  `not-yet:skinned-contour-transform-order` after a later structural skinned
+  transform delta. Full `make golden-compare` reports `exact=236`,
+  `exact-segments=557`, `diverges=0`, `unsupported-feature=55`,
+  `not-yet=4`, and parked `M6=14 gated=5 harness=36`; next target is
+  `bad_skin.riv`.
 - 2026-07-02: `rive-runtime` owns static draw emission through
   `rive-render-api`; `rust-golden-runner` now only orchestrates import,
   artboard selection, stream markers, and recording output.

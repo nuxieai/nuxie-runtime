@@ -563,6 +563,10 @@ fn summarize_stream_line(line: &str) -> String {
 }
 
 fn line_equivalent(left: &str, right: &str, epsilon: f64) -> bool {
+    if let Some(equivalent) = buffer_data_line_equivalent(left, right, epsilon) {
+        return equivalent;
+    }
+
     let left_bytes = left.as_bytes();
     let right_bytes = right.as_bytes();
     let mut left_index = 0usize;
@@ -594,6 +598,79 @@ fn line_equivalent(left: &str, right: &str, epsilon: f64) -> bool {
     }
 
     left_index == left_bytes.len() && right_index == right_bytes.len()
+}
+
+fn buffer_data_line_equivalent(left: &str, right: &str, epsilon: f64) -> Option<bool> {
+    if !left.starts_with("bufferData ") || !right.starts_with("bufferData ") {
+        return None;
+    }
+
+    let (left_prefix, left_hex) = left.split_once(" data=")?;
+    let (right_prefix, right_hex) = right.split_once(" data=")?;
+    if left_prefix != right_prefix {
+        return Some(false);
+    }
+
+    let buffer_type = buffer_data_type(left_prefix)?;
+    if buffer_type != 1 {
+        return Some(left_hex == right_hex);
+    }
+
+    Some(vertex_buffer_hex_equivalent(left_hex, right_hex, epsilon))
+}
+
+fn buffer_data_type(prefix: &str) -> Option<u8> {
+    let marker = " type=";
+    let start = prefix.find(marker)? + marker.len();
+    let end = prefix[start..]
+        .find(' ')
+        .map(|offset| start + offset)
+        .unwrap_or(prefix.len());
+    prefix[start..end].parse().ok()
+}
+
+fn vertex_buffer_hex_equivalent(left_hex: &str, right_hex: &str, epsilon: f64) -> bool {
+    let Some(left) = decode_hex_bytes(left_hex) else {
+        return false;
+    };
+    let Some(right) = decode_hex_bytes(right_hex) else {
+        return false;
+    };
+    if left.len() != right.len() || left.len() % 4 != 0 {
+        return false;
+    }
+
+    left.chunks_exact(4)
+        .zip(right.chunks_exact(4))
+        .all(|(left, right)| {
+            let left = f32::from_le_bytes([left[0], left[1], left[2], left[3]]);
+            let right = f32::from_le_bytes([right[0], right[1], right[2], right[3]]);
+            left.to_bits() == right.to_bits()
+                || (f64::from(left) - f64::from(right)).abs() <= epsilon
+        })
+}
+
+fn decode_hex_bytes(hex: &str) -> Option<Vec<u8>> {
+    if hex.len() % 2 != 0 {
+        return None;
+    }
+    let bytes = hex.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len() / 2);
+    for chunk in bytes.chunks_exact(2) {
+        let high = hex_nibble(chunk[0])?;
+        let low = hex_nibble(chunk[1])?;
+        decoded.push((high << 4) | low);
+    }
+    Some(decoded)
+}
+
+fn hex_nibble(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
 }
 
 fn number_starts_at(bytes: &[u8], index: usize) -> bool {
@@ -672,6 +749,38 @@ mod tests {
         assert!(!streams_equivalent(
             "drawPath points=[(-7.31272936,-2.03849483)]\n",
             "drawPath points=[(-7.31272936,-2.03825000)]\n"
+        ));
+    }
+
+    #[test]
+    fn stream_comparison_allows_vertex_buffer_float_epsilon() {
+        assert!(streams_equivalent(
+            &format!(
+                "bufferData id=7 type=1 size=8 data={}\n",
+                f32_hex(&[1.0, -2.0])
+            ),
+            &format!(
+                "bufferData id=7 type=1 size=8 data={}\n",
+                f32_hex(&[1.00005, -2.00005])
+            )
+        ));
+        assert!(!streams_equivalent(
+            &format!(
+                "bufferData id=7 type=1 size=8 data={}\n",
+                f32_hex(&[1.0, -2.0])
+            ),
+            &format!(
+                "bufferData id=7 type=1 size=8 data={}\n",
+                f32_hex(&[1.001, -2.0])
+            )
+        ));
+    }
+
+    #[test]
+    fn stream_comparison_keeps_index_buffer_data_exact() {
+        assert!(!streams_equivalent(
+            "bufferData id=3 type=0 size=2 data=0001\n",
+            "bufferData id=3 type=0 size=2 data=0002\n"
         ));
     }
 
@@ -756,6 +865,16 @@ features = []
 
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].verification, VerificationMode::Tolerant(0.25));
+    }
+
+    fn f32_hex(values: &[f32]) -> String {
+        let mut hex = String::new();
+        for value in values {
+            for byte in value.to_le_bytes() {
+                hex.push_str(&format!("{byte:02x}"));
+            }
+        }
+        hex
     }
 }
 

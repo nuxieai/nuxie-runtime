@@ -2,15 +2,16 @@ use anyhow::{Context, Result};
 use rive_binary::{RuntimeFile, RuntimeObject};
 use rive_graph::{
     ArtboardGraph, ClippingShapeNode, DashNode, DrawableOrderKind, DrawableOrderNode, FeatherNode,
-    GradientStopNode, NSlicerAxisNode, ParametricPathNode, PathComposerNode, PathComposerPathNode,
-    PathGeometryNode, PathVertexNode, ShapePaintContainerNode, ShapePaintKind, ShapePaintNode,
-    ShapePaintPathKind, ShapePaintStateNode, SortedDrawableNode, StrokeEffectNode,
+    GradientStopNode, MeshGeometryNode, MeshVertexNode, NSlicerAxisNode, ParametricPathNode,
+    PathComposerNode, PathComposerPathNode, PathGeometryNode, PathVertexNode,
+    ShapePaintContainerNode, ShapePaintKind, ShapePaintNode, ShapePaintPathKind,
+    ShapePaintStateNode, SortedDrawableNode, StrokeEffectNode,
 };
 use rive_render_api::{
     BlendMode as RenderBlendMode, Factory as RenderFactory, FillRule as RenderFillRule,
-    ImageSampler as RenderImageSampler, Mat2D as RenderMat2D, RenderImage, RenderPaint,
-    RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap as RenderStrokeCap,
-    StrokeJoin as RenderStrokeJoin,
+    ImageSampler as RenderImageSampler, Mat2D as RenderMat2D, RenderBuffer, RenderBufferFlags,
+    RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader,
+    Renderer, StrokeCap as RenderStrokeCap, StrokeJoin as RenderStrokeJoin, Vec2D as RenderVec2D,
 };
 use rive_schema::definition_by_name;
 use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
@@ -453,6 +454,7 @@ impl ArtboardInstance {
         paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
         path_cache: &mut RuntimeRenderPathCache,
     ) -> Result<()> {
+        let mut mesh_buffers = BTreeMap::new();
         self.draw_prepared_static_artboard_internal_with_path_cache(
             runtime,
             graph,
@@ -461,6 +463,7 @@ impl ArtboardInstance {
             renderer,
             paint_by_global,
             &BTreeMap::new(),
+            &mut mesh_buffers,
             path_cache,
             None,
             true,
@@ -485,6 +488,7 @@ impl ArtboardInstance {
             renderer,
             &mut paint_cache.paints,
             &paint_cache.images,
+            &mut paint_cache.meshes,
             path_cache,
             Some(&mut paint_cache.nested_artboards),
             true,
@@ -500,6 +504,7 @@ impl ArtboardInstance {
         renderer: &mut dyn Renderer,
         paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
         image_by_global: &BTreeMap<u32, Box<dyn RenderImage>>,
+        mesh_by_local: &mut BTreeMap<usize, RuntimeMeshRenderBuffers>,
         path_cache: &mut RuntimeRenderPathCache,
         mut nested_paint_caches: Option<&mut BTreeMap<u32, RuntimeRenderPaintCache>>,
         apply_origin_transform: bool,
@@ -585,6 +590,7 @@ impl ArtboardInstance {
                 renderer,
                 paint_by_global,
                 image_by_global,
+                mesh_by_local,
                 path_cache,
                 match &mut nested_paint_caches {
                     Some(caches) => Some(&mut **caches),
@@ -2466,10 +2472,26 @@ impl ArtboardInstance {
         path: &PathGeometryNode,
         graph: &ArtboardGraph,
     ) -> Option<WeightedPathContext> {
+        self.runtime_weighted_skinnable_context(path.local_id, graph)
+    }
+
+    fn runtime_weighted_mesh_context(
+        &self,
+        mesh: &MeshGeometryNode,
+        graph: &ArtboardGraph,
+    ) -> Option<WeightedPathContext> {
+        self.runtime_weighted_skinnable_context(mesh.local_id, graph)
+    }
+
+    fn runtime_weighted_skinnable_context(
+        &self,
+        skinnable_local: usize,
+        graph: &ArtboardGraph,
+    ) -> Option<WeightedPathContext> {
         let skin = graph
             .skeletal_skins
             .iter()
-            .find(|skin| skin.skinnable_local == Some(path.local_id))?;
+            .find(|skin| skin.skinnable_local == Some(skinnable_local))?;
         let mut bone_transforms = vec![Mat2D::IDENTITY];
         for tendon in &skin.tendons {
             let bone = self.component(tendon.bone_local?)?;
@@ -4120,6 +4142,7 @@ pub struct RuntimeGradientStop {
 pub struct RuntimeRenderPaintCache {
     paints: BTreeMap<u32, Box<dyn RenderPaint>>,
     images: BTreeMap<u32, Box<dyn RenderImage>>,
+    meshes: BTreeMap<usize, RuntimeMeshRenderBuffers>,
     nested_artboards: BTreeMap<u32, RuntimeRenderPaintCache>,
 }
 
@@ -4131,6 +4154,24 @@ impl RuntimeRenderPaintCache {
     pub fn root_images_mut(&mut self) -> &mut BTreeMap<u32, Box<dyn RenderImage>> {
         &mut self.images
     }
+}
+
+struct RuntimeSourceMeshRenderBuffers {
+    source_vertices: Box<dyn RenderBuffer>,
+    uv_coords: Box<dyn RenderBuffer>,
+    indices: Box<dyn RenderBuffer>,
+    vertex_count: u32,
+    index_count: u32,
+}
+
+struct RuntimeMeshRenderBuffers {
+    _source_vertices: Box<dyn RenderBuffer>,
+    vertices: Box<dyn RenderBuffer>,
+    uv_coords: Box<dyn RenderBuffer>,
+    indices: Box<dyn RenderBuffer>,
+    vertex_count: u32,
+    index_count: u32,
+    last_vertex_bytes: Option<Vec<u8>>,
 }
 
 #[derive(Default)]
@@ -4314,8 +4355,26 @@ pub fn preallocate_render_paint_cache_for_artboard_tree(
     for asset_global in image_asset_globals.iter().copied().skip(pre_source_count) {
         predecode_render_image(runtime, asset_global, factory, &mut images);
     }
-    let mut cache =
-        preallocate_artboard_render_paint_tree_batch(runtime, graph, artboards, factory);
+    let mut source_meshes =
+        preallocate_source_mesh_render_buffers_for_artboards(runtime, artboards, factory, &images);
+    let mut cache = RuntimeRenderPaintCache::default();
+    preallocate_artboard_mesh_render_buffer_tree_batch_into(
+        runtime,
+        graph,
+        artboards,
+        factory,
+        &mut source_meshes,
+        &mut cache,
+        &mut BTreeSet::new(),
+    );
+    preallocate_artboard_render_paint_tree_batch_into(
+        runtime,
+        graph,
+        artboards,
+        factory,
+        &mut cache,
+        &mut BTreeSet::new(),
+    );
     cache.images = images;
     cache
 }
@@ -4439,6 +4498,182 @@ fn embedded_file_asset_bytes(runtime: &RuntimeFile, asset_global: u32) -> Option
     None
 }
 
+fn write_render_buffer_bytes(buffer: &mut dyn RenderBuffer, bytes: &[u8]) {
+    let target = buffer.map_mut();
+    debug_assert_eq!(target.len(), bytes.len());
+    target.copy_from_slice(bytes);
+    buffer.unmap();
+}
+
+fn push_f32_pair_bytes(bytes: &mut Vec<u8>, x: f32, y: f32) {
+    bytes.extend_from_slice(&x.to_le_bytes());
+    bytes.extend_from_slice(&y.to_le_bytes());
+}
+
+fn preallocate_artboard_mesh_render_buffer_tree_batch_into(
+    runtime: &RuntimeFile,
+    graph: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+    factory: &mut dyn RenderFactory,
+    source_meshes: &mut BTreeMap<(u32, usize), RuntimeSourceMeshRenderBuffers>,
+    cache: &mut RuntimeRenderPaintCache,
+    visiting: &mut BTreeSet<u32>,
+) {
+    if !visiting.insert(graph.global_id) {
+        return;
+    }
+
+    cache.meshes = preallocate_artboard_mesh_render_buffers(graph, factory, source_meshes);
+
+    for local_object in &graph.local_objects {
+        if let Some(child_graph) =
+            referenced_artboard_graph_for_local_object(runtime, artboards, local_object.global_id)
+        {
+            let cache_key = nested_render_cache_key(
+                Some(local_object.global_id),
+                Some(local_object.local_id),
+                child_graph.global_id,
+            );
+            let child_cache = cache.nested_artboards.entry(cache_key).or_default();
+            preallocate_artboard_mesh_render_buffer_tree_batch_into(
+                runtime,
+                child_graph,
+                artboards,
+                factory,
+                source_meshes,
+                child_cache,
+                visiting,
+            );
+        }
+    }
+
+    visiting.remove(&graph.global_id);
+}
+
+fn preallocate_source_mesh_render_buffers_for_artboards(
+    runtime: &RuntimeFile,
+    artboards: &[ArtboardGraph],
+    factory: &mut dyn RenderFactory,
+    image_by_global: &BTreeMap<u32, Box<dyn RenderImage>>,
+) -> BTreeMap<(u32, usize), RuntimeSourceMeshRenderBuffers> {
+    // Ported from C++ `src/shapes/mesh.cpp::Mesh::onAssetLoaded`: source
+    // artboards allocate their mesh vertex/UV/index buffers before cloned
+    // artboard instances allocate the dynamic vertex buffers they draw with.
+    let mut source_meshes = BTreeMap::new();
+    for graph in artboards {
+        for mesh in &graph.meshes {
+            if let Some(source) = preallocate_source_mesh_render_buffers(
+                runtime,
+                graph,
+                mesh,
+                factory,
+                image_by_global,
+            ) {
+                source_meshes.insert((graph.global_id, mesh.local_id), source);
+            }
+        }
+    }
+    source_meshes
+}
+
+fn preallocate_artboard_mesh_render_buffers(
+    graph: &ArtboardGraph,
+    factory: &mut dyn RenderFactory,
+    source_meshes: &mut BTreeMap<(u32, usize), RuntimeSourceMeshRenderBuffers>,
+) -> BTreeMap<usize, RuntimeMeshRenderBuffers> {
+    let mut source_buffers = Vec::new();
+    for mesh in &graph.meshes {
+        if let Some(source) = source_meshes.remove(&(graph.global_id, mesh.local_id)) {
+            source_buffers.push((mesh.local_id, source));
+        }
+    }
+
+    let mut buffers_by_local = BTreeMap::new();
+    for (mesh_local, source) in source_buffers {
+        let vertices = factory.make_render_buffer(
+            RenderBufferType::Vertex,
+            RenderBufferFlags::None,
+            source.vertex_count as usize * 8,
+        );
+        buffers_by_local.insert(
+            mesh_local,
+            RuntimeMeshRenderBuffers {
+                _source_vertices: source.source_vertices,
+                vertices,
+                uv_coords: source.uv_coords,
+                indices: source.indices,
+                vertex_count: source.vertex_count,
+                index_count: source.index_count,
+                last_vertex_bytes: None,
+            },
+        );
+    }
+    buffers_by_local
+}
+
+fn preallocate_source_mesh_render_buffers(
+    runtime: &RuntimeFile,
+    graph: &ArtboardGraph,
+    mesh: &MeshGeometryNode,
+    factory: &mut dyn RenderFactory,
+    image_by_global: &BTreeMap<u32, Box<dyn RenderImage>>,
+) -> Option<RuntimeSourceMeshRenderBuffers> {
+    let mesh_object = runtime.object(mesh.global_id as usize)?;
+    let image_local = usize::try_from(mesh_object.uint_property("parentId")?).ok()?;
+    let image_global = graph
+        .local_objects
+        .iter()
+        .find(|object| object.local_id == image_local)?
+        .global_id;
+    let image_object = runtime.object(image_global as usize)?;
+    let image_asset = runtime.resolved_file_asset_for_referencer(image_object)?;
+    let image = image_by_global.get(&image_asset.id)?;
+    let indices = mesh_object.mesh_triangle_indices()?;
+    let vertex_count = u32::try_from(mesh.vertices.len()).ok()?;
+    let index_count = u32::try_from(indices.len()).ok()?;
+
+    let source_vertices = factory.make_render_buffer(
+        RenderBufferType::Vertex,
+        RenderBufferFlags::None,
+        mesh.vertices.len() * 8,
+    );
+    let mut uv_coords = factory.make_render_buffer(
+        RenderBufferType::Vertex,
+        RenderBufferFlags::MappedOnceAtInitialization,
+        mesh.vertices.len() * 8,
+    );
+    let uv_transform = image.uv_transform();
+    let mut uv_bytes = Vec::with_capacity(mesh.vertices.len() * 8);
+    for vertex in &mesh.vertices {
+        let vertex_object = runtime.object(vertex.global_id as usize)?;
+        let uv = uv_transform.transform_point(RenderVec2D::new(
+            vertex_object.double_property("u").unwrap_or(0.0),
+            vertex_object.double_property("v").unwrap_or(0.0),
+        ));
+        push_f32_pair_bytes(&mut uv_bytes, uv.x, uv.y);
+    }
+    write_render_buffer_bytes(uv_coords.as_mut(), &uv_bytes);
+
+    let mut index_buffer = factory.make_render_buffer(
+        RenderBufferType::Index,
+        RenderBufferFlags::MappedOnceAtInitialization,
+        indices.len() * 2,
+    );
+    let mut index_bytes = Vec::with_capacity(indices.len() * 2);
+    for index in indices {
+        index_bytes.extend_from_slice(&index.to_le_bytes());
+    }
+    write_render_buffer_bytes(index_buffer.as_mut(), &index_bytes);
+
+    Some(RuntimeSourceMeshRenderBuffers {
+        source_vertices,
+        uv_coords,
+        indices: index_buffer,
+        vertex_count,
+        index_count,
+    })
+}
+
 fn preallocate_render_paint_batch(
     runtime: &RuntimeFile,
     factory: &mut dyn RenderFactory,
@@ -4481,25 +4716,6 @@ fn preallocate_artboard_render_paint_batch(
         }
     }
     paints
-}
-
-fn preallocate_artboard_render_paint_tree_batch(
-    runtime: &RuntimeFile,
-    graph: &ArtboardGraph,
-    artboards: &[ArtboardGraph],
-    factory: &mut dyn RenderFactory,
-) -> RuntimeRenderPaintCache {
-    let mut cache = RuntimeRenderPaintCache::default();
-    let mut visiting = BTreeSet::new();
-    preallocate_artboard_render_paint_tree_batch_into(
-        runtime,
-        graph,
-        artboards,
-        factory,
-        &mut cache,
-        &mut visiting,
-    );
-    cache
 }
 
 fn preallocate_artboard_render_paint_tree_batch_into(
@@ -4757,6 +4973,7 @@ fn runtime_draw_command(
     renderer: &mut dyn Renderer,
     paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
     image_by_global: &BTreeMap<u32, Box<dyn RenderImage>>,
+    mesh_by_local: &mut BTreeMap<usize, RuntimeMeshRenderBuffers>,
     path_cache: &mut RuntimeRenderPathCache,
     nested_paint_caches: Option<&mut BTreeMap<u32, RuntimeRenderPaintCache>>,
 ) -> Result<()> {
@@ -4820,6 +5037,7 @@ fn runtime_draw_command(
             renderer,
             paint_by_global,
             image_by_global,
+            mesh_by_local,
             path_cache,
             nested_paint_caches,
             layout_bounds,
@@ -4834,6 +5052,7 @@ fn runtime_draw_command(
             command,
             layout_bounds,
             image_by_global,
+            mesh_by_local,
             renderer,
         );
     }
@@ -5039,10 +5258,10 @@ fn runtime_draw_image(
     command: RuntimeDrawCommand,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     image_by_global: &BTreeMap<u32, Box<dyn RenderImage>>,
+    mesh_by_local: &mut BTreeMap<usize, RuntimeMeshRenderBuffers>,
     renderer: &mut dyn Renderer,
 ) -> Result<()> {
-    // Ported from C++ `src/shapes/image.cpp::Image::draw` for the non-mesh
-    // image path. Mesh-backed images stay behind the runner's image gate.
+    // Ported from C++ `src/shapes/image.cpp::Image::draw`.
     let local_id = command.local_id.context("image command missing local id")?;
     let image_object = command
         .global_id
@@ -5058,6 +5277,28 @@ fn runtime_draw_image(
 
     if command.needs_save_operation {
         renderer.save();
+    }
+
+    if let Some(mesh) = runtime_image_mesh(runtime, graph, local_id) {
+        let buffers = mesh_by_local
+            .get_mut(&mesh.local_id)
+            .with_context(|| format!("missing mesh render buffers for local {}", mesh.local_id))?;
+        runtime_draw_mesh_image(
+            runtime,
+            instance,
+            graph,
+            local_id,
+            image_object,
+            mesh,
+            buffers,
+            layout_bounds,
+            image.as_ref(),
+            renderer,
+        )?;
+        if command.needs_save_operation {
+            renderer.restore();
+        }
+        return Ok(());
     }
 
     let origin_x_key =
@@ -5117,6 +5358,134 @@ fn runtime_draw_image(
         renderer.restore();
     }
     Ok(())
+}
+
+fn runtime_image_mesh<'a>(
+    runtime: &RuntimeFile,
+    graph: &'a ArtboardGraph,
+    image_local: usize,
+) -> Option<&'a MeshGeometryNode> {
+    graph.meshes.iter().find(|mesh| {
+        runtime
+            .object(mesh.global_id as usize)
+            .and_then(|object| object.uint_property("parentId"))
+            == Some(image_local as u64)
+    })
+}
+
+fn runtime_draw_mesh_image(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    image_local: usize,
+    image_object: Option<&RuntimeObject>,
+    mesh: &MeshGeometryNode,
+    buffers: &mut RuntimeMeshRenderBuffers,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    image: &dyn RenderImage,
+    renderer: &mut dyn Renderer,
+) -> Result<()> {
+    let weighted_context = instance.runtime_weighted_mesh_context(mesh, graph);
+    if weighted_context.is_none() {
+        let world = instance.runtime_component_world_transform_with_bounds(
+            image_local,
+            graph,
+            layout_bounds,
+        );
+        renderer.transform(runtime_render_mat(world));
+    }
+
+    runtime_update_mesh_vertex_buffer(runtime, instance, mesh, weighted_context.as_ref(), buffers)?;
+
+    let blend_mode_key = property_key_for_name("Drawable", "blendModeValue")
+        .context("missing Drawable.blendModeValue")?;
+    let blend_mode_value = instance
+        .uint_property(image_local, blend_mode_key)
+        .or_else(|| image_object.and_then(|object| object.uint_property("blendModeValue")))
+        .unwrap_or(3);
+    let opacity = instance
+        .component(image_local)
+        .map(|component| component.transform.render_opacity)
+        .unwrap_or(1.0);
+    renderer.draw_image_mesh(
+        Some(image),
+        RenderImageSampler::LINEAR_CLAMP,
+        Some(buffers.vertices.as_ref()),
+        Some(buffers.uv_coords.as_ref()),
+        Some(buffers.indices.as_ref()),
+        buffers.vertex_count,
+        buffers.index_count,
+        runtime_blend_mode(u32::try_from(blend_mode_value).unwrap_or(3))?,
+        opacity,
+    );
+    Ok(())
+}
+
+fn runtime_update_mesh_vertex_buffer(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    mesh: &MeshGeometryNode,
+    weighted_context: Option<&WeightedPathContext>,
+    buffers: &mut RuntimeMeshRenderBuffers,
+) -> Result<()> {
+    let bytes = runtime_mesh_vertex_buffer_bytes(runtime, instance, mesh, weighted_context)?;
+    if buffers.last_vertex_bytes.as_ref() == Some(&bytes) {
+        return Ok(());
+    }
+    write_render_buffer_bytes(buffers.vertices.as_mut(), &bytes);
+    buffers.last_vertex_bytes = Some(bytes);
+    Ok(())
+}
+
+fn runtime_mesh_vertex_buffer_bytes(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    mesh: &MeshGeometryNode,
+    weighted_context: Option<&WeightedPathContext>,
+) -> Result<Vec<u8>> {
+    let mut bytes = Vec::with_capacity(mesh.vertices.len() * 8);
+    for vertex in &mesh.vertices {
+        let (x, y) =
+            runtime_mesh_vertex_render_translation(runtime, instance, vertex, weighted_context)?;
+        push_f32_pair_bytes(&mut bytes, x, y);
+    }
+    Ok(bytes)
+}
+
+fn runtime_mesh_vertex_render_translation(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    vertex: &MeshVertexNode,
+    weighted_context: Option<&WeightedPathContext>,
+) -> Result<(f32, f32)> {
+    let vertex_object = runtime
+        .object(vertex.global_id as usize)
+        .with_context(|| format!("missing mesh vertex global {}", vertex.global_id))?;
+    let x_key = property_key_for_name("Vertex", "x").context("missing Vertex.x")?;
+    let y_key = property_key_for_name("Vertex", "y").context("missing Vertex.y")?;
+    let x = instance
+        .double_property(vertex.local_id, x_key)
+        .or_else(|| vertex_object.double_property("x"))
+        .unwrap_or(0.0);
+    let y = instance
+        .double_property(vertex.local_id, y_key)
+        .or_else(|| vertex_object.double_property("y"))
+        .unwrap_or(0.0);
+    if let Some(weighted_context) = weighted_context
+        && let Some(weight_global) = vertex.weight_global
+    {
+        let weight = runtime
+            .object(weight_global as usize)
+            .with_context(|| format!("missing mesh weight global {weight_global}"))?;
+        return weighted_context
+            .deform_point(
+                (x, y),
+                u32::try_from(weight.uint_property("indices").unwrap_or(1)).unwrap_or(1),
+                u32::try_from(weight.uint_property("values").unwrap_or(255)).unwrap_or(255),
+            )
+            .context("mesh bone deformation referenced a missing bone transform");
+    }
+    Ok((x, y))
 }
 
 fn runtime_image_world_transform(
@@ -5235,6 +5604,7 @@ fn runtime_draw_nested_artboard(
     renderer: &mut dyn Renderer,
     paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
     image_by_global: &BTreeMap<u32, Box<dyn RenderImage>>,
+    mesh_by_local: &mut BTreeMap<usize, RuntimeMeshRenderBuffers>,
     path_cache: &mut RuntimeRenderPathCache,
     nested_paint_caches: Option<&mut BTreeMap<u32, RuntimeRenderPaintCache>>,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
@@ -5345,6 +5715,7 @@ fn runtime_draw_nested_artboard(
                 renderer,
                 &mut child_paint_cache.paints,
                 image_by_global,
+                &mut child_paint_cache.meshes,
                 child_cache,
                 Some(&mut child_paint_cache.nested_artboards),
                 false,
@@ -5367,6 +5738,7 @@ fn runtime_draw_nested_artboard(
                 renderer,
                 paint_by_global,
                 image_by_global,
+                mesh_by_local,
                 child_cache,
                 None,
                 false,
@@ -5404,6 +5776,7 @@ fn runtime_draw_nested_artboard(
             renderer,
             &mut child_paint_cache.paints,
             image_by_global,
+            &mut child_paint_cache.meshes,
             child_cache,
             Some(&mut child_paint_cache.nested_artboards),
             false,
@@ -5426,6 +5799,7 @@ fn runtime_draw_nested_artboard(
             renderer,
             paint_by_global,
             image_by_global,
+            mesh_by_local,
             child_cache,
             None,
             false,
@@ -8590,12 +8964,12 @@ impl WeightedPathContext {
             let bone_transform = self.bone_transforms.get(bone_index)?;
             let normalized_weight = f32::from(weight) / 255.0;
             for (target, value) in blended.iter_mut().zip(bone_transform.0) {
-                *target += value * normalized_weight;
+                *target = value.mul_add(normalized_weight, *target);
             }
         }
 
-        let (x, y) = self.skin_world_transform.transform_point(point.0, point.1);
-        Some(Mat2D(blended).transform_point(x, y))
+        let (x, y) = self.skin_world_transform.map_point(point.0, point.1);
+        Some(Mat2D(blended).map_point(x, y))
     }
 }
 

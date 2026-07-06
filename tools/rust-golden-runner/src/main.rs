@@ -882,14 +882,6 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
-    if let Some(global_id) = unsupported_mesh_image_global(graph, artboard) {
-        bail!("unsupported: mesh-images in Rust golden runner (global {global_id})");
-    }
-
-    if let Some(global_id) = unsupported_contour_mesh_metadata_global(graph, artboard) {
-        bail!("unsupported: contour-mesh-metadata in Rust golden runner (global {global_id})");
-    }
-
     if let Some(global_id) =
         unsupported_selected_root_gradient_shader_order_global(graph, artboard, !is_nested_child)
     {
@@ -2067,23 +2059,6 @@ fn first_image_or_asset_global(graph: &GraphFile, artboard: &ArtboardGraph) -> O
         })
 }
 
-fn unsupported_mesh_image_global(graph: &GraphFile, artboard: &ArtboardGraph) -> Option<u32> {
-    first_image_or_asset_global(graph, artboard)?;
-    artboard.meshes.first().map(|mesh| mesh.global_id)
-}
-
-fn unsupported_contour_mesh_metadata_global(
-    graph: &GraphFile,
-    artboard: &ArtboardGraph,
-) -> Option<u32> {
-    first_image_or_asset_global(graph, artboard)?;
-    artboard
-        .local_objects
-        .iter()
-        .find(|object| object.type_name == Some("ContourMeshVertex"))
-        .map(|object| object.global_id)
-}
-
 fn selected_root_external_image_global(
     graph: &GraphFile,
     artboard: &ArtboardGraph,
@@ -2171,12 +2146,9 @@ fn simple_static_image_artboard_tree_supported_entered(
     artboard: &ArtboardGraph,
     visiting: &mut BTreeSet<u32>,
 ) -> bool {
-    // Ported image drawing currently covers C++ `src/shapes/image.cpp`'s
-    // non-mesh path. Keep complex image-bearing roots fenced until their
-    // non-image draw and paint-order behavior is exact under corpus comparison.
-    if !artboard.meshes.is_empty() {
-        return false;
-    }
+    // Ported image drawing covers C++ `src/shapes/image.cpp` for direct image
+    // drawables, including the `Mesh::draw` vertex-buffer path. Keep the guard
+    // focused on asset resolution and nested image tree admission.
     let image_asset_globals = graph
         .file_assets
         .iter()
@@ -2184,13 +2156,6 @@ fn simple_static_image_artboard_tree_supported_entered(
         .map(|asset| asset.global_id)
         .collect::<BTreeSet<_>>();
     if image_asset_globals.is_empty() {
-        return false;
-    }
-    if artboard
-        .local_objects
-        .iter()
-        .any(|object| object.type_name == Some("ContourMeshVertex"))
-    {
         return false;
     }
     artboard

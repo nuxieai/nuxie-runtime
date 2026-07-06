@@ -78,6 +78,21 @@ the only memory the next session has. Update it every commit.
    convention-change decision, not a harness fix. Keep them
    `milestone = "harness"` until decided.
 
+7. DECIDED (see Decisions 2026-07-06): adopt the reference-test view-model
+   binding convention. Run as ONE coordinated slice: (a) change BOTH
+   runners (tools/golden-runner and tools/rust-golden-runner) to bind
+   named view-model instance 0 when the selected artboard has a serialized
+   `viewModelId` (matching `createViewModelInstance(viewModelId, 0)` in
+   the C++ unit tests) instead of a blank default instance; (b) in the
+   same slice, re-verify every affected exact entry (~66) — the ratchet
+   must be green in the same commit, with any legitimately-changed
+   expectations re-confirmed by direct C++/Rust stream pairs, never by
+   loosening modes; (c) then flip `data_viz_demo` and
+   `data_binding_artboards_test` from `milestone = "harness"` to
+   `not-yet` and triage them. If any exact entry cannot be re-confirmed
+   under the new convention, stop and record it as a Known Divergence
+   rather than shipping a partial convention.
+
 ## Known Divergences
 
 - None in the active corpus. `make golden-compare` reports `diverges=0`; the
@@ -457,6 +472,15 @@ the only memory the next session has. Update it every commit.
   ratchet (eligible lanes: C++ harness crash repair, M7 scaffolding —
   benchmarks/fuzz/API drafts — and the feature-gated scripting spike).
   Never two writers on adjacent critical-path runtime slices.
+
+- 2026-07-06: View-model binding convention decided: both golden runners
+  bind named view-model instance 0 (reference unit-test convention,
+  `createViewModelInstance(viewModelId, 0)`) when the selected artboard
+  has a serialized `viewModelId`, replacing the blank default instance.
+  Rationale: matches how the C++ unit tests exercise these files, recovers
+  the two harness residuals, and aligns default-instance semantics before
+  M7 freezes the public API. Must land as one coordinated slice with all
+  affected exact entries re-verified in the same commit.
 
 ## Log
 

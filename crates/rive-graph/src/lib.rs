@@ -2339,7 +2339,7 @@ fn paths(
                 type_name: path.object.type_name,
                 is_closed: path.object.bool_property("isClosed").unwrap_or(false),
                 is_hole: path.object.bool_property("isHole").unwrap_or(false),
-                is_clockwise: path.object.bool_property("isClockwise").unwrap_or(true),
+                is_clockwise: path_is_clockwise(&path.object),
                 parametric: parametric_path(&path.object),
                 vertices: path
                     .vertices
@@ -5503,6 +5503,10 @@ fn is_drawable(object: &RuntimeObject) -> bool {
 
 fn drawable_is_hidden(object: &RuntimeObject) -> bool {
     object.uint_property("drawableFlags").unwrap_or(0) & 1 != 0
+}
+
+fn path_is_clockwise(object: &RuntimeObject) -> bool {
+    object.uint_property("pathFlags").unwrap_or(0) & (1 << 1) == 0
 }
 
 fn resolved_image_asset_global(file: &RuntimeFile, object: &RuntimeObject) -> Option<u32> {

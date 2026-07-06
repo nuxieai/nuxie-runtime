@@ -960,6 +960,7 @@ impl ArtboardInstance {
                         container.type_name,
                         "LayoutComponent" | "ForegroundLayoutDrawable"
                     ),
+                    container.type_name != "Shape",
                 )?;
                 if drawable.kind == DrawableOrderKind::LayoutProxy
                     || container.type_name == "ForegroundLayoutDrawable"
@@ -4152,7 +4153,7 @@ pub enum RuntimeShapePaintKind {
     Unknown,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum RuntimeShapePaintPathKind {
     Local,
     LocalClockwise,
@@ -4174,6 +4175,7 @@ pub struct RuntimeShapePaintCommand {
     pub has_effect_path: bool,
     pub needs_save_operation: bool,
     pub shape_world_override: Option<Mat2D>,
+    pub aliases_local_clockwise_path: bool,
     pub uses_temporary_paint: bool,
     pub allocates_text_paint_pool: bool,
 }
@@ -4271,6 +4273,7 @@ struct RuntimeGradientShaderResources<'a> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 struct RuntimeDrawPathCacheKey {
     kind: RuntimeDrawPathCacheKind,
+    path_kind: RuntimeShapePaintPathKind,
     local_id: Option<usize>,
     path_index: usize,
 }
@@ -4278,7 +4281,6 @@ struct RuntimeDrawPathCacheKey {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum RuntimeDrawPathCacheKind {
     Draw,
-    InnerFeatherClip,
 }
 
 impl RuntimeRenderPathCache {
@@ -5054,6 +5056,7 @@ fn runtime_background_shape_paint_command(
         has_effect_path: false,
         needs_save_operation: true,
         shape_world_override: None,
+        aliases_local_clockwise_path: false,
         uses_temporary_paint: false,
         allocates_text_paint_pool: false,
     })
@@ -5089,6 +5092,7 @@ fn runtime_prepare_gradient_paint_command(
         has_effect_path: false,
         needs_save_operation: false,
         shape_world_override: None,
+        aliases_local_clockwise_path: false,
         uses_temporary_paint: false,
         allocates_text_paint_pool: false,
     }
@@ -5326,7 +5330,8 @@ fn runtime_draw_command(
                 );
                 let clip_path = path_cache.draw_path(
                     RuntimeDrawPathCacheKey {
-                        kind: RuntimeDrawPathCacheKind::InnerFeatherClip,
+                        kind: RuntimeDrawPathCacheKind::Draw,
+                        path_kind: runtime_draw_path_cache_path_kind(paint),
                         local_id: command.local_id,
                         path_index: clip_path_index,
                     },
@@ -5352,6 +5357,7 @@ fn runtime_draw_command(
         let path = path_cache.draw_path(
             RuntimeDrawPathCacheKey {
                 kind: RuntimeDrawPathCacheKind::Draw,
+                path_kind: runtime_draw_path_cache_path_kind(paint),
                 local_id: inner_feather_path_cache_local,
                 path_index,
             },
@@ -5383,6 +5389,18 @@ fn runtime_draw_command(
     }
 
     Ok(())
+}
+
+fn runtime_draw_path_cache_path_kind(
+    paint: &RuntimeShapePaintCommand,
+) -> RuntimeShapePaintPathKind {
+    if paint.aliases_local_clockwise_path
+        && paint.path_kind == RuntimeShapePaintPathKind::LocalClockwise
+    {
+        RuntimeShapePaintPathKind::Local
+    } else {
+        paint.path_kind
+    }
 }
 
 fn runtime_draw_image(
@@ -6556,6 +6574,7 @@ pub(crate) fn runtime_shape_paint_command(
     path_commands: Vec<RuntimePathCommand>,
     require_effective_visible: bool,
     suppress_authored_transparent: bool,
+    aliases_local_clockwise_path: bool,
 ) -> Option<RuntimeShapePaintCommand> {
     if !runtime_shape_paint_is_visible(artboard, paint) {
         return None;
@@ -6583,6 +6602,7 @@ pub(crate) fn runtime_shape_paint_command(
         ),
         paint_state,
         feather_state: runtime_feather_state(
+            artboard,
             paint.feather.as_ref(),
             feather_path_commands,
             shape_world,
@@ -6592,6 +6612,7 @@ pub(crate) fn runtime_shape_paint_command(
         has_effect_path,
         needs_save_operation,
         shape_world_override: None,
+        aliases_local_clockwise_path,
         uses_temporary_paint: false,
         allocates_text_paint_pool: false,
     })
@@ -6883,12 +6904,23 @@ fn runtime_gradient_stop_position(
 }
 
 fn runtime_feather_state(
+    artboard: &ArtboardInstance,
     feather: Option<&FeatherNode>,
     path_commands: &[RuntimePathCommand],
     shape_world: Mat2D,
 ) -> Option<RuntimeFeatherState> {
-    let feather = feather?;
-    let inner_path_commands = inner_feather_path_commands(feather, path_commands, shape_world);
+    let mut feather = feather?.clone();
+    feather.space_value =
+        runtime_feather_uint_property(artboard, &feather, "spaceValue", feather.space_value);
+    feather.strength =
+        runtime_feather_double_property(artboard, &feather, "strength", feather.strength);
+    feather.offset_x =
+        runtime_feather_double_property(artboard, &feather, "offsetX", feather.offset_x);
+    feather.offset_y =
+        runtime_feather_double_property(artboard, &feather, "offsetY", feather.offset_y);
+    feather.inner = runtime_feather_bool_property(artboard, &feather, "inner", feather.inner);
+
+    let inner_path_commands = inner_feather_path_commands(&feather, path_commands, shape_world);
     Some(RuntimeFeatherState {
         feather_local: feather.local_id,
         space_value: feather.space_value,
@@ -6923,6 +6955,40 @@ fn inner_feather_path_commands(
     translate_path_commands(&mut reversed_source, offset);
     commands.extend(reversed_source);
     commands
+}
+
+fn runtime_feather_double_property(
+    artboard: &ArtboardInstance,
+    feather: &FeatherNode,
+    property_name: &str,
+    default: f32,
+) -> f32 {
+    property_key_for_name(feather.type_name, property_name)
+        .and_then(|key| artboard.double_property(feather.local_id, key))
+        .unwrap_or(default)
+}
+
+fn runtime_feather_uint_property(
+    artboard: &ArtboardInstance,
+    feather: &FeatherNode,
+    property_name: &str,
+    default: u32,
+) -> u32 {
+    property_key_for_name(feather.type_name, property_name)
+        .and_then(|key| artboard.uint_property(feather.local_id, key))
+        .and_then(|value| u32::try_from(value).ok())
+        .unwrap_or(default)
+}
+
+fn runtime_feather_bool_property(
+    artboard: &ArtboardInstance,
+    feather: &FeatherNode,
+    property_name: &str,
+    default: bool,
+) -> bool {
+    property_key_for_name(feather.type_name, property_name)
+        .and_then(|key| artboard.bool_property(feather.local_id, key))
+        .unwrap_or(default)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -8249,13 +8315,7 @@ fn runtime_path_geometry(artboard: &ArtboardInstance, path: &PathGeometryNode) -
         "isHole",
         path.is_hole,
     );
-    path.is_clockwise = runtime_path_bool_property(
-        artboard,
-        path.local_id,
-        path.type_name,
-        "isClockwise",
-        path.is_clockwise,
-    );
+    path.is_clockwise = runtime_path_is_clockwise(artboard, path.local_id, path.is_clockwise);
     path.parametric = runtime_parametric_path(artboard, &path);
 
     for vertex in &mut path.vertices {
@@ -8716,6 +8776,12 @@ fn runtime_path_uint_property(
         .unwrap_or(default)
 }
 
+fn runtime_path_is_clockwise(artboard: &ArtboardInstance, local_id: usize, default: bool) -> bool {
+    let default_flags = if default { 0 } else { 1 << 1 };
+    let flags = runtime_path_uint_property(artboard, local_id, "Path", "pathFlags", default_flags);
+    flags & (1 << 1) == 0
+}
+
 fn points_path_commands(
     path: &PathGeometryNode,
     path_kind: ShapePaintPathKind,
@@ -8733,10 +8799,8 @@ fn points_path_commands(
         let Some(weighted_context) = weighted_context else {
             return Vec::new();
         };
-        let Some(deformed_path) = deformed_points_path(path, weighted_context) else {
-            return Vec::new();
-        };
-        return points_path_commands(&deformed_path, path_kind, transform, None);
+        return weighted_points_path_commands(path, path_kind, transform, weighted_context)
+            .unwrap_or_default();
     }
     if path
         .vertices
@@ -8837,6 +8901,200 @@ fn points_path_commands(
     } else {
         commands
     }
+}
+
+fn weighted_points_path_commands(
+    path: &PathGeometryNode,
+    path_kind: ShapePaintPathKind,
+    transform: Mat2D,
+    weighted_context: &WeightedPathContext,
+) -> Option<Vec<RuntimePathCommand>> {
+    if path
+        .vertices
+        .iter()
+        .any(|vertex| !is_supported_point_path_vertex(vertex))
+    {
+        return None;
+    }
+    let reverse_for_clockwise_fill = path_kind == ShapePaintPathKind::LocalClockwise
+        && path_needs_clockwise_reversal(path, transform);
+
+    let mut commands = Vec::new();
+    let first = &path.vertices[0];
+
+    let (start, start_in, mut out, start_is_cubic, mut prev_is_cubic) =
+        if let Some((in_point, out_point)) = weighted_cubic_vertex_points(first, weighted_context)?
+        {
+            let start = weighted_vertex_translation(first, weighted_context)?;
+            push_move(&mut commands, transform, start);
+            (start, in_point, out_point, true, true)
+        } else if first.radius != 0.0 {
+            let prev = path
+                .vertices
+                .last()
+                .expect("path has at least two vertices");
+            let next = &path.vertices[1];
+            let (start, mut out_point, mut in_point, out_after) =
+                weighted_rounded_straight_vertex_points(first, prev, next, weighted_context)?;
+            if first.radius < 0.0 {
+                rotate_rounded_points(
+                    out_after,
+                    start,
+                    weighted_vertex_translation(first, weighted_context)?,
+                    &mut out_point,
+                    &mut in_point,
+                );
+            }
+            push_move(&mut commands, transform, start);
+            push_cubic(&mut commands, transform, out_point, in_point, out_after);
+            (start, start, out_after, false, false)
+        } else {
+            let start = weighted_vertex_translation(first, weighted_context)?;
+            push_move(&mut commands, transform, start);
+            (start, start, start, false, false)
+        };
+
+    for (index, vertex) in path.vertices.iter().enumerate().skip(1) {
+        if let Some((in_point, out_point)) = weighted_cubic_vertex_points(vertex, weighted_context)?
+        {
+            let translation = weighted_vertex_translation(vertex, weighted_context)?;
+            push_cubic(&mut commands, transform, out, in_point, translation);
+            prev_is_cubic = true;
+            out = out_point;
+        } else {
+            let position = weighted_vertex_translation(vertex, weighted_context)?;
+            if vertex.radius != 0.0 {
+                let prev = &path.vertices[index - 1];
+                let next = &path.vertices[(index + 1) % path.vertices.len()];
+                let (translation, mut out_point, mut in_point, out_after) =
+                    weighted_rounded_straight_vertex_points(vertex, prev, next, weighted_context)?;
+                if prev_is_cubic {
+                    push_cubic(&mut commands, transform, out, translation, translation);
+                } else {
+                    push_line(&mut commands, transform, translation);
+                }
+                if vertex.radius < 0.0 {
+                    rotate_rounded_points(
+                        out_after,
+                        translation,
+                        position,
+                        &mut out_point,
+                        &mut in_point,
+                    );
+                }
+                push_cubic(&mut commands, transform, out_point, in_point, out_after);
+                prev_is_cubic = false;
+                out = out_after;
+            } else if prev_is_cubic {
+                push_cubic(&mut commands, transform, out, position, position);
+                prev_is_cubic = false;
+                out = position;
+            } else {
+                push_line(&mut commands, transform, position);
+                out = position;
+            }
+        }
+    }
+
+    if path.is_closed {
+        if prev_is_cubic || start_is_cubic {
+            push_cubic(&mut commands, transform, out, start_in, start);
+        } else {
+            push_line(&mut commands, transform, start);
+        }
+        commands.push(RuntimePathCommand::Close);
+    }
+
+    Some(if reverse_for_clockwise_fill {
+        path_commands_backwards(&commands)
+    } else {
+        commands
+    })
+}
+
+fn weighted_vertex_translation(
+    vertex: &PathVertexNode,
+    weighted_context: &WeightedPathContext,
+) -> Option<(f32, f32)> {
+    if vertex.weight_local.is_some() {
+        weighted_context.deform_point(
+            vertex_translation(vertex),
+            vertex.weight_indices.unwrap_or(1),
+            vertex.weight_values.unwrap_or(255),
+        )
+    } else {
+        Some(vertex_translation(vertex))
+    }
+}
+
+fn weighted_cubic_vertex_points(
+    vertex: &PathVertexNode,
+    weighted_context: &WeightedPathContext,
+) -> Option<Option<((f32, f32), (f32, f32))>> {
+    let Some((in_point, out_point)) = cubic_vertex_points(vertex) else {
+        return Some(None);
+    };
+    if vertex.weight_local.is_some() {
+        Some(Some((
+            weighted_context.deform_point(
+                in_point,
+                vertex.weight_in_indices.unwrap_or(1),
+                vertex.weight_in_values.unwrap_or(255),
+            )?,
+            weighted_context.deform_point(
+                out_point,
+                vertex.weight_out_indices.unwrap_or(1),
+                vertex.weight_out_values.unwrap_or(255),
+            )?,
+        )))
+    } else {
+        Some(Some((in_point, out_point)))
+    }
+}
+
+fn weighted_vertex_render_in_point(
+    vertex: &PathVertexNode,
+    weighted_context: &WeightedPathContext,
+) -> Option<(f32, f32)> {
+    weighted_cubic_vertex_points(vertex, weighted_context)?
+        .map(|(in_point, _)| in_point)
+        .or_else(|| weighted_vertex_translation(vertex, weighted_context))
+}
+
+fn weighted_vertex_render_out_point(
+    vertex: &PathVertexNode,
+    weighted_context: &WeightedPathContext,
+) -> Option<(f32, f32)> {
+    weighted_cubic_vertex_points(vertex, weighted_context)?
+        .map(|(_, out_point)| out_point)
+        .or_else(|| weighted_vertex_translation(vertex, weighted_context))
+}
+
+fn weighted_rounded_straight_vertex_points(
+    vertex: &PathVertexNode,
+    prev: &PathVertexNode,
+    next: &PathVertexNode,
+    weighted_context: &WeightedPathContext,
+) -> Option<((f32, f32), (f32, f32), (f32, f32), (f32, f32))> {
+    let position = weighted_vertex_translation(vertex, weighted_context)?;
+    let (to_prev, to_prev_length) = normalize_vector(subtract_point(
+        weighted_vertex_render_out_point(prev, weighted_context)?,
+        position,
+    ));
+    let (to_next, to_next_length) = normalize_vector(subtract_point(
+        weighted_vertex_render_in_point(next, weighted_context)?,
+        position,
+    ));
+    let render_radius = (to_prev_length / 2.0)
+        .min(to_next_length / 2.0)
+        .min(vertex.radius.abs());
+    let ideal_distance = compute_ideal_control_point_distance(to_prev, to_next, render_radius);
+    let translation = scale_and_add_point(position, to_prev, render_radius);
+    let out_point = scale_and_add_point(position, to_prev, render_radius - ideal_distance);
+    let in_point = scale_and_add_point(position, to_next, render_radius - ideal_distance);
+    let out_after = scale_and_add_point(position, to_next, render_radius);
+
+    Some((translation, out_point, in_point, out_after))
 }
 
 fn rectangle_path_commands(
@@ -9188,12 +9446,12 @@ impl WeightedPathContext {
             let bone_transform = self.bone_transforms.get(bone_index)?;
             let normalized_weight = f32::from(weight) / 255.0;
             for (target, value) in blended.iter_mut().zip(bone_transform.0) {
-                *target = value.mul_add(normalized_weight, *target);
+                *target += value * normalized_weight;
             }
         }
 
-        let (x, y) = self.skin_world_transform.map_point(point.0, point.1);
-        Some(Mat2D(blended).map_point(x, y))
+        let (x, y) = self.skin_world_transform.transform_point(point.0, point.1);
+        Some(Mat2D(blended).transform_point(x, y))
     }
 }
 
@@ -9593,79 +9851,6 @@ fn runtime_mat2d_invert(mat: Mat2D) -> Option<Mat2D> {
 
 fn runtime_copysign_one(value: f32) -> f32 {
     if value.is_sign_negative() { -1.0 } else { 1.0 }
-}
-
-fn deformed_points_path(
-    path: &PathGeometryNode,
-    weighted_context: &WeightedPathContext,
-) -> Option<PathGeometryNode> {
-    let mut deformed_path = path.clone();
-    for vertex in &mut deformed_path.vertices {
-        if vertex.weight_local.is_none() {
-            continue;
-        }
-
-        let original = vertex.clone();
-        if !is_supported_point_path_vertex(&original) {
-            return None;
-        }
-
-        let translation = weighted_context.deform_point(
-            vertex_translation(&original),
-            original.weight_indices.unwrap_or(1),
-            original.weight_values.unwrap_or(255),
-        )?;
-        vertex.x = translation.0;
-        vertex.y = translation.1;
-
-        if let Some((in_point, out_point)) = cubic_vertex_points(&original) {
-            let in_point = weighted_context.deform_point(
-                in_point,
-                original.weight_in_indices.unwrap_or(1),
-                original.weight_in_values.unwrap_or(255),
-            )?;
-            let out_point = weighted_context.deform_point(
-                out_point,
-                original.weight_out_indices.unwrap_or(1),
-                original.weight_out_values.unwrap_or(255),
-            )?;
-            set_detached_cubic_points(vertex, translation, in_point, out_point);
-        }
-
-        clear_vertex_weight(vertex);
-    }
-
-    Some(deformed_path)
-}
-
-fn set_detached_cubic_points(
-    vertex: &mut PathVertexNode,
-    translation: (f32, f32),
-    in_point: (f32, f32),
-    out_point: (f32, f32),
-) {
-    let in_vector = subtract_point(in_point, translation);
-    let out_vector = subtract_point(out_point, translation);
-    vertex.type_name = "CubicDetachedVertex";
-    vertex.radius = 0.0;
-    vertex.rotation = 0.0;
-    vertex.distance = 0.0;
-    vertex.in_rotation = in_vector.1.atan2(in_vector.0);
-    vertex.in_distance = vector_length(in_vector);
-    vertex.out_rotation = out_vector.1.atan2(out_vector.0);
-    vertex.out_distance = vector_length(out_vector);
-}
-
-fn clear_vertex_weight(vertex: &mut PathVertexNode) {
-    vertex.weight_local = None;
-    vertex.weight_global = None;
-    vertex.weight_type_name = None;
-    vertex.weight_values = None;
-    vertex.weight_indices = None;
-    vertex.weight_in_values = None;
-    vertex.weight_in_indices = None;
-    vertex.weight_out_values = None;
-    vertex.weight_out_indices = None;
 }
 
 fn vertex_translation(vertex: &PathVertexNode) -> (f32, f32) {

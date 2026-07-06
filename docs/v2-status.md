@@ -5,9 +5,9 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 559 across 238 files (strict
-  exact=553/232; tolerant=6/6; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=55, not-yet=2
+- Exact-status segments (file × sample): 560 across 239 files (strict
+  exact=553/232; tolerant=7/7; structural=0/0)
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=55, not-yet=1
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=14 gated=5 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes**
 
@@ -24,12 +24,12 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. All remaining M6 diagnostics are one-file queues. Pick the freshest
-   adjacency first: `not-yet:local-clockwise-contour-order`
-   (`hunter_x_demo.riv`). The selected-root shader-order and gradient opacity
+1. Resolve the lone active `not-yet` entry:
+   `not-yet:nested-feather-gradient-space` (`ai_assitant.riv`). The
+   selected-root shader-order, gradient opacity, and local-clockwise contour
    adjacencies are closed: `bullet_man.riv` now reaches the existing
-   `selected-root-skinned-clip-path` gate, and `hunter_x_demo.riv` now first
-   differs at local-clockwise child contour verb ordering.
+   `selected-root-skinned-clip-path` gate, and `hunter_x_demo.riv` is exact
+   under `tolerant(0.0015)`.
 2. Other parked one-file M6 queues are `scripted-data-context`,
    `focus-data` (`focus_traversal.riv`), `layout-component-paint`
    (`text_input.riv`), `viewmodel-asset-conditions`,
@@ -47,8 +47,8 @@ the only memory the next session has. Update it every commit.
    `nested-layout-size-data-bind` diagnostic. Gated one-file diagnostics
    include `scripted-transition-condition` (2 gated),
    `scripted-path-effects` (1 gated), and `text-polygon-sibling`
-   (`bankcard.riv`). The other M6 `not-yet` entry is
-   `not-yet:nested-feather-gradient-space` (`ai_assitant.riv`).
+   (`bankcard.riv`). Keep these parked queues separate from the active
+   `not-yet` item above.
 3. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
@@ -120,12 +120,8 @@ the only memory the next session has. Update it every commit.
 
 - None in the active corpus. `make golden-compare` reports `diverges=0`; the
   remaining M6 work is parked behind explicit unsupported-feature diagnostics
-  or documented `not-yet` entries. `ai_assitant.riv` imports and draws but has
-  a nested-feather gradient-space exact-parity gap. `hunter_x_demo.riv` now
-  matches C++ selected-root gradient shader allocation and child gradient
-  opacity propagation, but its focused stream first differs at local-clockwise
-  child contour verb ordering, parked as
-  `not-yet:local-clockwise-contour-order`.
+  or the lone documented `not-yet` entry. `ai_assitant.riv` imports and draws
+  but has a nested-feather gradient-space exact-parity gap.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -383,6 +379,18 @@ the only memory the next session has. Update it every commit.
   `M6=14 gated=5 harness=36`; `cargo test --workspace` passes. Next target is
   `hunter_x_demo.riv`
   (`not-yet:local-clockwise-contour-order`).
+- 2026-07-06: [M6] Promoted `hunter_x_demo.riv` by honoring
+  `Path.pathFlags` for `PointsPath` clockwise state, reusing the C++ draw-path
+  identity for inner-feather clips, reading live `Feather` properties at draw
+  time, preserving distinct local/localClockwise `Shape` path cache identity
+  while aliasing text/layout providers, and building weighted `PointsPath`
+  commands from deformed cubic handles directly instead of round-tripping
+  through angle/distance. The stream is structurally identical and guarded by
+  `verification = "tolerant(0.0015)"` for bounded skinned float drift (max
+  observed `0.0013504`). Full `make golden-compare` reports `exact=239`,
+  `exact-segments=560`, `diverges=0`, `unsupported-feature=55`, `not-yet=1`,
+  and parked `M6=14 gated=5 harness=36`. Next target is `ai_assitant.riv`
+  (`not-yet:nested-feather-gradient-space`).
 - 2026-07-02: `rive-runtime` owns static draw emission through
   `rive-render-api`; `rust-golden-runner` now only orchestrates import,
   artboard selection, stream markers, and recording output.

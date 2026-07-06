@@ -5,8 +5,8 @@ use harfrust::{
 };
 use rive_binary::RuntimeFile;
 use rive_graph::{
-    ArtboardGraph, DataBindNode, ShapePaintContainerNode, ShapePaintKind, ShapePaintPathKind,
-    ShapePaintStateNode,
+    ArtboardGraph, DataBindNode, PathGeometryNode, ShapePaintContainerNode, ShapePaintKind,
+    ShapePaintPathKind, ShapePaintStateNode,
 };
 use rive_schema::definition_by_name;
 use skrifa::instance::{LocationRef, Size};
@@ -18,7 +18,10 @@ use skrifa::{FontRef as SkrifaFontRef, GlyphId, MetadataProvider, Tag as SkrifaT
 use std::collections::BTreeSet;
 
 use crate::data_bind_flags_apply_source_to_target;
-use crate::draw::{RuntimeLayoutBounds, runtime_shape_paint_command};
+use crate::draw::{
+    RuntimeLayoutBounds, RuntimePathMeasure, runtime_path_geometry_commands,
+    runtime_shape_paint_command,
+};
 use crate::properties::property_key_for_name;
 use crate::{ArtboardInstance, Mat2D, RuntimeDrawCommand, RuntimePathCommand};
 use crate::{RuntimeShapePaintCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind};
@@ -82,7 +85,13 @@ pub(crate) fn runtime_text_shape_paint_commands(
         .local_id
         .context("text draw command missing local id")?;
     let slice = StaticTextSlice::from_graph(runtime, graph, text_local)?;
-    let render_data = slice.render_data(runtime, instance, layout_constraint)?;
+    let render_opacity = instance
+        .component(text_local)
+        .map(|component| component.transform.render_opacity)
+        .unwrap_or(1.0);
+    let text_world =
+        instance.runtime_component_world_transform_with_bounds(text_local, graph, layout_bounds);
+    let render_data = slice.render_data(runtime, instance, layout_constraint, text_world)?;
     if render_data
         .path_buckets_by_style
         .iter()
@@ -90,13 +99,7 @@ pub(crate) fn runtime_text_shape_paint_commands(
     {
         return Ok(Vec::new());
     }
-    let render_opacity = instance
-        .component(text_local)
-        .map(|component| component.transform.render_opacity)
-        .unwrap_or(1.0);
-    let shape_world =
-        instance.runtime_component_world_transform_with_bounds(text_local, graph, layout_bounds);
-    let shape_world = shape_world.multiply(render_data.local_transform);
+    let shape_world = text_world.multiply(render_data.local_transform);
     // C++ text draw isolates the glyph path transform even when clipping
     // elides the drawable-level save.
     let needs_save_operation = true;
@@ -225,6 +228,7 @@ struct StaticTextModifierGroup {
     local_id: usize,
     global_id: u32,
     ranges: Vec<StaticTextModifierRange>,
+    follow_path_modifiers: Vec<StaticTextFollowPathModifier>,
 }
 
 #[derive(Debug, Clone)]
@@ -232,6 +236,35 @@ struct StaticTextModifierRange {
     local_id: usize,
     global_id: u32,
     interpolator: Option<StaticCubicInterpolator>,
+}
+
+#[derive(Debug, Clone)]
+struct StaticTextFollowPathModifier {
+    local_id: usize,
+    global_id: u32,
+    paths: Vec<StaticTextFollowPathPath>,
+}
+
+#[derive(Debug, Clone)]
+struct StaticTextFollowPathPath {
+    local_id: usize,
+    geometry: PathGeometryNode,
+}
+
+#[derive(Debug, Clone)]
+struct StaticTextGlyphContext {
+    origin_x: f32,
+    origin_y: f32,
+    line_index_in_paragraph: usize,
+    paragraph_baselines: Vec<f32>,
+    text_world_inverse: Mat2D,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct StaticFollowPathGlyphTransform {
+    x: f32,
+    y: f32,
+    rotation: f32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -301,6 +334,18 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
                     .any(|name| property_key_for_name("Text", name) == Some(property_key))
                     && (data_bind.converter_global.is_none()
                         || data_bind.converter_type_name == Some("DataConverterFormula")))
+        }
+        Some("TextFollowPathModifier") => {
+            ["start", "end", "strength", "offset"]
+                .into_iter()
+                .any(|name| {
+                    property_key_for_name("TextFollowPathModifier", name) == Some(property_key)
+                })
+                && (data_bind.converter_global.is_none()
+                    || data_bind.converter_type_name == Some("DataConverterFormula"))
+                || (["radial", "orient"].into_iter().any(|name| {
+                    property_key_for_name("TextFollowPathModifier", name) == Some(property_key)
+                }) && data_bind.converter_global.is_none())
         }
         _ => false,
     }
@@ -388,6 +433,7 @@ impl<'a> StaticTextSlice<'a> {
                         | "GradientStop"
                         | "Fill"
                         | "Stroke"
+                        | "TrimPath"
                         | "Backboard"
                         | "NestedArtboard"
                         | "NestedStateMachine"
@@ -414,6 +460,7 @@ impl<'a> StaticTextSlice<'a> {
                         | "FocusData"
                         | "KeyboardInput"
                         | "ScriptedDrawable"
+                        | "TextFollowPathModifier"
                         | "Feather"
                         | "CustomPropertyGroup"
                         | "CustomPropertyNumber"
@@ -465,7 +512,6 @@ impl<'a> StaticTextSlice<'a> {
                         | "TextShapeModifier"
                         | "TextVariationModifier"
                         | "TextTargetModifier"
-                        | "TextFollowPathModifier"
                         | "NestedArtboardLayout"
                         | "NestedArtboardLeaf"
                 )
@@ -571,6 +617,7 @@ impl<'a> StaticTextSlice<'a> {
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
         layout_constraint: Option<RuntimeTextLayoutConstraint>,
+        text_world: Mat2D,
     ) -> Result<StaticTextRenderData> {
         let resolved_runs = self.resolved_runs(runtime, instance)?;
         let text = resolved_runs
@@ -677,6 +724,19 @@ impl<'a> StaticTextSlice<'a> {
             apply_ellipsis,
             layout_constraint,
         )?;
+        let local_transform = Mat2D([
+            1.0,
+            0.0,
+            0.0,
+            1.0,
+            layout_info.x_offset,
+            layout_info.y_offset,
+        ]);
+        let text_world_inverse = text_world.invert_or_identity();
+        let paragraph_baselines = lines
+            .iter()
+            .map(|line| baseline + line.line_index as f32 * line_height)
+            .collect::<Vec<_>>();
         let mut commands_by_style = vec![Vec::new(); self.styles.len()];
         let modifier_coverages = self
             .modifiers
@@ -738,11 +798,19 @@ impl<'a> StaticTextSlice<'a> {
             for glyph in &glyphs {
                 let mut glyph_transform = Mat2D::IDENTITY;
                 let mut glyph_opacity = 1.0;
+                let center_x = cursor_x + glyph.advance * 0.5;
+                let glyph_context = StaticTextGlyphContext {
+                    origin_x: center_x,
+                    origin_y: line_baseline,
+                    line_index_in_paragraph: line.line_index,
+                    paragraph_baselines: paragraph_baselines.clone(),
+                    text_world_inverse,
+                };
                 for (modifier, coverage) in self.modifiers.iter().zip(&modifier_coverages) {
                     let amount = glyph_coverage(coverage, glyph.char_index, glyph.char_len);
                     if amount != 0.0 {
                         glyph_transform = modifier
-                            .transform(runtime, instance, amount)?
+                            .transform(runtime, instance, amount, &glyph_context)?
                             .multiply(glyph_transform);
                     }
                     if modifier.modifies_opacity(runtime, instance)? {
@@ -772,7 +840,7 @@ impl<'a> StaticTextSlice<'a> {
                             cursor_x,
                             line_baseline,
                             glyph.scale,
-                            cursor_x + glyph.advance * 0.5,
+                            center_x,
                             line_baseline,
                             glyph_transform,
                         );
@@ -803,14 +871,7 @@ impl<'a> StaticTextSlice<'a> {
 
         Ok(StaticTextRenderData {
             path_buckets_by_style: commands_by_style,
-            local_transform: Mat2D([
-                1.0,
-                0.0,
-                0.0,
-                1.0,
-                layout_info.x_offset,
-                layout_info.y_offset,
-            ]),
+            local_transform,
         })
     }
 
@@ -1838,10 +1899,18 @@ impl StaticTextModifierGroup {
         let component = component_for_local(graph, local_id)
             .with_context(|| format!("TextModifierGroup local {local_id} component is missing"))?;
         let mut ranges = Vec::new();
+        let mut follow_path_modifiers = Vec::new();
         for child_local in &component.children {
             match type_for_local(graph, *child_local) {
                 Some("TextModifierRange") => {
                     ranges.push(StaticTextModifierRange::from_graph(
+                        runtime,
+                        graph,
+                        *child_local,
+                    )?);
+                }
+                Some("TextFollowPathModifier") => {
+                    follow_path_modifiers.push(StaticTextFollowPathModifier::from_graph(
                         runtime,
                         graph,
                         *child_local,
@@ -1860,6 +1929,7 @@ impl StaticTextModifierGroup {
             local_id,
             global_id,
             ranges,
+            follow_path_modifiers,
         })
     }
 
@@ -1868,6 +1938,7 @@ impl StaticTextModifierGroup {
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
         amount: f32,
+        glyph: &StaticTextGlyphContext,
     ) -> Result<Mat2D> {
         let flags = runtime_uint_property(
             runtime,
@@ -1880,32 +1951,76 @@ impl StaticTextModifierGroup {
         )?;
         const MODIFY_TRANSLATION: u64 = 1 << 2;
         const MODIFY_ROTATION: u64 = 1 << 3;
-        let (x, y) = if flags & MODIFY_TRANSLATION != 0 {
-            (
-                runtime_double_property(
-                    runtime,
-                    instance,
-                    "TextModifierGroup",
-                    self.local_id,
-                    self.global_id,
-                    "x",
-                    0.0,
-                )? * amount,
-                runtime_double_property(
-                    runtime,
-                    instance,
-                    "TextModifierGroup",
-                    self.local_id,
-                    self.global_id,
-                    "y",
-                    0.0,
-                )? * amount,
-            )
-        } else {
-            (0.0, 0.0)
-        };
-        let rotation = if flags & MODIFY_ROTATION != 0 {
-            runtime_double_property(
+        let follows_path = !self.follow_path_modifiers.is_empty();
+        if amount == 0.0 && !follows_path {
+            return Ok(Mat2D::IDENTITY);
+        }
+
+        let mut x = 0.0;
+        let mut y = 0.0;
+        let mut rotation = 0.0;
+
+        if follows_path {
+            // Ported from C++ `src/text/text_modifier_group.cpp`
+            // `TextModifierGroup::transform` for follow-path modifiers.
+            let mut current = StaticFollowPathGlyphTransform {
+                x: glyph.origin_x,
+                y: glyph.origin_y,
+                rotation: 0.0,
+            };
+            let offset = if flags & MODIFY_TRANSLATION != 0 {
+                (
+                    runtime_double_property(
+                        runtime,
+                        instance,
+                        "TextModifierGroup",
+                        self.local_id,
+                        self.global_id,
+                        "x",
+                        0.0,
+                    )?,
+                    runtime_double_property(
+                        runtime,
+                        instance,
+                        "TextModifierGroup",
+                        self.local_id,
+                        self.global_id,
+                        "y",
+                        0.0,
+                    )?,
+                )
+            } else {
+                (0.0, 0.0)
+            };
+            for modifier in &self.follow_path_modifiers {
+                current = modifier.transform_glyph(runtime, instance, current, glyph, offset)?;
+            }
+            x = (current.x - glyph.origin_x) * amount;
+            y = (current.y - glyph.origin_y) * amount;
+            rotation += current.rotation * amount;
+        } else if flags & MODIFY_TRANSLATION != 0 {
+            x = runtime_double_property(
+                runtime,
+                instance,
+                "TextModifierGroup",
+                self.local_id,
+                self.global_id,
+                "x",
+                0.0,
+            )? * amount;
+            y = runtime_double_property(
+                runtime,
+                instance,
+                "TextModifierGroup",
+                self.local_id,
+                self.global_id,
+                "y",
+                0.0,
+            )? * amount;
+        }
+
+        if flags & MODIFY_ROTATION != 0 {
+            rotation += runtime_double_property(
                 runtime,
                 instance,
                 "TextModifierGroup",
@@ -1913,10 +2028,8 @@ impl StaticTextModifierGroup {
                 self.global_id,
                 "rotation",
                 0.0,
-            )? * amount
-        } else {
-            0.0
-        };
+            )? * amount;
+        }
         let mut transform = Mat2D::from_rotation(rotation);
         transform.0[4] = x;
         transform.0[5] = y;
@@ -1983,6 +2096,230 @@ impl StaticTextModifierGroup {
             range.apply_coverage(runtime, instance, text, runs, lines, &mut coverage)?;
         }
         Ok(coverage)
+    }
+}
+
+// Ported from C++ `src/text/text_follow_path_modifier.cpp`.
+impl StaticTextFollowPathModifier {
+    fn from_graph(runtime: &RuntimeFile, graph: &ArtboardGraph, local_id: usize) -> Result<Self> {
+        let global_id = global_for_local(graph, local_id)?;
+        let object = runtime
+            .object(global_id as usize)
+            .with_context(|| format!("missing TextFollowPathModifier global {global_id}"))?;
+        let target_local = object
+            .uint_property("targetId")
+            .and_then(|target| usize::try_from(target).ok());
+        let paths = match target_local {
+            Some(target_local) if type_for_local(graph, target_local) == Some("Shape") => graph
+                .path_composers
+                .iter()
+                .find(|composer| composer.shape_local == target_local)
+                .map(|composer| {
+                    composer
+                        .paths
+                        .iter()
+                        .filter_map(|path_ref| {
+                            graph
+                                .paths
+                                .iter()
+                                .find(|path| path.local_id == path_ref.local_id)
+                                .cloned()
+                                .map(|geometry| StaticTextFollowPathPath {
+                                    local_id: path_ref.local_id,
+                                    geometry,
+                                })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+            Some(target_local) => graph
+                .paths
+                .iter()
+                .find(|path| path.local_id == target_local)
+                .cloned()
+                .map(|geometry| {
+                    vec![StaticTextFollowPathPath {
+                        local_id: target_local,
+                        geometry,
+                    }]
+                })
+                .unwrap_or_default(),
+            None => Vec::new(),
+        };
+
+        Ok(Self {
+            local_id,
+            global_id,
+            paths,
+        })
+    }
+
+    fn transform_glyph(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        current: StaticFollowPathGlyphTransform,
+        glyph: &StaticTextGlyphContext,
+        offset: (f32, f32),
+    ) -> Result<StaticFollowPathGlyphTransform> {
+        let path_measure = self.path_measure(instance, glyph.text_world_inverse);
+        let path_length = path_measure.length();
+        if path_length == 0.0 {
+            return Ok(current);
+        }
+
+        let position_on_path = (glyph.origin_x + offset.0, glyph.origin_y + offset.1);
+        let start = self.double_property(runtime, instance, "start", 0.0)?;
+        let end = self.double_property(runtime, instance, "end", 1.0)?;
+        let start_pct = start.min(end).clamp(0.0, 1.0);
+        let end_pct = start.max(end).clamp(0.0, 1.0);
+        let can_wrap = path_measure.raw_is_closed() && (end_pct - start_pct) == 1.0;
+        let valid_length = (end_pct - start_pct) * path_length;
+        let offset_pct = self
+            .double_property(runtime, instance, "offset", 0.0)?
+            .rem_euclid(1.0);
+        let start_pct = start_pct + offset_pct;
+        let end_pct = end_pct + offset_pct;
+
+        let sample = if (!can_wrap && position_on_path.0 < 0.0) || start_pct == end_pct {
+            let result = path_measure.at_percentage(start_pct);
+            let tangent = normalize_point(result.tan);
+            let extra = -position_on_path.0;
+            RuntimePathSampleParts {
+                position: (
+                    result.pos.0 - tangent.0 * extra,
+                    result.pos.1 - tangent.1 * extra,
+                ),
+                tangent,
+            }
+        } else if !can_wrap && position_on_path.0 > valid_length {
+            let result = path_measure.at_percentage(end_pct);
+            let tangent = normalize_point(result.tan);
+            let extra = position_on_path.0 - valid_length;
+            RuntimePathSampleParts {
+                position: (
+                    result.pos.0 + tangent.0 * extra,
+                    result.pos.1 + tangent.1 * extra,
+                ),
+                tangent,
+            }
+        } else {
+            let result = path_measure.at_percentage(start_pct + position_on_path.0 / path_length);
+            RuntimePathSampleParts {
+                position: result.pos,
+                tangent: normalize_point(result.tan),
+            }
+        };
+
+        let last_line_index = glyph.line_index_in_paragraph.checked_sub(1);
+        let last_baseline = last_line_index
+            .and_then(|index| glyph.paragraph_baselines.get(index).copied())
+            .unwrap_or(0.0);
+        let current_baseline = glyph
+            .paragraph_baselines
+            .get(glyph.line_index_in_paragraph)
+            .copied()
+            .unwrap_or(0.0);
+        let translation = if self.bool_property(runtime, instance, "radial", false)? {
+            let vertical_spacing = position_on_path.1 - current_baseline;
+            let perpendicular = (-sample.tangent.1, sample.tangent.0);
+            (
+                sample.position.0 + vertical_spacing * perpendicular.0,
+                sample.position.1 + vertical_spacing * perpendicular.1,
+            )
+        } else {
+            (
+                sample.position.0,
+                position_on_path.1 - current_baseline + sample.position.1 + last_baseline,
+            )
+        };
+        let rotation = if self.bool_property(runtime, instance, "orient", true)? {
+            sample.tangent.1.atan2(sample.tangent.0)
+        } else {
+            0.0
+        };
+
+        let strength = self
+            .double_property(runtime, instance, "strength", 1.0)?
+            .clamp(0.0, 1.0);
+        let inverse_strength = 1.0 - strength;
+        Ok(StaticFollowPathGlyphTransform {
+            x: translation.0 * strength + current.x * inverse_strength,
+            y: translation.1 * strength + current.y * inverse_strength,
+            rotation: rotation * strength + current.rotation * inverse_strength,
+        })
+    }
+
+    fn path_measure(
+        &self,
+        instance: &ArtboardInstance,
+        text_world_inverse: Mat2D,
+    ) -> RuntimePathMeasure {
+        let mut commands = Vec::new();
+        for path in &self.paths {
+            let Some(path_world) = instance
+                .component(path.local_id)
+                .map(|component| component.transform.world_transform)
+            else {
+                continue;
+            };
+            let mut path_commands =
+                runtime_path_geometry_commands(instance, &path.geometry, path_world);
+            transform_path_commands(&mut path_commands, text_world_inverse);
+            commands.extend(path_commands);
+        }
+        RuntimePathMeasure::from_commands_with_tolerance(&commands, 0.1)
+    }
+
+    fn double_property(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        property_name: &str,
+        default: f32,
+    ) -> Result<f32> {
+        runtime_double_property(
+            runtime,
+            instance,
+            "TextFollowPathModifier",
+            self.local_id,
+            self.global_id,
+            property_name,
+            default,
+        )
+    }
+
+    fn bool_property(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        property_name: &str,
+        default: bool,
+    ) -> Result<bool> {
+        runtime_bool_property(
+            runtime,
+            instance,
+            "TextFollowPathModifier",
+            self.local_id,
+            self.global_id,
+            property_name,
+            default,
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RuntimePathSampleParts {
+    position: (f32, f32),
+    tangent: (f32, f32),
+}
+
+fn normalize_point(point: (f32, f32)) -> (f32, f32) {
+    let length = (point.0 * point.0 + point.1 * point.1).sqrt();
+    if length == 0.0 {
+        (0.0, 0.0)
+    } else {
+        (point.0 / length, point.1 / length)
     }
 }
 

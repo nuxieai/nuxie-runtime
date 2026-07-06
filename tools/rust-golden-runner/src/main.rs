@@ -1662,6 +1662,11 @@ fn nested_child_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> boo
                 || data_bind.converter_type_name == Some("DataConverterToString")
                 || data_bind.converter_type_name == Some("DataConverterGroup")
                 || data_bind.converter_type_name == Some("DataConverterFormula")))
+        || (data_bind.target_type_name == Some("TextFollowPathModifier")
+            // TextFollowPathModifierBase start/end/strength/offset/radial/orient.
+            && matches!(data_bind.property_key, 779 | 782 | 783 | 784 | 785 | 786)
+            && (data_bind.converter_global.is_none()
+                || data_bind.converter_type_name == Some("DataConverterFormula")))
 }
 
 fn solid_color_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> bool {
@@ -1705,7 +1710,7 @@ fn unsupported_scripted_data_context<'a>(
 fn nested_child_data_bind_is_text(data_bind: &rive_graph::DataBindNode) -> bool {
     matches!(
         data_bind.target_type_name,
-        Some("Text" | "TextValueRun" | "TextStylePaint")
+        Some("Text" | "TextValueRun" | "TextStylePaint" | "TextFollowPathModifier")
     )
 }
 

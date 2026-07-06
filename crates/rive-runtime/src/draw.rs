@@ -5866,6 +5866,7 @@ struct TrimContour {
 pub(crate) struct RuntimePathMeasure {
     contours: Vec<TrimContour>,
     length: f32,
+    raw_is_closed: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -5898,6 +5899,13 @@ enum TrimSegmentKind {
 
 impl TrimContour {
     fn from_commands(commands: &[RuntimePathCommand]) -> Vec<Self> {
+        Self::from_commands_with_inv_tolerance(commands, TRIM_CONTOUR_DEFAULT_INV_TOLERANCE)
+    }
+
+    fn from_commands_with_inv_tolerance(
+        commands: &[RuntimePathCommand],
+        inv_tolerance: f32,
+    ) -> Vec<Self> {
         let mut contours = Vec::new();
         let mut raw_segments = Vec::<TrimSegmentKind>::new();
         let mut start = None::<(f32, f32)>;
@@ -5907,7 +5915,8 @@ impl TrimContour {
         let finish_contour = |contours: &mut Vec<Self>,
                               raw_segments: &mut Vec<TrimSegmentKind>,
                               is_closed: &mut bool| {
-            if let Some(contour) = Self::from_raw_segments(raw_segments, *is_closed) {
+            if let Some(contour) = Self::from_raw_segments(raw_segments, *is_closed, inv_tolerance)
+            {
                 contours.push(contour);
             }
             raw_segments.clear();
@@ -5968,7 +5977,11 @@ impl TrimContour {
         contours
     }
 
-    fn from_raw_segments(raw_segments: &[TrimSegmentKind], is_closed: bool) -> Option<Self> {
+    fn from_raw_segments(
+        raw_segments: &[TrimSegmentKind],
+        is_closed: bool,
+        inv_tolerance: f32,
+    ) -> Option<Self> {
         let mut segments = Vec::new();
         let mut distance_so_far = 0.0;
 
@@ -5988,7 +6001,8 @@ impl TrimContour {
                     });
                 }
                 TrimSegmentKind::Cubic { p0, p1, p2, p3 } => {
-                    let segment_count = cubic_measure_segment_count([p0, p1, p2, p3]);
+                    let segment_count =
+                        cubic_measure_segment_count([p0, p1, p2, p3], inv_tolerance);
                     if segment_count == 0 {
                         continue;
                     }
@@ -6132,9 +6146,38 @@ impl TrimContour {
 
 impl RuntimePathMeasure {
     pub(crate) fn from_commands(commands: &[RuntimePathCommand]) -> Self {
-        let contours = TrimContour::from_commands(commands);
+        Self::from_commands_with_inv_tolerance(commands, TRIM_CONTOUR_DEFAULT_INV_TOLERANCE)
+    }
+
+    pub(crate) fn from_commands_with_tolerance(
+        commands: &[RuntimePathCommand],
+        tolerance: f32,
+    ) -> Self {
+        let min_tolerance = 1.0 / 16.0;
+        let tolerance = if tolerance.is_finite() {
+            tolerance.max(min_tolerance)
+        } else {
+            TRIM_CONTOUR_DEFAULT_TOLERANCE
+        };
+        Self::from_commands_with_inv_tolerance(commands, 1.0 / tolerance)
+    }
+
+    fn from_commands_with_inv_tolerance(
+        commands: &[RuntimePathCommand],
+        inv_tolerance: f32,
+    ) -> Self {
+        let contours = TrimContour::from_commands_with_inv_tolerance(commands, inv_tolerance);
         let length = contours.iter().map(|contour| contour.length).sum();
-        Self { contours, length }
+        let raw_is_closed = matches!(commands.last(), Some(RuntimePathCommand::Close));
+        Self {
+            contours,
+            length,
+            raw_is_closed,
+        }
+    }
+
+    pub(crate) fn length(&self) -> f32 {
+        self.length
     }
 
     pub(crate) fn at_percentage(&self, percentage_distance: f32) -> RuntimePathSample {
@@ -6204,8 +6247,12 @@ impl RuntimePathMeasure {
         }
     }
 
-    fn is_closed(&self) -> bool {
+    pub(crate) fn is_closed(&self) -> bool {
         self.contours.len() == 1 && self.contours[0].is_closed
+    }
+
+    pub(crate) fn raw_is_closed(&self) -> bool {
+        self.raw_is_closed
     }
 }
 
@@ -6369,7 +6416,8 @@ fn trim_path_synchronized(
 }
 
 const TRIM_CONTOUR_EPSILON: f32 = 1.0 / 4096.0;
-const TRIM_CONTOUR_INV_TOLERANCE: f32 = 2.0;
+const TRIM_CONTOUR_DEFAULT_TOLERANCE: f32 = 0.5;
+const TRIM_CONTOUR_DEFAULT_INV_TOLERANCE: f32 = 1.0 / TRIM_CONTOUR_DEFAULT_TOLERANCE;
 const TRIM_CONTOUR_MAX_SEGMENTS: u32 = 100;
 const TRIM_CONTOUR_DOT30_SCALE: f32 = (1u32 << 30) as f32;
 const TRIM_CONTOUR_MAX_DOT30: u32 = (1u32 << 30) - 1;
@@ -6379,8 +6427,8 @@ fn trim_contour_dot30_t(t: f32) -> f32 {
     ((t * TRIM_CONTOUR_DOT30_SCALE) as u32) as f32 * TRIM_CONTOUR_INV_MAX_DOT30
 }
 
-fn cubic_measure_segment_count(points: [(f32, f32); 4]) -> u32 {
-    wangs_cubic(points, TRIM_CONTOUR_INV_TOLERANCE)
+fn cubic_measure_segment_count(points: [(f32, f32); 4], inv_tolerance: f32) -> u32 {
+    wangs_cubic(points, inv_tolerance)
         .ceil()
         .ceil()
         .min(TRIM_CONTOUR_MAX_SEGMENTS as f32) as u32

@@ -221,7 +221,10 @@ pub(crate) enum RuntimeDataBindGraphConverter {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum RuntimeDataBindGraphFormulaToken {
     Input,
-    Value(f32),
+    Value {
+        token_id: u32,
+        value: f32,
+    },
     Operation {
         operation_type: u64,
     },
@@ -230,6 +233,37 @@ pub(crate) enum RuntimeDataBindGraphFormulaToken {
         arguments_count: usize,
         random_mode: u64,
     },
+}
+
+impl RuntimeDataBindGraphConverter {
+    pub(crate) fn set_formula_token_value(&mut self, token_id: u32, value: f32) -> bool {
+        match self {
+            RuntimeDataBindGraphConverter::Formula { tokens } => {
+                let mut changed = false;
+                for token in tokens {
+                    if let RuntimeDataBindGraphFormulaToken::Value {
+                        token_id: candidate_id,
+                        value: token_value,
+                    } = token
+                        && *candidate_id == token_id
+                        && *token_value != value
+                    {
+                        *token_value = value;
+                        changed = true;
+                    }
+                }
+                changed
+            }
+            RuntimeDataBindGraphConverter::Group(converters) => {
+                let mut changed = false;
+                for converter in converters {
+                    changed |= converter.set_formula_token_value(token_id, value);
+                }
+                changed
+            }
+            _ => false,
+        }
+    }
 }
 
 pub(crate) fn runtime_data_bind_graph_converter_contains_source_change_random(
@@ -1469,7 +1503,7 @@ fn runtime_data_bind_graph_convert_formula_with_state(
     for token in tokens {
         match token {
             RuntimeDataBindGraphFormulaToken::Input => stack.push(input),
-            RuntimeDataBindGraphFormulaToken::Value(value) => stack.push(*value),
+            RuntimeDataBindGraphFormulaToken::Value { value, .. } => stack.push(*value),
             RuntimeDataBindGraphFormulaToken::Operation { operation_type } => {
                 if stack.len() > 1 {
                     let right = stack.pop().expect("stack length checked");
@@ -1923,12 +1957,13 @@ fn runtime_data_bind_graph_formula_converter(
     for token in file.data_converter_formula_output_tokens_for_object(converter) {
         match token.object.type_name {
             "FormulaTokenInput" => tokens.push(RuntimeDataBindGraphFormulaToken::Input),
-            "FormulaTokenValue" => tokens.push(RuntimeDataBindGraphFormulaToken::Value(
-                token
+            "FormulaTokenValue" => tokens.push(RuntimeDataBindGraphFormulaToken::Value {
+                token_id: token.object.id,
+                value: token
                     .object
                     .double_property("operationValue")
                     .unwrap_or(1.0),
-            )),
+            }),
             "FormulaTokenOperation" => {
                 tokens.push(RuntimeDataBindGraphFormulaToken::Operation {
                     operation_type: token.object.uint_property("operationType").unwrap_or(0),

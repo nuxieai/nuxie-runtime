@@ -10,13 +10,15 @@ use crate::animation::{
     build_linear_animations, build_runtime_joysticks,
 };
 use crate::artboard_data_bind::{
-    RuntimeArtboardCustomPropertyBindingInstance, RuntimeArtboardLayoutComputedBindingInstance,
-    RuntimeArtboardListBindingInstance, RuntimeArtboardNestedHostBindingInstance,
+    RuntimeArtboardCustomPropertyBindingInstance, RuntimeArtboardFormulaTokenBindingInstance,
+    RuntimeArtboardLayoutComputedBindingInstance, RuntimeArtboardListBindingInstance,
+    RuntimeArtboardNestedHostBindingInstance, RuntimeArtboardNumericSourceBindingInstance,
     RuntimeArtboardPropertyBindingInstance, RuntimeArtboardSoloBindingInstance,
     RuntimeArtboardSoloSourceBindingInstance, apply_artboard_unbound_color_data_bind_defaults,
     build_artboard_custom_property_bindings, build_artboard_default_view_model_values,
-    build_artboard_layout_computed_bindings, build_artboard_list_bindings,
-    build_artboard_nested_host_bindings, build_artboard_property_bindings,
+    build_artboard_formula_token_bindings, build_artboard_layout_computed_bindings,
+    build_artboard_list_bindings, build_artboard_nested_host_bindings,
+    build_artboard_numeric_source_bindings, build_artboard_property_bindings,
     build_artboard_solo_bindings, build_artboard_solo_source_bindings,
 };
 use crate::components::{
@@ -70,6 +72,8 @@ pub struct ArtboardInstance {
     pub(crate) artboard_property_bindings: Vec<RuntimeArtboardPropertyBindingInstance>,
     pub(crate) artboard_custom_property_bindings: Vec<RuntimeArtboardCustomPropertyBindingInstance>,
     pub(crate) artboard_layout_computed_bindings: Vec<RuntimeArtboardLayoutComputedBindingInstance>,
+    pub(crate) artboard_numeric_source_bindings: Vec<RuntimeArtboardNumericSourceBindingInstance>,
+    pub(crate) artboard_formula_token_bindings: Vec<RuntimeArtboardFormulaTokenBindingInstance>,
     pub(crate) artboard_solo_bindings: Vec<RuntimeArtboardSoloBindingInstance>,
     pub(crate) artboard_solo_source_bindings: Vec<RuntimeArtboardSoloSourceBindingInstance>,
     pub(crate) artboard_nested_host_bindings: Vec<RuntimeArtboardNestedHostBindingInstance>,
@@ -210,6 +214,8 @@ impl ArtboardInstance {
             build_artboard_custom_property_bindings(file, graph);
         let artboard_layout_computed_bindings =
             build_artboard_layout_computed_bindings(file, graph);
+        let artboard_numeric_source_bindings = build_artboard_numeric_source_bindings(file, graph);
+        let artboard_formula_token_bindings = build_artboard_formula_token_bindings(file, graph);
         let artboard_solo_bindings = build_artboard_solo_bindings(file, graph);
         let artboard_solo_source_bindings = build_artboard_solo_source_bindings(file, graph);
         let artboard_nested_host_bindings = build_artboard_nested_host_bindings(file, graph);
@@ -259,6 +265,8 @@ impl ArtboardInstance {
             artboard_property_bindings,
             artboard_custom_property_bindings,
             artboard_layout_computed_bindings,
+            artboard_numeric_source_bindings,
+            artboard_formula_token_bindings,
             artboard_solo_bindings,
             artboard_solo_source_bindings,
             artboard_nested_host_bindings,
@@ -1887,6 +1895,8 @@ mod tests {
             artboard_property_bindings: Vec::new(),
             artboard_custom_property_bindings: Vec::new(),
             artboard_layout_computed_bindings: Vec::new(),
+            artboard_numeric_source_bindings: Vec::new(),
+            artboard_formula_token_bindings: Vec::new(),
             artboard_solo_bindings: Vec::new(),
             artboard_solo_source_bindings: Vec::new(),
             artboard_nested_host_bindings: Vec::new(),

@@ -3,6 +3,7 @@ use crate::data_bind_graph::{
     runtime_data_bind_graph_convert_value, runtime_data_bind_graph_converter,
     runtime_data_bind_graph_converter_contains_source_change_random,
 };
+use crate::draw::{RuntimePathMeasure, runtime_path_geometry_commands};
 use crate::objects::InstanceObjectArena;
 use crate::properties::{
     RuntimeLayoutComputedProperty, artboard_index_for_graph, layout_computed_property_for_key,
@@ -48,6 +49,29 @@ pub(super) struct RuntimeArtboardLayoutComputedBindingInstance {
     target_local_id: usize,
     property: RuntimeLayoutComputedProperty,
     path: Vec<u32>,
+}
+
+#[derive(Debug, Clone)]
+pub(super) struct RuntimeArtboardNumericSourceBindingInstance {
+    target_local_id: usize,
+    property_key: u16,
+    property: RuntimeArtboardNumericSourceProperty,
+    path: Vec<u32>,
+}
+
+#[derive(Debug, Clone)]
+pub(super) struct RuntimeArtboardFormulaTokenBindingInstance {
+    target_global_id: u32,
+    path: Vec<u32>,
+    converter: Option<RuntimeDataBindGraphConverter>,
+    converter_state: RuntimeDataBindGraphConverterState,
+    default_value: RuntimeDataBindGraphValue,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum RuntimeArtboardNumericSourceProperty {
+    DirectDouble,
+    ShapeLength,
 }
 
 #[derive(Debug, Clone)]
@@ -672,6 +696,124 @@ pub(super) fn build_artboard_custom_property_bindings(
                     .unwrap_or(false),
                 flags,
                 value_kind,
+                converter_state: RuntimeDataBindGraphConverterState::for_converter(
+                    converter.as_ref(),
+                ),
+                converter,
+                default_value,
+            })
+        })
+        .collect()
+}
+
+pub(super) fn build_artboard_numeric_source_bindings(
+    file: &RuntimeFile,
+    graph: &ArtboardGraph,
+) -> Vec<RuntimeArtboardNumericSourceBindingInstance> {
+    let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
+        return Vec::new();
+    };
+    let trim_start_key = property_key_for_name("TrimPath", "start");
+    let trim_end_key = property_key_for_name("TrimPath", "end");
+    let shape_length_key = property_key_for_name("Shape", "length");
+
+    file.artboard_data_binds(artboard_index)
+        .into_iter()
+        .filter_map(|data_bind| {
+            if !data_bind_flags_apply_target_to_source(
+                data_bind.object.uint_property("flags").unwrap_or(0),
+            ) {
+                return None;
+            }
+            let target = data_bind.target?;
+            let property_key =
+                u16::try_from(data_bind.object.uint_property("propertyKey")?).ok()?;
+            let property = match target.type_name {
+                "TrimPath" if Some(property_key) == trim_start_key => {
+                    RuntimeArtboardNumericSourceProperty::DirectDouble
+                }
+                "TrimPath" if Some(property_key) == trim_end_key => {
+                    RuntimeArtboardNumericSourceProperty::DirectDouble
+                }
+                "Shape" if Some(property_key) == shape_length_key => {
+                    RuntimeArtboardNumericSourceProperty::ShapeLength
+                }
+                _ => return None,
+            };
+            Some(RuntimeArtboardNumericSourceBindingInstance {
+                target_local_id: data_bind.target_local_id?,
+                property_key,
+                property,
+                path: file.data_bind_context_source_path_ids_for_object(data_bind.object)?,
+            })
+        })
+        .collect()
+}
+
+pub(super) fn build_artboard_formula_token_bindings(
+    file: &RuntimeFile,
+    graph: &ArtboardGraph,
+) -> Vec<RuntimeArtboardFormulaTokenBindingInstance> {
+    let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
+        return Vec::new();
+    };
+    let Some(operation_value_key) = property_key_for_name("FormulaTokenValue", "operationValue")
+    else {
+        return Vec::new();
+    };
+    let default_instance = artboard_default_view_model_instance(file, artboard_index);
+
+    file.objects
+        .iter()
+        .flatten()
+        .filter(|object| object.type_name == "DataBindContext")
+        .into_iter()
+        .filter_map(|data_bind| {
+            let data_bind_id = usize::try_from(data_bind.id).ok()?;
+            if file.import_status(data_bind_id) != Some(rive_binary::RuntimeImportStatus::Imported)
+            {
+                return None;
+            }
+            if !data_bind_flags_apply_source_to_target(
+                data_bind.uint_property("flags").unwrap_or(0),
+            ) {
+                return None;
+            }
+            let target = file.data_bind_target_for_object(data_bind)?;
+            if target.type_name != "FormulaTokenValue" {
+                return None;
+            }
+            if u16::try_from(data_bind.uint_property("propertyKey")?).ok()? != operation_value_key {
+                return None;
+            }
+            let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
+            let converter = runtime_data_bind_graph_converter(file, data_bind);
+            if matches!(converter, Some(RuntimeDataBindGraphConverter::Unsupported)) {
+                return None;
+            }
+            let default_value = default_instance
+                .as_ref()
+                .and_then(|default_instance| {
+                    file.data_context_view_model_property_for_instance(
+                        default_instance.object,
+                        &path,
+                    )
+                    .and_then(|source| runtime_created_view_model_value_for_source(file, source))
+                })
+                .or_else(|| runtime_created_view_model_value_for_declared_path(file, &path))
+                .unwrap_or(RuntimeDataBindGraphValue::Number(0.0));
+            let default_is_number = match converter.as_ref() {
+                Some(converter) => runtime_data_bind_graph_convert_value(converter, &default_value)
+                    .is_some_and(|value| matches!(value, RuntimeDataBindGraphValue::Number(_))),
+                None => matches!(default_value, RuntimeDataBindGraphValue::Number(_)),
+            };
+            if !default_is_number {
+                return None;
+            }
+
+            Some(RuntimeArtboardFormulaTokenBindingInstance {
+                target_global_id: target.id,
+                path,
                 converter_state: RuntimeDataBindGraphConverterState::for_converter(
                     converter.as_ref(),
                 ),
@@ -1334,6 +1476,8 @@ impl ArtboardInstance {
         }
         changed |= self.update_artboard_layout_computed_bindings(root_transform);
         changed |= self.update_artboard_solo_source_bindings();
+        changed |= self.update_artboard_numeric_source_bindings();
+        changed |= self.update_artboard_formula_token_bindings();
         changed |= self.apply_artboard_property_bindings();
         changed |= self.advance_artboard_property_binding_converters(elapsed_seconds);
         changed |= self.apply_artboard_property_bindings();
@@ -1357,6 +1501,109 @@ impl ArtboardInstance {
         changed |= self.apply_artboard_nested_host_bindings();
         changed |= self.sync_nested_child_artboard_data_contexts();
         changed
+    }
+
+    fn update_artboard_numeric_source_bindings(&mut self) -> bool {
+        let graph = self.runtime_graph().cloned();
+        let mut changed = false;
+        for binding in self.artboard_numeric_source_bindings.clone() {
+            let value = match binding.property {
+                RuntimeArtboardNumericSourceProperty::DirectDouble => {
+                    self.double_property(binding.target_local_id, binding.property_key)
+                }
+                RuntimeArtboardNumericSourceProperty::ShapeLength => graph
+                    .as_ref()
+                    .and_then(|graph| self.artboard_shape_length(binding.target_local_id, graph)),
+            };
+            let Some(value) = value else { continue };
+            let value = RuntimeDataBindGraphValue::Number(value);
+            if self.artboard_data_bind_values.get(&binding.path) == Some(&value) {
+                continue;
+            }
+            self.artboard_data_bind_values
+                .insert(binding.path.clone(), value);
+            self.reset_artboard_property_formula_random_state_for_path(&binding.path);
+            changed = true;
+        }
+        changed
+    }
+
+    fn update_artboard_formula_token_bindings(&mut self) -> bool {
+        let mut changed = false;
+        for index in 0..self.artboard_formula_token_bindings.len() {
+            let Some((token_id, value)) =
+                self.converted_artboard_formula_token_binding_value(index)
+            else {
+                continue;
+            };
+            changed |= self.set_artboard_formula_token_value(token_id, value);
+        }
+        changed
+    }
+
+    fn converted_artboard_formula_token_binding_value(
+        &mut self,
+        index: usize,
+    ) -> Option<(u32, f32)> {
+        let binding = self.artboard_formula_token_bindings.get_mut(index)?;
+        let value = self
+            .artboard_data_bind_values
+            .get(&binding.path)
+            .cloned()
+            .unwrap_or_else(|| binding.default_value.clone());
+        let converted = match binding.converter.as_ref() {
+            Some(converter) => binding.converter_state.convert_value_with_formula_randoms(
+                converter,
+                &value,
+                &mut self.artboard_formula_random_source,
+            ),
+            None => Some(value),
+        }?;
+        match converted {
+            RuntimeDataBindGraphValue::Number(value) => Some((binding.target_global_id, value)),
+            _ => None,
+        }
+    }
+
+    fn set_artboard_formula_token_value(&mut self, token_id: u32, value: f32) -> bool {
+        let mut changed = false;
+        for binding in &mut self.artboard_property_bindings {
+            let Some(converter) = binding.converter.as_mut() else {
+                continue;
+            };
+            if converter.set_formula_token_value(token_id, value) {
+                binding.converter_state.reset_formula_randoms();
+                changed = true;
+            }
+        }
+        for binding in &mut self.artboard_custom_property_bindings {
+            let Some(converter) = binding.converter.as_mut() else {
+                continue;
+            };
+            if converter.set_formula_token_value(token_id, value) {
+                binding.converter_state.reset_formula_randoms();
+                changed = true;
+            }
+        }
+        changed
+    }
+
+    fn artboard_shape_length(&self, shape_local_id: usize, graph: &ArtboardGraph) -> Option<f32> {
+        let composer = graph
+            .path_composers
+            .iter()
+            .find(|composer| composer.shape_local == shape_local_id)?;
+        let mut commands = Vec::new();
+        for path_ref in &composer.paths {
+            let path = graph
+                .paths
+                .iter()
+                .find(|path| path.local_id == path_ref.local_id)?;
+            let path_world =
+                self.runtime_component_world_transform_with_bounds(path.local_id, graph, None);
+            commands.extend(runtime_path_geometry_commands(self, path, path_world));
+        }
+        Some(RuntimePathMeasure::from_commands(&commands).length())
     }
 
     fn update_artboard_layout_computed_bindings(&mut self, root_transform: Mat2D) -> bool {

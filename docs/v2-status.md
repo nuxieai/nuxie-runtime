@@ -5,9 +5,9 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 514 across 193 exact files
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=102, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=58 gated=8 harness=36
+- Exact segments (file × sample): 515 across 194 exact files
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=101, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=57 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -23,22 +23,18 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Start `text_follow_path_shape_length.riv`, the sharpest remaining text gate,
-   parked behind `TextFollowPathModifier`: after admitting source-to-target
-   `Text.width` binds with no converter or `DataConverterFormula`, direct Rust
-   now stops on data-binding target `TextFollowPathModifier` global 168.
-2. Keep `text_vertical_trim_test.riv` parked behind `text-vertical-trim`:
+1. Start `text_vertical_trim_test.riv`, the sharpest remaining text gate,
+   parked behind `text-vertical-trim`:
    property keys 1027/1028 are `Text.verticalTrimTopValue` /
    `Text.verticalTrimBottomValue` bitmask passthroughs into
    `verticalTrimValue`, and C++ applies them in `Text::computeVerticalTrim`
    to rendered/measured text bounds.
-3. Generic `rust-runner-unsupported:text` is empty in the current corpus; the
-   remaining sharper text gates are `text-follow-path-modifier` and
-   `text-vertical-trim`.
-4. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
+2. Generic `rust-runner-unsupported:text` is empty in the current corpus; the
+   remaining sharper text gate is `text-vertical-trim`.
+3. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
-5. Remaining exact entries pinned to sample `0` are static M1 holdovers:
+4. Remaining exact entries pinned to sample `0` are static M1 holdovers:
    `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
    them during M6 unless a related refactor needs a cheap draw-regression check.
 
@@ -149,12 +145,14 @@ the only memory the next session has. Update it every commit.
   `LayoutComponent.height` / `SolidColor.colorValue` / `Shape.x/y` through
   no-converter and `DataConverterGroup` paths / `Shape.rotation` via
   `DataConverterSystemDegsToRads`, `Text.width/height` through no converter
-  or `DataConverterFormula`, plus no-converter `ParametricPath` width/height
-  binds for Ellipse/Polygon/Rectangle/Star/Triangle around static text.
+  or `DataConverterFormula`, static `TextFollowPathModifier` over Shape/Path
+  targets with C++ `PathMeasure` tolerance, plus no-converter `ParametricPath`
+  width/height binds for Ellipse/Polygon/Rectangle/Star/Triangle around static
+  text.
   Static text can coexist with authored nested bool input controls beside
   nested state-machine hosts and passive sample-0 `FocusData` /
   `KeyboardInput` metadata plus inert `ScriptedDrawable` siblings.
-  Shape/follow-path/scale/origin modifiers,
+  Shape/scale/origin modifiers,
   gradient/feather/other text effects, richer layout, broader `Text` property
   data binds, and text input/editing remain M6 text diagnostics.
 - `TransformConstraint` currently covers Text constraint bounds for the
@@ -1064,3 +1062,12 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=102`, `not-yet=0`, and parked
   `M6=58 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
   `text_follow_path_shape_length.riv`.
+- 2026-07-06: [M6] Promoted `text_follow_path_shape_length.riv` by porting
+  static `TextFollowPathModifier` over Shape/Path targets, adding
+  target-to-source TrimPath/Shape length source values for the fixture's
+  formula-driven `Text.width`, and mirroring C++'s text follow-path
+  `PathMeasure(&path, 0.1f)` tolerance. Focused and full streams are exact:
+  `make golden-compare` reports `exact=194`, `exact-segments=515`,
+  `diverges=0`, `unsupported-feature=101`, `not-yet=0`, and parked
+  `M6=57 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
+  `text_vertical_trim_test.riv`.

@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 508 across 187 exact files
-- Current compare: `make golden-compare` reports diverges=6, unsupported-feature=102, not-yet=0
+- Exact segments (file × sample): 509 across 188 exact files
+- Current compare: `make golden-compare` reports diverges=5, unsupported-feature=102, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=58 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
@@ -23,41 +23,31 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Start `fit_font_size_test.riv`: it is the highest-value remaining M6
-   text/layout divergence because it exercises fit-font-size wrapping under
-   layout-controlled text bounds rather than a one-off data-bind/path cache
-   corner.
-2. Keep `spotify_kids_app_icon.riv` parked as a known M6 draw-order/background
-   divergence: after cubic path vertex sibling admission, Rust reaches draw but
-   emits a full-artboard background before C++'s centered rounded icon stream.
-3. Keep `text_follow_path_shape_length.riv` parked behind
+1. Start `spotify_kids_app_icon.riv`: it is the next known M6 draw-order /
+   background divergence. After cubic path vertex sibling admission, Rust
+   reaches draw but emits a full-artboard background before C++'s centered
+   rounded icon stream.
+2. Keep `text_follow_path_shape_length.riv` parked behind
    `TextFollowPathModifier`: after admitting source-to-target `Text.width`
    binds with no converter or `DataConverterFormula`, direct Rust now stops on
    data-binding target `TextFollowPathModifier` global 168.
-4. Keep `text_vertical_trim_test.riv` parked behind `text-vertical-trim`:
+3. Keep `text_vertical_trim_test.riv` parked behind `text-vertical-trim`:
    property keys 1027/1028 are `Text.verticalTrimTopValue` /
    `Text.verticalTrimBottomValue` bitmask passthroughs into
    `verticalTrimValue`, and C++ applies them in `Text::computeVerticalTrim`
    to rendered/measured text bounds.
-5. Generic `rust-runner-unsupported:text` is empty in the current corpus; the
+4. Generic `rust-runner-unsupported:text` is empty in the current corpus; the
    remaining sharper text gates are `text-follow-path-modifier` and
    `text-vertical-trim`.
-6. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
+5. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
-7. Remaining exact entries pinned to sample `0` are static M1 holdovers:
+6. Remaining exact entries pinned to sample `0` are static M1 holdovers:
    `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
    them during M6 unless a related refactor needs a cheap draw-regression check.
 
 ## Known Divergences
 
-- `fit_font_size_test.riv`: after admitting source-to-target
-  `TextStylePaint.fontSize`, `Text.overflowValue`, and
-  `LayoutComponent.height` binds through static text, Rust reaches draw but
-  differs on fit-font-size text layout under layout-controlled bounds. Focused
-  diff: C++ wraps/fits the right-column text where Rust keeps advancing on a
-  wider line (`x=7.71484375` versus `x=212.890625`), and C++ emits a
-  zero-sized middle text path that Rust suppresses.
 - `spotify_kids_app_icon.riv`: after cubic path vertex sibling admission, Rust
   reaches draw but emits a full-artboard background before C++'s centered
   rounded icon stream. First blocker is draw-order/background parity, not text
@@ -157,7 +147,7 @@ the only memory the next session has. Update it every commit.
   and layout-backed or virtualized component-list instancing remain M6 or
   later diagnostics.
   Golden runner sample lists now advance by sorted absolute-time deltas and
-  reuse render paths across samples; no images, richer text layout/editing,
+  reuse render paths across samples; no images, remaining text layout/editing,
   live data-bound nested host controls/artboard swaps, nested layout/leaf,
   scroll constraints, or layout-backed/virtualized component-list instancing.
   Harness-level scripted input replay dispatches
@@ -177,7 +167,8 @@ the only memory the next session has. Update it every commit.
   line range maps with runId targeting and optional cubic range
   interpolation, including C++-ordered opacity buckets, plus solid fill/stroke
   `TextStylePaint` drawing with DashPath stroke effects, text under `Shape`
-  parent transforms, and
+  parent transforms, fit-font-size wrapping under layout-controlled bounds with
+  C++ zero-font collapsed glyph paths, and
   source-to-target `TextValueRun.text` / `Text.alignValue` /
   `Text.overflowValue` / `TextStylePaint.fontSize` /
   `LayoutComponent.height` / `SolidColor.colorValue` / `Shape.x/y` through
@@ -1052,3 +1043,12 @@ the only memory the next session has. Update it every commit.
   `make golden-compare` reports `exact=187`, `exact-segments=508`,
   `diverges=6`, `unsupported-feature=102`, `not-yet=0`, and parked
   `M6=58 gated=8 harness=36`. Next target is `fit_font_size_test.riv`.
+- 2026-07-05: [M6] Promoted `fit_font_size_test.riv` by translating C++
+  `src/text/text.cpp::Text::fitFontScale` into the static text path: Rust now
+  binary-searches the largest fitting integer top font size, scales font-size
+  only during shaping/metrics/line breaking, and preserves C++ zero-font
+  collapsed text paths. Focused streams are epsilon-equivalent under the exact
+  comparator. `make golden-compare` reports `exact=188`,
+  `exact-segments=509`, `diverges=5`, `unsupported-feature=102`,
+  `not-yet=0`, and parked `M6=58 gated=8 harness=36`;
+  `cargo test --workspace` passes. Next target is `spotify_kids_app_icon.riv`.

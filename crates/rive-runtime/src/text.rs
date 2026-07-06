@@ -29,6 +29,8 @@ const TEXT_SHAPE_SCALE_F32: f32 = TEXT_SHAPE_SCALE as f32;
 const TEXT_SIZING_AUTO_WIDTH: u64 = 0;
 const TEXT_SIZING_AUTO_HEIGHT: u64 = 1;
 const TEXT_SIZING_FIXED: u64 = 2;
+const TEXT_OVERFLOW_ELLIPSIS: u64 = 3;
+const TEXT_OVERFLOW_FIT_FONT_SIZE: u64 = 5;
 const LAYOUT_SCALE_TYPE_HUG: u64 = 2;
 
 pub fn static_text_support_error(
@@ -577,7 +579,7 @@ impl<'a> StaticTextSlice<'a> {
             .collect::<String>();
         let base_style = self.base_style()?;
         let font_size = self.style_font_size(runtime, instance, base_style)?;
-        if text.is_empty() || font_size <= 0.0 {
+        if text.is_empty() || font_size < 0.0 {
             return Ok(StaticTextRenderData {
                 path_buckets_by_style: vec![Vec::new(); self.styles.len()],
                 local_transform: Mat2D::IDENTITY,
@@ -629,15 +631,25 @@ impl<'a> StaticTextSlice<'a> {
             .location(skrifa_variations.iter().copied());
         let location_ref = LocationRef::from(&location);
         let (ascent, descent) = harfbuzz_line_metrics(&skrifa_font, location_ref);
+        let font_scale = self.fit_font_scale(
+            runtime,
+            instance,
+            layout_constraint,
+            &resolved_runs,
+            &text,
+            &shaper,
+            disable_legacy_kern,
+        )?;
+        let scaled_font_size = font_size * font_scale;
         let (baseline, line_height) = self
-            .max_static_line_metrics(runtime, instance)?
+            .max_static_line_metrics(runtime, instance, font_scale)?
             .unwrap_or_else(|| {
                 (
-                    ascent * font_size / TEXT_SHAPE_SCALE_F32,
-                    (ascent - descent) * font_size / TEXT_SHAPE_SCALE_F32,
+                    ascent * scaled_font_size / TEXT_SHAPE_SCALE_F32,
+                    (ascent - descent) * scaled_font_size / TEXT_SHAPE_SCALE_F32,
                 )
             });
-        let scale = font_size / TEXT_SHAPE_SCALE_F32;
+        let scale = scaled_font_size / TEXT_SHAPE_SCALE_F32;
         let apply_ellipsis =
             self.should_apply_static_ellipsis(runtime, instance, layout_constraint)?;
         let lines = self.layout_static_text_lines(
@@ -652,7 +664,7 @@ impl<'a> StaticTextSlice<'a> {
         )?;
         let measured_width = lines
             .iter()
-            .map(|line| self.styled_line_width(runtime, instance, line, &resolved_runs))
+            .map(|line| self.styled_line_width(runtime, instance, line, &resolved_runs, font_scale))
             .collect::<Result<Vec<_>>>()?
             .into_iter()
             .fold(0.0f32, f32::max);
@@ -682,7 +694,8 @@ impl<'a> StaticTextSlice<'a> {
             if line.text.is_empty() {
                 continue;
             }
-            let mut glyphs = self.styled_line_glyphs(runtime, instance, &line, &resolved_runs)?;
+            let mut glyphs =
+                self.styled_line_glyphs(runtime, instance, &line, &resolved_runs, font_scale)?;
             if layout_info.ellipsis_line == Some(line.line_index) {
                 let max_width = self.effective_width(runtime, instance, layout_constraint)?;
                 let ellipsis_style = glyphs.last().map(|glyph| glyph.style_index).unwrap_or(0);
@@ -692,6 +705,7 @@ impl<'a> StaticTextSlice<'a> {
                     "...",
                     line.char_start + line.text.chars().count(),
                     ellipsis_style,
+                    font_scale,
                 )?;
                 let base_glyphs = shape_text_glyphs(&shaper, line.text, disable_legacy_kern);
                 let line_end = self.first_static_wrapped_line_end(
@@ -808,7 +822,7 @@ impl<'a> StaticTextSlice<'a> {
         let text = self.text_value(runtime, instance)?;
         let base_style = self.base_style()?;
         let font_size = self.style_font_size(runtime, instance, base_style)?;
-        if text.is_empty() || font_size <= 0.0 {
+        if text.is_empty() || font_size < 0.0 {
             return Ok(Some((0.0, 0.0, 0.0, 0.0)));
         }
         let Some(font_bytes) = base_style.font_bytes else {
@@ -850,10 +864,20 @@ impl<'a> StaticTextSlice<'a> {
             .location(skrifa_variations.iter().copied());
         let location_ref = LocationRef::from(&location);
         let (ascent, descent) = harfbuzz_line_metrics(&skrifa_font, location_ref);
-        let line_height = (ascent - descent) * font_size / TEXT_SHAPE_SCALE_F32;
-        let scale = font_size / TEXT_SHAPE_SCALE_F32;
-        let letter_spacing = self.letter_spacing(runtime, instance);
         let lines = split_static_text_lines(&text);
+        let font_scale = self.fit_font_scale_without_resolved_runs(
+            runtime,
+            instance,
+            None,
+            &text,
+            &lines,
+            &shaper,
+            disable_legacy_kern,
+        )?;
+        let scaled_font_size = font_size * font_scale;
+        let line_height = (ascent - descent) * scaled_font_size / TEXT_SHAPE_SCALE_F32;
+        let scale = scaled_font_size / TEXT_SHAPE_SCALE_F32;
+        let letter_spacing = self.letter_spacing(runtime, instance);
         let measured_width = lines
             .iter()
             .filter(|line| !line.text.is_empty())
@@ -891,7 +915,7 @@ impl<'a> StaticTextSlice<'a> {
             .collect::<String>();
         let base_style = self.base_style()?;
         let font_size = self.style_font_size(runtime, instance, base_style)?;
-        if text.is_empty() || font_size <= 0.0 {
+        if text.is_empty() || font_size < 0.0 {
             return Ok(Some((0.0, 0.0, 0.0, 0.0)));
         }
         let Some(font_bytes) = base_style.font_bytes else {
@@ -933,15 +957,25 @@ impl<'a> StaticTextSlice<'a> {
             .location(skrifa_variations.iter().copied());
         let location_ref = LocationRef::from(&location);
         let (ascent, descent) = harfbuzz_line_metrics(&skrifa_font, location_ref);
+        let font_scale = self.fit_font_scale(
+            runtime,
+            instance,
+            Some(layout_constraint),
+            &resolved_runs,
+            &text,
+            &shaper,
+            disable_legacy_kern,
+        )?;
+        let scaled_font_size = font_size * font_scale;
         let (_baseline, line_height) = self
-            .max_static_line_metrics(runtime, instance)?
+            .max_static_line_metrics(runtime, instance, font_scale)?
             .unwrap_or_else(|| {
                 (
-                    ascent * font_size / TEXT_SHAPE_SCALE_F32,
-                    (ascent - descent) * font_size / TEXT_SHAPE_SCALE_F32,
+                    ascent * scaled_font_size / TEXT_SHAPE_SCALE_F32,
+                    (ascent - descent) * scaled_font_size / TEXT_SHAPE_SCALE_F32,
                 )
             });
-        let scale = font_size / TEXT_SHAPE_SCALE_F32;
+        let scale = scaled_font_size / TEXT_SHAPE_SCALE_F32;
         let letter_spacing = self.letter_spacing(runtime, instance);
         let lines = self.layout_static_text_lines(
             runtime,
@@ -955,7 +989,7 @@ impl<'a> StaticTextSlice<'a> {
         )?;
         let measured_width = lines
             .iter()
-            .map(|line| self.styled_line_width(runtime, instance, line, &resolved_runs))
+            .map(|line| self.styled_line_width(runtime, instance, line, &resolved_runs, font_scale))
             .collect::<Result<Vec<_>>>()?
             .into_iter()
             .fold(0.0f32, f32::max);
@@ -1068,6 +1102,7 @@ impl<'a> StaticTextSlice<'a> {
         &self,
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
+        font_scale: f32,
     ) -> Result<Option<(f32, f32)>> {
         let mut baseline = 0.0f32;
         let mut line_height = 0.0f32;
@@ -1085,11 +1120,168 @@ impl<'a> StaticTextSlice<'a> {
             let location = font.axes().location(skrifa_variations.iter().copied());
             let location_ref = LocationRef::from(&location);
             let (ascent, descent) = harfbuzz_line_metrics(&font, location_ref);
-            let scale = self.style_font_size(runtime, instance, style)? / TEXT_SHAPE_SCALE_F32;
+            let scale =
+                self.style_font_size(runtime, instance, style)? * font_scale / TEXT_SHAPE_SCALE_F32;
             baseline = baseline.max(ascent * scale);
             line_height = line_height.max((ascent - descent) * scale);
         }
         Ok((line_height > 0.0).then_some((baseline, line_height)))
+    }
+
+    fn fit_font_scale(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        layout_constraint: Option<RuntimeTextLayoutConstraint>,
+        runs: &[StaticResolvedRun],
+        text: &str,
+        shaper: &harfrust::Shaper<'_>,
+        disable_legacy_kern: bool,
+    ) -> Result<f32> {
+        // Ported from C++ src/text/text.cpp::Text::fitFontScale for the
+        // current static text subset.
+        let overflow = self.text_uint_property(runtime, instance, "overflowValue")?;
+        if overflow != TEXT_OVERFLOW_FIT_FONT_SIZE {
+            return Ok(1.0);
+        }
+        let max_size = self.max_authored_font_size(runtime, instance, runs)?;
+        self.fit_font_scale_for_max_size(
+            runtime,
+            instance,
+            layout_constraint,
+            runs,
+            text,
+            shaper,
+            disable_legacy_kern,
+            max_size,
+        )
+    }
+
+    fn fit_font_scale_without_resolved_runs(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        layout_constraint: Option<RuntimeTextLayoutConstraint>,
+        text: &str,
+        lines: &[StaticTextLine<'_>],
+        shaper: &harfrust::Shaper<'_>,
+        disable_legacy_kern: bool,
+    ) -> Result<f32> {
+        let overflow = self.text_uint_property(runtime, instance, "overflowValue")?;
+        if overflow != TEXT_OVERFLOW_FIT_FONT_SIZE {
+            return Ok(1.0);
+        }
+        let Some(base_style) = self.styles.first() else {
+            return Ok(1.0);
+        };
+        let max_size =
+            if base_style.font_bytes.is_some() && lines.iter().any(|line| !line.text.is_empty()) {
+                self.style_font_size(runtime, instance, base_style)?
+            } else {
+                0.0
+            };
+        let runs = [StaticResolvedRun {
+            local_id: self.text_local,
+            global_id: self.text_global,
+            style_local: base_style.local_id,
+            char_start: 0,
+            char_len: text.chars().count(),
+            text: text.to_owned(),
+        }];
+        self.fit_font_scale_for_max_size(
+            runtime,
+            instance,
+            layout_constraint,
+            &runs,
+            text,
+            shaper,
+            disable_legacy_kern,
+            max_size,
+        )
+    }
+
+    fn max_authored_font_size(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        runs: &[StaticResolvedRun],
+    ) -> Result<f32> {
+        let mut max_size = 0.0f32;
+        for run in runs {
+            if run.text.is_empty() {
+                continue;
+            }
+            let style_index = self.style_index_for_local(run.style_local)?;
+            let style = &self.styles[style_index];
+            if style.font_bytes.is_some() {
+                max_size = max_size.max(self.style_font_size(runtime, instance, style)?);
+            }
+        }
+        Ok(max_size)
+    }
+
+    fn fit_font_scale_for_max_size(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        layout_constraint: Option<RuntimeTextLayoutConstraint>,
+        runs: &[StaticResolvedRun],
+        text: &str,
+        shaper: &harfrust::Shaper<'_>,
+        disable_legacy_kern: bool,
+        max_size: f32,
+    ) -> Result<f32> {
+        let sizing = self.effective_sizing(runtime, instance, layout_constraint)?;
+        if max_size <= 1.0 || sizing == TEXT_SIZING_AUTO_WIDTH {
+            return Ok(1.0);
+        }
+
+        let box_width = self.effective_width(runtime, instance, layout_constraint)?;
+        let box_height = self.effective_height(runtime, instance, layout_constraint)?;
+        let base_style = self.base_style()?;
+        let base_font_size = self.style_font_size(runtime, instance, base_style)?;
+        let letter_spacing = self.letter_spacing(runtime, instance);
+
+        let fits = |top_size: i32| -> Result<bool> {
+            let font_scale = top_size as f32 / max_size;
+            let scale = base_font_size * font_scale / TEXT_SHAPE_SCALE_F32;
+            let lines = self.layout_static_text_lines(
+                runtime,
+                instance,
+                layout_constraint,
+                text,
+                shaper,
+                disable_legacy_kern,
+                scale,
+                letter_spacing,
+            )?;
+            let max_width = lines
+                .iter()
+                .map(|line| self.styled_line_width(runtime, instance, line, runs, font_scale))
+                .collect::<Result<Vec<_>>>()?
+                .into_iter()
+                .fold(0.0f32, f32::max);
+            let line_height = self
+                .max_static_line_metrics(runtime, instance, font_scale)?
+                .map(|(_, line_height)| line_height)
+                .unwrap_or(0.0);
+            let height = line_height * lines.len().max(1) as f32;
+            Ok(max_width <= box_width && (sizing != TEXT_SIZING_FIXED || height <= box_height))
+        };
+
+        let mut lo = 1i32;
+        let mut hi = (max_size as i32).max(1);
+        let mut best = 1i32;
+        while lo <= hi {
+            let mid = lo + (hi - lo) / 2;
+            if fits(mid)? {
+                best = mid;
+                lo = mid + 1;
+            } else {
+                hi = mid - 1;
+            }
+        }
+        Ok(best as f32 / max_size)
     }
 
     fn styled_line_glyphs(
@@ -1098,6 +1290,7 @@ impl<'a> StaticTextSlice<'a> {
         instance: &ArtboardInstance,
         line: &StaticTextLine<'_>,
         runs: &[StaticResolvedRun],
+        font_scale: f32,
     ) -> Result<Vec<StyledTextGlyph>> {
         let line_start = line.char_start;
         let line_end = line_start + line.text.chars().count();
@@ -1122,6 +1315,7 @@ impl<'a> StaticTextSlice<'a> {
                 segment_text,
                 segment_start,
                 style_index,
+                font_scale,
             )?);
         }
         Ok(glyphs)
@@ -1133,9 +1327,10 @@ impl<'a> StaticTextSlice<'a> {
         instance: &ArtboardInstance,
         line: &StaticTextLine<'_>,
         runs: &[StaticResolvedRun],
+        font_scale: f32,
     ) -> Result<f32> {
         Ok(self
-            .styled_line_glyphs(runtime, instance, line, runs)?
+            .styled_line_glyphs(runtime, instance, line, runs, font_scale)?
             .iter()
             .map(|glyph| glyph.advance)
             .sum())
@@ -1148,6 +1343,7 @@ impl<'a> StaticTextSlice<'a> {
         text: &str,
         char_start: usize,
         style_index: usize,
+        font_scale: f32,
     ) -> Result<Vec<StyledTextGlyph>> {
         let style = self
             .styles
@@ -1157,7 +1353,7 @@ impl<'a> StaticTextSlice<'a> {
             return Ok(Vec::new());
         };
         let font_size = self.style_font_size(runtime, instance, style)?;
-        let scale = font_size / TEXT_SHAPE_SCALE_F32;
+        let scale = font_size * font_scale / TEXT_SHAPE_SCALE_F32;
         let letter_spacing = self.style_letter_spacing(runtime, instance, style);
         let raw_glyphs = shape_text_glyphs_for_style(font_bytes, style, text)?;
         Ok(raw_glyphs
@@ -1288,7 +1484,7 @@ impl<'a> StaticTextSlice<'a> {
         let sizing = self.effective_sizing(runtime, instance, layout_constraint)?;
         let overflow = self.text_uint_property(runtime, instance, "overflowValue")?;
         Ok(sizing == TEXT_SIZING_FIXED
-            && overflow == 3
+            && overflow == TEXT_OVERFLOW_ELLIPSIS
             && self.effective_width(runtime, instance, layout_constraint)? > 0.0)
     }
 
@@ -2702,6 +2898,10 @@ impl OutlinePen for TextOutlinePen {
     }
 
     fn line_to(&mut self, x: f32, y: f32) {
+        if self.scale == 0.0 {
+            // C++ RawPath collapses zero-size glyph contours to move/close pairs.
+            return;
+        }
         let point = self.map(x, y);
         self.commands.push(RuntimePathCommand::Line {
             x: point.0,
@@ -2711,6 +2911,9 @@ impl OutlinePen for TextOutlinePen {
     }
 
     fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
+        if self.scale == 0.0 {
+            return;
+        }
         let Some(current) = self.current else {
             self.move_to(x, y);
             return;
@@ -2733,6 +2936,9 @@ impl OutlinePen for TextOutlinePen {
     }
 
     fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
+        if self.scale == 0.0 {
+            return;
+        }
         let control0 = self.map(cx0, cy0);
         let control1 = self.map(cx1, cy1);
         let end = self.map(x, y);

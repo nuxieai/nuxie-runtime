@@ -11,12 +11,13 @@ use crate::animation::{
 };
 use crate::artboard_data_bind::{
     RuntimeArtboardCustomPropertyBindingInstance, RuntimeArtboardFormulaTokenBindingInstance,
-    RuntimeArtboardLayoutComputedBindingInstance, RuntimeArtboardListBindingInstance,
-    RuntimeArtboardNestedHostBindingInstance, RuntimeArtboardNumericSourceBindingInstance,
-    RuntimeArtboardPropertyBindingInstance, RuntimeArtboardSoloBindingInstance,
-    RuntimeArtboardSoloSourceBindingInstance, apply_artboard_unbound_color_data_bind_defaults,
-    build_artboard_custom_property_bindings, build_artboard_default_view_model_values,
-    build_artboard_formula_token_bindings, build_artboard_layout_computed_bindings,
+    RuntimeArtboardImageAssetBindingInstance, RuntimeArtboardLayoutComputedBindingInstance,
+    RuntimeArtboardListBindingInstance, RuntimeArtboardNestedHostBindingInstance,
+    RuntimeArtboardNumericSourceBindingInstance, RuntimeArtboardPropertyBindingInstance,
+    RuntimeArtboardSoloBindingInstance, RuntimeArtboardSoloSourceBindingInstance,
+    apply_artboard_unbound_color_data_bind_defaults, build_artboard_custom_property_bindings,
+    build_artboard_default_view_model_values, build_artboard_formula_token_bindings,
+    build_artboard_image_asset_bindings, build_artboard_layout_computed_bindings,
     build_artboard_list_bindings, build_artboard_nested_host_bindings,
     build_artboard_numeric_source_bindings, build_artboard_property_bindings,
     build_artboard_solo_bindings, build_artboard_solo_source_bindings,
@@ -70,6 +71,7 @@ pub struct ArtboardInstance {
     pub(crate) artboard_data_bind_values: BTreeMap<Vec<u32>, RuntimeDataBindGraphValue>,
     pub(crate) artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource,
     pub(crate) artboard_property_bindings: Vec<RuntimeArtboardPropertyBindingInstance>,
+    pub(crate) artboard_image_asset_bindings: Vec<RuntimeArtboardImageAssetBindingInstance>,
     pub(crate) artboard_custom_property_bindings: Vec<RuntimeArtboardCustomPropertyBindingInstance>,
     pub(crate) artboard_layout_computed_bindings: Vec<RuntimeArtboardLayoutComputedBindingInstance>,
     pub(crate) artboard_numeric_source_bindings: Vec<RuntimeArtboardNumericSourceBindingInstance>,
@@ -78,6 +80,7 @@ pub struct ArtboardInstance {
     pub(crate) artboard_solo_source_bindings: Vec<RuntimeArtboardSoloSourceBindingInstance>,
     pub(crate) artboard_nested_host_bindings: Vec<RuntimeArtboardNestedHostBindingInstance>,
     pub(crate) artboard_list_bindings: Vec<RuntimeArtboardListBindingInstance>,
+    pub(crate) image_asset_overrides: BTreeMap<usize, Option<u32>>,
     pub(crate) dirt: ComponentDirt,
     pub(crate) dirt_depth: usize,
     pub(crate) did_change: bool,
@@ -210,6 +213,7 @@ impl ArtboardInstance {
         let state_machines = build_state_machines(file, graph, &linear_animations);
         let artboard_data_bind_values = build_artboard_default_view_model_values(file, graph);
         let artboard_property_bindings = build_artboard_property_bindings(file, graph);
+        let artboard_image_asset_bindings = build_artboard_image_asset_bindings(file, graph);
         let artboard_custom_property_bindings =
             build_artboard_custom_property_bindings(file, graph);
         let artboard_layout_computed_bindings =
@@ -263,6 +267,7 @@ impl ArtboardInstance {
             artboard_data_bind_values,
             artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource::default(),
             artboard_property_bindings,
+            artboard_image_asset_bindings,
             artboard_custom_property_bindings,
             artboard_layout_computed_bindings,
             artboard_numeric_source_bindings,
@@ -271,6 +276,7 @@ impl ArtboardInstance {
             artboard_solo_source_bindings,
             artboard_nested_host_bindings,
             artboard_list_bindings,
+            image_asset_overrides: BTreeMap::new(),
             dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,
             did_change: true,
@@ -407,6 +413,30 @@ impl ArtboardInstance {
 
     pub(crate) fn uint_property(&self, local_id: usize, property_key: u16) -> Option<u64> {
         self.objects.uint_property(local_id, property_key)
+    }
+
+    pub(crate) fn resolved_image_asset_global(
+        &self,
+        local_id: Option<usize>,
+        authored_asset_global: Option<u32>,
+    ) -> Option<u32> {
+        local_id
+            .and_then(|local_id| self.image_asset_overrides.get(&local_id))
+            .copied()
+            .unwrap_or(authored_asset_global)
+    }
+
+    pub(crate) fn set_image_asset_override(
+        &mut self,
+        local_id: usize,
+        asset_global: Option<u32>,
+    ) -> bool {
+        if self.image_asset_overrides.get(&local_id) == Some(&asset_global) {
+            return false;
+        }
+        self.image_asset_overrides.insert(local_id, asset_global);
+        self.did_change = true;
+        true
     }
 
     pub(crate) fn double_property(&self, local_id: usize, property_key: u16) -> Option<f32> {
@@ -1893,6 +1923,7 @@ mod tests {
             artboard_data_bind_values: BTreeMap::new(),
             artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource::default(),
             artboard_property_bindings: Vec::new(),
+            artboard_image_asset_bindings: Vec::new(),
             artboard_custom_property_bindings: Vec::new(),
             artboard_layout_computed_bindings: Vec::new(),
             artboard_numeric_source_bindings: Vec::new(),
@@ -1901,6 +1932,7 @@ mod tests {
             artboard_solo_source_bindings: Vec::new(),
             artboard_nested_host_bindings: Vec::new(),
             artboard_list_bindings: Vec::new(),
+            image_asset_overrides: BTreeMap::new(),
             dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,
             did_change: true,

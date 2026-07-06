@@ -609,7 +609,12 @@ impl ArtboardInstance {
                 }
 
                 if drawable.type_name == "Image" {
-                    return drawable.resolved_image_asset_global.is_some()
+                    return self
+                        .resolved_image_asset_global(
+                            drawable.local_id,
+                            drawable.resolved_image_asset_global,
+                        )
+                        .is_some()
                         && self
                             .runtime_drawable_render_opacity(drawable)
                             .is_some_and(|opacity| opacity != 0.0);
@@ -714,6 +719,10 @@ impl ArtboardInstance {
         graph: &ArtboardGraph,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) -> RuntimeDrawCommand {
+        let local_id = match drawable.kind {
+            DrawableOrderKind::LayoutProxy => drawable.layout_local,
+            _ => drawable.local_id,
+        };
         RuntimeDrawCommand {
             kind: match drawable.kind {
                 DrawableOrderKind::ClipStartProxy => RuntimeDrawCommandKind::ClipStart,
@@ -722,14 +731,12 @@ impl ArtboardInstance {
                     RuntimeDrawCommandKind::Draw
                 }
             },
-            local_id: match drawable.kind {
-                DrawableOrderKind::LayoutProxy => drawable.layout_local,
-                _ => drawable.local_id,
-            },
+            local_id,
             global_id: drawable.global_id,
             type_name: drawable.type_name,
             referenced_artboard_global: drawable.referenced_artboard_global,
-            resolved_image_asset_global: drawable.resolved_image_asset_global,
+            resolved_image_asset_global: self
+                .resolved_image_asset_global(local_id, drawable.resolved_image_asset_global),
             clipping_shape_local: drawable.clipping_shape_local,
             needs_save_operation: drawable.needs_save_operation,
             shape_paints: self.runtime_shape_paint_commands(drawable, graph, layout_bounds),

@@ -32,6 +32,13 @@ pub(super) struct RuntimeArtboardPropertyBindingInstance {
 }
 
 #[derive(Debug, Clone)]
+pub(super) struct RuntimeArtboardImageAssetBindingInstance {
+    target_local_id: usize,
+    path: Vec<u32>,
+    default_value: RuntimeDataBindGraphValue,
+}
+
+#[derive(Debug, Clone)]
 pub(super) struct RuntimeArtboardCustomPropertyBindingInstance {
     target_local_id: usize,
     property_key: u16,
@@ -454,6 +461,67 @@ pub(super) fn build_artboard_property_bindings(
         .collect()
 }
 
+pub(super) fn build_artboard_image_asset_bindings(
+    file: &RuntimeFile,
+    graph: &ArtboardGraph,
+) -> Vec<RuntimeArtboardImageAssetBindingInstance> {
+    let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
+        return Vec::new();
+    };
+    let Some(image_asset_id_key) = property_key_for_name("Image", "assetId") else {
+        return Vec::new();
+    };
+    let default_instance = artboard_default_view_model_instance(file, artboard_index);
+
+    file.artboard_data_binds(artboard_index)
+        .into_iter()
+        .filter_map(|data_bind| {
+            if !data_bind_flags_apply_source_to_target(
+                data_bind.object.uint_property("flags").unwrap_or(0),
+            ) {
+                return None;
+            }
+            let target = data_bind.target?;
+            if target.type_name != "Image" {
+                return None;
+            }
+            if u16::try_from(data_bind.object.uint_property("propertyKey")?).ok()?
+                != image_asset_id_key
+            {
+                return None;
+            }
+            let path = file.data_bind_context_source_path_ids_for_object(data_bind.object)?;
+            let default_value = default_instance
+                .as_ref()
+                .and_then(|default_instance| {
+                    file.data_context_view_model_property_for_instance(
+                        default_instance.object,
+                        &path,
+                    )
+                    .and_then(|source| runtime_created_view_model_value_for_source(file, source))
+                })
+                .or_else(|| {
+                    if file
+                        .data_bind_is_name_based_for_object(data_bind.object)
+                        .unwrap_or(false)
+                    {
+                        return None;
+                    }
+                    runtime_created_view_model_value_for_declared_path(file, &path)
+                })?;
+            if !matches!(default_value, RuntimeDataBindGraphValue::Asset(_)) {
+                return None;
+            }
+
+            Some(RuntimeArtboardImageAssetBindingInstance {
+                target_local_id: data_bind.target_local_id?,
+                path,
+                default_value,
+            })
+        })
+        .collect()
+}
+
 fn artboard_property_binding_value_matches_kind(
     value: &RuntimeDataBindGraphValue,
     property_kind: FieldKind,
@@ -482,6 +550,14 @@ fn artboard_property_binding_allows_converted_default(
         .convert_value(converter, default_value)
         .as_ref()
         .is_some_and(|value| artboard_property_binding_value_matches_kind(value, property_kind))
+}
+
+fn runtime_image_asset_global_for_file_asset_index(
+    file: &RuntimeFile,
+    asset_index: u64,
+) -> Option<u32> {
+    let asset = file.file_asset(usize::try_from(asset_index).ok()?)?;
+    (asset.type_name == "ImageAsset").then_some(asset.id)
 }
 
 pub(super) fn build_artboard_nested_host_bindings(
@@ -1296,6 +1372,21 @@ impl ArtboardInstance {
                 .map(|value| (binding.path.clone(), value))
             })
             .chain(
+                self.artboard_image_asset_bindings
+                    .iter()
+                    .filter_map(|binding| {
+                        runtime_owned_view_model_binding_value_for_context_chain(
+                            file,
+                            context,
+                            context_chain,
+                            &binding.path,
+                            false,
+                            &binding.default_value,
+                        )
+                        .map(|value| (binding.path.clone(), value))
+                    }),
+            )
+            .chain(
                 self.artboard_custom_property_bindings
                     .iter()
                     .filter_map(|binding| {
@@ -1373,6 +1464,11 @@ impl ArtboardInstance {
             .iter()
             .map(|binding| binding.path.clone())
             .chain(
+                self.artboard_image_asset_bindings
+                    .iter()
+                    .map(|binding| binding.path.clone()),
+            )
+            .chain(
                 self.artboard_custom_property_bindings
                     .iter()
                     .map(|binding| binding.path.clone()),
@@ -1399,6 +1495,12 @@ impl ArtboardInstance {
                 .iter()
                 .find(|binding| binding.path == path)
                 .map(|binding| binding.default_value.clone())
+                .or_else(|| {
+                    self.artboard_image_asset_bindings
+                        .iter()
+                        .find(|binding| binding.path == path)
+                        .map(|binding| binding.default_value.clone())
+                })
                 .or_else(|| {
                     runtime_created_view_model_value_for_path(file, view_model_instance, &path)
                 })
@@ -1479,8 +1581,10 @@ impl ArtboardInstance {
         changed |= self.update_artboard_numeric_source_bindings();
         changed |= self.update_artboard_formula_token_bindings();
         changed |= self.apply_artboard_property_bindings();
+        changed |= self.apply_artboard_image_asset_bindings();
         changed |= self.advance_artboard_property_binding_converters(elapsed_seconds);
         changed |= self.apply_artboard_property_bindings();
+        changed |= self.apply_artboard_image_asset_bindings();
         for binding in &mut self.artboard_list_bindings {
             let target_value = match binding.converter.as_ref() {
                 Some(converter) => {
@@ -1686,6 +1790,38 @@ impl ArtboardInstance {
                 self.apply_artboard_property_binding_value(target_local_id, property_key, &value);
         }
         changed
+    }
+
+    fn apply_artboard_image_asset_bindings(&mut self) -> bool {
+        let mut changed = false;
+        for binding in self.artboard_image_asset_bindings.clone() {
+            let value = self
+                .artboard_data_bind_values
+                .get(&binding.path)
+                .cloned()
+                .unwrap_or_else(|| binding.default_value.clone());
+            changed |=
+                self.apply_artboard_image_asset_binding_value(binding.target_local_id, &value);
+        }
+        changed
+    }
+
+    fn apply_artboard_image_asset_binding_value(
+        &mut self,
+        target_local_id: usize,
+        value: &RuntimeDataBindGraphValue,
+    ) -> bool {
+        // Mirrors C++ `src/data_bind/context/context_value_asset_image.cpp`:
+        // applying an asset-image value to an Image target swaps the Image's
+        // asset pointer. Missing/sentinel values use the view-model instance's
+        // private empty ImageAsset, which makes Image::draw return early.
+        let RuntimeDataBindGraphValue::Asset(value) = value else {
+            return false;
+        };
+        let asset_global = self
+            .runtime_file()
+            .and_then(|file| runtime_image_asset_global_for_file_asset_index(file, *value));
+        self.set_image_asset_override(target_local_id, asset_global)
     }
 
     fn converted_artboard_property_binding_value(

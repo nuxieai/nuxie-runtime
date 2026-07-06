@@ -5,10 +5,10 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 523 across 202 files (strict
-  exact=520/199; tolerant=3/3; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=93, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=49 gated=8 harness=36
+- Exact-status segments (file × sample): 524 across 203 files (strict
+  exact=521/200; tolerant=3/3; structural=0/0)
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=92, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=48 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -24,12 +24,13 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue the M6 image bucket with asset-image view-model binding/reset
-   semantics: `image_fit_alignment.riv` and `viewmodel_image_reset.riv` now
-   deliberately stay behind `rust-runner-unsupported:images` after successful
-   Rust image drawing proved non-exact against C++ draw suppression/rebinding.
-   After that, reopen `image_fit_alignment_2.riv` for the same fit/alignment
-   family plus `NSlicer`/axis layout behavior.
+1. Continue the M6 image bucket with `image_fit_alignment.riv`, now narrowed
+   to `rust-runner-unsupported:asset-image-layout` after asset-image
+   view-model reset/draw suppression made `viewmodel_image_reset.riv` exact.
+   The remaining focused diff is image decode ordering plus LayoutComponent Y
+   placement (`272.5` in C++ vs `539.5` in Rust). After that, reopen
+   `image_fit_alignment_2.riv` for the same fit/alignment family plus
+   `NSlicer`/axis layout behavior.
 2. Generic `rust-runner-unsupported:text` and the sharper
    `text-vertical-trim` gate are empty in the current corpus. Do not reopen
    text unless a newly added corpus entry exposes a first text diagnostic.
@@ -122,10 +123,11 @@ the only memory the next session has. Update it every commit.
   and layout-backed or virtualized component-list instancing remain M6 or
   later diagnostics.
   Golden runner sample lists now advance by sorted absolute-time deltas and
-  reuse render paths across samples; no asset-image view-model binding/reset,
-  N-slice image layout, mesh/skinned images, remaining text layout/editing,
-  live data-bound nested host controls/artboard swaps, nested layout/leaf,
-  scroll constraints, or layout-backed/virtualized component-list instancing.
+  reuse render paths across samples; no asset-image layout/decode-order
+  parity, N-slice image layout, mesh/skinned images, remaining text
+  layout/editing, live data-bound nested host controls/artboard swaps, nested
+  layout/leaf, scroll constraints, or layout-backed/virtualized component-list
+  instancing.
   Harness-level scripted input replay dispatches
   pointerDown/pointerMove/pointerUp/pointerExit markers into direct rectangle
   state-machine listeners with listener input actions, direct rectangle
@@ -1169,3 +1171,15 @@ the only memory the next session has. Update it every commit.
   and parked `M6=49 gated=8 harness=36`; `cargo test --workspace` passes.
   Next target is the asset-image view-model pair:
   `image_fit_alignment.riv` and `viewmodel_image_reset.riv`.
+- 2026-07-06: [M6] Promoted `viewmodel_image_reset.riv` by applying
+  `ViewModelInstanceAssetImage` defaults to `Image.assetId` targets like C++
+  `DataBindContextValueAssetImage`, including the empty private image-asset
+  reset path that suppresses `Image::draw`. Removed the blanket asset-image
+  image gate and replaced `image_fit_alignment.riv` with the sharper
+  `rust-runner-unsupported:asset-image-layout` diagnostic after the focused
+  diff narrowed to image decode ordering plus LayoutComponent Y placement
+  (`272.5` in C++ vs `539.5` in Rust). Full `make golden-compare` reports
+  `exact=203`, `exact-segments=524`, `diverges=0`,
+  `unsupported-feature=92`, `not-yet=0`, and parked
+  `M6=48 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
+  `image_fit_alignment.riv`, then `image_fit_alignment_2.riv`.

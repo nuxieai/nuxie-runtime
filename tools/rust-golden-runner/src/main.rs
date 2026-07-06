@@ -337,6 +337,8 @@ fn unsupported_static_text_feature(message: &str) -> &'static str {
         "text-joystick-data-bind"
     } else if message.contains("NestedArtboardLayout") || message.contains("NestedArtboardLeaf") {
         "nested-artboard-layout"
+    } else if message.contains("TextModifierGroup flags") {
+        "text-modifier-group-flags"
     } else if message.contains("sibling Polygon") {
         "text-polygon-sibling"
     } else {
@@ -1058,12 +1060,6 @@ fn ensure_static_draw_supported_for_artboard(
             true,
             has_input_events,
         )?;
-    }
-
-    if let Some(global_id) =
-        unsupported_nested_feather_paints_global(graph, artboard, &mut BTreeSet::new())
-    {
-        bail!("unsupported: nested-feather-paints in Rust golden runner (global {global_id})");
     }
 
     Ok(())
@@ -2064,47 +2060,6 @@ fn runtime_has_type(runtime: &RuntimeFile, type_name: &str) -> bool {
         .iter()
         .flatten()
         .any(|object| object.type_name == type_name)
-}
-
-fn unsupported_nested_feather_paints_global(
-    graph: &GraphFile,
-    artboard: &ArtboardGraph,
-    visiting: &mut BTreeSet<u32>,
-) -> Option<u32> {
-    if !visiting.insert(artboard.global_id) {
-        return None;
-    }
-
-    for referenced_artboard_global in artboard
-        .sorted_drawable_order
-        .iter()
-        .filter_map(|drawable| drawable.referenced_artboard_global)
-    {
-        let Some(child) = graph
-            .artboards
-            .iter()
-            .find(|artboard| artboard.global_id == referenced_artboard_global)
-        else {
-            continue;
-        };
-        if let Some(global_id) = first_feather_global(child) {
-            return Some(global_id);
-        }
-        if let Some(global_id) = unsupported_nested_feather_paints_global(graph, child, visiting) {
-            return Some(global_id);
-        }
-    }
-
-    visiting.remove(&artboard.global_id);
-    None
-}
-
-fn first_feather_global(artboard: &ArtboardGraph) -> Option<u32> {
-    artboard
-        .shape_paint_containers
-        .iter()
-        .flat_map(|container| &container.paints)
-        .find_map(|paint| paint.feather.as_ref().map(|feather| feather.global_id))
 }
 
 fn first_image_or_asset_global(graph: &GraphFile, artboard: &ArtboardGraph) -> Option<u32> {

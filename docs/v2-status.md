@@ -7,9 +7,9 @@ the only memory the next session has. Update it every commit.
 
 - Exact-status segments (file × sample): 554 across 233 files (strict
   exact=551/230; tolerant=3/3; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=62, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=19 gated=7 harness=36
-- Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=61, not-yet=1
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=19 gated=6 harness=36
+- Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes**
 
 ## Milestones
 
@@ -25,18 +25,19 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Pick one of the tied largest remaining M6 buckets. Prefer
-   `rust-runner-unsupported:nested-feather-paints` (2: `hunter_x_demo.riv`,
-   `rewards_demo.riv`) first because it follows the just-closed inner-feather
-   path work. `rust-runner-unsupported:mesh-images` is the other two-file
-   bucket (`jellyfish_test.riv`, `tape.riv`).
-2. Other M6 queues are
+   `rust-runner-unsupported:n-slice` first because it is layout-native M6 work
+   and `rewards_demo.riv` exposed it after the nested-feather umbrella was
+   removed. The two-file bucket is `local_bounds.riv` plus `rewards_demo.riv`.
+   `rust-runner-unsupported:mesh-images` is the other two-file bucket
+   (`jellyfish_test.riv`, `tape.riv`).
+2. Other parked queues are
    `rust-runner-unsupported:contour-mesh-metadata` (1: `bad_skin.riv`),
-   `n-slice` (1 M6 plus 1 gated), `scripted-transition-condition` (2 gated),
-   `nested-feather-paints` (2 M6 plus 1 gated), `scripted-path-effects` (1 gated),
+   `scripted-transition-condition` (2 gated), `scripted-path-effects` (1 gated),
    `scripted-data-context` (1), `focus-data` (1: `focus_traversal.riv`),
    `layout-component-paint` (1: `text_input.riv`),
    `viewmodel-asset-conditions` (1),
    `text-joystick-data-bind` (1: `echo_show_demo.riv`),
+   `text-modifier-group-flags` (1: `hunter_x_demo.riv`),
    `nested-artboard-layout` (1: `superbowl.riv`),
    `selected-root-gradient-shader-order` (1: `bullet_man.riv`), and
    `selected-root-skinned-clip-path` (1: `spotify_kids_demo.riv`). The former
@@ -46,7 +47,8 @@ the only memory the next session has. Update it every commit.
    `nested-node-transform-data-bind` (`car_widgets_v01.riv`),
    `nested-layout-clip-data-bind` (`stateful_multi_property.riv`), and
    `nested-stateful-view-model-property` (`stateful_nested.riv`). Gated
-   one-file diagnostics include `text-polygon-sibling` (`bankcard.riv`).
+   one-file diagnostics include `text-polygon-sibling` (`bankcard.riv`) and
+   `not-yet:nested-feather-gradient-space` (`ai_assitant.riv`).
 3. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
@@ -67,6 +69,8 @@ the only memory the next session has. Update it every commit.
 
 - None in the active corpus. `make golden-compare` reports `diverges=0`; the
   remaining M6 work is parked behind explicit unsupported-feature diagnostics.
+  The single `not-yet` entry is gated `ai_assitant.riv`, which now imports and
+  draws but has a nested-feather gradient-space exact-parity gap.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -157,7 +161,8 @@ the only memory the next session has. Update it every commit.
   text-root single external-image predecode case,
   contour-mesh image files, remaining text
   layout/editing, selected-root gradient shader ordering, selected-root
-  skinned clip-path geometry, nested feather paint trees, live
+  skinned clip-path geometry, nested-feather gradient-space exact parity for
+  `ai_assitant.riv`, live
   data-bound nested host controls/artboard swaps, nested layout/leaf, scroll
   constraints, or layout-backed/virtualized component-list instancing.
   Harness-level scripted input replay dispatches
@@ -1580,3 +1585,17 @@ the only memory the next session has. Update it every commit.
   `diverges=0`, `unsupported-feature=62`, `not-yet=0`, and parked
   `M6=19 gated=7 harness=36`; next target is the tied largest M6 bucket
   `rust-runner-unsupported:nested-feather-paints`.
+- 2026-07-06: [M6] Closed the stale
+  `rust-runner-unsupported:nested-feather-paints` runner guard and let the
+  affected files run to their real first blockers. `hunter_x_demo.riv` now
+  verifies as `rust-runner-unsupported:text-modifier-group-flags`,
+  `rewards_demo.riv` as `rust-runner-unsupported:n-slice`, and gated
+  `ai_assitant.riv` now reaches Rust draw output but is parked as
+  `not-yet:nested-feather-gradient-space` because its focused compare differs
+  at nested-feather linear-gradient coordinates. Full `make golden-compare`
+  reports `exact=233`, `exact-segments=554`, `diverges=0`,
+  `unsupported-feature=61`, `not-yet=1`, and parked
+  `M6=19 gated=6 harness=36`; next target is the tied largest M6 bucket,
+  preferring `rust-runner-unsupported:n-slice` over `mesh-images` because it
+  is layout-facing and now blocks both `local_bounds.riv` and
+  `rewards_demo.riv`.

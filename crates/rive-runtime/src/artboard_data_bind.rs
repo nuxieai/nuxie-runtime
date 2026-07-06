@@ -1,6 +1,6 @@
 use crate::data_bind_graph::{
-    RuntimeDataBindGraphConverterState, runtime_data_bind_graph_convert_value,
-    runtime_data_bind_graph_converter,
+    DATA_BIND_FLAG_DIRECTION_TO_SOURCE, RuntimeDataBindGraphConverterState,
+    runtime_data_bind_graph_convert_value, runtime_data_bind_graph_converter,
     runtime_data_bind_graph_converter_contains_source_change_random,
 };
 use crate::objects::InstanceObjectArena;
@@ -33,7 +33,11 @@ pub(super) struct RuntimeArtboardCustomPropertyBindingInstance {
     target_local_id: usize,
     property_key: u16,
     path: Vec<u32>,
+    flags: u64,
     value_kind: RuntimeArtboardDataBindValueKind,
+    converter: Option<RuntimeDataBindGraphConverter>,
+    converter_state: RuntimeDataBindGraphConverterState,
+    default_value: RuntimeDataBindGraphValue,
 }
 
 #[derive(Debug, Clone)]
@@ -80,6 +84,65 @@ enum RuntimeArtboardDataBindValueKind {
     Color,
     Enum,
     Trigger,
+}
+
+fn runtime_artboard_data_bind_default_value_for_kind(
+    kind: RuntimeArtboardDataBindValueKind,
+) -> RuntimeDataBindGraphValue {
+    match kind {
+        RuntimeArtboardDataBindValueKind::Number => RuntimeDataBindGraphValue::Number(0.0),
+        RuntimeArtboardDataBindValueKind::Boolean => RuntimeDataBindGraphValue::Boolean(false),
+        RuntimeArtboardDataBindValueKind::String => RuntimeDataBindGraphValue::String(Vec::new()),
+        RuntimeArtboardDataBindValueKind::Color => RuntimeDataBindGraphValue::Color(0xFF000000),
+        RuntimeArtboardDataBindValueKind::Enum => RuntimeDataBindGraphValue::Enum(0),
+        RuntimeArtboardDataBindValueKind::Trigger => RuntimeDataBindGraphValue::Trigger(0),
+    }
+}
+
+fn artboard_data_bind_values_have_same_kind(
+    source: &RuntimeDataBindGraphValue,
+    value: &RuntimeDataBindGraphValue,
+) -> bool {
+    matches!(
+        (source, value),
+        (
+            RuntimeDataBindGraphValue::Number(_),
+            RuntimeDataBindGraphValue::Number(_)
+        ) | (
+            RuntimeDataBindGraphValue::Boolean(_),
+            RuntimeDataBindGraphValue::Boolean(_)
+        ) | (
+            RuntimeDataBindGraphValue::String(_),
+            RuntimeDataBindGraphValue::String(_)
+        ) | (
+            RuntimeDataBindGraphValue::Color(_),
+            RuntimeDataBindGraphValue::Color(_)
+        ) | (
+            RuntimeDataBindGraphValue::Enum(_),
+            RuntimeDataBindGraphValue::Enum(_)
+        ) | (
+            RuntimeDataBindGraphValue::SymbolListIndex(_),
+            RuntimeDataBindGraphValue::SymbolListIndex(_)
+        ) | (
+            RuntimeDataBindGraphValue::List { .. },
+            RuntimeDataBindGraphValue::List { .. }
+        ) | (
+            RuntimeDataBindGraphValue::ListLength(_),
+            RuntimeDataBindGraphValue::ListLength(_)
+        ) | (
+            RuntimeDataBindGraphValue::Asset(_),
+            RuntimeDataBindGraphValue::Asset(_)
+        ) | (
+            RuntimeDataBindGraphValue::Artboard(_),
+            RuntimeDataBindGraphValue::Artboard(_)
+        ) | (
+            RuntimeDataBindGraphValue::Trigger(_),
+            RuntimeDataBindGraphValue::Trigger(_)
+        ) | (
+            RuntimeDataBindGraphValue::ViewModel(_),
+            RuntimeDataBindGraphValue::ViewModel(_)
+        )
+    )
 }
 
 #[derive(Debug, Clone)]
@@ -411,13 +474,13 @@ pub(super) fn build_artboard_custom_property_bindings(
     let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
         return Vec::new();
     };
+    let default_instance = artboard_default_view_model_instance(file, artboard_index);
 
     file.artboard_data_binds(artboard_index)
         .into_iter()
         .filter_map(|data_bind| {
-            if !data_bind_flags_apply_target_to_source(
-                data_bind.object.uint_property("flags").unwrap_or(0),
-            ) {
+            let flags = data_bind.object.uint_property("flags").unwrap_or(0);
+            if !data_bind_flags_apply_target_to_source(flags) {
                 return None;
             }
             let target = data_bind.target?;
@@ -463,11 +526,41 @@ pub(super) fn build_artboard_custom_property_bindings(
                 }
                 _ => return None,
             };
+            let path = file.data_bind_context_source_path_ids_for_object(data_bind.object)?;
+            let converter = runtime_data_bind_graph_converter(file, data_bind.object);
+            if matches!(converter, Some(RuntimeDataBindGraphConverter::Unsupported)) {
+                return None;
+            }
+            let default_value = default_instance
+                .as_ref()
+                .and_then(|default_instance| {
+                    file.data_context_view_model_property_for_instance(
+                        default_instance.object,
+                        &path,
+                    )
+                    .and_then(|source| runtime_created_view_model_value_for_source(file, source))
+                })
+                .or_else(|| {
+                    if file
+                        .data_bind_is_name_based_for_object(data_bind.object)
+                        .unwrap_or(false)
+                    {
+                        return None;
+                    }
+                    runtime_created_view_model_value_for_declared_path(file, &path)
+                })
+                .unwrap_or_else(|| runtime_artboard_data_bind_default_value_for_kind(value_kind));
             Some(RuntimeArtboardCustomPropertyBindingInstance {
                 target_local_id,
                 property_key,
-                path: file.data_bind_context_source_path_ids_for_object(data_bind.object)?,
+                path,
+                flags,
                 value_kind,
+                converter_state: RuntimeDataBindGraphConverterState::for_converter(
+                    converter.as_ref(),
+                ),
+                converter,
+                default_value,
             })
         })
         .collect()
@@ -900,8 +993,8 @@ impl ArtboardInstance {
 
     pub fn advance_artboard_data_binds_with_elapsed(&mut self, elapsed_seconds: f32) -> bool {
         let mut changed = false;
-        for binding in self.artboard_custom_property_bindings.clone() {
-            changed |= self.update_artboard_custom_property_binding(&binding);
+        for index in 0..self.artboard_custom_property_bindings.len() {
+            changed |= self.update_artboard_custom_property_binding(index);
         }
         changed |= self.update_artboard_layout_computed_bindings();
         changed |= self.update_artboard_solo_source_bindings();
@@ -1108,11 +1201,29 @@ impl ArtboardInstance {
         }
     }
 
-    fn update_artboard_custom_property_binding(
-        &mut self,
-        binding: &RuntimeArtboardCustomPropertyBindingInstance,
-    ) -> bool {
-        let value = match binding.value_kind {
+    fn update_artboard_custom_property_binding(&mut self, index: usize) -> bool {
+        let Some(target_value) = self.artboard_custom_property_binding_target_value(index) else {
+            return false;
+        };
+        let Some((path, value)) =
+            self.convert_artboard_custom_property_binding_target_value(index, &target_value)
+        else {
+            return false;
+        };
+        if self.artboard_data_bind_values.get(&path) == Some(&value) {
+            return false;
+        }
+        self.artboard_data_bind_values.insert(path.clone(), value);
+        self.reset_artboard_property_formula_random_state_for_path(&path);
+        true
+    }
+
+    fn artboard_custom_property_binding_target_value(
+        &self,
+        index: usize,
+    ) -> Option<RuntimeDataBindGraphValue> {
+        let binding = self.artboard_custom_property_bindings.get(index)?;
+        match binding.value_kind {
             RuntimeArtboardDataBindValueKind::Number => self
                 .double_property(binding.target_local_id, binding.property_key)
                 .map(RuntimeDataBindGraphValue::Number),
@@ -1131,17 +1242,34 @@ impl ArtboardInstance {
             RuntimeArtboardDataBindValueKind::Trigger => self
                 .uint_property(binding.target_local_id, binding.property_key)
                 .map(RuntimeDataBindGraphValue::Trigger),
-        };
-        let Some(value) = value else {
-            return false;
-        };
-        if self.artboard_data_bind_values.get(&binding.path) == Some(&value) {
-            return false;
         }
-        self.artboard_data_bind_values
-            .insert(binding.path.clone(), value);
-        self.reset_artboard_property_formula_random_state_for_path(&binding.path);
-        true
+    }
+
+    fn convert_artboard_custom_property_binding_target_value(
+        &mut self,
+        index: usize,
+        value: &RuntimeDataBindGraphValue,
+    ) -> Option<(Vec<u32>, RuntimeDataBindGraphValue)> {
+        let binding = self.artboard_custom_property_bindings.get_mut(index)?;
+        let converted = match binding.converter.as_ref() {
+            None => value.clone(),
+            Some(converter) if binding.flags & DATA_BIND_FLAG_DIRECTION_TO_SOURCE != 0 => {
+                binding.converter_state.convert_value_with_formula_randoms(
+                    converter,
+                    value,
+                    &mut self.artboard_formula_random_source,
+                )?
+            }
+            Some(converter) => binding
+                .converter_state
+                .reverse_convert_value_with_formula_randoms(
+                    converter,
+                    value,
+                    &mut self.artboard_formula_random_source,
+                )?,
+        };
+        artboard_data_bind_values_have_same_kind(&binding.default_value, &converted)
+            .then(|| (binding.path.clone(), converted))
     }
 
     fn apply_artboard_solo_bindings(&mut self) -> bool {

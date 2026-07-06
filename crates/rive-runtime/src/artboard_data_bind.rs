@@ -10,7 +10,8 @@ use crate::properties::{
 };
 use crate::{
     ArtboardInstance, Mat2D, RuntimeDataBindGraphConverter, RuntimeDataBindGraphValue,
-    data_bind_flags_apply_source_to_target, data_bind_flags_apply_target_to_source,
+    RuntimeOwnedViewModelInstance, data_bind_flags_apply_source_to_target,
+    data_bind_flags_apply_target_to_source,
 };
 use rive_binary::{RuntimeDataType, RuntimeFile, RuntimeObject};
 use rive_graph::ArtboardGraph;
@@ -22,6 +23,7 @@ pub(super) struct RuntimeArtboardPropertyBindingInstance {
     target_local_id: usize,
     property_key: u16,
     path: Vec<u32>,
+    path_is_name_based: bool,
     enum_value_names: Vec<Vec<u8>>,
     converter: Option<RuntimeDataBindGraphConverter>,
     converter_state: RuntimeDataBindGraphConverterState,
@@ -33,6 +35,7 @@ pub(super) struct RuntimeArtboardCustomPropertyBindingInstance {
     target_local_id: usize,
     property_key: u16,
     path: Vec<u32>,
+    path_is_name_based: bool,
     flags: u64,
     value_kind: RuntimeArtboardDataBindValueKind,
     converter: Option<RuntimeDataBindGraphConverter>,
@@ -149,6 +152,104 @@ fn artboard_data_bind_values_have_same_kind(
             RuntimeDataBindGraphValue::ViewModel(_)
         )
     )
+}
+
+fn runtime_owned_view_model_context_path_for_context_chain(
+    file: &RuntimeFile,
+    context: &RuntimeOwnedViewModelInstance,
+    context_chain: &[Vec<usize>],
+    path: &[u32],
+) -> Option<Vec<usize>> {
+    context_chain.iter().find_map(|context_path| {
+        let property_path =
+            context.property_path_for_context_source_path(file, context_path, path, false)?;
+        context
+            .view_model_index_by_property_path(&property_path)
+            .map(|_| property_path)
+    })
+}
+
+fn runtime_owned_view_model_binding_value_for_context_chain(
+    file: &RuntimeFile,
+    context: &RuntimeOwnedViewModelInstance,
+    context_chain: &[Vec<usize>],
+    path: &[u32],
+    path_is_name_based: bool,
+    default_value: &RuntimeDataBindGraphValue,
+) -> Option<RuntimeDataBindGraphValue> {
+    context_chain.iter().find_map(|context_path| {
+        let property_path = context.property_path_for_context_source_path(
+            file,
+            context_path,
+            path,
+            path_is_name_based,
+        )?;
+        runtime_owned_view_model_binding_value_for_property_path(
+            context,
+            &property_path,
+            default_value,
+        )
+    })
+}
+
+fn runtime_owned_view_model_binding_value_for_property_path(
+    context: &RuntimeOwnedViewModelInstance,
+    property_path: &[usize],
+    default_value: &RuntimeDataBindGraphValue,
+) -> Option<RuntimeDataBindGraphValue> {
+    match default_value {
+        RuntimeDataBindGraphValue::Number(_) => context
+            .number_value_by_property_path(property_path)
+            .map(RuntimeDataBindGraphValue::Number),
+        RuntimeDataBindGraphValue::Boolean(_) => context
+            .boolean_value_by_property_path(property_path)
+            .map(RuntimeDataBindGraphValue::Boolean),
+        RuntimeDataBindGraphValue::String(_) => context
+            .string_value_by_property_path(property_path)
+            .map(|value| RuntimeDataBindGraphValue::String(value.to_vec())),
+        RuntimeDataBindGraphValue::Color(_) => context
+            .color_value_by_property_path(property_path)
+            .map(RuntimeDataBindGraphValue::Color),
+        RuntimeDataBindGraphValue::Enum(_) => context
+            .enum_value_by_property_path(property_path)
+            .map(RuntimeDataBindGraphValue::Enum),
+        RuntimeDataBindGraphValue::SymbolListIndex(_) => context
+            .symbol_list_index_value_by_property_path(property_path)
+            .map(RuntimeDataBindGraphValue::SymbolListIndex),
+        RuntimeDataBindGraphValue::List { .. } => context
+            .list_item_count_by_property_path(property_path)
+            .map(|item_count| RuntimeDataBindGraphValue::List { item_count }),
+        RuntimeDataBindGraphValue::Asset(_) => context
+            .asset_value_by_property_path(property_path)
+            .map(RuntimeDataBindGraphValue::Asset),
+        RuntimeDataBindGraphValue::Artboard(_) => context
+            .artboard_value_by_property_path(property_path)
+            .map(RuntimeDataBindGraphValue::Artboard),
+        RuntimeDataBindGraphValue::Trigger(_) => context
+            .trigger_value_by_property_path(property_path)
+            .map(RuntimeDataBindGraphValue::Trigger),
+        RuntimeDataBindGraphValue::ViewModel(_) => context
+            .view_model_value_by_property_path(property_path)
+            .map(RuntimeDataBindGraphValue::ViewModel),
+        RuntimeDataBindGraphValue::ListLength(_) => None,
+    }
+}
+
+fn runtime_owned_view_model_missing_binding_value_for_context_chain(
+    context_chain: &[Vec<usize>],
+    binding: &RuntimeArtboardPropertyBindingInstance,
+) -> Option<RuntimeDataBindGraphValue> {
+    let text_property_key = property_key_for_name("TextValueRun", "text")?;
+    if binding.property_key != text_property_key {
+        return None;
+    }
+    if !binding.path_is_name_based || !context_chain.iter().any(|path| !path.is_empty()) {
+        return None;
+    }
+    match binding.default_value {
+        RuntimeDataBindGraphValue::String(_) => Some(RuntimeDataBindGraphValue::String(Vec::new())),
+        _ => None,
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -279,6 +380,9 @@ pub(super) fn build_artboard_property_bindings(
                 data_bind.object,
                 &path,
             );
+            let path_is_name_based = file
+                .data_bind_is_name_based_for_object(data_bind.object)
+                .unwrap_or(false);
             let default_value = default_instance
                 .as_ref()
                 .and_then(|default_instance| {
@@ -289,10 +393,12 @@ pub(super) fn build_artboard_property_bindings(
                     .and_then(|source| runtime_created_view_model_value_for_source(file, source))
                 })
                 .or_else(|| {
-                    if file
-                        .data_bind_is_name_based_for_object(data_bind.object)
-                        .unwrap_or(false)
-                    {
+                    if path_is_name_based {
+                        if property_kind == FieldKind::String
+                            && property_key_for_name("TextValueRun", "text") == Some(property_key)
+                        {
+                            return Some(RuntimeDataBindGraphValue::String(Vec::new()));
+                        }
                         return None;
                     }
                     runtime_created_view_model_value_for_declared_path(file, &path)
@@ -312,6 +418,7 @@ pub(super) fn build_artboard_property_bindings(
                 target_local_id,
                 property_key,
                 path: path.to_vec(),
+                path_is_name_based,
                 enum_value_names,
                 converter_state: RuntimeDataBindGraphConverterState::for_converter(
                     converter.as_ref(),
@@ -560,6 +667,9 @@ pub(super) fn build_artboard_custom_property_bindings(
                 target_local_id,
                 property_key,
                 path,
+                path_is_name_based: file
+                    .data_bind_is_name_based_for_object(data_bind.object)
+                    .unwrap_or(false),
                 flags,
                 value_kind,
                 converter_state: RuntimeDataBindGraphConverterState::for_converter(
@@ -963,6 +1073,131 @@ impl ArtboardInstance {
             return false;
         };
         self.bind_artboard_data_context(file, default_instance.object)
+    }
+
+    pub fn bind_owned_view_model_artboard_context(
+        &mut self,
+        file: &RuntimeFile,
+        context: &RuntimeOwnedViewModelInstance,
+    ) -> bool {
+        self.bind_owned_view_model_artboard_context_chain(file, context, &[Vec::new()], true)
+    }
+
+    pub fn bind_owned_view_model_nested_artboard_contexts(
+        &mut self,
+        file: &RuntimeFile,
+        context: &RuntimeOwnedViewModelInstance,
+    ) -> bool {
+        self.bind_owned_view_model_artboard_context_chain(file, context, &[Vec::new()], false)
+    }
+
+    fn bind_owned_view_model_artboard_context_chain(
+        &mut self,
+        file: &RuntimeFile,
+        context: &RuntimeOwnedViewModelInstance,
+        context_chain: &[Vec<usize>],
+        bind_self: bool,
+    ) -> bool {
+        let mut changed = if bind_self {
+            self.bind_owned_view_model_artboard_values(file, context, context_chain)
+        } else {
+            false
+        };
+        let host_locals = self.nested_artboards.keys().copied().collect::<Vec<_>>();
+        for host_local_id in host_locals {
+            let child_context_chain = self
+                .owned_view_model_context_chain_for_nested_host(
+                    file,
+                    context,
+                    context_chain,
+                    host_local_id,
+                )
+                .unwrap_or_else(|| context_chain.to_vec());
+            let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
+                continue;
+            };
+            changed |= nested.child.bind_owned_view_model_artboard_context_chain(
+                file,
+                context,
+                &child_context_chain,
+                true,
+            );
+        }
+        changed
+    }
+
+    fn bind_owned_view_model_artboard_values(
+        &mut self,
+        file: &RuntimeFile,
+        context: &RuntimeOwnedViewModelInstance,
+        context_chain: &[Vec<usize>],
+    ) -> bool {
+        let mut changed = false;
+        let updates = self
+            .artboard_property_bindings
+            .iter()
+            .filter_map(|binding| {
+                runtime_owned_view_model_binding_value_for_context_chain(
+                    file,
+                    context,
+                    context_chain,
+                    &binding.path,
+                    binding.path_is_name_based,
+                    &binding.default_value,
+                )
+                .or_else(|| {
+                    runtime_owned_view_model_missing_binding_value_for_context_chain(
+                        context_chain,
+                        binding,
+                    )
+                })
+                .map(|value| (binding.path.clone(), value))
+            })
+            .chain(
+                self.artboard_custom_property_bindings
+                    .iter()
+                    .filter_map(|binding| {
+                        runtime_owned_view_model_binding_value_for_context_chain(
+                            file,
+                            context,
+                            context_chain,
+                            &binding.path,
+                            binding.path_is_name_based,
+                            &binding.default_value,
+                        )
+                        .map(|value| (binding.path.clone(), value))
+                    }),
+            )
+            .collect::<Vec<_>>();
+        for (path, value) in updates {
+            changed |= self.set_artboard_data_bind_value_for_path(&path, value);
+        }
+        changed
+    }
+
+    fn owned_view_model_context_chain_for_nested_host(
+        &self,
+        file: &RuntimeFile,
+        context: &RuntimeOwnedViewModelInstance,
+        context_chain: &[Vec<usize>],
+        host_local_id: usize,
+    ) -> Option<Vec<Vec<usize>>> {
+        let host = self.slot(host_local_id)?;
+        let host_object = file.object(host.source_global_id as usize)?;
+        let path = file
+            .data_bind_path_for_referencer_object(host_object)?
+            .resolved_path_ids;
+        let child_context = runtime_owned_view_model_context_path_for_context_chain(
+            file,
+            context,
+            context_chain,
+            &path,
+        )?;
+        context.view_model_index_by_property_path(&child_context)?;
+        let mut child_chain = Vec::with_capacity(context_chain.len() + 1);
+        child_chain.push(child_context);
+        child_chain.extend(context_chain.iter().cloned());
+        Some(child_chain)
     }
 
     pub(crate) fn clear_default_text_property_context(&mut self) -> bool {

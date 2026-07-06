@@ -1751,6 +1751,7 @@ struct RuntimeOwnedViewModelViewModel {
     property_index: usize,
     property_name: String,
     value: RuntimeViewModelPointer,
+    referenced_view_model_index: Option<usize>,
     property_names: Vec<(String, usize)>,
     numbers: Vec<RuntimeOwnedViewModelNumber>,
     imported_numbers: BTreeMap<u32, Vec<RuntimeOwnedViewModelNumber>>,
@@ -2133,10 +2134,9 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        if color.value == value {
-            return false;
+        if color.value != value {
+            color.value = value;
         }
-        color.value = value;
         true
     }
 
@@ -3130,7 +3130,7 @@ fn runtime_owned_view_model_colors(
                     (property.type_name == "ViewModelPropertyColor").then_some(
                         RuntimeOwnedViewModelColor {
                             property_index,
-                            value: 0,
+                            value: 0xFF000000,
                         },
                     )
                 })
@@ -3905,6 +3905,7 @@ fn runtime_owned_view_model_property_children(
                     .unwrap_or_default()
                     .to_owned(),
                 value,
+                referenced_view_model_index,
                 property_names: referenced_view_model_index
                     .map(|view_model_index| {
                         runtime_owned_view_model_property_names(file, view_model_index)
@@ -4051,7 +4052,7 @@ impl RuntimeOwnedViewModelInstance {
                 }),
                 "ViewModelPropertyColor" => colors.push(RuntimeOwnedViewModelColor {
                     property_index,
-                    value: 0,
+                    value: 0xFF000000,
                 }),
                 "ViewModelPropertyEnum"
                 | "ViewModelPropertyEnumCustom"
@@ -4127,6 +4128,7 @@ impl RuntimeOwnedViewModelInstance {
                         property_index,
                         property_name: property.string_property("name").unwrap_or_default().to_owned(),
                         value,
+                        referenced_view_model_index,
                         property_names: referenced_view_model_index
                             .map(|view_model_index| {
                                 runtime_owned_view_model_property_names(file, view_model_index)
@@ -4708,10 +4710,9 @@ impl RuntimeOwnedViewModelInstance {
         else {
             return false;
         };
-        if color.value == value {
-            return false;
+        if color.value != value {
+            color.value = value;
         }
-        color.value = value;
         true
     }
 
@@ -4752,6 +4753,11 @@ impl RuntimeOwnedViewModelInstance {
         handle: &RuntimeOwnedViewModelColorSourceHandle,
         value: u32,
     ) -> bool {
+        match self.color_value_by_property_path(&handle.property_path) {
+            Some(current) if current == value => return false,
+            Some(_) => {}
+            None => return false,
+        }
         self.set_color_by_property_path(&handle.property_path, value)
     }
 
@@ -6046,6 +6052,82 @@ impl RuntimeOwnedViewModelInstance {
     ) -> Option<RuntimeViewModelPointer> {
         self.view_model_by_property_path(property_path)
             .map(|view_model| view_model.value)
+    }
+
+    pub(crate) fn view_model_index_by_property_path(
+        &self,
+        property_path: &[usize],
+    ) -> Option<usize> {
+        if property_path.is_empty() {
+            return Some(self.view_model_index);
+        }
+        let view_model = self.view_model_by_property_path(property_path)?;
+        match view_model.value {
+            RuntimeViewModelPointer::OwnedGenerated { .. }
+            | RuntimeViewModelPointer::Imported { .. } => view_model.referenced_view_model_index,
+            _ => None,
+        }
+    }
+
+    pub(crate) fn property_path_for_context_source_path(
+        &self,
+        file: &RuntimeFile,
+        context_path: &[usize],
+        source_path: &[u32],
+        name_based: bool,
+    ) -> Option<Vec<usize>> {
+        if name_based {
+            return self.property_path_for_context_name_source_path(
+                file,
+                context_path,
+                source_path,
+            );
+        }
+
+        if source_path.is_empty() {
+            return None;
+        }
+        let view_model_index = self.view_model_index_by_property_path(context_path)?;
+        if usize::try_from(source_path[0]).ok()? != view_model_index {
+            return None;
+        }
+        let mut property_path = context_path.to_vec();
+        property_path.extend(
+            source_path[1..]
+                .iter()
+                .map(|property_index| usize::try_from(*property_index).ok())
+                .collect::<Option<Vec<_>>>()?,
+        );
+        Some(property_path)
+    }
+
+    fn property_path_for_context_name_source_path(
+        &self,
+        file: &RuntimeFile,
+        context_path: &[usize],
+        source_path: &[u32],
+    ) -> Option<Vec<usize>> {
+        if source_path.is_empty() {
+            return None;
+        }
+        let manifest = file.manifest()?;
+        let source_path = source_path
+            .first()
+            .and_then(|path_id| manifest.resolve_path(*path_id))
+            .filter(|resolved_path| !resolved_path.is_empty())
+            .unwrap_or(source_path);
+        let mut property_path = context_path.to_vec();
+        for name_id in source_path {
+            let property_name = manifest.resolve_name(*name_id)?;
+            let property_index = if property_path.is_empty() {
+                self.property_index_by_name(property_name)?
+            } else {
+                self.view_model_by_property_path(&property_path)?
+                    .property_index_by_name(property_name)?
+            };
+            property_path.push(property_index);
+        }
+        Some(property_path)
     }
 }
 

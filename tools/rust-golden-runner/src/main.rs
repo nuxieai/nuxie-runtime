@@ -73,6 +73,9 @@ fn run() -> Result<String> {
         }
         state_machine.advance_data_context();
     }
+    if let Some(context) = owned_view_model_context.as_ref() {
+        instance.bind_owned_view_model_nested_artboard_contexts(&runtime, context);
+    }
 
     let artboard_name = artboard.name.clone().unwrap_or_default();
     if options.layout_bounds {
@@ -117,7 +120,9 @@ fn run() -> Result<String> {
             let event = &input_events[next_input];
             advance_scene_to(
                 &mut instance,
+                &runtime,
                 state_machine.as_mut(),
+                owned_view_model_context.as_ref(),
                 event.seconds,
                 &mut current_seconds,
             )?;
@@ -138,7 +143,9 @@ fn run() -> Result<String> {
         }
         advance_scene_to(
             &mut instance,
+            &runtime,
             state_machine.as_mut(),
+            owned_view_model_context.as_ref(),
             *sample,
             &mut current_seconds,
         )?;
@@ -198,7 +205,9 @@ fn write_layout_bounds_report(
             let event = &input_events[next_input];
             advance_scene_to(
                 instance,
+                runtime,
                 state_machine.as_mut(),
+                owned_view_model_context.as_ref(),
                 event.seconds,
                 &mut current_seconds,
             )?;
@@ -213,7 +222,9 @@ fn write_layout_bounds_report(
 
         advance_scene_to(
             instance,
+            runtime,
             state_machine.as_mut(),
+            owned_view_model_context.as_ref(),
             *sample,
             &mut current_seconds,
         )?;
@@ -615,7 +626,9 @@ fn select_scene(
 
 fn advance_scene_to(
     instance: &mut ArtboardInstance,
+    runtime: &RuntimeFile,
     state_machine: Option<&mut StateMachineInstance>,
+    owned_view_model_context: Option<&RuntimeOwnedViewModelInstance>,
     target_seconds: f32,
     current_seconds: &mut f32,
 ) -> Result<()> {
@@ -630,6 +643,9 @@ fn advance_scene_to(
         }
     } else {
         instance.advance_nested_artboards(elapsed_seconds);
+    }
+    if let Some(context) = owned_view_model_context {
+        instance.bind_owned_view_model_nested_artboard_contexts(runtime, context);
     }
     instance.advance_artboard_data_binds_with_elapsed(elapsed_seconds);
     instance.update_pass();

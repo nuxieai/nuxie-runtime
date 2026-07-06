@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 511 across 190 exact files
-- Current compare: `make golden-compare` reports diverges=3, unsupported-feature=102, not-yet=0
+- Exact segments (file × sample): 513 across 192 exact files
+- Current compare: `make golden-compare` reports diverges=1, unsupported-feature=102, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=58 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
@@ -23,13 +23,13 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Start `relative_data_binding.riv`: it is the next known M6 nested/shared
-   text draw-suppression divergence. After nested `TextValueRun.text` support,
-   Rust reaches draw but activates a nested text/relative-position branch that
-   C++ suppresses at sample 0. First stream diff: a rectangle transform has
-   x=96.5 in Rust vs x=0 in C++, followed by extra text draw calls. Check it
-   alongside `shared_viewmodel_instance.riv`, which appears to be the same
-   family.
+1. Start `interpolate_to_end.riv`: it is now the only active `diverges`
+   entry. After admitting nested child `TextValueRun.text` converter groups
+   through the runner gate and validating artboard property bindings with
+   stateful converter defaults, Rust reaches draw but keeps the serialized
+   fallback child text where C++ renders the data-bound/interpolated numeric
+   string. Focused first diff is the nested text path at transform
+   `[1,0,0,1,245.207031,58.4726562]`.
 2. Keep `text_follow_path_shape_length.riv` parked behind
    `TextFollowPathModifier`: after admitting source-to-target `Text.width`
    binds with no converter or `DataConverterFormula`, direct Rust now stops on
@@ -51,13 +51,6 @@ the only memory the next session has. Update it every commit.
 
 ## Known Divergences
 
-- `relative_data_binding.riv`: after nested `TextValueRun.text` support, Rust
-  reaches draw but activates a nested text/relative-position branch that C++
-  suppresses at sample 0. First stream diff: a rectangle transform has x=96.5
-  in Rust vs x=0 in C++, followed by extra text draw calls.
-- `shared_viewmodel_instance.riv`: same newly-rendering shared-view-model text
-  family; Rust emits extra nested text draw calls before the rectangle stream
-  that C++ produces at sample 0.
 - `interpolate_to_end.riv`: after admitting nested child `TextValueRun.text`
   converter groups through the runner gate and validating artboard property
   bindings with stateful converter defaults, Rust reaches draw but keeps the
@@ -1064,3 +1057,15 @@ the only memory the next session has. Update it every commit.
   `exact-segments=511`, `diverges=3`, `unsupported-feature=102`, `not-yet=0`,
   and parked `M6=58 gated=8 harness=36`; `cargo test --workspace` passes. Next
   target is `relative_data_binding.riv` with `shared_viewmodel_instance.riv`.
+- 2026-07-06: [M6] Promoted `relative_data_binding.riv` and
+  `shared_viewmodel_instance.riv` by binding owned view-model contexts through
+  nested artboard hosts, resolving manifest-backed name paths, defaulting fresh
+  generated color values to opaque black, and clearing missing name-based
+  `TextValueRun.text` only for concrete nested owned contexts. The runner now
+  applies this owned-context pass to nested artboards only, leaving root
+  artboard values on the existing state-machine/default data-bind path so
+  `transition_actions.riv` remains exact. `make golden-compare` reports
+  `exact=192`, `exact-segments=513`, `diverges=1`,
+  `unsupported-feature=102`, `not-yet=0`, and parked
+  `M6=58 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
+  `interpolate_to_end.riv`.

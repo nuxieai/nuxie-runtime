@@ -210,6 +210,7 @@ impl ArtboardInstance {
             factory,
             paint_by_global,
             render_cache,
+            None,
             RuntimeGradientPaintFilter::All,
         )
     }
@@ -221,6 +222,7 @@ impl ArtboardInstance {
         factory: &mut dyn RenderFactory,
         paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
         render_cache: &mut RuntimeRenderPathCache,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
         filter: RuntimeGradientPaintFilter,
     ) -> Result<()> {
         let mut paints_by_mutator =
@@ -271,8 +273,19 @@ impl ArtboardInstance {
                     .object(paint.global_id as usize)
                     .with_context(|| format!("missing paint global {}", paint.global_id))?;
                 let opacity_local = shape_paint_container_opacity_local(graph, container.local_id);
-                let runtime_paint =
-                    runtime_prepare_gradient_paint_command(self, opacity_local, container, paint);
+                let shape_world = runtime_shape_paint_container_world_transform(
+                    self,
+                    graph,
+                    container,
+                    layout_bounds,
+                );
+                let runtime_paint = runtime_prepare_gradient_paint_command(
+                    self,
+                    opacity_local,
+                    container,
+                    paint,
+                    shape_world,
+                );
                 let mut gradient_resources = RuntimeGradientShaderResources {
                     factory,
                     shaders: &mut render_cache.gradient_shaders,
@@ -345,6 +358,7 @@ impl ArtboardInstance {
             factory,
             paint_by_global,
             render_cache,
+            layout_bounds.as_ref(),
             initial_filter,
         )?;
 
@@ -471,6 +485,7 @@ impl ArtboardInstance {
                 factory,
                 paint_by_global,
                 render_cache,
+                layout_bounds.as_ref(),
                 RuntimeGradientPaintFilter::OnlyLayoutComponents,
             )?;
         }
@@ -4170,6 +4185,7 @@ pub struct RuntimeShapePaintCommand {
     pub render_blend_mode_value: u32,
     pub paint_state: Option<RuntimeShapePaintState>,
     pub feather_state: Option<RuntimeFeatherState>,
+    pub paint_space_transform: Option<Mat2D>,
     pub path_commands: Vec<RuntimePathCommand>,
     pub effect_path_commands: Vec<RuntimePathCommand>,
     pub has_effect_path: bool,
@@ -5051,6 +5067,7 @@ fn runtime_background_shape_paint_command(
         render_blend_mode_value: 3,
         paint_state,
         feather_state: None,
+        paint_space_transform: None,
         path_commands,
         effect_path_commands: Vec::new(),
         has_effect_path: false,
@@ -5067,6 +5084,7 @@ fn runtime_prepare_gradient_paint_command(
     opacity_local: usize,
     container: &ShapePaintContainerNode,
     paint: &ShapePaintNode,
+    shape_world: Mat2D,
 ) -> RuntimeShapePaintCommand {
     let render_opacity = instance
         .component(opacity_local)
@@ -5087,6 +5105,7 @@ fn runtime_prepare_gradient_paint_command(
         ),
         paint_state: runtime_shape_paint_state(instance, paint, render_opacity),
         feather_state: None,
+        paint_space_transform: runtime_shape_paint_space_transform(paint, shape_world),
         path_commands: Vec::new(),
         effect_path_commands: Vec::new(),
         has_effect_path: false,
@@ -5095,6 +5114,44 @@ fn runtime_prepare_gradient_paint_command(
         aliases_local_clockwise_path: false,
         uses_temporary_paint: false,
         allocates_text_paint_pool: false,
+    }
+}
+
+fn runtime_shape_paint_container_world_transform(
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    container: &ShapePaintContainerNode,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+) -> Mat2D {
+    match container.type_name {
+        "LayoutComponent" => instance.runtime_layout_component_world_transform_with_bounds(
+            container.local_id,
+            graph,
+            layout_bounds,
+        ),
+        "ForegroundLayoutDrawable" => {
+            let layout_local = graph
+                .components
+                .iter()
+                .find(|component| component.local_id == container.local_id)
+                .and_then(|component| component.parent_local)
+                .filter(|parent_local| {
+                    instance
+                        .component(*parent_local)
+                        .is_some_and(|component| component.type_name == "LayoutComponent")
+                })
+                .unwrap_or(container.local_id);
+            instance.runtime_layout_component_world_transform_with_bounds(
+                layout_local,
+                graph,
+                layout_bounds,
+            )
+        }
+        _ => instance.runtime_component_world_transform_with_bounds(
+            container.local_id,
+            graph,
+            layout_bounds,
+        ),
     }
 }
 
@@ -6282,15 +6339,29 @@ fn runtime_configure_paint(
             },
         ) => {
             if let Some(resources) = gradient_resources {
-                runtime_configure_linear_gradient(
-                    render_paint,
-                    resources,
-                    object.id,
-                    state.clone(),
+                let (start_x, start_y, end_x, end_y) = runtime_gradient_space_endpoints(
+                    paint.paint_space_transform,
                     *start_x,
                     *start_y,
                     *end_x,
                     *end_y,
+                );
+                let state = runtime_shape_paint_state_with_endpoints(
+                    state.clone(),
+                    start_x,
+                    start_y,
+                    end_x,
+                    end_y,
+                );
+                runtime_configure_linear_gradient(
+                    render_paint,
+                    resources,
+                    object.id,
+                    state,
+                    start_x,
+                    start_y,
+                    end_x,
+                    end_y,
                     stops,
                 );
             }
@@ -6306,15 +6377,29 @@ fn runtime_configure_paint(
             },
         ) => {
             if let Some(resources) = gradient_resources {
-                runtime_configure_radial_gradient(
-                    render_paint,
-                    resources,
-                    object.id,
-                    state.clone(),
+                let (start_x, start_y, end_x, end_y) = runtime_gradient_space_endpoints(
+                    paint.paint_space_transform,
                     *start_x,
                     *start_y,
                     *end_x,
                     *end_y,
+                );
+                let state = runtime_shape_paint_state_with_endpoints(
+                    state.clone(),
+                    start_x,
+                    start_y,
+                    end_x,
+                    end_y,
+                );
+                runtime_configure_radial_gradient(
+                    render_paint,
+                    resources,
+                    object.id,
+                    state,
+                    start_x,
+                    start_y,
+                    end_x,
+                    end_y,
                     stops,
                 );
             }
@@ -6379,6 +6464,38 @@ fn runtime_configure_radial_gradient(
         factory.make_radial_gradient(start_x, start_y, radius, &colors, &positions)
     });
     render_paint.shader(Some(shader));
+}
+
+fn runtime_shape_paint_state_with_endpoints(
+    mut state: RuntimeShapePaintState,
+    start_x: f32,
+    start_y: f32,
+    end_x: f32,
+    end_y: f32,
+) -> RuntimeShapePaintState {
+    match &mut state {
+        RuntimeShapePaintState::LinearGradient {
+            start_x: state_start_x,
+            start_y: state_start_y,
+            end_x: state_end_x,
+            end_y: state_end_y,
+            ..
+        }
+        | RuntimeShapePaintState::RadialGradient {
+            start_x: state_start_x,
+            start_y: state_start_y,
+            end_x: state_end_x,
+            end_y: state_end_y,
+            ..
+        } => {
+            *state_start_x = start_x;
+            *state_start_y = start_y;
+            *state_end_x = end_x;
+            *state_end_y = end_y;
+        }
+        RuntimeShapePaintState::SolidColor { .. } => {}
+    }
+    state
 }
 
 fn runtime_cached_gradient_shader<'a>(
@@ -6607,6 +6724,7 @@ pub(crate) fn runtime_shape_paint_command(
             feather_path_commands,
             shape_world,
         ),
+        paint_space_transform: runtime_shape_paint_space_transform(paint, shape_world),
         path_commands,
         effect_path_commands: effect_path_commands.unwrap_or_default(),
         has_effect_path,
@@ -6711,6 +6829,13 @@ fn runtime_shape_paint_path_kind(kind: ShapePaintPathKind) -> Option<RuntimeShap
         ShapePaintPathKind::LocalClockwise => Some(RuntimeShapePaintPathKind::LocalClockwise),
         ShapePaintPathKind::World => Some(RuntimeShapePaintPathKind::World),
     }
+}
+
+fn runtime_shape_paint_space_transform(
+    paint: &ShapePaintNode,
+    shape_world: Mat2D,
+) -> Option<Mat2D> {
+    (paint.path_kind == Some(ShapePaintPathKind::World)).then_some(shape_world)
 }
 
 fn runtime_shape_paint_state(
@@ -6849,6 +6974,21 @@ fn runtime_gradient_endpoints(
         runtime_gradient_double_property(artboard, mutator_local, type_name, "endX", end_x),
         runtime_gradient_double_property(artboard, mutator_local, type_name, "endY", end_y),
     )
+}
+
+fn runtime_gradient_space_endpoints(
+    paint_space_transform: Option<Mat2D>,
+    start_x: f32,
+    start_y: f32,
+    end_x: f32,
+    end_y: f32,
+) -> (f32, f32, f32, f32) {
+    let Some(shape_world) = paint_space_transform else {
+        return (start_x, start_y, end_x, end_y);
+    };
+    let (start_x, start_y) = shape_world.transform_point(start_x, start_y);
+    let (end_x, end_y) = shape_world.transform_point(end_x, end_y);
+    (start_x, start_y, end_x, end_y)
 }
 
 fn runtime_gradient_double_property(

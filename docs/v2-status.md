@@ -5,9 +5,9 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 560 across 239 files (strict
-  exact=553/232; tolerant=7/7; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=55, not-yet=1
+- Exact-status segments (file × sample): 561 across 240 files (strict
+  exact=554/233; tolerant=7/7; structural=0/0)
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=55, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=14 gated=5 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes**
 
@@ -24,13 +24,16 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Resolve the lone active `not-yet` entry:
-   `not-yet:nested-feather-gradient-space` (`ai_assitant.riv`). The
-   selected-root shader-order, gradient opacity, and local-clockwise contour
-   adjacencies are closed: `bullet_man.riv` now reaches the existing
-   `selected-root-skinned-clip-path` gate, and `hunter_x_demo.riv` is exact
-   under `tolerant(0.0015)`.
-2. Other parked one-file M6 queues are `scripted-data-context`,
+1. The active `not-yet` queue is empty. Continue M6 by picking the highest-value
+   remaining unsupported/gated queue that is not scripting/audio:
+   start with `scripted-data-context` only if it can be made a loud scripting
+   gate, otherwise pick one of `focus-data` (`focus_traversal.riv`),
+   `layout-component-paint` (`text_input.riv`),
+   `viewmodel-asset-conditions`, `text-joystick-data-bind`
+   (`echo_show_demo.riv`), `nested-artboard-layout` (`superbowl.riv`), or
+   `selected-root-skinned-clip-path` (`bullet_man.riv`,
+   `spotify_kids_demo.riv`).
+2. Other parked one-file M6 queues include `scripted-data-context`,
    `focus-data` (`focus_traversal.riv`), `layout-component-paint`
    (`text_input.riv`), `viewmodel-asset-conditions`,
    `text-joystick-data-bind` (`echo_show_demo.riv`),
@@ -47,8 +50,9 @@ the only memory the next session has. Update it every commit.
    `nested-layout-size-data-bind` diagnostic. Gated one-file diagnostics
    include `scripted-transition-condition` (2 gated),
    `scripted-path-effects` (1 gated), and `text-polygon-sibling`
-   (`bankcard.riv`). Keep these parked queues separate from the active
-   `not-yet` item above.
+   (`bankcard.riv`). Keep these parked queues as explicit unsupported/gated
+   work until a focused slice can either promote a file or replace the guard
+   with a sharper diagnostic.
 3. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
@@ -118,10 +122,9 @@ the only memory the next session has. Update it every commit.
 
 ## Known Divergences
 
-- None in the active corpus. `make golden-compare` reports `diverges=0`; the
-  remaining M6 work is parked behind explicit unsupported-feature diagnostics
-  or the lone documented `not-yet` entry. `ai_assitant.riv` imports and draws
-  but has a nested-feather gradient-space exact-parity gap.
+- None in the active corpus. `make golden-compare` reports `diverges=0` and
+  `not-yet=0`; remaining M6 work is parked behind explicit
+  unsupported-feature diagnostics.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -391,6 +394,16 @@ the only memory the next session has. Update it every commit.
   `exact-segments=560`, `diverges=0`, `unsupported-feature=55`, `not-yet=1`,
   and parked `M6=14 gated=5 harness=36`. Next target is `ai_assitant.riv`
   (`not-yet:nested-feather-gradient-space`).
+- 2026-07-06: [M6] Promoted `ai_assitant.riv` by matching C++ world-space
+  gradient shader construction for strokes whose `transformAffectsStroke` flag
+  selects `PathFlags::world`: Rust now keeps local gradient mutator payloads
+  for probe parity, carries a `paint_space_transform` on draw commands, and
+  applies that transform only while configuring/caching linear/radial render
+  shaders. Focused streams are structurally identical with max numeric drift
+  `0.000122`, below the golden epsilon. Full `make golden-compare` reports
+  `exact=240`, `exact-segments=561`, `diverges=0`,
+  `unsupported-feature=55`, `not-yet=0`, and parked
+  `M6=14 gated=5 harness=36`. The active `not-yet` queue is empty.
 - 2026-07-02: `rive-runtime` owns static draw emission through
   `rive-render-api`; `rust-golden-runner` now only orchestrates import,
   artboard selection, stream markers, and recording output.

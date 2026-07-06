@@ -15492,6 +15492,119 @@ fn runtime_draw_command_stream_exposes_gradient_paint_payloads_like_cpp_probe() 
 }
 
 #[test]
+fn runtime_draw_command_stream_world_stroke_gradient_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_world_stroke_gradient_payloads.riv";
+    let bytes = synthetic_runtime_file(8252, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "Shape", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+            push_f32_property(bytes, "Node", "x", 100.0);
+            push_f32_property(bytes, "Node", "y", 50.0);
+        });
+        push_object_with_properties(bytes, "Stroke", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 1);
+            push_bool_property(bytes, "Stroke", "transformAffectsStroke", false);
+        });
+        push_object_with_properties(bytes, "LinearGradient", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 2);
+            push_f32_property(bytes, "LinearGradient", "startX", 1.0);
+            push_f32_property(bytes, "LinearGradient", "startY", 2.0);
+            push_f32_property(bytes, "LinearGradient", "endX", 11.0);
+            push_f32_property(bytes, "LinearGradient", "endY", 12.0);
+            push_f32_property(bytes, "LinearGradient", "opacity", 0.75);
+        });
+        push_object_with_properties(bytes, "GradientStop", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 3);
+            push_color_property(bytes, "GradientStop", "colorValue", 0xff00_ff00);
+            push_f32_property(bytes, "GradientStop", "position", 0.0);
+        });
+        push_object_with_properties(bytes, "GradientStop", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 3);
+            push_color_property(bytes, "GradientStop", "colorValue", 0x8000_00ff);
+            push_f32_property(bytes, "GradientStop", "position", 1.0);
+        });
+        push_object_with_properties(bytes, "PointsPath", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 1);
+            push_bool_property(bytes, "PointsCommonPath", "isClosed", true);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 6);
+            push_f32_property(bytes, "Vertex", "x", 0.0);
+            push_f32_property(bytes, "Vertex", "y", 0.0);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 6);
+            push_f32_property(bytes, "Vertex", "x", 10.0);
+            push_f32_property(bytes, "Vertex", "y", 0.0);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 6);
+            push_f32_property(bytes, "Vertex", "x", 0.0);
+            push_f32_property(bytes, "Vertex", "y", 10.0);
+        });
+    });
+
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let (_, graph, mut rust) = read_rust_graph_instance_from_bytes(&bytes, label);
+    rust.update_components();
+
+    let artboard = graph
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing Rust artboard for {label}"));
+    let rust_paints = rust
+        .draw_commands(artboard)
+        .into_iter()
+        .flat_map(|command| command.shape_paints)
+        .collect::<Vec<_>>();
+    let cpp_paints = cpp.artboards[0]
+        .draw_command_stream
+        .iter()
+        .flat_map(|command| command.shape_paint_commands.iter())
+        .collect::<Vec<_>>();
+
+    assert_eq!(cpp_paints.len(), 1, "C++ should emit one gradient stroke");
+    assert_eq!(rust_paints.len(), 1, "Rust should emit one gradient stroke");
+
+    let expected_state = RuntimeShapePaintState::LinearGradient {
+        start_x: 1.0,
+        start_y: 2.0,
+        end_x: 11.0,
+        end_y: 12.0,
+        opacity: 0.75,
+        render_opacity: 1.0,
+        stops: vec![
+            RuntimeGradientStop {
+                color: 0xff00_ff00,
+                render_color: 0xbf00_ff00,
+                position: 0.0,
+            },
+            RuntimeGradientStop {
+                color: 0x8000_00ff,
+                render_color: 0x6000_00ff,
+                position: 1.0,
+            },
+        ],
+    };
+
+    let cpp_paint = cpp_paints[0];
+    let rust_paint = &rust_paints[0];
+    assert_eq!(cpp_paint.paint_state(), Some(expected_state.clone()));
+    assert_eq!(rust_paint.paint_state, Some(expected_state));
+    assert_eq!(rust_paint.paint_state, cpp_paint.paint_state());
+    assert_eq!(
+        rust_paint.paint_space_transform,
+        Some(Mat2D([1.0, 0.0, -0.0, 1.0, 100.0, 50.0]))
+    );
+}
+
+#[test]
 fn runtime_draw_command_stream_exposes_feather_paint_payloads_like_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");

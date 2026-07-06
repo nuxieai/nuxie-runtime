@@ -4847,11 +4847,17 @@ fn runtime_draw_command(
         let object = runtime
             .object(global_id as usize)
             .with_context(|| format!("missing paint global {global_id}"))?;
-        let path_commands = if paint.has_effect_path {
+        let effect_or_shape_path_commands = if paint.has_effect_path {
             &paint.effect_path_commands
         } else {
             &paint.path_commands
         };
+        let draw_path_commands = paint
+            .feather_state
+            .as_ref()
+            .filter(|feather| feather.inner)
+            .map(|feather| feather.inner_path_commands.as_slice())
+            .unwrap_or(effect_or_shape_path_commands);
         let temporary_paint_index = if draws_text && paint.uses_temporary_paint {
             let render_paint = text_temporary_paints
                 .get_mut(text_temporary_paint_index)
@@ -4872,9 +4878,29 @@ fn runtime_draw_command(
             )?;
             None
         };
-        let path_index = runtime_cached_path_slot_index(&mut draw_path_slots, path_commands);
         let mut saved = !paint.needs_save_operation;
         let paint_shape_world = paint.shape_world_override.unwrap_or(shape_world);
+        // Ported from C++ src/shapes/paint/shape_paint.cpp and feather.cpp.
+        let feather_path_cache_local = if paint
+            .feather_state
+            .as_ref()
+            .is_some_and(|feather| feather.inner)
+        {
+            Some(paint.paint_local)
+        } else {
+            command.local_id
+        };
+        if let Some(feather) = paint.feather_state.as_ref()
+            && runtime_feather_uses_world_space(feather)
+            && !feather.inner
+            && runtime_feather_has_offset(feather)
+        {
+            if !saved {
+                saved = true;
+                renderer.save();
+            }
+            renderer.transform(runtime_translation(feather.offset_x, feather.offset_y));
+        }
         if matches!(
             paint.path_kind,
             RuntimeShapePaintPathKind::Local | RuntimeShapePaintPathKind::LocalClockwise
@@ -4885,13 +4911,50 @@ fn runtime_draw_command(
             }
             renderer.transform(runtime_render_mat(paint_shape_world));
         }
+        if let Some(feather) = paint.feather_state.as_ref() {
+            if feather.inner {
+                if feather.inner_path_commands.is_empty() {
+                    continue;
+                }
+                if !saved {
+                    saved = true;
+                    renderer.save();
+                }
+                let clip_path_index = runtime_cached_path_slot_index(
+                    &mut draw_path_slots,
+                    effect_or_shape_path_commands,
+                );
+                let clip_path = path_cache.draw_path(
+                    RuntimeDrawPathCacheKey {
+                        local_id: feather_path_cache_local,
+                        path_index: clip_path_index,
+                    },
+                    factory,
+                    effect_or_shape_path_commands,
+                    RenderFillRule::Clockwise,
+                );
+                if !draws_text {
+                    runtime_configure_fill_rule(clip_path.as_mut(), object);
+                }
+                renderer.clip_path(clip_path.as_ref());
+            } else if !runtime_feather_uses_world_space(feather)
+                && runtime_feather_has_offset(feather)
+            {
+                if !saved {
+                    saved = true;
+                    renderer.save();
+                }
+                renderer.transform(runtime_translation(feather.offset_x, feather.offset_y));
+            }
+        }
+        let path_index = runtime_cached_path_slot_index(&mut draw_path_slots, draw_path_commands);
         let path = path_cache.draw_path(
             RuntimeDrawPathCacheKey {
-                local_id: command.local_id,
+                local_id: feather_path_cache_local,
                 path_index,
             },
             factory,
-            path_commands,
+            draw_path_commands,
             RenderFillRule::Clockwise,
         );
         if !draws_text {
@@ -5668,6 +5731,13 @@ fn runtime_configure_paint(
             render_paint.shader(None);
         }
     }
+    render_paint.feather(
+        paint
+            .feather_state
+            .as_ref()
+            .map(|feather| feather.strength)
+            .unwrap_or(0.0),
+    );
     Ok(())
 }
 
@@ -5839,6 +5909,18 @@ fn runtime_render_mat(mat: Mat2D) -> RenderMat2D {
     RenderMat2D(mat.0)
 }
 
+fn runtime_translation(x: f32, y: f32) -> RenderMat2D {
+    RenderMat2D([1.0, 0.0, 0.0, 1.0, x, y])
+}
+
+fn runtime_feather_uses_world_space(feather: &RuntimeFeatherState) -> bool {
+    feather.space_value == 0
+}
+
+fn runtime_feather_has_offset(feather: &RuntimeFeatherState) -> bool {
+    feather.offset_x != 0.0 || feather.offset_y != 0.0
+}
+
 fn mat2d_has_visible_skew_or_rotation(mat: Mat2D) -> bool {
     // Keep near-axis-aligned cancellation on the regular multiply path; real
     // off-axis local path composition needs the fused C++ residual.
@@ -5904,6 +5986,7 @@ pub(crate) fn runtime_shape_paint_command(
     }
     let effect_path_commands = runtime_effect_path_commands(artboard, paint, &path_commands);
     let has_effect_path = effect_path_commands.is_some();
+    let feather_path_commands = effect_path_commands.as_deref().unwrap_or(&path_commands);
     Some(RuntimeShapePaintCommand {
         paint_local: paint.local_id,
         mutator_local: paint.mutator_local,
@@ -5915,7 +5998,11 @@ pub(crate) fn runtime_shape_paint_command(
             container_blend_mode_value,
         ),
         paint_state: runtime_shape_paint_state(artboard, paint, render_opacity),
-        feather_state: runtime_feather_state(paint.feather.as_ref(), &path_commands, shape_world),
+        feather_state: runtime_feather_state(
+            paint.feather.as_ref(),
+            feather_path_commands,
+            shape_world,
+        ),
         path_commands,
         effect_path_commands: effect_path_commands.unwrap_or_default(),
         has_effect_path,

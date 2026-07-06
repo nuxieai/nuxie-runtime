@@ -5,10 +5,10 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 544 across 223 files (strict
-  exact=541/220; tolerant=3/3; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=72, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=28 gated=8 harness=36
+- Exact-status segments (file × sample): 545 across 224 files (strict
+  exact=542/221; tolerant=3/3; structural=0/0)
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=71, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=27 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -24,28 +24,29 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Continue the largest remaining M6 bucket, `feather` (8 total: M6=5,
-   gated=3): `car_widgets_v01.riv`, `echo_show_demo.riv`,
-   `feather_render_test.riv`, `hunter_x_demo.riv`, and `rewards_demo.riv`.
-   The former generic image queue is now split into
-   `rust-runner-unsupported:selected-root-image-order` (2:
-   `bullet_man.riv`, `spotify_kids_demo.riv`),
-   `rust-runner-unsupported:mesh-images` (2:
-   `jellyfish_test.riv`, `tape.riv`), and
-   `rust-runner-unsupported:contour-mesh-metadata` (1: `bad_skin.riv`).
-   Other M6 queues are
+1. Continue one of the tied largest M6 buckets:
    `rust-runner-unsupported:scroll-constraints` (4:
    `component_list_virtualized.riv`, `draw_index_list.riv`,
-   `scroll_snap.riv`, `virtualized_artboard_databound_children.riv`),
-   `data-binding-nested-stateful-view-model` (4), `focus-data` (3),
-   `data-binding-nested-child` (3), `scripted-transition-condition` (2 gated),
-   `n-slice` (2 total: M6=1, gated=1), `rust-runner-unsupported:text` (1),
-   `scripted-path-effects` (1 gated), `scripted-data-context` (1), and
-   `viewmodel-asset-conditions` (1).
-2. Generic `rust-runner-unsupported:text` is reopened only for
-   `superbowl.riv`, whose first Rust diagnostic is the static text subset's
-   sibling `NestedArtboardLayout` limit. The sharper `text-vertical-trim` gate
-   remains empty.
+   `scroll_snap.riv`, `virtualized_artboard_databound_children.riv`) or
+   `rust-runner-unsupported:data-binding-nested-stateful-view-model` (4:
+   `focus_traversal.riv`, `stateful_keyed_trigger.riv`,
+   `stateful_multi_property.riv`, `stateful_nested.riv`). Prefer
+   `scroll-constraints` first because it continues the active M6 layout/runtime
+   slice and already has a partial passive implementation.
+2. Other M6 queues are
+   `rust-runner-unsupported:selected-root-image-order` (3:
+   `bullet_man.riv`, `car_widgets_v01.riv`, `spotify_kids_demo.riv`),
+   `rust-runner-unsupported:data-binding-nested-child` (3:
+   `db_health_tracker.riv`, `hit_test_test.riv`, `nested_hug.riv`),
+   `rust-runner-unsupported:text` (3: `echo_show_demo.riv`,
+   `hunter_x_demo.riv`, `superbowl.riv`), `focus-data` (3),
+   `rust-runner-unsupported:mesh-images` (2:
+   `jellyfish_test.riv`, `tape.riv`), and
+   `rust-runner-unsupported:contour-mesh-metadata` (1: `bad_skin.riv`),
+   `n-slice` (1 M6 plus 1 gated), `feather-inner-multipaint` (1 M6 plus
+   1 gated), `scripted-transition-condition` (2 gated),
+   `nested-feather-paints` (1 gated), `scripted-path-effects` (1 gated),
+   `scripted-data-context` (1), and `viewmodel-asset-conditions` (1).
 3. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
@@ -138,7 +139,9 @@ the only memory the next session has. Update it every commit.
   ordering is exact while drawing only simple vector/text siblings, simple
   clipped/draw-target image fixtures with metadata-only component-list nodes,
   plus an asset-only unresolved nested-library host that decodes its image
-  asset but draws only the root background like C++.
+  asset but draws only the root background like C++, and simple
+  ShapePaint/Feather draws including outer feathers and single inner-feather
+  paint paths.
   Custom handle-source world-space math, data-bound nested host controls beyond
   generated defaults (external/live pause/speed/quantize mutation), remaining
   nested child data-bind targets beyond the current number/color/default bind
@@ -153,9 +156,9 @@ the only memory the next session has. Update it every commit.
   reuse render paths across samples; no N-slice image layout, mesh image
   drawing, selected-root image paint/preallocation ordering,
   contour-mesh image files, remaining text
-  layout/editing, live data-bound nested host controls/artboard swaps, nested
-  layout/leaf, scroll constraints, or layout-backed/virtualized component-list
-  instancing.
+  layout/editing, inner-feather multipaint, nested feather paint trees, live
+  data-bound nested host controls/artboard swaps, nested layout/leaf, scroll
+  constraints, or layout-backed/virtualized component-list instancing.
   Harness-level scripted input replay dispatches
   pointerDown/pointerMove/pointerUp/pointerExit markers into direct rectangle
   state-machine listeners with listener input actions, direct rectangle
@@ -219,9 +222,9 @@ the only memory the next session has. Update it every commit.
   and data-viz crash paths it currently aborts on.
 - `coin.riv` is no longer parked as an M3 constraints file after
   `ScaleConstraint`; it reaches draw and is now `milestone = "gated"` on the
-  explicit `rust-runner-unsupported:feather` renderer diagnostic. `bankcard.riv`
-  is also now gated on feather after clearing its `layout-component-paint`
-  blocker.
+  explicit `rust-runner-unsupported:feather-inner-multipaint` renderer
+  diagnostic. `bankcard.riv` now reaches the text diagnostic after clearing
+  its `layout-component-paint` and feather blockers.
 - `solar-system.riv` stays gated on a Rust import gap: `blendModeValue = 5`
   rejected on Shape object 13.
 
@@ -1455,3 +1458,17 @@ the only memory the next session has. Update it every commit.
   `M6=28 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
   the largest M6 bucket, `feather`, starting with `car_widgets_v01.riv`
   unless focused classification finds a smaller first gate.
+- 2026-07-06: [M6] Promoted `feather_render_test.riv` by porting the runtime
+  ShapePaint/Feather draw slice from C++ `shape_paint.cpp` and `feather.cpp`:
+  render paints now carry feather strength, outer feathers apply world/local
+  offsets in the same order as C++, and inner feathers draw their generated
+  inner path under the original/effect path clip. The broad feather queue is
+  gone; the remaining former feather files now verify as sharper first gates:
+  `selected-root-image-order`, `text`, `feather-inner-multipaint`, or
+  `nested-feather-paints`. Full `make golden-compare` reports `exact=224`,
+  `exact-segments=545`, `diverges=0`, `unsupported-feature=71`,
+  `not-yet=0`, and parked `M6=27 gated=8 harness=36`; `cargo test
+  --workspace` passes. Next target is the tied
+  `rust-runner-unsupported:scroll-constraints` bucket, starting with
+  `component_list_virtualized.riv` unless focused classification finds a
+  smaller first gate.

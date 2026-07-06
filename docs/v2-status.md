@@ -93,6 +93,29 @@ the only memory the next session has. Update it every commit.
    under the new convention, stop and record it as a Known Divergence
    rather than shipping a partial convention.
 
+8. SCOUT RESULT (read-only pre-classification of the 34 recovered harness
+   files; streams/diffs in the session scratchpad — trust but re-verify on
+   promotion): (a) promote-exact, already verified epsilon-identical via
+   golden-compare: audio_script, image_scripting_property_value,
+   multi_listeners, script_dependency_test, script_dependency_test2,
+   script_dependency_test_using_library(+_v2), script_namespace_test,
+   script_string_converter_test, scripted_listener_action.
+   (b) gated-scripting (21): all remaining script*/viewmodel*/gamepad/
+   data_bind_artboard_input/path_effect_with_feathers/group_effect/
+   replace_view_model files — blocked on the Luau VM; note
+   path_effect_with_feathers is ScriptedPathEffect content, NOT M6 feather
+   work. (c) NEW M6 WORK (3): relative_data_bind_path (nested-child data
+   bind into NestedArtboard), scripted_data_converter_bound_input (data
+   bind target Shape.x through static-text subset), databind_viewmodel
+   (DataConverterToString value mismatch feeding a Text run — Rust
+   data_bind_graph ToString produces a different string than C++).
+   PROCESS FIX REQUIRED before flipping the 18 stream-subset scripting
+   files: the Rust runner silently drops ScriptedDrawable draws (known-
+   ignored list in text.rs), so they would land as `diverges` and invite
+   wrong work — add a loud `unsupported: scripting` diagnostic for
+   ScriptedDrawable-bearing files first, then flip them straight to
+   `milestone = "gated"`. Unsupported is never silent.
+
 ## Known Divergences
 
 - None in the active corpus. `make golden-compare` reports `diverges=0`; the

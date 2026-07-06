@@ -1164,18 +1164,22 @@ fn passive_initial_scroll_constraint_supported(
     // C++ scroll is implementation-defined runtime behavior. This runner admits
     // only the passive initial-state slice ported from
     // `src/constraints/scrolling/scroll_constraint.cpp`: no pointer/input
-    // driving, no authored offset, no snap/infinite/virtualization, and a
-    // coherent Taffy layout snapshot for the scroll tree.
+    // driving, no authored offset, no snap/infinite behavior, no real
+    // virtualized instances, and a coherent Taffy layout snapshot for the
+    // scroll tree. Empty virtualized component-list layout providers are
+    // admitted because they create no virtualizable children at sample 0.
     let Some(scroll) = runtime.object(scroll_global as usize) else {
         return false;
     };
+    let virtualize = scroll.bool_property("virtualize").unwrap_or(false);
     if scroll.double_property("scrollOffsetX").unwrap_or(0.0) != 0.0
         || scroll.double_property("scrollOffsetY").unwrap_or(0.0) != 0.0
         || scroll.double_property("scrollPercentX").unwrap_or(0.0) != 0.0
         || scroll.double_property("scrollPercentY").unwrap_or(0.0) != 0.0
         || scroll.double_property("scrollIndex").unwrap_or(0.0) != 0.0
         || scroll.bool_property("snap").unwrap_or(false)
-        || scroll.bool_property("virtualize").unwrap_or(false)
+        || (virtualize
+            && !passive_virtualized_empty_component_lists_supported(artboard, scroll_local))
         || scroll.bool_property("infinite").unwrap_or(false)
     {
         return false;
@@ -1207,6 +1211,44 @@ fn passive_initial_scroll_constraint_supported(
     instance
         .debug_taffy_layout_bounds_report(runtime, artboard)
         .is_some()
+}
+
+fn passive_virtualized_empty_component_lists_supported(
+    artboard: &ArtboardGraph,
+    scroll_local: usize,
+) -> bool {
+    let mut saw_list = false;
+    for registration in artboard
+        .layout_constraint_registrations
+        .iter()
+        .filter(|registration| registration.constraint_local == scroll_local)
+    {
+        if registration.layout_provider_type_name != "ArtboardComponentList" {
+            return false;
+        }
+        let Some(list) = artboard
+            .component_lists
+            .iter()
+            .find(|list| list.local_id == registration.layout_provider_local)
+        else {
+            return false;
+        };
+        if !list.map_rules.is_empty() {
+            return false;
+        }
+        let Some(component) = artboard
+            .components
+            .iter()
+            .find(|component| component.local_id == registration.layout_provider_local)
+        else {
+            return false;
+        };
+        if !component.children.is_empty() {
+            return false;
+        }
+        saw_list = true;
+    }
+    saw_list
 }
 
 fn layout_component_paint_supported(

@@ -478,6 +478,7 @@ impl<'a> StaticTextSlice<'a> {
                         | "KeyFrameBool"
                         | "TransformConstraint"
                         | "FollowPathConstraint"
+                        | "ScrollConstraint"
                         | "LayoutComponent"
                         | "LayoutComponentStyle"
                         | "ForegroundLayoutDrawable"

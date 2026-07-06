@@ -913,10 +913,14 @@ impl ArtboardInstance {
         &self,
         layout_local: usize,
         graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) -> Vec<RuntimePathCommand> {
-        let bounds = self.runtime_layout_component_bounds(layout_local, graph);
+        let bounds =
+            self.runtime_layout_component_bounds_with_bounds(layout_local, graph, layout_bounds);
         let corners = self.runtime_layout_component_corners(layout_local);
-        runtime_layout_rect_path_commands(bounds, corners)
+        let mut commands = runtime_layout_rect_path_commands(bounds, corners);
+        translate_path_commands(&mut commands, (bounds.x, bounds.y));
+        commands
     }
 
     fn runtime_layout_component_clip_enabled(&self, layout_local: usize) -> bool {
@@ -4734,8 +4738,11 @@ fn runtime_draw_command(
         && instance.runtime_layout_component_clip_enabled(layout_local)
     {
         renderer.save();
-        let path_commands =
-            instance.runtime_layout_component_clip_path_commands(layout_local, graph);
+        let path_commands = instance.runtime_layout_component_clip_path_commands(
+            layout_local,
+            graph,
+            layout_bounds,
+        );
         if !path_commands.is_empty() {
             let path = path_cache.layout_clip_path(
                 layout_local,

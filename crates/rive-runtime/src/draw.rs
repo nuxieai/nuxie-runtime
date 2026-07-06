@@ -4244,6 +4244,9 @@ fn runtime_background_shape_paint_command(
     paint: &ShapePaintNode,
     path_commands: Vec<RuntimePathCommand>,
 ) -> Option<RuntimeShapePaintCommand> {
+    if !runtime_shape_paint_is_visible(instance, paint) {
+        return None;
+    }
     let render_opacity = instance
         .component(0)
         .map(|component| component.transform.render_opacity)

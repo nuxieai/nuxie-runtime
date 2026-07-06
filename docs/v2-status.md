@@ -5,8 +5,8 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact segments (file × sample): 509 across 188 exact files
-- Current compare: `make golden-compare` reports diverges=5, unsupported-feature=102, not-yet=0
+- Exact segments (file × sample): 510 across 189 exact files
+- Current compare: `make golden-compare` reports diverges=4, unsupported-feature=102, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=58 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
@@ -23,10 +23,13 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Start `spotify_kids_app_icon.riv`: it is the next known M6 draw-order /
-   background divergence. After cubic path vertex sibling admission, Rust
-   reaches draw but emits a full-artboard background before C++'s centered
-   rounded icon stream.
+1. Start `computed_values_test.riv`: it is the next known M6 text/layout
+   divergence. After admitting `ArtboardComponentList.listSource`, nested child
+   `Shape.computedRootX/Y` binds, and empty component-list provider trees
+   through the #V2-7 Taffy layout path, Rust reaches draw. The layout background
+   now matches C++ at width `510`; the first remaining diff is text path id 3,
+   where C++ renders a longer computed/list value string and Rust emits fewer
+   glyph contours.
 2. Keep `text_follow_path_shape_length.riv` parked behind
    `TextFollowPathModifier`: after admitting source-to-target `Text.width`
    binds with no converter or `DataConverterFormula`, direct Rust now stops on
@@ -48,10 +51,6 @@ the only memory the next session has. Update it every commit.
 
 ## Known Divergences
 
-- `spotify_kids_app_icon.riv`: after cubic path vertex sibling admission, Rust
-  reaches draw but emits a full-artboard background before C++'s centered
-  rounded icon stream. First blocker is draw-order/background parity, not text
-  admission.
 - `computed_values_test.riv`: after admitting `ArtboardComponentList.listSource`,
   nested child `Shape.computedRootX/Y` binds, and empty component-list provider
   trees through the #V2-7 Taffy layout path, Rust reaches draw. The layout
@@ -73,6 +72,7 @@ the only memory the next session has. Update it every commit.
   `[1,0,0,1,245.207031,58.4726562]`; C++ emits a longer cubic-heavy numeric
   text path while Rust emits the shorter fallback `text` glyph payload. Parked
   under `rust-runner-divergence:nested-child-text-converter-context`.
+
 ## Backlog (unsupported features awaiting corpus demand)
 
 - Golden runner view-model mutation scripts; `--view-model-script` is reserved
@@ -85,7 +85,8 @@ the only memory the next session has. Update it every commit.
   the text, so this is an M6 scripting diagnostic rather than text
   draw-suppression work.
 - Rust golden draw path currently supports sorted absolute-time samples,
-  artboard clip/background, selected-artboard origins, solid fills/strokes, and
+  visibility-gated artboard clip/background, selected-artboard origins, solid
+  fills/strokes, and
   `ClippingShape` clip paths, skinned `PointsPath` deformation, plus empty and
   multi-contour TrimPath effects, DashPath stroke effects, and linear/radial
   gradient shader creation, default state-machine frame-0 application for
@@ -1052,3 +1053,11 @@ the only memory the next session has. Update it every commit.
   `exact-segments=509`, `diverges=5`, `unsupported-feature=102`,
   `not-yet=0`, and parked `M6=58 gated=8 harness=36`;
   `cargo test --workspace` passes. Next target is `spotify_kids_app_icon.riv`.
+- 2026-07-06: [M6] Promoted `spotify_kids_app_icon.riv` by routing root
+  artboard background paints through the same C++ `ShapePaint::shouldDraw`
+  visibility gate used by regular shape paints. This suppresses the hidden
+  full-artboard Backboard fill before the centered icon while preserving the
+  visible rounded background draw. `make golden-compare` reports `exact=189`,
+  `exact-segments=510`, `diverges=4`, `unsupported-feature=102`, `not-yet=0`,
+  and parked `M6=58 gated=8 harness=36`; `cargo test --workspace` passes. Next
+  target is `computed_values_test.riv`.

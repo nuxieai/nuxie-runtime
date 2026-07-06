@@ -25,17 +25,17 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. All remaining M6 diagnostics are one-file queues. Pick the freshest
-   adjacency first: `not-yet:gradient-shader-order` (`hunter_x_demo.riv`),
-   paired with `selected-root-gradient-shader-order` (`bullet_man.riv`) if the
-   selected-root paint/shader ordering fix naturally covers both. This is the
-   nearest remaining ordering divergence after the image predecode and
-   live-stroke paint slices.
+   adjacency first: `not-yet:gradient-opacity-propagation`
+   (`hunter_x_demo.riv`). The selected-root shader-order adjacency is closed:
+   `bullet_man.riv` now reaches the existing
+   `selected-root-skinned-clip-path` gate.
 2. Other parked one-file M6 queues are `scripted-data-context`,
    `focus-data` (`focus_traversal.riv`), `layout-component-paint`
    (`text_input.riv`), `viewmodel-asset-conditions`,
    `text-joystick-data-bind` (`echo_show_demo.riv`),
    `nested-artboard-layout` (`superbowl.riv`), and
-   `selected-root-skinned-clip-path` (`spotify_kids_demo.riv`). The former
+   `selected-root-skinned-clip-path` (`bullet_man.riv`,
+   `spotify_kids_demo.riv`). The former
    `data-binding-nested-child` queue is five one-file diagnostics:
    `nested-trim-path-data-bind` (`db_health_tracker.riv`),
    `nested-artboard-root-transform` (`nested_hug.riv`),
@@ -121,8 +121,9 @@ the only memory the next session has. Update it every commit.
   remaining M6 work is parked behind explicit unsupported-feature diagnostics
   or documented `not-yet` entries. `ai_assitant.riv` imports and draws but has
   a nested-feather gradient-space exact-parity gap. `hunter_x_demo.riv` now
-  runs after scale text modifiers, but Rust and C++ allocate gradients/shaders
-  in different selected-root order.
+  matches C++ selected-root gradient shader allocation order, but its focused
+  stream first differs at child gradient stop alpha values, parked as
+  `not-yet:gradient-opacity-propagation`.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -354,6 +355,19 @@ the only memory the next session has. Update it every commit.
   `exact-segments=559`, `diverges=0`, `unsupported-feature=55`,
   `not-yet=2`, and parked `M6=14 gated=5 harness=36`; next target is
   `hunter_x_demo.riv` (`not-yet:gradient-shader-order`).
+- 2026-07-06: [M6] Closed the selected-root gradient shader-order adjacency
+  by deferring selected-root `LayoutComponent` gradient shader preparation
+  until after nested artboard paint preparation while preserving child-artboard
+  ordering. `hunter_x_demo.riv` now matches C++ selected-root shader
+  allocation order and is parked at `not-yet:gradient-opacity-propagation`
+  after the focused stream first differs at child gradient stop alpha values.
+  The stale `selected-root-gradient-shader-order` runner guard was removed;
+  `bullet_man.riv` now verifies as
+  `rust-runner-unsupported:selected-root-skinned-clip-path`. Full
+  `make golden-compare` reports `exact=238`, `exact-segments=559`,
+  `diverges=0`, `unsupported-feature=55`, `not-yet=2`, and parked
+  `M6=14 gated=5 harness=36`; `cargo test --workspace` passes. Next target is
+  `hunter_x_demo.riv` (`not-yet:gradient-opacity-propagation`).
 - 2026-07-02: `rive-runtime` owns static draw emission through
   `rive-render-api`; `rust-golden-runner` now only orchestrates import,
   artboard selection, stream markers, and recording output.

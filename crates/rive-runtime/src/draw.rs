@@ -32,6 +32,23 @@ use crate::text::{
 };
 use crate::{ArtboardInstance, Mat2D};
 
+#[derive(Clone, Copy)]
+enum RuntimeGradientPaintFilter {
+    All,
+    ExcludeLayoutComponents,
+    OnlyLayoutComponents,
+}
+
+impl RuntimeGradientPaintFilter {
+    fn includes_container(self, container: &ShapePaintContainerNode) -> bool {
+        match self {
+            Self::All => true,
+            Self::ExcludeLayoutComponents => container.type_name != "LayoutComponent",
+            Self::OnlyLayoutComponents => container.type_name == "LayoutComponent",
+        }
+    }
+}
+
 impl ArtboardInstance {
     pub fn draw_commands(&self, graph: &ArtboardGraph) -> Vec<RuntimeDrawCommand> {
         let layout_bounds = self.runtime_taffy_layout_bounds(graph, None);
@@ -187,9 +204,31 @@ impl ArtboardInstance {
         paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
         render_cache: &mut RuntimeRenderPathCache,
     ) -> Result<()> {
+        self.prepare_static_artboard_paints_with_filter(
+            runtime,
+            graph,
+            factory,
+            paint_by_global,
+            render_cache,
+            RuntimeGradientPaintFilter::All,
+        )
+    }
+
+    fn prepare_static_artboard_paints_with_filter(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        factory: &mut dyn RenderFactory,
+        paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
+        render_cache: &mut RuntimeRenderPathCache,
+        filter: RuntimeGradientPaintFilter,
+    ) -> Result<()> {
         let mut paints_by_mutator =
             BTreeMap::<usize, Vec<(&ShapePaintContainerNode, &ShapePaintNode)>>::new();
         for container in &graph.shape_paint_containers {
+            if !filter.includes_container(container) {
+                continue;
+            }
             for paint in &container.paints {
                 if !matches!(
                     paint.paint_state,
@@ -273,6 +312,7 @@ impl ArtboardInstance {
             &mut paint_cache.paints,
             Some(&mut paint_cache.nested_artboards),
             render_cache,
+            true,
         )
     }
 
@@ -285,17 +325,30 @@ impl ArtboardInstance {
         paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
         mut nested_paint_caches: Option<&mut BTreeMap<u32, RuntimeRenderPaintCache>>,
         render_cache: &mut RuntimeRenderPathCache,
+        defer_root_layout_gradients: bool,
     ) -> Result<()> {
-        self.prepare_static_artboard_paints(
+        let layout_bounds = self.runtime_taffy_layout_bounds(graph, Some(runtime));
+        let commands = self.draw_commands_with_layout_bounds(graph, layout_bounds.as_ref());
+        let defer_layout_gradients = defer_root_layout_gradients
+            && commands
+                .iter()
+                .any(|command| sorted_drawable_is_nested_artboard(command.type_name));
+        let initial_filter = if defer_layout_gradients {
+            RuntimeGradientPaintFilter::ExcludeLayoutComponents
+        } else {
+            RuntimeGradientPaintFilter::All
+        };
+
+        self.prepare_static_artboard_paints_with_filter(
             runtime,
             graph,
             factory,
             paint_by_global,
             render_cache,
+            initial_filter,
         )?;
 
-        let layout_bounds = self.runtime_taffy_layout_bounds(graph, Some(runtime));
-        for command in self.draw_commands_with_layout_bounds(graph, layout_bounds.as_ref()) {
+        for command in commands {
             if !sorted_drawable_is_nested_artboard(command.type_name) {
                 continue;
             }
@@ -354,6 +407,7 @@ impl ArtboardInstance {
                         child_paints,
                         child_nested_paints,
                         child_cache,
+                        false,
                     )?;
                 } else {
                     child.prepare_static_artboard_tree_paints_internal(
@@ -364,6 +418,7 @@ impl ArtboardInstance {
                         paint_by_global,
                         None,
                         child_cache,
+                        false,
                     )?;
                 }
                 continue;
@@ -393,6 +448,7 @@ impl ArtboardInstance {
                     child_paints,
                     child_nested_paints,
                     child_cache,
+                    false,
                 )?;
             } else {
                 child.prepare_static_artboard_tree_paints_internal(
@@ -403,8 +459,20 @@ impl ArtboardInstance {
                     paint_by_global,
                     None,
                     child_cache,
+                    false,
                 )?;
             }
+        }
+
+        if defer_layout_gradients {
+            self.prepare_static_artboard_paints_with_filter(
+                runtime,
+                graph,
+                factory,
+                paint_by_global,
+                render_cache,
+                RuntimeGradientPaintFilter::OnlyLayoutComponents,
+            )?;
         }
 
         Ok(())
@@ -5768,6 +5836,7 @@ fn runtime_draw_nested_artboard(
                 &mut child_paint_cache.paints,
                 Some(&mut child_paint_cache.nested_artboards),
                 child_cache,
+                false,
             )?;
             child.draw_prepared_static_artboard_internal_with_path_cache(
                 runtime,
@@ -5791,6 +5860,7 @@ fn runtime_draw_nested_artboard(
                 paint_by_global,
                 None,
                 child_cache,
+                false,
             )?;
             child.draw_prepared_static_artboard_internal_with_path_cache(
                 runtime,
@@ -5829,6 +5899,7 @@ fn runtime_draw_nested_artboard(
             &mut child_paint_cache.paints,
             Some(&mut child_paint_cache.nested_artboards),
             child_cache,
+            false,
         )?;
         child.draw_prepared_static_artboard_internal_with_path_cache(
             runtime,
@@ -5852,6 +5923,7 @@ fn runtime_draw_nested_artboard(
             paint_by_global,
             None,
             child_cache,
+            false,
         )?;
         child.draw_prepared_static_artboard_internal_with_path_cache(
             runtime,

@@ -883,14 +883,6 @@ fn ensure_static_draw_supported_for_artboard(
     }
 
     if let Some(global_id) =
-        unsupported_selected_root_gradient_shader_order_global(graph, artboard, !is_nested_child)
-    {
-        bail!(
-            "unsupported: selected-root-gradient-shader-order in Rust golden runner (global {global_id})"
-        );
-    }
-
-    if let Some(global_id) =
         unsupported_selected_root_skinned_clip_path_global(graph, artboard, !is_nested_child)
     {
         bail!(
@@ -2069,24 +2061,6 @@ fn selected_root_external_image_global(
     }
 
     first_image_or_asset_global(graph, artboard)
-}
-
-fn unsupported_selected_root_gradient_shader_order_global(
-    graph: &GraphFile,
-    artboard: &ArtboardGraph,
-    apply_selected_root_fence: bool,
-) -> Option<u32> {
-    let image_global =
-        selected_root_external_image_global(graph, artboard, apply_selected_root_fence)?;
-    let has_radial_gradient = artboard
-        .local_objects
-        .iter()
-        .any(|object| object.type_name == Some("RadialGradient"));
-    let has_skin = artboard
-        .local_objects
-        .iter()
-        .any(|object| object.type_name == Some("Skin"));
-    (has_radial_gradient && has_skin).then_some(image_global)
 }
 
 fn unsupported_selected_root_skinned_clip_path_global(

@@ -27,10 +27,10 @@ the only memory the next session has. Update it every commit.
 1. Continue the M6 image bucket with `image_fit_alignment.riv`, now narrowed
    to `rust-runner-unsupported:asset-image-layout` after asset-image
    view-model reset/draw suppression made `viewmodel_image_reset.riv` exact.
-   The remaining focused diff is image decode ordering plus LayoutComponent Y
-   placement (`272.5` in C++ vs `539.5` in Rust). After that, reopen
-   `image_fit_alignment_2.riv` for the same fit/alignment family plus
-   `NSlicer`/axis layout behavior.
+   The remaining focused diff is dimension-only image decode ordering plus
+   LayoutComponent Y placement (`272.5` in C++ vs `539.5` in Rust). After
+   that, reopen `image_fit_alignment_2.riv` for the same fit/alignment family
+   plus `NSlicer`/axis layout behavior.
 2. Generic `rust-runner-unsupported:text` and the sharper
    `text-vertical-trim` gate are empty in the current corpus. Do not reopen
    text unless a newly added corpus entry exposes a first text diagnostic.
@@ -275,6 +275,12 @@ the only memory the next session has. Update it every commit.
   above once Rust image support lands). Do not pin Taffy against Yoga
   behavior-by-behavior. Taffy CSS Grid is a post-M7 enhancement idea, not port
   scope.
+- 2026-07-06: #V2-7 image verifier first slice: C++ and Rust recording
+  factories now parse PNG/JPEG/WebP dimensions from encoded headers, emit
+  `decodeImage id=... width=... height=...`, and return those dimensions
+  through `RecordingRenderImage`. Payload hashes are no longer in golden
+  streams; tolerant pixel sampling remains before lossy decoder fixtures can
+  rely on image-specific tolerant verification.
 - 2026-07-03: Metric is now segments-weighted: `golden-compare` reports
   `exact-segments` (sum of samples across exact entries) alongside the file
   count, so M2 sample widening registers as metric movement. Gated corpus
@@ -1183,3 +1189,13 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=92`, `not-yet=0`, and parked
   `M6=48 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
   `image_fit_alignment.riv`, then `image_fit_alignment_2.riv`.
+- 2026-07-06: [M6] Closed the #V2-7 payload-hash image verifier gap by
+  switching both recording factories from encoded `size/hash` lines to
+  decoded-header `width/height` lines for PNG/JPEG/WebP assets, and by
+  returning those dimensions through `RecordingRenderImage`. Focused
+  `image_fit_alignment_3.riv` and `walle.riv` streams remain exact with real
+  dimensions. Full `make golden-compare` remains `exact=203`,
+  `exact-segments=524`, `diverges=0`, `unsupported-feature=92`, `not-yet=0`,
+  and parked `M6=48 gated=8 harness=36`; `cargo test --workspace` passes.
+  Next target remains `image_fit_alignment.riv`, then
+  `image_fit_alignment_2.riv`.

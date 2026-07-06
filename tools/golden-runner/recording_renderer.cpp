@@ -93,15 +93,184 @@ std::string samplerToString(rive::ImageSampler sampler)
     return out.str();
 }
 
-uint64_t fnv1a(rive::Span<const uint8_t> bytes)
+uint32_t readBigEndian32(rive::Span<const uint8_t> bytes, size_t offset)
 {
-    uint64_t hash = 1469598103934665603ull;
-    for (uint8_t byte : bytes)
+    return (static_cast<uint32_t>(bytes[offset]) << 24) |
+           (static_cast<uint32_t>(bytes[offset + 1]) << 16) |
+           (static_cast<uint32_t>(bytes[offset + 2]) << 8) |
+           static_cast<uint32_t>(bytes[offset + 3]);
+}
+
+uint16_t readBigEndian16(rive::Span<const uint8_t> bytes, size_t offset)
+{
+    return static_cast<uint16_t>((static_cast<uint16_t>(bytes[offset]) << 8) |
+                                 static_cast<uint16_t>(bytes[offset + 1]));
+}
+
+uint32_t readLittleEndian24(rive::Span<const uint8_t> bytes, size_t offset)
+{
+    return static_cast<uint32_t>(bytes[offset]) |
+           (static_cast<uint32_t>(bytes[offset + 1]) << 8) |
+           (static_cast<uint32_t>(bytes[offset + 2]) << 16);
+}
+
+uint16_t readLittleEndian16(rive::Span<const uint8_t> bytes, size_t offset)
+{
+    return static_cast<uint16_t>(static_cast<uint16_t>(bytes[offset]) |
+                                 (static_cast<uint16_t>(bytes[offset + 1])
+                                  << 8));
+}
+
+bool bytesEqual(rive::Span<const uint8_t> bytes,
+                size_t offset,
+                const char* literal,
+                size_t length)
+{
+    return bytes.size() >= offset + length &&
+           std::memcmp(bytes.data() + offset, literal, length) == 0;
+}
+
+std::pair<uint32_t, uint32_t> pngDimensions(rive::Span<const uint8_t> bytes)
+{
+    static constexpr uint8_t pngSignature[] = {
+        0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'};
+    if (bytes.size() < 24 ||
+        std::memcmp(bytes.data(), pngSignature, sizeof(pngSignature)) != 0 ||
+        !bytesEqual(bytes, 12, "IHDR", 4))
     {
-        hash ^= byte;
-        hash *= 1099511628211ull;
+        return {0, 0};
     }
-    return hash;
+    return {readBigEndian32(bytes, 16), readBigEndian32(bytes, 20)};
+}
+
+bool jpegStartOfFrame(uint8_t marker)
+{
+    return (marker >= 0xc0 && marker <= 0xc3) ||
+           (marker >= 0xc5 && marker <= 0xc7) ||
+           (marker >= 0xc9 && marker <= 0xcb) ||
+           (marker >= 0xcd && marker <= 0xcf);
+}
+
+std::pair<uint32_t, uint32_t> jpegDimensions(rive::Span<const uint8_t> bytes)
+{
+    if (bytes.size() < 4 || bytes[0] != 0xff || bytes[1] != 0xd8)
+    {
+        return {0, 0};
+    }
+
+    size_t offset = 2;
+    while (offset + 4 <= bytes.size())
+    {
+        while (offset < bytes.size() && bytes[offset] != 0xff)
+        {
+            offset++;
+        }
+        while (offset < bytes.size() && bytes[offset] == 0xff)
+        {
+            offset++;
+        }
+        if (offset >= bytes.size())
+        {
+            break;
+        }
+
+        uint8_t marker = bytes[offset++];
+        if (marker == 0xd9 || marker == 0xda)
+        {
+            break;
+        }
+        if (marker >= 0xd0 && marker <= 0xd7)
+        {
+            continue;
+        }
+        if (offset + 2 > bytes.size())
+        {
+            break;
+        }
+
+        uint16_t segmentLength = readBigEndian16(bytes, offset);
+        if (segmentLength < 2 || offset + segmentLength > bytes.size())
+        {
+            break;
+        }
+        if (jpegStartOfFrame(marker) && segmentLength >= 7)
+        {
+            uint32_t height = readBigEndian16(bytes, offset + 3);
+            uint32_t width = readBigEndian16(bytes, offset + 5);
+            return {width, height};
+        }
+        offset += segmentLength;
+    }
+
+    return {0, 0};
+}
+
+std::pair<uint32_t, uint32_t> webpDimensions(rive::Span<const uint8_t> bytes)
+{
+    if (bytes.size() < 20 || !bytesEqual(bytes, 0, "RIFF", 4) ||
+        !bytesEqual(bytes, 8, "WEBP", 4))
+    {
+        return {0, 0};
+    }
+
+    size_t offset = 12;
+    while (offset + 8 <= bytes.size())
+    {
+        const size_t chunkData = offset + 8;
+        uint32_t chunkSize = static_cast<uint32_t>(bytes[offset + 4]) |
+                             (static_cast<uint32_t>(bytes[offset + 5]) << 8) |
+                             (static_cast<uint32_t>(bytes[offset + 6]) << 16) |
+                             (static_cast<uint32_t>(bytes[offset + 7]) << 24);
+        if (chunkData + chunkSize > bytes.size())
+        {
+            break;
+        }
+
+        if (bytesEqual(bytes, offset, "VP8X", 4) && chunkSize >= 10)
+        {
+            return {readLittleEndian24(bytes, chunkData + 4) + 1,
+                    readLittleEndian24(bytes, chunkData + 7) + 1};
+        }
+        if (bytesEqual(bytes, offset, "VP8L", 4) && chunkSize >= 5 &&
+            bytes[chunkData] == 0x2f)
+        {
+            uint32_t width = 1 + static_cast<uint32_t>(
+                                     bytes[chunkData + 1] |
+                                     ((bytes[chunkData + 2] & 0x3f) << 8));
+            uint32_t height =
+                1 + static_cast<uint32_t>((bytes[chunkData + 2] >> 6) |
+                                          (bytes[chunkData + 3] << 2) |
+                                          ((bytes[chunkData + 4] & 0x0f)
+                                           << 10));
+            return {width, height};
+        }
+        if (bytesEqual(bytes, offset, "VP8 ", 4) && chunkSize >= 10 &&
+            bytesEqual(bytes, chunkData + 3, "\x9d\x01\x2a", 3))
+        {
+            return {readLittleEndian16(bytes, chunkData + 6) & 0x3fff,
+                    readLittleEndian16(bytes, chunkData + 8) & 0x3fff};
+        }
+
+        offset = chunkData + chunkSize + (chunkSize & 1);
+    }
+
+    return {0, 0};
+}
+
+std::pair<uint32_t, uint32_t> encodedImageDimensions(
+    rive::Span<const uint8_t> bytes)
+{
+    auto dimensions = pngDimensions(bytes);
+    if (dimensions.first != 0 || dimensions.second != 0)
+    {
+        return dimensions;
+    }
+    dimensions = jpegDimensions(bytes);
+    if (dimensions.first != 0 || dimensions.second != 0)
+    {
+        return dimensions;
+    }
+    return webpDimensions(bytes);
 }
 
 std::string hexBytes(const std::vector<uint8_t>& bytes)
@@ -551,13 +720,14 @@ rive::rcp<rive::RenderImage> RecordingFactory::decodeImage(
     rive::Span<const uint8_t> data)
 {
     auto id = m_nextImageId++;
+    auto dimensions = encodedImageDimensions(data);
     std::ostringstream out;
-    out << "decodeImage id=" << id << " size=" << data.size()
-        << " hash=" << fnv1a(data);
+    out << "decodeImage id=" << id << " width=" << dimensions.first
+        << " height=" << dimensions.second;
     m_stream.line(out.str());
-    // TODO(golden): link rive_decoders into the full harness and record real
-    // decoded image dimensions.
-    return rive::make_rcp<RecordingRenderImage>(id, 0, 0);
+    return rive::make_rcp<RecordingRenderImage>(id,
+                                                dimensions.first,
+                                                dimensions.second);
 }
 
 std::unique_ptr<rive::Renderer> RecordingFactory::makeRenderer()

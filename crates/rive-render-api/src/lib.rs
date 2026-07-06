@@ -585,16 +585,11 @@ impl Factory for RecordingFactory {
     fn decode_image(&mut self, data: &[u8]) -> Box<dyn RenderImage> {
         let id = self.next_image_id;
         self.next_image_id += 1;
-        self.stream.borrow_mut().line(format!(
-            "decodeImage id={id} size={} hash={}",
-            data.len(),
-            fnv1a(data)
-        ));
-        Box::new(RecordingRenderImage {
-            id,
-            width: 0,
-            height: 0,
-        })
+        let (width, height) = encoded_image_dimensions(data);
+        self.stream
+            .borrow_mut()
+            .line(format!("decodeImage id={id} width={width} height={height}"));
+        Box::new(RecordingRenderImage { id, width, height })
     }
 }
 
@@ -1009,13 +1004,137 @@ fn hex_bytes(bytes: &[u8]) -> String {
     out
 }
 
-fn fnv1a(bytes: &[u8]) -> u64 {
-    let mut hash = 1_469_598_103_934_665_603_u64;
-    for byte in bytes {
-        hash ^= u64::from(*byte);
-        hash = hash.wrapping_mul(1_099_511_628_211);
+fn encoded_image_dimensions(bytes: &[u8]) -> (u32, u32) {
+    png_dimensions(bytes)
+        .or_else(|| jpeg_dimensions(bytes))
+        .or_else(|| webp_dimensions(bytes))
+        .unwrap_or((0, 0))
+}
+
+fn png_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
+    const PNG_SIGNATURE: &[u8; 8] = b"\x89PNG\r\n\x1a\n";
+    if bytes.len() < 24 || &bytes[..8] != PNG_SIGNATURE || &bytes[12..16] != b"IHDR" {
+        return None;
     }
-    hash
+    Some((read_be_u32(bytes, 16)?, read_be_u32(bytes, 20)?))
+}
+
+fn jpeg_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
+    if bytes.len() < 4 || bytes[0] != 0xff || bytes[1] != 0xd8 {
+        return None;
+    }
+
+    let mut offset = 2usize;
+    while offset + 4 <= bytes.len() {
+        while offset < bytes.len() && bytes[offset] != 0xff {
+            offset += 1;
+        }
+        while offset < bytes.len() && bytes[offset] == 0xff {
+            offset += 1;
+        }
+        let marker = *bytes.get(offset)?;
+        offset += 1;
+        if marker == 0xd9 || marker == 0xda {
+            break;
+        }
+        if (0xd0..=0xd7).contains(&marker) {
+            continue;
+        }
+
+        let segment_length = usize::from(read_be_u16(bytes, offset)?);
+        if segment_length < 2 || offset + segment_length > bytes.len() {
+            break;
+        }
+        if jpeg_start_of_frame(marker) && segment_length >= 7 {
+            let height = u32::from(read_be_u16(bytes, offset + 3)?);
+            let width = u32::from(read_be_u16(bytes, offset + 5)?);
+            return Some((width, height));
+        }
+        offset += segment_length;
+    }
+
+    None
+}
+
+fn jpeg_start_of_frame(marker: u8) -> bool {
+    (0xc0..=0xc3).contains(&marker)
+        || (0xc5..=0xc7).contains(&marker)
+        || (0xc9..=0xcb).contains(&marker)
+        || (0xcd..=0xcf).contains(&marker)
+}
+
+fn webp_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
+    if bytes.len() < 20 || &bytes[..4] != b"RIFF" || &bytes[8..12] != b"WEBP" {
+        return None;
+    }
+
+    let mut offset = 12usize;
+    while offset + 8 <= bytes.len() {
+        let chunk_data = offset + 8;
+        let chunk_size = usize::try_from(read_le_u32(bytes, offset + 4)?).ok()?;
+        if chunk_data + chunk_size > bytes.len() {
+            break;
+        }
+
+        if &bytes[offset..offset + 4] == b"VP8X" && chunk_size >= 10 {
+            return Some((
+                read_le_u24(bytes, chunk_data + 4)? + 1,
+                read_le_u24(bytes, chunk_data + 7)? + 1,
+            ));
+        }
+        if &bytes[offset..offset + 4] == b"VP8L" && chunk_size >= 5 && bytes[chunk_data] == 0x2f {
+            let width = 1
+                + u32::from(bytes[chunk_data + 1])
+                + (u32::from(bytes[chunk_data + 2] & 0x3f) << 8);
+            let height = 1
+                + u32::from(bytes[chunk_data + 2] >> 6)
+                + (u32::from(bytes[chunk_data + 3]) << 2)
+                + (u32::from(bytes[chunk_data + 4] & 0x0f) << 10);
+            return Some((width, height));
+        }
+        if &bytes[offset..offset + 4] == b"VP8 "
+            && chunk_size >= 10
+            && &bytes[chunk_data + 3..chunk_data + 6] == b"\x9d\x01\x2a"
+        {
+            return Some((
+                u32::from(read_le_u16(bytes, chunk_data + 6)? & 0x3fff),
+                u32::from(read_le_u16(bytes, chunk_data + 8)? & 0x3fff),
+            ));
+        }
+
+        offset = chunk_data + chunk_size + (chunk_size & 1);
+    }
+
+    None
+}
+
+fn read_be_u32(bytes: &[u8], offset: usize) -> Option<u32> {
+    Some(u32::from_be_bytes(
+        bytes.get(offset..offset + 4)?.try_into().ok()?,
+    ))
+}
+
+fn read_be_u16(bytes: &[u8], offset: usize) -> Option<u16> {
+    Some(u16::from_be_bytes(
+        bytes.get(offset..offset + 2)?.try_into().ok()?,
+    ))
+}
+
+fn read_le_u32(bytes: &[u8], offset: usize) -> Option<u32> {
+    Some(u32::from_le_bytes(
+        bytes.get(offset..offset + 4)?.try_into().ok()?,
+    ))
+}
+
+fn read_le_u24(bytes: &[u8], offset: usize) -> Option<u32> {
+    let bytes = bytes.get(offset..offset + 3)?;
+    Some(u32::from(bytes[0]) | (u32::from(bytes[1]) << 8) | (u32::from(bytes[2]) << 16))
+}
+
+fn read_le_u16(bytes: &[u8], offset: usize) -> Option<u16> {
+    Some(u16::from_le_bytes(
+        bytes.get(offset..offset + 2)?.try_into().ok()?,
+    ))
 }
 
 unsafe extern "C" {
@@ -1133,7 +1252,7 @@ mod tests {
             "makeLinearGradient id=1 start=(0,0.5) end=(10,20) stops=[{color=0xff000000,stop=0},{color=0xffffffff,stop=1}]\n"
         ));
         assert!(stream.contains("makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}\n"));
-        assert!(stream.contains("decodeImage id=1 size=3 hash=11570874782335668893\n"));
+        assert!(stream.contains("decodeImage id=1 width=0 height=0\n"));
         assert!(stream.contains("makeRenderBuffer id=1 type=1 flags=1 size=4\n"));
         assert!(stream.contains("bufferData id=1 type=1 size=4 data=01020304\n"));
         assert!(stream.contains(

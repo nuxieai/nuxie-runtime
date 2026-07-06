@@ -3167,11 +3167,10 @@ impl TaffyRuntimeLayoutEngine {
         // Ported from C++ `src/nested_artboard_layout.cpp` and
         // `include/rive/layout/style_overrider.hpp`: the layout-backed host
         // contributes the referenced artboard instance's layout node to its
-        // parent. This first corpus slice supports the fill/fill override form
-        // used by `artboard_width_test.riv`.
+        // parent.
         let width_scale = self.nested_artboard_layout_axis_scale(instance, local, true);
         let height_scale = self.nested_artboard_layout_axis_scale(instance, local, false);
-        if !matches!(width_scale, 0 | 1) || !matches!(height_scale, 0 | 1) {
+        if !matches!(width_scale, 0 | 1 | 2) || !matches!(height_scale, 0 | 1 | 2) {
             return None;
         }
 
@@ -3195,7 +3194,7 @@ impl TaffyRuntimeLayoutEngine {
             width_scale
         };
         match main_scale {
-            0 => {
+            0 | 2 => {
                 style.flex_grow = 0.0;
                 style.flex_shrink = 0.0;
                 style.flex_basis = Dimension::auto();
@@ -3209,7 +3208,7 @@ impl TaffyRuntimeLayoutEngine {
         }
         style.align_self = match cross_scale {
             1 => Some(AlignSelf::STRETCH),
-            0 => None,
+            0 | 2 => None,
             _ => return None,
         };
         Some(style)
@@ -3237,6 +3236,9 @@ impl TaffyRuntimeLayoutEngine {
                 }
             }
             1 => Some(Dimension::auto()),
+            2 => self
+                .nested_artboard_layout_axis_intrinsic_dimension(instance, local, width_axis)
+                .or_else(|| Some(Dimension::auto())),
             _ => None,
         }
     }

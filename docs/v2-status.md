@@ -25,10 +25,11 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the largest remaining M6 bucket,
-   `rust-runner-unsupported:nested-artboard-layout` (14 entries), starting
-   with `db_health_tracker.riv` unless focused classification finds a smaller
-   nested-layout slice. `rust-runner-unsupported:images` is now 10 entries;
-   true `NSlicedNode`/mesh image work remains gated. The single
+   `rust-runner-unsupported:nested-artboard-layout` (13 entries), starting
+   with `focus_collapsing.riv` unless focused classification finds a smaller
+   nested-layout slice. `rust-runner-unsupported:images` and
+   `rust-runner-unsupported:scroll-constraints` are now 10 entries each; true
+   `NSlicedNode`/mesh image work remains gated. The single
    `rust-runner-unsupported:viewmodel-asset-conditions` entry is
    `viewmodel_based_condition.riv`.
 2. Generic `rust-runner-unsupported:text` and the sharper
@@ -1312,4 +1313,17 @@ the only memory the next session has. Update it every commit.
   --workspace` passes. Next target is the largest M6 bucket,
   `rust-runner-unsupported:nested-artboard-layout`, starting with
   `db_health_tracker.riv` unless focused classification finds a smaller
+  nested-layout slice.
+- 2026-07-06: [M6] Reclassified `db_health_tracker.riv` from
+  `nested-artboard-layout` to `scroll-constraints` by porting the
+  `NestedArtboardLayout` scale-type 2 hug/intrinsic sizing path from C++
+  `StyleOverrider` into the Taffy adapter. The file now computes a coherent
+  whole-artboard layout snapshot for its six layout-backed nested hosts; the
+  first remaining Rust runner gate is the authored `ScrollConstraint` global
+  210. Full `make golden-compare` remains `exact=215`,
+  `exact-segments=536`, `diverges=0`, `unsupported-feature=80`,
+  `not-yet=0`, and parked `M6=36 gated=8 harness=36`; `cargo test
+  --workspace` passes. Next target is still the largest M6 bucket,
+  `rust-runner-unsupported:nested-artboard-layout`, starting with
+  `focus_collapsing.riv` unless focused classification finds a smaller
   nested-layout slice.

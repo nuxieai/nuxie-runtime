@@ -877,6 +877,10 @@ impl ArtboardInstance {
                     render_opacity,
                     shape_world,
                     path_commands,
+                    matches!(
+                        container.type_name,
+                        "LayoutComponent" | "ForegroundLayoutDrawable"
+                    ),
                 )?;
                 if drawable.kind == DrawableOrderKind::LayoutProxy
                     || container.type_name == "ForegroundLayoutDrawable"
@@ -5975,8 +5979,13 @@ pub(crate) fn runtime_shape_paint_command(
     render_opacity: f32,
     shape_world: Mat2D,
     path_commands: Vec<RuntimePathCommand>,
+    suppress_authored_transparent: bool,
 ) -> Option<RuntimeShapePaintCommand> {
     if !runtime_shape_paint_is_visible(artboard, paint) {
+        return None;
+    }
+    let paint_state = runtime_shape_paint_state(artboard, paint, render_opacity);
+    if suppress_authored_transparent && !runtime_shape_paint_state_is_visible(&paint_state) {
         return None;
     }
     let effect_path_commands = runtime_effect_path_commands(artboard, paint, &path_commands);
@@ -5992,7 +6001,7 @@ pub(crate) fn runtime_shape_paint_command(
             paint.blend_mode_value,
             container_blend_mode_value,
         ),
-        paint_state: runtime_shape_paint_state(artboard, paint, render_opacity),
+        paint_state,
         feather_state: runtime_feather_state(
             paint.feather.as_ref(),
             feather_path_commands,

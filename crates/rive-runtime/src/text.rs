@@ -132,6 +132,7 @@ pub(crate) fn runtime_text_shape_paint_commands(
                     render_opacity * path_bucket.opacity,
                     shape_world,
                     path_commands,
+                    false,
                 )?;
                 command.shape_world_override = Some(shape_world);
                 if command.paint_type == RuntimeShapePaintKind::Fill {

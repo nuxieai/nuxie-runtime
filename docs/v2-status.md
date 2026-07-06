@@ -5,10 +5,10 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 549 across 228 files (strict
-  exact=546/225; tolerant=3/3; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=67, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=23 gated=8 harness=36
+- Exact-status segments (file × sample): 553 across 232 files (strict
+  exact=550/229; tolerant=3/3; structural=0/0)
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=63, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=19 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -24,14 +24,11 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Pick one of the tied largest remaining M6 buckets:
+1. Pick the largest remaining M6 bucket,
    `rust-runner-unsupported:data-binding-nested-child` (4:
    `db_health_tracker.riv`, `nested_hug.riv`, `stateful_multi_property.riv`,
-   `stateful_nested.riv`) or `rust-runner-unsupported:scroll-constraints` (4:
-   `component_list_virtualized.riv`, `draw_index_list.riv`,
-   `hit_test_test.riv`, `virtualized_artboard_databound_children.riv`).
-   If staying in the data-binding lane, start from the stateful Artboard/text
-   transform drift exposed by the focused compare below.
+   `stateful_nested.riv`). Start from the stateful Artboard/text transform
+   drift exposed by the focused compare below.
 2. Other M6 queues are
    `rust-runner-unsupported:selected-root-image-order` (3:
    `bullet_man.riv`, `car_widgets_v01.riv`, `spotify_kids_demo.riv`),
@@ -1512,3 +1509,14 @@ the only memory the next session has. Update it every commit.
   `diverges=0`, `unsupported-feature=67`, `not-yet=0`, and parked
   `M6=23 gated=8 harness=36`. Next target is one of the tied four-file M6
   buckets: data-binding nested child or scroll constraints.
+- 2026-07-06: [M6] Closed the `scroll-constraints` queue by admitting
+  passive, listener-free, zero-offset virtualized/infinite scroll constraints
+  when a Taffy layout snapshot exists, and by suppressing authored-transparent
+  layout proxy paints without suppressing transparent normal hit shapes.
+  Promoted `component_list_virtualized.riv`, `draw_index_list.riv`,
+  `hit_test_test.riv`, and `virtualized_artboard_databound_children.riv`.
+  Full `make golden-compare` reports `exact=232`, `exact-segments=553`,
+  `diverges=0`, `unsupported-feature=63`, `not-yet=0`, and parked
+  `M6=19 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
+  the largest remaining M6 bucket,
+  `rust-runner-unsupported:data-binding-nested-child`.

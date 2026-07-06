@@ -25,13 +25,15 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the largest remaining M6 bucket,
-   `rust-runner-unsupported:nested-artboard-layout` (13 entries), starting
-   with `focus_collapsing.riv` unless focused classification finds a smaller
-   nested-layout slice. `rust-runner-unsupported:images` and
-   `rust-runner-unsupported:scroll-constraints` are now 10 entries each; true
-   `NSlicedNode`/mesh image work remains gated. The single
-   `rust-runner-unsupported:viewmodel-asset-conditions` entry is
-   `viewmodel_based_condition.riv`.
+   `rust-runner-unsupported:scroll-constraints` (12 entries), starting with
+   `component_list_1.riv` unless focused classification finds a smaller scroll
+   slice. `rust-runner-unsupported:images` is 11 entries; true
+   `NSlicedNode`/mesh image work remains gated. The former
+   `nested-artboard-layout` bucket is empty after direct runner classification.
+   Other small M6 queues are `feather` (5),
+   `data-binding-nested-stateful-view-model` (4), `focus-data` (3),
+   `data-binding-nested-child` (2), and
+   `viewmodel-asset-conditions` (1).
 2. Generic `rust-runner-unsupported:text` and the sharper
    `text-vertical-trim` gate are empty in the current corpus. Do not reopen
    text unless a newly added corpus entry exposes a first text diagnostic.
@@ -1327,3 +1329,15 @@ the only memory the next session has. Update it every commit.
   `rust-runner-unsupported:nested-artboard-layout`, starting with
   `focus_collapsing.riv` unless focused classification finds a smaller
   nested-layout slice.
+- 2026-07-06: [M6] Closed the stale
+  `rust-runner-unsupported:nested-artboard-layout` manifest queue by direct
+  `rust-golden-runner` classification of all 13 remaining entries. Each now
+  computes or passes Taffy layout far enough to expose a sharper first gate:
+  `focus-data`, `data-binding-nested-stateful-view-model`,
+  `data-binding-nested-child`, `scroll-constraints`, `feather`, or `images`.
+  Full `make golden-compare` remains `exact=215`, `exact-segments=536`,
+  `diverges=0`, `unsupported-feature=80`, `not-yet=0`, and parked
+  `M6=36 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
+  the largest M6 bucket, `rust-runner-unsupported:scroll-constraints`, starting
+  with `component_list_1.riv` unless focused classification finds a smaller
+  scroll slice.

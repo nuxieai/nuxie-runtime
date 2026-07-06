@@ -1991,9 +1991,6 @@ impl<'a> StaticTextStyle<'a> {
                 ) {
                     bail!("static text subset only supports solid/gradient text fill/stroke");
                 }
-                if paint.feather.is_some() {
-                    bail!("static text subset does not support text paint feather");
-                }
                 if paint
                     .effects
                     .iter()

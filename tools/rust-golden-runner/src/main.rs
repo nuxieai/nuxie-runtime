@@ -333,6 +333,12 @@ fn unsupported_static_text_draw_error(error: anyhow::Error) -> anyhow::Error {
 fn unsupported_static_text_feature(message: &str) -> &'static str {
     if message.contains("verticalTrim") {
         "text-vertical-trim"
+    } else if message.contains("data binding target Joystick.") {
+        "text-joystick-data-bind"
+    } else if message.contains("NestedArtboardLayout") || message.contains("NestedArtboardLeaf") {
+        "nested-artboard-layout"
+    } else if message.contains("sibling Polygon") {
+        "text-polygon-sibling"
     } else {
         "text"
     }

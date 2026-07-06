@@ -25,26 +25,28 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Pick the largest remaining M6 bucket:
-   `rust-runner-unsupported:text` (4: `car_widgets_v01.riv`,
-   `echo_show_demo.riv`, `hunter_x_demo.riv`, `superbowl.riv`). This is now
-   the central M6 queue after the former selected-root image-order bucket was
-   split into sharper diagnostics.
+   `rust-runner-unsupported:feather-inner-multipaint` (3:
+   `car_widgets_v01.riv`, `hunter_x_demo.riv`, `rewards_demo.riv`). The broad
+   `rust-runner-unsupported:text` queue is closed; the remaining text-adjacent
+   blockers are now explicit one-file diagnostics.
 2. Other M6 queues are `rust-runner-unsupported:mesh-images` (2:
    `jellyfish_test.riv`, `tape.riv`), and
    `rust-runner-unsupported:contour-mesh-metadata` (1: `bad_skin.riv`),
-   `n-slice` (1 M6 plus 1 gated), `feather-inner-multipaint` (1 M6 plus
-   1 gated), `scripted-transition-condition` (2 gated),
+   `n-slice` (1 M6 plus 1 gated), `scripted-transition-condition` (2 gated),
    `nested-feather-paints` (1 gated), `scripted-path-effects` (1 gated),
    `scripted-data-context` (1), `focus-data` (1: `focus_traversal.riv`),
    `layout-component-paint` (1: `text_input.riv`),
    `viewmodel-asset-conditions` (1),
+   `text-joystick-data-bind` (1: `echo_show_demo.riv`),
+   `nested-artboard-layout` (1: `superbowl.riv`),
    `selected-root-gradient-shader-order` (1: `bullet_man.riv`), and
    `selected-root-skinned-clip-path` (1: `spotify_kids_demo.riv`). The former
    `data-binding-nested-child` queue is now four one-file diagnostics:
    `nested-trim-path-data-bind` (`db_health_tracker.riv`),
    `nested-artboard-root-transform` (`nested_hug.riv`),
    `nested-layout-clip-data-bind` (`stateful_multi_property.riv`), and
-   `nested-stateful-view-model-property` (`stateful_nested.riv`).
+   `nested-stateful-view-model-property` (`stateful_nested.riv`). Gated
+   one-file diagnostics include `text-polygon-sibling` (`bankcard.riv`).
 3. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
@@ -174,9 +176,9 @@ the only memory the next session has. Update it every commit.
   `TextModifierRange` character, character-excluding-space, word, and static
   line range maps with runId targeting and optional cubic range
   interpolation, including C++-ordered opacity buckets, plus solid fill/stroke
-  `TextStylePaint` drawing with DashPath stroke effects, text under `Shape`
-  parent transforms, fit-font-size wrapping under layout-controlled bounds with
-  C++ zero-font collapsed glyph paths, and
+  `TextStylePaint` drawing with DashPath stroke effects and text paint feather
+  state, text under `Shape` parent transforms, fit-font-size wrapping under
+  layout-controlled bounds with C++ zero-font collapsed glyph paths, and
   source-to-target `TextValueRun.text` / `Text.alignValue` /
   `Text.overflowValue` / `TextStylePaint.fontSize` /
   `LayoutComponent.height` / `SolidColor.colorValue` / `Shape.x/y` through
@@ -192,7 +194,7 @@ the only memory the next session has. Update it every commit.
   nested state-machine hosts and passive sample-0 `FocusData` /
   `KeyboardInput` metadata plus inert `ScriptedDrawable` siblings.
   Shape/scale/origin modifiers,
-  gradient/feather/other text effects, richer layout, broader `Text` property
+  gradient/other text effects, richer layout, broader `Text` property
   data binds, and text input/editing remain M6 text diagnostics.
 - `TransformConstraint` currently covers Text constraint bounds for the
   supported static Text subset plus the default empty
@@ -1554,3 +1556,16 @@ the only memory the next session has. Update it every commit.
   `exact-segments=553`, `diverges=0`, `unsupported-feature=63`, `not-yet=0`,
   and parked `M6=19 gated=8 harness=36`; `cargo test --workspace` passes.
   Next target is the `text` bucket.
+- 2026-07-06: [M6] Closed the broad
+  `rust-runner-unsupported:text` queue by admitting text paint feather state
+  through the existing `ShapePaint` feather path and splitting the five
+  remaining broad text-tagged entries into first blockers.
+  `car_widgets_v01.riv` and `hunter_x_demo.riv` now verify as
+  `rust-runner-unsupported:feather-inner-multipaint`, `echo_show_demo.riv` as
+  `rust-runner-unsupported:text-joystick-data-bind`, `superbowl.riv` as
+  `rust-runner-unsupported:nested-artboard-layout`, and gated `bankcard.riv`
+  as `rust-runner-unsupported:text-polygon-sibling`. Full
+  `make golden-compare` reports `exact=232`, `exact-segments=553`,
+  `diverges=0`, `unsupported-feature=63`, `not-yet=0`, and parked
+  `M6=19 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
+  `rust-runner-unsupported:feather-inner-multipaint`.

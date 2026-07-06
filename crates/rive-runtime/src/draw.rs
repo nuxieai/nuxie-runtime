@@ -4346,7 +4346,10 @@ fn pre_source_image_decode_count(artboards: &[ArtboardGraph], image_asset_count:
         return image_asset_count.min(2);
     }
 
-    1
+    // Ported from C++ `src/importers/file_asset_importer.cpp`: consecutive
+    // embedded file assets resolve as each importer is displaced, while the
+    // final file-asset importer resolves later when the import stack unwinds.
+    image_asset_count.saturating_sub(1)
 }
 
 fn predecode_render_image(
@@ -6010,7 +6013,7 @@ fn runtime_shape_paint_state(
                 end_y,
                 opacity,
                 render_opacity,
-                stops: runtime_gradient_stops(stops, opacity * render_opacity),
+                stops: runtime_gradient_stops(artboard, stops, opacity * render_opacity),
             })
         }
         ShapePaintStateNode::RadialGradient {
@@ -6037,7 +6040,7 @@ fn runtime_shape_paint_state(
                 end_y,
                 opacity,
                 render_opacity,
-                stops: runtime_gradient_stops(stops, opacity * render_opacity),
+                stops: runtime_gradient_stops(artboard, stops, opacity * render_opacity),
             })
         }
     }
@@ -6094,18 +6097,43 @@ fn runtime_gradient_double_property(
 }
 
 fn runtime_gradient_stops(
+    artboard: &ArtboardInstance,
     mut stops: Vec<GradientStopNode>,
     opacity: f32,
 ) -> Vec<RuntimeGradientStop> {
-    stops.sort_by(|left, right| left.position.total_cmp(&right.position));
+    // Ported from C++ `src/shapes/paint/linear_gradient.cpp::applyTo` and
+    // `radial_gradient.cpp`: stops read live object properties after animation.
+    let color_key = property_key_for_name("GradientStop", "colorValue");
+    let position_key = property_key_for_name("GradientStop", "position");
+    stops.sort_by(|left, right| {
+        let left_position = runtime_gradient_stop_position(artboard, left, position_key);
+        let right_position = runtime_gradient_stop_position(artboard, right, position_key);
+        left_position.total_cmp(&right_position)
+    });
     stops
         .into_iter()
-        .map(|stop| RuntimeGradientStop {
-            color: stop.color,
-            render_color: color_modulate_opacity(stop.color, opacity),
-            position: stop.position.clamp(0.0, 1.0),
+        .map(|stop| {
+            let color = color_key
+                .and_then(|key| artboard.color_property(stop.local_id, key))
+                .unwrap_or(stop.color);
+            RuntimeGradientStop {
+                color,
+                render_color: color_modulate_opacity(color, opacity),
+                position: runtime_gradient_stop_position(artboard, &stop, position_key)
+                    .clamp(0.0, 1.0),
+            }
         })
         .collect()
+}
+
+fn runtime_gradient_stop_position(
+    artboard: &ArtboardInstance,
+    stop: &GradientStopNode,
+    position_key: Option<u16>,
+) -> f32 {
+    position_key
+        .and_then(|key| artboard.double_property(stop.local_id, key))
+        .unwrap_or(stop.position)
 }
 
 fn runtime_feather_state(

@@ -874,7 +874,7 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
-    if let Some(global_id) = unsupported_image_global(runtime, graph, artboard) {
+    if let Some(global_id) = unsupported_image_global(runtime, graph, artboard, !is_nested_child) {
         bail!("unsupported: images in Rust golden runner (global {global_id})");
     }
 
@@ -2001,6 +2001,7 @@ fn unsupported_image_global(
     runtime: &RuntimeFile,
     graph: &GraphFile,
     artboard: &ArtboardGraph,
+    apply_selected_root_fence: bool,
 ) -> Option<u32> {
     let first_image_global = artboard
         .local_objects
@@ -2015,7 +2016,7 @@ fn unsupported_image_global(
     if first_image_global.is_none() && first_image_asset_global.is_none() {
         return None;
     }
-    (!simple_static_image_artboard_supported(runtime, graph, artboard))
+    (!simple_static_image_artboard_supported(runtime, graph, artboard, apply_selected_root_fence))
         .then_some(first_image_global.or(first_image_asset_global).unwrap_or(0))
 }
 
@@ -2023,9 +2024,16 @@ fn simple_static_image_artboard_supported(
     runtime: &RuntimeFile,
     graph: &GraphFile,
     artboard: &ArtboardGraph,
+    apply_selected_root_fence: bool,
 ) -> bool {
     let mut visiting = BTreeSet::new();
-    simple_static_image_artboard_tree_supported(runtime, graph, artboard, &mut visiting)
+    simple_static_image_artboard_tree_supported(
+        runtime,
+        graph,
+        artboard,
+        &mut visiting,
+        apply_selected_root_fence,
+    )
 }
 
 fn simple_static_image_artboard_tree_supported(
@@ -2033,12 +2041,18 @@ fn simple_static_image_artboard_tree_supported(
     graph: &GraphFile,
     artboard: &ArtboardGraph,
     visiting: &mut BTreeSet<u32>,
+    apply_selected_root_fence: bool,
 ) -> bool {
     if !visiting.insert(artboard.global_id) {
         return false;
     }
-    let supported =
-        simple_static_image_artboard_tree_supported_entered(runtime, graph, artboard, visiting);
+    let supported = simple_static_image_artboard_tree_supported_entered(
+        runtime,
+        graph,
+        artboard,
+        visiting,
+        apply_selected_root_fence,
+    );
     visiting.remove(&artboard.global_id);
     supported
 }
@@ -2048,60 +2062,14 @@ fn simple_static_image_artboard_tree_supported_entered(
     graph: &GraphFile,
     artboard: &ArtboardGraph,
     visiting: &mut BTreeSet<u32>,
+    apply_selected_root_fence: bool,
 ) -> bool {
-    if !artboard.local_objects.iter().all(|object| {
-        matches!(
-            object.type_name,
-            Some(
-                "Artboard"
-                    | "ArtboardComponentList"
-                    | "ClippingShape"
-                    | "CubicEaseInterpolator"
-                    | "CustomPropertyGroup"
-                    | "CustomPropertyNumber"
-                    | "DrawRules"
-                    | "DrawTarget"
-                    | "Event"
-                    | "Ellipse"
-                    | "Fill"
-                    | "Image"
-                    | "LayoutComponent"
-                    | "LayoutComponentStyle"
-                    | "NestedArtboard"
-                    | "NestedStateMachine"
-                    | "Node"
-                    | "NSlicer"
-                    | "AxisX"
-                    | "AxisY"
-                    | "Rectangle"
-                    | "Shape"
-                    | "ScriptedDrawable"
-                    | "SolidColor"
-                    | "Text"
-                    | "TextStyleAxis"
-                    | "TextStylePaint"
-                    | "TextValueRun",
-            )
-        )
-    }) {
-        return false;
-    }
+    // Ported image drawing currently covers C++ `src/shapes/image.cpp`'s
+    // non-mesh path. Keep complex image-bearing roots fenced until their
+    // non-image draw and paint-order behavior is exact under corpus comparison.
     if !artboard.meshes.is_empty() {
         return false;
     }
-    if !artboard.shape_paint_containers.iter().all(|container| {
-        matches!(
-            container.type_name.as_ref(),
-            "Artboard" | "LayoutComponent" | "Shape" | "TextStylePaint"
-        ) && container.paints.iter().all(|paint| {
-            simple_static_image_paint_supported(paint)
-                && (container.type_name != "LayoutComponent"
-                    || paint.path_kind == Some(ShapePaintPathKind::LocalClockwise))
-        })
-    }) {
-        return false;
-    }
-
     let image_asset_globals = graph
         .file_assets
         .iter()
@@ -2109,6 +2077,25 @@ fn simple_static_image_artboard_tree_supported_entered(
         .map(|asset| asset.global_id)
         .collect::<BTreeSet<_>>();
     if image_asset_globals.is_empty() {
+        return false;
+    }
+    if artboard
+        .local_objects
+        .iter()
+        .any(|object| matches!(object.type_name, Some("ContourMeshVertex" | "Feather")))
+    {
+        return false;
+    }
+    if apply_selected_root_fence
+        && visiting.len() == 1
+        && !artboard_has_direct_image_drawable(artboard)
+        && artboard.local_objects.iter().any(|object| {
+            matches!(
+                object.type_name,
+                Some("LinearGradient" | "RadialGradient" | "Skin")
+            )
+        })
+    {
         return false;
     }
 
@@ -2137,17 +2124,18 @@ fn simple_static_image_artboard_tree_supported_entered(
                     graph,
                     child_artboard,
                     visiting,
+                    false,
                 )
             }
             _ => true,
         })
 }
 
-fn simple_static_image_paint_supported(paint: &rive_graph::ShapePaintNode) -> bool {
-    if !paint.is_visible {
-        return paint.feather.is_none() && paint.effects.is_empty();
-    }
-    root_layout_background_paint_supported(paint)
+fn artboard_has_direct_image_drawable(artboard: &ArtboardGraph) -> bool {
+    artboard
+        .sorted_drawable_order
+        .iter()
+        .any(|drawable| drawable.type_name == "Image")
 }
 
 fn frame_dimension(value: f32) -> u32 {

@@ -5,10 +5,10 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 541 across 220 files (strict
-  exact=538/217; tolerant=3/3; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=75, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=31 gated=8 harness=36
+- Exact-status segments (file × sample): 542 across 221 files (strict
+  exact=539/218; tolerant=3/3; structural=0/0)
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=74, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=30 gated=8 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes (#V2-7)**
 
 ## Milestones
@@ -25,17 +25,17 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Continue the largest remaining M6 bucket,
-   `rust-runner-unsupported:images` (11 entries), starting with
+   `rust-runner-unsupported:images` (10 entries), starting with
    `bad_skin.riv` unless focused classification finds a smaller first gate.
    The passive initial scroll slice promoted five files; the remaining
    `rust-runner-unsupported:scroll-constraints` queue is now 7 entries, with
    `component_list_child_origin.riv` as the first scroll target if choosing to
    keep shrinking scroll before returning to images. Other M6 queues are
-   `feather` (5), `data-binding-nested-stateful-view-model` (4),
-   `focus-data` (3), `data-binding-nested-child` (2),
-   `scripted-transition-condition` (2), `n-slice` (1),
-   `scripted-path-effects` (1), `scripted-data-context` (1), and
-   `viewmodel-asset-conditions` (1).
+   `feather` (5 total: M6=2, gated=3),
+   `data-binding-nested-stateful-view-model` (4), `focus-data` (3),
+   `data-binding-nested-child` (2), `scripted-transition-condition` (2 gated),
+   `n-slice` (1 gated), `scripted-path-effects` (1 gated),
+   `scripted-data-context` (1), and `viewmodel-asset-conditions` (1).
 2. Generic `rust-runner-unsupported:text` and the sharper
    `text-vertical-trim` gate are empty in the current corpus. Do not reopen
    text unless a newly added corpus entry exposes a first text diagnostic.
@@ -45,6 +45,15 @@ the only memory the next session has. Update it every commit.
 4. Remaining exact entries pinned to sample `0` are static M1 holdovers:
    `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
    them during M6 unless a related refactor needs a cheap draw-regression check.
+
+5. Threads are now policy (see `/goal` "Threads" section): the main loop
+   stays the single writer here; use read-only scout threads to triage the
+   remaining M6 queues in parallel. Start the first lane thread in a NEW
+   worktree for the C++ golden-runner crash repair (`milestone =
+   "harness"`, 36 files; FileAssetContents/scripting/data-viz crash paths
+   in `tools/golden-runner` only), merging back into this branch once the
+   full ratchet passes. Recovered files enter as `not-yet` — denominator
+   growth, zero conflict with M6 runtime work.
 
 ## Known Divergences
 
@@ -134,8 +143,8 @@ the only memory the next session has. Update it every commit.
   and layout-backed or virtualized component-list instancing remain M6 or
   later diagnostics.
   Golden runner sample lists now advance by sorted absolute-time deltas and
-  reuse render paths across samples; no N-slice image layout, mesh/skinned
-  images, remaining text
+  reuse render paths across samples; no N-slice image layout, mesh image
+  drawing, contour-mesh image files, remaining text
   layout/editing, live data-bound nested host controls/artboard swaps, nested
   layout/leaf, scroll constraints, or layout-backed/virtualized component-list
   instancing.
@@ -396,6 +405,13 @@ the only memory the next session has. Update it every commit.
   The Rust runner emits `unsupported: scripted-data-context` for that surface
   until the #V2-7 `mlua`/Luau glue lands; passive script fixtures that already
   match C++ remain eligible for exact comparison.
+
+- 2026-07-06: Threads policy adopted (recorded in `/goal`): single writer
+  per worktree; parallel threads are read-only triage scouts or orthogonal
+  lane threads started in a new worktree and merged back through the full
+  ratchet (eligible lanes: C++ harness crash repair, M7 scaffolding —
+  benchmarks/fuzz/API drafts — and the feature-gated scripting spike).
+  Never two writers on adjacent critical-path runtime slices.
 
 ## Log
 
@@ -1369,3 +1385,16 @@ the only memory the next session has. Update it every commit.
   `M6=31 gated=8 harness=36`; `cargo test --workspace` passes. Next target is
   the largest M6 bucket, `rust-runner-unsupported:images`, starting with
   `bad_skin.riv` unless focused classification finds a smaller first gate.
+- 2026-07-06: [M6] Promoted `zombie_skins.riv` by widening the static image
+  gate to admit non-mesh image artboard trees with nested vector children,
+  preserving C++ all-but-final embedded image decode ordering, and reading live
+  animated `GradientStop` color/position values when building gradient shaders.
+  Focused `zombie_skins.riv` and full streams are exact; `bad_skin.riv`,
+  `bullet_man.riv`, and `spotify_kids_demo.riv` stay parked behind the image
+  diagnostic after focused diffs exposed contour-mesh path drift, selected-root
+  gradient allocation ordering, and image/deeper layout-text drift respectively.
+  Full `make golden-compare` reports `exact=221`, `exact-segments=542`,
+  `diverges=0`, `unsupported-feature=74`, `not-yet=0`, and parked
+  `M6=30 gated=8 harness=36`; `cargo test --workspace` passes. Next target
+  remains the M6 image bucket, starting with `bad_skin.riv` unless focused
+  classification finds another smaller first gate.

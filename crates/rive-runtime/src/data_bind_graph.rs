@@ -2565,7 +2565,7 @@ impl RuntimeDataBindGraph {
         let mut targets = Vec::new();
         let mut default_view_model_bindings = Vec::new();
 
-        for bindable in &state_machine.bindable_numbers {
+        for bindable in state_machine.bindable_numbers.iter() {
             for source in &bindable.default_view_model_sources {
                 let source_handle = Self::push_default_view_model_binding(
                     &mut sources,
@@ -2585,7 +2585,7 @@ impl RuntimeDataBindGraph {
                 }
             }
         }
-        for binding in &state_machine.transition_duration_bindings {
+        for binding in state_machine.transition_duration_bindings.iter() {
             let source = &binding.source;
             let source_handle = Self::push_default_view_model_binding(
                 &mut sources,
@@ -2604,7 +2604,7 @@ impl RuntimeDataBindGraph {
                 node.view_model_instance_ids = source.view_model_instance_ids.clone();
             }
         }
-        for bindable in &state_machine.bindable_integers {
+        for bindable in state_machine.bindable_integers.iter() {
             for source in &bindable.default_view_model_sources {
                 Self::push_default_view_model_binding(
                     &mut sources,
@@ -2621,7 +2621,7 @@ impl RuntimeDataBindGraph {
                 );
             }
         }
-        for bindable in &state_machine.bindable_booleans {
+        for bindable in state_machine.bindable_booleans.iter() {
             for source in &bindable.default_view_model_sources {
                 Self::push_default_view_model_binding(
                     &mut sources,
@@ -2638,7 +2638,7 @@ impl RuntimeDataBindGraph {
                 );
             }
         }
-        for bindable in &state_machine.bindable_strings {
+        for bindable in state_machine.bindable_strings.iter() {
             for source in &bindable.default_view_model_sources {
                 Self::push_default_view_model_binding(
                     &mut sources,
@@ -2655,7 +2655,7 @@ impl RuntimeDataBindGraph {
                 );
             }
         }
-        for bindable in &state_machine.bindable_colors {
+        for bindable in state_machine.bindable_colors.iter() {
             for source in &bindable.default_view_model_sources {
                 Self::push_default_view_model_binding(
                     &mut sources,
@@ -2672,7 +2672,7 @@ impl RuntimeDataBindGraph {
                 );
             }
         }
-        for bindable in &state_machine.bindable_enums {
+        for bindable in state_machine.bindable_enums.iter() {
             for source in &bindable.default_view_model_sources {
                 Self::push_default_view_model_binding(
                     &mut sources,
@@ -2689,7 +2689,7 @@ impl RuntimeDataBindGraph {
                 );
             }
         }
-        for bindable in &state_machine.bindable_assets {
+        for bindable in state_machine.bindable_assets.iter() {
             for source in &bindable.default_view_model_sources {
                 Self::push_default_view_model_binding(
                     &mut sources,
@@ -2706,7 +2706,7 @@ impl RuntimeDataBindGraph {
                 );
             }
         }
-        for bindable in &state_machine.bindable_artboards {
+        for bindable in state_machine.bindable_artboards.iter() {
             for source in &bindable.default_view_model_sources {
                 Self::push_default_view_model_binding(
                     &mut sources,
@@ -2723,7 +2723,7 @@ impl RuntimeDataBindGraph {
                 );
             }
         }
-        for bindable in &state_machine.bindable_lists {
+        for bindable in state_machine.bindable_lists.iter() {
             for source in &bindable.default_view_model_sources {
                 Self::push_default_view_model_binding(
                     &mut sources,
@@ -2740,7 +2740,7 @@ impl RuntimeDataBindGraph {
                 );
             }
         }
-        for bindable in &state_machine.bindable_triggers {
+        for bindable in state_machine.bindable_triggers.iter() {
             for source in &bindable.default_view_model_sources {
                 Self::push_default_view_model_binding(
                     &mut sources,
@@ -2757,7 +2757,7 @@ impl RuntimeDataBindGraph {
                 );
             }
         }
-        for bindable in &state_machine.bindable_view_models {
+        for bindable in state_machine.bindable_view_models.iter() {
             for source in &bindable.default_view_model_sources {
                 let source_handle = Self::push_default_view_model_binding(
                     &mut sources,

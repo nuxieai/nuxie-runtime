@@ -7,6 +7,7 @@ use crate::properties::{artboard_index_for_graph, property_key_for_name};
 use rive_binary::{RuntimeFile, RuntimeObject};
 use rive_graph::{ArtboardGraph, ParametricPathNode};
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 mod bindables;
 mod instance;
@@ -98,22 +99,22 @@ pub(crate) fn runtime_state_machine_input(
 pub struct RuntimeStateMachine {
     pub global_id: u32,
     pub name: Option<String>,
-    pub inputs: Vec<RuntimeStateMachineInput>,
-    pub(crate) listeners: Vec<RuntimeStateMachineListener>,
-    pub layers: Vec<RuntimeStateMachineLayer>,
-    pub(crate) bindable_numbers: Vec<RuntimeBindableNumber>,
-    pub(crate) bindable_integers: Vec<RuntimeBindableInteger>,
-    pub(crate) bindable_colors: Vec<RuntimeBindableColor>,
-    pub(crate) bindable_strings: Vec<RuntimeBindableString>,
-    pub(crate) bindable_enums: Vec<RuntimeBindableEnum>,
-    pub(crate) bindable_assets: Vec<RuntimeBindableAsset>,
-    pub(crate) bindable_artboards: Vec<RuntimeBindableArtboard>,
-    pub(crate) bindable_lists: Vec<RuntimeBindableList>,
-    pub(crate) bindable_triggers: Vec<RuntimeBindableTrigger>,
-    pub(crate) bindable_view_models: Vec<RuntimeBindableViewModel>,
-    pub(crate) bindable_booleans: Vec<RuntimeBindableBoolean>,
-    pub(crate) view_model_triggers: Vec<RuntimeViewModelTrigger>,
-    pub(crate) transition_duration_bindings: Vec<RuntimeTransitionDurationBinding>,
+    pub inputs: Arc<Vec<RuntimeStateMachineInput>>,
+    pub(crate) listeners: Arc<Vec<RuntimeStateMachineListener>>,
+    pub layers: Arc<Vec<RuntimeStateMachineLayer>>,
+    pub(crate) bindable_numbers: Arc<Vec<RuntimeBindableNumber>>,
+    pub(crate) bindable_integers: Arc<Vec<RuntimeBindableInteger>>,
+    pub(crate) bindable_colors: Arc<Vec<RuntimeBindableColor>>,
+    pub(crate) bindable_strings: Arc<Vec<RuntimeBindableString>>,
+    pub(crate) bindable_enums: Arc<Vec<RuntimeBindableEnum>>,
+    pub(crate) bindable_assets: Arc<Vec<RuntimeBindableAsset>>,
+    pub(crate) bindable_artboards: Arc<Vec<RuntimeBindableArtboard>>,
+    pub(crate) bindable_lists: Arc<Vec<RuntimeBindableList>>,
+    pub(crate) bindable_triggers: Arc<Vec<RuntimeBindableTrigger>>,
+    pub(crate) bindable_view_models: Arc<Vec<RuntimeBindableViewModel>>,
+    pub(crate) bindable_booleans: Arc<Vec<RuntimeBindableBoolean>>,
+    pub(crate) view_model_triggers: Arc<Vec<RuntimeViewModelTrigger>>,
+    pub(crate) transition_duration_bindings: Arc<Vec<RuntimeTransitionDurationBinding>>,
 }
 
 #[derive(Debug, Clone)]
@@ -191,33 +192,43 @@ pub(crate) fn build_state_machines(
                     .object
                     .string_property("name")
                     .map(ToOwned::to_owned),
-                inputs: state_machine
-                    .inputs
-                    .iter()
-                    .copied()
-                    .filter_map(runtime_state_machine_input)
-                    .collect(),
-                listeners: state_machine
-                    .listeners
-                    .iter()
-                    .filter_map(|listener| {
-                        runtime_state_machine_listener(file, graph, &state_machine_data_binds, listener)
-                    })
-                    .collect(),
-                bindable_numbers,
-                bindable_integers,
-                bindable_colors,
-                bindable_strings,
-                bindable_enums,
-                bindable_assets,
-                bindable_artboards,
-                bindable_lists,
-                bindable_triggers,
-                bindable_view_models,
-                bindable_booleans,
-                view_model_triggers,
-                transition_duration_bindings,
-                layers: state_machine
+                inputs: Arc::new(
+                    state_machine
+                        .inputs
+                        .iter()
+                        .copied()
+                        .filter_map(runtime_state_machine_input)
+                        .collect(),
+                ),
+                listeners: Arc::new(
+                    state_machine
+                        .listeners
+                        .iter()
+                        .filter_map(|listener| {
+                            runtime_state_machine_listener(
+                                file,
+                                graph,
+                                &state_machine_data_binds,
+                                listener,
+                            )
+                        })
+                        .collect(),
+                ),
+                bindable_numbers: Arc::new(bindable_numbers),
+                bindable_integers: Arc::new(bindable_integers),
+                bindable_colors: Arc::new(bindable_colors),
+                bindable_strings: Arc::new(bindable_strings),
+                bindable_enums: Arc::new(bindable_enums),
+                bindable_assets: Arc::new(bindable_assets),
+                bindable_artboards: Arc::new(bindable_artboards),
+                bindable_lists: Arc::new(bindable_lists),
+                bindable_triggers: Arc::new(bindable_triggers),
+                bindable_view_models: Arc::new(bindable_view_models),
+                bindable_booleans: Arc::new(bindable_booleans),
+                view_model_triggers: Arc::new(view_model_triggers),
+                transition_duration_bindings: Arc::new(transition_duration_bindings),
+                layers: Arc::new(
+                    state_machine
                     .layers
                     .into_iter()
                     .map(|layer| {
@@ -356,6 +367,7 @@ pub(crate) fn build_state_machines(
                         }
                     })
                     .collect(),
+                ),
             }
         })
         .collect()
@@ -2206,7 +2218,7 @@ impl AnimationReset {
                 continue;
             };
             let use_baseline = use_first_as_baseline && animation_order == 0;
-            for keyed_object in &animation.keyed_objects {
+            for keyed_object in animation.keyed_objects.iter() {
                 for keyed_property in &keyed_object.keyed_properties {
                     if !keyed_property.double_property && !keyed_property.color_property {
                         continue;

@@ -521,7 +521,7 @@ impl StateMachineInstance {
         };
 
         let mut changed = false;
-        for listener in &state_machine.listeners {
+        for listener in state_machine.listeners.iter() {
             if !listener.has_listener(RuntimeListenerType::Event) {
                 continue;
             }

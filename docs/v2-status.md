@@ -44,20 +44,22 @@ the only memory the next session has. Update it every commit.
    lookup in the paint/path hot paths; caching fixed paint keys previously
    reduced Rust direct `ai_assitant` 100-segment repeat time from about
    1019 ms to about 255 ms. Follow-up path-geometry key caching,
-   repeat-aware `perf-compare`, and removal of `artboard_data_bind.rs`
-   hot-loop graph/binding clones now give focused 10-iteration verification
-   with `make perf-hot-loop PERF_CORPUS_LIMIT=5 PERF_ITERATIONS=10
-   PERF_WARMUPS=1 PERF_MAX_RATIO=999` at aggregate Rust/C++=5.723 over
-   5 exact entries / 10 segments (`ai_assitant`=6.727,
-   `advance_blend_mode`=13.603, `animation_reset_cases`=12.953). Strict
-   `PERF_MAX_RATIO=2.0` still fails by inspection of that ratio. M7 perf is
-   now explicitly defined as steady-state per-frame runtime cost; direct
-   `ai_assitant` with `--benchmark-repeat 100` reports Rust/C++=355.870,
-   confirming that C++ clean-frame dirt/retention is the dominant remaining
-   gap. Highest priority next target is to port the scout-ranked steady-state
-   slices: port idempotent dirt raisers and draw/path retention behind C++
-   dirt gates. After the perf target is real, expand the C ABI to instance
-   advance/draw.
+   repeat-aware `perf-compare`, removal of `artboard_data_bind.rs`
+   hot-loop graph/binding clones, and shallow sharing of immutable
+   animation/state-machine definition vectors now give focused
+   10-iteration verification with `make perf-hot-loop PERF_CORPUS_LIMIT=5
+   PERF_ITERATIONS=10 PERF_WARMUPS=1 PERF_MAX_RATIO=999` at aggregate
+   Rust/C++=6.353 over 5 exact entries / 10 segments (`ai_assitant`=8.589,
+   `advance_blend_mode`=14.993, `animation_reset_cases`=13.461). This
+   focused ratio is noisy and strict `PERF_MAX_RATIO=2.0` still fails by
+   inspection. M7 perf is now explicitly defined as steady-state per-frame
+   runtime cost; direct `ai_assitant` with `--benchmark-repeat 100` improves
+   from Rust/C++=355.870 to 316.968, confirming that definition cloning was
+   real but secondary and C++ clean-frame dirt/retention is still the
+   dominant gap. Highest priority next target is to port the scout-ranked
+   steady-state slices: port idempotent dirt raisers and draw/path retention
+   behind C++ dirt gates. After the perf target is real, expand the C ABI to
+   instance advance/draw.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -569,6 +571,18 @@ the only memory the next session has. Update it every commit.
   Rust/C++ to 5.723, and direct `ai_assitant --benchmark-repeat 100` improves
   to Rust/C++=355.870. Next target remains C++ dirt/retention, not more
   clone cleanup.
+- 2026-07-07: [M7] Made runtime animation/state-machine definitions
+  shallow-clone by storing immutable keyed-object, layer, listener, and
+  bindable vectors behind `Arc<Vec<_>>`. This mirrors C++ applying from
+  shared immutable definitions while preserving the current Rust
+  borrow-avoidance call shape. Focused runtime tests pass; full
+  `cargo test --workspace` and `make golden-compare` remain green at
+  exact=263/exact-segments=584. Release hot-loop smoke with
+  `PERF_CORPUS_LIMIT=5 PERF_ITERATIONS=10 PERF_WARMUPS=1 PERF_MAX_RATIO=999`
+  reports aggregate Rust/C++=6.353 (ratio noisy, not M7 passing), while
+  direct `ai_assitant --benchmark-repeat 100` improves from 355.870 to
+  316.968. Next target remains audited C++ dirt/retention, not more clone
+  cleanup.
 - 2026-07-07: [M7] Cached fixed schema property keys in the release
   null-renderer draw hot path after profiling `ai_assitant.riv`, mirroring the
   generated C++ property-key/member access at the same paint hot site. Both

@@ -11,6 +11,7 @@ use rive_schema::{
     CoreRegistryFieldKind, FieldKind, core_registry_field_kind_by_property_key,
     definition_by_type_key, is_callback_property_key, object_supports_property,
 };
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum RuntimeInterpolator {
@@ -331,7 +332,7 @@ pub(crate) fn build_linear_animations(
                 work_end: object.uint_property("workEnd").unwrap_or(0),
                 enable_work_area: object.bool_property("enableWorkArea").unwrap_or(false),
                 quantize: object.bool_property("quantize").unwrap_or(false),
-                keyed_objects: Vec::new(),
+                keyed_objects: Arc::new(Vec::new()),
             });
             current_animation = Some(animations.len() - 1);
             current_keyed_object = None;
@@ -352,15 +353,14 @@ pub(crate) fn build_linear_animations(
                 continue;
             };
 
-            animations[animation_index]
-                .keyed_objects
-                .push(RuntimeKeyedObject {
-                    global_id: global_id as u32,
-                    object_id,
-                    target_local_id,
-                    keyed_properties: Vec::new(),
-                });
-            current_keyed_object = Some(animations[animation_index].keyed_objects.len() - 1);
+            let keyed_objects = Arc::make_mut(&mut animations[animation_index].keyed_objects);
+            keyed_objects.push(RuntimeKeyedObject {
+                global_id: global_id as u32,
+                object_id,
+                target_local_id,
+                keyed_properties: Vec::new(),
+            });
+            current_keyed_object = Some(keyed_objects.len() - 1);
             current_keyed_property = None;
             continue;
         }
@@ -391,7 +391,8 @@ pub(crate) fn build_linear_animations(
                 continue;
             }
 
-            animations[animation_index].keyed_objects[keyed_object_index]
+            let keyed_objects = Arc::make_mut(&mut animations[animation_index].keyed_objects);
+            keyed_objects[keyed_object_index]
                 .keyed_properties
                 .push(RuntimeKeyedProperty {
                     global_id: global_id as u32,
@@ -430,10 +431,7 @@ pub(crate) fn build_linear_animations(
                 });
             current_keyed_property = Some((
                 keyed_object_index,
-                animations[animation_index].keyed_objects[keyed_object_index]
-                    .keyed_properties
-                    .len()
-                    - 1,
+                keyed_objects[keyed_object_index].keyed_properties.len() - 1,
             ));
             continue;
         }
@@ -442,118 +440,156 @@ pub(crate) fn build_linear_animations(
             let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
                 continue;
             };
-            animations[animation_index].keyed_objects[keyed_object_index].keyed_properties
-                [keyed_property_index]
-                .key_frames
-                .push(RuntimeKeyFrameDouble {
-                    global_id: global_id as u32,
-                    frame: object.uint_property("frame").unwrap_or(0),
-                    interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
-                    interpolator_id: normalized_interpolator_id(object),
-                    interpolator: runtime_key_frame_interpolator(file, artboard_index, object),
-                    value: object.double_property("value").unwrap_or(0.0),
-                });
+            runtime_keyed_property_mut(
+                &mut animations,
+                animation_index,
+                keyed_object_index,
+                keyed_property_index,
+            )
+            .key_frames
+            .push(RuntimeKeyFrameDouble {
+                global_id: global_id as u32,
+                frame: object.uint_property("frame").unwrap_or(0),
+                interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
+                interpolator_id: normalized_interpolator_id(object),
+                interpolator: runtime_key_frame_interpolator(file, artboard_index, object),
+                value: object.double_property("value").unwrap_or(0.0),
+            });
         }
 
         if object.type_name == "KeyFrameColor" {
             let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
                 continue;
             };
-            animations[animation_index].keyed_objects[keyed_object_index].keyed_properties
-                [keyed_property_index]
-                .color_key_frames
-                .push(RuntimeKeyFrameColor {
-                    global_id: global_id as u32,
-                    frame: object.uint_property("frame").unwrap_or(0),
-                    interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
-                    interpolator_id: normalized_interpolator_id(object),
-                    interpolator: runtime_key_frame_interpolator(file, artboard_index, object),
-                    value: object.color_property("value").unwrap_or(0),
-                });
+            runtime_keyed_property_mut(
+                &mut animations,
+                animation_index,
+                keyed_object_index,
+                keyed_property_index,
+            )
+            .color_key_frames
+            .push(RuntimeKeyFrameColor {
+                global_id: global_id as u32,
+                frame: object.uint_property("frame").unwrap_or(0),
+                interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
+                interpolator_id: normalized_interpolator_id(object),
+                interpolator: runtime_key_frame_interpolator(file, artboard_index, object),
+                value: object.color_property("value").unwrap_or(0),
+            });
         }
 
         if object.type_name == "KeyFrameBool" {
             let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
                 continue;
             };
-            animations[animation_index].keyed_objects[keyed_object_index].keyed_properties
-                [keyed_property_index]
-                .bool_key_frames
-                .push(RuntimeKeyFrameBool {
-                    global_id: global_id as u32,
-                    frame: object.uint_property("frame").unwrap_or(0),
-                    interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
-                    interpolator_id: normalized_interpolator_id(object),
-                    value: object.bool_property("value").unwrap_or(false),
-                });
+            runtime_keyed_property_mut(
+                &mut animations,
+                animation_index,
+                keyed_object_index,
+                keyed_property_index,
+            )
+            .bool_key_frames
+            .push(RuntimeKeyFrameBool {
+                global_id: global_id as u32,
+                frame: object.uint_property("frame").unwrap_or(0),
+                interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
+                interpolator_id: normalized_interpolator_id(object),
+                value: object.bool_property("value").unwrap_or(false),
+            });
         }
 
         if object.type_name == "KeyFrameUint" {
             let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
                 continue;
             };
-            animations[animation_index].keyed_objects[keyed_object_index].keyed_properties
-                [keyed_property_index]
-                .uint_key_frames
-                .push(RuntimeKeyFrameUint {
-                    global_id: global_id as u32,
-                    frame: object.uint_property("frame").unwrap_or(0),
-                    interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
-                    interpolator_id: normalized_interpolator_id(object),
-                    value: object.uint_property("value").unwrap_or(0),
-                });
+            runtime_keyed_property_mut(
+                &mut animations,
+                animation_index,
+                keyed_object_index,
+                keyed_property_index,
+            )
+            .uint_key_frames
+            .push(RuntimeKeyFrameUint {
+                global_id: global_id as u32,
+                frame: object.uint_property("frame").unwrap_or(0),
+                interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
+                interpolator_id: normalized_interpolator_id(object),
+                value: object.uint_property("value").unwrap_or(0),
+            });
         }
 
         if object.type_name == "KeyFrameId" {
             let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
                 continue;
             };
-            animations[animation_index].keyed_objects[keyed_object_index].keyed_properties
-                [keyed_property_index]
-                .uint_key_frames
-                .push(RuntimeKeyFrameUint {
-                    global_id: global_id as u32,
-                    frame: object.uint_property("frame").unwrap_or(0),
-                    interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
-                    interpolator_id: normalized_interpolator_id(object),
-                    value: object.uint_property("value").unwrap_or(0),
-                });
+            runtime_keyed_property_mut(
+                &mut animations,
+                animation_index,
+                keyed_object_index,
+                keyed_property_index,
+            )
+            .uint_key_frames
+            .push(RuntimeKeyFrameUint {
+                global_id: global_id as u32,
+                frame: object.uint_property("frame").unwrap_or(0),
+                interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
+                interpolator_id: normalized_interpolator_id(object),
+                value: object.uint_property("value").unwrap_or(0),
+            });
         }
 
         if object.type_name == "KeyFrameString" {
             let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
                 continue;
             };
-            animations[animation_index].keyed_objects[keyed_object_index].keyed_properties
-                [keyed_property_index]
-                .string_key_frames
-                .push(RuntimeKeyFrameString {
-                    global_id: global_id as u32,
-                    frame: object.uint_property("frame").unwrap_or(0),
-                    interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
-                    interpolator_id: normalized_interpolator_id(object),
-                    value: object
-                        .string_property_bytes("value")
-                        .unwrap_or_default()
-                        .to_vec(),
-                });
+            runtime_keyed_property_mut(
+                &mut animations,
+                animation_index,
+                keyed_object_index,
+                keyed_property_index,
+            )
+            .string_key_frames
+            .push(RuntimeKeyFrameString {
+                global_id: global_id as u32,
+                frame: object.uint_property("frame").unwrap_or(0),
+                interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
+                interpolator_id: normalized_interpolator_id(object),
+                value: object
+                    .string_property_bytes("value")
+                    .unwrap_or_default()
+                    .to_vec(),
+            });
         }
 
         if object.type_name == "KeyFrameCallback" {
             let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
                 continue;
             };
-            animations[animation_index].keyed_objects[keyed_object_index].keyed_properties
-                [keyed_property_index]
-                .callback_key_frames
-                .push(RuntimeKeyFrameCallback {
-                    global_id: global_id as u32,
-                    frame: object.uint_property("frame").unwrap_or(0),
-                });
+            runtime_keyed_property_mut(
+                &mut animations,
+                animation_index,
+                keyed_object_index,
+                keyed_property_index,
+            )
+            .callback_key_frames
+            .push(RuntimeKeyFrameCallback {
+                global_id: global_id as u32,
+                frame: object.uint_property("frame").unwrap_or(0),
+            });
         }
     }
 
     animations
+}
+
+fn runtime_keyed_property_mut(
+    animations: &mut [RuntimeLinearAnimation],
+    animation_index: usize,
+    keyed_object_index: usize,
+    keyed_property_index: usize,
+) -> &mut RuntimeKeyedProperty {
+    &mut Arc::make_mut(&mut animations[animation_index].keyed_objects)[keyed_object_index]
+        .keyed_properties[keyed_property_index]
 }
 
 fn artboard_object_range(file: &RuntimeFile, start: usize) -> Option<(usize, usize)> {
@@ -610,7 +646,7 @@ pub struct RuntimeLinearAnimation {
     pub work_end: u64,
     pub enable_work_area: bool,
     pub quantize: bool,
-    pub keyed_objects: Vec<RuntimeKeyedObject>,
+    pub keyed_objects: Arc<Vec<RuntimeKeyedObject>>,
 }
 
 impl RuntimeLinearAnimation {
@@ -623,7 +659,7 @@ impl RuntimeLinearAnimation {
         };
 
         let mut changed = false;
-        for keyed_object in &self.keyed_objects {
+        for keyed_object in self.keyed_objects.iter() {
             for keyed_property in &keyed_object.keyed_properties {
                 if let Some(property) = keyed_property.transform_property {
                     let Some(current) =
@@ -723,7 +759,7 @@ impl RuntimeLinearAnimation {
             return;
         }
 
-        for keyed_object in &self.keyed_objects {
+        for keyed_object in self.keyed_objects.iter() {
             for keyed_property in &keyed_object.keyed_properties {
                 keyed_property.report_keyed_callbacks(
                     keyed_object.target_local_id,
@@ -1553,7 +1589,7 @@ mod tests {
             work_end: 40,
             enable_work_area,
             quantize: false,
-            keyed_objects: Vec::new(),
+            keyed_objects: Arc::new(Vec::new()),
         }
     }
 

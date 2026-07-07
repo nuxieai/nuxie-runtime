@@ -4948,7 +4948,7 @@ pub struct RuntimeRenderPathCache {
     background_paths: BTreeMap<usize, Box<dyn RenderPath>>,
     clip_paths: BTreeMap<usize, Box<dyn RenderPath>>,
     layout_clip_paths: BTreeMap<usize, Box<dyn RenderPath>>,
-    draw_paths: BTreeMap<RuntimeDrawPathCacheKey, Box<dyn RenderPath>>,
+    draw_paths: BTreeMap<RuntimeDrawPathCacheKey, RuntimeCachedDrawPath>,
     gradient_shaders: BTreeMap<u32, RuntimeGradientShaderCacheEntry>,
     nested_artboards: BTreeMap<u32, RuntimeRenderPathCache>,
 }
@@ -4969,6 +4969,11 @@ struct RuntimePreparedArtboardFrame {
 struct RuntimeGradientShaderCacheEntry {
     state: RuntimeShapePaintState,
     shader: Box<dyn RenderShader>,
+}
+
+struct RuntimeCachedDrawPath {
+    path: Box<dyn RenderPath>,
+    epoch: u64,
 }
 
 struct RuntimeGradientShaderResources<'a> {
@@ -5077,17 +5082,27 @@ impl RuntimeRenderPathCache {
     fn draw_path(
         &mut self,
         key: RuntimeDrawPathCacheKey,
+        instance_epoch: u64,
         factory: &mut dyn RenderFactory,
         commands: &[RuntimePathCommand],
         fill_rule: RenderFillRule,
     ) -> &mut Box<dyn RenderPath> {
         match self.draw_paths.entry(key) {
             Entry::Occupied(entry) => {
-                let path = entry.into_mut();
-                runtime_rebuild_path_preserving_fill_rule(path.as_mut(), commands);
-                path
+                let cached = entry.into_mut();
+                if cached.epoch != instance_epoch {
+                    runtime_rebuild_path_preserving_fill_rule(cached.path.as_mut(), commands);
+                    cached.epoch = instance_epoch;
+                }
+                &mut cached.path
             }
-            Entry::Vacant(entry) => entry.insert(runtime_make_path(factory, commands, fill_rule)),
+            Entry::Vacant(entry) => {
+                let cached = entry.insert(RuntimeCachedDrawPath {
+                    path: runtime_make_path(factory, commands, fill_rule),
+                    epoch: instance_epoch,
+                });
+                &mut cached.path
+            }
         }
     }
 }
@@ -6047,6 +6062,7 @@ fn runtime_draw_command(
     }
     let mut text_temporary_paint_index = 0;
     let mut draw_path_slots = Vec::<&[RuntimePathCommand]>::new();
+    let draw_path_epoch = instance.cache_epoch();
     let foreground_layout_path_cache_local = if command.type_name == "ForegroundLayoutDrawable" {
         command
             .local_id
@@ -6153,6 +6169,7 @@ fn runtime_draw_command(
                         local_id: draw_path_cache_local,
                         path_index: clip_path_index,
                     },
+                    draw_path_epoch,
                     factory,
                     effect_or_shape_path_commands,
                     RenderFillRule::Clockwise,
@@ -6176,6 +6193,7 @@ fn runtime_draw_command(
                 local_id: inner_feather_path_cache_local,
                 path_index,
             },
+            draw_path_epoch,
             factory,
             draw_path_commands,
             RenderFillRule::Clockwise,
@@ -11326,4 +11344,284 @@ fn sorted_drawable_is_nested_artboard(type_name: &str) -> bool {
 fn runtime_draw_command_is_nested_artboard(command: &RuntimeDrawCommand) -> bool {
     sorted_drawable_is_nested_artboard(command.type_name)
         || command.referenced_artboard_global.is_some()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rive_render_api::{ColorInt, RawPath};
+    use std::any::Any;
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    #[derive(Default)]
+    struct CountingStats {
+        make_empty_paths: Cell<usize>,
+        rewinds: Cell<usize>,
+        lines: Cell<usize>,
+        closes: Cell<usize>,
+    }
+
+    struct CountingFactory {
+        stats: Rc<CountingStats>,
+        next_path_id: usize,
+    }
+
+    struct CountingRenderPath {
+        stats: Rc<CountingStats>,
+        id: usize,
+        raw_path: RawPath,
+        fill_rule: RenderFillRule,
+    }
+
+    impl RenderPath for CountingRenderPath {
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+
+        fn rewind(&mut self) {
+            self.stats.rewinds.set(self.stats.rewinds.get() + 1);
+            self.raw_path.rewind();
+        }
+
+        fn fill_rule(&mut self, value: RenderFillRule) {
+            self.fill_rule = value;
+        }
+
+        fn add_render_path(&mut self, _path: &dyn RenderPath, _transform: RenderMat2D) {}
+
+        fn add_render_path_backwards(&mut self, _path: &dyn RenderPath, _transform: RenderMat2D) {}
+
+        fn add_raw_path(&mut self, path: &RawPath) {
+            self.raw_path.add_path(path, RenderMat2D::IDENTITY);
+        }
+
+        fn move_to(&mut self, x: f32, y: f32) {
+            self.raw_path.move_to(x, y);
+        }
+
+        fn line_to(&mut self, x: f32, y: f32) {
+            self.stats.lines.set(self.stats.lines.get() + 1);
+            self.raw_path.line_to(x, y);
+        }
+
+        fn cubic_to(&mut self, ox: f32, oy: f32, ix: f32, iy: f32, x: f32, y: f32) {
+            self.raw_path.cubic_to(ox, oy, ix, iy, x, y);
+        }
+
+        fn close(&mut self) {
+            self.stats.closes.set(self.stats.closes.get() + 1);
+            self.raw_path.close();
+        }
+    }
+
+    struct TestRenderBuffer {
+        buffer_type: RenderBufferType,
+        flags: RenderBufferFlags,
+        bytes: Vec<u8>,
+    }
+
+    impl RenderBuffer for TestRenderBuffer {
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+
+        fn buffer_type(&self) -> RenderBufferType {
+            self.buffer_type
+        }
+
+        fn flags(&self) -> RenderBufferFlags {
+            self.flags
+        }
+
+        fn size_in_bytes(&self) -> usize {
+            self.bytes.len()
+        }
+
+        fn map_mut(&mut self) -> &mut [u8] {
+            &mut self.bytes
+        }
+
+        fn unmap(&mut self) {}
+    }
+
+    struct TestRenderShader;
+
+    impl RenderShader for TestRenderShader {
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+    }
+
+    struct TestRenderImage;
+
+    impl RenderImage for TestRenderImage {
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+
+        fn width(&self) -> u32 {
+            0
+        }
+
+        fn height(&self) -> u32 {
+            0
+        }
+    }
+
+    struct TestRenderPaint;
+
+    impl RenderPaint for TestRenderPaint {
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+
+        fn style(&mut self, _style: RenderPaintStyle) {}
+        fn color(&mut self, _value: ColorInt) {}
+        fn thickness(&mut self, _value: f32) {}
+        fn join(&mut self, _value: RenderStrokeJoin) {}
+        fn cap(&mut self, _value: RenderStrokeCap) {}
+        fn feather(&mut self, _value: f32) {}
+        fn blend_mode(&mut self, _value: RenderBlendMode) {}
+        fn shader(&mut self, _shader: Option<&dyn RenderShader>) {}
+        fn invalidate_stroke(&mut self) {}
+    }
+
+    impl RenderFactory for CountingFactory {
+        fn make_render_buffer(
+            &mut self,
+            buffer_type: RenderBufferType,
+            flags: RenderBufferFlags,
+            size_in_bytes: usize,
+        ) -> Box<dyn RenderBuffer> {
+            Box::new(TestRenderBuffer {
+                buffer_type,
+                flags,
+                bytes: vec![0; size_in_bytes],
+            })
+        }
+
+        fn make_linear_gradient(
+            &mut self,
+            _sx: f32,
+            _sy: f32,
+            _ex: f32,
+            _ey: f32,
+            _colors: &[ColorInt],
+            _stops: &[f32],
+        ) -> Box<dyn RenderShader> {
+            Box::new(TestRenderShader)
+        }
+
+        fn make_radial_gradient(
+            &mut self,
+            _cx: f32,
+            _cy: f32,
+            _radius: f32,
+            _colors: &[ColorInt],
+            _stops: &[f32],
+        ) -> Box<dyn RenderShader> {
+            Box::new(TestRenderShader)
+        }
+
+        fn make_render_path(
+            &mut self,
+            raw_path: RawPath,
+            fill_rule: RenderFillRule,
+        ) -> Box<dyn RenderPath> {
+            let id = self.next_path_id;
+            self.next_path_id += 1;
+            Box::new(CountingRenderPath {
+                stats: Rc::clone(&self.stats),
+                id,
+                raw_path,
+                fill_rule,
+            })
+        }
+
+        fn make_empty_render_path(&mut self) -> Box<dyn RenderPath> {
+            self.stats
+                .make_empty_paths
+                .set(self.stats.make_empty_paths.get() + 1);
+            self.make_render_path(RawPath::new(), RenderFillRule::NonZero)
+        }
+
+        fn make_render_paint(&mut self) -> Box<dyn RenderPaint> {
+            Box::new(TestRenderPaint)
+        }
+
+        fn decode_image(&mut self, _data: &[u8]) -> Box<dyn RenderImage> {
+            Box::new(TestRenderImage)
+        }
+    }
+
+    #[test]
+    fn draw_path_reuses_render_path_until_instance_epoch_changes() {
+        let stats = Rc::new(CountingStats::default());
+        let mut factory = CountingFactory {
+            stats: Rc::clone(&stats),
+            next_path_id: 0,
+        };
+        let mut cache = RuntimeRenderPathCache::default();
+        let key = RuntimeDrawPathCacheKey {
+            kind: RuntimeDrawPathCacheKind::Draw,
+            path_kind: RuntimeShapePaintPathKind::Local,
+            local_id: Some(7),
+            path_index: 0,
+        };
+        let commands = vec![
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 1.0, y: 1.0 },
+        ];
+        let changed_commands = vec![
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 2.0, y: 2.0 },
+            RuntimePathCommand::Close,
+        ];
+
+        let first_id = {
+            let path = cache.draw_path(key, 10, &mut factory, &commands, RenderFillRule::Clockwise);
+            path.as_any()
+                .downcast_ref::<CountingRenderPath>()
+                .expect("counting path")
+                .id
+        };
+
+        assert_eq!(stats.make_empty_paths.get(), 1);
+        assert_eq!(stats.rewinds.get(), 1);
+        assert_eq!(stats.lines.get(), 1);
+
+        let second_id = {
+            let path = cache.draw_path(key, 10, &mut factory, &commands, RenderFillRule::Clockwise);
+            path.as_any()
+                .downcast_ref::<CountingRenderPath>()
+                .expect("counting path")
+                .id
+        };
+
+        assert_eq!(second_id, first_id);
+        assert_eq!(stats.make_empty_paths.get(), 1);
+        assert_eq!(stats.rewinds.get(), 1);
+        assert_eq!(stats.lines.get(), 1);
+
+        let third_id = {
+            let path = cache.draw_path(
+                key,
+                11,
+                &mut factory,
+                &changed_commands,
+                RenderFillRule::Clockwise,
+            );
+            path.as_any()
+                .downcast_ref::<CountingRenderPath>()
+                .expect("counting path")
+                .id
+        };
+
+        assert_eq!(third_id, first_id);
+        assert_eq!(stats.make_empty_paths.get(), 1);
+        assert_eq!(stats.rewinds.get(), 2);
+        assert_eq!(stats.lines.get(), 2);
+        assert_eq!(stats.closes.get(), 1);
+    }
 }

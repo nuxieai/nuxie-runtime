@@ -342,6 +342,9 @@ private:
     uint64_t m_id;
 };
 
+class NullRenderShader : public rive::RenderShader
+{};
+
 class RecordingRenderImage : public rive::RenderImage
 {
 public:
@@ -355,6 +358,16 @@ public:
 
 private:
     uint64_t m_id;
+};
+
+class NullRenderImage : public rive::RenderImage
+{
+public:
+    NullRenderImage(int width, int height)
+    {
+        m_Width = width;
+        m_Height = height;
+    }
 };
 
 class RecordingRenderPaint : public rive::RenderPaint
@@ -401,6 +414,33 @@ public:
 
 private:
     uint64_t m_id;
+    rive::RenderPaintStyle m_style = rive::RenderPaintStyle::fill;
+    rive::ColorInt m_color = 0xff000000;
+    float m_thickness = 1.0f;
+    rive::StrokeJoin m_join = rive::StrokeJoin::miter;
+    rive::StrokeCap m_cap = rive::StrokeCap::butt;
+    float m_feather = 0.0f;
+    rive::BlendMode m_blendMode = rive::BlendMode::srcOver;
+    rive::rcp<rive::RenderShader> m_shader;
+};
+
+class NullRenderPaint : public rive::RenderPaint
+{
+public:
+    void style(rive::RenderPaintStyle style) override { m_style = style; }
+    void color(rive::ColorInt value) override { m_color = value; }
+    void thickness(float value) override { m_thickness = value; }
+    void join(rive::StrokeJoin value) override { m_join = value; }
+    void cap(rive::StrokeCap value) override { m_cap = value; }
+    void feather(float value) override { m_feather = value; }
+    void blendMode(rive::BlendMode value) override { m_blendMode = value; }
+    void shader(rive::rcp<rive::RenderShader> shader) override
+    {
+        m_shader = std::move(shader);
+    }
+    void invalidateStroke() override {}
+
+private:
     rive::RenderPaintStyle m_style = rive::RenderPaintStyle::fill;
     rive::ColorInt m_color = 0xff000000;
     float m_thickness = 1.0f;
@@ -477,6 +517,57 @@ private:
     rive::FillRule m_fillRule = rive::FillRule::nonZero;
 };
 
+class NullRenderPath : public rive::RenderPath
+{
+public:
+    NullRenderPath() = default;
+    NullRenderPath(const rive::RawPath& rawPath, rive::FillRule fillRule) :
+        m_rawPath(rawPath), m_fillRule(fillRule)
+    {}
+
+    void rewind() override { m_rawPath.rewind(); }
+    void fillRule(rive::FillRule value) override { m_fillRule = value; }
+    void addPath(rive::CommandPath* path,
+                 const rive::Mat2D& transform) override
+    {
+        addRenderPath(path->renderPath(), transform);
+    }
+    void addRenderPath(const rive::RenderPath* path,
+                       const rive::Mat2D& transform) override
+    {
+        auto nullPath = static_cast<const NullRenderPath*>(path);
+        m_rawPath.addPath(nullPath->rawPath(), &transform);
+    }
+    void addRenderPathBackwards(const rive::RenderPath* path,
+                                const rive::Mat2D& transform) override
+    {
+        auto nullPath = static_cast<const NullRenderPath*>(path);
+        m_rawPath.addPathBackwards(nullPath->rawPath(), &transform);
+    }
+    void moveTo(float x, float y) override { m_rawPath.moveTo(x, y); }
+    void lineTo(float x, float y) override { m_rawPath.lineTo(x, y); }
+    void cubicTo(float ox,
+                 float oy,
+                 float ix,
+                 float iy,
+                 float x,
+                 float y) override
+    {
+        m_rawPath.cubicTo(ox, oy, ix, iy, x, y);
+    }
+    void close() override { m_rawPath.close(); }
+    void addRawPath(const rive::RawPath& path) override
+    {
+        m_rawPath.addPath(path);
+    }
+
+    const rive::RawPath& rawPath() const { return m_rawPath; }
+
+private:
+    rive::RawPath m_rawPath;
+    rive::FillRule m_fillRule = rive::FillRule::nonZero;
+};
+
 class RecordingRenderBuffer : public rive::RenderBuffer
 {
 public:
@@ -508,6 +599,23 @@ private:
 
     RecordingStream* m_stream;
     uint64_t m_id;
+    std::vector<uint8_t> m_bytes;
+};
+
+class NullRenderBuffer : public rive::RenderBuffer
+{
+public:
+    NullRenderBuffer(rive::RenderBufferType type,
+                     rive::RenderBufferFlags flags,
+                     size_t sizeInBytes) :
+        rive::RenderBuffer(type, flags, sizeInBytes),
+        m_bytes(sizeInBytes)
+    {}
+
+private:
+    void* onMap() override { return m_bytes.data(); }
+    void onUnmap() override {}
+
     std::vector<uint8_t> m_bytes;
 };
 
@@ -613,6 +721,35 @@ void RecordingRenderer::modulateOpacity(float opacity)
 {
     m_stream->line("modulateOpacity opacity=" + floatToString(opacity));
 }
+
+void NullRenderer::save() {}
+
+void NullRenderer::restore() {}
+
+void NullRenderer::transform(const rive::Mat2D&) {}
+
+void NullRenderer::drawPath(rive::RenderPath*, rive::RenderPaint*) {}
+
+void NullRenderer::clipPath(rive::RenderPath*) {}
+
+void NullRenderer::drawImage(const rive::RenderImage*,
+                             rive::ImageSampler,
+                             rive::BlendMode,
+                             float)
+{}
+
+void NullRenderer::drawImageMesh(const rive::RenderImage*,
+                                 rive::ImageSampler,
+                                 rive::rcp<rive::RenderBuffer>,
+                                 rive::rcp<rive::RenderBuffer>,
+                                 rive::rcp<rive::RenderBuffer>,
+                                 uint32_t,
+                                 uint32_t,
+                                 rive::BlendMode,
+                                 float)
+{}
+
+void NullRenderer::modulateOpacity(float) {}
 
 RecordingFactory::RecordingFactory()
 {
@@ -779,5 +916,66 @@ void RecordingFactory::clear()
 {
     m_stream.clear();
     m_stream.line("rive-golden-stream-v1");
+}
+
+rive::rcp<rive::RenderBuffer> NullFactory::makeRenderBuffer(
+    rive::RenderBufferType type,
+    rive::RenderBufferFlags flags,
+    size_t sizeInBytes)
+{
+    return rive::make_rcp<NullRenderBuffer>(type, flags, sizeInBytes);
+}
+
+rive::rcp<rive::RenderShader> NullFactory::makeLinearGradient(
+    float,
+    float,
+    float,
+    float,
+    const rive::ColorInt[],
+    const float[],
+    size_t)
+{
+    return rive::make_rcp<NullRenderShader>();
+}
+
+rive::rcp<rive::RenderShader> NullFactory::makeRadialGradient(
+    float,
+    float,
+    float,
+    const rive::ColorInt[],
+    const float[],
+    size_t)
+{
+    return rive::make_rcp<NullRenderShader>();
+}
+
+rive::rcp<rive::RenderPath> NullFactory::makeRenderPath(
+    rive::RawPath& rawPath,
+    rive::FillRule fillRule)
+{
+    return rive::make_rcp<NullRenderPath>(rawPath, fillRule);
+}
+
+rive::rcp<rive::RenderPath> NullFactory::makeEmptyRenderPath()
+{
+    return rive::make_rcp<NullRenderPath>();
+}
+
+rive::rcp<rive::RenderPaint> NullFactory::makeRenderPaint()
+{
+    return rive::make_rcp<NullRenderPaint>();
+}
+
+rive::rcp<rive::RenderImage> NullFactory::decodeImage(
+    rive::Span<const uint8_t> data)
+{
+    auto dimensions = encodedImageDimensions(data);
+    return rive::make_rcp<NullRenderImage>(dimensions.first,
+                                           dimensions.second);
+}
+
+std::unique_ptr<rive::Renderer> NullFactory::makeRenderer()
+{
+    return std::make_unique<NullRenderer>();
 }
 } // namespace rive_rust::golden

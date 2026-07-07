@@ -405,6 +405,33 @@ pub struct RecordingFactory {
     next_shader_id: u64,
 }
 
+pub struct NullRenderer;
+
+impl NullRenderer {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for NullRenderer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Default)]
+pub struct NullFactory;
+
+impl NullFactory {
+    pub fn new() -> Self {
+        Self
+    }
+
+    pub fn make_renderer(&self) -> NullRenderer {
+        NullRenderer::new()
+    }
+}
+
 impl RecordingFactory {
     pub fn new() -> Self {
         let stream = Rc::new(RefCell::new(RecordingStream::default()));
@@ -604,6 +631,276 @@ impl Factory for RecordingFactory {
             .line(format!("decodeImage id={id} width={width} height={height}"));
         Box::new(RecordingRenderImage { id, width, height })
     }
+}
+
+impl Factory for NullFactory {
+    fn make_render_buffer(
+        &mut self,
+        buffer_type: RenderBufferType,
+        flags: RenderBufferFlags,
+        size_in_bytes: usize,
+    ) -> Box<dyn RenderBuffer> {
+        Box::new(NullRenderBuffer {
+            buffer_type,
+            flags,
+            bytes: vec![0; size_in_bytes],
+        })
+    }
+
+    fn make_linear_gradient(
+        &mut self,
+        _sx: f32,
+        _sy: f32,
+        _ex: f32,
+        _ey: f32,
+        _colors: &[ColorInt],
+        _stops: &[f32],
+    ) -> Box<dyn RenderShader> {
+        Box::new(NullRenderShader)
+    }
+
+    fn make_radial_gradient(
+        &mut self,
+        _cx: f32,
+        _cy: f32,
+        _radius: f32,
+        _colors: &[ColorInt],
+        _stops: &[f32],
+    ) -> Box<dyn RenderShader> {
+        Box::new(NullRenderShader)
+    }
+
+    fn make_render_path(&mut self, raw_path: RawPath, fill_rule: FillRule) -> Box<dyn RenderPath> {
+        Box::new(NullRenderPath {
+            raw_path,
+            fill_rule,
+        })
+    }
+
+    fn make_empty_render_path(&mut self) -> Box<dyn RenderPath> {
+        Box::new(NullRenderPath {
+            raw_path: RawPath::new(),
+            fill_rule: FillRule::NonZero,
+        })
+    }
+
+    fn make_render_paint(&mut self) -> Box<dyn RenderPaint> {
+        Box::new(NullRenderPaint {
+            style: RenderPaintStyle::Fill,
+            color: 0xff000000,
+            thickness: 1.0,
+            join: StrokeJoin::Miter,
+            cap: StrokeCap::Butt,
+            feather: 0.0,
+            blend_mode: BlendMode::SrcOver,
+        })
+    }
+
+    fn decode_image(&mut self, data: &[u8]) -> Box<dyn RenderImage> {
+        let (width, height) = encoded_image_dimensions(data);
+        Box::new(NullRenderImage { width, height })
+    }
+}
+
+struct NullRenderShader;
+
+impl RenderShader for NullRenderShader {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+struct NullRenderImage {
+    width: u32,
+    height: u32,
+}
+
+impl RenderImage for NullRenderImage {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn width(&self) -> u32 {
+        self.width
+    }
+
+    fn height(&self) -> u32 {
+        self.height
+    }
+}
+
+struct NullRenderPaint {
+    style: RenderPaintStyle,
+    color: ColorInt,
+    thickness: f32,
+    join: StrokeJoin,
+    cap: StrokeCap,
+    feather: f32,
+    blend_mode: BlendMode,
+}
+
+impl RenderPaint for NullRenderPaint {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn style(&mut self, style: RenderPaintStyle) {
+        self.style = style;
+    }
+
+    fn color(&mut self, value: ColorInt) {
+        self.color = value;
+    }
+
+    fn thickness(&mut self, value: f32) {
+        self.thickness = value;
+    }
+
+    fn join(&mut self, value: StrokeJoin) {
+        self.join = value;
+    }
+
+    fn cap(&mut self, value: StrokeCap) {
+        self.cap = value;
+    }
+
+    fn feather(&mut self, value: f32) {
+        self.feather = value;
+    }
+
+    fn blend_mode(&mut self, value: BlendMode) {
+        self.blend_mode = value;
+    }
+
+    fn shader(&mut self, _shader: Option<&dyn RenderShader>) {}
+
+    fn invalidate_stroke(&mut self) {}
+}
+
+struct NullRenderPath {
+    raw_path: RawPath,
+    fill_rule: FillRule,
+}
+
+impl RenderPath for NullRenderPath {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn rewind(&mut self) {
+        self.raw_path.rewind();
+    }
+
+    fn reserve(&mut self, verbs: usize, points: usize) {
+        self.raw_path.reserve(verbs, points);
+    }
+
+    fn fill_rule(&mut self, value: FillRule) {
+        self.fill_rule = value;
+    }
+
+    fn add_render_path(&mut self, path: &dyn RenderPath, transform: Mat2D) {
+        let path = null_path(path);
+        self.raw_path.add_path(&path.raw_path, transform);
+    }
+
+    fn add_render_path_backwards(&mut self, path: &dyn RenderPath, transform: Mat2D) {
+        let path = null_path(path);
+        self.raw_path.add_path_backwards(&path.raw_path, transform);
+    }
+
+    fn add_raw_path(&mut self, path: &RawPath) {
+        self.raw_path.add_path(path, Mat2D::IDENTITY);
+    }
+
+    fn move_to(&mut self, x: f32, y: f32) {
+        self.raw_path.move_to(x, y);
+    }
+
+    fn line_to(&mut self, x: f32, y: f32) {
+        self.raw_path.line_to(x, y);
+    }
+
+    fn cubic_to(&mut self, ox: f32, oy: f32, ix: f32, iy: f32, x: f32, y: f32) {
+        self.raw_path.cubic_to(ox, oy, ix, iy, x, y);
+    }
+
+    fn close(&mut self) {
+        self.raw_path.close();
+    }
+}
+
+struct NullRenderBuffer {
+    buffer_type: RenderBufferType,
+    flags: RenderBufferFlags,
+    bytes: Vec<u8>,
+}
+
+impl RenderBuffer for NullRenderBuffer {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn buffer_type(&self) -> RenderBufferType {
+        self.buffer_type
+    }
+
+    fn flags(&self) -> RenderBufferFlags {
+        self.flags
+    }
+
+    fn size_in_bytes(&self) -> usize {
+        self.bytes.len()
+    }
+
+    fn map_mut(&mut self) -> &mut [u8] {
+        &mut self.bytes
+    }
+
+    fn unmap(&mut self) {}
+}
+
+impl Renderer for NullRenderer {
+    fn save(&mut self) {}
+
+    fn restore(&mut self) {}
+
+    fn transform(&mut self, _transform: Mat2D) {}
+
+    fn draw_path(&mut self, _path: &dyn RenderPath, _paint: &dyn RenderPaint) {}
+
+    fn clip_path(&mut self, _path: &dyn RenderPath) {}
+
+    fn draw_image(
+        &mut self,
+        _image: Option<&dyn RenderImage>,
+        _sampler: ImageSampler,
+        _blend_mode: BlendMode,
+        _opacity: f32,
+    ) {
+    }
+
+    fn draw_image_mesh(
+        &mut self,
+        _image: Option<&dyn RenderImage>,
+        _sampler: ImageSampler,
+        _vertices: Option<&dyn RenderBuffer>,
+        _uv_coords: Option<&dyn RenderBuffer>,
+        _indices: Option<&dyn RenderBuffer>,
+        _vertex_count: u32,
+        _index_count: u32,
+        _blend_mode: BlendMode,
+        _opacity: f32,
+    ) {
+    }
+
+    fn modulate_opacity(&mut self, _opacity: f32) {}
+}
+
+fn null_path(path: &dyn RenderPath) -> &NullRenderPath {
+    path.as_any()
+        .downcast_ref::<NullRenderPath>()
+        .expect("NullFactory requires NullRenderPath")
 }
 
 struct RecordingRenderShader {

@@ -52,6 +52,30 @@ private:
     RecordingStream* m_stream;
 };
 
+class NullRenderer : public rive::Renderer
+{
+public:
+    void save() override;
+    void restore() override;
+    void transform(const rive::Mat2D& transform) override;
+    void drawPath(rive::RenderPath* path, rive::RenderPaint* paint) override;
+    void clipPath(rive::RenderPath* path) override;
+    void drawImage(const rive::RenderImage* image,
+                   rive::ImageSampler sampler,
+                   rive::BlendMode blendMode,
+                   float opacity) override;
+    void drawImageMesh(const rive::RenderImage* image,
+                       rive::ImageSampler sampler,
+                       rive::rcp<rive::RenderBuffer> vertices,
+                       rive::rcp<rive::RenderBuffer> uvCoords,
+                       rive::rcp<rive::RenderBuffer> indices,
+                       uint32_t vertexCount,
+                       uint32_t indexCount,
+                       rive::BlendMode blendMode,
+                       float opacity) override;
+    void modulateOpacity(float opacity) override;
+};
+
 class RecordingFactory : public rive::Factory
 {
 public:
@@ -104,6 +128,37 @@ private:
     uint64_t m_nextPathId = 1;
     uint64_t m_nextBufferId = 1;
     uint64_t m_nextShaderId = 1;
+};
+
+class NullFactory : public rive::Factory
+{
+public:
+    rive::rcp<rive::RenderBuffer> makeRenderBuffer(rive::RenderBufferType,
+                                                   rive::RenderBufferFlags,
+                                                   size_t sizeInBytes) override;
+    rive::rcp<rive::RenderShader> makeLinearGradient(
+        float sx,
+        float sy,
+        float ex,
+        float ey,
+        const rive::ColorInt colors[],
+        const float stops[],
+        size_t count) override;
+    rive::rcp<rive::RenderShader> makeRadialGradient(
+        float cx,
+        float cy,
+        float radius,
+        const rive::ColorInt colors[],
+        const float stops[],
+        size_t count) override;
+    rive::rcp<rive::RenderPath> makeRenderPath(rive::RawPath&,
+                                               rive::FillRule) override;
+    rive::rcp<rive::RenderPath> makeEmptyRenderPath() override;
+    rive::rcp<rive::RenderPaint> makeRenderPaint() override;
+    rive::rcp<rive::RenderImage> decodeImage(
+        rive::Span<const uint8_t>) override;
+
+    std::unique_ptr<rive::Renderer> makeRenderer();
 };
 } // namespace rive_rust::golden
 

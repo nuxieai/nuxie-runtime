@@ -4,7 +4,9 @@ use rive_graph::{
     ArtboardGraph, GraphFile, ShapePaintContainerNode, ShapePaintKind, ShapePaintPathKind,
     ShapePaintStateNode,
 };
-use rive_render_api::RecordingFactory;
+use rive_render_api::{
+    Factory as RenderFactory, NullFactory, RecordingFactory, Renderer as RenderRenderer,
+};
 use rive_runtime::{
     ArtboardInstance, RuntimeLayoutBoundsReport, RuntimeOwnedViewModelInstance,
     RuntimeRenderPathCache, StateMachineInstance, preallocate_render_paint_cache_for_artboard_tree,
@@ -19,6 +21,75 @@ use std::time::{Duration, Instant};
 const TIME_EPSILON: f32 = 0.000001;
 const DATA_BIND_FLAG_DIRECTION_TO_SOURCE: u64 = 1 << 0;
 const DATA_BIND_FLAG_TWO_WAY: u64 = 1 << 1;
+
+trait RunnerBackend {
+    fn as_factory(&mut self) -> &mut dyn RenderFactory;
+    fn make_renderer(&self) -> Box<dyn RenderRenderer>;
+    fn source(&mut self, file: &str, artboard: &str, scene: &str);
+    fn frame_size(&mut self, width: u32, height: u32);
+    fn add_input_event(&mut self, kind: &str, seconds: f32, x: f32, y: f32, pointer_id: i32);
+    fn add_sample(&mut self, seconds: f32);
+    fn add_frame(&mut self);
+    fn stream(&self) -> String;
+}
+
+impl RunnerBackend for RecordingFactory {
+    fn as_factory(&mut self) -> &mut dyn RenderFactory {
+        self
+    }
+
+    fn make_renderer(&self) -> Box<dyn RenderRenderer> {
+        Box::new(RecordingFactory::make_renderer(self))
+    }
+
+    fn source(&mut self, file: &str, artboard: &str, scene: &str) {
+        RecordingFactory::source(self, file, artboard, scene);
+    }
+
+    fn frame_size(&mut self, width: u32, height: u32) {
+        RecordingFactory::frame_size(self, width, height);
+    }
+
+    fn add_input_event(&mut self, kind: &str, seconds: f32, x: f32, y: f32, pointer_id: i32) {
+        RecordingFactory::add_input_event(self, kind, seconds, x, y, pointer_id);
+    }
+
+    fn add_sample(&mut self, seconds: f32) {
+        RecordingFactory::add_sample(self, seconds);
+    }
+
+    fn add_frame(&mut self) {
+        RecordingFactory::add_frame(self);
+    }
+
+    fn stream(&self) -> String {
+        RecordingFactory::stream(self)
+    }
+}
+
+impl RunnerBackend for NullFactory {
+    fn as_factory(&mut self) -> &mut dyn RenderFactory {
+        self
+    }
+
+    fn make_renderer(&self) -> Box<dyn RenderRenderer> {
+        Box::new(NullFactory::make_renderer(self))
+    }
+
+    fn source(&mut self, _file: &str, _artboard: &str, _scene: &str) {}
+
+    fn frame_size(&mut self, _width: u32, _height: u32) {}
+
+    fn add_input_event(&mut self, _kind: &str, _seconds: f32, _x: f32, _y: f32, _pointer_id: i32) {}
+
+    fn add_sample(&mut self, _seconds: f32) {}
+
+    fn add_frame(&mut self) {}
+
+    fn stream(&self) -> String {
+        String::new()
+    }
+}
 
 fn main() {
     match run() {
@@ -93,12 +164,16 @@ fn run() -> Result<String> {
         );
     }
 
-    let mut factory = RecordingFactory::new();
+    let mut factory: Box<dyn RunnerBackend> = if options.benchmark {
+        Box::new(NullFactory::new())
+    } else {
+        Box::new(RecordingFactory::new())
+    };
     let mut paint_cache = preallocate_render_paint_cache_for_artboard_tree(
         &runtime,
         artboard,
         &graph.artboards,
-        &mut factory,
+        factory.as_factory(),
     );
     let mut path_cache = RuntimeRenderPathCache::default();
     let mut renderer = factory.make_renderer();
@@ -166,7 +241,7 @@ fn run() -> Result<String> {
                 &runtime,
                 artboard,
                 &graph.artboards,
-                &mut factory,
+                factory.as_factory(),
                 &mut paint_cache,
                 &mut path_cache,
             )
@@ -178,8 +253,8 @@ fn run() -> Result<String> {
                     &runtime,
                     artboard,
                     &graph.artboards,
-                    &mut factory,
-                    &mut renderer,
+                    factory.as_factory(),
+                    &mut *renderer,
                     &mut paint_cache,
                     &mut path_cache,
                 )

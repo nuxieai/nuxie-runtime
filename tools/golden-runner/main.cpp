@@ -706,17 +706,26 @@ int runFile(const Options& options)
 
     rive::File::deterministicMode = true;
 
-    rive_rust::golden::RecordingFactory factory;
+    rive_rust::golden::RecordingFactory recordingFactory;
+    rive_rust::golden::NullFactory nullFactory;
+    rive::Factory* factory = options.benchmark ? static_cast<rive::Factory*>(&nullFactory)
+                                               : static_cast<rive::Factory*>(&recordingFactory);
     RIVLoader loader(stripAbortingAssetContents(readFile(options.file)),
                      options.artboard,
                      options.stateMachine,
-                     &factory);
+                     factory);
     rive::Scene* scene = loader.scene();
-    auto renderer = factory.makeRenderer();
+    auto renderer = options.benchmark ? nullFactory.makeRenderer()
+                                      : recordingFactory.makeRenderer();
 
-    factory.source(options.file, loader.artboardName(), scene->name());
-    factory.frameSize(frameDimension(scene->width()),
-                      frameDimension(scene->height()));
+    if (!options.benchmark)
+    {
+        recordingFactory.source(options.file,
+                                loader.artboardName(),
+                                scene->name());
+        recordingFactory.frameSize(frameDimension(scene->width()),
+                                   frameDimension(scene->height()));
+    }
 
     const auto benchmarkStart = std::chrono::steady_clock::now();
     std::chrono::steady_clock::duration advanceElapsed{};
@@ -745,11 +754,14 @@ int runFile(const Options& options)
             });
             timedStage(inputElapsed, [&] {
                 applyInput(scene, event);
-                factory.addInputEvent(inputKindName(event.kind),
-                                      event.seconds,
-                                      event.x,
-                                      event.y,
-                                      event.pointerId);
+                if (!options.benchmark)
+                {
+                    recordingFactory.addInputEvent(inputKindName(event.kind),
+                                                   event.seconds,
+                                                   event.x,
+                                                   event.y,
+                                                   event.pointerId);
+                }
             });
             nextInput++;
         }
@@ -757,9 +769,15 @@ int runFile(const Options& options)
         timedStage(advanceElapsed, [&] {
             advanceTo(scene, sampleSeconds, currentSeconds);
         });
-        factory.addSample(sampleSeconds);
+        if (!options.benchmark)
+        {
+            recordingFactory.addSample(sampleSeconds);
+        }
         timedStage(drawElapsed, [&] { scene->draw(renderer.get()); });
-        factory.addFrame();
+        if (!options.benchmark)
+        {
+            recordingFactory.addFrame();
+        }
     }
     const auto benchmarkElapsed =
         std::chrono::steady_clock::now() - benchmarkStart;
@@ -780,7 +798,7 @@ int runFile(const Options& options)
     }
     else
     {
-        std::cout << factory.stream();
+        std::cout << recordingFactory.stream();
     }
 
     // The stream is complete; exit without running destructors. The

@@ -34,34 +34,23 @@ the only memory the next session has. Update it every commit.
    artboard listing/selection, artboard instantiation, one-shot advance/draw
    through the renderer traits, and raw runtime/graph escape hatches. First C
    ABI facade exists at `crates/rive-capi` with import/free and artboard
-   metadata functions. First process-level perf baseline exists via
-   `make perf-compare`: default `shapetest.riv`, samples=0, iterations=5,
-   warmups=1 reports C++ median 37.848ms, Rust median 5.131ms,
-   Rust/C++=0.136 on this machine. First corpus perf threshold exists via
-   `make perf-corpus`: focused verification with `PERF_CORPUS_LIMIT=5`,
-   `PERF_ITERATIONS=2`, `PERF_WARMUPS=1`, `PERF_MAX_RATIO=2.0` reports 5
-   exact entries / 10 segments, aggregate Rust/C++=1.183. Full
-   `cargo test --workspace` passes, and full `make golden-compare` remains
-   `exact=263`, `exact-segments=584`, `diverges=0`,
-   `unsupported-feature=32`, `not-yet=0`. First in-process advance+draw
-   hot-loop benchmark exists via `make perf-hot-loop`, using runner-side
-   `--benchmark` mode to exclude process startup/import. Focused debug-runner
-   verification with `PERF_CORPUS_LIMIT=5`, `PERF_ITERATIONS=2`,
-   `PERF_WARMUPS=1`, `PERF_MAX_RATIO=8.0` initially reported aggregate
-   Rust/C++=7.007 and passed the loose smoke threshold. The recording
-   serializer now writes path/paint snapshots directly into `RecordingStream`
-   instead of building nested temporary strings. Focused loose-threshold
-   hot-loop verification after the follow-up draw allocation slice now reports
-   aggregate Rust/C++=5.290; the strict M7 target check with
-   `PERF_MAX_RATIO=2.0` still fails at aggregate Rust/C++=5.122. Runner
-   benchmark output includes phase timings. Direct `ai_assitant.riv` phase
-   timing after the allocation slice is noisy but typical runs report Rust ~=
-   146.57ms total (7.27ms advance, 44.41ms prepare, 94.89ms draw) vs C++ ~=
-   25.08ms total (7.62ms advance, 17.45ms draw). Highest priority next target
-   is reducing remaining hot-loop fixed overhead, especially
-   `animation_reset_cases` / tiny-file ratios and `ai_assitant` draw/prepare;
-   after that, rerun the hot-loop 2.0 threshold and expand the C ABI to
-   instance advance/draw.
+   metadata functions. `make perf-compare`, `make perf-corpus`, and
+   `make perf-hot-loop` now build release C++/Rust runners by default, and
+   `perf-hot-loop` consumes runner benchmark phase sums rather than wall-clock
+   process or stream-serialization time. Both runners have null-renderer
+   benchmark backends, so M7 perf checks exclude golden recording output.
+   Decision-grade focused verification with `make perf-hot-loop
+   PERF_CORPUS_LIMIT=5 PERF_ITERATIONS=10 PERF_WARMUPS=1` fails the strict
+   `PERF_MAX_RATIO=2.0` target at aggregate Rust/C++=21.908 over 5 exact
+   entries / 10 segments (`ai_assitant`=37.503, `advance_blend_mode`=19.690,
+   `animation_reset_cases`=19.837). Full `cargo test --workspace` passes, and
+   full `make golden-compare` remains `exact=263`, `exact-segments=584`,
+   `diverges=0`, `unsupported-feature=32`, `not-yet=0`. Highest priority next
+   target is M7 perf attribution: run a release flamegraph/profile on the
+   null-renderer hot loop, start with `ai_assitant.riv`, then port the matching
+   C++ dirt-gating, keyframe cursor, buffer reuse, or retained-cache
+   optimization before rerunning the 10-iteration strict threshold. After the
+   perf target is real, expand the C ABI to instance advance/draw.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -358,6 +347,23 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-07: [M7] Corrected the hot-loop perf proof path. Perf Make targets
+  now build release C++/Rust runners by default. Runner benchmark comparison
+  consumes `advance_ms + input_ms + prepare_ms + draw_ms` instead of
+  `elapsed_ms`, and both golden runners now route `--benchmark` through
+  null-renderer/null-factory backends so serializer and golden recording work
+  stay out of the metric. Decision-grade focused verification:
+  `make perf-hot-loop PERF_CORPUS_LIMIT=5 PERF_ITERATIONS=10 PERF_WARMUPS=1`
+  fails the strict `PERF_MAX_RATIO=2.0` target at aggregate Rust/C++=21.908
+  over 5 exact entries / 10 segments; largest focused ratios are
+  `ai_assitant`=37.503, `advance_blend_mode`=19.690, and
+  `animation_reset_cases`=19.837. This replaces the earlier recording-renderer
+  perf numbers as M7 signal. Full `cargo test --workspace` passes, and full
+  `make golden-compare` remains `exact=263`, `exact-segments=584`,
+  `diverges=0`, `unsupported-feature=32`, `not-yet=0`. Next M7 slice should
+  flamegraph the release null-renderer hot loop, starting with
+  `ai_assitant.riv`, then port the corresponding C++ optimization rather than
+  inventing cache/dirt behavior.
 - 2026-07-07: [M7] Reduced Rust hot-loop draw/prepare allocations. The draw
   path no longer rebuilds a per-frame local-to-global `BTreeMap`; it indexes
   `ArtboardGraph.local_objects` directly. Per-draw path slot dedup now borrows

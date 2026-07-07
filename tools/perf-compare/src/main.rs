@@ -31,6 +31,7 @@ fn run_single(options: &Options, target: &RunTarget) -> Result<(), String> {
         "perf-compare samples={} iterations={} warmups={}",
         target.samples, options.iterations, options.warmups
     );
+    print_metric(options.runner_benchmark);
     print_measurements("cpp", cpp);
     print_measurements("rust", rust);
     println!("rust_over_cpp={ratio:.3}");
@@ -69,6 +70,7 @@ fn run_corpus(options: &Options, corpus: &Path) -> Result<(), String> {
         options.iterations,
         options.warmups
     );
+    print_metric(options.runner_benchmark);
     for target in &targets {
         let cpp = measure_runner("cpp", &options.cpp_runner, target, options)?;
         let rust = measure_runner("rust", &options.rust_runner, target, options)?;
@@ -103,6 +105,15 @@ fn print_measurements(label: &str, measurements: Measurements) {
         millis(measurements.min),
         millis(measurements.max)
     );
+}
+
+fn print_metric(runner_benchmark: bool) {
+    let metric = if runner_benchmark {
+        "runner_hot_loop_ms"
+    } else {
+        "process_elapsed_ms"
+    };
+    println!("perf-compare metric={metric}");
 }
 
 fn check_max_ratio(ratio: f64, max_ratio: Option<f64>) -> Result<(), String> {
@@ -325,7 +336,7 @@ fn run_once(
         ));
     }
     if options.runner_benchmark {
-        return parse_benchmark_duration(&output.stdout).map_err(|error| {
+        return parse_benchmark_hot_loop_duration(&output.stdout).map_err(|error| {
             let kind = if warmup { "warmup" } else { "iteration" };
             format!(
                 "{label} runner {} did not emit a benchmark for {} on {kind} {iteration}: {error}",
@@ -364,25 +375,54 @@ fn runner_command(runner: &Path, target: &RunTarget, benchmark: bool) -> Command
     command
 }
 
-fn parse_benchmark_duration(stdout: &[u8]) -> Result<Duration, String> {
+fn parse_benchmark_hot_loop_duration(stdout: &[u8]) -> Result<Duration, String> {
     let text = std::str::from_utf8(stdout).map_err(|error| format!("invalid utf8: {error}"))?;
     let mut lines = text.lines();
     if lines.next() != Some("rive-golden-benchmark-v1") {
         return Err("missing rive-golden-benchmark-v1 header".to_owned());
     }
+
+    let mut advance = None;
+    let mut input = None;
+    let mut prepare = None;
+    let mut draw = None;
     for line in lines {
-        let Some(value) = line.strip_prefix("elapsed_ms=") else {
+        let Some((key, value)) = line.split_once('=') else {
             continue;
         };
-        let millis = value
-            .parse::<f64>()
-            .map_err(|error| format!("invalid elapsed_ms {value}: {error}"))?;
-        if !millis.is_finite() || millis < 0.0 {
-            return Err(format!("invalid elapsed_ms {value}"));
-        }
-        return Ok(Duration::from_secs_f64(millis / 1000.0));
+        let target = match key {
+            "advance_ms" => &mut advance,
+            "input_ms" => &mut input,
+            "prepare_ms" => &mut prepare,
+            "draw_ms" => &mut draw,
+            _ => continue,
+        };
+        *target = Some(parse_millis(value, key)?);
     }
-    Err("missing elapsed_ms".to_owned())
+
+    let mut total = Duration::ZERO;
+    for (name, duration) in [
+        ("advance_ms", advance),
+        ("input_ms", input),
+        ("prepare_ms", prepare),
+        ("draw_ms", draw),
+    ] {
+        let Some(duration) = duration else {
+            return Err(format!("missing {name}"));
+        };
+        total += duration;
+    }
+    Ok(total)
+}
+
+fn parse_millis(value: &str, key: &str) -> Result<Duration, String> {
+    let millis = value
+        .parse::<f64>()
+        .map_err(|error| format!("invalid {key} {value}: {error}"))?;
+    if !millis.is_finite() || millis < 0.0 {
+        return Err(format!("invalid {key} {value}"));
+    }
+    Ok(Duration::from_secs_f64(millis / 1000.0))
 }
 
 fn measurements_summary(mut measurements: Vec<Duration>) -> Measurements {
@@ -731,10 +771,20 @@ status = "unsupported-feature"
     }
 
     #[test]
-    fn parses_runner_benchmark_duration() {
-        let duration =
-            parse_benchmark_duration(b"rive-golden-benchmark-v1\nelapsed_ms=12.5\nsegments=2\n")
-                .expect("parse benchmark duration");
-        assert_eq!(duration, Duration::from_micros(12_500));
+    fn parses_runner_benchmark_hot_loop_duration() {
+        let duration = parse_benchmark_hot_loop_duration(
+            b"rive-golden-benchmark-v1\nelapsed_ms=99\nadvance_ms=1.5\ninput_ms=0.25\nprepare_ms=2.0\ndraw_ms=4.25\nbookkeeping_ms=91\nsegments=2\n",
+        )
+        .expect("parse benchmark duration");
+        assert_eq!(duration, Duration::from_micros(8_000));
+    }
+
+    #[test]
+    fn rejects_runner_benchmark_without_phase_duration() {
+        let error = parse_benchmark_hot_loop_duration(
+            b"rive-golden-benchmark-v1\nelapsed_ms=12.5\nadvance_ms=1\ninput_ms=0\nprepare_ms=0\nsegments=2\n",
+        )
+        .unwrap_err();
+        assert!(error.contains("missing draw_ms"));
     }
 }

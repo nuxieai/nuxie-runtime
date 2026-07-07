@@ -741,7 +741,7 @@ impl RuntimeLinearAnimation {
     }
 
     pub(crate) fn duration_seconds(&self) -> f32 {
-        self.frame_to_seconds(self.duration as f32)
+        (self.end_seconds() - self.start_seconds()).abs()
     }
 
     pub(crate) fn global_to_local_seconds(&self, seconds: f32) -> f32 {
@@ -1528,5 +1528,42 @@ impl LinearAnimationInstance {
         }
         self.did_loop = did_loop;
         self.keep_going_with_speed_multiplier(animation, elapsed_seconds)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn animation_with_work_area(enable_work_area: bool) -> RuntimeLinearAnimation {
+        RuntimeLinearAnimation {
+            global_id: 1,
+            name: Some("work area".to_owned()),
+            fps: 60,
+            duration: 60,
+            speed: 1.0,
+            loop_value: 1,
+            work_start: 10,
+            work_end: 40,
+            enable_work_area,
+            quantize: false,
+            keyed_objects: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn duration_seconds_respects_enabled_work_area() {
+        let animation = animation_with_work_area(true);
+
+        assert_eq!(animation.start_seconds(), 10.0 / 60.0);
+        assert_eq!(animation.duration_seconds(), 30.0 / 60.0);
+    }
+
+    #[test]
+    fn duration_seconds_uses_serialized_duration_without_work_area() {
+        let animation = animation_with_work_area(false);
+
+        assert_eq!(animation.start_seconds(), 0.0);
+        assert_eq!(animation.duration_seconds(), 1.0);
     }
 }

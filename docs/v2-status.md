@@ -5,10 +5,10 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 564 across 243 files (strict
-  exact=557/236; tolerant=7/7; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=52, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=10 gated=6 harness=36
+- Exact-status segments (file × sample): 565 across 244 files (strict
+  exact=558/237; tolerant=7/7; structural=0/0)
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=51, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=9 gated=6 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes**
 
 ## Milestones
@@ -26,17 +26,16 @@ the only memory the next session has. Update it every commit.
 
 1. The active `not-yet` queue is empty. Continue M6 by picking the highest-value
    remaining unsupported queue that is not scripting/audio: start with
-   `selected-root-skinned-clip-path` (`bullet_man.riv`,
-   `spotify_kids_demo.riv`) or the nested data-bind diagnostics.
+   `selected-root-skinned-ik-clip-path` (`bullet_man.riv`) or the nested
+   data-bind diagnostics.
    `echo_show_demo.riv` is now parked behind the sharper
    `text-joystick-data-bind-divergence` diagnostic after a focused probe
    reached draw but diverged from C++; `superbowl.riv` is parked behind the
    sharper `state-machine-viewmodel-solo-image` diagnostic.
 2. Other parked one-file M6 queues include `text-joystick-data-bind-divergence`
    (`echo_show_demo.riv`), `state-machine-viewmodel-solo-image`
-   (`superbowl.riv`), plus the two-file
-   `selected-root-skinned-clip-path` queue (`bullet_man.riv`,
-   `spotify_kids_demo.riv`). The former
+   (`superbowl.riv`), and `selected-root-skinned-ik-clip-path`
+   (`bullet_man.riv`). The former
    `data-binding-nested-child` queue is five one-file diagnostics:
    `nested-trim-path-data-bind` (`db_health_tracker.riv`),
    `nested-artboard-root-transform` (`nested_hug.riv`),
@@ -519,6 +518,17 @@ the only memory the next session has. Update it every commit.
   `diverges=0`, `unsupported-feature=52`, `not-yet=0`, parked
   `M6=10 gated=6 harness=36`. Next target is
   `selected-root-skinned-clip-path` or the nested data-bind diagnostics.
+- 2026-07-06: [M6] Promoted `spotify_kids_demo.riv` by matching C++
+  `LinearAnimation::durationSeconds()` work-area semantics: runtime animation
+  duration is `abs(endSeconds() - startSeconds())`, not the serialized full
+  duration, so joystick-driven work-area animations sample the same local time
+  as C++. The broad `selected-root-skinned-clip-path` guard is narrowed to
+  `selected-root-skinned-ik-clip-path`; `bullet_man.riv` remains parked there
+  with tiny skinned path drift under IK plus clipping. Full
+  `make golden-compare` reports `exact=244`, `exact-segments=565`,
+  `diverges=0`, `unsupported-feature=51`, `not-yet=0`, parked
+  `M6=9 gated=6 harness=36`. Next target is
+  `selected-root-skinned-ik-clip-path` or the nested data-bind diagnostics.
 - 2026-07-02: `rive-runtime` owns static draw emission through
   `rive-render-api`; `rust-golden-runner` now only orchestrates import,
   artboard selection, stream markers, and recording output.

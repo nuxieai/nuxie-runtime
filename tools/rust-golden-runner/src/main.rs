@@ -872,10 +872,10 @@ fn ensure_static_draw_supported_for_artboard(
     }
 
     if let Some(global_id) =
-        unsupported_selected_root_skinned_clip_path_global(graph, artboard, !is_nested_child)
+        unsupported_selected_root_skinned_ik_clip_path_global(graph, artboard, !is_nested_child)
     {
         bail!(
-            "unsupported: selected-root-skinned-clip-path in Rust golden runner (global {global_id})"
+            "unsupported: selected-root-skinned-ik-clip-path in Rust golden runner (global {global_id})"
         );
     }
 
@@ -2169,17 +2169,17 @@ fn selected_root_external_image_global(
     first_image_or_asset_global(graph, artboard)
 }
 
-fn unsupported_selected_root_skinned_clip_path_global(
+fn unsupported_selected_root_skinned_ik_clip_path_global(
     graph: &GraphFile,
     artboard: &ArtboardGraph,
     apply_selected_root_fence: bool,
 ) -> Option<u32> {
     let image_global =
         selected_root_external_image_global(graph, artboard, apply_selected_root_fence)?;
-    artboard_has_skin_and_clipping_shape(artboard).then_some(image_global)
+    artboard_has_skin_clipping_shape_and_ik_constraint(artboard).then_some(image_global)
 }
 
-fn artboard_has_skin_and_clipping_shape(artboard: &ArtboardGraph) -> bool {
+fn artboard_has_skin_clipping_shape_and_ik_constraint(artboard: &ArtboardGraph) -> bool {
     let has_skin = artboard
         .local_objects
         .iter()
@@ -2188,7 +2188,11 @@ fn artboard_has_skin_and_clipping_shape(artboard: &ArtboardGraph) -> bool {
         .local_objects
         .iter()
         .any(|object| object.type_name == Some("ClippingShape"));
-    has_skin && has_clipping_shape
+    let has_ik_constraint = artboard
+        .local_objects
+        .iter()
+        .any(|object| object.type_name == Some("IKConstraint"));
+    has_skin && has_clipping_shape && has_ik_constraint
 }
 
 fn unsupported_image_global(

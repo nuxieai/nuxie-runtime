@@ -60,17 +60,19 @@ the only memory the next session has. Update it every commit.
    Rust/C++=34.736 on the current 10-iteration run
    (cpp median=0.543 ms, rust median=18.878 ms), confirming retained
    frame/path preparation and cached keys are real clean-frame wins but still
-   far from the strict target. Post-slice sampling shows raw
-   `property_key_for_name` is no longer the stateful nested-host binding hot
-   site; remaining heat is schema/type lookup in
+   far from the strict target. Generated schema kind/property switch tables now
+   remove the remaining linear schema/type lookup from the hot
    `RuntimeFile::data_bind_path_for_referencer_object`,
    `InstanceObjectArena::set_property_value` / `property_kind`, and layout/draw
-   property helpers. The next M7 target is generated/cached schema kind/property
-   tables for those frame-loop lookup sites, then C++-aligned dirty-gated
-   layout/paint preparation retention (`markLayoutNodeDirty`,
-   Paint|Stops|RenderOpacity gates) before lower-priority path/clip rebuild
-   leftovers. After the perf target is real, expand the C ABI to instance
-   advance/draw.
+   property helper paths; focused 10-iteration verification now reports
+   aggregate Rust/C++=2.543 over the same 5 exact entries / 10 segments
+   (`ai_assitant`=2.611, `align_target`=1.831, `animated_clipping`=2.460).
+   Direct `ai_assitant --benchmark-repeat 100` improves to Rust/C++=17.233
+   (cpp median=0.625 ms, rust median=10.766 ms). The next M7 target is a fresh
+   release profile, then C++-aligned dirty-gated layout/paint preparation
+   retention (`markLayoutNodeDirty`, Paint|Stops|RenderOpacity gates) before
+   lower-priority path/clip rebuild leftovers. After the perf target is real,
+   expand the C ABI to instance advance/draw.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -572,6 +574,21 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-07: [M7] Generated switch-table schema lookups from `rive-codegen`
+  and routed the public `rive-schema` definition/property/core-registry helpers
+  through them. This removes linear `DEFINITIONS` / ancestor scans from the
+  frame-loop lookup sites called by data-bind path referencers, instance
+  property setting/kind checks, and layout/draw property helpers while keeping
+  the old public API and first-match semantics. Full
+  `cargo fmt --all -- --check`, `cargo test --workspace`, and
+  `make golden-compare` pass at exact=263/exact-segments=584. Release
+  hot-loop smoke with `PERF_CORPUS_LIMIT=5 PERF_ITERATIONS=10 PERF_WARMUPS=1
+  PERF_MAX_RATIO=999` improves aggregate Rust/C++ from 3.096 to 2.543 over 5
+  exact entries / 10 segments (`ai_assitant`=2.611). Direct
+  `ai_assitant --benchmark-repeat 100` improves from Rust/C++=34.736 to
+  17.233 (cpp median=0.625 ms, rust median=10.766 ms). Strict <=2.0 remains
+  open; next target is a fresh release profile, then audited C++ dirty-gated
+  layout/paint preparation retention.
 - 2026-07-07: [M7] Cached fixed data-bind property keys used by artboard
   property/default/nested-host binding paths, mirroring C++ generated
   `*PropertyKey` / CoreRegistry access instead of doing schema name scans in

@@ -3,7 +3,7 @@ use rive_binary::RuntimeObject;
 use rive_binary::{FieldValue, RuntimeFile, StringValue};
 use rive_schema::{
     FieldKind, core_registry_setter_field_kind_by_property_key, definition_by_name,
-    definition_by_type_key,
+    definition_by_type_key, property_by_key_in_hierarchy,
 };
 
 mod generated_objects {
@@ -292,18 +292,7 @@ fn runtime_property_metadata_by_key(
     type_key: u16,
     property_key: u16,
 ) -> Option<(&'static str, &'static rive_schema::Property)> {
-    let definition = definition_by_type_key(type_key)?;
-    definition
-        .property_by_key(property_key)
-        .map(|property| (definition.name, property))
-        .or_else(|| {
-            definition.ancestors.iter().find_map(|ancestor| {
-                let definition = definition_by_name(ancestor)?;
-                definition
-                    .property_by_key(property_key)
-                    .map(|property| (*ancestor, property))
-            })
-        })
+    property_by_key_in_hierarchy(type_key, property_key)
 }
 
 fn runtime_property_metadata_by_name(

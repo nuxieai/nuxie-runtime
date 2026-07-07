@@ -221,18 +221,12 @@ impl Definition {
     }
 
     pub fn property_by_key_in_hierarchy(self, key: u16) -> Option<&'static Property> {
-        self.property_by_key(key).or_else(|| {
-            self.ancestors.iter().find_map(|ancestor| {
-                definition_by_name(ancestor).and_then(|definition| definition.property_by_key(key))
-            })
-        })
+        property_by_key_in_hierarchy(self.type_key.int, key).map(|(_, property)| property)
     }
 }
 
 pub fn definition_by_type_key(key: u16) -> Option<&'static Definition> {
-    generated::DEFINITIONS
-        .iter()
-        .find(|definition| definition.type_key.int == key)
+    generated::definition_by_type_key(key)
 }
 
 pub fn is_callback_property_key(key: u16) -> bool {
@@ -240,54 +234,31 @@ pub fn is_callback_property_key(key: u16) -> bool {
 }
 
 pub fn object_supports_property(type_key: u16, property_key: u16) -> bool {
-    match definition_by_type_key(type_key) {
-        Some(definition) => match definition.property_by_key_in_hierarchy(property_key) {
-            Some(property) => !property.encoded,
-            None => false,
-        },
-        None => false,
-    }
+    property_by_key_in_hierarchy(type_key, property_key)
+        .is_some_and(|(_, property)| !property.encoded)
 }
 
 pub fn definition_by_name(name: &str) -> Option<&'static Definition> {
-    generated::DEFINITIONS
-        .iter()
-        .find(|definition| definition.name == name)
+    generated::definition_by_name(name)
+}
+
+pub fn property_by_key_in_hierarchy(
+    type_key: u16,
+    property_key: u16,
+) -> Option<(&'static str, &'static Property)> {
+    generated::property_by_key_in_hierarchy(type_key, property_key)
 }
 
 pub fn core_registry_field_kind_by_property_key(key: u16) -> Option<CoreRegistryFieldKind> {
-    generated::DEFINITIONS
-        .iter()
-        .find_map(|definition| definition.property_by_key(key))
-        .and_then(CoreRegistryFieldKind::from_property)
+    generated::core_registry_field_kind_by_property_key(key)
 }
 
 pub fn core_registry_setter_field_kind_by_property_key(key: u16) -> Option<FieldKind> {
-    let property = generated::DEFINITIONS
-        .iter()
-        .find_map(|definition| definition.property_by_key(key))?;
-
-    if property.encoded || property.runtime_type == FieldKind::Bytes {
-        None
-    } else {
-        Some(property.runtime_type)
-    }
+    generated::core_registry_setter_field_kind_by_property_key(key)
 }
 
 pub fn core_registry_getter_field_kind_by_property_key(key: u16) -> Option<FieldKind> {
-    let property = generated::DEFINITIONS
-        .iter()
-        .find_map(|definition| definition.property_by_key(key))?;
-
-    if property.encoded
-        || property.runtime_type == FieldKind::Bytes
-        || property.runtime_type == FieldKind::Callback
-        || (property.runtime_type == FieldKind::Bool && property.bitmask_passthrough.is_some())
-    {
-        None
-    } else {
-        Some(property.runtime_type)
-    }
+    generated::core_registry_getter_field_kind_by_property_key(key)
 }
 
 fn parse_bool_initializer(value: &'static str) -> bool {

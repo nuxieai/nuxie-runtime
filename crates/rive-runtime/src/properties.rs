@@ -1,6 +1,6 @@
 use rive_binary::{RuntimeFile, RuntimeObject};
 use rive_graph::ArtboardGraph;
-use rive_schema::{FieldKind, definition_by_name, definition_by_type_key};
+use rive_schema::{FieldKind, definition_by_name, property_by_key_in_hierarchy};
 use std::sync::OnceLock;
 
 use crate::components::TransformProperty;
@@ -48,18 +48,15 @@ pub(crate) fn artboard_index_for_graph(file: &RuntimeFile, graph: &ArtboardGraph
 }
 
 fn runtime_property_name_by_key(object: &RuntimeObject, property_key: u16) -> Option<&'static str> {
-    definition_by_type_key(object.type_key)?
-        .property_by_key_in_hierarchy(property_key)
-        .map(|property| property.name)
+    property_by_key_in_hierarchy(object.type_key, property_key).map(|(_, property)| property.name)
 }
 
 pub(crate) fn runtime_object_field_kind_by_key(
     object: &RuntimeObject,
     property_key: u16,
 ) -> Option<FieldKind> {
-    definition_by_type_key(object.type_key)?
-        .property_by_key_in_hierarchy(property_key)
-        .map(|property| property.runtime_type)
+    property_by_key_in_hierarchy(object.type_key, property_key)
+        .map(|(_, property)| property.runtime_type)
 }
 
 pub(crate) fn runtime_object_double_property_by_key(
@@ -101,8 +98,7 @@ fn runtime_object_string_property_bytes_by_key(
     object: &RuntimeObject,
     property_key: u16,
 ) -> Option<&[u8]> {
-    let property =
-        definition_by_type_key(object.type_key)?.property_by_key_in_hierarchy(property_key)?;
+    let (_, property) = property_by_key_in_hierarchy(object.type_key, property_key)?;
     match property.runtime_type {
         FieldKind::String => object.string_property_bytes(property.name),
         FieldKind::Bytes => object.bytes_property(property.name),

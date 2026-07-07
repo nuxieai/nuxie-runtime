@@ -3627,47 +3627,11 @@ struct StyledTextGlyph {
 
 fn harfbuzz_line_metrics(font: &SkrifaFontRef<'_>, location_ref: LocationRef<'_>) -> (f32, f32) {
     // Mirrors src/text/font_hb.cpp::make_lmx: HarfBuzz scales extents to
-    // kStdScale and rounds them before Rive applies the authored font size.
-    // HarfBuzz prefers OS/2 typo metrics whenever that table exists, while
-    // Skrifa's public metrics follow platform selection flags. Match the
-    // HarfBuzz table policy and fold in MVAR deltas for variable fonts.
-    if let Some(metrics) = harfbuzz_table_line_metrics(font, location_ref) {
-        return metrics;
-    }
+    // kStdScale and rounds them before Rive applies the authored font size. Its
+    // OpenType funcs use the platform line-metric policy: OS/2 typo metrics
+    // only when USE_TYPO_METRICS is set, hhea otherwise, with font fallbacks.
     let metrics = font.metrics(Size::new(TEXT_SHAPE_SCALE_F32), location_ref);
     (metrics.ascent.round(), metrics.descent.round())
-}
-
-fn harfbuzz_table_line_metrics(
-    font: &SkrifaFontRef<'_>,
-    location_ref: LocationRef<'_>,
-) -> Option<(f32, f32)> {
-    let units_per_em = font.head().ok()?.units_per_em();
-    if units_per_em == 0 {
-        return None;
-    }
-    let (mut ascent, mut descent) = if let Ok(os2) = font.os2() {
-        (os2.s_typo_ascender() as f32, os2.s_typo_descender() as f32)
-    } else if let Ok(hhea) = font.hhea() {
-        (
-            hhea.ascender().to_i16() as f32,
-            hhea.descender().to_i16() as f32,
-        )
-    } else {
-        return None;
-    };
-
-    if !location_ref.is_default()
-        && let Ok(mvar) = font.mvar()
-    {
-        use skrifa::raw::tables::mvar::tags::{HASC, HDSC};
-        let coords = location_ref.coords();
-        ascent += mvar.metric_delta(HASC, coords).unwrap_or_default().to_f64() as f32;
-        descent += mvar.metric_delta(HDSC, coords).unwrap_or_default().to_f64() as f32;
-    }
-
-    let scale = TEXT_SHAPE_SCALE_F32 / units_per_em as f32;
-    Some(((ascent * scale).round(), (descent * scale).round()))
 }
 
 fn harfbuzz_scaled_glyph_top(raw_edge: f32) -> f32 {

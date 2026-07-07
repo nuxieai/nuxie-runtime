@@ -648,7 +648,7 @@ pub(super) fn build_artboard_default_view_model_values(
     values
 }
 
-pub(super) fn apply_artboard_unbound_color_data_bind_defaults(
+pub(super) fn apply_artboard_name_based_color_data_bind_defaults(
     file: &RuntimeFile,
     graph: &ArtboardGraph,
     objects: &mut InstanceObjectArena,
@@ -665,6 +665,12 @@ pub(super) fn apply_artboard_unbound_color_data_bind_defaults(
         if !data_bind_flags_apply_source_to_target(
             data_bind.object.uint_property("flags").unwrap_or(0),
         ) {
+            continue;
+        }
+        if !file
+            .data_bind_is_name_based_for_object(data_bind.object)
+            .unwrap_or(false)
+        {
             continue;
         }
         if data_bind

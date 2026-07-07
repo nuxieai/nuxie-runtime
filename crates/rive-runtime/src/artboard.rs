@@ -16,7 +16,7 @@ use crate::artboard_data_bind::{
     RuntimeArtboardListBindingInstance, RuntimeArtboardNestedHostBindingInstance,
     RuntimeArtboardNumericSourceBindingInstance, RuntimeArtboardPropertyBindingInstance,
     RuntimeArtboardSoloBindingInstance, RuntimeArtboardSoloSourceBindingInstance,
-    apply_artboard_unbound_color_data_bind_defaults, build_artboard_custom_property_bindings,
+    apply_artboard_name_based_color_data_bind_defaults, build_artboard_custom_property_bindings,
     build_artboard_default_view_model_values, build_artboard_formula_token_bindings,
     build_artboard_image_asset_bindings, build_artboard_layout_computed_bindings,
     build_artboard_list_bindings, build_artboard_nested_host_bindings,
@@ -176,7 +176,7 @@ impl ArtboardInstance {
             });
         }
         let mut objects = InstanceObjectArena::from_slots(file, &slots);
-        apply_artboard_unbound_color_data_bind_defaults(file, graph, &mut objects);
+        apply_artboard_name_based_color_data_bind_defaults(file, graph, &mut objects);
 
         let mut component_by_local = BTreeMap::new();
         let mut components = Vec::new();

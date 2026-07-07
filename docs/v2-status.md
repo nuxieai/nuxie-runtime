@@ -5,10 +5,10 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 581 across 260 files (strict
-  exact=571/250; tolerant=10/10; structural=0/0)
-- Current compare: `make golden-compare` reports exact=260,
-  exact-segments=581, diverges=0, unsupported-feature=34, not-yet=1
+- Exact-status segments (file × sample): 582 across 261 files (strict
+  exact=571/250; tolerant=11/11; structural=0/0)
+- Current compare: `make golden-compare` reports exact=261,
+  exact-segments=582, diverges=0, unsupported-feature=34, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
   M6=2 gated=6 harness=26
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes**
@@ -26,23 +26,19 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Active `not-yet` queue: `rewards_demo.riv`
-   (`not-yet:nested-feather-gradient-space`). Current slice fixed three
-   nested-runtime gaps: constrained descendants under layout overlays now use
-   the solved layout transform delta, skinned paths/meshes evaluate bone
-   transforms through those solved layout bounds, and flagged 1D blend states
-   now apply the C++ `AnimationResetFactory::fromAnimations(..., true)`
-   baseline reset for double/color keyed properties. `RootBone.x/y` are also
-   wired into transform-property animation. The focused exact compare now
-   first fails at line 694 on Chest nested feather path id 57 with a small
-   local Y residual (~2.4e-4 on the feather-expanded path, above the
-   1.3e-4 exact epsilon). Next work should localize that residual in keyed
-   interpolation/skin/feather math for the same Chest nested path, not reopen
-   layout transform or blend-state reset ordering.
-2. The former `nested-node-transform-data-bind`,
+1. Active `not-yet` queue is empty. `rewards_demo.riv` is exact-status under
+   `verification = "tolerant(0.0005)"`; the tolerance covers residual
+   HarfRust/Skrifa text-outline coordinate drift only.
+2. Highest-priority M6 target is `stateful_multi_property.riv`
+   (`rust-runner-unsupported:nested-layout-clip-data-bind`). Start by
+   admitting a focused exact candidate, then localize the first real stream
+   mismatch without reopening the now-closed rewards nested-feather lane.
+   `stateful_nested.riv` (`nested-stateful-view-model-property`) is the next
+   one-file M6 queue after that.
+3. The former `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
    `nested-feather-gradient-space` unsupported queues are empty.
-3. Remaining parked one-file M6 queues include `nested-layout-clip-data-bind`
+4. Remaining parked one-file M6 queues include `nested-layout-clip-data-bind`
    (`stateful_multi_property.riv`) and `nested-stateful-view-model-property`
    (`stateful_nested.riv`). Gated one-file diagnostics include
    `scripted-data-context`
@@ -52,14 +48,14 @@ the only memory the next session has. Update it every commit.
    work until a focused slice can either promote a file or replace the guard
    with a sharper diagnostic.
    The old `text-input` manifest queue is empty.
-4. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
+5. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
-5. Remaining exact entries pinned to sample `0` are static M1 holdovers:
+6. Remaining exact entries pinned to sample `0` are static M1 holdovers:
    `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
    them during M6 unless a related refactor needs a cheap draw-regression check.
 
-6. Threads are now policy (see `/goal` "Threads" section): the main loop
+7. Threads are now policy (see `/goal` "Threads" section): the main loop
    stays the single writer here; use read-only scout threads to triage the
    remaining M6 queues in parallel. Start the first lane thread in a NEW
    worktree for the C++ golden-runner crash repair (`milestone =
@@ -68,7 +64,7 @@ the only memory the next session has. Update it every commit.
    full ratchet passes. Recovered files enter as `not-yet` — denominator
    growth, zero conflict with M6 runtime work.
 
-7. Harness lane MERGED (e5941e7): the C++ golden-runner now survives 34 of
+8. Harness lane MERGED (e5941e7): the C++ golden-runner now survives 34 of
    36 `milestone = "harness"` files (FileAssetContents stripping for the
    non-scripting librive build, flush + `_Exit(0)` before teardown, ABI
    define alignment). MAIN-LOOP FOLLOW-UP is partially complete: 10 recovered
@@ -83,7 +79,7 @@ the only memory the next session has. Update it every commit.
    convention-change decision, not a harness fix. Keep them
    `milestone = "harness"` until decided.
 
-8. REVISED (see Decisions 2026-07-07): do not adopt the global named
+9. REVISED (see Decisions 2026-07-07): do not adopt the global named
    view-model instance 0 binding convention yet. The coordinated runner
    experiment recovered `scripted_color.riv` after binding the selected
    artboard's own owned view-model context, but still left 48 exact entries
@@ -96,7 +92,7 @@ the only memory the next session has. Update it every commit.
    layout, and view-model data-context binding well enough for the affected
    exact corpus to reverify green in the same commit.
 
-9. SCOUT RESULT (read-only pre-classification of the 34 recovered harness
+10. SCOUT RESULT (read-only pre-classification of the 34 recovered harness
    files; streams/diffs in the session scratchpad — trust but re-verify on
    promotion): (a) promoted exact in the main loop:
    audio_script, multi_listeners, script_dependency_test,
@@ -124,9 +120,7 @@ the only memory the next session has. Update it every commit.
 
 ## Known Divergences
 
-- `rewards_demo.riv` is the only active `status = "not-yet"` entry. It runs
-  in both golden runners at sample 0; the current first focused diff is the
-  small Chest nested feather local-path residual described in Next.
+- There are no active `status = "not-yet"` entries.
 - Remaining M6 parked work is behind explicit unsupported-feature diagnostics.
 
 ## Backlog (unsupported features awaiting corpus demand)
@@ -309,6 +303,19 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-07: [M6] Promoted `rewards_demo.riv` to exact-status under
+  `verification = "tolerant(0.0005)"`. The promotion closed the active
+  `not-yet:nested-feather-gradient-space` queue by matching C++ NSliced path
+  deformation/clip behavior, zero-size layout clip paths, inner-feather clip
+  fill-rule ordering, platform text line metrics, and a narrowed clone-time
+  SolidColor default rule: only name-based source-to-target SolidColor binds
+  get the opaque-black default, preserving authored id-path text paints while
+  keeping `relative_data_binding.riv` exact. Full `make golden-compare`
+  reports `exact=261`, `exact-segments=582`, `diverges=0`,
+  `unsupported-feature=34`, `not-yet=0`, parked
+  `M6=2 gated=6 harness=26`; `cargo test --workspace` passes. Next target is
+  `stateful_multi_property.riv`
+  (`rust-runner-unsupported:nested-layout-clip-data-bind`).
 - 2026-07-07: [M6] Cleared the focused `rewards_demo.riv` Chest shader
   allocation/order mismatch without changing runtime scheduler order.
   `rive-graph` now keeps a separate `dependency_insertion_order` projection

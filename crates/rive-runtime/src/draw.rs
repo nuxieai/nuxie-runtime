@@ -2776,7 +2776,7 @@ impl ArtboardInstance {
                     if shape_world == path_transform
                         && mat2d_has_visible_skew_or_rotation(shape_world)
                     {
-                        Mat2D::IDENTITY
+                        inverse_shape_world.multiply_path_local_contracted(path_transform)
                     } else if mat2d_has_visible_skew_or_rotation(shape_world)
                         || mat2d_has_visible_skew_or_rotation(path_transform)
                     {
@@ -2791,21 +2791,48 @@ impl ArtboardInstance {
                 }
             };
 
-            let mut path_commands = path_commands(
-                &runtime_path,
-                path_kind,
-                transform,
-                weighted_context.as_ref(),
-            );
-            if let Some(nsliced_context) = nsliced_context.as_ref() {
+            let mut path_commands = if let Some(nsliced_context) = nsliced_context.as_ref()
+                && weighted_context.is_none()
+            {
+                let mut path_commands = path_commands(
+                    &runtime_path,
+                    ShapePaintPathKind::World,
+                    Mat2D::IDENTITY,
+                    None,
+                );
                 runtime_deform_path_commands_with_nsliced_node(
                     &mut path_commands,
                     nsliced_context,
-                    path_kind,
-                    shape_world,
-                    inverse_shape_world,
+                    ShapePaintPathKind::Local,
+                    path_world,
+                    path_world.invert_or_identity(),
                 );
-            }
+                transform_path_commands(&mut path_commands, transform);
+                if path_kind == ShapePaintPathKind::LocalClockwise
+                    && path_needs_clockwise_reversal(&runtime_path, transform)
+                {
+                    path_commands_backwards(&path_commands)
+                } else {
+                    path_commands
+                }
+            } else {
+                let mut path_commands = path_commands(
+                    &runtime_path,
+                    path_kind,
+                    transform,
+                    weighted_context.as_ref(),
+                );
+                if let Some(nsliced_context) = nsliced_context.as_ref() {
+                    runtime_deform_path_commands_with_nsliced_node(
+                        &mut path_commands,
+                        nsliced_context,
+                        path_kind,
+                        shape_world,
+                        inverse_shape_world,
+                    );
+                }
+                path_commands
+            };
             prune_empty_path_segments(&mut path_commands);
             commands.extend(path_commands);
         }
@@ -2828,6 +2855,14 @@ impl ArtboardInstance {
             else {
                 continue;
             };
+            let shape_world = self.runtime_component_world_transform_with_bounds(
+                *shape_local,
+                graph,
+                layout_bounds,
+            );
+            let inverse_shape_world = shape_world.invert_or_identity();
+            let nsliced_context =
+                runtime_nsliced_node_context_for_shape(self, graph, *shape_local, layout_bounds);
 
             for path_ref in &composer.paths {
                 if !self.runtime_path_counts_for_clip(path_ref) {
@@ -2860,6 +2895,15 @@ impl ArtboardInstance {
                     path_transform,
                     weighted_context.as_ref(),
                 );
+                if let Some(nsliced_context) = nsliced_context.as_ref() {
+                    runtime_deform_path_commands_with_nsliced_node(
+                        &mut path_commands,
+                        nsliced_context,
+                        ShapePaintPathKind::World,
+                        shape_world,
+                        inverse_shape_world,
+                    );
+                }
                 prune_empty_path_segments(&mut path_commands);
                 commands.extend(path_commands);
             }
@@ -2909,6 +2953,7 @@ impl ArtboardInstance {
                     self.runtime_layout_component_style_local(current_local)?;
                     return layout_bounds.get(&current_local).copied();
                 }
+                "NSlicedNode" => return None,
                 "Artboard" | "Node" => return None,
                 _ => {
                     current_local = component.parent_local?;
@@ -4518,6 +4563,12 @@ fn runtime_layout_rect_path_commands(
 ) -> Vec<RuntimePathCommand> {
     let width_is_zero = bounds.width.abs() <= f32::EPSILON;
     let height_is_zero = bounds.height.abs() <= f32::EPSILON;
+    if width_is_zero && height_is_zero {
+        return vec![
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Close,
+        ];
+    }
     if height_is_zero {
         return vec![
             RuntimePathCommand::Move { x: 0.0, y: 0.0 },
@@ -5941,9 +5992,6 @@ fn runtime_draw_command(
                     effect_or_shape_path_commands,
                     RenderFillRule::Clockwise,
                 );
-                if !draws_text {
-                    runtime_configure_fill_rule(clip_path.as_mut(), object);
-                }
                 renderer.clip_path(clip_path.as_ref());
             } else if !runtime_feather_uses_world_space(feather)
                 && runtime_feather_has_offset(feather)
@@ -7219,6 +7267,29 @@ fn runtime_append_path_commands(path: &mut dyn RenderPath, commands: &[RuntimePa
                 y3,
             } => path.cubic_to(x1, y1, x2, y2, x3, y3),
             RuntimePathCommand::Close => path.close(),
+        }
+    }
+}
+
+fn transform_path_commands(commands: &mut [RuntimePathCommand], transform: Mat2D) {
+    for command in commands {
+        match command {
+            RuntimePathCommand::Move { x, y } | RuntimePathCommand::Line { x, y } => {
+                (*x, *y) = transform.map_point(*x, *y);
+            }
+            RuntimePathCommand::Cubic {
+                x1,
+                y1,
+                x2,
+                y2,
+                x3,
+                y3,
+            } => {
+                (*x1, *y1) = transform.map_point(*x1, *y1);
+                (*x2, *y2) = transform.map_point(*x2, *y2);
+                (*x3, *y3) = transform.map_point(*x3, *y3);
+            }
+            RuntimePathCommand::Close => {}
         }
     }
 }
@@ -10269,7 +10340,7 @@ impl WeightedPathContext {
 
 impl RuntimeNSlicedNodeContext {
     fn deform_world_point(&self, x: f32, y: f32) -> (f32, f32) {
-        let (local_x, local_y) = self.inverse_world.transform_point(x, y);
+        let (local_x, local_y) = self.inverse_world.map_point(x, y);
         let sliced_x = if self.scale_x == 0.0 {
             0.0
         } else {
@@ -10290,7 +10361,7 @@ impl RuntimeNSlicedNodeContext {
                 local_y,
             ) * runtime_copysign_one(self.scale_y)
         };
-        self.world.transform_point(sliced_x, sliced_y)
+        self.world.map_point(sliced_x, sliced_y)
     }
 }
 
@@ -10485,9 +10556,9 @@ fn runtime_deform_path_point_with_nsliced_node(
     if path_kind == ShapePaintPathKind::World {
         return context.deform_world_point(x, y);
     }
-    let (world_x, world_y) = shape_world.transform_point(x, y);
+    let (world_x, world_y) = shape_world.map_point(x, y);
     let (deformed_x, deformed_y) = context.deform_world_point(world_x, world_y);
-    inverse_shape_world.transform_point(deformed_x, deformed_y)
+    inverse_shape_world.map_point(deformed_x, deformed_y)
 }
 
 fn runtime_deform_local_gradient_point_with_nsliced_node(
@@ -10497,9 +10568,9 @@ fn runtime_deform_local_gradient_point_with_nsliced_node(
     shape_world: Mat2D,
     inverse_shape_world: Mat2D,
 ) -> (f32, f32) {
-    let (world_x, world_y) = shape_world.transform_point(x, y);
+    let (world_x, world_y) = shape_world.map_point(x, y);
     let (deformed_x, deformed_y) = context.deform_world_point(world_x, world_y);
-    inverse_shape_world.transform_point(deformed_x, deformed_y)
+    inverse_shape_world.map_point(deformed_x, deformed_y)
 }
 
 fn runtime_nslicer_uv_stops(
@@ -10562,7 +10633,7 @@ fn runtime_nslicer_analyze_uv_stops(
     let scalable_size = size - fixed_size;
     let use_scale = scalable_size != 0.0;
     let scale_factor = if use_scale {
-        (size * scale - fixed_size) / scalable_size
+        size.mul_add(scale, -fixed_size) / scalable_size
     } else {
         0.0
     };
@@ -10608,7 +10679,7 @@ fn runtime_nslicer_map_value(
         if runtime_nslicer_is_fixed_segment(index) {
             result += span;
         } else if scale_info.use_scale {
-            result += scale_info.scale_factor * span;
+            result = scale_info.scale_factor.mul_add(span, result);
         } else {
             result += scale_info.fallback_size;
         }

@@ -29,8 +29,10 @@ the only memory the next session has. Update it every commit.
 1. Active `not-yet`: none. The M6 queue is now explicit
    `unsupported-feature` diagnostics only.
 2. Highest-priority M6 slice: `superbowl.riv`
-   (`rust-runner-unsupported:nested-state-machine-layout-update`). Start with
-   focused C++/Rust layout-bound probes for the Summary nested layout host.
+   (`rust-runner-unsupported:nested-state-machine-text-empty-glyph-path-order`).
+   Start at the full-stream structural diff around line 997, where C++ emits
+   an empty text fill path and Rust skips it after the Summary nested layout
+   and Celebration remap streams have already been narrowed.
    `echo_show_demo.riv` stays parked behind
    `rust-runner-unsupported:joystick-nested-remap-gradient-update-order`.
 3. Other parked one-file M6 queues include `joystick-nested-remap-gradient-update-order`
@@ -612,6 +614,22 @@ the only memory the next session has. Update it every commit.
   `not-yet=0`, parked `M6=6 gated=6 harness=36`; `cargo test --workspace`
   passes. Next target is `superbowl.riv`
   (`nested-state-machine-layout-update`).
+- 2026-07-07: [M6] Narrowed `superbowl.riv` by sizing nested layout hosts
+  from child Taffy root bounds when available, propagating
+  `LayoutComponentStyle.displayValue` collapse/style dirt with C++-style
+  direct-child collapse dispatch, and allowing a newly uncollapsed remap child
+  with pending component dirt to run its first child `update_pass` only when
+  the host artboard has data-bind bindings. Focused `Celebration` direct
+  streams are exact, `death_knight.riv` and the solo/collapse exact corpus
+  stay exact, and the prior Summary nested layout/red-remap-path mismatch is
+  gone. A full bypass now reaches a text residual: bounded numeric glyph drift
+  around `3e-5` plus a structural empty-glyph/path-order mismatch near line
+  997, where C++ emits an empty filled text path and Rust skips it. The
+  runner/corpus diagnostic is sharpened to
+  `nested-state-machine-text-empty-glyph-path-order`; with the guard restored,
+  `cargo test --workspace` passes and full `make golden-compare` remains
+  `exact=247`, `exact-segments=568`, `diverges=0`,
+  `unsupported-feature=48`, `not-yet=0`, parked `M6=6 gated=6 harness=36`.
 - 2026-07-02: `rive-runtime` owns static draw emission through
   `rive-render-api`; `rust-golden-runner` now only orchestrates import,
   artboard selection, stream markers, and recording output.

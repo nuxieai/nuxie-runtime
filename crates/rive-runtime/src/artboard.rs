@@ -38,7 +38,8 @@ use crate::objects::{InstanceObjectArena, InstanceSlot};
 use crate::properties::{
     JOYSTICK_FLAG_INVERT_X, JOYSTICK_FLAG_INVERT_Y, RuntimeArtboardDimensions,
     joystick_flags_property_key, joystick_x_property_key, joystick_y_property_key,
-    property_key_for_name, solo_active_component_id_property_key, transform_property_for_key,
+    layout_component_style_display_value_property_key, property_key_for_name,
+    solo_active_component_id_property_key, transform_property_for_key,
 };
 use crate::state_machine::{
     RuntimeStateMachine, StateMachineInputKind, StateMachineInstance, StateMachineReportedEvent,
@@ -286,6 +287,7 @@ impl ArtboardInstance {
             dirt_depth: 0,
             did_change: true,
         };
+        instance.apply_initial_layout_component_display_collapses();
         let nested_host_locals = instance
             .nested_artboards
             .keys()
@@ -947,7 +949,16 @@ impl ArtboardInstance {
                         matches!(animation, RuntimeNestedAnimationInstance::Remap { .. })
                     })
                 });
-            if newly_uncollapsed && is_remap_host && dirt.contains(ComponentDirt::RENDER_OPACITY) {
+            let child_has_component_dirt = self
+                .nested_artboards
+                .get(&host_local_id)
+                .is_some_and(|nested| nested.child.has_dirt(ComponentDirt::COMPONENTS));
+            let host_has_data_bindings = self.has_artboard_data_bindings();
+            if newly_uncollapsed
+                && is_remap_host
+                && dirt.contains(ComponentDirt::RENDER_OPACITY)
+                && (!child_has_component_dirt || !host_has_data_bindings)
+            {
                 return changed;
             }
             if let Some(nested) = self.nested_artboards.get_mut(&host_local_id) {
@@ -955,6 +966,19 @@ impl ArtboardInstance {
             }
         }
         changed
+    }
+
+    fn has_artboard_data_bindings(&self) -> bool {
+        !self.artboard_property_bindings.is_empty()
+            || !self.artboard_image_asset_bindings.is_empty()
+            || !self.artboard_custom_property_bindings.is_empty()
+            || !self.artboard_layout_computed_bindings.is_empty()
+            || !self.artboard_numeric_source_bindings.is_empty()
+            || !self.artboard_formula_token_bindings.is_empty()
+            || !self.artboard_solo_bindings.is_empty()
+            || !self.artboard_solo_source_bindings.is_empty()
+            || !self.artboard_nested_host_bindings.is_empty()
+            || !self.artboard_list_bindings.is_empty()
     }
 
     fn sync_nested_artboard_root_opacity(&mut self, host_local_id: usize) -> bool {
@@ -1127,6 +1151,9 @@ impl ArtboardInstance {
         if solo_active_component_id_property_key() == Some(property_key) {
             changed |= self.propagate_solo_collapse(local_id);
         }
+        if layout_component_style_display_value_property_key() == Some(property_key) {
+            changed |= self.propagate_layout_component_display_changed(local_id);
+        }
         changed |= self.apply_nested_trigger_property_changed(local_id, property_key);
         changed
     }
@@ -1214,6 +1241,90 @@ impl ArtboardInstance {
         changed |= self.add_dirt(text_local, ComponentDirt::TEXT_SHAPE, false);
         changed |= self.add_dirt(text_local, ComponentDirt::WORLD_TRANSFORM, true);
         changed
+    }
+
+    fn propagate_layout_component_display_changed(&mut self, style_local_id: usize) -> bool {
+        if self.slot(style_local_id).and_then(|slot| slot.type_name) != Some("LayoutComponentStyle")
+        {
+            return false;
+        }
+        let Some(style_id_key) = property_key_for_name("LayoutComponent", "styleId") else {
+            return false;
+        };
+        let layout_locals = self
+            .components
+            .iter()
+            .filter(|component| matches!(component.type_name, "Artboard" | "LayoutComponent"))
+            .filter(|component| {
+                self.uint_property(component.local_id, style_id_key) == Some(style_local_id as u64)
+            })
+            .map(|component| component.local_id)
+            .collect::<Vec<_>>();
+
+        let mut changed = false;
+        for layout_local in layout_locals {
+            changed |= self.propagate_layout_component_display_collapse(layout_local);
+            changed |= self.add_dirt(layout_local, ComponentDirt::LAYOUT_STYLE, false);
+        }
+        changed
+    }
+
+    fn apply_initial_layout_component_display_collapses(&mut self) -> bool {
+        let layout_locals = self
+            .components
+            .iter()
+            .filter(|component| matches!(component.type_name, "Artboard" | "LayoutComponent"))
+            .map(|component| component.local_id)
+            .collect::<Vec<_>>();
+
+        let mut changed = false;
+        for layout_local in layout_locals {
+            changed |= self.propagate_layout_component_display_collapse(layout_local);
+        }
+        changed
+    }
+
+    fn propagate_layout_component_display_collapse(&mut self, layout_local: usize) -> bool {
+        let display_hidden =
+            self.layout_component_style_local(layout_local)
+                .and_then(|style_local| {
+                    layout_component_style_display_value_property_key()
+                        .and_then(|key| self.uint_property(style_local, key))
+                })
+                == Some(1);
+        let collapsed = display_hidden
+            || self
+                .component(layout_local)
+                .is_some_and(RuntimeComponent::is_collapsed);
+        let children = self
+            .components
+            .iter()
+            .filter(|component| component.parent_local == Some(layout_local))
+            .map(|component| component.local_id)
+            .collect::<Vec<_>>();
+
+        let mut changed = false;
+        for child_local in children {
+            changed |= self.collapse_layout_component_child(child_local, collapsed);
+        }
+        changed
+    }
+
+    fn collapse_layout_component_child(&mut self, child_local: usize, collapsed: bool) -> bool {
+        let mut changed = self.collapse_component(child_local, collapsed);
+        if matches!(
+            self.slot(child_local).and_then(|slot| slot.type_name),
+            Some("Artboard" | "LayoutComponent")
+        ) {
+            changed |= self.propagate_layout_component_display_collapse(child_local);
+        }
+        changed
+    }
+
+    fn layout_component_style_local(&self, layout_local: usize) -> Option<usize> {
+        property_key_for_name("LayoutComponent", "styleId")
+            .and_then(|key| self.uint_property(layout_local, key))
+            .and_then(|style| usize::try_from(style).ok())
     }
 
     pub(crate) fn apply_double_property_changed(

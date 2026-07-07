@@ -1026,17 +1026,17 @@ fn ensure_static_draw_supported_for_artboard(
     }
 
     if let Some(global_id) =
-        unsupported_nested_state_machine_layout_update(runtime, graph, artboard)
+        unsupported_nested_state_machine_text_empty_glyph_path_order(runtime, graph, artboard)
     {
         bail!(
-            "unsupported: nested-state-machine-layout-update in Rust golden runner (global {global_id})"
+            "unsupported: nested-state-machine-text-empty-glyph-path-order in Rust golden runner (global {global_id})"
         );
     }
 
     Ok(())
 }
 
-fn unsupported_nested_state_machine_layout_update(
+fn unsupported_nested_state_machine_text_empty_glyph_path_order(
     runtime: &RuntimeFile,
     graph: &GraphFile,
     artboard: &ArtboardGraph,

@@ -141,6 +141,10 @@ pub(crate) fn solo_active_component_id_property_key() -> Option<u16> {
     property_key_for_name("Solo", "activeComponentId")
 }
 
+pub(crate) fn layout_component_style_display_value_property_key() -> Option<u16> {
+    property_key_for_name("LayoutComponentStyle", "displayValue")
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum RuntimeLayoutComputedProperty {
     LocalX,

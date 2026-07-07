@@ -3769,17 +3769,46 @@ impl TaffyRuntimeLayoutEngine {
         local: usize,
         width_axis: bool,
     ) -> Option<Dimension> {
-        let nested = instance.nested_artboards.get(&local)?;
-        let value = if width_axis {
-            nested.child.width
-        } else {
-            nested.child.height
-        };
+        let value = self.nested_artboard_layout_axis_intrinsic_size(instance, local, width_axis)?;
         if value.is_finite() && value >= 0.0 {
             Some(Dimension::length(value))
         } else {
             None
         }
+    }
+
+    fn nested_artboard_layout_axis_intrinsic_size(
+        &self,
+        instance: &ArtboardInstance,
+        local: usize,
+        width_axis: bool,
+    ) -> Option<f32> {
+        let nested = instance.nested_artboards.get(&local)?;
+        let layout_size = nested
+            .child
+            .runtime_file()
+            .zip(nested.child.runtime_graph())
+            .and_then(|(runtime, graph)| {
+                nested
+                    .child
+                    .runtime_taffy_layout_bounds(graph, Some(runtime))
+                    .and_then(|bounds| bounds.get(&0).copied())
+            })
+            .map(|bounds| {
+                if width_axis {
+                    bounds.width
+                } else {
+                    bounds.height
+                }
+            });
+
+        layout_size.or_else(|| {
+            Some(if width_axis {
+                nested.child.width
+            } else {
+                nested.child.height
+            })
+        })
     }
 
     fn nested_artboard_layout_axis_scale(

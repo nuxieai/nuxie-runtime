@@ -39,13 +39,21 @@ the only memory the next session has. Update it every commit.
    A C++-shaped outer-loop experiment (`tryChangeState` plus zero-time nested
    advance inside the runner) was also rejected: the focused bypass still
    first-differed at line 980, shader id 4, with C++ 107 vs Rust 108
-   pre-sample gradients. Next inspect the specific nested remap/joystick data
-   that leaves Rust paint global 636 in the animated zero-alpha state before
-   first draw. A follow-up snapshot prototype was also rejected: it recorded
-   update-time gradient shaders, but still replayed paint globals 636/634 with
-   Rust's already-animated/zero-alpha state instead of C++'s first
-   authored-geometry shader, so the remaining gap is state-machine/remap/paint
-   mutator ordering rather than just missing shader replay.
+   pre-sample gradients. A follow-up snapshot prototype was also rejected: it
+   recorded update-time gradient shaders, but still replayed paint globals
+   636/634 with Rust's already-animated/zero-alpha state instead of C++'s
+   first authored-geometry shader, so the remaining gap is
+   state-machine/remap/paint mutator ordering rather than just missing shader
+   replay. Latest focused trace maps Rust shader id 4 to selected-root paint
+   global 636 (local 543, container 431, mutator 438): Rust prepares it as
+   `center=(-185.856506,-285.401245)`, `radius=551.585327`, zero alpha, while
+   C++ shader id 4 is the authored root radial
+   `center=(-218.036606,-275.353241)`, `radius=642.693481`, `0x78ffd689`.
+   The next implementation attempt must reproduce C++ update-time shader
+   allocation before `636/635` are observed in their remapped zero-alpha state;
+   do not retry generic prewarming, final-state replay, the component-update
+   broad hook, the outer-loop runner shape, or non-before-joystick data-bind
+   placement.
 3. Other parked one-file M6 queues include `layout-component-paint`
    (`rewards_demo.riv`), `nested-node-transform-data-bind` (`car_widgets_v01.riv`),
    `nested-layout-clip-data-bind` (`stateful_multi_property.riv`), and
@@ -319,6 +327,20 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=37`, `not-yet=0`, parked
   `M6=5 gated=6 harness=26`. Next target is `echo_show_demo.riv`
   (`rust-runner-unsupported:joystick-nested-remap-gradient-update-order`).
+- 2026-07-07: [M6] Narrowed `echo_show_demo.riv` with a temporary
+  `RIVE_TRACE_ECHO` bypass/trace that was fully reverted before this commit.
+  The focused Rust stream still first differs before `sample seconds=0`;
+  trace line 4 shows Rust shader id 4 is selected-root paint global 636
+  (container 431, mutator 438) after joystick/remap has moved the radial
+  endpoints to `(-185.856506,-285.401245)` and driven render opacity to zero.
+  C++ shader id 4 remains the authored radial `(-218.036606,-275.353241)` with
+  nonzero alpha, and C++ never emits Rust's `-185.856506` radial before the
+  first sample. A non-before-joystick `updateDataBinds()` placement experiment
+  was also rejected in this pass: both echo joysticks are before-update, and
+  the focused stream still first-differed at line 980. Next target remains
+  `echo_show_demo.riv`, but the slice is now constrained to C++ update-time
+  gradient allocation for the `636/635` root branch before remap/final-state
+  static paint prep sees it.
 - 2026-07-02: V2 map adopted (`docs/porting-map-v2.md`); V1 map superseded, its contract suite frozen as regression floor.
 - 2026-07-02: Golden runner records decoded image payloads by size/hash for the first renderer slice; real decoded dimensions are deferred until `rive_decoders` is wired into the CLI harness build.
 - 2026-07-02: Golden runner emits one accumulated stream per run with

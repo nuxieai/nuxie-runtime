@@ -1074,6 +1074,43 @@ fn synthetic_state_machine_bool_transition(file_id: u64) -> Vec<u8> {
     synthetic_state_machine_input_transition(file_id, SyntheticInputTransitionKind::Bool)
 }
 
+fn synthetic_state_machine_entry_timed_transition(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "fps", 10);
+            push_uint_property(bytes, "LinearAnimation", "duration", 20);
+        });
+        push_object_with_properties(bytes, "KeyedObject", |bytes| {
+            push_uint_property(bytes, "KeyedObject", "objectId", 1);
+        });
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("Node", "x")),
+            );
+        });
+        push_keyframe_double(bytes, 0, 20.0, 1);
+        push_keyframe_double(bytes, 10, 30.0, 0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+            push_uint_property(bytes, "StateTransition", "duration", 1000);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
 fn push_animation_for_single_node(
     bytes: &mut Vec<u8>,
     target_local_id: u64,
@@ -16616,6 +16653,31 @@ fn state_machine_bool_input_drives_zero_duration_transition() {
         transform_x(&rust, 1),
         20.0,
         "bool transition target state x",
+    );
+}
+
+#[test]
+fn state_machine_entry_timed_transition_starts_destination_at_zero_mix() {
+    let label = "synthetic/runtime_state_machine_entry_timed_transition_public.riv";
+    let bytes = synthetic_state_machine_entry_timed_transition(8261);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    assert!(rust.advance_state_machine_instance(&mut state_machine, 0.0));
+    assert_eq!(state_machine.changed_state_count(), 1);
+    assert_close(
+        transform_x(&rust, 1),
+        2.0,
+        "entry transition target animation starts at mix 0",
+    );
+
+    assert!(rust.advance_state_machine_instance(&mut state_machine, 0.5));
+    assert_close(
+        transform_x(&rust, 1),
+        13.5,
+        "entry transition target animation mixes after elapsed time",
     );
 }
 

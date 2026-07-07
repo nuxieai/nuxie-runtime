@@ -2806,9 +2806,6 @@ impl StateMachineLayerInstance {
             return;
         }
 
-        let has_transition_source = previous_animation.is_some()
-            || previous_blend_state_1d.is_some()
-            || previous_blend_state_direct.is_some();
         let mut reset_animation_indices = Vec::new();
         if let Some(animation) = previous_animation.as_ref() {
             reset_animation_indices.push(animation.animation_index);
@@ -2819,9 +2816,7 @@ impl StateMachineLayerInstance {
         let transition_animation_reset =
             TransitionAnimationReset::from_animation_indices(artboard, &reset_animation_indices);
 
-        if let Some(source_state_index) = previous_state_index
-            && has_transition_source
-        {
+        if let Some(source_state_index) = previous_state_index {
             self.transition_source_state_index = Some(source_state_index);
             self.transition_source_animation = previous_animation;
             self.transition_source_blend_state_1d = previous_blend_state_1d;
@@ -2873,9 +2868,7 @@ impl StateMachineLayerInstance {
     }
 
     fn has_transition_source(&self) -> bool {
-        self.transition_source_animation.is_some()
-            || self.transition_source_blend_state_1d.is_some()
-            || self.transition_source_blend_state_direct.is_some()
+        self.transition_source_state_index.is_some()
     }
 
     fn update_transition_mix(

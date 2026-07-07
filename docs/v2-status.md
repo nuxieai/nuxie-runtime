@@ -29,9 +29,10 @@ the only memory the next session has. Update it every commit.
 1. Active `not-yet` queue is empty.
 2. Highest-priority M6 unsupported slice: `echo_show_demo.riv`
    (`rust-runner-unsupported:joystick-nested-remap-gradient-update-order`).
-   Start from the focused bypass note below: the first mismatch happens before
-   `sample seconds=0`, in nested-remap gradient shader creation rather than
-   draw geometry, and likely needs C++-style dirty/update interleaving.
+   Start from the focused bypass notes below: the first mismatch still happens
+   before `sample seconds=0`, in nested-remap gradient shader creation rather
+   than draw geometry, but shader ids 4 and 5 now match C++ after retaining
+   Entry/non-animated transition sources during nonzero-duration transitions.
    A targeted Rust runner hook that created gradient shaders during component
    update was rejected: it fixed neither `echo_show_demo.riv` nor shader
    ordering generally, and it regressed `bullet_man.riv`/`hunter_x_demo.riv`
@@ -42,18 +43,13 @@ the only memory the next session has. Update it every commit.
    pre-sample gradients. A follow-up snapshot prototype was also rejected: it
    recorded update-time gradient shaders, but still replayed paint globals
    636/634 with Rust's already-animated/zero-alpha state instead of C++'s
-   first authored-geometry shader, so the remaining gap is
-   state-machine/remap/paint mutator ordering rather than just missing shader
-   replay. Latest focused trace maps Rust shader id 4 to selected-root paint
-   global 636 (local 543, container 431, mutator 438): Rust prepares it as
-   `center=(-185.856506,-285.401245)`, `radius=551.585327`, zero alpha, while
-   C++ shader id 4 is the authored root radial
-   `center=(-218.036606,-275.353241)`, `radius=642.693481`, `0x78ffd689`.
-   The next implementation attempt must reproduce C++ update-time shader
-   allocation before `636/635` are observed in their remapped zero-alpha state;
-   do not retry generic prewarming, final-state replay, the component-update
-   broad hook, the outer-loop runner shape, or non-before-joystick data-bind
-   placement.
+   first authored-geometry shader. The latest focused trace now first differs
+   at shader id 6: C++ continues the authored source-branch gradient sequence,
+   while Rust skips to a later zero-alpha radial matching C++'s later id 10.
+   The remaining gap is nested-remap/paint mutator ordering after the initial
+   transition mix, not generic prewarming, final-state replay, the
+   component-update broad hook, the outer-loop runner shape, or
+   non-before-joystick data-bind placement.
 3. Other parked one-file M6 queues include `layout-component-paint`
    (`rewards_demo.riv`), `nested-node-transform-data-bind` (`car_widgets_v01.riv`),
    `nested-layout-clip-data-bind` (`stateful_multi_property.riv`), and
@@ -318,6 +314,20 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-07: [M6] Narrowed `echo_show_demo.riv` by matching C++ transition
+  source retention for Entry/non-animated sources. C++ keeps `m_stateFrom`
+  during a nonzero-duration Entry -> animation transition, so the destination
+  animation applies at mix 0 on the first update; Rust now tracks
+  `transition_source_state_index` even when the previous state has no
+  animation/blend payload, backed by a synthetic Entry-timed-transition
+  regression. A focused bypass compare moved the first pre-sample diff past
+  shader ids 4 and 5: both now match C++, and the remaining first diff is
+  shader id 6 where Rust emits a later zero-alpha radial out of order.
+  Full `make golden-compare` remains `exact=258`, `exact-segments=579`,
+  `diverges=0`, `unsupported-feature=37`, `not-yet=0`, parked
+  `M6=5 gated=6 harness=26`; `cargo test --workspace` passes. Next target
+  remains `echo_show_demo.riv`
+  (`rust-runner-unsupported:joystick-nested-remap-gradient-update-order`).
 - 2026-07-07: [M6] Promoted `image_scripting_property_value.riv` by narrowing
   pre-source image decode ordering to the non-scripting C++ golden-runner
   import stack: `ScriptAsset`/`ShaderAsset` do not use the `FileAsset` stack

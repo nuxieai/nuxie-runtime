@@ -48,24 +48,29 @@ the only memory the next session has. Update it every commit.
    hot-loop graph/binding clones, shallow sharing of immutable
    animation/state-machine definition vectors, an epoch-keyed retained
    prepared draw-command frame, epoch-keyed retained draw `RenderPath`
-   handles, and cached fixed layout/schema property keys now give focused
+   handles, cached fixed layout/schema property keys, and cached fixed
+   data-bind property keys now give focused
    10-iteration verification with `make perf-hot-loop PERF_CORPUS_LIMIT=5
    PERF_ITERATIONS=10 PERF_WARMUPS=1 PERF_MAX_RATIO=999` at aggregate
-   Rust/C++=3.306 over 5 exact entries / 10 segments (`ai_assitant`=3.941,
-   `align_target`=2.043, `animated_clipping`=2.359). This repeat=1 focused
+   Rust/C++=3.096 over 5 exact entries / 10 segments (`ai_assitant`=3.347,
+   `align_target`=1.947, `animated_clipping`=2.711). This repeat=1 focused
    ratio is noisy and strict `PERF_MAX_RATIO=2.0` still fails by inspection.
    M7 perf is now explicitly defined as steady-state per-frame runtime cost;
    direct `ai_assitant` with `--benchmark-repeat 100` now reports
-   Rust/C++=43.716 on the second 10-iteration run
-   (cpp median=0.542 ms, rust median=23.677 ms), confirming retained
+   Rust/C++=34.736 on the current 10-iteration run
+   (cpp median=0.543 ms, rust median=18.878 ms), confirming retained
    frame/path preparation and cached keys are real clean-frame wins but still
-   far from the strict target. Post-slice sample before this key-cache work
-   showed `draw_path`/path rebuilds are no longer the hot site for
-   `ai_assitant`; the next M7 target is a fresh release/null-renderer profile,
-   then C++-aligned dirty-gated layout/paint preparation retention
-   (`markLayoutNodeDirty`, Paint|Stops|RenderOpacity gates) before
-   lower-priority path/clip rebuild leftovers. After the perf target is real,
-   expand the C ABI to instance advance/draw.
+   far from the strict target. Post-slice sampling shows raw
+   `property_key_for_name` is no longer the stateful nested-host binding hot
+   site; remaining heat is schema/type lookup in
+   `RuntimeFile::data_bind_path_for_referencer_object`,
+   `InstanceObjectArena::set_property_value` / `property_kind`, and layout/draw
+   property helpers. The next M7 target is generated/cached schema kind/property
+   tables for those frame-loop lookup sites, then C++-aligned dirty-gated
+   layout/paint preparation retention (`markLayoutNodeDirty`,
+   Paint|Stops|RenderOpacity gates) before lower-priority path/clip rebuild
+   leftovers. After the perf target is real, expand the C ABI to instance
+   advance/draw.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -136,11 +141,13 @@ the only memory the next session has. Update it every commit.
    data_bind_artboard_input/path_effect_with_feathers/group_effect/
    replace_view_model files — blocked on the Luau VM; note
    path_effect_with_feathers is ScriptedPathEffect content, NOT M6 feather
-   work. (c) NEW M6 WORK (3): relative_data_bind_path (nested-child data
-   bind into NestedArtboard), scripted_data_converter_bound_input (data
-   bind target Shape.x through static-text subset), databind_viewmodel
-   (DataConverterToString value mismatch feeding a Text run — Rust
-   data_bind_graph ToString produces a different string than C++).
+   work. (c) HARNESS-BLOCKED runtime candidates (3): relative_data_bind_path
+   (nested-child data bind into NestedArtboard),
+   scripted_data_converter_bound_input (data bind target Shape.x through
+   static-text subset), databind_viewmodel (DataConverterToString value
+   mismatch feeding a Text run — Rust data_bind_graph ToString produces a
+   different string than C++). They remain `milestone = "harness"` until the
+   C++ runner path is recovered and each file is reverified.
    PROCESS FIX REQUIRED before flipping the 18 stream-subset scripting
    files: the Rust runner silently drops ScriptedDrawable draws (known-
    ignored list in text.rs), so they would land as `diverges` and invite
@@ -148,10 +155,11 @@ the only memory the next session has. Update it every commit.
    ScriptedDrawable-bearing files first, then flip them straight to
    `milestone = "gated"`. Unsupported is never silent.
 
-9. PERF METHODOLOGY FENCE (supersedes the "highest priority next target"
-   in item 2 — measurement before optimization). All perf numbers to date
-   are debug-vs-debug and include recording-serializer cost; both distort
-   ratios and target ranking. Required order:
+11. PERF METHODOLOGY FENCE (measurement gate before optimization). Earlier
+   debug-vs-debug and recording-serializer perf numbers are void. The release
+   C++/Rust runner builds, null-renderer benchmark mode, hot-loop phase sums,
+   and perf JSON artifact path have landed; keep using them for all M7
+   decisions. Required order for any new optimization slice:
    (a) Release-vs-release perf builds: `cargo build --release` for the
        Rust runner and a release C++ runner + release reference libraries;
        correctness ratchet stays on debug. Re-baseline all ratios and
@@ -176,7 +184,7 @@ the only memory the next session has. Update it every commit.
    audited C++ dirt gate — invented caching is how original-author
    decisions get silently broken on unsampled timelines.
 
-10. SCOUT REPORT — C++ animation-apply audit (port-ready, cited against
+12. SCOUT REPORT — C++ animation-apply audit (port-ready, cited against
     reference @7c778d13). Headline: C++ has NO keyframe cursor and NO
     value-unchanged skip in the animation layer — do not invent them.
     KeyedProperty::apply is a stateless binary search over CACHED
@@ -214,7 +222,7 @@ the only memory the next session has. Update it every commit.
     caps at 5 passes breaking when Components dirt clears
     (state_machine_instance.cpp:2589-2616).
 
-11. SCOUT REPORT — C++ draw-retention audit (port-ready, cited against
+13. SCOUT REPORT — C++ draw-retention audit (port-ready, cited against
     reference @7c778d13). Governing principle: C++ computes NOTHING during
     draw() — all geometry/paint work happens in updateComponents gated by
     dirt (clean frame: first-branch return, artboard.cpp:1186-1189), and
@@ -248,10 +256,10 @@ the only memory the next session has. Update it every commit.
         paths (clipping_shape.cpp:151-173).
     CROSS-CUTTING PREREQUISITE for 1-3: per-component dirt bitset with the
     updateComponents early-out (artboard.cpp:1184-1223) so clean frames
-    skip the entire prepare phase. Pairs with item 10's slices; do 10(1)
-    deep-clone removal first, then this prerequisite, then slices by rank.
+    skip the entire prepare phase. Pairs with the animation-apply slices; do
+    the deep-clone removal first, then this prerequisite, then slices by rank.
 
-12. SCOUT REPORT — C++ dirt-gating audit (port-ready, cited against
+14. SCOUT REPORT — C++ dirt-gating audit (port-ready, cited against
     reference @7c778d13). Confirms Rust already mirrors the
     updateComponents loop skeleton (add_dirt / update_components_with_hook
     / dirt_depth vs artboard.cpp:1184-1223) — the gap is that per-frame
@@ -287,15 +295,15 @@ the only memory the next session has. Update it every commit.
     (5) Data-bind dirty queues instead of scans (data_bind_container.cpp:
         145-258, data_bind.cpp:487-511, core.cpp:25-46 push observers with
         one-branch no-subscriber fast path, artboard.cpp:1169-1173).
-    COMBINED SEQUENCE across items 10-12: 10(1) kill per-frame definition
-    clones -> 12(1) idempotent writes/raiser table -> 11 prerequisite +
-    retention slices in rank order -> 10(2-4)/12(5) as flamegraph data
-    directs. Full ComponentDirt bit inventory with consumers is in the
+    COMBINED SEQUENCE across the animation/draw/dirt scouts: kill per-frame
+    definition clones -> idempotent writes/raiser table -> draw-retention
+    prerequisite + retention slices in rank order -> remaining animation/data-bind
+    dirt slices as flamegraph data directs. Full ComponentDirt bit inventory with consumers is in the
     scout transcript; component_dirt.hpp:8-81 is the source of truth.
 
-13. SCOUT REPORT — release flamegraph attribution (samply, release build,
+15. SCOUT REPORT — release flamegraph attribution (samply, release build,
     null-renderer hot loop; profiles in session scratchpad). REORDERS the
-    item-12 combined sequence:
+    dirt-gating combined sequence:
     (0) NEW TOP SLICE — schema reflection in hot paths, ~36% of self time:
         definition_by_name (rive-schema lib.rs:252, LINEAR SCAN + string
         eq, 17.5%), definition_by_type_key (lib.rs:232 linear scan, 8.4%),
@@ -331,7 +339,7 @@ the only memory the next session has. Update it every commit.
     the steady-state gap. Record the chosen definition as a Decision
     before optimizing further.
 
-14. LANE MERGED (88fe434): scripting spike. `crates/rive-scripting`
+16. LANE MERGED (88fe434): scripting spike. `crates/rive-scripting`
     (feature `luau`, default-on, zero deps leaking) proves luaur 0.1.8
     (PINNED =0.1.8, upstream Luau commit 8f33df9): boots, loads real
     Rive-editor Luau BYTECODE directly (ScriptAssets carry bytecode v6 in
@@ -360,7 +368,7 @@ the only memory the next session has. Update it every commit.
     lua_mat4, lua_buffer_ext, most of lua_image_decode, lua_audio.
     Signature verification (libhydrogen) deferrable — corpus unsigned.
 
-15. LANE MERGED (d8cf8cb): C ABI embed loop + perf JSON.
+17. LANE MERGED (d8cf8cb): C ABI embed loop + perf JSON.
     crates/rive-capi now covers file->artboard-instance->state-machine->
     inputs->advance->draw via a caller-provided RiveRenderCallbacks
     repr(C) vtable (FFI-renderer pattern, opaque u64 handles, balanced
@@ -564,6 +572,24 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-07: [M7] Cached fixed data-bind property keys used by artboard
+  property/default/nested-host binding paths, mirroring C++ generated
+  `*PropertyKey` / CoreRegistry access instead of doing schema name scans in
+  frame-loop data-bind code. Full `cargo fmt --all -- --check`,
+  `cargo test --workspace`, and `make golden-compare` pass at
+  exact=263/exact-segments=584. Release hot-loop smoke with
+  `PERF_CORPUS_LIMIT=5 PERF_ITERATIONS=10 PERF_WARMUPS=1 PERF_MAX_RATIO=999`
+  reports aggregate Rust/C++=3.096 over 5 exact entries / 10 segments
+  (`ai_assitant`=3.347). Direct `ai_assitant --benchmark-repeat 100` reports
+  Rust/C++=34.736 (cpp median=0.543 ms, rust median=18.878 ms), so strict
+  <=2.0 remains open. Post-slice sampling confirms raw `property_key_for_name`
+  is no longer the stateful nested-host binding hot site; remaining heat is
+  `RuntimeFile::data_bind_path_for_referencer_object` ->
+  `definition_by_type_key`, `InstanceObjectArena::set_property_value` /
+  `property_kind` -> core registry/type scans, and layout/draw property helper
+  keys. Next M7 target: generated/cached schema kind/property tables for these
+  frame-loop lookup sites, then audited dirty-gated layout/paint preparation
+  retention.
 - 2026-07-07: [M7] Cached fixed layout/schema property keys used by layout
   preparation, collapse/visibility checks, nested-artboard layout sizing, and
   shared Solo/Joystick helpers, mirroring C++ generated `*PropertyKey`
@@ -1560,6 +1586,12 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-07: [M7] Cached fixed data-bind property keys. `make golden-compare`
+  remains exact=263/exact-segments=584 with diverges=0; `cargo test
+  --workspace` passes. Focused release hot-loop is Rust/C++=3.096 aggregate,
+  and direct `ai_assitant --benchmark-repeat 100` is Rust/C++=34.736. Next
+  target is generated/cached schema kind/property tables in the remaining
+  frame-loop lookup sites.
 - 2026-07-04: [M6] Opened M6 after closing the M5 queue: the final four M5
   entries now probe as nested child `TextValueRun`, so the next loop starts
   with the text sizing spike from `docs/porting-map-v2.md`. `make

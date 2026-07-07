@@ -6,8 +6,9 @@ use crate::data_bind_graph::{
 use crate::draw::{RuntimePathMeasure, runtime_path_geometry_commands};
 use crate::objects::InstanceObjectArena;
 use crate::properties::{
-    RuntimeLayoutComputedProperty, artboard_index_for_graph, layout_computed_property_for_key,
-    property_key_for_name, solid_color_value_property_key, solo_active_component_id_property_key,
+    RuntimeLayoutComputedProperty, artboard_index_for_graph, cached_property_key_for_name,
+    layout_computed_property_for_key, property_key_for_name, solid_color_value_property_key,
+    solo_active_component_id_property_key,
 };
 use crate::{
     ArtboardInstance, Mat2D, RuntimeDataBindGraphConverter, RuntimeDataBindGraphValue,
@@ -18,6 +19,90 @@ use rive_binary::{RuntimeDataType, RuntimeFile, RuntimeObject};
 use rive_graph::ArtboardGraph;
 use rive_schema::FieldKind;
 use std::collections::BTreeMap;
+use std::sync::OnceLock;
+
+macro_rules! cached_runtime_data_bind_property_key {
+    ($type_name:literal, $property_name:literal) => {{
+        static KEY: OnceLock<Option<u16>> = OnceLock::new();
+        cached_property_key_for_name(&KEY, $type_name, $property_name)
+    }};
+}
+
+fn runtime_data_bind_property_key_for_name(type_name: &str, property_name: &str) -> Option<u16> {
+    match (type_name, property_name) {
+        ("Component", "parentId") => {
+            cached_runtime_data_bind_property_key!("Component", "parentId")
+        }
+        ("TextValueRun", "text") => {
+            cached_runtime_data_bind_property_key!("TextValueRun", "text")
+        }
+        ("Image", "assetId") => cached_runtime_data_bind_property_key!("Image", "assetId"),
+        ("NestedArtboard", "artboardId") => {
+            cached_runtime_data_bind_property_key!("NestedArtboard", "artboardId")
+        }
+        ("NestedArtboard", "isPaused") => {
+            cached_runtime_data_bind_property_key!("NestedArtboard", "isPaused")
+        }
+        ("NestedArtboard", "speed") => {
+            cached_runtime_data_bind_property_key!("NestedArtboard", "speed")
+        }
+        ("NestedArtboard", "quantize") => {
+            cached_runtime_data_bind_property_key!("NestedArtboard", "quantize")
+        }
+        ("CustomPropertyNumber", "propertyValue") => {
+            cached_runtime_data_bind_property_key!("CustomPropertyNumber", "propertyValue")
+        }
+        ("CustomPropertyBoolean", "propertyValue") => {
+            cached_runtime_data_bind_property_key!("CustomPropertyBoolean", "propertyValue")
+        }
+        ("CustomPropertyString", "propertyValue") => {
+            cached_runtime_data_bind_property_key!("CustomPropertyString", "propertyValue")
+        }
+        ("CustomPropertyColor", "propertyValue") => {
+            cached_runtime_data_bind_property_key!("CustomPropertyColor", "propertyValue")
+        }
+        ("CustomPropertyEnum", "propertyValue") => {
+            cached_runtime_data_bind_property_key!("CustomPropertyEnum", "propertyValue")
+        }
+        ("CustomPropertyTrigger", "propertyValue") => {
+            cached_runtime_data_bind_property_key!("CustomPropertyTrigger", "propertyValue")
+        }
+        ("TrimPath", "start") => cached_runtime_data_bind_property_key!("TrimPath", "start"),
+        ("TrimPath", "end") => cached_runtime_data_bind_property_key!("TrimPath", "end"),
+        ("Shape", "length") => cached_runtime_data_bind_property_key!("Shape", "length"),
+        ("FormulaTokenValue", "operationValue") => {
+            cached_runtime_data_bind_property_key!("FormulaTokenValue", "operationValue")
+        }
+        ("DataConverterOperationValue", "operationValue") => {
+            cached_runtime_data_bind_property_key!("DataConverterOperationValue", "operationValue")
+        }
+        ("ViewModelInstanceNumber", "propertyValue") => {
+            cached_runtime_data_bind_property_key!("ViewModelInstanceNumber", "propertyValue")
+        }
+        ("ViewModelInstanceString", "propertyValue") => {
+            cached_runtime_data_bind_property_key!("ViewModelInstanceString", "propertyValue")
+        }
+        ("ViewModelInstanceColor", "propertyValue") => {
+            cached_runtime_data_bind_property_key!("ViewModelInstanceColor", "propertyValue")
+        }
+        ("ViewModelInstanceBoolean", "propertyValue") => {
+            cached_runtime_data_bind_property_key!("ViewModelInstanceBoolean", "propertyValue")
+        }
+        ("ViewModelInstanceEnum", "propertyValue") => {
+            cached_runtime_data_bind_property_key!("ViewModelInstanceEnum", "propertyValue")
+        }
+        ("ViewModelInstanceAssetImage", "propertyValue") => {
+            cached_runtime_data_bind_property_key!("ViewModelInstanceAssetImage", "propertyValue")
+        }
+        ("ViewModelInstance", "viewModelId") => {
+            cached_runtime_data_bind_property_key!("ViewModelInstance", "viewModelId")
+        }
+        ("ViewModelInstanceValue", "viewModelPropertyId") => {
+            cached_runtime_data_bind_property_key!("ViewModelInstanceValue", "viewModelPropertyId")
+        }
+        _ => property_key_for_name(type_name, property_name),
+    }
+}
 
 #[derive(Debug, Clone)]
 pub(super) struct RuntimeArtboardPropertyBindingInstance {
@@ -276,7 +361,7 @@ fn runtime_owned_view_model_missing_binding_value_for_context_chain(
     context_chain: &[Vec<usize>],
     binding: &RuntimeArtboardPropertyBindingInstance,
 ) -> Option<RuntimeDataBindGraphValue> {
-    let text_property_key = property_key_for_name("TextValueRun", "text")?;
+    let text_property_key = runtime_data_bind_property_key_for_name("TextValueRun", "text")?;
     if binding.property_key != text_property_key {
         return None;
     }
@@ -436,7 +521,8 @@ pub(super) fn build_artboard_property_bindings(
                 .or_else(|| {
                     if path_is_name_based {
                         if property_kind == FieldKind::String
-                            && property_key_for_name("TextValueRun", "text") == Some(property_key)
+                            && runtime_data_bind_property_key_for_name("TextValueRun", "text")
+                                == Some(property_key)
                         {
                             return Some(RuntimeDataBindGraphValue::String(Vec::new()));
                         }
@@ -481,7 +567,8 @@ pub(super) fn build_artboard_image_asset_bindings(
     let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
         return Vec::new();
     };
-    let Some(image_asset_id_key) = property_key_for_name("Image", "assetId") else {
+    let Some(image_asset_id_key) = runtime_data_bind_property_key_for_name("Image", "assetId")
+    else {
         return Vec::new();
     };
     let default_instance = artboard_default_view_model_instance(file, artboard_index);
@@ -581,10 +668,10 @@ pub(super) fn build_artboard_nested_host_bindings(
     let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
         return Vec::new();
     };
-    let artboard_id_key = property_key_for_name("NestedArtboard", "artboardId");
-    let is_paused_key = property_key_for_name("NestedArtboard", "isPaused");
-    let speed_key = property_key_for_name("NestedArtboard", "speed");
-    let quantize_key = property_key_for_name("NestedArtboard", "quantize");
+    let artboard_id_key = runtime_data_bind_property_key_for_name("NestedArtboard", "artboardId");
+    let is_paused_key = runtime_data_bind_property_key_for_name("NestedArtboard", "isPaused");
+    let speed_key = runtime_data_bind_property_key_for_name("NestedArtboard", "speed");
+    let quantize_key = runtime_data_bind_property_key_for_name("NestedArtboard", "quantize");
 
     file.artboard_data_binds(artboard_index)
         .into_iter()
@@ -722,38 +809,50 @@ pub(super) fn build_artboard_custom_property_bindings(
                 u16::try_from(data_bind.object.uint_property("propertyKey")?).ok()?;
             let value_kind = match target.type_name {
                 "CustomPropertyNumber"
-                    if property_key_for_name("CustomPropertyNumber", "propertyValue")
-                        == Some(property_key) =>
+                    if runtime_data_bind_property_key_for_name(
+                        "CustomPropertyNumber",
+                        "propertyValue",
+                    ) == Some(property_key) =>
                 {
                     RuntimeArtboardDataBindValueKind::Number
                 }
                 "CustomPropertyBoolean"
-                    if property_key_for_name("CustomPropertyBoolean", "propertyValue")
-                        == Some(property_key) =>
+                    if runtime_data_bind_property_key_for_name(
+                        "CustomPropertyBoolean",
+                        "propertyValue",
+                    ) == Some(property_key) =>
                 {
                     RuntimeArtboardDataBindValueKind::Boolean
                 }
                 "CustomPropertyString"
-                    if property_key_for_name("CustomPropertyString", "propertyValue")
-                        == Some(property_key) =>
+                    if runtime_data_bind_property_key_for_name(
+                        "CustomPropertyString",
+                        "propertyValue",
+                    ) == Some(property_key) =>
                 {
                     RuntimeArtboardDataBindValueKind::String
                 }
                 "CustomPropertyColor"
-                    if property_key_for_name("CustomPropertyColor", "propertyValue")
-                        == Some(property_key) =>
+                    if runtime_data_bind_property_key_for_name(
+                        "CustomPropertyColor",
+                        "propertyValue",
+                    ) == Some(property_key) =>
                 {
                     RuntimeArtboardDataBindValueKind::Color
                 }
                 "CustomPropertyEnum"
-                    if property_key_for_name("CustomPropertyEnum", "propertyValue")
-                        == Some(property_key) =>
+                    if runtime_data_bind_property_key_for_name(
+                        "CustomPropertyEnum",
+                        "propertyValue",
+                    ) == Some(property_key) =>
                 {
                     RuntimeArtboardDataBindValueKind::Enum
                 }
                 "CustomPropertyTrigger"
-                    if property_key_for_name("CustomPropertyTrigger", "propertyValue")
-                        == Some(property_key) =>
+                    if runtime_data_bind_property_key_for_name(
+                        "CustomPropertyTrigger",
+                        "propertyValue",
+                    ) == Some(property_key) =>
                 {
                     RuntimeArtboardDataBindValueKind::Trigger
                 }
@@ -809,9 +908,9 @@ pub(super) fn build_artboard_numeric_source_bindings(
     let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
         return Vec::new();
     };
-    let trim_start_key = property_key_for_name("TrimPath", "start");
-    let trim_end_key = property_key_for_name("TrimPath", "end");
-    let shape_length_key = property_key_for_name("Shape", "length");
+    let trim_start_key = runtime_data_bind_property_key_for_name("TrimPath", "start");
+    let trim_end_key = runtime_data_bind_property_key_for_name("TrimPath", "end");
+    let shape_length_key = runtime_data_bind_property_key_for_name("Shape", "length");
 
     file.artboard_data_binds(artboard_index)
         .into_iter()
@@ -854,9 +953,9 @@ pub(super) fn build_artboard_formula_token_bindings(
         return Vec::new();
     };
     let formula_token_operation_value_key =
-        property_key_for_name("FormulaTokenValue", "operationValue");
+        runtime_data_bind_property_key_for_name("FormulaTokenValue", "operationValue");
     let converter_operation_value_key =
-        property_key_for_name("DataConverterOperationValue", "operationValue");
+        runtime_data_bind_property_key_for_name("DataConverterOperationValue", "operationValue");
     if formula_token_operation_value_key.is_none() && converter_operation_value_key.is_none() {
         return Vec::new();
     }
@@ -1472,7 +1571,9 @@ impl ArtboardInstance {
     }
 
     pub(crate) fn clear_default_text_property_context(&mut self) -> bool {
-        let Some(text_property_key) = property_key_for_name("TextValueRun", "text") else {
+        let Some(text_property_key) =
+            runtime_data_bind_property_key_for_name("TextValueRun", "text")
+        else {
             return false;
         };
         let mut changed = false;
@@ -2252,38 +2353,50 @@ impl ArtboardInstance {
         let source_local = self.stateful_nested_host_value_local(host_local_id, path)?;
         match default_value {
             RuntimeDataBindGraphValue::Number(_) => {
-                let property_value_key =
-                    property_key_for_name("ViewModelInstanceNumber", "propertyValue")?;
+                let property_value_key = runtime_data_bind_property_key_for_name(
+                    "ViewModelInstanceNumber",
+                    "propertyValue",
+                )?;
                 self.double_property(source_local, property_value_key)
                     .map(RuntimeDataBindGraphValue::Number)
             }
             RuntimeDataBindGraphValue::String(_) => {
-                let property_value_key =
-                    property_key_for_name("ViewModelInstanceString", "propertyValue")?;
+                let property_value_key = runtime_data_bind_property_key_for_name(
+                    "ViewModelInstanceString",
+                    "propertyValue",
+                )?;
                 self.string_property(source_local, property_value_key)
                     .map(|value| RuntimeDataBindGraphValue::String(value.to_vec()))
             }
             RuntimeDataBindGraphValue::Color(_) => {
-                let property_value_key =
-                    property_key_for_name("ViewModelInstanceColor", "propertyValue")?;
+                let property_value_key = runtime_data_bind_property_key_for_name(
+                    "ViewModelInstanceColor",
+                    "propertyValue",
+                )?;
                 self.color_property(source_local, property_value_key)
                     .map(RuntimeDataBindGraphValue::Color)
             }
             RuntimeDataBindGraphValue::Boolean(_) => {
-                let property_value_key =
-                    property_key_for_name("ViewModelInstanceBoolean", "propertyValue")?;
+                let property_value_key = runtime_data_bind_property_key_for_name(
+                    "ViewModelInstanceBoolean",
+                    "propertyValue",
+                )?;
                 self.bool_property(source_local, property_value_key)
                     .map(RuntimeDataBindGraphValue::Boolean)
             }
             RuntimeDataBindGraphValue::Enum(_) => {
-                let property_value_key =
-                    property_key_for_name("ViewModelInstanceEnum", "propertyValue")?;
+                let property_value_key = runtime_data_bind_property_key_for_name(
+                    "ViewModelInstanceEnum",
+                    "propertyValue",
+                )?;
                 self.uint_property(source_local, property_value_key)
                     .map(RuntimeDataBindGraphValue::Enum)
             }
             RuntimeDataBindGraphValue::Asset(_) => {
-                let property_value_key =
-                    property_key_for_name("ViewModelInstanceAssetImage", "propertyValue")?;
+                let property_value_key = runtime_data_bind_property_key_for_name(
+                    "ViewModelInstanceAssetImage",
+                    "propertyValue",
+                )?;
                 self.uint_property(source_local, property_value_key)
                     .map(RuntimeDataBindGraphValue::Asset)
             }
@@ -2311,8 +2424,9 @@ impl ArtboardInstance {
         host_local_id: usize,
         view_model_id: u32,
     ) -> Option<usize> {
-        let parent_key = property_key_for_name("Component", "parentId")?;
-        let view_model_key = property_key_for_name("ViewModelInstance", "viewModelId")?;
+        let parent_key = runtime_data_bind_property_key_for_name("Component", "parentId")?;
+        let view_model_key =
+            runtime_data_bind_property_key_for_name("ViewModelInstance", "viewModelId")?;
         self.slots.iter().find_map(|slot| {
             (slot.type_name == Some("ViewModelInstance")
                 && self.uint_property(slot.local_id, parent_key) == Some(host_local_id as u64)
@@ -2327,8 +2441,11 @@ impl ArtboardInstance {
         parent_local_id: usize,
         view_model_property_id: u32,
     ) -> Option<usize> {
-        let parent_key = property_key_for_name("Component", "parentId")?;
-        let property_key = property_key_for_name("ViewModelInstanceValue", "viewModelPropertyId")?;
+        let parent_key = runtime_data_bind_property_key_for_name("Component", "parentId")?;
+        let property_key = runtime_data_bind_property_key_for_name(
+            "ViewModelInstanceValue",
+            "viewModelPropertyId",
+        )?;
         self.slots.iter().find_map(|slot| {
             let type_name = slot.type_name?;
             (type_name.starts_with("ViewModelInstance")

@@ -33,6 +33,10 @@ the only memory the next session has. Update it every commit.
    Start from the focused bypass note below: the first mismatch happens before
    `sample seconds=0`, in nested-remap gradient shader creation rather than
    draw geometry, and likely needs C++-style dirty/update interleaving.
+   A targeted Rust runner hook that created gradient shaders during component
+   update was rejected: it fixed neither `echo_show_demo.riv` nor shader
+   ordering generally, and it regressed `bullet_man.riv`/`hunter_x_demo.riv`
+   by allocating gradients too early.
 3. Other parked one-file M6 queues include `layout-component-paint`
    (`rewards_demo.riv`), `nested-node-transform-data-bind` (`car_widgets_v01.riv`),
    `nested-layout-clip-data-bind` (`stateful_multi_property.riv`), and
@@ -637,6 +641,19 @@ the only memory the next session has. Update it every commit.
   `diverges=0`, `unsupported-feature=47`, `not-yet=0`, parked
   `M6=5 gated=6 harness=36`; `cargo test --workspace` passes. Next target is
   `echo_show_demo.riv` (`joystick-nested-remap-gradient-update-order`).
+- 2026-07-07: [M6] Kept `echo_show_demo.riv` parked but landed the safe
+  gradient dirt subset found during the bypass: color data binds now call the
+  color change handler, string binds still call the string handler, gradient
+  endpoint/opacity changes mark transform/paint dirt, and `GradientStop`
+  color/position changes mark parent gradient stops dirty. A proposed
+  component-update shader creation hook was explicitly rejected after it
+  regressed `bullet_man.riv` and `hunter_x_demo.riv`; the remaining
+  `echo_show_demo.riv` blocker is state-machine/joystick/nested-remap update
+  ordering, not standalone render-paint prewarming. Full `make
+  golden-compare` remains `exact=248`, `exact-segments=569`, `diverges=0`,
+  `unsupported-feature=47`, `not-yet=0`, parked `M6=5 gated=6 harness=36`;
+  `cargo test --workspace` passes. Next target remains `echo_show_demo.riv`
+  (`joystick-nested-remap-gradient-update-order`).
 - 2026-07-02: `rive-runtime` owns static draw emission through
   `rive-render-api`; `rust-golden-runner` now only orchestrates import,
   artboard selection, stream markers, and recording output.

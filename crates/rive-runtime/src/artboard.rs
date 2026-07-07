@@ -394,7 +394,7 @@ impl ArtboardInstance {
             return false;
         }
         self.did_change = true;
-        self.apply_string_property_changed(local_id, property_key);
+        self.apply_color_property_changed(local_id, property_key);
         true
     }
 
@@ -502,6 +502,7 @@ impl ArtboardInstance {
             return false;
         }
         self.did_change = true;
+        self.apply_string_property_changed(local_id, property_key);
         true
     }
 
@@ -1223,6 +1224,21 @@ impl ArtboardInstance {
         }
     }
 
+    pub(crate) fn apply_color_property_changed(
+        &mut self,
+        local_id: usize,
+        property_key: u16,
+    ) -> bool {
+        match self.slot(local_id).and_then(|slot| slot.type_name) {
+            Some("GradientStop")
+                if property_key_for_name("GradientStop", "colorValue") == Some(property_key) =>
+            {
+                self.mark_parent_gradient_stops_dirty(local_id)
+            }
+            _ => false,
+        }
+    }
+
     fn mark_text_value_run_shape_dirty(&mut self, run_local_id: usize) -> bool {
         let Some(parent_key) = property_key_for_name("Component", "parentId") else {
             return false;
@@ -1351,6 +1367,24 @@ impl ArtboardInstance {
         }
 
         match self.slot(local_id).and_then(|slot| slot.type_name) {
+            Some("LinearGradient" | "RadialGradient")
+                if property_key_for_name("LinearGradient", "startX") == Some(property_key)
+                    || property_key_for_name("LinearGradient", "startY") == Some(property_key)
+                    || property_key_for_name("LinearGradient", "endX") == Some(property_key)
+                    || property_key_for_name("LinearGradient", "endY") == Some(property_key) =>
+            {
+                self.add_dirt(local_id, ComponentDirt::TRANSFORM, false)
+            }
+            Some("LinearGradient" | "RadialGradient")
+                if property_key_for_name("LinearGradient", "opacity") == Some(property_key) =>
+            {
+                self.add_dirt(local_id, ComponentDirt::PAINT, false)
+            }
+            Some("GradientStop")
+                if property_key_for_name("GradientStop", "position") == Some(property_key) =>
+            {
+                self.mark_parent_gradient_stops_dirty(local_id)
+            }
             Some("NestedArtboard")
                 if property_key_for_name("NestedArtboard", "speed") == Some(property_key) =>
             {
@@ -1377,6 +1411,29 @@ impl ArtboardInstance {
             }
             _ => false,
         }
+    }
+
+    fn mark_parent_gradient_stops_dirty(&mut self, stop_local_id: usize) -> bool {
+        let Some(parent_key) = property_key_for_name("Component", "parentId") else {
+            return false;
+        };
+        let Some(gradient_local_id) = self
+            .uint_property(stop_local_id, parent_key)
+            .and_then(|parent_id| usize::try_from(parent_id).ok())
+        else {
+            return false;
+        };
+        if !matches!(
+            self.slot(gradient_local_id).and_then(|slot| slot.type_name),
+            Some("LinearGradient" | "RadialGradient")
+        ) {
+            return false;
+        }
+        self.add_dirt(
+            gradient_local_id,
+            ComponentDirt::PAINT | ComponentDirt::STOPS,
+            false,
+        )
     }
 
     fn set_nested_artboard_is_paused(&mut self, local_id: usize, value: bool) -> bool {
@@ -2320,6 +2377,79 @@ mod tests {
         assert!(instance.has_dirt(ComponentDirt::COMPONENTS));
 
         assert!(!instance.add_dirt(0, ComponentDirt::PATH, true));
+    }
+
+    #[test]
+    fn gradient_property_changes_mark_cpp_dirty_bits() {
+        let mut gradient = synthetic_component(0, 0);
+        gradient.type_name = "LinearGradient";
+        let mut stop = synthetic_component(1, 1);
+        stop.type_name = "GradientStop";
+        let mut instance = synthetic_instance(vec![gradient, stop], vec![0, 1]);
+        let parent_key = property_key_for_name("Component", "parentId").expect("parentId key");
+        let start_x_key = property_key_for_name("LinearGradient", "startX").expect("startX key");
+        let opacity_key = property_key_for_name("LinearGradient", "opacity").expect("opacity key");
+        let stop_color_key =
+            property_key_for_name("GradientStop", "colorValue").expect("stop color key");
+        let stop_position_key =
+            property_key_for_name("GradientStop", "position").expect("stop position key");
+        instance.objects = InstanceObjectArena::from_runtime_objects(vec![
+            Some(synthetic_runtime_object(0, "LinearGradient", Vec::new())),
+            Some(synthetic_runtime_object(
+                1,
+                "GradientStop",
+                vec![RuntimeProperty {
+                    key: parent_key,
+                    name: "parentId",
+                    owner: "Component",
+                    value: FieldValue::Uint(0),
+                }],
+            )),
+        ]);
+
+        instance.dirt = ComponentDirt::NONE;
+        instance.component_mut(0).unwrap().dirt = ComponentDirt::NONE;
+        assert!(instance.set_double_property(0, start_x_key, 10.0));
+        assert!(
+            instance
+                .component(0)
+                .unwrap()
+                .dirt
+                .contains(ComponentDirt::TRANSFORM)
+        );
+
+        instance.dirt = ComponentDirt::NONE;
+        instance.component_mut(0).unwrap().dirt = ComponentDirt::NONE;
+        assert!(instance.set_double_property(0, opacity_key, 0.5));
+        assert!(
+            instance
+                .component(0)
+                .unwrap()
+                .dirt
+                .contains(ComponentDirt::PAINT)
+        );
+
+        instance.dirt = ComponentDirt::NONE;
+        instance.component_mut(0).unwrap().dirt = ComponentDirt::NONE;
+        assert!(instance.set_color_property(1, stop_color_key, 0xff00_ff00));
+        assert!(
+            instance
+                .component(0)
+                .unwrap()
+                .dirt
+                .contains(ComponentDirt::PAINT | ComponentDirt::STOPS)
+        );
+
+        instance.dirt = ComponentDirt::NONE;
+        instance.component_mut(0).unwrap().dirt = ComponentDirt::NONE;
+        assert!(instance.set_double_property(1, stop_position_key, 0.25));
+        assert!(
+            instance
+                .component(0)
+                .unwrap()
+                .dirt
+                .contains(ComponentDirt::PAINT | ComponentDirt::STOPS)
+        );
     }
 
     #[test]

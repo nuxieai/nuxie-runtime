@@ -402,7 +402,11 @@ pub(super) fn build_artboard_property_bindings(
             };
             if !matches!(
                 property_kind,
-                FieldKind::Double | FieldKind::Uint | FieldKind::Color | FieldKind::String
+                FieldKind::Double
+                    | FieldKind::Uint
+                    | FieldKind::Bool
+                    | FieldKind::Color
+                    | FieldKind::String
             ) {
                 return None;
             }
@@ -440,7 +444,10 @@ pub(super) fn build_artboard_property_bindings(
                     }
                     runtime_created_view_model_value_for_declared_path(file, &path)
                 })
-                .unwrap_or(RuntimeDataBindGraphValue::Number(0.0));
+                .unwrap_or_else(|| match property_kind {
+                    FieldKind::Bool => RuntimeDataBindGraphValue::Boolean(false),
+                    _ => RuntimeDataBindGraphValue::Number(0.0),
+                });
             if !artboard_property_binding_value_matches_kind(&default_value, property_kind)
                 && !artboard_property_binding_allows_converted_default(
                     converter.as_ref(),
@@ -537,7 +544,8 @@ fn artboard_property_binding_value_matches_kind(
         (
             RuntimeDataBindGraphValue::Number(_),
             FieldKind::Double | FieldKind::Uint
-        ) | (RuntimeDataBindGraphValue::Color(_), FieldKind::Color)
+        ) | (RuntimeDataBindGraphValue::Boolean(_), FieldKind::Bool)
+            | (RuntimeDataBindGraphValue::Color(_), FieldKind::Color)
             | (RuntimeDataBindGraphValue::String(_), FieldKind::String)
             | (RuntimeDataBindGraphValue::Enum(_), FieldKind::Uint)
     )
@@ -2002,6 +2010,9 @@ impl ArtboardInstance {
             }
             (Some(FieldKind::Uint), Some(RuntimeDataBindGraphValue::Enum(value))) => {
                 self.set_uint_property(target_local_id, property_key, value)
+            }
+            (Some(FieldKind::Bool), Some(RuntimeDataBindGraphValue::Boolean(value))) => {
+                self.set_bool_property(target_local_id, property_key, value)
             }
             (Some(FieldKind::Color), Some(RuntimeDataBindGraphValue::Color(value))) => {
                 // Mirrors C++ src/data_bind/context/context_value_color.cpp.

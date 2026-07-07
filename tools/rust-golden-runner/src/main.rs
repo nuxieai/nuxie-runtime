@@ -1768,6 +1768,10 @@ fn nested_child_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> boo
             // NodeBase::x/yPropertyKey in C++ generated/node_base.hpp.
             && matches!(data_bind.property_key, 13 | 14)
             && data_bind.converter_global.is_none())
+        || (data_bind.target_type_name == Some("Artboard")
+            // ArtboardBase::clipPropertyKey in C++ generated/artboard_base.hpp.
+            && data_bind.property_key == 196
+            && data_bind.converter_global.is_none())
         || (data_bind.target_type_name == Some("Node")
             // NodeBase::x/yPropertyKey in C++ generated/node_base.hpp.
             && matches!(data_bind.property_key, 13 | 14)
@@ -1819,6 +1823,10 @@ fn nested_child_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> boo
             && matches!(data_bind.property_key, 7 | 8)
             && (data_bind.converter_global.is_none()
                 || data_bind.converter_type_name == Some("DataConverterInterpolator")))
+        || (data_bind.target_type_name == Some("LayoutComponentStyle")
+            // LayoutComponentStyleBase::displayValuePropertyKey in C++ generated/layout/layout_component_style_base.hpp.
+            && data_bind.property_key == 596
+            && data_bind.converter_global.is_none())
 }
 
 fn nested_child_data_bind_unsupported_feature(

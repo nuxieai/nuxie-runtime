@@ -5,12 +5,12 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 582 across 261 files (strict
-  exact=571/250; tolerant=11/11; structural=0/0)
-- Current compare: `make golden-compare` reports exact=261,
-  exact-segments=582, diverges=0, unsupported-feature=34, not-yet=0
+- Exact-status segments (file × sample): 583 across 262 files (strict
+  exact=572/251; tolerant=11/11; structural=0/0)
+- Current compare: `make golden-compare` reports exact=262,
+  exact-segments=583, diverges=0, unsupported-feature=33, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
-  M6=2 gated=6 harness=26
+  M6=1 gated=6 harness=26
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes**
 
 ## Milestones
@@ -29,17 +29,15 @@ the only memory the next session has. Update it every commit.
 1. Active `not-yet` queue is empty. `rewards_demo.riv` is exact-status under
    `verification = "tolerant(0.0005)"`; the tolerance covers residual
    HarfRust/Skrifa text-outline coordinate drift only.
-2. Highest-priority M6 target is `stateful_multi_property.riv`
-   (`rust-runner-unsupported:nested-layout-clip-data-bind`). Start by
-   admitting a focused exact candidate, then localize the first real stream
-   mismatch without reopening the now-closed rewards nested-feather lane.
-   `stateful_nested.riv` (`nested-stateful-view-model-property`) is the next
-   one-file M6 queue after that.
+2. Highest-priority M6 target is `stateful_nested.riv`
+   (`rust-runner-unsupported:nested-stateful-view-model-property`). Start by
+   admitting a focused exact candidate and localizing the first real stream
+   mismatch now that `stateful_multi_property.riv` covers nested layout clip
+   and style display data binds.
 3. The former `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
    `nested-feather-gradient-space` unsupported queues are empty.
-4. Remaining parked one-file M6 queues include `nested-layout-clip-data-bind`
-   (`stateful_multi_property.riv`) and `nested-stateful-view-model-property`
+4. Remaining parked one-file M6 queue is `nested-stateful-view-model-property`
    (`stateful_nested.riv`). Gated one-file diagnostics include
    `scripted-data-context`
    (`scripted_data_context.riv`), `scripted-transition-condition` (2 gated),
@@ -303,6 +301,17 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-07: [M6] Promoted `stateful_multi_property.riv` to exact-status.
+  The old `nested-layout-clip-data-bind` guard was cleared by adding boolean
+  source-to-target artboard property bindings, admitting nested `Artboard.clip`
+  and `LayoutComponentStyle.displayValue` data binds in the Rust runner, and
+  teaching the static text subset that those layout-affecting binds are
+  supported siblings. Focused exact compare passes; full `make golden-compare`
+  reports `exact=262`, `exact-segments=583`, `diverges=0`,
+  `unsupported-feature=33`, `not-yet=0`, parked
+  `M6=1 gated=6 harness=26`; `cargo test --workspace` passes. Next target is
+  `stateful_nested.riv`
+  (`rust-runner-unsupported:nested-stateful-view-model-property`).
 - 2026-07-07: [M6] Promoted `rewards_demo.riv` to exact-status under
   `verification = "tolerant(0.0005)"`. The promotion closed the active
   `not-yet:nested-feather-gradient-space` queue by matching C++ NSliced path

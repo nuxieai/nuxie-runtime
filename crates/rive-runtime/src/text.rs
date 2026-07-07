@@ -436,9 +436,10 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
                     && data_bind.converter_type_name == Some("DataConverterGroup"))
         }
         Some("Artboard") => {
-            ["x", "y"]
+            (["x", "y"]
                 .into_iter()
                 .any(|name| property_key_for_name("Node", name) == Some(property_key))
+                || property_key_for_name("Artboard", "clip") == Some(property_key))
                 && data_bind.converter_global.is_none()
         }
         Some("Joystick") => {
@@ -466,6 +467,10 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
                 .any(|name| property_key_for_name("LayoutComponent", name) == Some(property_key))
                 && (data_bind.converter_global.is_none()
                     || data_bind.converter_type_name == Some("DataConverterInterpolator"))
+        }
+        Some("LayoutComponentStyle") => {
+            property_key_for_name("LayoutComponentStyle", "displayValue") == Some(property_key)
+                && data_bind.converter_global.is_none()
         }
         Some("Solo") => property_key_for_name("Solo", "activeComponentId") == Some(property_key),
         Some("TextStylePaint") => {

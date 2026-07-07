@@ -871,14 +871,6 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
-    if let Some(global_id) =
-        unsupported_selected_root_skinned_ik_clip_path_global(graph, artboard, !is_nested_child)
-    {
-        bail!(
-            "unsupported: selected-root-skinned-ik-clip-path in Rust golden runner (global {global_id})"
-        );
-    }
-
     if let Some(global_id) = unsupported_image_global(runtime, graph, artboard) {
         bail!("unsupported: images in Rust golden runner (global {global_id})");
     }
@@ -2150,44 +2142,6 @@ fn first_image_or_asset_global(graph: &GraphFile, artboard: &ArtboardGraph) -> O
         })
 }
 
-fn selected_root_external_image_global(
-    graph: &GraphFile,
-    artboard: &ArtboardGraph,
-    apply_selected_root_fence: bool,
-) -> Option<u32> {
-    if !apply_selected_root_fence || artboard_has_direct_image_drawable(artboard) {
-        return None;
-    }
-
-    first_image_or_asset_global(graph, artboard)
-}
-
-fn unsupported_selected_root_skinned_ik_clip_path_global(
-    graph: &GraphFile,
-    artboard: &ArtboardGraph,
-    apply_selected_root_fence: bool,
-) -> Option<u32> {
-    let image_global =
-        selected_root_external_image_global(graph, artboard, apply_selected_root_fence)?;
-    artboard_has_skin_clipping_shape_and_ik_constraint(artboard).then_some(image_global)
-}
-
-fn artboard_has_skin_clipping_shape_and_ik_constraint(artboard: &ArtboardGraph) -> bool {
-    let has_skin = artboard
-        .local_objects
-        .iter()
-        .any(|object| object.type_name == Some("Skin"));
-    let has_clipping_shape = artboard
-        .local_objects
-        .iter()
-        .any(|object| object.type_name == Some("ClippingShape"));
-    let has_ik_constraint = artboard
-        .local_objects
-        .iter()
-        .any(|object| object.type_name == Some("IKConstraint"));
-    has_skin && has_clipping_shape && has_ik_constraint
-}
-
 fn unsupported_image_global(
     runtime: &RuntimeFile,
     graph: &GraphFile,
@@ -2268,13 +2222,6 @@ fn simple_static_image_artboard_tree_supported_entered(
             }
             _ => true,
         })
-}
-
-fn artboard_has_direct_image_drawable(artboard: &ArtboardGraph) -> bool {
-    artboard
-        .sorted_drawable_order
-        .iter()
-        .any(|drawable| drawable.type_name == "Image")
 }
 
 fn frame_dimension(value: f32) -> u32 {

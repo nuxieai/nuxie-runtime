@@ -5,10 +5,12 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 567 across 246 files (strict
-  exact=559/238; tolerant=8/8; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=49, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=7 gated=6 harness=36
+- Exact-status segments (file × sample): 568 across 247 files (strict
+  exact=559/238; tolerant=9/9; structural=0/0)
+- Current compare: `make golden-compare` reports exact=247,
+  exact-segments=568, diverges=0, unsupported-feature=48, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
+  M6=6 gated=6 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes**
 
 ## Milestones
@@ -26,10 +28,10 @@ the only memory the next session has. Update it every commit.
 
 1. Active `not-yet`: none. The M6 queue is now explicit
    `unsupported-feature` diagnostics only.
-2. Highest-priority M6 slice: `bullet_man.riv`
-   (`rust-runner-unsupported:selected-root-skinned-ik-clip-path`).
-   `echo_show_demo.riv` is parked behind
-   `rust-runner-unsupported:text-joystick-nested-remap-gradient-order`;
+2. Highest-priority M6 slice: `echo_show_demo.riv`
+   (`rust-runner-unsupported:text-joystick-nested-remap-gradient-order`).
+   Start by capturing the C++ intermediate child gradient shader-cache side
+   effects during nested-remap advance before broadening runtime behavior.
    `superbowl.riv` is parked behind
    `rust-runner-unsupported:nested-state-machine-layout-update`.
 3. Other parked one-file M6 queues include `nested-state-machine-layout-update`
@@ -44,14 +46,14 @@ the only memory the next session has. Update it every commit.
    work until a focused slice can either promote a file or replace the guard
    with a sharper diagnostic.
    The old `text-input` manifest queue is empty.
-3. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
+4. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
-4. Remaining exact entries pinned to sample `0` are static M1 holdovers:
+5. Remaining exact entries pinned to sample `0` are static M1 holdovers:
    `artboardclipping.riv`, `shapetest.riv`, and `trim.riv`. Do not prioritize
    them during M6 unless a related refactor needs a cheap draw-regression check.
 
-5. Threads are now policy (see `/goal` "Threads" section): the main loop
+6. Threads are now policy (see `/goal` "Threads" section): the main loop
    stays the single writer here; use read-only scout threads to triage the
    remaining M6 queues in parallel. Start the first lane thread in a NEW
    worktree for the C++ golden-runner crash repair (`milestone =
@@ -60,7 +62,7 @@ the only memory the next session has. Update it every commit.
    full ratchet passes. Recovered files enter as `not-yet` — denominator
    growth, zero conflict with M6 runtime work.
 
-6. Harness lane MERGED (e5941e7): the C++ golden-runner now survives 34 of
+7. Harness lane MERGED (e5941e7): the C++ golden-runner now survives 34 of
    36 `milestone = "harness"` files (FileAssetContents stripping for the
    non-scripting librive build, flush + `_Exit(0)` before teardown, ABI
    define alignment). MAIN-LOOP FOLLOW-UP: flip those 34 corpus entries
@@ -73,7 +75,7 @@ the only memory the next session has. Update it every commit.
    convention-change decision, not a harness fix. Keep them
    `milestone = "harness"` until decided.
 
-7. DECIDED (see Decisions 2026-07-06): adopt the reference-test view-model
+8. DECIDED (see Decisions 2026-07-06): adopt the reference-test view-model
    binding convention. Run as ONE coordinated slice: (a) change BOTH
    runners (tools/golden-runner and tools/rust-golden-runner) to bind
    named view-model instance 0 when the selected artboard has a serialized
@@ -88,7 +90,7 @@ the only memory the next session has. Update it every commit.
    under the new convention, stop and record it as a Known Divergence
    rather than shipping a partial convention.
 
-8. SCOUT RESULT (read-only pre-classification of the 34 recovered harness
+9. SCOUT RESULT (read-only pre-classification of the 34 recovered harness
    files; streams/diffs in the session scratchpad — trust but re-verify on
    promotion): (a) promote-exact, already verified epsilon-identical via
    golden-compare: audio_script, image_scripting_property_value,
@@ -586,6 +588,16 @@ the only memory the next session has. Update it every commit.
   `diverges=0`, `unsupported-feature=49`, `not-yet=0`, parked
   `M6=7 gated=6 harness=36`; `cargo test --workspace` passes. Next target is
   `bullet_man.riv` (`selected-root-skinned-ik-clip-path`).
+- 2026-07-07: [M6] Promoted `bullet_man.riv` after a focused bypass proved
+  the selected-root skinned/IK clip-path stream is structurally identical to
+  C++ at sample 0, with only bounded skinned path numeric drift (max
+  `0.000489` across 6972 numeric tokens). The stale
+  `selected-root-skinned-ik-clip-path` runner guard is removed and the corpus
+  entry is exact under `verification = "tolerant(0.0005)"`. Full
+  `make golden-compare` reports `exact=247`, `exact-segments=568`,
+  `diverges=0`, `unsupported-feature=48`, `not-yet=0`, parked
+  `M6=6 gated=6 harness=36`; `cargo test --workspace` passes. Next target is
+  `echo_show_demo.riv` (`text-joystick-nested-remap-gradient-order`).
 - 2026-07-02: `rive-runtime` owns static draw emission through
   `rive-render-api`; `rust-golden-runner` now only orchestrates import,
   artboard selection, stream markers, and recording output.

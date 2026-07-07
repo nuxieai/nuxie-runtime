@@ -144,6 +144,34 @@ the only memory the next session has. Update it every commit.
    ScriptedDrawable-bearing files first, then flip them straight to
    `milestone = "gated"`. Unsupported is never silent.
 
+9. PERF METHODOLOGY FENCE (supersedes the "highest priority next target"
+   in item 2 — measurement before optimization). All perf numbers to date
+   are debug-vs-debug and include recording-serializer cost; both distort
+   ratios and target ranking. Required order:
+   (a) Release-vs-release perf builds: `cargo build --release` for the
+       Rust runner and a release C++ runner + release reference libraries;
+       correctness ratchet stays on debug. Re-baseline all ratios and
+       discard debug-era perf conclusions and priorities.
+   (b) Null-renderer benchmark mode on BOTH runners (same trait calls,
+       output discarded) so the measured cost is pure runtime
+       advance/prepare/draw-path work, not stream serialization.
+       Re-baseline again.
+   (c) Only then resume optimization slices, each one: flamegraph
+       attribution (samply/Instruments) -> read the C++ source at the same
+       hot site -> PORT the C++ optimization if one exists (keyframe
+       cursors, ComponentDirt gating, RawPath rewind/reuse, paint/path
+       caching) -> invent a novel optimization only when C++ has none
+       there.
+   (d) Statistical floor: >=10 iterations with median + spread, a pinned
+       perf corpus spanning tiny/medium/heavy files, and a per-commit perf
+       JSON artifact so trends are data, not "noisy but typical" recall.
+   Fidelity rules while optimizing: no tolerance widening for perf; no
+   float-math restructuring in geometry paths (the fused scaleAndAdd
+   lesson — no reassociation/fast-math; SIMD only if the ratchet stays
+   strictly green); no invalidation/skip logic that does not mirror an
+   audited C++ dirt gate — invented caching is how original-author
+   decisions get silently broken on unsampled timelines.
+
 ## Known Divergences
 
 - There are no active `status = "not-yet"` entries.
@@ -1184,6 +1212,16 @@ the only memory the next session has. Update it every commit.
   scripting seam; `mlua`+`luau` (same API shape) is the untriggered
   fallback. Port `src/lua/` glue corpus-file-by-corpus-file — the fence
   rules apply to the 16.4k-line binding surface more than anywhere else.
+
+- 2026-07-07: Perf methodology fence adopted: benchmarks must be
+  release-vs-release and exclude serializer cost (null-renderer mode)
+  before any further optimization; debug-era perf numbers are void.
+  Optimization slices follow flamegraph -> C++-site-first -> port-their-
+  optimization-before-inventing. Fidelity while optimizing: no tolerance
+  widening, no geometry float-math restructuring, no skip/cache logic
+  that does not mirror an audited C++ dirt gate. Statistical floor: >=10
+  iterations, median+spread, pinned size-class corpus, per-commit perf
+  JSON artifact.
 
 ## Log
 

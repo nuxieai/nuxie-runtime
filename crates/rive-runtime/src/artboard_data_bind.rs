@@ -1353,6 +1353,11 @@ impl ArtboardInstance {
             let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
                 continue;
             };
+            changed |= nested.bind_owned_view_model_animation_contexts(
+                file,
+                context,
+                &child_context_chain,
+            );
             changed |= nested.child.bind_owned_view_model_artboard_context_chain(
                 file,
                 context,

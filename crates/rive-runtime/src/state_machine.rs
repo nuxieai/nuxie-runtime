@@ -159,23 +159,31 @@ pub(crate) fn build_state_machines(
         .enumerate()
         .map(|(index, animation)| (animation.global_id, index))
         .collect::<BTreeMap<_, _>>();
+    let default_view_model_index = state_machine_default_view_model_index(file, artboard_index);
+    let default_instance = default_view_model_index
+        .and_then(|view_model_index| file.view_model_default_instance(view_model_index))
+        .map(|instance| instance.object);
 
     file.artboard_state_machine_graphs(artboard_index)
         .into_iter()
         .map(|state_machine| {
             let state_machine_data_binds = state_machine.data_binds.clone();
-            let bindable_numbers = runtime_bindable_numbers(file, &state_machine);
-            let bindable_integers = runtime_bindable_integers(file, &state_machine);
-            let bindable_colors = runtime_bindable_colors(file, &state_machine);
-            let bindable_strings = runtime_bindable_strings(file, &state_machine);
-            let bindable_enums = runtime_bindable_enums(file, &state_machine);
-            let bindable_assets = runtime_bindable_assets(file, &state_machine);
-            let bindable_artboards = runtime_bindable_artboards(file, &state_machine);
-            let bindable_lists = runtime_bindable_lists(file, &state_machine);
-            let bindable_triggers = runtime_bindable_triggers(file, &state_machine);
-            let bindable_view_models = runtime_bindable_view_models(file, &state_machine);
-            let bindable_booleans = runtime_bindable_booleans(file, &state_machine);
-            let view_model_triggers = runtime_default_view_model_triggers(file);
+            let bindable_numbers = runtime_bindable_numbers(file, &state_machine, default_instance);
+            let bindable_integers =
+                runtime_bindable_integers(file, &state_machine, default_instance);
+            let bindable_colors = runtime_bindable_colors(file, &state_machine, default_instance);
+            let bindable_strings = runtime_bindable_strings(file, &state_machine, default_instance);
+            let bindable_enums = runtime_bindable_enums(file, &state_machine, default_instance);
+            let bindable_assets = runtime_bindable_assets(file, &state_machine, default_instance);
+            let bindable_artboards =
+                runtime_bindable_artboards(file, &state_machine, default_instance);
+            let bindable_lists = runtime_bindable_lists(file, &state_machine, default_instance);
+            let bindable_triggers = runtime_bindable_triggers(file, &state_machine, default_instance);
+            let bindable_view_models =
+                runtime_bindable_view_models(file, &state_machine, default_instance);
+            let bindable_booleans = runtime_bindable_booleans(file, &state_machine, default_instance);
+            let view_model_triggers =
+                runtime_default_view_model_triggers(file, default_view_model_index);
             let transition_duration_bindings =
                 runtime_transition_duration_bindings(file, &state_machine, artboard_index);
             RuntimeStateMachine {
@@ -354,14 +362,22 @@ pub(crate) fn build_state_machines(
         .collect()
 }
 
+fn state_machine_default_view_model_index(
+    file: &RuntimeFile,
+    artboard_index: usize,
+) -> Option<usize> {
+    file.resolved_view_model_for_artboard(artboard_index)
+        .map(|view_model| view_model.view_model_index)
+        .or_else(|| file.view_model(0).map(|_| 0))
+}
+
 fn runtime_transition_duration_bindings(
     file: &RuntimeFile,
     state_machine: &rive_binary::RuntimeStateMachine<'_>,
     artboard_index: usize,
 ) -> Vec<RuntimeTransitionDurationBinding> {
-    let Some(default_instance) = file
-        .resolved_view_model_for_artboard(artboard_index)
-        .and_then(|view_model| file.view_model_default_instance(view_model.view_model_index))
+    let Some(default_instance) = state_machine_default_view_model_index(file, artboard_index)
+        .and_then(|view_model_index| file.view_model_default_instance(view_model_index))
     else {
         return Vec::new();
     };

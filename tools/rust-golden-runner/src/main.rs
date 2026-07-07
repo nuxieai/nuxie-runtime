@@ -930,12 +930,6 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
-    if let Some(global_id) = unsupported_state_machine_viewmodel_solo_image(runtime, artboard) {
-        bail!(
-            "unsupported: state-machine-viewmodel-solo-image in Rust golden runner (global {global_id})"
-        );
-    }
-
     if let Some(data_bind) = artboard
         .data_binds
         .iter()
@@ -1039,82 +1033,54 @@ fn ensure_static_draw_supported_for_artboard(
         )?;
     }
 
+    if let Some(global_id) =
+        unsupported_nested_state_machine_layout_update(runtime, graph, artboard)
+    {
+        bail!(
+            "unsupported: nested-state-machine-layout-update in Rust golden runner (global {global_id})"
+        );
+    }
+
     Ok(())
 }
 
-fn unsupported_state_machine_viewmodel_solo_image(
+fn unsupported_nested_state_machine_layout_update(
     runtime: &RuntimeFile,
+    graph: &GraphFile,
     artboard: &ArtboardGraph,
 ) -> Option<u32> {
-    if !runtime_has_type(runtime, "BindablePropertyEnum")
-        || !runtime_has_type(runtime, "TransitionValueEnumComparator")
-        || !artboard
+    artboard.nested_artboards.iter().find_map(|host| {
+        if !matches!(
+            host.type_name,
+            "NestedArtboardLayout" | "NestedArtboardLeaf"
+        ) {
+            return None;
+        }
+        let host_object = runtime.object(host.global_id as usize)?;
+        let child_index = usize::try_from(host_object.uint_property("artboardId")?).ok()?;
+        let child = graph.artboards.get(child_index)?;
+        if !child
             .state_machines
             .iter()
             .any(|state_machine| !state_machine.data_binds.is_empty())
-    {
-        return None;
-    }
-
-    let active_component_key =
-        u64::from(schema_property_key_for_name("Solo", "activeComponentId")?);
-    let solo_locals = artboard
-        .components
-        .iter()
-        .filter(|component| component.type_name == "Solo")
-        .map(|component| component.local_id)
-        .collect::<BTreeSet<_>>();
-    if solo_locals.is_empty() {
-        return None;
-    }
-
-    let solo_image_globals = artboard
-        .components
-        .iter()
-        .filter(|component| component.type_name == "Image")
-        .filter(|component| {
-            component_has_solo_ancestor(artboard, component.parent_local, &solo_locals)
-        })
-        .map(|component| component.global_id)
-        .collect::<Vec<_>>();
-    if solo_image_globals.len() < 2 {
-        return None;
-    }
-
-    let active_solo_animation_count = artboard
-        .animations
-        .iter()
-        .flat_map(|animation| &animation.keyed_objects)
-        .filter(|keyed_object| {
-            usize::try_from(keyed_object.object_id)
-                .ok()
-                .is_some_and(|local| solo_locals.contains(&local))
-                && keyed_object
-                    .keyed_properties
-                    .iter()
-                    .any(|keyed_property| keyed_property.property_key == active_component_key)
-        })
-        .count();
-
-    (active_solo_animation_count >= 2).then_some(solo_image_globals[0])
+        {
+            return None;
+        }
+        child
+            .animations
+            .iter()
+            .any(animation_keys_layout_update)
+            .then_some(host.global_id)
+    })
 }
 
-fn component_has_solo_ancestor(
-    artboard: &ArtboardGraph,
-    mut parent_local: Option<usize>,
-    solo_locals: &BTreeSet<usize>,
-) -> bool {
-    while let Some(local_id) = parent_local {
-        if solo_locals.contains(&local_id) {
-            return true;
-        }
-        parent_local = artboard
-            .components
+fn animation_keys_layout_update(animation: &rive_graph::AnimationGraph) -> bool {
+    animation.keyed_objects.iter().any(|keyed_object| {
+        keyed_object
+            .keyed_properties
             .iter()
-            .find(|component| component.local_id == local_id)
-            .and_then(|component| component.parent_local);
-    }
-    false
+            .any(|keyed_property| matches!(keyed_property.property_key, 596 | 597 | 598 | 632))
+    })
 }
 
 fn artboard_has_joystick_nested_remap_dependents(artboard: &ArtboardGraph) -> bool {

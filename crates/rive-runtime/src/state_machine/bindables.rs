@@ -671,6 +671,7 @@ pub(crate) fn bindable_boolean_value(
 pub(crate) fn runtime_bindable_numbers(
     file: &RuntimeFile,
     state_machine: &rive_binary::RuntimeStateMachine<'_>,
+    default_instance: Option<&RuntimeObject>,
 ) -> Vec<RuntimeBindableNumber> {
     let mut values = BTreeMap::<u32, RuntimeBindableNumber>::new();
     for (data_bind_index, data_bind) in state_machine.data_binds.iter().enumerate() {
@@ -689,9 +690,12 @@ pub(crate) fn runtime_bindable_numbers(
                 default_view_model_sources: Vec::new(),
                 value: target.double_property("propertyValue").unwrap_or(0.0),
             });
-        if let Some(source) =
-            runtime_bindable_number_default_view_model_source(file, data_bind_index, data_bind)
-        {
+        if let Some(source) = runtime_bindable_number_default_view_model_source(
+            file,
+            data_bind_index,
+            data_bind,
+            default_instance,
+        ) {
             values.entry(target.id).and_modify(|bindable_number| {
                 bindable_number.default_view_model_sources.push(source)
             });
@@ -705,31 +709,15 @@ fn runtime_bindable_number_default_view_model_source(
     file: &RuntimeFile,
     data_bind_index: usize,
     data_bind: &RuntimeObject,
+    default_instance: Option<&RuntimeObject>,
 ) -> Option<RuntimeBindableNumberDefaultViewModelSource> {
-    runtime_number_default_view_model_source(
+    runtime_number_default_view_model_source_for_instance(
         file,
         data_bind_index,
         data_bind,
         "BindablePropertyNumber",
         "propertyValue",
-    )
-}
-
-pub(crate) fn runtime_number_default_view_model_source(
-    file: &RuntimeFile,
-    data_bind_index: usize,
-    data_bind: &RuntimeObject,
-    target_type_name: &str,
-    target_property_name: &str,
-) -> Option<RuntimeBindableNumberDefaultViewModelSource> {
-    let default_instance = file.view_model_default_instance(0)?;
-    runtime_number_default_view_model_source_for_instance(
-        file,
-        data_bind_index,
-        data_bind,
-        target_type_name,
-        target_property_name,
-        default_instance.object,
+        default_instance?,
     )
 }
 
@@ -895,6 +883,7 @@ pub(crate) fn runtime_number_default_view_model_source_for_instance(
 pub(crate) fn runtime_bindable_integers(
     file: &RuntimeFile,
     state_machine: &rive_binary::RuntimeStateMachine<'_>,
+    default_instance: Option<&RuntimeObject>,
 ) -> Vec<RuntimeBindableInteger> {
     let mut values = BTreeMap::<u32, RuntimeBindableInteger>::new();
     for (data_bind_index, data_bind) in state_machine.data_binds.iter().enumerate() {
@@ -913,9 +902,12 @@ pub(crate) fn runtime_bindable_integers(
                 default_view_model_sources: Vec::new(),
                 value: target.uint_property("propertyValue").unwrap_or(0),
             });
-        if let Some(source) =
-            runtime_bindable_integer_default_view_model_source(file, data_bind_index, data_bind)
-        {
+        if let Some(source) = runtime_bindable_integer_default_view_model_source(
+            file,
+            data_bind_index,
+            data_bind,
+            default_instance,
+        ) {
             values.entry(target.id).and_modify(|bindable_integer| {
                 bindable_integer.default_view_model_sources.push(source)
             });
@@ -929,6 +921,7 @@ fn runtime_bindable_integer_default_view_model_source(
     file: &RuntimeFile,
     data_bind_index: usize,
     data_bind: &RuntimeObject,
+    default_instance: Option<&RuntimeObject>,
 ) -> Option<RuntimeBindableIntegerDefaultViewModelSource> {
     let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
     if property_key_for_name("BindablePropertyInteger", "propertyValue") != Some(property_key) {
@@ -938,9 +931,7 @@ fn runtime_bindable_integer_default_view_model_source(
         return None;
     }
     let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
-    let default_instance = file.view_model_default_instance(0)?;
-    let source =
-        file.data_context_view_model_property_for_instance(default_instance.object, &path)?;
+    let source = file.data_context_view_model_property_for_instance(default_instance?, &path)?;
     let value = file.view_model_instance_symbol_list_index_value_for_object(source)?;
     Some(RuntimeBindableIntegerDefaultViewModelSource {
         data_bind_index,
@@ -953,6 +944,7 @@ fn runtime_bindable_integer_default_view_model_source(
 pub(crate) fn runtime_bindable_colors(
     file: &RuntimeFile,
     state_machine: &rive_binary::RuntimeStateMachine<'_>,
+    default_instance: Option<&RuntimeObject>,
 ) -> Vec<RuntimeBindableColor> {
     let mut values = BTreeMap::<u32, RuntimeBindableColor>::new();
     for (data_bind_index, data_bind) in state_machine.data_binds.iter().enumerate() {
@@ -971,9 +963,12 @@ pub(crate) fn runtime_bindable_colors(
                 default_view_model_sources: Vec::new(),
                 value: target.color_property("propertyValue").unwrap_or(0),
             });
-        if let Some(source) =
-            runtime_bindable_color_default_view_model_source(file, data_bind_index, data_bind)
-        {
+        if let Some(source) = runtime_bindable_color_default_view_model_source(
+            file,
+            data_bind_index,
+            data_bind,
+            default_instance,
+        ) {
             values.entry(target.id).and_modify(|bindable_color| {
                 bindable_color.default_view_model_sources.push(source)
             });
@@ -987,15 +982,14 @@ fn runtime_bindable_color_default_view_model_source(
     file: &RuntimeFile,
     data_bind_index: usize,
     data_bind: &RuntimeObject,
+    default_instance: Option<&RuntimeObject>,
 ) -> Option<RuntimeBindableColorDefaultViewModelSource> {
     let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
     if property_key_for_name("BindablePropertyColor", "propertyValue") != Some(property_key) {
         return None;
     }
     let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
-    let default_instance = file.view_model_default_instance(0)?;
-    let source =
-        file.data_context_view_model_property_for_instance(default_instance.object, &path)?;
+    let source = file.data_context_view_model_property_for_instance(default_instance?, &path)?;
     let value = file.view_model_instance_color_value_for_object(source)?;
     Some(RuntimeBindableColorDefaultViewModelSource {
         data_bind_index,
@@ -1008,6 +1002,7 @@ fn runtime_bindable_color_default_view_model_source(
 pub(crate) fn runtime_bindable_strings(
     file: &RuntimeFile,
     state_machine: &rive_binary::RuntimeStateMachine<'_>,
+    default_instance: Option<&RuntimeObject>,
 ) -> Vec<RuntimeBindableString> {
     let mut values = BTreeMap::<u32, RuntimeBindableString>::new();
     for (data_bind_index, data_bind) in state_machine.data_binds.iter().enumerate() {
@@ -1029,9 +1024,12 @@ pub(crate) fn runtime_bindable_strings(
                     .unwrap_or_default()
                     .to_vec(),
             });
-        if let Some(source) =
-            runtime_bindable_string_default_view_model_source(file, data_bind_index, data_bind)
-        {
+        if let Some(source) = runtime_bindable_string_default_view_model_source(
+            file,
+            data_bind_index,
+            data_bind,
+            default_instance,
+        ) {
             values.entry(target.id).and_modify(|bindable_string| {
                 bindable_string.default_view_model_sources.push(source)
             });
@@ -1045,15 +1043,14 @@ fn runtime_bindable_string_default_view_model_source(
     file: &RuntimeFile,
     data_bind_index: usize,
     data_bind: &RuntimeObject,
+    default_instance: Option<&RuntimeObject>,
 ) -> Option<RuntimeBindableStringDefaultViewModelSource> {
     let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
     if property_key_for_name("BindablePropertyString", "propertyValue") != Some(property_key) {
         return None;
     }
     let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
-    let default_instance = file.view_model_default_instance(0)?;
-    let source =
-        file.data_context_view_model_property_for_instance(default_instance.object, &path)?;
+    let source = file.data_context_view_model_property_for_instance(default_instance?, &path)?;
     let converter = runtime_data_bind_graph_converter(file, data_bind);
     let value = if runtime_data_bind_graph_converter_starts_with_to_string(converter.as_ref()) {
         if let Some(value) = file.view_model_instance_number_value_for_object(source) {
@@ -1093,6 +1090,7 @@ fn runtime_bindable_string_default_view_model_source(
 pub(crate) fn runtime_bindable_enums(
     file: &RuntimeFile,
     state_machine: &rive_binary::RuntimeStateMachine<'_>,
+    default_instance: Option<&RuntimeObject>,
 ) -> Vec<RuntimeBindableEnum> {
     let mut values = BTreeMap::<u32, RuntimeBindableEnum>::new();
     for (data_bind_index, data_bind) in state_machine.data_binds.iter().enumerate() {
@@ -1113,9 +1111,12 @@ pub(crate) fn runtime_bindable_enums(
                     .uint_property("propertyValue")
                     .unwrap_or(u64::from(u32::MAX)),
             });
-        if let Some(source) =
-            runtime_bindable_enum_default_view_model_source(file, data_bind_index, data_bind)
-        {
+        if let Some(source) = runtime_bindable_enum_default_view_model_source(
+            file,
+            data_bind_index,
+            data_bind,
+            default_instance,
+        ) {
             values
                 .entry(target.id)
                 .and_modify(|bindable_enum| bindable_enum.default_view_model_sources.push(source));
@@ -1129,19 +1130,30 @@ fn runtime_bindable_enum_default_view_model_source(
     file: &RuntimeFile,
     data_bind_index: usize,
     data_bind: &RuntimeObject,
+    default_instance: Option<&RuntimeObject>,
 ) -> Option<RuntimeBindableEnumDefaultViewModelSource> {
     let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
     if property_key_for_name("BindablePropertyEnum", "propertyValue") != Some(property_key) {
         return None;
     }
     let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
-    let default_instance = file.view_model_default_instance(0)?;
-    let source =
-        file.data_context_view_model_property_for_instance(default_instance.object, &path)?;
-    if source.type_name != "ViewModelInstanceEnum" {
-        return None;
-    }
-    let value = source.uint_property("propertyValue")?;
+    let value = if let Some(source) = default_instance.and_then(|default_instance| {
+        file.data_context_view_model_property_for_instance(default_instance, &path)
+    }) {
+        if source.type_name != "ViewModelInstanceEnum" {
+            return None;
+        }
+        source.uint_property("propertyValue")?
+    } else {
+        let property = runtime_view_model_property_at_path(file, &path)?;
+        if !matches!(
+            property.type_name,
+            "ViewModelPropertyEnum" | "ViewModelPropertyEnumCustom" | "ViewModelPropertyEnumSystem"
+        ) {
+            return None;
+        }
+        0
+    };
     Some(RuntimeBindableEnumDefaultViewModelSource {
         data_bind_index,
         path: path.to_vec(),
@@ -1153,6 +1165,7 @@ fn runtime_bindable_enum_default_view_model_source(
 pub(crate) fn runtime_bindable_assets(
     file: &RuntimeFile,
     state_machine: &rive_binary::RuntimeStateMachine<'_>,
+    default_instance: Option<&RuntimeObject>,
 ) -> Vec<RuntimeBindableAsset> {
     let mut values = BTreeMap::<u32, RuntimeBindableAsset>::new();
     for (data_bind_index, data_bind) in state_machine.data_binds.iter().enumerate() {
@@ -1173,9 +1186,12 @@ pub(crate) fn runtime_bindable_assets(
                     .uint_property("propertyValue")
                     .unwrap_or(u64::from(u32::MAX)),
             });
-        if let Some(source) =
-            runtime_bindable_asset_default_view_model_source(file, data_bind_index, data_bind)
-        {
+        if let Some(source) = runtime_bindable_asset_default_view_model_source(
+            file,
+            data_bind_index,
+            data_bind,
+            default_instance,
+        ) {
             values.entry(target.id).and_modify(|bindable_asset| {
                 bindable_asset.default_view_model_sources.push(source)
             });
@@ -1189,15 +1205,14 @@ fn runtime_bindable_asset_default_view_model_source(
     file: &RuntimeFile,
     data_bind_index: usize,
     data_bind: &RuntimeObject,
+    default_instance: Option<&RuntimeObject>,
 ) -> Option<RuntimeBindableAssetDefaultViewModelSource> {
     let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
     if property_key_for_name("BindablePropertyAsset", "propertyValue") != Some(property_key) {
         return None;
     }
     let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
-    let default_instance = file.view_model_default_instance(0)?;
-    let source =
-        file.data_context_view_model_property_for_instance(default_instance.object, &path)?;
+    let source = file.data_context_view_model_property_for_instance(default_instance?, &path)?;
     if source.type_name != "ViewModelInstanceAssetImage" {
         return None;
     }
@@ -1213,6 +1228,7 @@ fn runtime_bindable_asset_default_view_model_source(
 pub(crate) fn runtime_bindable_artboards(
     file: &RuntimeFile,
     state_machine: &rive_binary::RuntimeStateMachine<'_>,
+    default_instance: Option<&RuntimeObject>,
 ) -> Vec<RuntimeBindableArtboard> {
     let mut values = BTreeMap::<u32, RuntimeBindableArtboard>::new();
     for (data_bind_index, data_bind) in state_machine.data_binds.iter().enumerate() {
@@ -1235,9 +1251,12 @@ pub(crate) fn runtime_bindable_artboards(
                     .uint_property("propertyValue")
                     .unwrap_or(u64::from(u32::MAX)),
             });
-        if let Some(source) =
-            runtime_bindable_artboard_default_view_model_source(file, data_bind_index, data_bind)
-        {
+        if let Some(source) = runtime_bindable_artboard_default_view_model_source(
+            file,
+            data_bind_index,
+            data_bind,
+            default_instance,
+        ) {
             values.entry(target.id).and_modify(|bindable_artboard| {
                 bindable_artboard.default_view_model_sources.push(source)
             });
@@ -1251,15 +1270,14 @@ fn runtime_bindable_artboard_default_view_model_source(
     file: &RuntimeFile,
     data_bind_index: usize,
     data_bind: &RuntimeObject,
+    default_instance: Option<&RuntimeObject>,
 ) -> Option<RuntimeBindableArtboardDefaultViewModelSource> {
     let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
     if property_key_for_name("BindablePropertyArtboard", "propertyValue") != Some(property_key) {
         return None;
     }
     let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
-    let default_instance = file.view_model_default_instance(0)?;
-    let source =
-        file.data_context_view_model_property_for_instance(default_instance.object, &path)?;
+    let source = file.data_context_view_model_property_for_instance(default_instance?, &path)?;
     if source.type_name != "ViewModelInstanceArtboard" {
         return None;
     }
@@ -1275,6 +1293,7 @@ fn runtime_bindable_artboard_default_view_model_source(
 pub(crate) fn runtime_bindable_lists(
     file: &RuntimeFile,
     state_machine: &rive_binary::RuntimeStateMachine<'_>,
+    default_instance: Option<&RuntimeObject>,
 ) -> Vec<RuntimeBindableList> {
     let mut values = BTreeMap::<u32, RuntimeBindableList>::new();
     for (data_bind_index, data_bind) in state_machine.data_binds.iter().enumerate() {
@@ -1296,9 +1315,12 @@ pub(crate) fn runtime_bindable_lists(
                     .and_then(|value| usize::try_from(value).ok())
                     .unwrap_or(usize::try_from(u64::from(u32::MAX)).unwrap_or(usize::MAX)),
             });
-        if let Some(source) =
-            runtime_bindable_list_default_view_model_source(file, data_bind_index, data_bind)
-        {
+        if let Some(source) = runtime_bindable_list_default_view_model_source(
+            file,
+            data_bind_index,
+            data_bind,
+            default_instance,
+        ) {
             values
                 .entry(target.id)
                 .and_modify(|bindable_list| bindable_list.default_view_model_sources.push(source));
@@ -1312,14 +1334,14 @@ fn runtime_bindable_list_default_view_model_source(
     file: &RuntimeFile,
     data_bind_index: usize,
     data_bind: &RuntimeObject,
+    default_instance: Option<&RuntimeObject>,
 ) -> Option<RuntimeBindableListDefaultViewModelSource> {
     let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
     if property_key_for_name("BindablePropertyList", "propertyValue") != Some(property_key) {
         return None;
     }
     let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
-    let default_instance = file.view_model_default_instance(0)?;
-    let source = file.data_context_view_model_property_for_instance(default_instance.object, &path);
+    let source = file.data_context_view_model_property_for_instance(default_instance?, &path);
     let converter = runtime_data_bind_graph_converter(file, data_bind);
     let value = match converter.as_ref() {
         Some(RuntimeDataBindGraphConverter::NumberToList { .. }) => {
@@ -1378,6 +1400,7 @@ fn runtime_view_model_property_at_path<'a>(
 pub(crate) fn runtime_bindable_triggers(
     file: &RuntimeFile,
     state_machine: &rive_binary::RuntimeStateMachine<'_>,
+    default_instance: Option<&RuntimeObject>,
 ) -> Vec<RuntimeBindableTrigger> {
     let mut values = BTreeMap::<u32, RuntimeBindableTrigger>::new();
     for (data_bind_index, data_bind) in state_machine.data_binds.iter().enumerate() {
@@ -1387,7 +1410,7 @@ pub(crate) fn runtime_bindable_triggers(
         if target.type_name != "BindablePropertyTrigger" {
             continue;
         }
-        let source = runtime_bindable_trigger_source(file, data_bind);
+        let source = runtime_bindable_trigger_source(file, data_bind, default_instance);
         let value = target.uint_property("propertyValue").unwrap_or(0);
         values
             .entry(target.id)
@@ -1403,9 +1426,12 @@ pub(crate) fn runtime_bindable_triggers(
                 source,
                 default_view_model_sources: Vec::new(),
             });
-        if let Some(default_source) =
-            runtime_bindable_trigger_default_view_model_source(file, data_bind_index, data_bind)
-        {
+        if let Some(default_source) = runtime_bindable_trigger_default_view_model_source(
+            file,
+            data_bind_index,
+            data_bind,
+            default_instance,
+        ) {
             values.entry(target.id).and_modify(|bindable_trigger| {
                 bindable_trigger
                     .default_view_model_sources
@@ -1421,15 +1447,14 @@ fn runtime_bindable_trigger_default_view_model_source(
     file: &RuntimeFile,
     data_bind_index: usize,
     data_bind: &RuntimeObject,
+    default_instance: Option<&RuntimeObject>,
 ) -> Option<RuntimeBindableTriggerDefaultViewModelSource> {
     let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
     if property_key_for_name("BindablePropertyTrigger", "propertyValue") != Some(property_key) {
         return None;
     }
     let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
-    let default_instance = file.view_model_default_instance(0)?;
-    let source =
-        file.data_context_view_model_property_for_instance(default_instance.object, &path)?;
+    let source = file.data_context_view_model_property_for_instance(default_instance?, &path)?;
     let value = file.view_model_instance_trigger_count_for_object(source)?;
     Some(RuntimeBindableTriggerDefaultViewModelSource {
         data_bind_index,
@@ -1443,15 +1468,15 @@ fn runtime_bindable_trigger_default_view_model_source(
 fn runtime_bindable_trigger_source(
     file: &RuntimeFile,
     data_bind: &RuntimeObject,
+    default_instance: Option<&RuntimeObject>,
 ) -> RuntimeBindableTriggerSource {
     let Some(path) = file.data_bind_context_source_path_ids_for_object(data_bind) else {
         return RuntimeBindableTriggerSource::None;
     };
-    let Some(default_instance) = file.view_model_default_instance(0) else {
+    let Some(default_instance) = default_instance else {
         return RuntimeBindableTriggerSource::None;
     };
-    let Some(target) =
-        file.data_context_view_model_property_for_instance(default_instance.object, &path)
+    let Some(target) = file.data_context_view_model_property_for_instance(default_instance, &path)
     else {
         return RuntimeBindableTriggerSource::None;
     };
@@ -1470,6 +1495,7 @@ fn runtime_bindable_trigger_source(
 pub(crate) fn runtime_bindable_view_models(
     file: &RuntimeFile,
     state_machine: &rive_binary::RuntimeStateMachine<'_>,
+    default_instance: Option<&RuntimeObject>,
 ) -> Vec<RuntimeBindableViewModel> {
     let mut values = BTreeMap::<u32, RuntimeBindableViewModel>::new();
     for (data_bind_index, data_bind) in state_machine.data_binds.iter().enumerate() {
@@ -1492,9 +1518,12 @@ pub(crate) fn runtime_bindable_view_models(
                 source,
                 default_view_model_sources: Vec::new(),
             });
-        if let Some(source) =
-            runtime_bindable_view_model_default_view_model_source(file, data_bind_index, data_bind)
-        {
+        if let Some(source) = runtime_bindable_view_model_default_view_model_source(
+            file,
+            data_bind_index,
+            data_bind,
+            default_instance,
+        ) {
             values.entry(target.id).and_modify(|bindable_view_model| {
                 bindable_view_model.default_view_model_sources.push(source)
             });
@@ -1508,15 +1537,15 @@ fn runtime_bindable_view_model_default_view_model_source(
     file: &RuntimeFile,
     data_bind_index: usize,
     data_bind: &RuntimeObject,
+    default_instance: Option<&RuntimeObject>,
 ) -> Option<RuntimeBindableViewModelDefaultViewModelSource> {
     let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
     if property_key_for_name("BindablePropertyViewModel", "propertyValue") != Some(property_key) {
         return None;
     }
     let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
-    let default_instance = file.view_model_default_instance(0)?;
     let Some(reference) =
-        file.data_context_view_model_instance_for_instance(default_instance.object, &path)
+        file.data_context_view_model_instance_for_instance(default_instance?, &path)
     else {
         return None;
     };
@@ -1556,6 +1585,7 @@ fn runtime_bindable_view_model_source(
 pub(crate) fn runtime_bindable_booleans(
     file: &RuntimeFile,
     state_machine: &rive_binary::RuntimeStateMachine<'_>,
+    default_instance: Option<&RuntimeObject>,
 ) -> Vec<RuntimeBindableBoolean> {
     let mut values = BTreeMap::<u32, RuntimeBindableBoolean>::new();
     for (data_bind_index, data_bind) in state_machine.data_binds.iter().enumerate() {
@@ -1574,9 +1604,12 @@ pub(crate) fn runtime_bindable_booleans(
                 default_view_model_sources: Vec::new(),
                 value: target.bool_property("propertyValue").unwrap_or(false),
             });
-        if let Some(source) =
-            runtime_bindable_boolean_default_view_model_source(file, data_bind_index, data_bind)
-        {
+        if let Some(source) = runtime_bindable_boolean_default_view_model_source(
+            file,
+            data_bind_index,
+            data_bind,
+            default_instance,
+        ) {
             values.entry(target.id).and_modify(|bindable_boolean| {
                 bindable_boolean.default_view_model_sources.push(source)
             });
@@ -1590,15 +1623,14 @@ fn runtime_bindable_boolean_default_view_model_source(
     file: &RuntimeFile,
     data_bind_index: usize,
     data_bind: &RuntimeObject,
+    default_instance: Option<&RuntimeObject>,
 ) -> Option<RuntimeBindableBooleanDefaultViewModelSource> {
     let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
     if property_key_for_name("BindablePropertyBoolean", "propertyValue") != Some(property_key) {
         return None;
     }
     let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
-    let default_instance = file.view_model_default_instance(0)?;
-    let source =
-        file.data_context_view_model_property_for_instance(default_instance.object, &path)?;
+    let source = file.data_context_view_model_property_for_instance(default_instance?, &path)?;
     let value = file.view_model_instance_boolean_value_for_object(source)?;
     Some(RuntimeBindableBooleanDefaultViewModelSource {
         data_bind_index,
@@ -1611,8 +1643,12 @@ fn runtime_bindable_boolean_default_view_model_source(
 
 pub(crate) fn runtime_default_view_model_triggers(
     file: &RuntimeFile,
+    view_model_index: Option<usize>,
 ) -> Vec<RuntimeViewModelTrigger> {
-    let Some(view_model) = file.view_model(0) else {
+    let Some(view_model_index) = view_model_index else {
+        return Vec::new();
+    };
+    let Some(view_model) = file.view_model(view_model_index) else {
         return Vec::new();
     };
     let Some(instance) = view_model.instances.into_iter().next() else {

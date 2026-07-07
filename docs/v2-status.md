@@ -26,17 +26,14 @@ the only memory the next session has. Update it every commit.
 
 1. Active `not-yet`: none. The M6 queue is now explicit
    `unsupported-feature` diagnostics only.
-2. Highest-priority M6 slice: `superbowl.riv`
-   (`rust-runner-unsupported:state-machine-viewmodel-solo-image`).
-   `echo_show_demo.riv` now has runtime Joystick nested-remap dependents wired
-   and is parked behind the sharper
-   `rust-runner-unsupported:text-joystick-nested-remap-gradient-order`
-   diagnostic. Do not reopen it until the golden runner can observe C++'s
-   intermediate gradient shader-cache side effects during Joystick-driven
-   `NestedRemapAnimation::advance(0, false)`.
-3. Other parked one-file M6 queues include `state-machine-viewmodel-solo-image`
-   (`superbowl.riv`), `selected-root-skinned-ik-clip-path`
-   (`bullet_man.riv`), `layout-component-paint` (`rewards_demo.riv`),
+2. Highest-priority M6 slice: `bullet_man.riv`
+   (`rust-runner-unsupported:selected-root-skinned-ik-clip-path`).
+   `echo_show_demo.riv` is parked behind
+   `rust-runner-unsupported:text-joystick-nested-remap-gradient-order`;
+   `superbowl.riv` is parked behind
+   `rust-runner-unsupported:nested-state-machine-layout-update`.
+3. Other parked one-file M6 queues include `nested-state-machine-layout-update`
+   (`superbowl.riv`), `layout-component-paint` (`rewards_demo.riv`),
    `nested-node-transform-data-bind` (`car_widgets_v01.riv`),
    `nested-layout-clip-data-bind` (`stateful_multi_property.riv`), and
    `nested-stateful-view-model-property` (`stateful_nested.riv`). Gated
@@ -574,6 +571,21 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=49`, `not-yet=0`, parked
   `M6=7 gated=6 harness=36`; `cargo test --workspace` passes. Next target is
   `superbowl.riv` (`state-machine-viewmodel-solo-image`).
+- 2026-07-07: [M6] Narrowed `superbowl.riv` by making state-machine bindable
+  sources artboard-aware, preserving inherited owned view-model context chains
+  for nested state machines, and admitting structural enum sources when a
+  nested child also needs an ancestor view-model path, while retaining the
+  view-model-0 fallback for generated default-view-model state-machine probes.
+  The focused bypass now draws the Logo Solo image and binds Summary's
+  `[2,2]`, `[2,7]`, and root `[3,5]` sources. The remaining first diff is
+  Summary nested layout/state-machine layout/style invalidation
+  (`transform ...102.686523` in C++ vs `...33.5` in Rust), so the
+  runner/corpus diagnostic is sharpened to
+  `nested-state-machine-layout-update` at host global `142`. Full
+  `make golden-compare` reports `exact=246`, `exact-segments=567`,
+  `diverges=0`, `unsupported-feature=49`, `not-yet=0`, parked
+  `M6=7 gated=6 harness=36`; `cargo test --workspace` passes. Next target is
+  `bullet_man.riv` (`selected-root-skinned-ik-clip-path`).
 - 2026-07-02: `rive-runtime` owns static draw emission through
   `rive-render-api`; `rust-golden-runner` now only orchestrates import,
   artboard selection, stream markers, and recording output.

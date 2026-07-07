@@ -2858,6 +2858,23 @@ impl StateMachineInstance {
         true
     }
 
+    pub(crate) fn bind_owned_view_model_context_chain(
+        &mut self,
+        file: &RuntimeFile,
+        context: &RuntimeOwnedViewModelInstance,
+        context_chain: &[Vec<usize>],
+    ) -> bool {
+        if !self
+            .data_bind_graph
+            .bind_owned_view_model_context_chain(file, context, context_chain)
+        {
+            return false;
+        }
+        self.bind_active_owned_view_model_triggers(context);
+        self.needs_advance = true;
+        true
+    }
+
     pub fn advance_data_context(&mut self) -> bool {
         if !self.data_bind_graph.data_context_present() {
             return false;

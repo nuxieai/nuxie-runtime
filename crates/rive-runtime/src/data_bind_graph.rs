@@ -2445,6 +2445,53 @@ impl RuntimeDataBindGraphValue {
         }
     }
 
+    pub(crate) fn resolve_from_owned_view_model_context_path(
+        &self,
+        file: &RuntimeFile,
+        context: &RuntimeOwnedViewModelInstance,
+        context_path: &[usize],
+        path: &[u32],
+    ) -> Option<Self> {
+        let property_path =
+            context.property_path_for_context_source_path(file, context_path, path, false)?;
+        match self {
+            Self::Number(_) => context
+                .number_value_by_property_path(&property_path)
+                .map(Self::Number),
+            Self::Boolean(_) => context
+                .boolean_value_by_property_path(&property_path)
+                .map(Self::Boolean),
+            Self::String(_) => context
+                .string_value_by_property_path(&property_path)
+                .map(|value| Self::String(value.to_vec())),
+            Self::Color(_) => context
+                .color_value_by_property_path(&property_path)
+                .map(Self::Color),
+            Self::Enum(_) => context
+                .enum_value_by_property_path(&property_path)
+                .map(Self::Enum),
+            Self::SymbolListIndex(_) => context
+                .symbol_list_index_value_by_property_path(&property_path)
+                .map(Self::SymbolListIndex),
+            Self::List { .. } => context
+                .list_item_count_by_property_path(&property_path)
+                .map(|item_count| Self::List { item_count }),
+            Self::ListLength(_) => None,
+            Self::Asset(_) => context
+                .asset_value_by_property_path(&property_path)
+                .map(Self::Asset),
+            Self::Artboard(_) => context
+                .artboard_value_by_property_path(&property_path)
+                .map(Self::Artboard),
+            Self::Trigger(_) => context
+                .trigger_value_by_property_path(&property_path)
+                .map(Self::Trigger),
+            Self::ViewModel(_) => context
+                .view_model_value_by_property_path(&property_path)
+                .map(Self::ViewModel),
+        }
+    }
+
     pub(crate) fn resolve_from_view_model_instance(
         &self,
         file: &RuntimeFile,
@@ -3000,6 +3047,39 @@ impl RuntimeDataBindGraph {
                 .value
                 .resolve_from_owned_view_model_instance(context, &source.path)
             {
+                source.value = value;
+                source.bound = true;
+            } else {
+                source.bound = false;
+            }
+            if let Some(converter) = source.converter.as_mut() {
+                runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_context(
+                    converter, context,
+                );
+            }
+            source.reset_converter_state();
+        }
+        self.context_kind = RuntimeDataBindGraphContextKind::OwnedViewModel;
+        self.imported_view_model_context = None;
+        self.mark_default_view_model_bindings_dirty();
+        true
+    }
+
+    pub(crate) fn bind_owned_view_model_context_chain(
+        &mut self,
+        file: &RuntimeFile,
+        context: &RuntimeOwnedViewModelInstance,
+        context_chain: &[Vec<usize>],
+    ) -> bool {
+        for source in &mut self.sources {
+            if let Some(value) = context_chain.iter().find_map(|context_path| {
+                source.value.resolve_from_owned_view_model_context_path(
+                    file,
+                    context,
+                    context_path,
+                    &source.path,
+                )
+            }) {
                 source.value = value;
                 source.bound = true;
             } else {

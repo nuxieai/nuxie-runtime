@@ -5,6 +5,7 @@ use anyhow::{Context, Result};
 use rive_binary::RuntimeFile;
 use rive_graph::ArtboardGraph;
 
+use crate::RuntimeOwnedViewModelInstance;
 use crate::animation::{
     LinearAnimationInstance, RuntimeJoystick, RuntimeKeyedCallback, RuntimeLinearAnimation,
     build_linear_animations, build_runtime_joysticks,
@@ -1570,6 +1571,26 @@ impl ArtboardInstance {
 }
 
 impl RuntimeNestedArtboardInstance {
+    pub(crate) fn bind_owned_view_model_animation_contexts(
+        &mut self,
+        file: &RuntimeFile,
+        context: &RuntimeOwnedViewModelInstance,
+        context_chain: &[Vec<usize>],
+    ) -> bool {
+        let mut changed = false;
+        for animation in &mut self.animations {
+            let RuntimeNestedAnimationInstance::StateMachine { state_machine, .. } = animation
+            else {
+                continue;
+            };
+            if state_machine.bind_owned_view_model_context_chain(file, context, context_chain) {
+                changed = true;
+                changed |= state_machine.advance_data_context();
+            }
+        }
+        changed
+    }
+
     fn advance(
         &mut self,
         elapsed_seconds: f32,

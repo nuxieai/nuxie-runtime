@@ -82,6 +82,11 @@ impl RawPath {
         self.points.clear();
     }
 
+    pub fn reserve(&mut self, verbs: usize, points: usize) {
+        self.verbs.reserve(verbs);
+        self.points.reserve(points);
+    }
+
     pub fn move_to(&mut self, x: f32, y: f32) {
         self.verbs.push(PathVerb::Move);
         self.points.push(Vec2D::new(x, y));
@@ -291,6 +296,7 @@ pub trait RenderPaint: Any {
 pub trait RenderPath: Any {
     fn as_any(&self) -> &dyn Any;
     fn rewind(&mut self);
+    fn reserve(&mut self, _verbs: usize, _points: usize) {}
     fn fill_rule(&mut self, value: FillRule);
     fn add_render_path(&mut self, path: &dyn RenderPath, transform: Mat2D);
     fn add_render_path_backwards(&mut self, path: &dyn RenderPath, transform: Mat2D);
@@ -738,6 +744,10 @@ impl RenderPath for RecordingRenderPath {
 
     fn rewind(&mut self) {
         self.raw_path.rewind();
+    }
+
+    fn reserve(&mut self, verbs: usize, points: usize) {
+        self.raw_path.reserve(verbs, points);
     }
 
     fn fill_rule(&mut self, value: FillRule) {

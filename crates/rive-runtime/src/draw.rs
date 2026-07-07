@@ -905,19 +905,12 @@ impl ArtboardInstance {
             )?;
         }
 
-        let local_to_global = graph
-            .local_objects
-            .iter()
-            .map(|object| (object.local_id, object.global_id))
-            .collect::<BTreeMap<_, _>>();
-
         for command in self.draw_commands_with_layout_bounds(graph, layout_bounds.as_ref()) {
             runtime_draw_command(
                 runtime,
                 self,
                 graph,
                 artboards,
-                &local_to_global,
                 command,
                 layout_bounds.as_ref(),
                 factory,
@@ -5744,7 +5737,6 @@ fn runtime_draw_command(
     instance: &ArtboardInstance,
     graph: &ArtboardGraph,
     artboards: &[ArtboardGraph],
-    local_to_global: &BTreeMap<usize, u32>,
     command: RuntimeDrawCommand,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     factory: &mut dyn RenderFactory,
@@ -5883,7 +5875,7 @@ fn runtime_draw_command(
         }
     }
     let mut text_temporary_paint_index = 0;
-    let mut draw_path_slots = Vec::<Vec<RuntimePathCommand>>::new();
+    let mut draw_path_slots = Vec::<&[RuntimePathCommand]>::new();
     let foreground_layout_path_cache_local = if command.type_name == "ForegroundLayoutDrawable" {
         command
             .local_id
@@ -5892,8 +5884,10 @@ fn runtime_draw_command(
         None
     };
     for paint in shape_paints {
-        let global_id = *local_to_global
-            .get(&paint.paint_local)
+        let global_id = graph
+            .local_objects
+            .get(paint.paint_local)
+            .map(|object| object.global_id)
             .with_context(|| format!("missing paint local {}", paint.paint_local))?;
         let object = runtime
             .object(global_id as usize)
@@ -6882,17 +6876,14 @@ fn runtime_clipping_shape(graph: &ArtboardGraph, local_id: usize) -> Option<&Cli
         .find(|clipping_shape| clipping_shape.local_id == local_id)
 }
 
-fn runtime_cached_path_slot_index(
-    cache: &mut Vec<Vec<RuntimePathCommand>>,
-    commands: &[RuntimePathCommand],
+fn runtime_cached_path_slot_index<'a>(
+    cache: &mut Vec<&'a [RuntimePathCommand]>,
+    commands: &'a [RuntimePathCommand],
 ) -> usize {
-    if let Some(index) = cache
-        .iter()
-        .position(|candidate| candidate.as_slice() == commands)
-    {
+    if let Some(index) = cache.iter().position(|candidate| *candidate == commands) {
         return index;
     }
-    cache.push(commands.to_vec());
+    cache.push(commands);
     cache.len() - 1
 }
 
@@ -7039,12 +7030,12 @@ fn runtime_configure_linear_gradient(
     end_y: f32,
     stops: &[RuntimeGradientStop],
 ) {
-    let colors = stops
-        .iter()
-        .map(|stop| stop.render_color)
-        .collect::<Vec<_>>();
-    let positions = stops.iter().map(|stop| stop.position).collect::<Vec<_>>();
     let shader = runtime_cached_gradient_shader(resources, paint_global_id, state, |factory| {
+        let colors = stops
+            .iter()
+            .map(|stop| stop.render_color)
+            .collect::<Vec<_>>();
+        let positions = stops.iter().map(|stop| stop.position).collect::<Vec<_>>();
         factory.make_linear_gradient(start_x, start_y, end_x, end_y, &colors, &positions)
     });
     render_paint.shader(Some(shader));
@@ -7061,15 +7052,15 @@ fn runtime_configure_radial_gradient(
     end_y: f32,
     stops: &[RuntimeGradientStop],
 ) {
-    let colors = stops
-        .iter()
-        .map(|stop| stop.render_color)
-        .collect::<Vec<_>>();
-    let positions = stops.iter().map(|stop| stop.position).collect::<Vec<_>>();
     let dx = end_x - start_x;
     let dy = end_y - start_y;
     let radius = (dx * dx + dy * dy).sqrt();
     let shader = runtime_cached_gradient_shader(resources, paint_global_id, state, |factory| {
+        let colors = stops
+            .iter()
+            .map(|stop| stop.render_color)
+            .collect::<Vec<_>>();
+        let positions = stops.iter().map(|stop| stop.position).collect::<Vec<_>>();
         factory.make_radial_gradient(start_x, start_y, radius, &colors, &positions)
     });
     render_paint.shader(Some(shader));
@@ -7241,6 +7232,8 @@ fn runtime_rebuild_path(
     fill_rule: RenderFillRule,
 ) {
     path.rewind();
+    let (verbs, points) = runtime_path_command_counts(commands);
+    path.reserve(verbs, points);
     path.fill_rule(fill_rule);
     runtime_append_path_commands(path, commands);
 }
@@ -7250,7 +7243,21 @@ fn runtime_rebuild_path_preserving_fill_rule(
     commands: &[RuntimePathCommand],
 ) {
     path.rewind();
+    let (verbs, points) = runtime_path_command_counts(commands);
+    path.reserve(verbs, points);
     runtime_append_path_commands(path, commands);
+}
+
+fn runtime_path_command_counts(commands: &[RuntimePathCommand]) -> (usize, usize) {
+    let mut points = 0;
+    for command in commands {
+        points += match command {
+            RuntimePathCommand::Move { .. } | RuntimePathCommand::Line { .. } => 1,
+            RuntimePathCommand::Cubic { .. } => 3,
+            RuntimePathCommand::Close => 0,
+        };
+    }
+    (commands.len(), points)
 }
 
 fn runtime_append_path_commands(path: &mut dyn RenderPath, commands: &[RuntimePathCommand]) {

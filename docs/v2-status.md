@@ -51,15 +51,17 @@ the only memory the next session has. Update it every commit.
    Rust/C++=7.007 and passed the loose smoke threshold. The recording
    serializer now writes path/paint snapshots directly into `RecordingStream`
    instead of building nested temporary strings. Focused loose-threshold
-   hot-loop verification now reports aggregate Rust/C++=6.457; the strict M7
-   target check with `PERF_MAX_RATIO=2.0` still fails at aggregate
-   Rust/C++=6.732. Runner benchmark output includes phase timings. Direct
-   `ai_assitant.riv` phase timing after the direct-write slice reports C++ ~=
-   25.98ms total (7.09ms advance, 18.89ms draw) and Rust ~= 147.91ms total
-   (6.75ms advance, 46.29ms prepare, 94.86ms draw). Highest priority next
-   target is profiling and reducing runtime draw command emission / paint
-   preparation outside pure recording string concatenation; after that, rerun
-   the hot-loop 2.0 threshold and expand the C ABI to instance advance/draw.
+   hot-loop verification after the follow-up draw allocation slice now reports
+   aggregate Rust/C++=5.290; the strict M7 target check with
+   `PERF_MAX_RATIO=2.0` still fails at aggregate Rust/C++=5.122. Runner
+   benchmark output includes phase timings. Direct `ai_assitant.riv` phase
+   timing after the allocation slice is noisy but typical runs report Rust ~=
+   146.57ms total (7.27ms advance, 44.41ms prepare, 94.89ms draw) vs C++ ~=
+   25.08ms total (7.62ms advance, 17.45ms draw). Highest priority next target
+   is reducing remaining hot-loop fixed overhead, especially
+   `animation_reset_cases` / tiny-file ratios and `ai_assitant` draw/prepare;
+   after that, rerun the hot-loop 2.0 threshold and expand the C ABI to
+   instance advance/draw.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -328,6 +330,26 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-07: [M7] Reduced Rust hot-loop draw/prepare allocations. The draw
+  path no longer rebuilds a per-frame local-to-global `BTreeMap`; it indexes
+  `ArtboardGraph.local_objects` directly. Per-draw path slot dedup now borrows
+  path-command slices instead of cloning each distinct `Vec<RuntimePathCommand>`.
+  `RenderPath::reserve` lets the recording renderer pre-size raw path verb and
+  point buffers before command replay, while the FFI renderer keeps the default
+  no-op. Gradient cache hits no longer allocate temporary color/position vectors;
+  those vectors are built only inside the shader cache-miss closure. Focused
+  verification: `make perf-hot-loop PERF_CORPUS_LIMIT=5 PERF_ITERATIONS=2
+  PERF_WARMUPS=1 PERF_MAX_RATIO=8.0` passes at aggregate Rust/C++=5.290; the
+  same command with `PERF_MAX_RATIO=2.0` fails at aggregate Rust/C++=5.122.
+  Direct `ai_assitant.riv` phase samples are noisy, with a representative Rust
+  run at ~= 146.57ms total (7.27ms advance, 44.41ms prepare, 94.89ms draw) vs
+  C++ ~= 25.08ms total (7.62ms advance, 17.45ms draw). Full
+  `cargo test --workspace` passes, `cargo fmt --all -- --check` passes,
+  `git diff --check` passes, and full `make golden-compare` remains
+  `exact=263`, `exact-segments=584`, `diverges=0`,
+  `unsupported-feature=32`, `not-yet=0`. Next M7 perf slice should focus on
+  remaining fixed overhead in tiny benchmark files plus `ai_assitant` draw and
+  paint-prep cost.
 - 2026-07-07: [M7] Replaced the Rust `RecordingRenderer` path/paint snapshot
   construction hot path with direct writes into the shared `RecordingStream`.
   `drawPath`, `clipPath`, `makeRenderPath`, `makeEmptyRenderPath`, and

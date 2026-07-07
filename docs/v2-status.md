@@ -47,12 +47,15 @@ the only memory the next session has. Update it every commit.
    hot-loop benchmark exists via `make perf-hot-loop`, using runner-side
    `--benchmark` mode to exclude process startup/import. Focused debug-runner
    verification with `PERF_CORPUS_LIMIT=5`, `PERF_ITERATIONS=2`,
-   `PERF_WARMUPS=1`, `PERF_MAX_RATIO=8.0` reports aggregate Rust/C++=7.306
+   `PERF_WARMUPS=1`, `PERF_MAX_RATIO=8.0` reports aggregate Rust/C++=7.007
    and passes the loose smoke threshold; the strict M7 target check with
-   `PERF_MAX_RATIO=2.0` fails at aggregate Rust/C++=7.159. Highest priority
-   next target is localizing Rust hot-loop overhead, starting with
-   `ai_assitant.riv` because it dominates absolute time; after that, rerun the
-   hot-loop 2.0 threshold and expand the C ABI to instance advance/draw.
+   `PERF_MAX_RATIO=2.0` fails at aggregate Rust/C++=7.159. Runner benchmark
+   output now includes phase timings. Direct `ai_assitant.riv` phase timing
+   reports C++ ~= 18.89ms total (4.96ms advance, 13.93ms draw) and Rust ~=
+   142.96ms total (6.15ms advance, 42.20ms prepare, 94.60ms draw). Highest
+   priority next target is reducing Rust draw/recording overhead first, then
+   paint prep; after that, rerun the hot-loop 2.0 threshold and expand the C
+   ABI to instance advance/draw.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -321,6 +324,19 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-07: [M7] Extended runner benchmark output with phase timings:
+  `advance_ms`, `input_ms`, `prepare_ms`, `draw_ms`, and `bookkeeping_ms`.
+  `perf-compare` still consumes `elapsed_ms`, so corpus thresholding remains
+  unchanged, but direct runner invocations now localize hot-loop overhead.
+  Direct debug-runner timing for `ai_assitant.riv` at sample 0 reports C++ ~=
+  18.89ms total (4.96ms advance, 13.93ms draw) and Rust ~= 142.96ms total
+  (6.15ms advance, 42.20ms prepare, 94.60ms draw). The next optimization slice
+  should target Rust draw/recording overhead first, with paint prep second.
+  Focused `make perf-hot-loop` with `PERF_CORPUS_LIMIT=5`,
+  `PERF_ITERATIONS=2`, `PERF_WARMUPS=1`, `PERF_MAX_RATIO=8.0` passes at
+  aggregate Rust/C++=7.007. Full `cargo test --workspace` passes, and full
+  `make golden-compare` remains `exact=263`, `exact-segments=584`,
+  `diverges=0`, `unsupported-feature=32`, `not-yet=0`.
 - 2026-07-07: [M7] Added runner-side hot-loop benchmarking. Both
   golden runners accept `--benchmark` and emit `rive-golden-benchmark-v1`,
   timing the already-imported sample/input advance-and-draw loop. `perf-compare`

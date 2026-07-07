@@ -14,7 +14,7 @@ use std::collections::BTreeSet;
 use std::env;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 const TIME_EPSILON: f32 = 0.000001;
 const DATA_BIND_FLAG_DIRECTION_TO_SOURCE: u64 = 1 << 0;
@@ -113,6 +113,10 @@ fn run() -> Result<String> {
     factory.frame_size(frame_dimension(width), frame_dimension(height));
 
     let benchmark_start = Instant::now();
+    let mut advance_elapsed = Duration::ZERO;
+    let mut input_elapsed = Duration::ZERO;
+    let mut prepare_elapsed = Duration::ZERO;
+    let mut draw_elapsed = Duration::ZERO;
     let mut current_seconds = 0.0;
     let mut next_input = 0;
     for sample in &options.samples {
@@ -120,70 +124,111 @@ fn run() -> Result<String> {
             && input_events[next_input].seconds <= *sample + TIME_EPSILON
         {
             let event = &input_events[next_input];
+            timed_result(options.benchmark, &mut advance_elapsed, || {
+                advance_scene_to(
+                    &mut instance,
+                    &runtime,
+                    state_machine.as_mut(),
+                    owned_view_model_context.as_ref(),
+                    event.seconds,
+                    &mut current_seconds,
+                )
+            })?;
+            timed(options.benchmark, &mut input_elapsed, || {
+                apply_input_event(
+                    event,
+                    &instance,
+                    state_machine.as_mut(),
+                    owned_view_model_context.as_mut(),
+                );
+                factory.add_input_event(
+                    event.kind.name(),
+                    event.seconds,
+                    event.x,
+                    event.y,
+                    event.pointer_id,
+                );
+            });
+            next_input += 1;
+        }
+        timed_result(options.benchmark, &mut advance_elapsed, || {
             advance_scene_to(
                 &mut instance,
                 &runtime,
                 state_machine.as_mut(),
                 owned_view_model_context.as_ref(),
-                event.seconds,
+                *sample,
                 &mut current_seconds,
-            )?;
-            apply_input_event(
-                event,
-                &instance,
-                state_machine.as_mut(),
-                owned_view_model_context.as_mut(),
-            );
-            factory.add_input_event(
-                event.kind.name(),
-                event.seconds,
-                event.x,
-                event.y,
-                event.pointer_id,
-            );
-            next_input += 1;
-        }
-        advance_scene_to(
-            &mut instance,
-            &runtime,
-            state_machine.as_mut(),
-            owned_view_model_context.as_ref(),
-            *sample,
-            &mut current_seconds,
-        )?;
-        instance.prepare_static_artboard_tree_paints(
-            &runtime,
-            artboard,
-            &graph.artboards,
-            &mut factory,
-            &mut paint_cache,
-            &mut path_cache,
-        )?;
-        factory.add_sample(*sample);
-        instance
-            .draw_prepared_static_artboard_with_render_cache(
+            )
+        })?;
+        timed_result(options.benchmark, &mut prepare_elapsed, || {
+            instance.prepare_static_artboard_tree_paints(
                 &runtime,
                 artboard,
                 &graph.artboards,
                 &mut factory,
-                &mut renderer,
                 &mut paint_cache,
                 &mut path_cache,
             )
-            .map_err(unsupported_static_text_draw_error)?;
+        })?;
+        factory.add_sample(*sample);
+        timed_result(options.benchmark, &mut draw_elapsed, || {
+            instance
+                .draw_prepared_static_artboard_with_render_cache(
+                    &runtime,
+                    artboard,
+                    &graph.artboards,
+                    &mut factory,
+                    &mut renderer,
+                    &mut paint_cache,
+                    &mut path_cache,
+                )
+                .map_err(unsupported_static_text_draw_error)
+        })?;
         factory.add_frame();
     }
     let benchmark_elapsed = benchmark_start.elapsed();
 
     if options.benchmark {
+        let accounted_elapsed = advance_elapsed + input_elapsed + prepare_elapsed + draw_elapsed;
+        let bookkeeping_elapsed = benchmark_elapsed.saturating_sub(accounted_elapsed);
         Ok(format!(
-            "rive-golden-benchmark-v1\nelapsed_ms={}\nsegments={}\n",
+            "rive-golden-benchmark-v1\nelapsed_ms={}\nadvance_ms={}\ninput_ms={}\nprepare_ms={}\ndraw_ms={}\nbookkeeping_ms={}\nsegments={}\n",
             benchmark_elapsed.as_secs_f64() * 1000.0,
+            advance_elapsed.as_secs_f64() * 1000.0,
+            input_elapsed.as_secs_f64() * 1000.0,
+            prepare_elapsed.as_secs_f64() * 1000.0,
+            draw_elapsed.as_secs_f64() * 1000.0,
+            bookkeeping_elapsed.as_secs_f64() * 1000.0,
             options.samples.len()
         ))
     } else {
         Ok(factory.stream())
     }
+}
+
+fn timed_result<T>(
+    enabled: bool,
+    elapsed: &mut Duration,
+    action: impl FnOnce() -> Result<T>,
+) -> Result<T> {
+    if !enabled {
+        return action();
+    }
+    let start = Instant::now();
+    let result = action();
+    *elapsed += start.elapsed();
+    result
+}
+
+fn timed(enabled: bool, elapsed: &mut Duration, action: impl FnOnce()) {
+    if !enabled {
+        action();
+        return;
+    }
+    let start = Instant::now();
+    action();
+    *elapsed += start.elapsed();
 }
 
 fn write_layout_bounds_report(

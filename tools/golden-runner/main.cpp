@@ -655,6 +655,11 @@ uint32_t frameDimension(float value)
     return static_cast<uint32_t>(std::max(1.0f, std::ceil(value)));
 }
 
+double durationMillis(std::chrono::steady_clock::duration duration)
+{
+    return std::chrono::duration<double, std::milli>(duration).count();
+}
+
 int runSmoke()
 {
     rive_rust::golden::RecordingFactory factory;
@@ -714,6 +719,19 @@ int runFile(const Options& options)
                       frameDimension(scene->height()));
 
     const auto benchmarkStart = std::chrono::steady_clock::now();
+    std::chrono::steady_clock::duration advanceElapsed{};
+    std::chrono::steady_clock::duration inputElapsed{};
+    std::chrono::steady_clock::duration drawElapsed{};
+    auto timedStage = [&](auto& elapsed, auto&& action) {
+        if (!options.benchmark)
+        {
+            action();
+            return;
+        }
+        const auto stageStart = std::chrono::steady_clock::now();
+        action();
+        elapsed += std::chrono::steady_clock::now() - stageStart;
+    };
     float currentSeconds = 0.0f;
     size_t nextInput = 0;
     for (float sampleSeconds : options.samples)
@@ -722,19 +740,25 @@ int runFile(const Options& options)
                inputEvents[nextInput].seconds <= sampleSeconds + kTimeEpsilon)
         {
             const auto& event = inputEvents[nextInput];
-            advanceTo(scene, event.seconds, currentSeconds);
-            applyInput(scene, event);
-            factory.addInputEvent(inputKindName(event.kind),
-                                  event.seconds,
-                                  event.x,
-                                  event.y,
-                                  event.pointerId);
+            timedStage(advanceElapsed, [&] {
+                advanceTo(scene, event.seconds, currentSeconds);
+            });
+            timedStage(inputElapsed, [&] {
+                applyInput(scene, event);
+                factory.addInputEvent(inputKindName(event.kind),
+                                      event.seconds,
+                                      event.x,
+                                      event.y,
+                                      event.pointerId);
+            });
             nextInput++;
         }
 
-        advanceTo(scene, sampleSeconds, currentSeconds);
+        timedStage(advanceElapsed, [&] {
+            advanceTo(scene, sampleSeconds, currentSeconds);
+        });
         factory.addSample(sampleSeconds);
-        scene->draw(renderer.get());
+        timedStage(drawElapsed, [&] { scene->draw(renderer.get()); });
         factory.addFrame();
     }
     const auto benchmarkElapsed =
@@ -742,10 +766,16 @@ int runFile(const Options& options)
 
     if (options.benchmark)
     {
-        const auto elapsedMs =
-            std::chrono::duration<double, std::milli>(benchmarkElapsed).count();
+        const auto bookkeepingElapsed =
+            benchmarkElapsed - advanceElapsed - inputElapsed - drawElapsed;
         std::cout << "rive-golden-benchmark-v1\n"
-                  << "elapsed_ms=" << elapsedMs << "\n"
+                  << "elapsed_ms=" << durationMillis(benchmarkElapsed) << "\n"
+                  << "advance_ms=" << durationMillis(advanceElapsed) << "\n"
+                  << "input_ms=" << durationMillis(inputElapsed) << "\n"
+                  << "prepare_ms=0\n"
+                  << "draw_ms=" << durationMillis(drawElapsed) << "\n"
+                  << "bookkeeping_ms=" << durationMillis(bookkeepingElapsed)
+                  << "\n"
                   << "segments=" << options.samples.size() << "\n";
     }
     else

@@ -30,10 +30,11 @@ the only memory the next session has. Update it every commit.
    `rewards_demo.riv` is exact-status under
    `verification = "tolerant(0.0005)"`; the tolerance covers residual
    HarfRust/Skrifa text-outline coordinate drift only.
-2. Highest-priority next target is M7 ship surface. Start by auditing the
-   current public API/C ABI/perf-benchmark surface against #V2-8, then take
-   the smallest slice that either publishes a missing API/ABI seam or creates
-   the C++/Rust performance baseline needed to ratchet M7.
+2. Initial M7 public Rust API crate exists at `crates/rive`: `File::import`,
+   artboard listing/selection, artboard instantiation, one-shot advance/draw
+   through the renderer traits, and raw runtime/graph escape hatches. Highest
+   priority next target is either the first C ABI facade over that crate or the
+   C++/Rust performance baseline needed to ratchet M7.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -302,6 +303,16 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-07: [M7] Added the initial user-facing `rive` crate. The public
+  facade imports `.riv` bytes, exposes borrowed artboard handles, instantiates
+  artboards with their file/graph context attached, re-exports the renderer
+  traits and state-machine/input types, and provides a one-shot `advance`/`draw`
+  path backed by the existing runtime. `cargo test -p rive` passes against the
+  reference `shapetest.riv` fixture; full `cargo test --workspace` passes, and
+  `make golden-compare` remains unchanged at `exact=263`,
+  `exact-segments=584`, `diverges=0`, `unsupported-feature=32`, `not-yet=0`.
+  Next M7 slice should publish the first C ABI facade or create the C++/Rust
+  perf baseline.
 - 2026-07-07: [M6] Promoted `stateful_nested.riv` to exact-status and closed
   the current M6 manifest queue. The old
   `nested-stateful-view-model-property` guard was cleared by admitting nested

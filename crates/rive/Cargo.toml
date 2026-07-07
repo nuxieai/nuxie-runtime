@@ -1,0 +1,13 @@
+[package]
+name = "rive"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+anyhow = "1"
+rive-binary = { path = "../rive-binary" }
+rive-graph = { path = "../rive-graph" }
+rive-render-api = { path = "../rive-render-api" }
+rive-runtime = { path = "../rive-runtime" }

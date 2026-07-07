@@ -4,6 +4,7 @@ members = [
     "crates/rive-graph",
     "crates/rive-render-api",
     "crates/rive-renderer-ffi",
+    "crates/rive",
     "crates/rive-runtime",
     "crates/rive-schema",
     "tools/golden-compare",

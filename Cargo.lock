@@ -139,6 +139,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "rive"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "rive-binary",
+ "rive-graph",
+ "rive-render-api",
+ "rive-runtime",
+]
+
+[[package]]
 name = "rive-binary"
 version = "0.1.0"
 dependencies = [

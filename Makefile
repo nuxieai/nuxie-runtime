@@ -1,4 +1,4 @@
-.PHONY: schema check test inspect graph cpp-probe golden-runner rust-golden-runner golden-compare perf-compare perf-corpus perf-hot-loop cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare
+.PHONY: schema check test inspect graph cpp-probe golden-runner rust-golden-runner golden-compare perf-compare perf-corpus perf-hot-loop perf-json capi-smoke cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 DEFS_DIR ?= $(RIVE_RUNTIME_DIR)/dev/defs
@@ -16,6 +16,10 @@ PERF_CORPUS ?= corpus.toml
 PERF_CORPUS_LIMIT ?= 10
 PERF_MAX_RATIO ?= 2.0
 PERF_BENCHMARK_REPEAT ?= 1
+PERF_JSON_OUT ?= $(CURDIR)/target/perf-compare.json
+PERF_JSON_META ?= --meta build_profile=release --meta git_sha=$(shell git rev-parse HEAD 2>/dev/null || echo unknown) --meta timestamp=$(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+CAPI_SMOKE_FIXTURE ?= fixtures/animation/smi_test.riv
+CC ?= cc
 
 schema:
 	cargo run -p rive-codegen -- --defs "$(DEFS_DIR)" --out crates/rive-schema/src/generated/schema.rs
@@ -59,6 +63,18 @@ perf-hot-loop: CPP_CONFIG=release
 perf-hot-loop: RUST_PROFILE=release
 perf-hot-loop: golden-runner rust-golden-runner
 	GOLDEN_RUNNER="$(GOLDEN_RUNNER)" RUST_GOLDEN_RUNNER="$(RUST_GOLDEN_RUNNER)" RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo run --quiet -p perf-compare --bin perf-compare -- --cpp-runner "$(GOLDEN_RUNNER)" --rust-runner "$(RUST_GOLDEN_RUNNER)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --corpus "$(PERF_CORPUS)" --corpus-limit "$(PERF_CORPUS_LIMIT)" --iterations "$(PERF_ITERATIONS)" --warmups "$(PERF_WARMUPS)" --max-ratio "$(PERF_MAX_RATIO)" --runner-benchmark --benchmark-repeat "$(PERF_BENCHMARK_REPEAT)"
+
+perf-json: CPP_CONFIG=release
+perf-json: RUST_PROFILE=release
+perf-json: golden-runner rust-golden-runner
+	GOLDEN_RUNNER="$(GOLDEN_RUNNER)" RUST_GOLDEN_RUNNER="$(RUST_GOLDEN_RUNNER)" RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo run --quiet -p perf-compare --bin perf-compare -- --cpp-runner "$(GOLDEN_RUNNER)" --rust-runner "$(RUST_GOLDEN_RUNNER)" --file "$(PERF_FILE)" --samples "$(PERF_SAMPLES)" --iterations "$(PERF_ITERATIONS)" --warmups "$(PERF_WARMUPS)" --runner-benchmark --json "$(PERF_JSON_OUT)" $(PERF_JSON_META)
+	@echo "perf-json wrote $(PERF_JSON_OUT)"
+
+capi-smoke:
+	cargo build --quiet -p rive-capi
+	mkdir -p target/capi-smoke
+	$(CC) -std=c11 -Wall -Wextra -Werror -Icrates/rive-capi/include -o target/capi-smoke/capi_smoke crates/rive-capi/smoke/capi_smoke.c -Ltarget/debug -lrive_capi
+	DYLD_LIBRARY_PATH=target/debug LD_LIBRARY_PATH=target/debug target/capi-smoke/capi_smoke "$(CAPI_SMOKE_FIXTURE)"
 
 cpp-binary-compare: cpp-probe
 	RIVE_CPP_PROBE="$(CPP_PROBE)" RIVE_CPP_CORPUS=1 cargo test -p rive-binary --test cpp_import -- --nocapture

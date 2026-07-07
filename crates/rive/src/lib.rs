@@ -6,16 +6,16 @@
 use anyhow::{Context, Result};
 use rive_binary::{RuntimeFile, read_runtime_file};
 use rive_graph::{ArtboardGraph, GraphFile};
-use rive_render_api::{Factory, Renderer};
 use rive_runtime::{
     ArtboardInstance as RuntimeArtboardInstance, RuntimeRenderPathCache,
     preallocate_render_paint_cache_for_artboard_tree,
 };
 
 pub use rive_render_api::{
-    BlendMode, ColorInt, FillRule, ImageFilter, ImageSampler, ImageWrap, Mat2D, PathVerb, RawPath,
-    RecordingFactory, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint,
-    RenderPaintStyle, RenderPath, RenderShader, StrokeCap, StrokeJoin, Vec2D,
+    BlendMode, ColorInt, Factory, FillRule, ImageFilter, ImageSampler, ImageWrap, Mat2D, PathVerb,
+    RawPath, RecordingFactory, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage,
+    RenderPaint, RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin,
+    Vec2D,
 };
 pub use rive_runtime::{
     LinearAnimationInstance, RuntimeLayerState, RuntimeStateMachineInput,
@@ -102,6 +102,20 @@ impl<'a> Artboard<'a> {
         self.graph().state_machines.len()
     }
 
+    /// Name of the state machine at `index`, when it has one.
+    pub fn state_machine_name(self, index: usize) -> Option<&'a str> {
+        self.graph().state_machines.get(index)?.name.as_deref()
+    }
+
+    /// Index of the state machine flagged as the artboard default in the
+    /// source file, validated against the artboard's state machine list.
+    pub fn default_state_machine_index(self) -> Option<usize> {
+        let artboard = self.file.runtime.artboard(self.index)?;
+        artboard.property("defaultStateMachineId")?;
+        let index = usize::try_from(artboard.uint_property("defaultStateMachineId")?).ok()?;
+        (index < self.state_machine_count()).then_some(index)
+    }
+
     pub fn instantiate(self) -> Result<ArtboardInstance<'a>> {
         let raw = RuntimeArtboardInstance::from_graph_with_artboards(
             &self.file.runtime,
@@ -161,6 +175,38 @@ impl<'a> ArtboardInstance<'a> {
 
     pub fn state_machine_instance(&self, index: usize) -> Option<StateMachineInstance> {
         self.raw.state_machine_instance(index)
+    }
+
+    /// Instantiate the artboard's default state machine: the one flagged in
+    /// the source file when present, otherwise the first state machine.
+    pub fn default_state_machine_instance(&self) -> Option<StateMachineInstance> {
+        let index = self.artboard().default_state_machine_index().unwrap_or(0);
+        self.state_machine_instance(index)
+    }
+
+    /// Advance the scene while driving `state_machine`, mirroring the golden
+    /// runner's advance order (state machine, nested artboards, data binds,
+    /// update pass). Returns whether anything changed.
+    pub fn advance_with_state_machine(
+        &mut self,
+        state_machine: &mut StateMachineInstance,
+        elapsed_seconds: f32,
+    ) -> bool {
+        let mut changed = self
+            .raw
+            .advance_state_machine_instance(state_machine, elapsed_seconds);
+        if self
+            .raw
+            .advance_nested_artboards_with_state_machine(elapsed_seconds, state_machine)
+        {
+            self.raw.advance_state_machine_instance(state_machine, 0.0);
+            changed = true;
+        }
+        changed |= self
+            .raw
+            .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
+        changed |= self.raw.update_pass();
+        changed
     }
 
     pub fn draw(&mut self, factory: &mut dyn Factory, renderer: &mut dyn Renderer) -> Result<()> {

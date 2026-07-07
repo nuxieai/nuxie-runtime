@@ -4,7 +4,6 @@
 // /Users/levi/dev/rive-rust/tools/golden-runner/recording_renderer.cpp
 use std::any::Any;
 use std::cell::RefCell;
-use std::ffi::CStr;
 use std::fmt::Write;
 use std::os::raw::{c_char, c_double, c_int};
 use std::rc::Rc;
@@ -371,6 +370,11 @@ impl RecordingStream {
         self.lines.push('\n');
     }
 
+    fn line_with(&mut self, write_line: impl FnOnce(&mut String)) {
+        write_line(&mut self.lines);
+        self.lines.push('\n');
+    }
+
     fn clear(&mut self) {
         self.lines.clear();
     }
@@ -542,9 +546,10 @@ impl Factory for RecordingFactory {
             raw_path,
             fill_rule,
         };
-        self.stream
-            .borrow_mut()
-            .line(format!("makeRenderPath {}", path.snapshot()));
+        self.stream.borrow_mut().line_with(|line| {
+            line.push_str("makeRenderPath ");
+            path.write_snapshot(line);
+        });
         Box::new(path)
     }
 
@@ -556,9 +561,10 @@ impl Factory for RecordingFactory {
             raw_path: RawPath::new(),
             fill_rule: FillRule::NonZero,
         };
-        self.stream
-            .borrow_mut()
-            .line(format!("makeEmptyRenderPath {}", path.snapshot()));
+        self.stream.borrow_mut().line_with(|line| {
+            line.push_str("makeEmptyRenderPath ");
+            path.write_snapshot(line);
+        });
         Box::new(path)
     }
 
@@ -576,9 +582,10 @@ impl Factory for RecordingFactory {
             blend_mode: BlendMode::SrcOver,
             shader_id: 0,
         };
-        self.stream
-            .borrow_mut()
-            .line(format!("makeRenderPaint {}", paint.snapshot()));
+        self.stream.borrow_mut().line_with(|line| {
+            line.push_str("makeRenderPaint ");
+            paint.write_snapshot(line);
+        });
         Box::new(paint)
     }
 
@@ -636,22 +643,29 @@ struct RecordingRenderPaint {
 }
 
 impl RecordingRenderPaint {
-    fn snapshot(&self) -> String {
-        format!(
-            "{{id={},style={},color={},thickness={},join={},cap={},feather={},blendMode={},shader={}}}",
-            self.id,
-            match self.style {
-                RenderPaintStyle::Stroke => "stroke",
-                RenderPaintStyle::Fill => "fill",
-            },
-            color_to_string(self.color),
-            float_to_string(self.thickness),
-            self.join as u32,
-            self.cap as u32,
-            float_to_string(self.feather),
-            self.blend_mode as u8,
-            self.shader_id
+    fn write_snapshot(&self, out: &mut String) {
+        write!(out, "{{id={},style=", self.id).expect("writing to a String cannot fail");
+        out.push_str(match self.style {
+            RenderPaintStyle::Stroke => "stroke",
+            RenderPaintStyle::Fill => "fill",
+        });
+        out.push_str(",color=");
+        write_color(out, self.color);
+        out.push_str(",thickness=");
+        write_float(out, self.thickness);
+        write!(
+            out,
+            ",join={},cap={},feather=",
+            self.join as u32, self.cap as u32
         )
+        .expect("writing to a String cannot fail");
+        write_float(out, self.feather);
+        write!(
+            out,
+            ",blendMode={},shader={}}}",
+            self.blend_mode as u8, self.shader_id
+        )
+        .expect("writing to a String cannot fail");
     }
 }
 
@@ -705,13 +719,15 @@ struct RecordingRenderPath {
 }
 
 impl RecordingRenderPath {
-    fn snapshot(&self) -> String {
-        format!(
-            "{{id={},fillRule={},path={}}}",
-            self.id,
-            self.fill_rule as u8,
-            raw_path_to_string(&self.raw_path)
+    fn write_snapshot(&self, out: &mut String) {
+        write!(
+            out,
+            "{{id={},fillRule={},path=",
+            self.id, self.fill_rule as u8
         )
+        .expect("writing to a String cannot fail");
+        write_raw_path(out, &self.raw_path);
+        out.push('}');
     }
 }
 
@@ -817,18 +833,20 @@ impl Renderer for RecordingRenderer {
     fn draw_path(&mut self, path: &dyn RenderPath, paint: &dyn RenderPaint) {
         let path = recording_path(path);
         let paint = recording_paint(paint);
-        self.stream.borrow_mut().line(format!(
-            "drawPath path={} paint={}",
-            path.snapshot(),
-            paint.snapshot()
-        ));
+        self.stream.borrow_mut().line_with(|line| {
+            line.push_str("drawPath path=");
+            path.write_snapshot(line);
+            line.push_str(" paint=");
+            paint.write_snapshot(line);
+        });
     }
 
     fn clip_path(&mut self, path: &dyn RenderPath) {
         let path = recording_path(path);
-        self.stream
-            .borrow_mut()
-            .line(format!("clipPath path={}", path.snapshot()));
+        self.stream.borrow_mut().line_with(|line| {
+            line.push_str("clipPath path=");
+            path.write_snapshot(line);
+        });
     }
 
     fn draw_image(
@@ -913,18 +931,16 @@ fn write_stops(out: &mut String, colors: &[ColorInt], stops: &[f32]) {
         if index != 0 {
             out.push(',');
         }
-        write!(
-            out,
-            "{{color={},stop={}}}",
-            color_to_string(*color),
-            float_to_string(*stop)
-        )
-        .expect("writing to a String cannot fail");
+        out.push_str("{color=");
+        write_color(out, *color);
+        out.push_str(",stop=");
+        write_float(out, *stop);
+        out.push('}');
     }
 }
 
-fn raw_path_to_string(path: &RawPath) -> String {
-    let mut out = String::from("{verbs=[");
+fn write_raw_path(out: &mut String, path: &RawPath) {
+    out.push_str("{verbs=[");
     for (index, verb) in path.verbs().iter().enumerate() {
         if index != 0 {
             out.push(',');
@@ -942,16 +958,13 @@ fn raw_path_to_string(path: &RawPath) -> String {
         if index != 0 {
             out.push(',');
         }
-        write!(
-            out,
-            "({},{})",
-            float_to_string(point.x),
-            float_to_string(point.y)
-        )
-        .expect("writing to a String cannot fail");
+        out.push('(');
+        write_float(out, point.x);
+        out.push(',');
+        write_float(out, point.y);
+        out.push(')');
     }
     out.push_str("]}");
-    out
 }
 
 fn sampler_to_string(sampler: ImageSampler) -> String {
@@ -970,14 +983,14 @@ fn mat_to_string(mat: Mat2D) -> String {
         if index != 0 {
             out.push(',');
         }
-        out.push_str(&float_to_string(value));
+        write_float(&mut out, value);
     }
     out.push(']');
     out
 }
 
-fn color_to_string(color: ColorInt) -> String {
-    format!("0x{color:08x}")
+fn write_color(out: &mut String, color: ColorInt) {
+    write!(out, "0x{color:08x}").expect("writing to a String cannot fail");
 }
 
 fn quoted_string(value: &str) -> String {
@@ -1142,6 +1155,12 @@ unsafe extern "C" {
 }
 
 fn float_to_string(value: f32) -> String {
+    let mut out = String::new();
+    write_float(&mut out, value);
+    out
+}
+
+fn write_float(out: &mut String, value: f32) {
     let mut buffer = [0 as c_char; 64];
     let format = b"%.9g\0";
     // C++ RecordingRenderer uses iostream defaultfloat with float max_digits10.
@@ -1155,9 +1174,10 @@ fn float_to_string(value: f32) -> String {
         )
     };
     assert!(written >= 0 && (written as usize) < buffer.len());
-    unsafe { CStr::from_ptr(buffer.as_ptr()) }
-        .to_string_lossy()
-        .into_owned()
+    let bytes =
+        unsafe { std::slice::from_raw_parts(buffer.as_ptr().cast::<u8>(), written as usize) };
+    let formatted = std::str::from_utf8(bytes).expect("snprintf emitted UTF-8 float digits");
+    out.push_str(formatted);
 }
 
 #[cfg(test)]

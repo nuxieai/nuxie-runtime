@@ -14,6 +14,7 @@ use std::collections::BTreeSet;
 use std::env;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 
 const TIME_EPSILON: f32 = 0.000001;
 const DATA_BIND_FLAG_DIRECTION_TO_SOURCE: u64 = 1 << 0;
@@ -111,6 +112,7 @@ fn run() -> Result<String> {
     factory.source(&options.file.to_string_lossy(), &artboard_name, &scene.name);
     factory.frame_size(frame_dimension(width), frame_dimension(height));
 
+    let benchmark_start = Instant::now();
     let mut current_seconds = 0.0;
     let mut next_input = 0;
     for sample in &options.samples {
@@ -171,8 +173,17 @@ fn run() -> Result<String> {
             .map_err(unsupported_static_text_draw_error)?;
         factory.add_frame();
     }
+    let benchmark_elapsed = benchmark_start.elapsed();
 
-    Ok(factory.stream())
+    if options.benchmark {
+        Ok(format!(
+            "rive-golden-benchmark-v1\nelapsed_ms={}\nsegments={}\n",
+            benchmark_elapsed.as_secs_f64() * 1000.0,
+            options.samples.len()
+        ))
+    } else {
+        Ok(factory.stream())
+    }
 }
 
 fn write_layout_bounds_report(
@@ -669,6 +680,7 @@ struct Options {
     input_script: Option<PathBuf>,
     samples: Vec<f32>,
     layout_bounds: bool,
+    benchmark: bool,
 }
 
 impl Options {
@@ -679,6 +691,7 @@ impl Options {
         let mut input_script = None;
         let mut samples = vec![0.0];
         let mut layout_bounds = false;
+        let mut benchmark = false;
 
         let mut index = 0;
         while index < args.len() {
@@ -697,9 +710,10 @@ impl Options {
                 "--input-script" => input_script = Some(PathBuf::from(value(arg)?)),
                 "--samples" => samples = parse_samples(&value(arg)?)?,
                 "--layout-bounds" => layout_bounds = true,
+                "--benchmark" => benchmark = true,
                 "--help" | "-h" => {
                     println!(
-                        "usage: rust-golden-runner --file <path> [--artboard <name>] [--samples <t0,t1,...>] [--layout-bounds]"
+                        "usage: rust-golden-runner --file <path> [--artboard <name>] [--samples <t0,t1,...>] [--layout-bounds] [--benchmark]"
                     );
                     std::process::exit(0);
                 }
@@ -711,6 +725,10 @@ impl Options {
             index += 1;
         }
 
+        if layout_bounds && benchmark {
+            bail!("--benchmark cannot be combined with --layout-bounds");
+        }
+
         Ok(Self {
             file: file.context("missing --file <path>")?,
             artboard,
@@ -718,6 +736,7 @@ impl Options {
             input_script,
             samples,
             layout_bounds,
+            benchmark,
         })
     }
 }

@@ -43,10 +43,16 @@ the only memory the next session has. Update it every commit.
    exact entries / 10 segments, aggregate Rust/C++=1.183. Full
    `cargo test --workspace` passes, and full `make golden-compare` remains
    `exact=263`, `exact-segments=584`, `diverges=0`,
-   `unsupported-feature=32`, `not-yet=0`. Highest priority next target is the
-   in-process advance+draw benchmark and/or the
-   `ai_assitant` perf outlier (Rust/C++=4.715 in the focused corpus run);
-   after that, expand the C ABI to instance advance/draw.
+   `unsupported-feature=32`, `not-yet=0`. First in-process advance+draw
+   hot-loop benchmark exists via `make perf-hot-loop`, using runner-side
+   `--benchmark` mode to exclude process startup/import. Focused debug-runner
+   verification with `PERF_CORPUS_LIMIT=5`, `PERF_ITERATIONS=2`,
+   `PERF_WARMUPS=1`, `PERF_MAX_RATIO=8.0` reports aggregate Rust/C++=7.306
+   and passes the loose smoke threshold; the strict M7 target check with
+   `PERF_MAX_RATIO=2.0` fails at aggregate Rust/C++=7.159. Highest priority
+   next target is localizing Rust hot-loop overhead, starting with
+   `ai_assitant.riv` because it dominates absolute time; after that, rerun the
+   hot-loop 2.0 threshold and expand the C ABI to instance advance/draw.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -315,6 +321,20 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-07: [M7] Added runner-side hot-loop benchmarking. Both
+  golden runners accept `--benchmark` and emit `rive-golden-benchmark-v1`,
+  timing the already-imported sample/input advance-and-draw loop. `perf-compare`
+  now has `--runner-benchmark`, and `make perf-hot-loop` wires it over the exact
+  corpus subset. Focused debug-runner verification with
+  `PERF_CORPUS_LIMIT=5`, `PERF_ITERATIONS=2`, `PERF_WARMUPS=1`,
+  `PERF_MAX_RATIO=8.0` reports aggregate Rust/C++=7.306 and passes the loose
+  smoke threshold. The same command with the strict M7 target
+  `PERF_MAX_RATIO=2.0` fails at aggregate Rust/C++=7.159. The next M7 perf
+  slice should profile Rust hot-loop overhead, starting with `ai_assitant.riv`
+  because it contributes most of the aggregate absolute time. Full
+  `cargo test --workspace` passes, and full `make golden-compare` remains
+  `exact=263`, `exact-segments=584`, `diverges=0`,
+  `unsupported-feature=32`, `not-yet=0`.
 - 2026-07-07: [M7] Added corpus-mode performance thresholding to
   `tools/perf-compare` and `make perf-corpus`. The tool now reads
   `corpus.toml`, selects exact entries, preserves per-entry samples and input

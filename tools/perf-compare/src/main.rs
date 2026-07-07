@@ -129,6 +129,7 @@ struct Options {
     warmups: usize,
     corpus_limit: Option<usize>,
     max_ratio: Option<f64>,
+    runner_benchmark: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -159,6 +160,7 @@ impl Options {
         let mut warmups = 0usize;
         let mut corpus_limit = None;
         let mut max_ratio = None;
+        let mut runner_benchmark = false;
 
         let mut index = 0;
         while index < args.len() {
@@ -180,6 +182,7 @@ impl Options {
                     corpus_limit = Some(parse_positive_usize(&value(arg)?, "--corpus-limit")?)
                 }
                 "--max-ratio" => max_ratio = Some(parse_ratio(&value(arg)?)?),
+                "--runner-benchmark" => runner_benchmark = true,
                 "--artboard" => artboard = Some(value(arg)?),
                 "--state-machine" => state_machine = Some(value(arg)?),
                 "--input-script" => input_script = Some(PathBuf::from(value(arg)?)),
@@ -196,7 +199,7 @@ impl Options {
                 }
                 "--help" | "-h" => {
                     println!(
-                        "usage: perf-compare (--file <path> | --corpus corpus.toml) [--samples 0,0.5] [--iterations N] [--warmups N] [--max-ratio N] [--cpp-runner path] [--rust-runner path]"
+                        "usage: perf-compare (--file <path> | --corpus corpus.toml) [--samples 0,0.5] [--iterations N] [--warmups N] [--max-ratio N] [--runner-benchmark] [--cpp-runner path] [--rust-runner path]"
                     );
                     std::process::exit(0);
                 }
@@ -234,6 +237,7 @@ impl Options {
             warmups,
             corpus_limit,
             max_ratio,
+            runner_benchmark,
         })
     }
 }
@@ -280,12 +284,19 @@ fn measure_runner(
     options: &Options,
 ) -> Result<Measurements, String> {
     for warmup in 0..options.warmups {
-        run_once(label, runner, target, warmup + 1, true)?;
+        run_once(label, runner, target, options, warmup + 1, true)?;
     }
 
     let mut measurements = Vec::with_capacity(options.iterations);
     for iteration in 0..options.iterations {
-        measurements.push(run_once(label, runner, target, iteration + 1, false)?);
+        measurements.push(run_once(
+            label,
+            runner,
+            target,
+            options,
+            iteration + 1,
+            false,
+        )?);
     }
     Ok(measurements_summary(measurements))
 }
@@ -294,10 +305,11 @@ fn run_once(
     label: &str,
     runner: &Path,
     target: &RunTarget,
+    options: &Options,
     iteration: usize,
     warmup: bool,
 ) -> Result<Duration, String> {
-    let mut command = runner_command(runner, target);
+    let mut command = runner_command(runner, target, options.runner_benchmark);
     let start = Instant::now();
     let output = command
         .output()
@@ -312,6 +324,16 @@ fn run_once(
             String::from_utf8_lossy(&output.stderr)
         ));
     }
+    if options.runner_benchmark {
+        return parse_benchmark_duration(&output.stdout).map_err(|error| {
+            let kind = if warmup { "warmup" } else { "iteration" };
+            format!(
+                "{label} runner {} did not emit a benchmark for {} on {kind} {iteration}: {error}",
+                runner.display(),
+                target.id
+            )
+        });
+    }
     if !output.stdout.starts_with(b"rive-golden-stream-v1\n") {
         let kind = if warmup { "warmup" } else { "iteration" };
         return Err(format!(
@@ -323,7 +345,7 @@ fn run_once(
     Ok(elapsed)
 }
 
-fn runner_command(runner: &Path, target: &RunTarget) -> Command {
+fn runner_command(runner: &Path, target: &RunTarget, benchmark: bool) -> Command {
     let mut command = Command::new(runner);
     command.arg("--file").arg(&target.file);
     if let Some(artboard) = &target.artboard {
@@ -336,7 +358,31 @@ fn runner_command(runner: &Path, target: &RunTarget) -> Command {
         command.arg("--input-script").arg(input_script);
     }
     command.arg("--samples").arg(&target.samples);
+    if benchmark {
+        command.arg("--benchmark");
+    }
     command
+}
+
+fn parse_benchmark_duration(stdout: &[u8]) -> Result<Duration, String> {
+    let text = std::str::from_utf8(stdout).map_err(|error| format!("invalid utf8: {error}"))?;
+    let mut lines = text.lines();
+    if lines.next() != Some("rive-golden-benchmark-v1") {
+        return Err("missing rive-golden-benchmark-v1 header".to_owned());
+    }
+    for line in lines {
+        let Some(value) = line.strip_prefix("elapsed_ms=") else {
+            continue;
+        };
+        let millis = value
+            .parse::<f64>()
+            .map_err(|error| format!("invalid elapsed_ms {value}: {error}"))?;
+        if !millis.is_finite() || millis < 0.0 {
+            return Err(format!("invalid elapsed_ms {value}"));
+        }
+        return Ok(Duration::from_secs_f64(millis / 1000.0));
+    }
+    Err("missing elapsed_ms".to_owned())
 }
 
 fn measurements_summary(mut measurements: Vec<Duration>) -> Measurements {
@@ -604,6 +650,7 @@ mod tests {
         assert_eq!(options.iterations, 3);
         assert_eq!(options.warmups, 2);
         assert_eq!(target.artboard.as_deref(), Some("Main"));
+        assert!(!options.runner_benchmark);
     }
 
     #[test]
@@ -615,12 +662,14 @@ mod tests {
             "7".to_owned(),
             "--max-ratio".to_owned(),
             "1.5".to_owned(),
+            "--runner-benchmark".to_owned(),
         ])
         .expect("parse options");
 
         assert!(matches!(options.mode, Mode::Corpus(_)));
         assert_eq!(options.corpus_limit, Some(7));
         assert_eq!(options.max_ratio, Some(1.5));
+        assert!(options.runner_benchmark);
     }
 
     #[test]
@@ -679,5 +728,13 @@ status = "unsupported-feature"
         assert_eq!(summary.min, Duration::from_millis(10));
         assert_eq!(summary.median, Duration::from_millis(20));
         assert_eq!(summary.max, Duration::from_millis(30));
+    }
+
+    #[test]
+    fn parses_runner_benchmark_duration() {
+        let duration =
+            parse_benchmark_duration(b"rive-golden-benchmark-v1\nelapsed_ms=12.5\nsegments=2\n")
+                .expect("parse benchmark duration");
+        assert_eq!(duration, Duration::from_micros(12_500));
     }
 }

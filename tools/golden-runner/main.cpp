@@ -24,6 +24,7 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <chrono>
 #include <cmath>
 #include <cctype>
 #include <cstdio>
@@ -70,6 +71,7 @@ struct Options
 {
     bool smoke = false;
     bool help = false;
+    bool benchmark = false;
     std::string file;
     std::string artboard;
     std::string stateMachine;
@@ -83,7 +85,7 @@ std::string usage()
     return "usage: rive_golden_runner [--smoke]\n"
            "       rive_golden_runner --file <path> [--artboard <name>]\n"
            "           [--state-machine <name>] [--samples <t0,t1,...>]\n"
-           "           [--input-script <path>]\n"
+           "           [--input-script <path>] [--benchmark]\n"
            "\n"
            "input script lines:\n"
            "  <seconds> pointerDown <x> <y> [pointerId]\n"
@@ -311,6 +313,10 @@ Options parseOptions(int argc, char** argv)
         else if (arg == "--smoke")
         {
             options.smoke = true;
+        }
+        else if (arg == "--benchmark")
+        {
+            options.benchmark = true;
         }
         else if (arg == "--file")
         {
@@ -707,6 +713,7 @@ int runFile(const Options& options)
     factory.frameSize(frameDimension(scene->width()),
                       frameDimension(scene->height()));
 
+    const auto benchmarkStart = std::chrono::steady_clock::now();
     float currentSeconds = 0.0f;
     size_t nextInput = 0;
     for (float sampleSeconds : options.samples)
@@ -730,8 +737,21 @@ int runFile(const Options& options)
         scene->draw(renderer.get());
         factory.addFrame();
     }
+    const auto benchmarkElapsed =
+        std::chrono::steady_clock::now() - benchmarkStart;
 
-    std::cout << factory.stream();
+    if (options.benchmark)
+    {
+        const auto elapsedMs =
+            std::chrono::duration<double, std::milli>(benchmarkElapsed).count();
+        std::cout << "rive-golden-benchmark-v1\n"
+                  << "elapsed_ms=" << elapsedMs << "\n"
+                  << "segments=" << options.samples.size() << "\n";
+    }
+    else
+    {
+        std::cout << factory.stream();
+    }
 
     // The stream is complete; exit without running destructors. The
     // reference librive we link is built without WITH_RIVE_SCRIPTING, and

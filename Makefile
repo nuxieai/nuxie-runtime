@@ -1,4 +1,4 @@
-.PHONY: schema check test inspect graph cpp-probe golden-runner rust-golden-runner golden-compare perf-compare perf-corpus cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare
+.PHONY: schema check test inspect graph cpp-probe golden-runner rust-golden-runner golden-compare perf-compare perf-corpus perf-hot-loop cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 DEFS_DIR ?= $(RIVE_RUNTIME_DIR)/dev/defs
@@ -46,6 +46,9 @@ perf-compare: golden-runner rust-golden-runner
 
 perf-corpus: golden-runner rust-golden-runner
 	GOLDEN_RUNNER="$(GOLDEN_RUNNER)" RUST_GOLDEN_RUNNER="$(RUST_GOLDEN_RUNNER)" RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo run --quiet -p perf-compare --bin perf-compare -- --cpp-runner "$(GOLDEN_RUNNER)" --rust-runner "$(RUST_GOLDEN_RUNNER)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --corpus "$(PERF_CORPUS)" --corpus-limit "$(PERF_CORPUS_LIMIT)" --iterations "$(PERF_ITERATIONS)" --warmups "$(PERF_WARMUPS)" --max-ratio "$(PERF_MAX_RATIO)"
+
+perf-hot-loop: golden-runner rust-golden-runner
+	GOLDEN_RUNNER="$(GOLDEN_RUNNER)" RUST_GOLDEN_RUNNER="$(RUST_GOLDEN_RUNNER)" RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo run --quiet -p perf-compare --bin perf-compare -- --cpp-runner "$(GOLDEN_RUNNER)" --rust-runner "$(RUST_GOLDEN_RUNNER)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --corpus "$(PERF_CORPUS)" --corpus-limit "$(PERF_CORPUS_LIMIT)" --iterations "$(PERF_ITERATIONS)" --warmups "$(PERF_WARMUPS)" --max-ratio "$(PERF_MAX_RATIO)" --runner-benchmark
 
 cpp-binary-compare: cpp-probe
 	RIVE_CPP_PROBE="$(CPP_PROBE)" RIVE_CPP_CORPUS=1 cargo test -p rive-binary --test cpp_import -- --nocapture

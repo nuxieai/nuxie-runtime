@@ -143,11 +143,13 @@ pub(crate) fn shape_paint_is_visible_property_key() -> Option<u16> {
 }
 
 pub(crate) fn solo_active_component_id_property_key() -> Option<u16> {
-    property_key_for_name("Solo", "activeComponentId")
+    static KEY: OnceLock<Option<u16>> = OnceLock::new();
+    cached_property_key_for_name(&KEY, "Solo", "activeComponentId")
 }
 
 pub(crate) fn layout_component_style_display_value_property_key() -> Option<u16> {
-    property_key_for_name("LayoutComponentStyle", "displayValue")
+    static KEY: OnceLock<Option<u16>> = OnceLock::new();
+    cached_property_key_for_name(&KEY, "LayoutComponentStyle", "displayValue")
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -185,15 +187,18 @@ pub(crate) const JOYSTICK_FLAG_INVERT_X: u64 = 1 << 0;
 pub(crate) const JOYSTICK_FLAG_INVERT_Y: u64 = 1 << 1;
 
 pub(crate) fn joystick_x_property_key() -> Option<u16> {
-    property_key_for_name("Joystick", "x")
+    static KEY: OnceLock<Option<u16>> = OnceLock::new();
+    cached_property_key_for_name(&KEY, "Joystick", "x")
 }
 
 pub(crate) fn joystick_y_property_key() -> Option<u16> {
-    property_key_for_name("Joystick", "y")
+    static KEY: OnceLock<Option<u16>> = OnceLock::new();
+    cached_property_key_for_name(&KEY, "Joystick", "y")
 }
 
 pub(crate) fn joystick_flags_property_key() -> Option<u16> {
-    property_key_for_name("Joystick", "joystickFlags")
+    static KEY: OnceLock<Option<u16>> = OnceLock::new();
+    cached_property_key_for_name(&KEY, "Joystick", "joystickFlags")
 }
 
 pub(crate) fn property_key_for_name(type_name: &str, property_name: &str) -> Option<u16> {

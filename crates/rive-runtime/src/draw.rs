@@ -184,6 +184,171 @@ fn runtime_draw_property_key_for_name(type_name: &str, property_name: &str) -> O
     }
 }
 
+fn runtime_layout_component_property_key_for_name(property_name: &str) -> Option<u16> {
+    match property_name {
+        "styleId" => cached_runtime_property_key!("LayoutComponent", "styleId"),
+        "clip" => cached_runtime_property_key!("LayoutComponent", "clip"),
+        "width" => cached_runtime_property_key!("LayoutComponent", "width"),
+        "height" => cached_runtime_property_key!("LayoutComponent", "height"),
+        "fractionalWidth" => cached_runtime_property_key!("LayoutComponent", "fractionalWidth"),
+        "fractionalHeight" => cached_runtime_property_key!("LayoutComponent", "fractionalHeight"),
+        _ => property_key_for_name("LayoutComponent", property_name),
+    }
+}
+
+fn runtime_layout_style_property_key_for_name(property_name: &str) -> Option<u16> {
+    match property_name {
+        "displayValue" => cached_runtime_property_key!("LayoutComponentStyle", "displayValue"),
+        "positionTypeValue" => {
+            cached_runtime_property_key!("LayoutComponentStyle", "positionTypeValue")
+        }
+        "directionValue" => cached_runtime_property_key!("LayoutComponentStyle", "directionValue"),
+        "flexDirectionValue" => {
+            cached_runtime_property_key!("LayoutComponentStyle", "flexDirectionValue")
+        }
+        "flexWrapValue" => cached_runtime_property_key!("LayoutComponentStyle", "flexWrapValue"),
+        "layoutAlignmentType" => {
+            cached_runtime_property_key!("LayoutComponentStyle", "layoutAlignmentType")
+        }
+        "layoutWidthScaleType" => {
+            cached_runtime_property_key!("LayoutComponentStyle", "layoutWidthScaleType")
+        }
+        "layoutHeightScaleType" => {
+            cached_runtime_property_key!("LayoutComponentStyle", "layoutHeightScaleType")
+        }
+        "widthUnitsValue" => {
+            cached_runtime_property_key!("LayoutComponentStyle", "widthUnitsValue")
+        }
+        "heightUnitsValue" => {
+            cached_runtime_property_key!("LayoutComponentStyle", "heightUnitsValue")
+        }
+        "flexBasis" => cached_runtime_property_key!("LayoutComponentStyle", "flexBasis"),
+        "flexBasisUnitsValue" => {
+            cached_runtime_property_key!("LayoutComponentStyle", "flexBasisUnitsValue")
+        }
+        "gapHorizontal" => cached_runtime_property_key!("LayoutComponentStyle", "gapHorizontal"),
+        "gapHorizontalUnitsValue" => {
+            cached_runtime_property_key!("LayoutComponentStyle", "gapHorizontalUnitsValue")
+        }
+        "gapVertical" => cached_runtime_property_key!("LayoutComponentStyle", "gapVertical"),
+        "gapVerticalUnitsValue" => {
+            cached_runtime_property_key!("LayoutComponentStyle", "gapVerticalUnitsValue")
+        }
+        "paddingLeft" => cached_runtime_property_key!("LayoutComponentStyle", "paddingLeft"),
+        "paddingLeftUnitsValue" => {
+            cached_runtime_property_key!("LayoutComponentStyle", "paddingLeftUnitsValue")
+        }
+        "paddingRight" => cached_runtime_property_key!("LayoutComponentStyle", "paddingRight"),
+        "paddingRightUnitsValue" => {
+            cached_runtime_property_key!("LayoutComponentStyle", "paddingRightUnitsValue")
+        }
+        "paddingTop" => cached_runtime_property_key!("LayoutComponentStyle", "paddingTop"),
+        "paddingTopUnitsValue" => {
+            cached_runtime_property_key!("LayoutComponentStyle", "paddingTopUnitsValue")
+        }
+        "paddingBottom" => cached_runtime_property_key!("LayoutComponentStyle", "paddingBottom"),
+        "paddingBottomUnitsValue" => {
+            cached_runtime_property_key!("LayoutComponentStyle", "paddingBottomUnitsValue")
+        }
+        "borderLeft" => cached_runtime_property_key!("LayoutComponentStyle", "borderLeft"),
+        "borderLeftUnitsValue" => {
+            cached_runtime_property_key!("LayoutComponentStyle", "borderLeftUnitsValue")
+        }
+        "borderRight" => cached_runtime_property_key!("LayoutComponentStyle", "borderRight"),
+        "borderRightUnitsValue" => {
+            cached_runtime_property_key!("LayoutComponentStyle", "borderRightUnitsValue")
+        }
+        "borderTop" => cached_runtime_property_key!("LayoutComponentStyle", "borderTop"),
+        "borderTopUnitsValue" => {
+            cached_runtime_property_key!("LayoutComponentStyle", "borderTopUnitsValue")
+        }
+        "borderBottom" => cached_runtime_property_key!("LayoutComponentStyle", "borderBottom"),
+        "borderBottomUnitsValue" => {
+            cached_runtime_property_key!("LayoutComponentStyle", "borderBottomUnitsValue")
+        }
+        "marginLeft" => cached_runtime_property_key!("LayoutComponentStyle", "marginLeft"),
+        "marginLeftUnitsValue" => {
+            cached_runtime_property_key!("LayoutComponentStyle", "marginLeftUnitsValue")
+        }
+        "marginRight" => cached_runtime_property_key!("LayoutComponentStyle", "marginRight"),
+        "marginRightUnitsValue" => {
+            cached_runtime_property_key!("LayoutComponentStyle", "marginRightUnitsValue")
+        }
+        "marginTop" => cached_runtime_property_key!("LayoutComponentStyle", "marginTop"),
+        "marginTopUnitsValue" => {
+            cached_runtime_property_key!("LayoutComponentStyle", "marginTopUnitsValue")
+        }
+        "marginBottom" => cached_runtime_property_key!("LayoutComponentStyle", "marginBottom"),
+        "marginBottomUnitsValue" => {
+            cached_runtime_property_key!("LayoutComponentStyle", "marginBottomUnitsValue")
+        }
+        "positionLeft" => cached_runtime_property_key!("LayoutComponentStyle", "positionLeft"),
+        "positionLeftUnitsValue" => {
+            cached_runtime_property_key!("LayoutComponentStyle", "positionLeftUnitsValue")
+        }
+        "positionRight" => cached_runtime_property_key!("LayoutComponentStyle", "positionRight"),
+        "positionRightUnitsValue" => {
+            cached_runtime_property_key!("LayoutComponentStyle", "positionRightUnitsValue")
+        }
+        "positionTop" => cached_runtime_property_key!("LayoutComponentStyle", "positionTop"),
+        "positionTopUnitsValue" => {
+            cached_runtime_property_key!("LayoutComponentStyle", "positionTopUnitsValue")
+        }
+        "positionBottom" => cached_runtime_property_key!("LayoutComponentStyle", "positionBottom"),
+        "positionBottomUnitsValue" => {
+            cached_runtime_property_key!("LayoutComponentStyle", "positionBottomUnitsValue")
+        }
+        "minWidth" => cached_runtime_property_key!("LayoutComponentStyle", "minWidth"),
+        "minWidthUnitsValue" => {
+            cached_runtime_property_key!("LayoutComponentStyle", "minWidthUnitsValue")
+        }
+        "minHeight" => cached_runtime_property_key!("LayoutComponentStyle", "minHeight"),
+        "minHeightUnitsValue" => {
+            cached_runtime_property_key!("LayoutComponentStyle", "minHeightUnitsValue")
+        }
+        "maxWidth" => cached_runtime_property_key!("LayoutComponentStyle", "maxWidth"),
+        "maxWidthUnitsValue" => {
+            cached_runtime_property_key!("LayoutComponentStyle", "maxWidthUnitsValue")
+        }
+        "maxHeight" => cached_runtime_property_key!("LayoutComponentStyle", "maxHeight"),
+        "maxHeightUnitsValue" => {
+            cached_runtime_property_key!("LayoutComponentStyle", "maxHeightUnitsValue")
+        }
+        "aspectRatio" => cached_runtime_property_key!("LayoutComponentStyle", "aspectRatio"),
+        "intrinsicallySizedValue" => {
+            cached_runtime_property_key!("LayoutComponentStyle", "intrinsicallySizedValue")
+        }
+        "linkCornerRadius" => {
+            cached_runtime_property_key!("LayoutComponentStyle", "linkCornerRadius")
+        }
+        "cornerRadiusTL" => cached_runtime_property_key!("LayoutComponentStyle", "cornerRadiusTL"),
+        "cornerRadiusTR" => cached_runtime_property_key!("LayoutComponentStyle", "cornerRadiusTR"),
+        "cornerRadiusBR" => cached_runtime_property_key!("LayoutComponentStyle", "cornerRadiusBR"),
+        "cornerRadiusBL" => cached_runtime_property_key!("LayoutComponentStyle", "cornerRadiusBL"),
+        _ => property_key_for_name("LayoutComponentStyle", property_name),
+    }
+}
+
+fn runtime_nested_artboard_layout_property_key_for_name(property_name: &str) -> Option<u16> {
+    match property_name {
+        "instanceWidthScaleType" => {
+            cached_runtime_property_key!("NestedArtboardLayout", "instanceWidthScaleType")
+        }
+        "instanceHeightScaleType" => {
+            cached_runtime_property_key!("NestedArtboardLayout", "instanceHeightScaleType")
+        }
+        "instanceWidthUnitsValue" => {
+            cached_runtime_property_key!("NestedArtboardLayout", "instanceWidthUnitsValue")
+        }
+        "instanceHeightUnitsValue" => {
+            cached_runtime_property_key!("NestedArtboardLayout", "instanceHeightUnitsValue")
+        }
+        "instanceWidth" => cached_runtime_property_key!("NestedArtboardLayout", "instanceWidth"),
+        "instanceHeight" => cached_runtime_property_key!("NestedArtboardLayout", "instanceHeight"),
+        _ => property_key_for_name("NestedArtboardLayout", property_name),
+    }
+}
+
 impl ArtboardInstance {
     pub fn draw_commands(&self, graph: &ArtboardGraph) -> Vec<RuntimeDrawCommand> {
         let layout_bounds = self.runtime_taffy_layout_bounds(graph, None);
@@ -1402,7 +1567,7 @@ impl ArtboardInstance {
     }
 
     fn runtime_layout_component_clip_enabled(&self, layout_local: usize) -> bool {
-        property_key_for_name("LayoutComponent", "clip")
+        runtime_layout_component_property_key_for_name("clip")
             .and_then(|key| self.bool_property(layout_local, key))
             .unwrap_or(false)
     }
@@ -2365,7 +2530,7 @@ impl ArtboardInstance {
     }
 
     fn runtime_layout_style_double(&self, style_local: usize, name: &str) -> Option<f32> {
-        property_key_for_name("LayoutComponentStyle", name)
+        runtime_layout_style_property_key_for_name(name)
             .and_then(|key| self.double_property(style_local, key))
     }
 
@@ -2384,7 +2549,7 @@ impl ArtboardInstance {
     }
 
     fn runtime_layout_style_bool(&self, style_local: usize, name: &str) -> Option<bool> {
-        property_key_for_name("LayoutComponentStyle", name)
+        runtime_layout_style_property_key_for_name(name)
             .and_then(|key| self.bool_property(style_local, key))
     }
 
@@ -2521,13 +2686,13 @@ impl ArtboardInstance {
     }
 
     fn runtime_layout_component_style_local(&self, layout_local: usize) -> Option<usize> {
-        property_key_for_name("LayoutComponent", "styleId")
+        runtime_layout_component_property_key_for_name("styleId")
             .and_then(|key| self.uint_property(layout_local, key))
             .and_then(|style| usize::try_from(style).ok())
     }
 
     fn runtime_layout_style_uint(&self, style_local: usize, name: &str) -> Option<u64> {
-        property_key_for_name("LayoutComponentStyle", name)
+        runtime_layout_style_property_key_for_name(name)
             .and_then(|key| self.uint_property(style_local, key))
     }
 
@@ -2542,7 +2707,7 @@ impl ArtboardInstance {
     }
 
     fn runtime_layout_component_dimension(&self, layout_local: usize, name: &str) -> f32 {
-        property_key_for_name("LayoutComponent", name)
+        runtime_layout_component_property_key_for_name(name)
             .and_then(|key| self.double_property(layout_local, key))
             .unwrap_or(0.0)
     }
@@ -2602,7 +2767,7 @@ impl ArtboardInstance {
         } else {
             "fractionalHeight"
         };
-        property_key_for_name("LayoutComponent", property_name)
+        runtime_layout_component_property_key_for_name(property_name)
             .and_then(|key| self.double_property(layout_local, key))
             .unwrap_or(1.0)
             .max(0.0)
@@ -4007,14 +4172,11 @@ impl TaffyRuntimeLayoutEngine {
         local: usize,
         width_axis: bool,
     ) -> u64 {
-        property_key_for_name(
-            "NestedArtboardLayout",
-            if width_axis {
-                "instanceWidthScaleType"
-            } else {
-                "instanceHeightScaleType"
-            },
-        )
+        runtime_nested_artboard_layout_property_key_for_name(if width_axis {
+            "instanceWidthScaleType"
+        } else {
+            "instanceHeightScaleType"
+        })
         .and_then(|key| instance.uint_property(local, key))
         .unwrap_or(0)
     }
@@ -4025,14 +4187,11 @@ impl TaffyRuntimeLayoutEngine {
         local: usize,
         width_axis: bool,
     ) -> u64 {
-        property_key_for_name(
-            "NestedArtboardLayout",
-            if width_axis {
-                "instanceWidthUnitsValue"
-            } else {
-                "instanceHeightUnitsValue"
-            },
-        )
+        runtime_nested_artboard_layout_property_key_for_name(if width_axis {
+            "instanceWidthUnitsValue"
+        } else {
+            "instanceHeightUnitsValue"
+        })
         .and_then(|key| instance.uint_property(local, key))
         .unwrap_or(1)
     }
@@ -4043,14 +4202,11 @@ impl TaffyRuntimeLayoutEngine {
         local: usize,
         width_axis: bool,
     ) -> f32 {
-        property_key_for_name(
-            "NestedArtboardLayout",
-            if width_axis {
-                "instanceWidth"
-            } else {
-                "instanceHeight"
-            },
-        )
+        runtime_nested_artboard_layout_property_key_for_name(if width_axis {
+            "instanceWidth"
+        } else {
+            "instanceHeight"
+        })
         .and_then(|key| instance.double_property(local, key))
         .unwrap_or(-1.0)
     }
@@ -6996,10 +7152,10 @@ fn runtime_apply_nested_artboard_layout_child_bounds(
         .and_then(|bounds| bounds.get(&local_id).copied())
         .context("nested artboard layout missing Taffy bounds")?;
     child.set_artboard_dimensions(bounds.width, bounds.height);
-    if let Some(width_key) = property_key_for_name("LayoutComponent", "width") {
+    if let Some(width_key) = runtime_layout_component_property_key_for_name("width") {
         child.set_double_property(0, width_key, bounds.width);
     }
-    if let Some(height_key) = property_key_for_name("LayoutComponent", "height") {
+    if let Some(height_key) = runtime_layout_component_property_key_for_name("height") {
         child.set_double_property(0, height_key, bounds.height);
     }
     Ok(())

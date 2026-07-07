@@ -47,21 +47,25 @@ the only memory the next session has. Update it every commit.
    repeat-aware `perf-compare`, removal of `artboard_data_bind.rs`
    hot-loop graph/binding clones, shallow sharing of immutable
    animation/state-machine definition vectors, an epoch-keyed retained
-   prepared draw-command frame, and epoch-keyed retained draw `RenderPath`
-   handles now give focused
+   prepared draw-command frame, epoch-keyed retained draw `RenderPath`
+   handles, and cached fixed layout/schema property keys now give focused
    10-iteration verification with `make perf-hot-loop PERF_CORPUS_LIMIT=5
    PERF_ITERATIONS=10 PERF_WARMUPS=1 PERF_MAX_RATIO=999` at aggregate
-   Rust/C++=3.764 over 5 exact entries / 10 segments (`ai_assitant`=4.505,
-   `align_target`=1.937, `animated_clipping`=2.701). This repeat=1 focused
+   Rust/C++=3.306 over 5 exact entries / 10 segments (`ai_assitant`=3.941,
+   `align_target`=2.043, `animated_clipping`=2.359). This repeat=1 focused
    ratio is noisy and strict `PERF_MAX_RATIO=2.0` still fails by inspection.
    M7 perf is now explicitly defined as steady-state per-frame runtime cost;
-   direct `ai_assitant` with `--benchmark-repeat 100` now improves from
-   Rust/C++=316.968 to 44.023, confirming retained frame/path preparation is a
-   real clean-frame win. Post-slice sample shows `draw_path`/path rebuilds are
-   no longer the hot site for `ai_assitant`; the next M7 target is sampled
-   per-frame paint preparation and collapsed/visibility property lookup
-   overhead before lower-priority path/clip rebuild leftovers. After the perf
-   target is real, expand the C ABI to instance advance/draw.
+   direct `ai_assitant` with `--benchmark-repeat 100` now reports
+   Rust/C++=43.716 on the second 10-iteration run
+   (cpp median=0.542 ms, rust median=23.677 ms), confirming retained
+   frame/path preparation and cached keys are real clean-frame wins but still
+   far from the strict target. Post-slice sample before this key-cache work
+   showed `draw_path`/path rebuilds are no longer the hot site for
+   `ai_assitant`; the next M7 target is a fresh release/null-renderer profile,
+   then C++-aligned dirty-gated layout/paint preparation retention
+   (`markLayoutNodeDirty`, Paint|Stops|RenderOpacity gates) before
+   lower-priority path/clip rebuild leftovers. After the perf target is real,
+   expand the C ABI to instance advance/draw.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -560,6 +564,21 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-07: [M7] Cached fixed layout/schema property keys used by layout
+  preparation, collapse/visibility checks, nested-artboard layout sizing, and
+  shared Solo/Joystick helpers, mirroring C++ generated `*PropertyKey`
+  constants instead of doing schema name/property scans in the frame loop.
+  Full `cargo test --workspace` and `make golden-compare` pass at
+  exact=263/exact-segments=584. Release hot-loop smoke with
+  `PERF_CORPUS_LIMIT=5 PERF_ITERATIONS=10 PERF_WARMUPS=1 PERF_MAX_RATIO=999`
+  reports aggregate Rust/C++=3.306 over 5 exact entries / 10 segments
+  (`ai_assitant`=3.941). Direct `ai_assitant --benchmark-repeat 100` reports
+  Rust/C++=43.716 on the second 10-iteration run (the first was a noisy
+  49.859 outlier), so strict <=2.0 remains open. A broad prepared-paint
+  skip-cache experiment was discarded before commit after regressing focused
+  aggregate to 11.227; future paint-prep work must mirror audited C++ dirt
+  invalidation rather than caching by instance epoch. Next M7 target: fresh
+  release profile, then C++ dirty-gated layout/paint preparation retention.
 - 2026-07-07: [M7] Retained draw `RenderPath` handles behind the
   `ArtboardInstance` cache epoch, mirroring C++ `ShapePaintPath`'s retained
   `RenderPath` plus dirty bit. Clean-epoch draw path cache hits no longer

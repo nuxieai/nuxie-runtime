@@ -114,7 +114,7 @@ pub(crate) fn runtime_text_shape_paint_commands(
     if render_data
         .path_buckets_by_style
         .iter()
-        .all(|buckets| buckets.iter().all(|bucket| bucket.commands.is_empty()))
+        .all(|buckets| buckets.is_empty())
     {
         return Ok(Vec::new());
     }
@@ -130,9 +130,6 @@ pub(crate) fn runtime_text_shape_paint_commands(
         };
         let mut allocated_text_paint_pool = false;
         for path_bucket in order_opacity_buckets_like_cpp(path_buckets) {
-            if path_bucket.commands.is_empty() {
-                continue;
-            }
             commands.extend(container.paints.iter().filter_map(|paint| {
                 let mut path_commands = path_bucket.commands.clone();
                 if paint.path_kind == Some(ShapePaintPathKind::World) {
@@ -3327,7 +3324,7 @@ fn append_opacity_bucket(
     opacity: f32,
     commands: Vec<RuntimePathCommand>,
 ) {
-    if opacity <= 0.0 || commands.is_empty() {
+    if opacity <= 0.0 {
         return;
     }
     if let Some(bucket) = buckets.iter_mut().find(|bucket| bucket.opacity == opacity) {

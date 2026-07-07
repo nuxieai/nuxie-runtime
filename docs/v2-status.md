@@ -5,12 +5,12 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 568 across 247 files (strict
-  exact=559/238; tolerant=9/9; structural=0/0)
-- Current compare: `make golden-compare` reports exact=247,
-  exact-segments=568, diverges=0, unsupported-feature=48, not-yet=0
+- Exact-status segments (file × sample): 569 across 248 files (strict
+  exact=560/239; tolerant=9/9; structural=0/0)
+- Current compare: `make golden-compare` reports exact=248,
+  exact-segments=569, diverges=0, unsupported-feature=47, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
-  M6=6 gated=6 harness=36
+  M6=5 gated=6 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes**
 
 ## Milestones
@@ -28,16 +28,13 @@ the only memory the next session has. Update it every commit.
 
 1. Active `not-yet`: none. The M6 queue is now explicit
    `unsupported-feature` diagnostics only.
-2. Highest-priority M6 slice: `superbowl.riv`
-   (`rust-runner-unsupported:nested-state-machine-text-empty-glyph-path-order`).
-   Start at the full-stream structural diff around line 997, where C++ emits
-   an empty text fill path and Rust skips it after the Summary nested layout
-   and Celebration remap streams have already been narrowed.
-   `echo_show_demo.riv` stays parked behind
-   `rust-runner-unsupported:joystick-nested-remap-gradient-update-order`.
-3. Other parked one-file M6 queues include `joystick-nested-remap-gradient-update-order`
-   (`echo_show_demo.riv`), `layout-component-paint` (`rewards_demo.riv`),
-   `nested-node-transform-data-bind` (`car_widgets_v01.riv`),
+2. Highest-priority M6 slice: `echo_show_demo.riv`
+   (`rust-runner-unsupported:joystick-nested-remap-gradient-update-order`).
+   Start from the focused bypass note below: the first mismatch happens before
+   `sample seconds=0`, in nested-remap gradient shader creation rather than
+   draw geometry, and likely needs C++-style dirty/update interleaving.
+3. Other parked one-file M6 queues include `layout-component-paint`
+   (`rewards_demo.riv`), `nested-node-transform-data-bind` (`car_widgets_v01.riv`),
    `nested-layout-clip-data-bind` (`stateful_multi_property.riv`), and
    `nested-stateful-view-model-property` (`stateful_nested.riv`). Gated
    one-file diagnostics include `scripted-data-context`
@@ -630,6 +627,16 @@ the only memory the next session has. Update it every commit.
   `cargo test --workspace` passes and full `make golden-compare` remains
   `exact=247`, `exact-segments=568`, `diverges=0`,
   `unsupported-feature=48`, `not-yet=0`, parked `M6=6 gated=6 harness=36`.
+- 2026-07-07: [M6] Promoted `superbowl.riv` to exact by mirroring C++
+  `TextStylePaint::addPath` for positive-opacity glyphs whose raw path has no
+  verbs: static text now keeps empty opacity buckets, emits empty text draw
+  paths, and only treats fully absent buckets as no text content. Removed the
+  temporary `nested-state-machine-text-empty-glyph-path-order` runner gate and
+  added a C++ probe assertion for the positive-opacity empty-path behavior.
+  Full `make golden-compare` reports `exact=248`, `exact-segments=569`,
+  `diverges=0`, `unsupported-feature=47`, `not-yet=0`, parked
+  `M6=5 gated=6 harness=36`; `cargo test --workspace` passes. Next target is
+  `echo_show_demo.riv` (`joystick-nested-remap-gradient-update-order`).
 - 2026-07-02: `rive-runtime` owns static draw emission through
   `rive-render-api`; `rust-golden-runner` now only orchestrates import,
   artboard selection, stream markers, and recording output.

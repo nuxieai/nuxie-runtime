@@ -1025,54 +1025,7 @@ fn ensure_static_draw_supported_for_artboard(
         )?;
     }
 
-    if let Some(global_id) =
-        unsupported_nested_state_machine_text_empty_glyph_path_order(runtime, graph, artboard)
-    {
-        bail!(
-            "unsupported: nested-state-machine-text-empty-glyph-path-order in Rust golden runner (global {global_id})"
-        );
-    }
-
     Ok(())
-}
-
-fn unsupported_nested_state_machine_text_empty_glyph_path_order(
-    runtime: &RuntimeFile,
-    graph: &GraphFile,
-    artboard: &ArtboardGraph,
-) -> Option<u32> {
-    artboard.nested_artboards.iter().find_map(|host| {
-        if !matches!(
-            host.type_name,
-            "NestedArtboardLayout" | "NestedArtboardLeaf"
-        ) {
-            return None;
-        }
-        let host_object = runtime.object(host.global_id as usize)?;
-        let child_index = usize::try_from(host_object.uint_property("artboardId")?).ok()?;
-        let child = graph.artboards.get(child_index)?;
-        if !child
-            .state_machines
-            .iter()
-            .any(|state_machine| !state_machine.data_binds.is_empty())
-        {
-            return None;
-        }
-        child
-            .animations
-            .iter()
-            .any(animation_keys_layout_update)
-            .then_some(host.global_id)
-    })
-}
-
-fn animation_keys_layout_update(animation: &rive_graph::AnimationGraph) -> bool {
-    animation.keyed_objects.iter().any(|keyed_object| {
-        keyed_object
-            .keyed_properties
-            .iter()
-            .any(|keyed_property| matches!(keyed_property.property_key, 596 | 597 | 598 | 632))
-    })
 }
 
 fn artboard_has_joystick_nested_remap_dependents(artboard: &ArtboardGraph) -> bool {

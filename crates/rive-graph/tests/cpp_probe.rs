@@ -4459,6 +4459,11 @@ fn cpp_stroke_path_builder_dependency_method_is_tracked_by_graph_model() {
             .contains("Component*TextStylePaint::pathBuilder(){returnparent();}"),
         "TextStylePaint::pathBuilder no longer returns its parent Text"
     );
+    assert!(
+        text_style_paint_source.contains("m_hasContents=true;if(opacity>0.0f)")
+            && text_style_paint_source.contains("shapePaintPath->addPathClockwise(rawPath);"),
+        "TextStylePaint::addPath no longer records positive-opacity empty raw paths"
+    );
 
     let foreground_layout_drawable_source = compact_cpp_source(
         &std::fs::read_to_string(runtime_dir.join("src/foreground_layout_drawable.cpp"))

@@ -5,12 +5,12 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 569 across 248 files (strict
-  exact=560/239; tolerant=9/9; structural=0/0)
-- Current compare: `make golden-compare` reports exact=248,
-  exact-segments=569, diverges=0, unsupported-feature=47, not-yet=0
+- Exact-status segments (file × sample): 578 across 257 files (strict
+  exact=569/248; tolerant=9/9; structural=0/0)
+- Current compare: `make golden-compare` reports exact=257,
+  exact-segments=578, diverges=0, unsupported-feature=37, not-yet=1
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
-  M6=5 gated=6 harness=36
+  M6=5 gated=6 harness=26
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes**
 
 ## Milestones
@@ -26,9 +26,14 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Active `not-yet`: none. The M6 queue is now explicit
-   `unsupported-feature` diagnostics only.
-2. Highest-priority M6 slice: `echo_show_demo.riv`
+1. Active `not-yet`: `image_scripting_property_value.riv`, recovered from
+   the harness crash lane but not exact. The failed exact promotion first
+   differed at stream line 3: Rust emitted `decodeImage id=2 width=278
+   height=278` before C++ emitted the first `makeRenderPaint`. Treat this as
+   selected-root image predecode/render-paint allocation ordering, not a C++
+   runner crash.
+2. Highest-priority M6 unsupported slice after the active `not-yet` is
+   cleared: `echo_show_demo.riv`
    (`rust-runner-unsupported:joystick-nested-remap-gradient-update-order`).
    Start from the focused bypass note below: the first mismatch happens before
    `sample seconds=0`, in nested-remap gradient shader creation rather than
@@ -42,7 +47,11 @@ the only memory the next session has. Update it every commit.
    first-differed at line 980, shader id 4, with C++ 107 vs Rust 108
    pre-sample gradients. Next inspect the specific nested remap/joystick data
    that leaves Rust paint global 636 in the animated zero-alpha state before
-   first draw.
+   first draw. A follow-up snapshot prototype was also rejected: it recorded
+   update-time gradient shaders, but still replayed paint globals 636/634 with
+   Rust's already-animated/zero-alpha state instead of C++'s first
+   authored-geometry shader, so the remaining gap is state-machine/remap/paint
+   mutator ordering rather than just missing shader replay.
 3. Other parked one-file M6 queues include `layout-component-paint`
    (`rewards_demo.riv`), `nested-node-transform-data-bind` (`car_widgets_v01.riv`),
    `nested-layout-clip-data-bind` (`stateful_multi_property.riv`), and
@@ -73,9 +82,10 @@ the only memory the next session has. Update it every commit.
 7. Harness lane MERGED (e5941e7): the C++ golden-runner now survives 34 of
    36 `milestone = "harness"` files (FileAssetContents stripping for the
    non-scripting librive build, flush + `_Exit(0)` before teardown, ABI
-   define alignment). MAIN-LOOP FOLLOW-UP: flip those 34 corpus entries
-   from `milestone = "harness"` to `status = "not-yet"` (keep type-key
-   features, drop `cpp-runner-crash`), then triage them like any queue.
+   define alignment). MAIN-LOOP FOLLOW-UP is partially complete: 9 recovered
+   entries were promoted exact and 1 entered `not-yet`; continue flipping the
+   remaining recovered files from `milestone = "harness"` only after assigning
+   each to exact/not-yet/gated with a verified compare result.
    Residuals (2): `data_viz_demo` and `data_binding_artboards_test` crash
    only because the runner binds a blank default view-model instance;
    binding named instance 0 (like the reference unit tests) recovers both
@@ -98,11 +108,13 @@ the only memory the next session has. Update it every commit.
 
 9. SCOUT RESULT (read-only pre-classification of the 34 recovered harness
    files; streams/diffs in the session scratchpad — trust but re-verify on
-   promotion): (a) promote-exact, already verified epsilon-identical via
-   golden-compare: audio_script, image_scripting_property_value,
-   multi_listeners, script_dependency_test, script_dependency_test2,
-   script_dependency_test_using_library(+_v2), script_namespace_test,
-   script_string_converter_test, scripted_listener_action.
+   promotion): (a) promoted exact in the main loop:
+   audio_script, multi_listeners, script_dependency_test,
+   script_dependency_test2, script_dependency_test_using_library(+_v2),
+   script_namespace_test, script_string_converter_test,
+   scripted_listener_action. `image_scripting_property_value` was a stale
+   scout exact call and is now active `not-yet` because Rust image decode
+   ordering precedes C++ render-paint allocation.
    (b) gated-scripting (21): all remaining script*/viewmodel*/gamepad/
    data_bind_artboard_input/path_effect_with_feathers/group_effect/
    replace_view_model files — blocked on the Luau VM; note

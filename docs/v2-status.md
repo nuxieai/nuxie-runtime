@@ -35,22 +35,26 @@ the only memory the next session has. Update it every commit.
    through the renderer traits, and raw runtime/graph escape hatches. First C
    ABI facade exists at `crates/rive-capi` with import/free and artboard
    metadata functions. `make perf-compare`, `make perf-corpus`, and
-   `make perf-hot-loop` now build release C++/Rust runners by default, and
+   `make perf-hot-loop` build release C++/Rust runners by default, and
    `perf-hot-loop` consumes runner benchmark phase sums rather than wall-clock
    process or stream-serialization time. Both runners have null-renderer
-   benchmark backends, so M7 perf checks exclude golden recording output.
-   Decision-grade focused verification with `make perf-hot-loop
-   PERF_CORPUS_LIMIT=5 PERF_ITERATIONS=10 PERF_WARMUPS=1` fails the strict
-   `PERF_MAX_RATIO=2.0` target at aggregate Rust/C++=21.908 over 5 exact
-   entries / 10 segments (`ai_assitant`=37.503, `advance_blend_mode`=19.690,
-   `animation_reset_cases`=19.837). Full `cargo test --workspace` passes, and
-   full `make golden-compare` remains `exact=263`, `exact-segments=584`,
-   `diverges=0`, `unsupported-feature=32`, `not-yet=0`. Highest priority next
-   target is M7 perf attribution: run a release flamegraph/profile on the
-   null-renderer hot loop, start with `ai_assitant.riv`, then port the matching
-   C++ dirt-gating, keyframe cursor, buffer reuse, or retained-cache
-   optimization before rerunning the 10-iteration strict threshold. After the
-   perf target is real, expand the C ABI to instance advance/draw.
+   benchmark backends, so M7 perf checks exclude golden recording output. Both
+   runners also support `--benchmark-repeat N` for long single-sample profiling
+   runs. A release `ai_assitant.riv` profile found fixed schema-name property
+   lookup in the paint hot path; caching those fixed keys reduced Rust direct
+   `ai_assitant` 100-segment repeat time from about 1019 ms to about 255 ms.
+   Focused 10-iteration verification with `make perf-hot-loop
+   PERF_CORPUS_LIMIT=5 PERF_ITERATIONS=10 PERF_WARMUPS=1 PERF_MAX_RATIO=999`
+   now records aggregate Rust/C++=7.002 over 5 exact entries / 10 segments.
+   The strict `PERF_MAX_RATIO=2.0` target still fails at aggregate Rust/C++=7.503
+   (`animation_reset_cases`=24.990, `advance_blend_mode`=17.282,
+   `ai_assitant`=8.679). Fresh post-cache sampling points next at
+   `TrimContour::get_segment` / `TrimSegmentKind::extract` allocation and
+   remaining `runtime_path_geometry` property-key scans. Highest priority next
+   target is to audit the matching C++ trim/path-geometry code for retained
+   path/contour buffers or generated property IDs, port that optimization, and
+   rerun the 10-iteration strict threshold. After the perf target is real,
+   expand the C ABI to instance advance/draw.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -347,6 +351,26 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-07: [M7] Cached fixed schema property keys in the release
+  null-renderer draw hot path after profiling `ai_assitant.riv`, mirroring the
+  generated C++ property-key/member access at the same paint hot site. Both
+  golden runners now accept `--benchmark-repeat N`, restricted to benchmark
+  mode with one sample, so sampler runs can stay inside the already-imported
+  hot loop.
+  The pre-change Rust direct `ai_assitant` 100-segment repeat was about
+  1019 ms; after caching `ShapePaint.isVisible`, `SolidColor.colorValue`, and
+  the fixed Stroke/Gradient/Feather/Dash/Trim keys used by draw preparation,
+  the same repeat is about 255 ms. Focused decision-grade verification with
+  `make perf-hot-loop PERF_CORPUS_LIMIT=5 PERF_ITERATIONS=10 PERF_WARMUPS=1
+  PERF_MAX_RATIO=999` reports aggregate Rust/C++=7.002 over 5 exact entries /
+  10 segments; the strict `PERF_MAX_RATIO=2.0` run still fails at 7.503. Fresh
+  post-cache sampling shows the paint property lookup hotspot mostly gone;
+  next M7 perf work should profile/port the C++ trim/path-geometry strategy for
+  `TrimContour::get_segment` / `TrimSegmentKind::extract` allocation and
+  remaining `runtime_path_geometry` property-key scans. Full
+  `cargo test --workspace` passes, and full `make golden-compare` remains
+  `exact=263`, `exact-segments=584`, `diverges=0`,
+  `unsupported-feature=32`, `not-yet=0`.
 - 2026-07-07: [M7] Corrected the hot-loop perf proof path. Perf Make targets
   now build release C++/Rust runners by default. Runner benchmark comparison
   consumes `advance_ms + input_ms + prepare_ms + draw_ms` instead of

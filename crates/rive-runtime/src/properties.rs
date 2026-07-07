@@ -1,6 +1,7 @@
 use rive_binary::{RuntimeFile, RuntimeObject};
 use rive_graph::ArtboardGraph;
 use rive_schema::{FieldKind, definition_by_name, definition_by_type_key};
+use std::sync::OnceLock;
 
 use crate::components::TransformProperty;
 
@@ -132,11 +133,13 @@ pub(crate) fn transform_property_for_key(property_key: u16) -> Option<TransformP
 }
 
 pub(crate) fn solid_color_value_property_key() -> Option<u16> {
-    property_key_for_name("SolidColor", "colorValue")
+    static KEY: OnceLock<Option<u16>> = OnceLock::new();
+    cached_property_key_for_name(&KEY, "SolidColor", "colorValue")
 }
 
 pub(crate) fn shape_paint_is_visible_property_key() -> Option<u16> {
-    property_key_for_name("ShapePaint", "isVisible")
+    static KEY: OnceLock<Option<u16>> = OnceLock::new();
+    cached_property_key_for_name(&KEY, "ShapePaint", "isVisible")
 }
 
 pub(crate) fn solo_active_component_id_property_key() -> Option<u16> {
@@ -215,6 +218,14 @@ pub(crate) fn property_key_for_name(type_name: &str, property_name: &str) -> Opt
     }
 
     None
+}
+
+pub(crate) fn cached_property_key_for_name(
+    slot: &'static OnceLock<Option<u16>>,
+    type_name: &'static str,
+    property_name: &'static str,
+) -> Option<u16> {
+    *slot.get_or_init(|| property_key_for_name(type_name, property_name))
 }
 
 pub(crate) fn mix_value(current: f32, value: f32, mix: f32) -> f32 {

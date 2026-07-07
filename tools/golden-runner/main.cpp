@@ -78,6 +78,7 @@ struct Options
     std::string inputScript;
     std::string viewModelScript;
     std::vector<float> samples = {0.0f};
+    size_t benchmarkRepeat = 1;
 };
 
 std::string usage()
@@ -86,6 +87,7 @@ std::string usage()
            "       rive_golden_runner --file <path> [--artboard <name>]\n"
            "           [--state-machine <name>] [--samples <t0,t1,...>]\n"
            "           [--input-script <path>] [--benchmark]\n"
+           "           [--benchmark-repeat N]\n"
            "\n"
            "input script lines:\n"
            "  <seconds> pointerDown <x> <y> [pointerId]\n"
@@ -135,6 +137,16 @@ int parseInt(const std::string& value, const std::string& context)
         throw CliError("invalid integer for " + context + ": " + value);
     }
     return static_cast<int>(parsed);
+}
+
+size_t parsePositiveSize(const std::string& value, const std::string& context)
+{
+    const int parsed = parseInt(value, context);
+    if (parsed <= 0)
+    {
+        throw CliError(context + " must be greater than 0");
+    }
+    return static_cast<size_t>(parsed);
 }
 
 std::vector<float> parseSamples(const std::string& value)
@@ -318,6 +330,10 @@ Options parseOptions(int argc, char** argv)
         {
             options.benchmark = true;
         }
+        else if (arg == "--benchmark-repeat")
+        {
+            options.benchmarkRepeat = parsePositiveSize(requireValue(arg), arg);
+        }
         else if (arg == "--file")
         {
             options.file = requireValue(arg);
@@ -377,6 +393,22 @@ Options parseOptions(int argc, char** argv)
             options.samples[index] + kTimeEpsilon < options.samples[index - 1])
         {
             throw CliError("sample times must be sorted in ascending order");
+        }
+    }
+    if (options.benchmarkRepeat > 1)
+    {
+        if (!options.benchmark)
+        {
+            throw CliError("--benchmark-repeat requires --benchmark");
+        }
+        if (!options.inputScript.empty())
+        {
+            throw CliError(
+                "--benchmark-repeat cannot be combined with --input-script");
+        }
+        if (options.samples.size() != 1)
+        {
+            throw CliError("--benchmark-repeat requires exactly one sample");
         }
     }
 
@@ -743,40 +775,45 @@ int runFile(const Options& options)
     };
     float currentSeconds = 0.0f;
     size_t nextInput = 0;
-    for (float sampleSeconds : options.samples)
+    for (size_t repeat = 0; repeat < options.benchmarkRepeat; repeat++)
     {
-        while (nextInput < inputEvents.size() &&
-               inputEvents[nextInput].seconds <= sampleSeconds + kTimeEpsilon)
+        for (float sampleSeconds : options.samples)
         {
-            const auto& event = inputEvents[nextInput];
-            timedStage(advanceElapsed, [&] {
-                advanceTo(scene, event.seconds, currentSeconds);
-            });
-            timedStage(inputElapsed, [&] {
-                applyInput(scene, event);
-                if (!options.benchmark)
-                {
-                    recordingFactory.addInputEvent(inputKindName(event.kind),
-                                                   event.seconds,
-                                                   event.x,
-                                                   event.y,
-                                                   event.pointerId);
-                }
-            });
-            nextInput++;
-        }
+            while (nextInput < inputEvents.size() &&
+                   inputEvents[nextInput].seconds <=
+                       sampleSeconds + kTimeEpsilon)
+            {
+                const auto& event = inputEvents[nextInput];
+                timedStage(advanceElapsed, [&] {
+                    advanceTo(scene, event.seconds, currentSeconds);
+                });
+                timedStage(inputElapsed, [&] {
+                    applyInput(scene, event);
+                    if (!options.benchmark)
+                    {
+                        recordingFactory.addInputEvent(
+                            inputKindName(event.kind),
+                            event.seconds,
+                            event.x,
+                            event.y,
+                            event.pointerId);
+                    }
+                });
+                nextInput++;
+            }
 
-        timedStage(advanceElapsed, [&] {
-            advanceTo(scene, sampleSeconds, currentSeconds);
-        });
-        if (!options.benchmark)
-        {
-            recordingFactory.addSample(sampleSeconds);
-        }
-        timedStage(drawElapsed, [&] { scene->draw(renderer.get()); });
-        if (!options.benchmark)
-        {
-            recordingFactory.addFrame();
+            timedStage(advanceElapsed, [&] {
+                advanceTo(scene, sampleSeconds, currentSeconds);
+            });
+            if (!options.benchmark)
+            {
+                recordingFactory.addSample(sampleSeconds);
+            }
+            timedStage(drawElapsed, [&] { scene->draw(renderer.get()); });
+            if (!options.benchmark)
+            {
+                recordingFactory.addFrame();
+            }
         }
     }
     const auto benchmarkElapsed =
@@ -794,7 +831,8 @@ int runFile(const Options& options)
                   << "draw_ms=" << durationMillis(drawElapsed) << "\n"
                   << "bookkeeping_ms=" << durationMillis(bookkeepingElapsed)
                   << "\n"
-                  << "segments=" << options.samples.size() << "\n";
+                  << "segments="
+                  << options.samples.size() * options.benchmarkRepeat << "\n";
     }
     else
     {

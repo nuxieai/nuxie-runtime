@@ -15,6 +15,7 @@ use rive_render_api::{
 };
 use rive_schema::definition_by_name;
 use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
+use std::sync::OnceLock;
 use taffy::prelude::{
     AlignContent, AlignItems, AlignSelf, AvailableSpace, Dimension, Display as TaffyDisplay,
     FlexDirection, FlexWrap, JustifyContent, LengthPercentage, LengthPercentageAuto, NodeId,
@@ -23,8 +24,8 @@ use taffy::prelude::{
 use taffy::style::Direction as TaffyDirection;
 
 use crate::properties::{
-    RuntimeLayoutComputedProperty, property_key_for_name, shape_paint_is_visible_property_key,
-    solid_color_value_property_key,
+    RuntimeLayoutComputedProperty, cached_property_key_for_name, property_key_for_name,
+    shape_paint_is_visible_property_key, solid_color_value_property_key,
 };
 use crate::text::{
     RuntimeTextLayoutConstraint, runtime_text_input_shape_paint_commands,
@@ -56,6 +57,124 @@ impl RuntimeGradientPaintFilter {
 
 fn runtime_gradient_container_is_root_artboard(container: &ShapePaintContainerNode) -> bool {
     container.local_id == 0 && container.type_name == "Artboard"
+}
+
+fn runtime_draw_property_key_for_name(type_name: &str, property_name: &str) -> Option<u16> {
+    match (type_name, property_name) {
+        ("Stroke", "thickness") => {
+            static KEY: OnceLock<Option<u16>> = OnceLock::new();
+            cached_property_key_for_name(&KEY, "Stroke", "thickness")
+        }
+        ("Stroke", "cap") => {
+            static KEY: OnceLock<Option<u16>> = OnceLock::new();
+            cached_property_key_for_name(&KEY, "Stroke", "cap")
+        }
+        ("Stroke", "join") => {
+            static KEY: OnceLock<Option<u16>> = OnceLock::new();
+            cached_property_key_for_name(&KEY, "Stroke", "join")
+        }
+        ("LinearGradient", "opacity") => {
+            static KEY: OnceLock<Option<u16>> = OnceLock::new();
+            cached_property_key_for_name(&KEY, "LinearGradient", "opacity")
+        }
+        ("LinearGradient", "startX") => {
+            static KEY: OnceLock<Option<u16>> = OnceLock::new();
+            cached_property_key_for_name(&KEY, "LinearGradient", "startX")
+        }
+        ("LinearGradient", "startY") => {
+            static KEY: OnceLock<Option<u16>> = OnceLock::new();
+            cached_property_key_for_name(&KEY, "LinearGradient", "startY")
+        }
+        ("LinearGradient", "endX") => {
+            static KEY: OnceLock<Option<u16>> = OnceLock::new();
+            cached_property_key_for_name(&KEY, "LinearGradient", "endX")
+        }
+        ("LinearGradient", "endY") => {
+            static KEY: OnceLock<Option<u16>> = OnceLock::new();
+            cached_property_key_for_name(&KEY, "LinearGradient", "endY")
+        }
+        ("RadialGradient", "opacity") => {
+            static KEY: OnceLock<Option<u16>> = OnceLock::new();
+            cached_property_key_for_name(&KEY, "RadialGradient", "opacity")
+        }
+        ("RadialGradient", "startX") => {
+            static KEY: OnceLock<Option<u16>> = OnceLock::new();
+            cached_property_key_for_name(&KEY, "RadialGradient", "startX")
+        }
+        ("RadialGradient", "startY") => {
+            static KEY: OnceLock<Option<u16>> = OnceLock::new();
+            cached_property_key_for_name(&KEY, "RadialGradient", "startY")
+        }
+        ("RadialGradient", "endX") => {
+            static KEY: OnceLock<Option<u16>> = OnceLock::new();
+            cached_property_key_for_name(&KEY, "RadialGradient", "endX")
+        }
+        ("RadialGradient", "endY") => {
+            static KEY: OnceLock<Option<u16>> = OnceLock::new();
+            cached_property_key_for_name(&KEY, "RadialGradient", "endY")
+        }
+        ("GradientStop", "colorValue") => {
+            static KEY: OnceLock<Option<u16>> = OnceLock::new();
+            cached_property_key_for_name(&KEY, "GradientStop", "colorValue")
+        }
+        ("GradientStop", "position") => {
+            static KEY: OnceLock<Option<u16>> = OnceLock::new();
+            cached_property_key_for_name(&KEY, "GradientStop", "position")
+        }
+        ("Feather", "spaceValue") => {
+            static KEY: OnceLock<Option<u16>> = OnceLock::new();
+            cached_property_key_for_name(&KEY, "Feather", "spaceValue")
+        }
+        ("Feather", "strength") => {
+            static KEY: OnceLock<Option<u16>> = OnceLock::new();
+            cached_property_key_for_name(&KEY, "Feather", "strength")
+        }
+        ("Feather", "offsetX") => {
+            static KEY: OnceLock<Option<u16>> = OnceLock::new();
+            cached_property_key_for_name(&KEY, "Feather", "offsetX")
+        }
+        ("Feather", "offsetY") => {
+            static KEY: OnceLock<Option<u16>> = OnceLock::new();
+            cached_property_key_for_name(&KEY, "Feather", "offsetY")
+        }
+        ("Feather", "inner") => {
+            static KEY: OnceLock<Option<u16>> = OnceLock::new();
+            cached_property_key_for_name(&KEY, "Feather", "inner")
+        }
+        ("DashPath", "offset") => {
+            static KEY: OnceLock<Option<u16>> = OnceLock::new();
+            cached_property_key_for_name(&KEY, "DashPath", "offset")
+        }
+        ("DashPath", "offsetIsPercentage") => {
+            static KEY: OnceLock<Option<u16>> = OnceLock::new();
+            cached_property_key_for_name(&KEY, "DashPath", "offsetIsPercentage")
+        }
+        ("Dash", "length") => {
+            static KEY: OnceLock<Option<u16>> = OnceLock::new();
+            cached_property_key_for_name(&KEY, "Dash", "length")
+        }
+        ("Dash", "lengthIsPercentage") => {
+            static KEY: OnceLock<Option<u16>> = OnceLock::new();
+            cached_property_key_for_name(&KEY, "Dash", "lengthIsPercentage")
+        }
+        ("TrimPath", "modeValue") => {
+            static KEY: OnceLock<Option<u16>> = OnceLock::new();
+            cached_property_key_for_name(&KEY, "TrimPath", "modeValue")
+        }
+        ("TrimPath", "offset") => {
+            static KEY: OnceLock<Option<u16>> = OnceLock::new();
+            cached_property_key_for_name(&KEY, "TrimPath", "offset")
+        }
+        ("TrimPath", "start") => {
+            static KEY: OnceLock<Option<u16>> = OnceLock::new();
+            cached_property_key_for_name(&KEY, "TrimPath", "start")
+        }
+        ("TrimPath", "end") => {
+            static KEY: OnceLock<Option<u16>> = OnceLock::new();
+            cached_property_key_for_name(&KEY, "TrimPath", "end")
+        }
+        _ => property_key_for_name(type_name, property_name),
+    }
 }
 
 impl ArtboardInstance {
@@ -7481,7 +7600,7 @@ fn runtime_stroke_thickness(
 }
 
 fn runtime_stroke_thickness_for_local(instance: &ArtboardInstance, local_id: usize) -> Option<f32> {
-    property_key_for_name("Stroke", "thickness")
+    runtime_draw_property_key_for_name("Stroke", "thickness")
         .and_then(|key| instance.double_property(local_id, key))
 }
 
@@ -7492,7 +7611,7 @@ fn runtime_stroke_uint_property(
     property_name: &str,
     fallback: u64,
 ) -> u64 {
-    property_key_for_name("Stroke", property_name)
+    runtime_draw_property_key_for_name("Stroke", property_name)
         .and_then(|key| instance.uint_property(local_id, key))
         .or_else(|| object.uint_property(property_name))
         .unwrap_or(fallback)
@@ -7714,7 +7833,7 @@ fn runtime_gradient_double_property(
     property_name: &str,
     fallback: f32,
 ) -> f32 {
-    property_key_for_name(type_name, property_name)
+    runtime_draw_property_key_for_name(type_name, property_name)
         .and_then(|property_key| artboard.double_property(local_id, property_key))
         .unwrap_or(fallback)
 }
@@ -7726,8 +7845,8 @@ fn runtime_gradient_stops(
 ) -> Vec<RuntimeGradientStop> {
     // Ported from C++ `src/shapes/paint/linear_gradient.cpp::applyTo` and
     // `radial_gradient.cpp`: stops read live object properties after animation.
-    let color_key = property_key_for_name("GradientStop", "colorValue");
-    let position_key = property_key_for_name("GradientStop", "position");
+    let color_key = runtime_draw_property_key_for_name("GradientStop", "colorValue");
+    let position_key = runtime_draw_property_key_for_name("GradientStop", "position");
     stops.sort_by(|left, right| {
         let left_position = runtime_gradient_stop_position(artboard, left, position_key);
         let right_position = runtime_gradient_stop_position(artboard, right, position_key);
@@ -7819,7 +7938,7 @@ fn runtime_feather_double_property(
     property_name: &str,
     default: f32,
 ) -> f32 {
-    property_key_for_name(feather.type_name, property_name)
+    runtime_draw_property_key_for_name(feather.type_name, property_name)
         .and_then(|key| artboard.double_property(feather.local_id, key))
         .unwrap_or(default)
 }
@@ -7830,7 +7949,7 @@ fn runtime_feather_uint_property(
     property_name: &str,
     default: u32,
 ) -> u32 {
-    property_key_for_name(feather.type_name, property_name)
+    runtime_draw_property_key_for_name(feather.type_name, property_name)
         .and_then(|key| artboard.uint_property(feather.local_id, key))
         .and_then(|value| u32::try_from(value).ok())
         .unwrap_or(default)
@@ -7842,7 +7961,7 @@ fn runtime_feather_bool_property(
     property_name: &str,
     default: bool,
 ) -> bool {
-    property_key_for_name(feather.type_name, property_name)
+    runtime_draw_property_key_for_name(feather.type_name, property_name)
         .and_then(|key| artboard.bool_property(feather.local_id, key))
         .unwrap_or(default)
 }
@@ -8215,7 +8334,7 @@ fn runtime_dash_path_double_property(
     property_name: &str,
     fallback: Option<f32>,
 ) -> Option<f32> {
-    property_key_for_name("DashPath", property_name)
+    runtime_draw_property_key_for_name("DashPath", property_name)
         .and_then(|key| artboard.double_property(effect.local_id, key))
         .or(fallback)
 }
@@ -8226,7 +8345,7 @@ fn runtime_dash_path_bool_property(
     property_name: &str,
     fallback: Option<bool>,
 ) -> Option<bool> {
-    property_key_for_name("DashPath", property_name)
+    runtime_draw_property_key_for_name("DashPath", property_name)
         .and_then(|key| artboard.bool_property(effect.local_id, key))
         .or(fallback)
 }
@@ -8304,13 +8423,13 @@ fn dash_path_apply_dash(
 }
 
 fn runtime_dash_length(artboard: &ArtboardInstance, dash: &DashNode) -> f32 {
-    property_key_for_name("Dash", "length")
+    runtime_draw_property_key_for_name("Dash", "length")
         .and_then(|key| artboard.double_property(dash.local_id, key))
         .unwrap_or(dash.length)
 }
 
 fn runtime_dash_length_is_percentage(artboard: &ArtboardInstance, dash: &DashNode) -> bool {
-    property_key_for_name("Dash", "lengthIsPercentage")
+    runtime_draw_property_key_for_name("Dash", "lengthIsPercentage")
         .and_then(|key| artboard.bool_property(dash.local_id, key))
         .unwrap_or(dash.length_is_percentage)
 }
@@ -8338,7 +8457,7 @@ fn runtime_trim_path_mode_value(
     artboard: &ArtboardInstance,
     effect: &StrokeEffectNode,
 ) -> Option<u32> {
-    property_key_for_name("TrimPath", "modeValue")
+    runtime_draw_property_key_for_name("TrimPath", "modeValue")
         .and_then(|key| artboard.uint_property(effect.local_id, key))
         .and_then(|value| u32::try_from(value).ok())
         .or(effect.trim_mode_value)
@@ -8350,7 +8469,7 @@ fn runtime_trim_path_double_property(
     property_name: &str,
     fallback: Option<f32>,
 ) -> f32 {
-    property_key_for_name("TrimPath", property_name)
+    runtime_draw_property_key_for_name("TrimPath", property_name)
         .and_then(|key| artboard.double_property(effect.local_id, key))
         .or(fallback)
         .unwrap_or(0.0)

@@ -194,73 +194,75 @@ fn run() -> Result<String> {
     let mut draw_elapsed = Duration::ZERO;
     let mut current_seconds = 0.0;
     let mut next_input = 0;
-    for sample in &options.samples {
-        while next_input < input_events.len()
-            && input_events[next_input].seconds <= *sample + TIME_EPSILON
-        {
-            let event = &input_events[next_input];
+    for _ in 0..options.benchmark_repeat {
+        for sample in &options.samples {
+            while next_input < input_events.len()
+                && input_events[next_input].seconds <= *sample + TIME_EPSILON
+            {
+                let event = &input_events[next_input];
+                timed_result(options.benchmark, &mut advance_elapsed, || {
+                    advance_scene_to(
+                        &mut instance,
+                        &runtime,
+                        state_machine.as_mut(),
+                        owned_view_model_context.as_ref(),
+                        event.seconds,
+                        &mut current_seconds,
+                    )
+                })?;
+                timed(options.benchmark, &mut input_elapsed, || {
+                    apply_input_event(
+                        event,
+                        &instance,
+                        state_machine.as_mut(),
+                        owned_view_model_context.as_mut(),
+                    );
+                    factory.add_input_event(
+                        event.kind.name(),
+                        event.seconds,
+                        event.x,
+                        event.y,
+                        event.pointer_id,
+                    );
+                });
+                next_input += 1;
+            }
             timed_result(options.benchmark, &mut advance_elapsed, || {
                 advance_scene_to(
                     &mut instance,
                     &runtime,
                     state_machine.as_mut(),
                     owned_view_model_context.as_ref(),
-                    event.seconds,
+                    *sample,
                     &mut current_seconds,
                 )
             })?;
-            timed(options.benchmark, &mut input_elapsed, || {
-                apply_input_event(
-                    event,
-                    &instance,
-                    state_machine.as_mut(),
-                    owned_view_model_context.as_mut(),
-                );
-                factory.add_input_event(
-                    event.kind.name(),
-                    event.seconds,
-                    event.x,
-                    event.y,
-                    event.pointer_id,
-                );
-            });
-            next_input += 1;
-        }
-        timed_result(options.benchmark, &mut advance_elapsed, || {
-            advance_scene_to(
-                &mut instance,
-                &runtime,
-                state_machine.as_mut(),
-                owned_view_model_context.as_ref(),
-                *sample,
-                &mut current_seconds,
-            )
-        })?;
-        timed_result(options.benchmark, &mut prepare_elapsed, || {
-            instance.prepare_static_artboard_tree_paints(
-                &runtime,
-                artboard,
-                &graph.artboards,
-                factory.as_factory(),
-                &mut paint_cache,
-                &mut path_cache,
-            )
-        })?;
-        factory.add_sample(*sample);
-        timed_result(options.benchmark, &mut draw_elapsed, || {
-            instance
-                .draw_prepared_static_artboard_with_render_cache(
+            timed_result(options.benchmark, &mut prepare_elapsed, || {
+                instance.prepare_static_artboard_tree_paints(
                     &runtime,
                     artboard,
                     &graph.artboards,
                     factory.as_factory(),
-                    &mut *renderer,
                     &mut paint_cache,
                     &mut path_cache,
                 )
-                .map_err(unsupported_static_text_draw_error)
-        })?;
-        factory.add_frame();
+            })?;
+            factory.add_sample(*sample);
+            timed_result(options.benchmark, &mut draw_elapsed, || {
+                instance
+                    .draw_prepared_static_artboard_with_render_cache(
+                        &runtime,
+                        artboard,
+                        &graph.artboards,
+                        factory.as_factory(),
+                        &mut *renderer,
+                        &mut paint_cache,
+                        &mut path_cache,
+                    )
+                    .map_err(unsupported_static_text_draw_error)
+            })?;
+            factory.add_frame();
+        }
     }
     let benchmark_elapsed = benchmark_start.elapsed();
 
@@ -275,7 +277,7 @@ fn run() -> Result<String> {
             prepare_elapsed.as_secs_f64() * 1000.0,
             draw_elapsed.as_secs_f64() * 1000.0,
             bookkeeping_elapsed.as_secs_f64() * 1000.0,
-            options.samples.len()
+            options.samples.len() * options.benchmark_repeat
         ))
     } else {
         Ok(factory.stream())
@@ -710,6 +712,40 @@ mod tests {
         assert!(parse_samples("-0.1").is_err());
         assert!(parse_samples("0.1,0.099").is_err());
     }
+
+    #[test]
+    fn benchmark_repeat_is_benchmark_only_single_sample() {
+        let options = Options::parse(vec![
+            "--file".to_owned(),
+            "fixture.riv".to_owned(),
+            "--benchmark".to_owned(),
+            "--benchmark-repeat".to_owned(),
+            "10".to_owned(),
+        ])
+        .expect("parse benchmark repeat");
+        assert_eq!(options.benchmark_repeat, 10);
+
+        let error = Options::parse(vec![
+            "--file".to_owned(),
+            "fixture.riv".to_owned(),
+            "--benchmark-repeat".to_owned(),
+            "10".to_owned(),
+        ])
+        .unwrap_err();
+        assert!(error.to_string().contains("requires --benchmark"));
+
+        let error = Options::parse(vec![
+            "--file".to_owned(),
+            "fixture.riv".to_owned(),
+            "--benchmark".to_owned(),
+            "--samples".to_owned(),
+            "0,1".to_owned(),
+            "--benchmark-repeat".to_owned(),
+            "10".to_owned(),
+        ])
+        .unwrap_err();
+        assert!(error.to_string().contains("exactly one sample"));
+    }
 }
 
 #[derive(Debug)]
@@ -801,6 +837,7 @@ struct Options {
     samples: Vec<f32>,
     layout_bounds: bool,
     benchmark: bool,
+    benchmark_repeat: usize,
 }
 
 impl Options {
@@ -812,6 +849,7 @@ impl Options {
         let mut samples = vec![0.0];
         let mut layout_bounds = false;
         let mut benchmark = false;
+        let mut benchmark_repeat = 1usize;
 
         let mut index = 0;
         while index < args.len() {
@@ -831,9 +869,12 @@ impl Options {
                 "--samples" => samples = parse_samples(&value(arg)?)?,
                 "--layout-bounds" => layout_bounds = true,
                 "--benchmark" => benchmark = true,
+                "--benchmark-repeat" => {
+                    benchmark_repeat = parse_positive_usize(&value(arg)?, arg)?;
+                }
                 "--help" | "-h" => {
                     println!(
-                        "usage: rust-golden-runner --file <path> [--artboard <name>] [--samples <t0,t1,...>] [--layout-bounds] [--benchmark]"
+                        "usage: rust-golden-runner --file <path> [--artboard <name>] [--samples <t0,t1,...>] [--layout-bounds] [--benchmark] [--benchmark-repeat N]"
                     );
                     std::process::exit(0);
                 }
@@ -848,6 +889,17 @@ impl Options {
         if layout_bounds && benchmark {
             bail!("--benchmark cannot be combined with --layout-bounds");
         }
+        if benchmark_repeat > 1 {
+            if !benchmark {
+                bail!("--benchmark-repeat requires --benchmark");
+            }
+            if input_script.is_some() {
+                bail!("--benchmark-repeat cannot be combined with --input-script");
+            }
+            if samples.len() != 1 {
+                bail!("--benchmark-repeat requires exactly one sample");
+            }
+        }
 
         Ok(Self {
             file: file.context("missing --file <path>")?,
@@ -857,8 +909,19 @@ impl Options {
             samples,
             layout_bounds,
             benchmark,
+            benchmark_repeat,
         })
     }
+}
+
+fn parse_positive_usize(value: &str, option: &str) -> Result<usize> {
+    let parsed = value
+        .parse::<usize>()
+        .with_context(|| format!("{option} must be a positive integer"))?;
+    if parsed == 0 {
+        bail!("{option} must be greater than 0");
+    }
+    Ok(parsed)
 }
 
 fn parse_samples(value: &str) -> Result<Vec<f32>> {

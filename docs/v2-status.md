@@ -27,12 +27,12 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Active `not-yet` queue: `rewards_demo.riv`
-   (`not-yet:nested-feather-gradient-space`). Rust now emits a stream at
-   sample 0; the focused first diff is Chest `makeLinearGradient id=15`
-   resource allocation/order (`Rust paint global 1963/local 1020/mutator 217`
-   versus `C++ paint global 1956/local 1013/mutator 188`). Next work should
-   localize that Chest nested layout/gradient ordering, not add a broader
-   runner gate.
+   (`not-yet:nested-feather-gradient-space`). Rust now matches the prior
+   Chest shader allocation/order block; the focused exact compare first fails
+   at line 492 on Chest `drawPath` geometry/local transform for render path
+   id 10. Rust and C++ use the same transform and shader there, but the path
+   points differ by a large local offset. Next work should localize that
+   nested layout/path-transform source, not add a broader runner gate.
 2. The former `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
    `nested-feather-gradient-space` unsupported queues are empty.
@@ -120,7 +120,8 @@ the only memory the next session has. Update it every commit.
 
 - `rewards_demo.riv` is the only active `status = "not-yet"` entry. It runs
   in both golden runners at sample 0; the current first focused diff is the
-  Chest nested-layout gradient allocation/order described in Next.
+  Chest nested-layout path geometry/local-transform divergence described in
+  Next.
 - Remaining M6 parked work is behind explicit unsupported-feature diagnostics.
 
 ## Backlog (unsupported features awaiting corpus demand)
@@ -301,6 +302,19 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-07: [M6] Cleared the focused `rewards_demo.riv` Chest shader
+  allocation/order mismatch without changing runtime scheduler order.
+  `rive-graph` now keeps a separate `dependency_insertion_order` projection
+  while preserving the existing sorted `dependency_order`/`graph_order`, and
+  the runtime uses the insertion-order projection only for deferred static
+  artboard-tree paint preparation. Focused exact compare now passes the prior
+  Chest `makeLinearGradient id=15` block and first fails at line 492 on
+  Chest path geometry/local transform under the same render transform and
+  shader. Full `make golden-compare` reports `exact=260`,
+  `exact-segments=581`, `diverges=0`, `unsupported-feature=34`,
+  `not-yet=1`, parked `M6=2 gated=6 harness=26`; `cargo test --workspace`
+  passes. Next target remains `rewards_demo.riv`, localizing the Chest
+  nested layout/path-transform divergence.
 - 2026-07-07: [M6] Moved `rewards_demo.riv` from
   `rust-runner-unsupported:nested-feather-gradient-space` to active
   `not-yet:nested-feather-gradient-space`. The runner now admits the file by

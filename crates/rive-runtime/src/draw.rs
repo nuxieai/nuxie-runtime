@@ -615,8 +615,12 @@ impl ArtboardInstance {
         let mut prepared_paints = BTreeSet::new();
         let mut prepared_nested_hosts = BTreeSet::new();
 
-        let dependency_order = graph
-            .dependency_order
+        let gradient_dependency_order = if graph.dependency_insertion_order.is_empty() {
+            &graph.dependency_order
+        } else {
+            &graph.dependency_insertion_order
+        };
+        let dependency_order = gradient_dependency_order
             .iter()
             .copied()
             .chain(graph.local_objects.iter().map(|object| object.local_id))

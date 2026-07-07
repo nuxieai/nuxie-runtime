@@ -77,6 +77,7 @@ pub struct ArtboardGraph {
     pub animations: Vec<AnimationGraph>,
     pub state_machines: Vec<StateMachineGraph>,
     pub dependency_order: Vec<usize>,
+    pub dependency_insertion_order: Vec<usize>,
     pub dependency_node_order: Vec<usize>,
     pub diagnostics: Vec<GraphDiagnostic>,
     pub lifecycle: LifecycleSummary,
@@ -187,7 +188,7 @@ impl ArtboardGraph {
         let artboard_hosts = artboard_hosts(file, &local_objects);
         let resetting_components = resetting_components(file, &local_objects);
         let advancing_components = advancing_components(file, &local_objects);
-        let dependency_edges = build_dependency_edges(
+        let dependency_edges_in_insertion_order = build_dependency_edges(
             file,
             &local_objects,
             &components,
@@ -195,25 +196,36 @@ impl ArtboardGraph {
             &draw_rules,
             &clipping_shapes,
         );
+        let mut dependency_edges = dependency_edges_in_insertion_order.clone();
+        sort_dependency_edges(&mut dependency_edges);
         lifecycle.build_dependencies_edges = dependency_edges.len();
         let dependency_nodes =
             build_dependency_nodes(&components, &path_composers, &text_variation_helpers);
         lifecycle.build_dependencies_nodes = dependency_nodes.len();
-        let dependency_node_edges = build_dependency_node_edges(
+        let dependency_node_edges_in_insertion_order = build_dependency_node_edges(
             file,
             &local_objects,
             &dependency_nodes,
-            &dependency_edges,
+            &dependency_edges_in_insertion_order,
             &path_composers,
             &clipping_shapes,
             &text_variation_helpers,
         );
+        let mut dependency_node_edges = dependency_node_edges_in_insertion_order.clone();
+        sort_dependency_node_edges(&mut dependency_node_edges);
         lifecycle.build_dependencies_node_edges = dependency_node_edges.len();
         index_component_dependents(
             &mut components,
             &dependency_nodes,
             &dependency_node_edges,
             &draw_target_order.dependency_edges,
+        );
+        let mut insertion_components = components.clone();
+        let dependency_insertion_order = build_dependency_order(
+            &mut insertion_components,
+            &component_by_local,
+            &dependency_nodes,
+            &dependency_node_edges_in_insertion_order,
         );
         let dependency_order = build_dependency_order(
             &mut components,
@@ -288,6 +300,7 @@ impl ArtboardGraph {
             animations,
             state_machines,
             dependency_order: dependency_order.component_order,
+            dependency_insertion_order: dependency_insertion_order.component_order,
             dependency_node_order: dependency_order.node_order,
             diagnostics,
             lifecycle,
@@ -3535,6 +3548,11 @@ fn build_dependency_node_edges(
         });
     }
 
+    dedup_preserving_order(&mut edges);
+    edges
+}
+
+fn sort_dependency_node_edges(edges: &mut Vec<DependencyNodeEdge>) {
     edges.sort_by_key(|edge| {
         (
             edge.source_node,
@@ -3543,7 +3561,6 @@ fn build_dependency_node_edges(
         )
     });
     edges.dedup();
-    edges
 }
 
 fn build_dependency_edges(
@@ -3726,6 +3743,11 @@ fn build_dependency_edges(
         });
     }
 
+    dedup_preserving_order(&mut edges);
+    edges
+}
+
+fn sort_dependency_edges(edges: &mut Vec<DependencyEdge>) {
     edges.sort_by_key(|edge| {
         (
             edge.source_local,
@@ -3734,7 +3756,16 @@ fn build_dependency_edges(
         )
     });
     edges.dedup();
-    edges
+}
+
+fn dedup_preserving_order<T: Copy + PartialEq>(items: &mut Vec<T>) {
+    let mut deduped = Vec::with_capacity(items.len());
+    for item in items.iter().copied() {
+        if !deduped.contains(&item) {
+            deduped.push(item);
+        }
+    }
+    *items = deduped;
 }
 
 fn component_skips_parent_child_dependency(

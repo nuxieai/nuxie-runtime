@@ -27,16 +27,15 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Active `not-yet` queue is empty.
-2. Highest-priority M6 unsupported slice: `layout-component-paint`
-   (`rewards_demo.riv`). This is the broadest remaining declared M6 queue:
-   solve or sharpen it before the narrower nested data-bind/layout queues.
-   Use a focused exact-candidate run first; keep the corpus guard unless the
-   full `make golden-compare` ratchet promotes the file.
-3. Other parked one-file M6 queues include `nested-node-transform-data-bind`
-   (`car_widgets_v01.riv`),
-   `nested-layout-clip-data-bind` (`stateful_multi_property.riv`), and
-   `nested-stateful-view-model-property` (`stateful_nested.riv`). Gated
-   one-file diagnostics include `scripted-data-context`
+2. Highest-priority M6 unsupported slice: `nested-node-transform-data-bind`
+   (`car_widgets_v01.riv`). The former `layout-component-paint` queue is
+   empty; `rewards_demo.riv` now has the sharper
+   `nested-feather-gradient-space` diagnostic.
+3. Other parked one-file M6 queues include `nested-feather-gradient-space`
+   (`rewards_demo.riv`), `nested-layout-clip-data-bind`
+   (`stateful_multi_property.riv`), and `nested-stateful-view-model-property`
+   (`stateful_nested.riv`). Gated one-file diagnostics include
+   `scripted-data-context`
    (`scripted_data_context.riv`), `scripted-transition-condition` (2 gated),
    `scripted-path-effects` (1 gated), and `text-polygon-sibling`
    (`bankcard.riv`). Keep these parked queues as explicit unsupported/gated
@@ -296,6 +295,20 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-07: [M6] Sharpened `rewards_demo.riv` from
+  `layout-component-paint` to `nested-feather-gradient-space`. A focused
+  exact-candidate bypass proved layout-paint admission alone was not enough:
+  the first mismatch was gradient preparation/order around `makeLinearGradient
+  id=15`, followed by nested transform/gradient coordinate differences. The
+  runner now reports `nested-feather-gradient-space` only for nested child
+  artboards that have layout components, no pre-existing static-text blocker,
+  and a feathered gradient paint container; this preserves exact
+  `ai_assitant.riv` and keeps `bankcard.riv` on its sharper
+  `text-polygon-sibling` diagnostic. Full `make golden-compare` remains
+  `exact=259`, `exact-segments=580`, `diverges=0`,
+  `unsupported-feature=36`, `not-yet=0`, parked `M6=4 gated=6 harness=26`;
+  `cargo test --workspace` passes. Next target is `car_widgets_v01.riv`
+  (`rust-runner-unsupported:nested-node-transform-data-bind`).
 - 2026-07-07: [M6] Promoted `echo_show_demo.riv` to exact by matching the
   C++ text line-metrics/bounds path instead of widening the nested-remap
   runtime surface. Rust text metrics now mirror

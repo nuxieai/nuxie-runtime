@@ -147,6 +147,40 @@ place. Parallelism comes in exactly three shapes:
 When you start a lane thread, record it in the status file (who owns what,
 which worktree); when it merges, log the merge like any other slice.
 
+### Thread mechanics (how to actually run one)
+
+**Scouts** are subagents spawned with your agent/task tool, read-only, no
+worktree: give each a self-contained prompt (they cannot see this
+conversation), forbid all repo writes, and have them return a report. Fold
+the report into the status file yourself.
+
+**Lanes** get an isolated worktree and merge back into this branch:
+
+1. Create: `git worktree add .claude/worktrees/lane-<name> -b lane/<name>`
+   from current HEAD (or spawn the subagent with your harness's worktree
+   isolation if it offers it).
+2. Brief the lane with a self-contained prompt that includes: the exact file
+   scope it may touch, the files it must NOT touch (always: `corpus.toml`,
+   `docs/v2-status.md`, and whatever modules the main loop is currently
+   editing — name them), commit-prefix `[lane-<name>]`, and the requirement
+   that the full ratchet (`make golden-compare` + `cargo test --workspace`)
+   passes in its worktree before it reports done.
+3. Merge back (main worktree, at a clean moment — commit or finish your
+   current slice first): verify scope with
+   `git diff main...lane/<name> --stat` (nothing outside the briefed scope),
+   then `git merge --no-ff lane/<name>`, rerun the full ratchet yourself —
+   never trust the lane's claim — then
+   `git worktree remove .claude/worktrees/lane-<name>` and
+   `git branch -d lane/<name>`.
+4. Log the merge in the status file like any other slice, including any
+   follow-ups the lane reported (e.g. corpus flips, which remain YOUR job as
+   the single writer).
+5. If the lane's diff touches out-of-scope files or its ratchet claim fails
+   your re-run, do not merge — record what happened and either re-brief a
+   fresh lane or absorb the salvageable parts as a normal slice.
+
+Run scouts freely; keep at most 1–2 lanes in flight so merges stay reviewable.
+
 ## Asking the user
 
 Work autonomously. Interrupt only for: destructive/irreversible actions,

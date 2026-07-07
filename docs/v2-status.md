@@ -32,9 +32,11 @@ the only memory the next session has. Update it every commit.
    HarfRust/Skrifa text-outline coordinate drift only.
 2. Initial M7 public Rust API crate exists at `crates/rive`: `File::import`,
    artboard listing/selection, artboard instantiation, one-shot advance/draw
-   through the renderer traits, and raw runtime/graph escape hatches. Highest
-   priority next target is either the first C ABI facade over that crate or the
-   C++/Rust performance baseline needed to ratchet M7.
+   through the renderer traits, and raw runtime/graph escape hatches. First C
+   ABI facade exists at `crates/rive-capi` with import/free and artboard
+   metadata functions. Highest priority next target is the C++/Rust performance
+   baseline needed to ratchet M7; after that, expand the C ABI to instance
+   advance/draw once the ownership shape is measured.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -303,6 +305,15 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-07: [M7] Added the first runtime C ABI crate, `rive-capi`. It
+  publishes an opaque `RiveFile` handle, `rive_file_import`/`rive_file_free`,
+  artboard count/name accessors, animation/state-machine count accessors, and
+  `include/rive_capi.h`. Focused `cargo test -p rive-capi` passes against the
+  reference `shapetest.riv` fixture; full `cargo test --workspace` passes, and
+  `make golden-compare` remains unchanged at `exact=263`,
+  `exact-segments=584`, `diverges=0`, `unsupported-feature=32`, `not-yet=0`.
+  Next M7 slice should create the C++/Rust performance baseline before
+  expanding C-owned artboard instances or draw.
 - 2026-07-07: [M7] Added the initial user-facing `rive` crate. The public
   facade imports `.riv` bytes, exposes borrowed artboard handles, instantiates
   artboards with their file/graph context attached, re-exports the renderer

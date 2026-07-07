@@ -160,6 +160,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "rive-capi"
+version = "0.1.0"
+dependencies = [
+ "rive",
+]
+
+[[package]]
 name = "rive-codegen"
 version = "0.1.0"
 dependencies = [

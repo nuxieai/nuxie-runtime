@@ -28,14 +28,13 @@ the only memory the next session has. Update it every commit.
 
 1. Active `not-yet`: none. The M6 queue is now explicit
    `unsupported-feature` diagnostics only.
-2. Highest-priority M6 slice: `echo_show_demo.riv`
-   (`rust-runner-unsupported:text-joystick-nested-remap-gradient-order`).
-   Start by capturing the C++ intermediate child gradient shader-cache side
-   effects during nested-remap advance before broadening runtime behavior.
-   `superbowl.riv` is parked behind
-   `rust-runner-unsupported:nested-state-machine-layout-update`.
-3. Other parked one-file M6 queues include `nested-state-machine-layout-update`
-   (`superbowl.riv`), `layout-component-paint` (`rewards_demo.riv`),
+2. Highest-priority M6 slice: `superbowl.riv`
+   (`rust-runner-unsupported:nested-state-machine-layout-update`). Start with
+   focused C++/Rust layout-bound probes for the Summary nested layout host.
+   `echo_show_demo.riv` stays parked behind
+   `rust-runner-unsupported:joystick-nested-remap-gradient-update-order`.
+3. Other parked one-file M6 queues include `joystick-nested-remap-gradient-update-order`
+   (`echo_show_demo.riv`), `layout-component-paint` (`rewards_demo.riv`),
    `nested-node-transform-data-bind` (`car_widgets_v01.riv`),
    `nested-layout-clip-data-bind` (`stateful_multi_property.riv`), and
    `nested-stateful-view-model-property` (`stateful_nested.riv`). Gated
@@ -598,6 +597,21 @@ the only memory the next session has. Update it every commit.
   `diverges=0`, `unsupported-feature=48`, `not-yet=0`, parked
   `M6=6 gated=6 harness=36`; `cargo test --workspace` passes. Next target is
   `echo_show_demo.riv` (`text-joystick-nested-remap-gradient-order`).
+- 2026-07-07: [M6] Sharpened `echo_show_demo.riv` from
+  `text-joystick-nested-remap-gradient-order` to
+  `joystick-nested-remap-gradient-update-order` after a focused bypass proved
+  the first mismatch happens before `sample seconds=0`, in gradient shader
+  creation rather than draw geometry. Paint allocation count still matches C++
+  exactly (`972` render paints), but C++ creates nonzero intermediate shaders
+  for the joystick-driven nested-remap fill pair before later zero-opacity
+  versions; Rust only observes the final zero-opacity state. An initial-state
+  prewarm experiment produced 160 pre-sample gradients vs C++'s 107, confirming
+  this needs C++-style dirty/update interleaving for nested remap gradient side
+  effects, not a broader pre-draw scan. Full `make golden-compare` remains
+  `exact=247`, `exact-segments=568`, `diverges=0`, `unsupported-feature=48`,
+  `not-yet=0`, parked `M6=6 gated=6 harness=36`; `cargo test --workspace`
+  passes. Next target is `superbowl.riv`
+  (`nested-state-machine-layout-update`).
 - 2026-07-02: `rive-runtime` owns static draw emission through
   `rive-render-api`; `rust-golden-runner` now only orchestrates import,
   artboard selection, stream markers, and recording output.

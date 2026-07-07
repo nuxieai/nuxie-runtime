@@ -897,9 +897,9 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
-    if let Some(data_bind) = unsupported_joystick_nested_remap_gradient_order(artboard) {
+    if let Some(data_bind) = unsupported_joystick_nested_remap_gradient_update_order(artboard) {
         bail!(
-            "unsupported: text-joystick-nested-remap-gradient-order in Rust golden runner (data bind global {} target global {:?} property key {})",
+            "unsupported: joystick-nested-remap-gradient-update-order in Rust golden runner (data bind global {} target global {:?} property key {})",
             data_bind.global_id,
             data_bind.target_global,
             data_bind.property_key
@@ -1082,7 +1082,7 @@ fn artboard_has_joystick_nested_remap_dependents(artboard: &ArtboardGraph) -> bo
         .any(|joystick| !joystick.nested_remap_dependents.is_empty())
 }
 
-fn unsupported_joystick_nested_remap_gradient_order(
+fn unsupported_joystick_nested_remap_gradient_update_order(
     artboard: &ArtboardGraph,
 ) -> Option<&rive_graph::DataBindNode> {
     if !artboard_has_joystick_nested_remap_dependents(artboard) {

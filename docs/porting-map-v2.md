@@ -14,11 +14,23 @@ verification model, and the porting method for everything that remains.
 
 A Rust runtime that loads real `.riv` files, instantiates artboards, advances
 animations/state machines with pointer input, resolves data binding, and draws
-through the existing C++ Rive Renderer via FFI. Everything but the renderer
-and the Luau VM is Rust: the subsystems the C++ runtime delegates to vendored
-C/C++ libraries use Rust-native equivalents instead (see #V2-7), chosen by the
-rule that spec-defined behavior may swap engines while implementation-defined
-semantics keep the same engine.
+through the existing C++ Rive Renderer via FFI. Every subsystem the C++
+runtime delegates to vendored C/C++ libraries uses a Rust-native equivalent
+instead (see #V2-7), chosen by the rule that spec-defined behavior may swap
+engines while implementation-defined semantics keep the same engine — where a
+faithful, upstream-conformance-verified port (HarfRust, luaur) counts as the
+same engine.
+
+**Pure-Rust end state (policy, 2026-07-07):** the shipped runtime contains no
+C/C++ under the covers. FFI appears in exactly two sanctioned forms: (1) the
+feature-gated renderer bridge, whose removal is the whole point of Phase R
+(`docs/renderer-port-map.md`), and (2) untriggered fallbacks (Yoga behind the
+layout trait, mlua behind the scripting seam) — documented contingencies with
+zero code, zero Cargo.lock presence, and zero build cost, whose activation
+requires a logged Decision and creates an obligation to return to the
+Rust-native path. The C++ golden runner is test scaffolding, not product, and
+stays C++ deliberately: it is the oracle the Rust runtime is verified
+against.
 
 Definition of done for every milestone: **N corpus files produce output
 identical to the C++ runtime**, never "behavior X is pinned."

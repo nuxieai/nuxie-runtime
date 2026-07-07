@@ -240,6 +240,48 @@ the only memory the next session has. Update it every commit.
     skip the entire prepare phase. Pairs with item 10's slices; do 10(1)
     deep-clone removal first, then this prerequisite, then slices by rank.
 
+12. SCOUT REPORT — C++ dirt-gating audit (port-ready, cited against
+    reference @7c778d13). Confirms Rust already mirrors the
+    updateComponents loop skeleton (add_dirt / update_components_with_hook
+    / dirt_depth vs artboard.cpp:1184-1223) — the gap is that per-frame
+    work is not BEHIND the gates. Core primitives to port exactly:
+    Component::addDirt early-out when bits already set (component.cpp:
+    34-38, the single most important line: repeated writes collapse to one
+    bit test); dirt cleared BEFORE update() runs (artboard.cpp:1209);
+    DirtDepth lowered by upstream re-dirt triggers inner-loop break +
+    re-sweep (artboard.cpp:978-990, 1215-1218); advanceAndApply settles
+    with up to 5 updatePass loops breaking when Components dirt clears
+    (state_machine_instance.cpp:2589-2615). Clean-frame contract: SM
+    layers still APPLY keyframes every frame, but generated setters'
+    equality early-outs mean steady values raise zero dirt, so
+    updateComponents returns at its first branch and NO component is
+    visited — draw() never checks dirt, it reads coherent caches.
+    Ranked slices:
+    (1) Idempotent property writes + the *Changed() dirt-raiser table
+        (node.cpp:9-10, transform_component.cpp:54-61,119-121,
+        world_transform_component.cpp:10-28, parametric_path.cpp:63-66,
+        path_vertex.cpp:21-30, stroke.cpp:37-41,
+        linear_gradient.cpp:203-215). Turns steady-value animation frames
+        into zero-dirt frames.
+    (2) Geometry behind Path dirt (= item 11 slices 1-3), incl. the
+        invisible-shape deferral bonus: canDeferPathUpdate +
+        m_deferredPathDirt (shape.cpp:35-52, path.cpp:344-347,361-365,
+        path_composer.cpp:29-38,44-48) — opacity-0 shapes never build
+        geometry.
+    (3) Sorted draw list behind DrawOrder dirt only (raisers:
+        draw_rules.cpp:40, draw_target.cpp:31); clipping ops behind
+        Clipping dirt (artboard.cpp:1146-1149).
+    (4) Render paints behind Paint|Stops|RenderOpacity (= item 11 slice
+        4).
+    (5) Data-bind dirty queues instead of scans (data_bind_container.cpp:
+        145-258, data_bind.cpp:487-511, core.cpp:25-46 push observers with
+        one-branch no-subscriber fast path, artboard.cpp:1169-1173).
+    COMBINED SEQUENCE across items 10-12: 10(1) kill per-frame definition
+    clones -> 12(1) idempotent writes/raiser table -> 11 prerequisite +
+    retention slices in rank order -> 10(2-4)/12(5) as flamegraph data
+    directs. Full ComponentDirt bit inventory with consumers is in the
+    scout transcript; component_dirt.hpp:8-81 is the source of truth.
+
 ## Known Divergences
 
 - There are no active `status = "not-yet"` entries.

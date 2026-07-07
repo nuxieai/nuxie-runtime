@@ -4016,263 +4016,94 @@ fn runtime_owned_view_model_property_children(
 
 impl RuntimeOwnedViewModelInstance {
     pub fn new(file: &RuntimeFile, view_model_index: usize) -> Option<Self> {
+        Self::from_view_model(file, view_model_index, None)
+    }
+
+    pub fn from_instance(
+        file: &RuntimeFile,
+        view_model_index: usize,
+        instance_index: usize,
+    ) -> Option<Self> {
         let view_model = file.view_model(view_model_index)?;
-        let mut property_names = Vec::new();
-        let mut numbers = Vec::new();
-        let mut booleans = Vec::new();
-        let mut strings = Vec::new();
-        let mut colors = Vec::new();
-        let mut enums = Vec::new();
-        let mut symbol_list_indices = Vec::new();
-        let mut lists = Vec::new();
-        let mut assets = Vec::new();
-        let mut artboards = Vec::new();
-        let mut triggers = Vec::new();
-        let mut view_models = Vec::new();
-        for (property_index, property) in view_model.properties.into_iter().enumerate() {
-            property_names.push((
-                property
-                    .string_property("name")
-                    .unwrap_or_default()
-                    .to_owned(),
-                property_index,
-            ));
-            match property.type_name {
-                "ViewModelPropertyNumber" => numbers.push(RuntimeOwnedViewModelNumber {
-                    property_index,
-                    value: 0.0,
-                }),
-                "ViewModelPropertyBoolean" => booleans.push(RuntimeOwnedViewModelBoolean {
-                    property_index,
-                    value: false,
-                }),
-                "ViewModelPropertyString" => strings.push(RuntimeOwnedViewModelString {
-                    property_index,
-                    value: Vec::new(),
-                }),
-                "ViewModelPropertyColor" => colors.push(RuntimeOwnedViewModelColor {
-                    property_index,
-                    value: 0xFF000000,
-                }),
-                "ViewModelPropertyEnum"
-                | "ViewModelPropertyEnumCustom"
-                | "ViewModelPropertyEnumSystem" => enums.push(RuntimeOwnedViewModelEnum {
-                    property_index,
-                    value: 0,
-                }),
-                "ViewModelPropertySymbolListIndex" => {
-                    symbol_list_indices.push(RuntimeOwnedViewModelSymbolListIndex {
-                        property_index,
-                        value: 0,
-                    })
-                }
-                "ViewModelPropertyList" => lists.push(RuntimeOwnedViewModelList {
-                    property_index,
-                    item_count: 0,
-                }),
-                "ViewModelPropertyAsset" | "ViewModelPropertyAssetImage" => {
-                    assets.push(RuntimeOwnedViewModelAsset {
-                        property_index,
-                        value: u64::from(u32::MAX),
-                    })
-                }
-                "ViewModelPropertyArtboard" => artboards.push(RuntimeOwnedViewModelArtboard {
-                    property_index,
-                    value: 0,
-                }),
-                "ViewModelPropertyTrigger" => triggers.push(RuntimeOwnedViewModelTrigger {
-                    property_index,
-                    value: 0,
-                }),
-                "ViewModelPropertyViewModel" => {
-                    let referenced_view_model_index =
-                        property.uint_property("viewModelReferenceId").and_then(
-                            |view_model_reference_id| usize::try_from(view_model_reference_id).ok(),
-                        );
-                    let referenced_view_model = referenced_view_model_index
-                        .and_then(|view_model_index| file.view_model(view_model_index));
-                    let path = [view_model_index, property_index];
-                    let value = if referenced_view_model.is_some() {
-                        RuntimeViewModelPointer::OwnedGenerated {
-                            view_model_index,
-                            property_index,
-                            path_key: runtime_owned_view_model_path_key(&path),
-                        }
-                    } else {
-                        RuntimeViewModelPointer::Null
-                    };
-                    let children = if referenced_view_model.is_some() {
-                        referenced_view_model_index
-                            .map(|referenced_view_model_index| {
-                                runtime_owned_view_model_view_model_children(
-                                    file,
-                                    referenced_view_model_index,
-                                    &path,
-                                    &[view_model_index],
-                                )
-                            })
-                            .unwrap_or_default()
-                    } else {
-                        Vec::new()
-                    };
-                    let view_model_instance_ids = referenced_view_model
-                        .map(|view_model| {
-                            view_model
-                                .instances
-                                .into_iter()
-                                .map(|instance| instance.object.id)
-                                .collect()
-                        })
-                        .unwrap_or_default();
-                    view_models.push(RuntimeOwnedViewModelViewModel {
-                        property_index,
-                        property_name: property.string_property("name").unwrap_or_default().to_owned(),
-                        value,
-                        referenced_view_model_index,
-                        property_names: referenced_view_model_index
-                            .map(|view_model_index| {
-                                runtime_owned_view_model_property_names(file, view_model_index)
-                            })
-                            .unwrap_or_default(),
-                        numbers: referenced_view_model_index
-                            .map(|view_model_index| {
-                                runtime_owned_view_model_numbers(file, view_model_index)
-                            })
-                            .unwrap_or_default(),
-                        imported_numbers: referenced_view_model_index
-                            .map(|view_model_index| {
-                                runtime_owned_view_model_imported_numbers(file, view_model_index)
-                            })
-                            .unwrap_or_default(),
-                        booleans: referenced_view_model_index
-                            .map(|view_model_index| {
-                                runtime_owned_view_model_booleans(file, view_model_index)
-                            })
-                            .unwrap_or_default(),
-                        imported_booleans: referenced_view_model_index
-                            .map(|view_model_index| {
-                                runtime_owned_view_model_imported_booleans(file, view_model_index)
-                            })
-                            .unwrap_or_default(),
-                        strings: referenced_view_model_index
-                            .map(|view_model_index| {
-                                runtime_owned_view_model_strings(file, view_model_index)
-                            })
-                            .unwrap_or_default(),
-                        imported_strings: referenced_view_model_index
-                            .map(|view_model_index| {
-                                runtime_owned_view_model_imported_strings(file, view_model_index)
-                            })
-                            .unwrap_or_default(),
-                        colors: referenced_view_model_index
-                            .map(|view_model_index| {
-                                runtime_owned_view_model_colors(file, view_model_index)
-                            })
-                            .unwrap_or_default(),
-                        imported_colors: referenced_view_model_index
-                            .map(|view_model_index| {
-                                runtime_owned_view_model_imported_colors(file, view_model_index)
-                            })
-                            .unwrap_or_default(),
-                        enums: referenced_view_model_index
-                            .map(|view_model_index| {
-                                runtime_owned_view_model_enums(file, view_model_index)
-                            })
-                            .unwrap_or_default(),
-                        imported_enums: referenced_view_model_index
-                            .map(|view_model_index| {
-                                runtime_owned_view_model_imported_enums(file, view_model_index)
-                            })
-                            .unwrap_or_default(),
-                        symbol_list_indices: referenced_view_model_index
-                            .map(|view_model_index| {
-                                runtime_owned_view_model_symbol_list_indices(
-                                    file,
-                                    view_model_index,
-                                )
-                            })
-                            .unwrap_or_default(),
-                        imported_symbol_list_indices: referenced_view_model_index
-                            .map(|view_model_index| {
-                                runtime_owned_view_model_imported_symbol_list_indices(
-                                    file,
-                                    view_model_index,
-                                )
-                            })
-                            .unwrap_or_default(),
-                        lists: referenced_view_model_index
-                            .map(|view_model_index| {
-                                runtime_owned_view_model_lists(file, view_model_index)
-                            })
-                            .unwrap_or_default(),
-                        imported_lists: referenced_view_model_index
-                            .map(|view_model_index| {
-                                runtime_owned_view_model_imported_lists(file, view_model_index)
-                            })
-                            .unwrap_or_default(),
-                        assets: referenced_view_model_index
-                            .map(|view_model_index| {
-                                runtime_owned_view_model_assets(file, view_model_index)
-                            })
-                            .unwrap_or_default(),
-                        imported_assets: referenced_view_model_index
-                            .map(|view_model_index| {
-                                runtime_owned_view_model_imported_assets(file, view_model_index)
-                            })
-                            .unwrap_or_default(),
-                        artboards: referenced_view_model_index
-                            .map(|view_model_index| {
-                                runtime_owned_view_model_artboards(file, view_model_index)
-                            })
-                            .unwrap_or_default(),
-                        imported_artboards: referenced_view_model_index
-                            .map(|view_model_index| {
-                                runtime_owned_view_model_imported_artboards(file, view_model_index)
-                            })
-                            .unwrap_or_default(),
-                        triggers: referenced_view_model_index
-                            .map(|view_model_index| {
-                                runtime_owned_view_model_triggers(file, view_model_index)
-                            })
-                            .unwrap_or_default(),
-                        imported_triggers: referenced_view_model_index
-                            .map(|view_model_index| {
-                                runtime_owned_view_model_imported_triggers(file, view_model_index)
-                            })
-                            .unwrap_or_default(),
-                        view_model_instance_ids,
-                        children,
-                        imported_children: referenced_view_model_index
-                            .and_then(|referenced_view_model_index| {
-                                file.view_model(referenced_view_model_index)
-                                    .map(|view_model| {
-                                        view_model
-                                            .instances
-                                            .into_iter()
-                                            .map(|instance| {
-                                                (
-                                                    instance.object.id,
-                                                    runtime_owned_view_model_view_model_children_for_instance(
-                                                        file,
-                                                        referenced_view_model_index,
-                                                        instance.object,
-                                                        &path,
-                                                        &[view_model_index],
-                                                    ),
-                                                )
-                                            })
-                                            .collect()
-                                    })
-                            })
-                            .unwrap_or_default(),
-                    });
-                }
-                _ => {}
-            }
-        }
+        let instance = view_model.instances.into_iter().nth(instance_index)?;
+        Self::from_view_model(file, view_model_index, Some(instance.object))
+    }
+
+    fn from_view_model(
+        file: &RuntimeFile,
+        view_model_index: usize,
+        instance: Option<&RuntimeObject>,
+    ) -> Option<Self> {
+        file.view_model(view_model_index)?;
+        let use_generated_defaults = instance.is_none();
+        let parent_path = [view_model_index];
+        let numbers = instance
+            .map(|instance| {
+                runtime_owned_view_model_numbers_for_instance(file, view_model_index, instance)
+            })
+            .unwrap_or_else(|| runtime_owned_view_model_numbers(file, view_model_index));
+        let booleans = instance
+            .map(|instance| {
+                runtime_owned_view_model_booleans_for_instance(file, view_model_index, instance)
+            })
+            .unwrap_or_else(|| runtime_owned_view_model_booleans(file, view_model_index));
+        let strings = instance
+            .map(|instance| {
+                runtime_owned_view_model_strings_for_instance(file, view_model_index, instance)
+            })
+            .unwrap_or_else(|| runtime_owned_view_model_strings(file, view_model_index));
+        let colors = instance
+            .map(|instance| {
+                runtime_owned_view_model_colors_for_instance(file, view_model_index, instance)
+            })
+            .unwrap_or_else(|| runtime_owned_view_model_colors(file, view_model_index));
+        let enums = instance
+            .map(|instance| {
+                runtime_owned_view_model_enums_for_instance(file, view_model_index, instance)
+            })
+            .unwrap_or_else(|| runtime_owned_view_model_enums(file, view_model_index));
+        let symbol_list_indices = instance
+            .map(|instance| {
+                runtime_owned_view_model_symbol_list_indices_for_instance(
+                    file,
+                    view_model_index,
+                    instance,
+                )
+            })
+            .unwrap_or_else(|| {
+                runtime_owned_view_model_symbol_list_indices(file, view_model_index)
+            });
+        let lists = instance
+            .map(|instance| {
+                runtime_owned_view_model_lists_for_instance(file, view_model_index, instance)
+            })
+            .unwrap_or_else(|| runtime_owned_view_model_lists(file, view_model_index));
+        let assets = instance
+            .map(|instance| {
+                runtime_owned_view_model_assets_for_instance(file, view_model_index, instance)
+            })
+            .unwrap_or_else(|| runtime_owned_view_model_assets(file, view_model_index));
+        let artboards = instance
+            .map(|instance| {
+                runtime_owned_view_model_artboards_for_instance(file, view_model_index, instance)
+            })
+            .unwrap_or_else(|| runtime_owned_view_model_artboards(file, view_model_index));
+        let triggers = instance
+            .map(|instance| {
+                runtime_owned_view_model_triggers_for_instance(file, view_model_index, instance)
+            })
+            .unwrap_or_else(|| runtime_owned_view_model_triggers(file, view_model_index));
+        let view_models = runtime_owned_view_model_property_children(
+            file,
+            view_model_index,
+            instance,
+            &parent_path,
+            &[view_model_index],
+            use_generated_defaults,
+        );
         Some(Self {
             view_model_index,
-            property_names,
+            property_names: runtime_owned_view_model_property_names(file, view_model_index),
             numbers,
             booleans,
             strings,

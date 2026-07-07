@@ -83,20 +83,18 @@ the only memory the next session has. Update it every commit.
    convention-change decision, not a harness fix. Keep them
    `milestone = "harness"` until decided.
 
-8. DECIDED (see Decisions 2026-07-06): adopt the reference-test view-model
-   binding convention. Run as ONE coordinated slice: (a) change BOTH
-   runners (tools/golden-runner and tools/rust-golden-runner) to bind
-   named view-model instance 0 when the selected artboard has a serialized
-   `viewModelId` (matching `createViewModelInstance(viewModelId, 0)` in
-   the C++ unit tests) instead of a blank default instance; (b) in the
-   same slice, re-verify every affected exact entry (~66) — the ratchet
-   must be green in the same commit, with any legitimately-changed
-   expectations re-confirmed by direct C++/Rust stream pairs, never by
-   loosening modes; (c) then flip `data_viz_demo` and
-   `data_binding_artboards_test` from `milestone = "harness"` to
-   `not-yet` and triage them. If any exact entry cannot be re-confirmed
-   under the new convention, stop and record it as a Known Divergence
-   rather than shipping a partial convention.
+8. REVISED (see Decisions 2026-07-07): do not adopt the global named
+   view-model instance 0 binding convention yet. The coordinated runner
+   experiment recovered `scripted_color.riv` after binding the selected
+   artboard's own owned view-model context, but still left 48 exact entries
+   divergent because serialized list data makes C++ `ArtboardComponentList`
+   instantiate and draw item artboards while Rust still has only partial
+   component-list runtime support. Keep `data_viz_demo` and
+   `data_binding_artboards_test` in `milestone = "harness"` under the
+   current blank-default runner convention. Reopen the convention only after
+   Rust supports `ArtboardComponentList` item artboard instancing, draw,
+   layout, and view-model data-context binding well enough for the affected
+   exact corpus to reverify green in the same commit.
 
 9. SCOUT RESULT (read-only pre-classification of the 34 recovered harness
    files; streams/diffs in the session scratchpad — trust but re-verify on
@@ -668,6 +666,18 @@ the only memory the next session has. Update it every commit.
   The experiment was fully reverted. Next pass should inspect the concrete
   joystick/nested-remap data path that selects paint global 636 in Rust before
   first draw, rather than adding another generic runner loop.
+- 2026-07-07: [M6] Rejected the global named view-model instance 0 runner
+  convention for now. The coordinated experiment recovered `scripted_color.riv`
+  after binding the selected artboard's own owned context, but still made 48
+  exact entries diverge because C++ `ArtboardComponentList` instantiates and
+  draws serialized list item artboards that Rust does not yet instantiate.
+  `RuntimeOwnedViewModelInstance::from_instance` remains as tested groundwork
+  for future serialized-instance binding, but both golden runners stay on the
+  blank-default convention. Full `make golden-compare` remains `exact=248`,
+  `exact-segments=569`, `diverges=0`, `unsupported-feature=47`,
+  `not-yet=0`, parked `M6=5 gated=6 harness=36`; `cargo test --workspace`
+  passes. Next target remains `echo_show_demo.riv`
+  (`joystick-nested-remap-gradient-update-order`).
 - 2026-07-02: `rive-runtime` owns static draw emission through
   `rive-render-api`; `rust-golden-runner` now only orchestrates import,
   artboard selection, stream markers, and recording output.
@@ -845,14 +855,17 @@ the only memory the next session has. Update it every commit.
   benchmarks/fuzz/API drafts — and the feature-gated scripting spike).
   Never two writers on adjacent critical-path runtime slices.
 
-- 2026-07-06: View-model binding convention decided: both golden runners
-  bind named view-model instance 0 (reference unit-test convention,
-  `createViewModelInstance(viewModelId, 0)`) when the selected artboard
-  has a serialized `viewModelId`, replacing the blank default instance.
-  Rationale: matches how the C++ unit tests exercise these files, recovers
-  the two harness residuals, and aligns default-instance semantics before
-  M7 freezes the public API. Must land as one coordinated slice with all
-  affected exact entries re-verified in the same commit.
+- 2026-07-07: View-model binding convention revised: keep the runners on
+  the blank default view-model instance convention until Rust has real
+  `ArtboardComponentList` item artboard runtime support. The named-instance
+  experiment (`createViewModelInstance(viewModelId, 0)` / serialized
+  instance 0 in Rust) recovered `scripted_color.riv` only after adding the
+  selected artboard's own owned-context binding, but still made 48 exact
+  entries diverge. Direct stream inspection of `component_list_1.riv`
+  showed the decisive gap: C++ instantiates and draws list item artboards
+  from serialized list data, while Rust does not yet. Treat named-instance
+  binding as blocked on component-list item instancing, draw, layout, and
+  data-context parity; do not ship a partial runner convention.
 
 ## Log
 

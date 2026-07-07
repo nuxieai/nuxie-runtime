@@ -18564,6 +18564,48 @@ fn state_machine_default_viewmodel_number_bind_source_matches_cpp_probe() {
 }
 
 #[test]
+fn owned_view_model_from_instance_uses_serialized_number_values() {
+    let label = "synthetic/runtime_owned_viewmodel_from_instance_number.riv";
+    let bytes = synthetic_state_machine_default_viewmodel_number_blend_state(9490);
+
+    fn x_after_owned_context_bind(bytes: &[u8], instance_index: usize, label: &str) -> f32 {
+        let (runtime, mut rust) = read_rust_instance_from_bytes(bytes, label);
+        let mut state_machine = rust
+            .state_machine_instance(0)
+            .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+        let context = RuntimeOwnedViewModelInstance::from_instance(&runtime, 0, instance_index)
+            .unwrap_or_else(|| {
+                panic!("missing Rust owned serialized view-model instance {instance_index}")
+            });
+
+        assert!(
+            state_machine.bind_owned_view_model_context(&context),
+            "{label} failed to bind owned serialized view-model context {instance_index}"
+        );
+        assert!(
+            rust.advance_state_machine_instance(&mut state_machine, 0.0),
+            "{label} failed to advance after binding owned serialized view-model context {instance_index}"
+        );
+        transform_x(&rust, 1)
+    }
+
+    assert_close(
+        x_after_owned_context_bind(&bytes, 0, label),
+        20.0,
+        "serialized instance 0 number",
+    );
+    assert_close(
+        x_after_owned_context_bind(&bytes, 1, label),
+        15.5,
+        "serialized instance 1 number",
+    );
+
+    let (runtime, _) = read_rust_instance_from_bytes(&bytes, label);
+    assert!(RuntimeOwnedViewModelInstance::from_instance(&runtime, 0, 2).is_none());
+    assert!(RuntimeOwnedViewModelInstance::from_instance(&runtime, 1, 0).is_none());
+}
+
+#[test]
 fn state_machine_name_based_number_bind_source_is_unresolved_like_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");

@@ -1746,6 +1746,22 @@ fn nested_child_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> boo
     {
         return true;
     }
+    if matches!(
+        data_bind.target_type_name,
+        Some(
+            "ViewModelInstanceBoolean"
+                | "ViewModelInstanceColor"
+                | "ViewModelInstanceString"
+                | "ViewModelInstanceEnum"
+                | "ViewModelInstanceNumber"
+        )
+    )
+        // ViewModelInstance*Base::propertyValuePropertyKey in generated/viewmodel.
+        && matches!(data_bind.property_key, 555 | 560 | 561 | 575 | 593)
+        && data_bind.converter_global.is_none()
+    {
+        return true;
+    }
     (data_bind.target_type_name == Some("Ellipse")
         && matches!(data_bind.property_key, 20 | 21)
         && data_bind.converter_global.is_none())

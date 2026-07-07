@@ -2265,6 +2265,18 @@ impl ArtboardInstance {
                 self.color_property(source_local, property_value_key)
                     .map(RuntimeDataBindGraphValue::Color)
             }
+            RuntimeDataBindGraphValue::Boolean(_) => {
+                let property_value_key =
+                    property_key_for_name("ViewModelInstanceBoolean", "propertyValue")?;
+                self.bool_property(source_local, property_value_key)
+                    .map(RuntimeDataBindGraphValue::Boolean)
+            }
+            RuntimeDataBindGraphValue::Enum(_) => {
+                let property_value_key =
+                    property_key_for_name("ViewModelInstanceEnum", "propertyValue")?;
+                self.uint_property(source_local, property_value_key)
+                    .map(RuntimeDataBindGraphValue::Enum)
+            }
             RuntimeDataBindGraphValue::Asset(_) => {
                 let property_value_key =
                     property_key_for_name("ViewModelInstanceAssetImage", "propertyValue")?;

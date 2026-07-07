@@ -1191,6 +1191,13 @@ impl ArtboardInstance {
         value: bool,
     ) -> bool {
         match self.slot(local_id).and_then(|slot| slot.type_name) {
+            Some("Artboard") if property_key_for_name("Artboard", "clip") == Some(property_key) => {
+                if self.clip == value {
+                    return false;
+                }
+                self.clip = value;
+                true
+            }
             Some("NestedArtboard")
                 if property_key_for_name("NestedArtboard", "isPaused") == Some(property_key) =>
             {
@@ -2450,6 +2457,20 @@ mod tests {
                 .dirt
                 .contains(ComponentDirt::PAINT | ComponentDirt::STOPS)
         );
+    }
+
+    #[test]
+    fn artboard_clip_property_updates_draw_cache() {
+        let mut artboard = synthetic_component(0, 0);
+        artboard.type_name = "Artboard";
+        let mut instance = synthetic_instance(vec![artboard], vec![0]);
+        let clip_key = property_key_for_name("Artboard", "clip").expect("Artboard.clip key");
+
+        assert!(instance.clip);
+        assert!(instance.set_bool_property(0, clip_key, false));
+        assert!(!instance.clip);
+        assert!(instance.set_bool_property(0, clip_key, true));
+        assert!(instance.clip);
     }
 
     #[test]

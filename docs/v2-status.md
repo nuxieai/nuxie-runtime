@@ -5,13 +5,13 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 583 across 262 files (strict
-  exact=572/251; tolerant=11/11; structural=0/0)
-- Current compare: `make golden-compare` reports exact=262,
-  exact-segments=583, diverges=0, unsupported-feature=33, not-yet=0
+- Exact-status segments (file × sample): 584 across 263 files (strict
+  exact=573/252; tolerant=11/11; structural=0/0)
+- Current compare: `make golden-compare` reports exact=263,
+  exact-segments=584, diverges=0, unsupported-feature=32, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
-  M6=1 gated=6 harness=26
-- Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes**
+  gated=6 harness=26
+- Current milestone: **M7 — Public `rive` API + C ABI; perf within target of C++**
 
 ## Milestones
 
@@ -21,30 +21,30 @@ the only memory the next session has. Update it every commit.
 - [x] M3: Interactive files exact under scripted pointer input
 - [x] M4: Nested artboards/lists exact for corpus entries whose first verified blocker is not M5/M6/gated
 - [x] M5: Data binding exact incl. external view-model mutation
-- [ ] M6: Layout + text verified per declared corpus modes; audio/scripting gated with diagnostics
+- [x] M6: Layout + text verified per declared corpus modes; audio/scripting gated with diagnostics
 - [ ] M7: Public `rive` API + C ABI; perf within target of C++
 
 ## Next
 
-1. Active `not-yet` queue is empty. `rewards_demo.riv` is exact-status under
+1. Active `not-yet` and `milestone = "M6"` queues are empty.
+   `rewards_demo.riv` is exact-status under
    `verification = "tolerant(0.0005)"`; the tolerance covers residual
    HarfRust/Skrifa text-outline coordinate drift only.
-2. Highest-priority M6 target is `stateful_nested.riv`
-   (`rust-runner-unsupported:nested-stateful-view-model-property`). Start by
-   admitting a focused exact candidate and localizing the first real stream
-   mismatch now that `stateful_multi_property.riv` covers nested layout clip
-   and style display data binds.
-3. The former `nested-node-transform-data-bind`,
+2. Highest-priority next target is M7 ship surface. Start by auditing the
+   current public API/C ABI/perf-benchmark surface against #V2-8, then take
+   the smallest slice that either publishes a missing API/ABI seam or creates
+   the C++/Rust performance baseline needed to ratchet M7.
+3. The former `nested-stateful-view-model-property`,
+   `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
    `nested-feather-gradient-space` unsupported queues are empty.
-4. Remaining parked one-file M6 queue is `nested-stateful-view-model-property`
-   (`stateful_nested.riv`). Gated one-file diagnostics include
-   `scripted-data-context`
+4. Remaining non-exact entries are intentionally parked as `gated` or
+   `harness`. Gated diagnostics include `scripted-data-context`
    (`scripted_data_context.riv`), `scripted-transition-condition` (2 gated),
    `scripted-path-effects` (1 gated), and `text-polygon-sibling`
    (`bankcard.riv`). Keep these parked queues as explicit unsupported/gated
-   work until a focused slice can either promote a file or replace the guard
-   with a sharper diagnostic.
+   work until an M7 or scripting/harness slice can either promote a file or
+   replace the guard with a sharper diagnostic.
    The old `text-input` manifest queue is empty.
 5. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
@@ -119,7 +119,8 @@ the only memory the next session has. Update it every commit.
 ## Known Divergences
 
 - There are no active `status = "not-yet"` entries.
-- Remaining M6 parked work is behind explicit unsupported-feature diagnostics.
+- There is no remaining `milestone = "M6"` parked work; remaining non-exact
+  files are behind explicit `gated` or `harness` diagnostics.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -301,6 +302,18 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-07: [M6] Promoted `stateful_nested.riv` to exact-status and closed
+  the current M6 manifest queue. The old
+  `nested-stateful-view-model-property` guard was cleared by admitting nested
+  child `ViewModelInstance*::propertyValue` data binds, propagating boolean
+  and enum nested host values alongside the existing string/color/number
+  path, allowing static text to accept the same passive view-model instance
+  binds, and syncing bound `Artboard.clip` values into the draw-time clip
+  cache. Focused exact compare passes; full `make golden-compare` reports
+  `exact=263`, `exact-segments=584`, `diverges=0`,
+  `unsupported-feature=32`, `not-yet=0`, parked
+  `gated=6 harness=26`; `cargo test --workspace` passes. Next target is M7
+  ship surface: public API/C ABI/perf baseline.
 - 2026-07-07: [M6] Promoted `stateful_multi_property.riv` to exact-status.
   The old `nested-layout-clip-data-bind` guard was cleared by adding boolean
   source-to-target artboard property bindings, admitting nested `Artboard.clip`

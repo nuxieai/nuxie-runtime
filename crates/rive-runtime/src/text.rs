@@ -472,6 +472,17 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
             property_key_for_name("LayoutComponentStyle", "displayValue") == Some(property_key)
                 && data_bind.converter_global.is_none()
         }
+        Some(
+            "ViewModelInstanceBoolean"
+            | "ViewModelInstanceColor"
+            | "ViewModelInstanceString"
+            | "ViewModelInstanceEnum"
+            | "ViewModelInstanceNumber",
+        ) => {
+            property_key_for_name(data_bind.target_type_name.unwrap_or(""), "propertyValue")
+                == Some(property_key)
+                && data_bind.converter_global.is_none()
+        }
         Some("Solo") => property_key_for_name("Solo", "activeComponentId") == Some(property_key),
         Some("TextStylePaint") => {
             property_key_for_name("TextStyle", "fontSize") == Some(property_key)

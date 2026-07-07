@@ -5,10 +5,10 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 578 across 257 files (strict
-  exact=569/248; tolerant=9/9; structural=0/0)
-- Current compare: `make golden-compare` reports exact=257,
-  exact-segments=578, diverges=0, unsupported-feature=37, not-yet=1
+- Exact-status segments (file × sample): 579 across 258 files (strict
+  exact=570/249; tolerant=9/9; structural=0/0)
+- Current compare: `make golden-compare` reports exact=258,
+  exact-segments=579, diverges=0, unsupported-feature=37, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
   M6=5 gated=6 harness=26
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes**
@@ -26,14 +26,8 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Active `not-yet`: `image_scripting_property_value.riv`, recovered from
-   the harness crash lane but not exact. The failed exact promotion first
-   differed at stream line 3: Rust emitted `decodeImage id=2 width=278
-   height=278` before C++ emitted the first `makeRenderPaint`. Treat this as
-   selected-root image predecode/render-paint allocation ordering, not a C++
-   runner crash.
-2. Highest-priority M6 unsupported slice after the active `not-yet` is
-   cleared: `echo_show_demo.riv`
+1. Active `not-yet` queue is empty.
+2. Highest-priority M6 unsupported slice: `echo_show_demo.riv`
    (`rust-runner-unsupported:joystick-nested-remap-gradient-update-order`).
    Start from the focused bypass note below: the first mismatch happens before
    `sample seconds=0`, in nested-remap gradient shader creation rather than
@@ -82,10 +76,11 @@ the only memory the next session has. Update it every commit.
 7. Harness lane MERGED (e5941e7): the C++ golden-runner now survives 34 of
    36 `milestone = "harness"` files (FileAssetContents stripping for the
    non-scripting librive build, flush + `_Exit(0)` before teardown, ABI
-   define alignment). MAIN-LOOP FOLLOW-UP is partially complete: 9 recovered
-   entries were promoted exact and 1 entered `not-yet`; continue flipping the
-   remaining recovered files from `milestone = "harness"` only after assigning
-   each to exact/not-yet/gated with a verified compare result.
+   define alignment). MAIN-LOOP FOLLOW-UP is partially complete: 10 recovered
+   entries were promoted exact after the image scripting property-value
+   ordering fix; continue flipping the remaining recovered files from
+   `milestone = "harness"` only after assigning each to exact/not-yet/gated
+   with a verified compare result.
    Residuals (2): `data_viz_demo` and `data_binding_artboards_test` crash
    only because the runner binds a blank default view-model instance;
    binding named instance 0 (like the reference unit tests) recovers both
@@ -112,9 +107,10 @@ the only memory the next session has. Update it every commit.
    audio_script, multi_listeners, script_dependency_test,
    script_dependency_test2, script_dependency_test_using_library(+_v2),
    script_namespace_test, script_string_converter_test,
-   scripted_listener_action. `image_scripting_property_value` was a stale
-   scout exact call and is now active `not-yet` because Rust image decode
-   ordering precedes C++ render-paint allocation.
+   scripted_listener_action, image_scripting_property_value. The latter
+   required matching the non-scripting C++ golden runner's import stack:
+   `ScriptAsset` does not displace a pending image `FileAssetImporter`, so
+   the second image decodes after the source render-paint allocation.
    (b) gated-scripting (21): all remaining script*/viewmodel*/gamepad/
    data_bind_artboard_input/path_effect_with_feathers/group_effect/
    replace_view_model files — blocked on the Luau VM; note
@@ -314,6 +310,15 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-07: [M6] Promoted `image_scripting_property_value.riv` by narrowing
+  pre-source image decode ordering to the non-scripting C++ golden-runner
+  import stack: `ScriptAsset`/`ShaderAsset` do not use the `FileAsset` stack
+  there, so they must not displace a pending embedded `ImageAsset` before
+  source render-paint allocation. Full `make golden-compare` reports
+  `exact=258`, `exact-segments=579`, `diverges=0`,
+  `unsupported-feature=37`, `not-yet=0`, parked
+  `M6=5 gated=6 harness=26`. Next target is `echo_show_demo.riv`
+  (`rust-runner-unsupported:joystick-nested-remap-gradient-update-order`).
 - 2026-07-02: V2 map adopted (`docs/porting-map-v2.md`); V1 map superseded, its contract suite frozen as regression floor.
 - 2026-07-02: Golden runner records decoded image payloads by size/hash for the first renderer slice; real decoded dimensions are deferred until `rive_decoders` is wired into the CLI harness build.
 - 2026-07-02: Golden runner emits one accumulated stream per run with

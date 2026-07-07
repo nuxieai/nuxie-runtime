@@ -4979,7 +4979,7 @@ fn import_stack_pre_source_image_asset_globals(runtime: &RuntimeFile) -> Vec<u32
         if object.type_name == "Artboard" {
             break;
         }
-        if !runtime_object_is_file_asset(object) {
+        if !runtime_object_uses_golden_file_asset_stack(object) {
             continue;
         }
 
@@ -4996,16 +4996,13 @@ fn import_stack_pre_source_image_asset_globals(runtime: &RuntimeFile) -> Vec<u32
     pre_source_assets
 }
 
-fn runtime_object_is_file_asset(object: &RuntimeObject) -> bool {
+fn runtime_object_uses_golden_file_asset_stack(object: &RuntimeObject) -> bool {
+    // The C++ golden runner is built without scripting, so ScriptAsset and
+    // ShaderAsset do not enter the WITH_RIVE_SCRIPTING FileAsset stack cases
+    // and must not displace a pending image importer here.
     matches!(
         object.type_name,
-        "ImageAsset"
-            | "FontAsset"
-            | "AudioAsset"
-            | "BlobAsset"
-            | "ScriptAsset"
-            | "ShaderAsset"
-            | "ManifestAsset"
+        "ImageAsset" | "FontAsset" | "AudioAsset" | "BlobAsset" | "ManifestAsset"
     )
 }
 

@@ -37,6 +37,12 @@ the only memory the next session has. Update it every commit.
    update was rejected: it fixed neither `echo_show_demo.riv` nor shader
    ordering generally, and it regressed `bullet_man.riv`/`hunter_x_demo.riv`
    by allocating gradients too early.
+   A C++-shaped outer-loop experiment (`tryChangeState` plus zero-time nested
+   advance inside the runner) was also rejected: the focused bypass still
+   first-differed at line 980, shader id 4, with C++ 107 vs Rust 108
+   pre-sample gradients. Next inspect the specific nested remap/joystick data
+   that leaves Rust paint global 636 in the animated zero-alpha state before
+   first draw.
 3. Other parked one-file M6 queues include `layout-component-paint`
    (`rewards_demo.riv`), `nested-node-transform-data-bind` (`car_widgets_v01.riv`),
    `nested-layout-clip-data-bind` (`stateful_multi_property.riv`), and
@@ -654,6 +660,14 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=47`, `not-yet=0`, parked `M6=5 gated=6 harness=36`;
   `cargo test --workspace` passes. Next target remains `echo_show_demo.riv`
   (`joystick-nested-remap-gradient-update-order`).
+- 2026-07-07: [M6] Rejected a C++ `advanceAndApply` outer-loop-shaped
+  experiment for `echo_show_demo.riv`: exposing a Rust `try_change_state` and
+  looping update-pass / zero-time state-machine+nest advancement in the
+  golden runner left the focused bypass unchanged (`makeRadialGradient id=4`
+  still differs at line 980; C++ emits 107 pre-sample gradients, Rust 108).
+  The experiment was fully reverted. Next pass should inspect the concrete
+  joystick/nested-remap data path that selects paint global 636 in Rust before
+  first draw, rather than adding another generic runner loop.
 - 2026-07-02: `rive-runtime` owns static draw emission through
   `rive-render-api`; `rust-golden-runner` now only orchestrates import,
   artboard selection, stream markers, and recording output.

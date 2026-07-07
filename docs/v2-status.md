@@ -8,9 +8,9 @@ the only memory the next session has. Update it every commit.
 - Exact-status segments (file × sample): 581 across 260 files (strict
   exact=571/250; tolerant=10/10; structural=0/0)
 - Current compare: `make golden-compare` reports exact=260,
-  exact-segments=581, diverges=0, unsupported-feature=35, not-yet=0
+  exact-segments=581, diverges=0, unsupported-feature=34, not-yet=1
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
-  M6=3 gated=6 harness=26
+  M6=2 gated=6 harness=26
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes**
 
 ## Milestones
@@ -26,12 +26,17 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Active `not-yet` queue is empty.
-2. Highest-priority M6 unsupported slice: `nested-feather-gradient-space`
-   (`rewards_demo.riv`). The former `nested-node-transform-data-bind`,
-   `nested-text-outline-contour-order`, and `layout-component-paint` queues
-   are empty.
-3. Other parked one-file M6 queues include `nested-layout-clip-data-bind`
+1. Active `not-yet` queue: `rewards_demo.riv`
+   (`not-yet:nested-feather-gradient-space`). Rust now emits a stream at
+   sample 0; the focused first diff is Chest `makeLinearGradient id=15`
+   resource allocation/order (`Rust paint global 1963/local 1020/mutator 217`
+   versus `C++ paint global 1956/local 1013/mutator 188`). Next work should
+   localize that Chest nested layout/gradient ordering, not add a broader
+   runner gate.
+2. The former `nested-node-transform-data-bind`,
+   `nested-text-outline-contour-order`, `layout-component-paint`, and
+   `nested-feather-gradient-space` unsupported queues are empty.
+3. Remaining parked one-file M6 queues include `nested-layout-clip-data-bind`
    (`stateful_multi_property.riv`) and `nested-stateful-view-model-property`
    (`stateful_nested.riv`). Gated one-file diagnostics include
    `scripted-data-context`
@@ -113,9 +118,10 @@ the only memory the next session has. Update it every commit.
 
 ## Known Divergences
 
-- No `status = "diverges"` or `status = "not-yet"` entries in the active
-  corpus. Remaining M6 work is parked behind explicit unsupported-feature
-  diagnostics.
+- `rewards_demo.riv` is the only active `status = "not-yet"` entry. It runs
+  in both golden runners at sample 0; the current first focused diff is the
+  Chest nested-layout gradient allocation/order described in Next.
+- Remaining M6 parked work is behind explicit unsupported-feature diagnostics.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -295,6 +301,21 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-07: [M6] Moved `rewards_demo.riv` from
+  `rust-runner-unsupported:nested-feather-gradient-space` to active
+  `not-yet:nested-feather-gradient-space`. The runner now admits the file by
+  allowing simple clipped layout paints and feathered simple layout
+  backgrounds, while the runtime prepares hidden layout nested-artboard paints
+  needed for shader allocation and limits NSliced layout sizing to real
+  `LayoutComponent` ancestors so `n_slice_triangle.riv` remains exact. Focused
+  compare now reaches a real stream mismatch at Chest `makeLinearGradient
+  id=15` (`Rust paint global 1963/local 1020/mutator 217` versus `C++ paint
+  global 1956/local 1013/mutator 188`). Full `make golden-compare` reports
+  `exact=260`, `exact-segments=581`, `diverges=0`,
+  `unsupported-feature=34`, `not-yet=1`, parked
+  `M6=2 gated=6 harness=26`; `cargo test --workspace` passes. Next target
+  remains `rewards_demo.riv`, localizing the Chest nested layout/gradient
+  ordering divergence.
 - 2026-07-07: [M6] Promoted `car_widgets_v01.riv` to exact-status under
   `verification = "tolerant(0.001)"`. The `nested-text-outline-contour-order`
   guard was a coarse proxy: the first real failure was Rust retaining a

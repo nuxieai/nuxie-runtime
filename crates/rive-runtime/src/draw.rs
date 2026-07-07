@@ -38,6 +38,8 @@ enum RuntimeGradientPaintFilter {
     All,
     ExcludeLayoutComponents,
     OnlyLayoutComponents,
+    ExcludeRootArtboard,
+    OnlyRootArtboard,
 }
 
 impl RuntimeGradientPaintFilter {
@@ -46,8 +48,14 @@ impl RuntimeGradientPaintFilter {
             Self::All => true,
             Self::ExcludeLayoutComponents => container.type_name != "LayoutComponent",
             Self::OnlyLayoutComponents => container.type_name == "LayoutComponent",
+            Self::ExcludeRootArtboard => !runtime_gradient_container_is_root_artboard(container),
+            Self::OnlyRootArtboard => runtime_gradient_container_is_root_artboard(container),
         }
     }
+}
+
+fn runtime_gradient_container_is_root_artboard(container: &ShapePaintContainerNode) -> bool {
+    container.local_id == 0 && container.type_name == "Artboard"
 }
 
 impl ArtboardInstance {
@@ -282,10 +290,12 @@ impl ArtboardInstance {
                 );
                 let runtime_paint = runtime_prepare_gradient_paint_command(
                     self,
+                    graph,
                     opacity_local,
                     container,
                     paint,
                     shape_world,
+                    layout_bounds,
                 );
                 let mut gradient_resources = RuntimeGradientShaderResources {
                     factory,
@@ -344,9 +354,7 @@ impl ArtboardInstance {
         let layout_bounds = self.runtime_taffy_layout_bounds(graph, Some(runtime));
         let commands = self.draw_commands_with_layout_bounds(graph, layout_bounds.as_ref());
         let defer_layout_gradients = defer_root_layout_gradients
-            && commands
-                .iter()
-                .any(|command| sorted_drawable_is_nested_artboard(command.type_name));
+            && commands.iter().any(runtime_draw_command_is_nested_artboard);
         if defer_layout_gradients {
             return self.prepare_static_artboard_tree_paints_in_dependency_order(
                 runtime,
@@ -378,96 +386,118 @@ impl ArtboardInstance {
         )?;
 
         for command in commands {
-            if !sorted_drawable_is_nested_artboard(command.type_name) {
-                continue;
-            }
-
-            let referenced_artboard_global = command
-                .referenced_artboard_global
-                .context("nested artboard missing referenced artboard")?;
-            let child_graph = artboards
-                .iter()
-                .find(|graph| graph.global_id == referenced_artboard_global)
-                .with_context(|| {
-                    format!("missing nested artboard graph for global {referenced_artboard_global}")
-                })?;
-            let cache_key = nested_render_cache_key(
-                command.global_id,
-                command.local_id,
-                referenced_artboard_global,
-            );
-            let child_cache = render_cache.nested_artboards.entry(cache_key).or_default();
-            let child_paint_caches = match &mut nested_paint_caches {
-                Some(caches) => {
-                    let child_paint_cache = caches.entry(cache_key).or_default();
-                    Some((
-                        &mut child_paint_cache.paints,
-                        Some(&mut child_paint_cache.nested_artboards),
-                    ))
-                }
-                None => None,
-            };
-
-            if let Some(child) = command
-                .local_id
-                .and_then(|local_id| self.nested_artboards.get(&local_id))
-                .map(|nested| nested.child.as_ref())
+            if command.referenced_artboard_global.is_none()
+                || !runtime_draw_command_is_nested_artboard(&command)
             {
-                let layout_child;
-                let child = if command.type_name == "NestedArtboardLayout" {
-                    let mut cloned = child.clone();
-                    runtime_apply_nested_artboard_layout_child_bounds(
-                        &mut cloned,
-                        &command,
-                        layout_bounds.as_ref(),
-                    )?;
-                    cloned.update_pass();
-                    layout_child = cloned;
-                    &layout_child
-                } else {
-                    child
-                };
-                if let Some((child_paints, child_nested_paints)) = child_paint_caches {
-                    child.prepare_static_artboard_tree_paints_internal(
-                        runtime,
-                        child_graph,
-                        artboards,
-                        factory,
-                        child_paints,
-                        child_nested_paints,
-                        child_cache,
-                        true,
-                    )?;
-                } else {
-                    child.prepare_static_artboard_tree_paints_internal(
-                        runtime,
-                        child_graph,
-                        artboards,
-                        factory,
-                        paint_by_global,
-                        None,
-                        child_cache,
-                        true,
-                    )?;
-                }
                 continue;
             }
-
-            let mut child = ArtboardInstance::from_graph(runtime, child_graph)?;
-            runtime_apply_nested_artboard_layout_child_bounds(
-                &mut child,
-                &command,
+            self.prepare_static_nested_artboard_tree_paints(
+                runtime,
+                artboards,
+                factory,
+                paint_by_global,
+                nested_paint_caches.as_deref_mut(),
+                render_cache,
                 layout_bounds.as_ref(),
+                &command,
             )?;
-            let host_opacity = command
-                .local_id
-                .and_then(|local_id| self.component(local_id))
-                .map(|component| component.transform.render_opacity)
-                .unwrap_or(1.0);
-            if let Some(opacity_key) = property_key_for_name("Artboard", "opacity") {
-                child.set_double_property(0, opacity_key, host_opacity);
+        }
+
+        if defer_layout_gradients {
+            self.prepare_static_artboard_paints_with_filter(
+                runtime,
+                graph,
+                factory,
+                paint_by_global,
+                render_cache,
+                layout_bounds.as_ref(),
+                RuntimeGradientPaintFilter::OnlyLayoutComponents,
+            )?;
+        }
+
+        Ok(())
+    }
+
+    fn runtime_nested_artboard_preparation_commands_by_local(
+        &self,
+        graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    ) -> BTreeMap<usize, RuntimeDrawCommand> {
+        let mut commands = BTreeMap::new();
+        for drawable in &graph.sorted_drawable_order {
+            if drawable.referenced_artboard_global.is_none() {
+                continue;
             }
-            child.update_pass();
+            let command = self.runtime_draw_command_for_node(drawable, graph, layout_bounds);
+            if command.referenced_artboard_global.is_none()
+                || !runtime_draw_command_is_nested_artboard(&command)
+            {
+                continue;
+            }
+            let Some(local_id) = command.local_id else {
+                continue;
+            };
+            commands.entry(local_id).or_insert(command);
+        }
+        commands
+    }
+
+    fn prepare_static_nested_artboard_tree_paints(
+        &self,
+        runtime: &RuntimeFile,
+        artboards: &[ArtboardGraph],
+        factory: &mut dyn RenderFactory,
+        paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
+        nested_paint_caches: Option<&mut BTreeMap<u32, RuntimeRenderPaintCache>>,
+        render_cache: &mut RuntimeRenderPathCache,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+        command: &RuntimeDrawCommand,
+    ) -> Result<()> {
+        let referenced_artboard_global = command
+            .referenced_artboard_global
+            .context("nested artboard missing referenced artboard")?;
+        let child_graph = artboards
+            .iter()
+            .find(|graph| graph.global_id == referenced_artboard_global)
+            .with_context(|| {
+                format!("missing nested artboard graph for global {referenced_artboard_global}")
+            })?;
+        let cache_key = nested_render_cache_key(
+            command.global_id,
+            command.local_id,
+            referenced_artboard_global,
+        );
+        let child_cache = render_cache.nested_artboards.entry(cache_key).or_default();
+        let child_paint_caches = match nested_paint_caches {
+            Some(caches) => {
+                let child_paint_cache = caches.entry(cache_key).or_default();
+                Some((
+                    &mut child_paint_cache.paints,
+                    Some(&mut child_paint_cache.nested_artboards),
+                ))
+            }
+            None => None,
+        };
+
+        if let Some(child) = command
+            .local_id
+            .and_then(|local_id| self.nested_artboards.get(&local_id))
+            .map(|nested| nested.child.as_ref())
+        {
+            let layout_child;
+            let child = if command.type_name == "NestedArtboardLayout" {
+                let mut cloned = child.clone();
+                runtime_apply_nested_artboard_layout_child_bounds(
+                    &mut cloned,
+                    command,
+                    layout_bounds,
+                )?;
+                cloned.update_pass();
+                layout_child = cloned;
+                &layout_child
+            } else {
+                child
+            };
             if let Some((child_paints, child_nested_paints)) = child_paint_caches {
                 child.prepare_static_artboard_tree_paints_internal(
                     runtime,
@@ -491,20 +521,43 @@ impl ArtboardInstance {
                     true,
                 )?;
             }
+            return Ok(());
         }
 
-        if defer_layout_gradients {
-            self.prepare_static_artboard_paints_with_filter(
+        let mut child = ArtboardInstance::from_graph(runtime, child_graph)?;
+        runtime_apply_nested_artboard_layout_child_bounds(&mut child, command, layout_bounds)?;
+        let host_opacity = command
+            .local_id
+            .and_then(|local_id| self.component(local_id))
+            .map(|component| component.transform.render_opacity)
+            .unwrap_or(1.0);
+        if let Some(opacity_key) = property_key_for_name("Artboard", "opacity") {
+            child.set_double_property(0, opacity_key, host_opacity);
+        }
+        child.update_pass();
+        if let Some((child_paints, child_nested_paints)) = child_paint_caches {
+            child.prepare_static_artboard_tree_paints_internal(
                 runtime,
-                graph,
+                child_graph,
+                artboards,
+                factory,
+                child_paints,
+                child_nested_paints,
+                child_cache,
+                true,
+            )?;
+        } else {
+            child.prepare_static_artboard_tree_paints_internal(
+                runtime,
+                child_graph,
+                artboards,
                 factory,
                 paint_by_global,
-                render_cache,
-                layout_bounds.as_ref(),
-                RuntimeGradientPaintFilter::OnlyLayoutComponents,
+                None,
+                child_cache,
+                true,
             )?;
         }
-
         Ok(())
     }
 
@@ -542,19 +595,33 @@ impl ArtboardInstance {
             }
         }
 
-        let command_by_local = commands
+        let mut nested_command_by_local = commands
             .iter()
-            .filter_map(|command| command.local_id.map(|local_id| (local_id, command)))
+            .filter(|command| {
+                command.referenced_artboard_global.is_some()
+                    && runtime_draw_command_is_nested_artboard(command)
+            })
+            .filter_map(|command| command.local_id.map(|local_id| (local_id, command.clone())))
             .collect::<BTreeMap<_, _>>();
+        if graph
+            .components
+            .iter()
+            .any(|component| component.type_name == "LayoutComponent")
+        {
+            nested_command_by_local.extend(
+                self.runtime_nested_artboard_preparation_commands_by_local(graph, layout_bounds),
+            );
+        }
         let mut prepared_paints = BTreeSet::new();
         let mut prepared_nested_hosts = BTreeSet::new();
 
-        for local_id in graph
+        let dependency_order = graph
             .dependency_order
             .iter()
             .copied()
             .chain(graph.local_objects.iter().map(|object| object.local_id))
-        {
+            .collect::<Vec<_>>();
+        for local_id in dependency_order.iter().copied() {
             self.prepare_static_gradient_paints_for_dependency_local(
                 runtime,
                 graph,
@@ -564,124 +631,42 @@ impl ArtboardInstance {
                 layout_bounds,
                 &paints_by_mutator,
                 &mut prepared_paints,
+                RuntimeGradientPaintFilter::ExcludeRootArtboard,
                 local_id,
             )?;
 
-            let Some(command) = command_by_local.get(&local_id) else {
+            let Some(command) = nested_command_by_local.get(&local_id) else {
                 continue;
             };
-            if !sorted_drawable_is_nested_artboard(command.type_name)
-                || !prepared_nested_hosts.insert(local_id)
-            {
+            if !prepared_nested_hosts.insert(local_id) {
                 continue;
             }
 
-            let command = (*command).clone();
-            let referenced_artboard_global = command
-                .referenced_artboard_global
-                .context("nested artboard missing referenced artboard")?;
-            let child_graph = artboards
-                .iter()
-                .find(|graph| graph.global_id == referenced_artboard_global)
-                .with_context(|| {
-                    format!("missing nested artboard graph for global {referenced_artboard_global}")
-                })?;
-            let cache_key = nested_render_cache_key(
-                command.global_id,
-                command.local_id,
-                referenced_artboard_global,
-            );
-            let child_cache = render_cache.nested_artboards.entry(cache_key).or_default();
-            let child_paint_caches = match &mut nested_paint_caches {
-                Some(caches) => {
-                    let child_paint_cache = caches.entry(cache_key).or_default();
-                    Some((
-                        &mut child_paint_cache.paints,
-                        Some(&mut child_paint_cache.nested_artboards),
-                    ))
-                }
-                None => None,
-            };
+            self.prepare_static_nested_artboard_tree_paints(
+                runtime,
+                artboards,
+                factory,
+                paint_by_global,
+                nested_paint_caches.as_deref_mut(),
+                render_cache,
+                layout_bounds,
+                command,
+            )?;
+        }
 
-            if let Some(child) = command
-                .local_id
-                .and_then(|local_id| self.nested_artboards.get(&local_id))
-                .map(|nested| nested.child.as_ref())
-            {
-                let layout_child;
-                let child = if command.type_name == "NestedArtboardLayout" {
-                    let mut cloned = child.clone();
-                    runtime_apply_nested_artboard_layout_child_bounds(
-                        &mut cloned,
-                        &command,
-                        layout_bounds,
-                    )?;
-                    cloned.update_pass();
-                    layout_child = cloned;
-                    &layout_child
-                } else {
-                    child
-                };
-                if let Some((child_paints, child_nested_paints)) = child_paint_caches {
-                    child.prepare_static_artboard_tree_paints_internal(
-                        runtime,
-                        child_graph,
-                        artboards,
-                        factory,
-                        child_paints,
-                        child_nested_paints,
-                        child_cache,
-                        true,
-                    )?;
-                } else {
-                    child.prepare_static_artboard_tree_paints_internal(
-                        runtime,
-                        child_graph,
-                        artboards,
-                        factory,
-                        paint_by_global,
-                        None,
-                        child_cache,
-                        true,
-                    )?;
-                }
-                continue;
-            }
-
-            let mut child = ArtboardInstance::from_graph(runtime, child_graph)?;
-            runtime_apply_nested_artboard_layout_child_bounds(&mut child, &command, layout_bounds)?;
-            let host_opacity = command
-                .local_id
-                .and_then(|local_id| self.component(local_id))
-                .map(|component| component.transform.render_opacity)
-                .unwrap_or(1.0);
-            if let Some(opacity_key) = property_key_for_name("Artboard", "opacity") {
-                child.set_double_property(0, opacity_key, host_opacity);
-            }
-            child.update_pass();
-            if let Some((child_paints, child_nested_paints)) = child_paint_caches {
-                child.prepare_static_artboard_tree_paints_internal(
-                    runtime,
-                    child_graph,
-                    artboards,
-                    factory,
-                    child_paints,
-                    child_nested_paints,
-                    child_cache,
-                    true,
-                )?;
-            } else {
-                child.prepare_static_artboard_tree_paints_internal(
-                    runtime,
-                    child_graph,
-                    artboards,
-                    factory,
-                    paint_by_global,
-                    None,
-                    child_cache,
-                    true,
-                )?;
-            }
+        for local_id in dependency_order {
+            self.prepare_static_gradient_paints_for_dependency_local(
+                runtime,
+                graph,
+                factory,
+                paint_by_global,
+                render_cache,
+                layout_bounds,
+                &paints_by_mutator,
+                &mut prepared_paints,
+                RuntimeGradientPaintFilter::OnlyRootArtboard,
+                local_id,
+            )?;
         }
 
         Ok(())
@@ -697,12 +682,16 @@ impl ArtboardInstance {
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
         paints_by_mutator: &BTreeMap<usize, Vec<(&ShapePaintContainerNode, &ShapePaintNode)>>,
         prepared: &mut BTreeSet<u32>,
+        filter: RuntimeGradientPaintFilter,
         local_id: usize,
     ) -> Result<()> {
         let Some(paints) = paints_by_mutator.get(&local_id) else {
             return Ok(());
         };
         for (container, paint) in paints {
+            if !filter.includes_container(container) {
+                continue;
+            }
             if self.runtime_gradient_paint_is_collapsed(container, paint) {
                 continue;
             }
@@ -721,10 +710,12 @@ impl ArtboardInstance {
             );
             let runtime_paint = runtime_prepare_gradient_paint_command(
                 self,
+                graph,
                 opacity_local,
                 container,
                 paint,
                 shape_world,
+                layout_bounds,
             );
             let mut gradient_resources = RuntimeGradientShaderResources {
                 factory,
@@ -5559,15 +5550,25 @@ fn runtime_background_shape_paint_command(
 
 fn runtime_prepare_gradient_paint_command(
     instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
     opacity_local: usize,
     container: &ShapePaintContainerNode,
     paint: &ShapePaintNode,
     shape_world: Mat2D,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
 ) -> RuntimeShapePaintCommand {
     let render_opacity = instance
         .component(opacity_local)
         .map(|component| component.transform.render_opacity)
         .unwrap_or(1.0);
+    let paint_state = runtime_deform_gradient_paint_state_with_nsliced_node(
+        instance,
+        graph,
+        container,
+        layout_bounds,
+        shape_world,
+        runtime_shape_paint_state(instance, paint, render_opacity),
+    );
     RuntimeShapePaintCommand {
         paint_local: paint.local_id,
         mutator_local: paint.mutator_local,
@@ -5581,7 +5582,7 @@ fn runtime_prepare_gradient_paint_command(
             paint.blend_mode_value,
             container.blend_mode_value,
         ),
-        paint_state: runtime_shape_paint_state(instance, paint, render_opacity),
+        paint_state,
         feather_state: None,
         paint_space_transform: runtime_shape_paint_space_transform(paint, shape_world),
         path_commands: Vec::new(),
@@ -7016,6 +7017,67 @@ fn runtime_shape_paint_state_with_endpoints(
         RuntimeShapePaintState::SolidColor { .. } => {}
     }
     state
+}
+
+fn runtime_deform_gradient_paint_state_with_nsliced_node(
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    container: &ShapePaintContainerNode,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    shape_world: Mat2D,
+    state: Option<RuntimeShapePaintState>,
+) -> Option<RuntimeShapePaintState> {
+    let state = state?;
+    let Some(context) =
+        runtime_nsliced_node_context_for_shape(instance, graph, container.local_id, layout_bounds)
+    else {
+        return Some(state);
+    };
+    let Some(inverse_shape_world) = runtime_mat2d_invert(shape_world) else {
+        return Some(state);
+    };
+
+    let (start_x, start_y, end_x, end_y) = match &state {
+        RuntimeShapePaintState::LinearGradient {
+            start_x,
+            start_y,
+            end_x,
+            end_y,
+            ..
+        }
+        | RuntimeShapePaintState::RadialGradient {
+            start_x,
+            start_y,
+            end_x,
+            end_y,
+            ..
+        } => {
+            let original_start_x = *start_x;
+            let original_start_y = *start_y;
+            let original_end_x = *end_x;
+            let original_end_y = *end_y;
+            let (start_x, start_y) = runtime_deform_local_gradient_point_with_nsliced_node(
+                original_start_x,
+                original_start_y,
+                &context,
+                shape_world,
+                inverse_shape_world,
+            );
+            let (end_x, end_y) = runtime_deform_local_gradient_point_with_nsliced_node(
+                original_end_x,
+                original_end_y,
+                &context,
+                shape_world,
+                inverse_shape_world,
+            );
+            (start_x, start_y, end_x, end_y)
+        }
+        RuntimeShapePaintState::SolidColor { .. } => return Some(state),
+    };
+
+    Some(runtime_shape_paint_state_with_endpoints(
+        state, start_x, start_y, end_x, end_y,
+    ))
 }
 
 fn runtime_cached_gradient_shader<'a>(
@@ -10217,7 +10279,7 @@ fn runtime_nsliced_node_context_for_shape(
         return None;
     }
 
-    let width = runtime_component_double_property(
+    let authored_width = runtime_component_double_property(
         runtime,
         instance,
         details.local_id,
@@ -10226,7 +10288,7 @@ fn runtime_nsliced_node_context_for_shape(
         "width",
         0.0,
     );
-    let height = runtime_component_double_property(
+    let authored_height = runtime_component_double_property(
         runtime,
         instance,
         details.local_id,
@@ -10235,6 +10297,14 @@ fn runtime_nsliced_node_context_for_shape(
         "height",
         0.0,
     );
+    let control_size =
+        runtime_nsliced_node_layout_control_size(instance, graph, details.local_id, layout_bounds);
+    let width = control_size
+        .map(|bounds| bounds.width)
+        .unwrap_or(authored_width);
+    let height = control_size
+        .map(|bounds| bounds.height)
+        .unwrap_or(authored_height);
     let world = instance.runtime_component_world_transform_with_bounds(
         details.local_id,
         graph,
@@ -10262,6 +10332,36 @@ fn runtime_nsliced_node_context_for_shape(
         // argument used for Y scale analysis.
         y_scale_info: runtime_nslicer_analyze_uv_stops(&y_uv_stops, initial_width, scale_y.abs()),
     })
+}
+
+fn runtime_nsliced_node_layout_control_size(
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    nsliced_local: usize,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+) -> Option<RuntimeLayoutBounds> {
+    let layout_bounds = layout_bounds?;
+    let mut current_local = graph
+        .components
+        .iter()
+        .find(|component| component.local_id == nsliced_local)?
+        .parent_local?;
+    loop {
+        let component = graph
+            .components
+            .iter()
+            .find(|component| component.local_id == current_local)?;
+        match component.type_name {
+            "LayoutComponent" => {
+                return layout_bounds.get(&current_local).copied().or_else(|| {
+                    Some(instance.runtime_layout_component_bounds(current_local, graph))
+                });
+            }
+            "Artboard" => return None,
+            "Node" => return None,
+            _ => current_local = component.parent_local?,
+        }
+    }
 }
 
 fn runtime_deform_path_commands_with_nsliced_node(
@@ -10332,6 +10432,18 @@ fn runtime_deform_path_point_with_nsliced_node(
     if path_kind == ShapePaintPathKind::World {
         return context.deform_world_point(x, y);
     }
+    let (world_x, world_y) = shape_world.transform_point(x, y);
+    let (deformed_x, deformed_y) = context.deform_world_point(world_x, world_y);
+    inverse_shape_world.transform_point(deformed_x, deformed_y)
+}
+
+fn runtime_deform_local_gradient_point_with_nsliced_node(
+    x: f32,
+    y: f32,
+    context: &RuntimeNSlicedNodeContext,
+    shape_world: Mat2D,
+    inverse_shape_world: Mat2D,
+) -> (f32, f32) {
     let (world_x, world_y) = shape_world.transform_point(x, y);
     let (deformed_x, deformed_y) = context.deform_world_point(world_x, world_y);
     inverse_shape_world.transform_point(deformed_x, deformed_y)
@@ -10746,4 +10858,9 @@ fn is_text_input_drawable_type(type_name: &str) -> bool {
 
 fn sorted_drawable_is_nested_artboard(type_name: &str) -> bool {
     definition_by_name(type_name).is_some_and(|definition| definition.is_a("NestedArtboard"))
+}
+
+fn runtime_draw_command_is_nested_artboard(command: &RuntimeDrawCommand) -> bool {
+    sorted_drawable_is_nested_artboard(command.type_name)
+        || command.referenced_artboard_global.is_some()
 }

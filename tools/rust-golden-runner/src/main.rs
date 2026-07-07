@@ -842,12 +842,6 @@ fn ensure_static_draw_supported_for_artboard(
                 focus_object.global_id
             );
         }
-        if let Some(container_global) = nested_feather_gradient_space_global(runtime, artboard) {
-            bail!(
-                "unsupported: nested-feather-gradient-space in Rust golden runner (nested artboard global {} paint container global {container_global})",
-                artboard.global_id
-            );
-        }
     }
 
     if let Some(data_bind) = nested_artboard_host_control_data_bind(graph, artboard) {
@@ -1034,44 +1028,6 @@ fn unsupported_layout_component_paint<'a>(
             && !container.paints.is_empty()
             && !layout_component_paint_supported(runtime, artboard, container)
     })
-}
-
-fn nested_feather_gradient_space_global(
-    runtime: &RuntimeFile,
-    artboard: &ArtboardGraph,
-) -> Option<u32> {
-    if !artboard
-        .components
-        .iter()
-        .any(|component| component.type_name == "LayoutComponent")
-    {
-        return None;
-    }
-    if artboard
-        .local_objects
-        .iter()
-        .filter(|object| object.type_name == Some("Text"))
-        .any(|object| static_text_support_error(runtime, artboard, object.local_id).is_some())
-    {
-        return None;
-    }
-
-    artboard
-        .shape_paint_containers
-        .iter()
-        .find_map(|container| {
-            let has_feather = container.paints.iter().any(|paint| paint.feather.is_some());
-            let has_gradient = container.paints.iter().any(|paint| {
-                matches!(
-                    paint.paint_state.as_ref(),
-                    Some(
-                        ShapePaintStateNode::LinearGradient { .. }
-                            | ShapePaintStateNode::RadialGradient { .. }
-                    )
-                )
-            });
-            (has_feather && has_gradient).then_some(container.global_id)
-        })
 }
 
 fn taffy_refused_layout_dependent_draw(
@@ -1525,9 +1481,6 @@ fn simple_flex_layout_component_paint_supported(
     let Some(layout_object) = runtime.object(container.global_id as usize) else {
         return false;
     };
-    if layout_object.bool_property("clip").unwrap_or(false) {
-        return false;
-    }
     if layout_style_object(runtime, artboard, layout_object).is_none() {
         return false;
     }
@@ -1586,9 +1539,6 @@ fn simple_flex_layout_child_supported(
     let Some(child_object) = runtime.object(child.global_id as usize) else {
         return false;
     };
-    if child_object.bool_property("clip").unwrap_or(false) {
-        return false;
-    }
     let Some(style_object) = layout_style_object(runtime, artboard, child_object) else {
         return false;
     };
@@ -1715,8 +1665,7 @@ fn simple_layout_background_paint_supported(paint: &rive_graph::ShapePaintNode) 
                 | ShapePaintStateNode::LinearGradient { .. }
                 | ShapePaintStateNode::RadialGradient { .. }
         )
-    ) && paint.feather.is_none()
-        && paint.effects.is_empty()
+    ) && paint.effects.is_empty()
 }
 
 fn nearly_equal(a: f32, b: f32) -> bool {

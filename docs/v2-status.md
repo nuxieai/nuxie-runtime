@@ -203,6 +203,43 @@ the only memory the next session has. Update it every commit.
     caps at 5 passes breaking when Components dirt clears
     (state_machine_instance.cpp:2589-2616).
 
+11. SCOUT REPORT — C++ draw-retention audit (port-ready, cited against
+    reference @7c778d13). Governing principle: C++ computes NOTHING during
+    draw() — all geometry/paint work happens in updateComponents gated by
+    dirt (clean frame: first-branch return, artboard.cpp:1186-1189), and
+    draw() replays retained RenderPath/RenderPaint handles. Confirmed Rust
+    per-frame rebuilds: sorted drawable order w/ BTreeMaps+clones
+    (draw.rs:224-299), vertex->command re-derivation per paint
+    (draw.rs:2836-2951), unconditional runtime_rebuild_path on every cache
+    access (draw.rs:5028-5041), layout bounds re-derived (draw.rs:996).
+    Ranked port slices:
+    (1) ShapePaintPath retention: retained RawPath + retained RenderPath +
+        one dirty bool (shape_paint_path.hpp:78-84, .cpp:13-76); rebuild
+        becomes a no-op on clean frames. Largest draw-phase win.
+    (2) PathComposer gated by Path|NSlicer dirt (path_composer.cpp:40-117)
+        plus dirt plumbing Path::markPathDirty/onDirty/Shape::pathChanged
+        (path.cpp:327-348, shape.cpp:99-108); note plain transform changes
+        do NOT rebuild vertex paths — WorldTransform only couples to path
+        rebuild when a deformer exists (path.cpp:358-359).
+    (3) Path::m_rawPath retention with rewind() capacity reuse
+        (path.cpp:350-380; raw_path.cpp:446-451 rewind keeps capacity;
+        addPath bulk memcpy+SIMD transform :255-279); zero-opacity deferral
+        via canDeferPathUpdate + m_deferredPathDirt (path.cpp:111-126,
+        :344-347).
+    (4) RenderPaint mutate-in-place for instance lifetime: solid color
+        writes mutate immediately w/o dirt (solid_color.cpp:24-54), stroke
+        props via Paint dirt (stroke.cpp:37-53), gradients rebuild only on
+        Paint|Stops|(WorldTransform iff world-space) into retained
+        m_colorStorage with only the shader rcp swapped
+        (linear_gradient.cpp:86-201).
+    (5) Retained sorted drawable list (intrusive, resorted only on
+        DrawOrder dirt, artboard.cpp:569-660,1142-1145) + retained clip
+        paths (clipping_shape.cpp:151-173).
+    CROSS-CUTTING PREREQUISITE for 1-3: per-component dirt bitset with the
+    updateComponents early-out (artboard.cpp:1184-1223) so clean frames
+    skip the entire prepare phase. Pairs with item 10's slices; do 10(1)
+    deep-clone removal first, then this prerequisite, then slices by rank.
+
 ## Known Divergences
 
 - There are no active `status = "not-yet"` entries.

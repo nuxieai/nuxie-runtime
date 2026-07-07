@@ -1646,28 +1646,41 @@ impl ArtboardInstance {
     }
 
     fn update_artboard_numeric_source_bindings(&mut self) -> bool {
-        let graph = self.runtime_graph().cloned();
         let mut changed = false;
-        for binding in self.artboard_numeric_source_bindings.clone() {
-            let value = match binding.property {
-                RuntimeArtboardNumericSourceProperty::DirectDouble => {
-                    self.double_property(binding.target_local_id, binding.property_key)
-                }
-                RuntimeArtboardNumericSourceProperty::ShapeLength => graph
-                    .as_ref()
-                    .and_then(|graph| self.artboard_shape_length(binding.target_local_id, graph)),
-            };
+        for index in 0..self.artboard_numeric_source_bindings.len() {
+            let binding = &self.artboard_numeric_source_bindings[index];
+            let value = self.artboard_numeric_source_binding_value(
+                binding.target_local_id,
+                binding.property_key,
+                binding.property,
+            );
             let Some(value) = value else { continue };
             let value = RuntimeDataBindGraphValue::Number(value);
             if self.artboard_data_bind_values.get(&binding.path) == Some(&value) {
                 continue;
             }
-            self.artboard_data_bind_values
-                .insert(binding.path.clone(), value);
-            self.reset_artboard_property_formula_random_state_for_path(&binding.path);
+            let path = binding.path.clone();
+            self.artboard_data_bind_values.insert(path.clone(), value);
+            self.reset_artboard_property_formula_random_state_for_path(&path);
             changed = true;
         }
         changed
+    }
+
+    fn artboard_numeric_source_binding_value(
+        &self,
+        target_local_id: usize,
+        property_key: u16,
+        property: RuntimeArtboardNumericSourceProperty,
+    ) -> Option<f32> {
+        match property {
+            RuntimeArtboardNumericSourceProperty::DirectDouble => {
+                self.double_property(target_local_id, property_key)
+            }
+            RuntimeArtboardNumericSourceProperty::ShapeLength => self
+                .runtime_graph()
+                .and_then(|graph| self.artboard_shape_length(target_local_id, graph)),
+        }
     }
 
     fn update_artboard_formula_token_bindings(&mut self) -> bool {
@@ -1778,41 +1791,28 @@ impl ArtboardInstance {
     }
 
     fn update_artboard_layout_computed_bindings(&mut self, root_transform: Mat2D) -> bool {
-        let Some(graph) = self.runtime_graph().cloned() else {
-            return false;
-        };
         let mut changed = false;
-        for binding in self.artboard_layout_computed_bindings.clone() {
-            changed |=
-                self.update_artboard_layout_computed_binding(&binding, &graph, root_transform);
+        for index in 0..self.artboard_layout_computed_bindings.len() {
+            let binding = &self.artboard_layout_computed_bindings[index];
+            let value = self.runtime_graph().and_then(|graph| {
+                self.artboard_layout_computed_binding_value(
+                    binding.target_local_id,
+                    binding.property,
+                    graph,
+                    root_transform,
+                )
+            });
+            let Some(value) = value else { continue };
+            let value = RuntimeDataBindGraphValue::Number(value);
+            if self.artboard_data_bind_values.get(&binding.path) == Some(&value) {
+                continue;
+            }
+            let path = binding.path.clone();
+            self.artboard_data_bind_values.insert(path.clone(), value);
+            self.reset_artboard_property_formula_random_state_for_path(&path);
+            changed = true;
         }
         changed
-    }
-
-    fn update_artboard_layout_computed_binding(
-        &mut self,
-        binding: &RuntimeArtboardLayoutComputedBindingInstance,
-        graph: &ArtboardGraph,
-        root_transform: Mat2D,
-    ) -> bool {
-        // Mirrors C++ `src/data_bind/data_bind.cpp` targetSupportsPush:
-        // Node computed* data binds are polled after layout settles.
-        let Some(value) = self.artboard_layout_computed_binding_value(
-            binding.target_local_id,
-            binding.property,
-            graph,
-            root_transform,
-        ) else {
-            return false;
-        };
-        let value = RuntimeDataBindGraphValue::Number(value);
-        if self.artboard_data_bind_values.get(&binding.path) == Some(&value) {
-            return false;
-        }
-        self.artboard_data_bind_values
-            .insert(binding.path.clone(), value);
-        self.reset_artboard_property_formula_random_state_for_path(&binding.path);
-        true
     }
 
     fn artboard_layout_computed_binding_value(
@@ -1949,16 +1949,20 @@ impl ArtboardInstance {
 
     fn update_artboard_solo_source_bindings(&mut self) -> bool {
         let mut changed = false;
-        for binding in self.artboard_solo_source_bindings.clone() {
-            let Some(value) = self.artboard_solo_source_binding_value(&binding) else {
+        for index in 0..self.artboard_solo_source_bindings.len() {
+            let binding = &self.artboard_solo_source_bindings[index];
+            let Some(value) = self.artboard_solo_source_binding_value(
+                binding.target_local_id,
+                &binding.enum_value_names,
+            ) else {
                 continue;
             };
             if self.artboard_data_bind_values.get(&binding.path) == Some(&value) {
                 continue;
             }
-            self.artboard_data_bind_values
-                .insert(binding.path.clone(), value);
-            self.reset_artboard_property_formula_random_state_for_path(&binding.path);
+            let path = binding.path.clone();
+            self.artboard_data_bind_values.insert(path.clone(), value);
+            self.reset_artboard_property_formula_random_state_for_path(&path);
             changed = true;
         }
         changed
@@ -1966,14 +1970,15 @@ impl ArtboardInstance {
 
     fn artboard_solo_source_binding_value(
         &self,
-        binding: &RuntimeArtboardSoloSourceBindingInstance,
+        target_local_id: usize,
+        enum_value_names: &[Vec<u8>],
     ) -> Option<RuntimeDataBindGraphValue> {
         let solo = self
             .solos
             .iter()
-            .find(|solo| solo.local_id == binding.target_local_id)?;
+            .find(|solo| solo.local_id == target_local_id)?;
         let active_component_id = usize::try_from(
-            self.uint_property(binding.target_local_id, solo.active_component_property_key)?,
+            self.uint_property(target_local_id, solo.active_component_property_key)?,
         )
         .ok()?;
         let active_local_id = solo
@@ -1984,8 +1989,7 @@ impl ArtboardInstance {
             .slot(active_local_id)
             .and_then(|slot| slot.name.as_deref())?
             .as_bytes();
-        let index = binding
-            .enum_value_names
+        let index = enum_value_names
             .iter()
             .position(|name| name.as_slice() == active_name)?;
         Some(RuntimeDataBindGraphValue::Enum(u64::try_from(index).ok()?))

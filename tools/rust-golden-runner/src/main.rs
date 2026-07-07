@@ -871,16 +871,6 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
-    if let Some(global_id) = unsupported_selected_root_leading_nested_paint_order_global(
-        graph,
-        artboard,
-        !is_nested_child,
-    ) {
-        bail!(
-            "unsupported: selected-root-leading-nested-paint-order in Rust golden runner (global {global_id})"
-        );
-    }
-
     if let Some(global_id) =
         unsupported_selected_root_skinned_clip_path_global(graph, artboard, !is_nested_child)
     {
@@ -2179,34 +2169,6 @@ fn selected_root_external_image_global(
     first_image_or_asset_global(graph, artboard)
 }
 
-fn unsupported_selected_root_leading_nested_paint_order_global(
-    graph: &GraphFile,
-    artboard: &ArtboardGraph,
-    apply_selected_root_fence: bool,
-) -> Option<u32> {
-    selected_root_external_image_global(graph, artboard, apply_selected_root_fence)?;
-    if !artboard_has_skin_and_clipping_shape(artboard) {
-        return None;
-    }
-    let leading_nested = artboard
-        .sorted_drawable_order
-        .iter()
-        .find(|drawable| !drawable.is_hidden && drawable.global_id.is_some())?;
-    if !sorted_drawable_is_nested_artboard(leading_nested.type_name) {
-        return None;
-    }
-    let referenced_artboard_global = leading_nested.referenced_artboard_global?;
-    let child_artboard = graph
-        .artboards
-        .iter()
-        .find(|artboard| artboard.global_id == referenced_artboard_global)?;
-    artboard_has_gradient_paint(child_artboard).then_some(
-        leading_nested
-            .global_id
-            .unwrap_or(referenced_artboard_global),
-    )
-}
-
 fn unsupported_selected_root_skinned_clip_path_global(
     graph: &GraphFile,
     artboard: &ArtboardGraph,
@@ -2227,29 +2189,6 @@ fn artboard_has_skin_and_clipping_shape(artboard: &ArtboardGraph) -> bool {
         .iter()
         .any(|object| object.type_name == Some("ClippingShape"));
     has_skin && has_clipping_shape
-}
-
-fn artboard_has_gradient_paint(artboard: &ArtboardGraph) -> bool {
-    artboard
-        .shape_paint_containers
-        .iter()
-        .flat_map(|container| &container.paints)
-        .any(|paint| {
-            matches!(
-                paint.paint_state,
-                Some(
-                    ShapePaintStateNode::LinearGradient { .. }
-                        | ShapePaintStateNode::RadialGradient { .. }
-                )
-            )
-        })
-}
-
-fn sorted_drawable_is_nested_artboard(type_name: &str) -> bool {
-    matches!(
-        type_name,
-        "NestedArtboard" | "NestedArtboardLayout" | "NestedArtboardLeaf"
-    )
 }
 
 fn unsupported_image_global(

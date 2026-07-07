@@ -26,18 +26,17 @@ the only memory the next session has. Update it every commit.
 
 1. The active `not-yet` queue is empty. Continue M6 by picking the highest-value
    remaining unsupported queue that is not scripting/audio: start with
-   `selected-root-leading-nested-paint-order` (`bullet_man.riv`),
-   `selected-root-skinned-clip-path` (`spotify_kids_demo.riv`), or the nested
-   data-bind diagnostics.
+   `selected-root-skinned-clip-path` (`bullet_man.riv`,
+   `spotify_kids_demo.riv`) or the nested data-bind diagnostics.
    `echo_show_demo.riv` is now parked behind the sharper
    `text-joystick-data-bind-divergence` diagnostic after a focused probe
    reached draw but diverged from C++; `superbowl.riv` is parked behind the
    sharper `state-machine-viewmodel-solo-image` diagnostic.
 2. Other parked one-file M6 queues include `text-joystick-data-bind-divergence`
    (`echo_show_demo.riv`), `state-machine-viewmodel-solo-image`
-   (`superbowl.riv`), and
-   `selected-root-leading-nested-paint-order` (`bullet_man.riv`) plus
-   `selected-root-skinned-clip-path` (`spotify_kids_demo.riv`). The former
+   (`superbowl.riv`), plus the two-file
+   `selected-root-skinned-clip-path` queue (`bullet_man.riv`,
+   `spotify_kids_demo.riv`). The former
    `data-binding-nested-child` queue is five one-file diagnostics:
    `nested-trim-path-data-bind` (`db_health_tracker.riv`),
    `nested-artboard-root-transform` (`nested_hug.riv`),
@@ -510,6 +509,16 @@ the only memory the next session has. Update it every commit.
   `M6=10 gated=6 harness=36`. Next target is
   `selected-root-leading-nested-paint-order`,
   `selected-root-skinned-clip-path`, or the nested data-bind diagnostics.
+- 2026-07-06: [M6] Closed `selected-root-leading-nested-paint-order` by
+  interleaving selected-root skinned paint preparation with nested-host
+  dependency order. A focused `bullet_man.riv` probe with both selected-root
+  guards bypassed now matches all shader creation and first diverges in the
+  skinned path geometry; `bullet_man.riv` is retagged back into the shared
+  `selected-root-skinned-clip-path` queue with `spotify_kids_demo.riv`. Full
+  `make golden-compare` reports `exact=243`, `exact-segments=564`,
+  `diverges=0`, `unsupported-feature=52`, `not-yet=0`, parked
+  `M6=10 gated=6 harness=36`. Next target is
+  `selected-root-skinned-clip-path` or the nested data-bind diagnostics.
 - 2026-07-02: `rive-runtime` owns static draw emission through
   `rive-render-api`; `rust-golden-runner` now only orchestrates import,
   artboard selection, stream markers, and recording output.

@@ -347,13 +347,7 @@ impl ArtboardInstance {
             && commands
                 .iter()
                 .any(|command| sorted_drawable_is_nested_artboard(command.type_name));
-        let prepare_selected_root_skinned_paints_in_dependency_order = defer_layout_gradients
-            && artboard_has_skin_and_clipping_shape(graph)
-            && commands
-                .iter()
-                .find(|command| command.kind == RuntimeDrawCommandKind::Draw)
-                .is_some_and(|command| sorted_drawable_is_nested_artboard(command.type_name));
-        if prepare_selected_root_skinned_paints_in_dependency_order {
+        if defer_layout_gradients {
             return self.prepare_static_artboard_tree_paints_in_dependency_order(
                 runtime,
                 graph,
@@ -442,7 +436,7 @@ impl ArtboardInstance {
                         child_paints,
                         child_nested_paints,
                         child_cache,
-                        false,
+                        true,
                     )?;
                 } else {
                     child.prepare_static_artboard_tree_paints_internal(
@@ -453,7 +447,7 @@ impl ArtboardInstance {
                         paint_by_global,
                         None,
                         child_cache,
-                        false,
+                        true,
                     )?;
                 }
                 continue;
@@ -483,7 +477,7 @@ impl ArtboardInstance {
                     child_paints,
                     child_nested_paints,
                     child_cache,
-                    false,
+                    true,
                 )?;
             } else {
                 child.prepare_static_artboard_tree_paints_internal(
@@ -494,7 +488,7 @@ impl ArtboardInstance {
                     paint_by_global,
                     None,
                     child_cache,
-                    false,
+                    true,
                 )?;
             }
         }
@@ -637,7 +631,7 @@ impl ArtboardInstance {
                         child_paints,
                         child_nested_paints,
                         child_cache,
-                        false,
+                        true,
                     )?;
                 } else {
                     child.prepare_static_artboard_tree_paints_internal(
@@ -648,7 +642,7 @@ impl ArtboardInstance {
                         paint_by_global,
                         None,
                         child_cache,
-                        false,
+                        true,
                     )?;
                 }
                 continue;
@@ -674,7 +668,7 @@ impl ArtboardInstance {
                     child_paints,
                     child_nested_paints,
                     child_cache,
-                    false,
+                    true,
                 )?;
             } else {
                 child.prepare_static_artboard_tree_paints_internal(
@@ -685,7 +679,7 @@ impl ArtboardInstance {
                     paint_by_global,
                     None,
                     child_cache,
-                    false,
+                    true,
                 )?;
             }
         }
@@ -10708,18 +10702,6 @@ fn is_text_input_drawable_type(type_name: &str) -> bool {
         type_name,
         "TextInputCursor" | "TextInputSelectedText" | "TextInputSelection" | "TextInputText"
     )
-}
-
-fn artboard_has_skin_and_clipping_shape(graph: &ArtboardGraph) -> bool {
-    let has_skin = graph
-        .local_objects
-        .iter()
-        .any(|object| object.type_name == Some("Skin"));
-    let has_clipping_shape = graph
-        .local_objects
-        .iter()
-        .any(|object| object.type_name == Some("ClippingShape"));
-    has_skin && has_clipping_shape
 }
 
 fn sorted_drawable_is_nested_artboard(type_name: &str) -> bool {

@@ -28,28 +28,18 @@ the only memory the next session has. Update it every commit.
 
 1. Active `not-yet` queue is empty.
 2. Highest-priority M6 unsupported slice: `echo_show_demo.riv`
-   (`rust-runner-unsupported:joystick-nested-remap-gradient-update-order`).
-   Start from the focused bypass notes below: the first mismatch still happens
-   before `sample seconds=0`, in nested-remap gradient shader creation rather
-   than draw geometry, but shader ids 4 and 5 now match C++ after retaining
-   Entry/non-animated transition sources during nonzero-duration transitions.
-   A targeted Rust runner hook that created gradient shaders during component
-   update was rejected: it fixed neither `echo_show_demo.riv` nor shader
-   ordering generally, and it regressed `bullet_man.riv`/`hunter_x_demo.riv`
-   by allocating gradients too early.
-   A C++-shaped outer-loop experiment (`tryChangeState` plus zero-time nested
-   advance inside the runner) was also rejected: the focused bypass still
-   first-differed at line 980, shader id 4, with C++ 107 vs Rust 108
-   pre-sample gradients. A follow-up snapshot prototype was also rejected: it
-   recorded update-time gradient shaders, but still replayed paint globals
-   636/634 with Rust's already-animated/zero-alpha state instead of C++'s
-   first authored-geometry shader. The latest focused trace now first differs
-   at shader id 6: C++ continues the authored source-branch gradient sequence,
-   while Rust skips to a later zero-alpha radial matching C++'s later id 10.
-   The remaining gap is nested-remap/paint mutator ordering after the initial
-   transition mix, not generic prewarming, final-state replay, the
-   component-update broad hook, the outer-loop runner shape, or
-   non-before-joystick data-bind placement.
+   (`rust-runner-unsupported:joystick-nested-remap-transform-update-order`).
+   Start from the focused bypass notes below: dependency-order deferred
+   gradient prep now interleaves root and nested artboards in C++ order, moving
+   the exact-candidate mismatch past the shader creation sequence. The current
+   first exact verification failure is line 1593:
+   Rust `transform matrix=[1.22242272,0,0,1.22242272,325.263824,230.126801]`
+   vs C++
+   `transform matrix=[1.22242272,0,0,1.22242272,325.263824,232.096527]`.
+   The remaining gap is nested-remap/transform update state after the initial
+   transition mix, not shader allocation order, generic prewarming,
+   final-state replay, the component-update broad hook, the outer-loop runner
+   shape, or non-before-joystick data-bind placement.
 3. Other parked one-file M6 queues include `layout-component-paint`
    (`rewards_demo.riv`), `nested-node-transform-data-bind` (`car_widgets_v01.riv`),
    `nested-layout-clip-data-bind` (`stateful_multi_property.riv`), and
@@ -314,6 +304,19 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-07: [M6] Narrowed `echo_show_demo.riv` by making deferred layout
+  gradient prep use dependency order for the whole artboard tree, including
+  recursive nested prepass traversal. A focused exact-candidate bypass now
+  matches the C++ shader creation sequence that previously diverged around
+  shader id 6, then first fails at line 1593 on a nested transform Y
+  translation (`230.126801` Rust vs `232.096527` C++). The runner/corpus
+  diagnostic is sharpened from `joystick-nested-remap-gradient-update-order`
+  to `joystick-nested-remap-transform-update-order`. Full
+  `make golden-compare` remains `exact=258`, `exact-segments=579`,
+  `diverges=0`, `unsupported-feature=37`, `not-yet=0`, parked
+  `M6=5 gated=6 harness=26`; `cargo test --workspace` passes. Next target
+  remains `echo_show_demo.riv`
+  (`rust-runner-unsupported:joystick-nested-remap-transform-update-order`).
 - 2026-07-07: [M6] Narrowed `echo_show_demo.riv` by matching C++ transition
   source retention for Entry/non-animated sources. C++ keeps `m_stateFrom`
   during a nonzero-duration Entry -> animation transition, so the destination

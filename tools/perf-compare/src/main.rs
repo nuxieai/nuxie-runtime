@@ -24,7 +24,7 @@ fn run() -> Result<(), String> {
 fn run_single(options: &Options, target: &RunTarget) -> Result<(), String> {
     let cpp = measure_runner("cpp", &options.cpp_runner, target, options)?;
     let rust = measure_runner("rust", &options.rust_runner, target, options)?;
-    let ratio = rust.median.as_secs_f64() / cpp.median.as_secs_f64();
+    let ratio = rust.total.median.as_secs_f64() / cpp.total.median.as_secs_f64();
 
     println!("perf-compare file={}", target.file.display());
     println!(
@@ -32,9 +32,19 @@ fn run_single(options: &Options, target: &RunTarget) -> Result<(), String> {
         target.samples, options.iterations, options.warmups
     );
     print_metric(options.runner_benchmark, options.benchmark_repeat);
-    print_measurements("cpp", cpp);
-    print_measurements("rust", rust);
+    print_measurements("cpp", cpp.total);
+    print_measurements("rust", rust.total);
     println!("rust_over_cpp={ratio:.3}");
+
+    let file = FileResult {
+        id: target.id.clone(),
+        file: target.file.display().to_string(),
+        segments: target.segment_count,
+        cpp,
+        rust,
+    };
+    let aggregate = aggregate_results(std::slice::from_ref(&file));
+    write_json_report_if_requested(options, std::slice::from_ref(&file), &aggregate)?;
     check_max_ratio(ratio, options.max_ratio)
 }
 
@@ -60,9 +70,7 @@ fn run_corpus(options: &Options, corpus: &Path) -> Result<(), String> {
         ));
     }
 
-    let mut cpp_sum = Duration::ZERO;
-    let mut rust_sum = Duration::ZERO;
-    let mut segments = 0usize;
+    let mut files = Vec::with_capacity(targets.len());
     println!("perf-compare corpus={}", corpus.display());
     println!(
         "perf-compare entries={} iterations={} warmups={}",
@@ -74,28 +82,34 @@ fn run_corpus(options: &Options, corpus: &Path) -> Result<(), String> {
     for target in &targets {
         let cpp = measure_runner("cpp", &options.cpp_runner, target, options)?;
         let rust = measure_runner("rust", &options.rust_runner, target, options)?;
-        let ratio = rust.median.as_secs_f64() / cpp.median.as_secs_f64();
-        cpp_sum += cpp.median;
-        rust_sum += rust.median;
-        segments += target.segment_count;
+        let ratio = rust.total.median.as_secs_f64() / cpp.total.median.as_secs_f64();
         println!(
             "entry id={} segments={} cpp_median_ms={:.3} rust_median_ms={:.3} rust_over_cpp={ratio:.3}",
             target.id,
             target.segment_count,
-            millis(cpp.median),
-            millis(rust.median)
+            millis(cpp.total.median),
+            millis(rust.total.median)
         );
+        files.push(FileResult {
+            id: target.id.clone(),
+            file: target.file.display().to_string(),
+            segments: target.segment_count,
+            cpp,
+            rust,
+        });
     }
 
-    let aggregate_ratio = rust_sum.as_secs_f64() / cpp_sum.as_secs_f64();
+    let aggregate = aggregate_results(&files);
     println!(
-        "aggregate entries={} segments={} cpp_median_ms_sum={:.3} rust_median_ms_sum={:.3} rust_over_cpp={aggregate_ratio:.3}",
-        targets.len(),
-        segments,
-        millis(cpp_sum),
-        millis(rust_sum)
+        "aggregate entries={} segments={} cpp_median_ms_sum={:.3} rust_median_ms_sum={:.3} rust_over_cpp={:.3}",
+        aggregate.entries,
+        aggregate.segments,
+        millis(aggregate.cpp_median_sum),
+        millis(aggregate.rust_median_sum),
+        aggregate.rust_over_cpp
     );
-    check_max_ratio(aggregate_ratio, options.max_ratio)
+    write_json_report_if_requested(options, &files, &aggregate)?;
+    check_max_ratio(aggregate.rust_over_cpp, options.max_ratio)
 }
 
 fn print_measurements(label: &str, measurements: Measurements) {
@@ -107,15 +121,216 @@ fn print_measurements(label: &str, measurements: Measurements) {
     );
 }
 
-fn print_metric(runner_benchmark: bool, benchmark_repeat: usize) {
-    let metric = if runner_benchmark {
+fn metric_name(runner_benchmark: bool) -> &'static str {
+    if runner_benchmark {
         "runner_hot_loop_ms"
     } else {
         "process_elapsed_ms"
-    };
-    println!("perf-compare metric={metric}");
+    }
+}
+
+fn print_metric(runner_benchmark: bool, benchmark_repeat: usize) {
+    println!("perf-compare metric={}", metric_name(runner_benchmark));
     if runner_benchmark {
         println!("perf-compare benchmark_repeat={benchmark_repeat}");
+    }
+}
+
+/// Write the machine-readable report when `--json` was passed. Runs before
+/// the max-ratio gate so threshold failures still leave an artifact behind.
+fn write_json_report_if_requested(
+    options: &Options,
+    files: &[FileResult],
+    aggregate: &Aggregate,
+) -> Result<(), String> {
+    let Some(path) = &options.json else {
+        return Ok(());
+    };
+    let report = render_json_report(options, files, aggregate);
+    std::fs::write(path, report)
+        .map_err(|error| format!("failed to write {}: {error}", path.display()))?;
+    println!("perf-compare json={}", path.display());
+    Ok(())
+}
+
+fn render_json_report(options: &Options, files: &[FileResult], aggregate: &Aggregate) -> String {
+    let mut out = String::new();
+    out.push('{');
+    push_json_key(&mut out, "schema");
+    push_json_string(&mut out, "rive-perf-compare-json-v1");
+    out.push(',');
+    push_json_key(&mut out, "metric");
+    push_json_string(&mut out, metric_name(options.runner_benchmark));
+    out.push(',');
+    push_json_key(&mut out, "iterations");
+    out.push_str(&options.iterations.to_string());
+    out.push(',');
+    push_json_key(&mut out, "warmups");
+    out.push_str(&options.warmups.to_string());
+    out.push(',');
+    if options.runner_benchmark {
+        push_json_key(&mut out, "benchmark_repeat");
+        out.push_str(&options.benchmark_repeat.to_string());
+        out.push(',');
+    }
+
+    push_json_key(&mut out, "meta");
+    out.push('{');
+    for (index, (key, value)) in options.meta.iter().enumerate() {
+        if index > 0 {
+            out.push(',');
+        }
+        push_json_string(&mut out, key);
+        out.push(':');
+        push_json_string(&mut out, value);
+    }
+    out.push_str("},");
+
+    push_json_key(&mut out, "files");
+    out.push('[');
+    for (index, file) in files.iter().enumerate() {
+        if index > 0 {
+            out.push(',');
+        }
+        push_file_result(&mut out, file);
+    }
+    out.push_str("],");
+
+    push_json_key(&mut out, "aggregate");
+    out.push('{');
+    push_json_key(&mut out, "entries");
+    out.push_str(&aggregate.entries.to_string());
+    out.push(',');
+    push_json_key(&mut out, "segments");
+    out.push_str(&aggregate.segments.to_string());
+    out.push(',');
+    push_json_key(&mut out, "cpp_median_ms_sum");
+    push_json_number(&mut out, millis(aggregate.cpp_median_sum));
+    out.push(',');
+    push_json_key(&mut out, "rust_median_ms_sum");
+    push_json_number(&mut out, millis(aggregate.rust_median_sum));
+    out.push(',');
+    push_json_key(&mut out, "rust_over_cpp");
+    push_json_number(&mut out, aggregate.rust_over_cpp);
+    out.push('}');
+
+    out.push('}');
+    out.push('\n');
+    out
+}
+
+fn push_file_result(out: &mut String, file: &FileResult) {
+    out.push('{');
+    push_json_key(out, "id");
+    push_json_string(out, &file.id);
+    out.push(',');
+    push_json_key(out, "file");
+    push_json_string(out, &file.file);
+    out.push(',');
+    push_json_key(out, "segments");
+    out.push_str(&file.segments.to_string());
+    out.push(',');
+
+    push_json_key(out, "runners");
+    out.push('{');
+    push_json_key(out, "cpp");
+    push_runner_measurements(out, &file.cpp);
+    out.push(',');
+    push_json_key(out, "rust");
+    push_runner_measurements(out, &file.rust);
+    out.push_str("},");
+
+    push_json_key(out, "rust_over_cpp");
+    push_json_number(out, file.rust_over_cpp());
+    out.push(',');
+
+    push_json_key(out, "rust_over_cpp_by_phase");
+    out.push('{');
+    push_json_key(out, "total");
+    push_json_number(out, file.rust_over_cpp());
+    for (name, cpp_phase) in &file.cpp.phases {
+        let Some((_, rust_phase)) = file
+            .rust
+            .phases
+            .iter()
+            .find(|(rust_name, _)| rust_name == name)
+        else {
+            continue;
+        };
+        out.push(',');
+        push_json_key(out, name);
+        push_json_number(
+            out,
+            rust_phase.median.as_secs_f64() / cpp_phase.median.as_secs_f64(),
+        );
+    }
+    out.push('}');
+
+    out.push('}');
+}
+
+fn push_runner_measurements(out: &mut String, measurements: &RunnerMeasurements) {
+    out.push('{');
+    push_json_key(out, "iterations");
+    out.push_str(&measurements.iterations.to_string());
+    out.push(',');
+    push_json_key(out, "phases");
+    out.push('{');
+    push_json_key(out, "total");
+    push_measurements(out, measurements.total);
+    for (name, phase) in &measurements.phases {
+        out.push(',');
+        push_json_key(out, name);
+        push_measurements(out, *phase);
+    }
+    out.push_str("}}");
+}
+
+fn push_measurements(out: &mut String, measurements: Measurements) {
+    out.push('{');
+    push_json_key(out, "median_ms");
+    push_json_number(out, millis(measurements.median));
+    out.push(',');
+    push_json_key(out, "min_ms");
+    push_json_number(out, millis(measurements.min));
+    out.push(',');
+    push_json_key(out, "max_ms");
+    push_json_number(out, millis(measurements.max));
+    out.push(',');
+    push_json_key(out, "spread_ms");
+    push_json_number(out, millis(measurements.spread()));
+    out.push('}');
+}
+
+fn push_json_key(out: &mut String, key: &str) {
+    push_json_string(out, key);
+    out.push(':');
+}
+
+fn push_json_string(out: &mut String, value: &str) {
+    out.push('"');
+    for character in value.chars() {
+        match character {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            control if (control as u32) < 0x20 => {
+                out.push_str(&format!("\\u{:04x}", control as u32));
+            }
+            other => out.push(other),
+        }
+    }
+    out.push('"');
+}
+
+/// JSON has no NaN/Infinity literals; emit null for non-finite values.
+fn push_json_number(out: &mut String, value: f64) {
+    if value.is_finite() {
+        out.push_str(&format!("{value:.6}"));
+    } else {
+        out.push_str("null");
     }
 }
 
@@ -145,6 +360,8 @@ struct Options {
     max_ratio: Option<f64>,
     runner_benchmark: bool,
     benchmark_repeat: usize,
+    json: Option<PathBuf>,
+    meta: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone)]
@@ -177,6 +394,8 @@ impl Options {
         let mut max_ratio = None;
         let mut runner_benchmark = false;
         let mut benchmark_repeat = 1usize;
+        let mut json = None;
+        let mut meta = Vec::new();
 
         let mut index = 0;
         while index < args.len() {
@@ -202,6 +421,8 @@ impl Options {
                 "--benchmark-repeat" => {
                     benchmark_repeat = parse_positive_usize(&value(arg)?, "--benchmark-repeat")?
                 }
+                "--json" => json = Some(PathBuf::from(value(arg)?)),
+                "--meta" => meta.push(parse_meta(&value(arg)?)?),
                 "--artboard" => artboard = Some(value(arg)?),
                 "--state-machine" => state_machine = Some(value(arg)?),
                 "--input-script" => input_script = Some(PathBuf::from(value(arg)?)),
@@ -218,7 +439,7 @@ impl Options {
                 }
                 "--help" | "-h" => {
                     println!(
-                        "usage: perf-compare (--file <path> | --corpus corpus.toml) [--samples 0,0.5] [--iterations N] [--warmups N] [--max-ratio N] [--runner-benchmark] [--benchmark-repeat N] [--cpp-runner path] [--rust-runner path]"
+                        "usage: perf-compare (--file <path> | --corpus corpus.toml) [--samples 0,0.5] [--iterations N] [--warmups N] [--max-ratio N] [--runner-benchmark] [--benchmark-repeat N] [--json path] [--meta key=value ...] [--cpp-runner path] [--rust-runner path]"
                     );
                     std::process::exit(0);
                 }
@@ -249,10 +470,10 @@ impl Options {
         if benchmark_repeat > 1 && !runner_benchmark {
             return Err("--benchmark-repeat requires --runner-benchmark".to_owned());
         }
-        if benchmark_repeat > 1 {
-            if let Mode::Single(target) = &mode {
-                validate_benchmark_repeat_target(target)?;
-            }
+        if benchmark_repeat > 1
+            && let Mode::Single(target) = &mode
+        {
+            validate_benchmark_repeat_target(target)?;
         }
 
         Ok(Self {
@@ -266,8 +487,22 @@ impl Options {
             max_ratio,
             runner_benchmark,
             benchmark_repeat,
+            json,
+            meta,
         })
     }
+}
+
+/// Metadata is passed in (never computed here) so JSON output stays
+/// deterministic for a given command line.
+fn parse_meta(value: &str) -> Result<(String, String), String> {
+    let Some((key, meta_value)) = value.split_once('=') else {
+        return Err(format!("--meta expects key=value, got {value}"));
+    };
+    if key.is_empty() {
+        return Err(format!("--meta expects a non-empty key, got {value}"));
+    }
+    Ok((key.to_owned(), meta_value.to_owned()))
 }
 
 #[derive(Debug, Clone)]
@@ -305,12 +540,71 @@ struct Measurements {
     max: Duration,
 }
 
+impl Measurements {
+    fn spread(&self) -> Duration {
+        self.max.saturating_sub(self.min)
+    }
+}
+
+/// One runner invocation: the measured total plus any per-phase breakdown
+/// (only available in `--runner-benchmark` mode).
+#[derive(Debug, Clone)]
+struct RunSample {
+    total: Duration,
+    phases: Vec<(&'static str, Duration)>,
+}
+
+/// Summary of every iteration for one runner on one target.
+#[derive(Debug, Clone)]
+struct RunnerMeasurements {
+    total: Measurements,
+    phases: Vec<(&'static str, Measurements)>,
+    iterations: usize,
+}
+
+/// Per-file comparison result feeding the console report and `--json` output.
+#[derive(Debug, Clone)]
+struct FileResult {
+    id: String,
+    file: String,
+    segments: usize,
+    cpp: RunnerMeasurements,
+    rust: RunnerMeasurements,
+}
+
+impl FileResult {
+    fn rust_over_cpp(&self) -> f64 {
+        self.rust.total.median.as_secs_f64() / self.cpp.total.median.as_secs_f64()
+    }
+}
+
+#[derive(Debug, Clone)]
+struct Aggregate {
+    entries: usize,
+    segments: usize,
+    cpp_median_sum: Duration,
+    rust_median_sum: Duration,
+    rust_over_cpp: f64,
+}
+
+fn aggregate_results(files: &[FileResult]) -> Aggregate {
+    let cpp_median_sum = files.iter().map(|file| file.cpp.total.median).sum();
+    let rust_median_sum: Duration = files.iter().map(|file| file.rust.total.median).sum();
+    Aggregate {
+        entries: files.len(),
+        segments: files.iter().map(|file| file.segments).sum(),
+        cpp_median_sum,
+        rust_median_sum,
+        rust_over_cpp: rust_median_sum.as_secs_f64() / cpp_median_sum.as_secs_f64(),
+    }
+}
+
 fn measure_runner(
     label: &str,
     runner: &Path,
     target: &RunTarget,
     options: &Options,
-) -> Result<Measurements, String> {
+) -> Result<RunnerMeasurements, String> {
     if options.benchmark_repeat > 1 {
         validate_benchmark_repeat_target(target)?;
     }
@@ -318,9 +612,9 @@ fn measure_runner(
         run_once(label, runner, target, options, warmup + 1, true)?;
     }
 
-    let mut measurements = Vec::with_capacity(options.iterations);
+    let mut samples = Vec::with_capacity(options.iterations);
     for iteration in 0..options.iterations {
-        measurements.push(run_once(
+        samples.push(run_once(
             label,
             runner,
             target,
@@ -329,7 +623,42 @@ fn measure_runner(
             false,
         )?);
     }
-    Ok(measurements_summary(measurements))
+    Ok(summarize_samples(&samples))
+}
+
+fn summarize_samples(samples: &[RunSample]) -> RunnerMeasurements {
+    let total = measurements_summary(samples.iter().map(|sample| sample.total).collect());
+    let phase_names = samples
+        .first()
+        .map(|sample| {
+            sample
+                .phases
+                .iter()
+                .map(|(name, _)| *name)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let phases = phase_names
+        .into_iter()
+        .map(|name| {
+            let durations = samples
+                .iter()
+                .map(|sample| {
+                    sample
+                        .phases
+                        .iter()
+                        .find(|(phase, _)| *phase == name)
+                        .map_or(Duration::ZERO, |(_, duration)| *duration)
+                })
+                .collect();
+            (name, measurements_summary(durations))
+        })
+        .collect();
+    RunnerMeasurements {
+        total,
+        phases,
+        iterations: samples.len(),
+    }
 }
 
 fn run_once(
@@ -339,7 +668,7 @@ fn run_once(
     options: &Options,
     iteration: usize,
     warmup: bool,
-) -> Result<Duration, String> {
+) -> Result<RunSample, String> {
     let mut command = runner_command(
         runner,
         target,
@@ -361,14 +690,16 @@ fn run_once(
         ));
     }
     if options.runner_benchmark {
-        return parse_benchmark_hot_loop_duration(&output.stdout).map_err(|error| {
+        let phases = parse_benchmark_phases(&output.stdout).map_err(|error| {
             let kind = if warmup { "warmup" } else { "iteration" };
             format!(
                 "{label} runner {} did not emit a benchmark for {} on {kind} {iteration}: {error}",
                 runner.display(),
                 target.id
             )
-        });
+        })?;
+        let total = phases.iter().map(|(_, duration)| *duration).sum();
+        return Ok(RunSample { total, phases });
     }
     if !output.stdout.starts_with(b"rive-golden-stream-v1\n") {
         let kind = if warmup { "warmup" } else { "iteration" };
@@ -378,7 +709,10 @@ fn run_once(
             target.id
         ));
     }
-    Ok(elapsed)
+    Ok(RunSample {
+        total: elapsed,
+        phases: Vec::new(),
+    })
 }
 
 fn runner_command(
@@ -420,44 +754,45 @@ fn validate_benchmark_repeat_target(target: &RunTarget) -> Result<(), String> {
     Ok(())
 }
 
-fn parse_benchmark_hot_loop_duration(stdout: &[u8]) -> Result<Duration, String> {
+/// Hot-loop phases reported by the golden runners' `--benchmark` mode, in
+/// stable output order.
+const BENCHMARK_PHASES: [(&str, &str); 4] = [
+    ("advance", "advance_ms"),
+    ("input", "input_ms"),
+    ("prepare", "prepare_ms"),
+    ("draw", "draw_ms"),
+];
+
+fn parse_benchmark_phases(stdout: &[u8]) -> Result<Vec<(&'static str, Duration)>, String> {
     let text = std::str::from_utf8(stdout).map_err(|error| format!("invalid utf8: {error}"))?;
     let mut lines = text.lines();
     if lines.next() != Some("rive-golden-benchmark-v1") {
         return Err("missing rive-golden-benchmark-v1 header".to_owned());
     }
 
-    let mut advance = None;
-    let mut input = None;
-    let mut prepare = None;
-    let mut draw = None;
+    let mut durations: [Option<Duration>; BENCHMARK_PHASES.len()] = [None; BENCHMARK_PHASES.len()];
     for line in lines {
         let Some((key, value)) = line.split_once('=') else {
             continue;
         };
-        let target = match key {
-            "advance_ms" => &mut advance,
-            "input_ms" => &mut input,
-            "prepare_ms" => &mut prepare,
-            "draw_ms" => &mut draw,
-            _ => continue,
+        let Some(index) = BENCHMARK_PHASES
+            .iter()
+            .position(|(_, phase_key)| *phase_key == key)
+        else {
+            continue;
         };
-        *target = Some(parse_millis(value, key)?);
+        durations[index] = Some(parse_millis(value, key)?);
     }
 
-    let mut total = Duration::ZERO;
-    for (name, duration) in [
-        ("advance_ms", advance),
-        ("input_ms", input),
-        ("prepare_ms", prepare),
-        ("draw_ms", draw),
-    ] {
-        let Some(duration) = duration else {
-            return Err(format!("missing {name}"));
-        };
-        total += duration;
-    }
-    Ok(total)
+    BENCHMARK_PHASES
+        .iter()
+        .zip(durations)
+        .map(|((name, key), duration)| {
+            duration
+                .map(|duration| (*name, duration))
+                .ok_or_else(|| format!("missing {key}"))
+        })
+        .collect()
 }
 
 fn parse_millis(value: &str, key: &str) -> Result<Duration, String> {
@@ -876,20 +1211,244 @@ status = "unsupported-feature"
     }
 
     #[test]
-    fn parses_runner_benchmark_hot_loop_duration() {
-        let duration = parse_benchmark_hot_loop_duration(
+    fn parses_runner_benchmark_hot_loop_phases() {
+        let phases = parse_benchmark_phases(
             b"rive-golden-benchmark-v1\nelapsed_ms=99\nadvance_ms=1.5\ninput_ms=0.25\nprepare_ms=2.0\ndraw_ms=4.25\nbookkeeping_ms=91\nsegments=2\n",
         )
-        .expect("parse benchmark duration");
-        assert_eq!(duration, Duration::from_micros(8_000));
+        .expect("parse benchmark phases");
+        assert_eq!(
+            phases,
+            vec![
+                ("advance", Duration::from_micros(1_500)),
+                ("input", Duration::from_micros(250)),
+                ("prepare", Duration::from_micros(2_000)),
+                ("draw", Duration::from_micros(4_250)),
+            ]
+        );
+        let total: Duration = phases.iter().map(|(_, duration)| *duration).sum();
+        assert_eq!(total, Duration::from_micros(8_000));
     }
 
     #[test]
     fn rejects_runner_benchmark_without_phase_duration() {
-        let error = parse_benchmark_hot_loop_duration(
+        let error = parse_benchmark_phases(
             b"rive-golden-benchmark-v1\nelapsed_ms=12.5\nadvance_ms=1\ninput_ms=0\nprepare_ms=0\nsegments=2\n",
         )
         .unwrap_err();
         assert!(error.contains("missing draw_ms"));
+    }
+
+    #[test]
+    fn parses_json_and_meta_options() {
+        let options = Options::parse(vec![
+            "--file".to_owned(),
+            "fixture.riv".to_owned(),
+            "--json".to_owned(),
+            "out.json".to_owned(),
+            "--meta".to_owned(),
+            "git_sha=abc123".to_owned(),
+            "--meta".to_owned(),
+            "build_profile=release".to_owned(),
+        ])
+        .expect("parse options");
+
+        assert_eq!(options.json, Some(PathBuf::from("out.json")));
+        assert_eq!(
+            options.meta,
+            vec![
+                ("git_sha".to_owned(), "abc123".to_owned()),
+                ("build_profile".to_owned(), "release".to_owned()),
+            ]
+        );
+    }
+
+    #[test]
+    fn rejects_meta_without_key_value_shape() {
+        let error = Options::parse(vec![
+            "--file".to_owned(),
+            "fixture.riv".to_owned(),
+            "--meta".to_owned(),
+            "no-equals-sign".to_owned(),
+        ])
+        .unwrap_err();
+        assert!(error.contains("--meta expects key=value"));
+    }
+
+    fn sample(advance: u64, input: u64, prepare: u64, draw: u64) -> RunSample {
+        let phases = vec![
+            ("advance", Duration::from_millis(advance)),
+            ("input", Duration::from_millis(input)),
+            ("prepare", Duration::from_millis(prepare)),
+            ("draw", Duration::from_millis(draw)),
+        ];
+        RunSample {
+            total: phases.iter().map(|(_, duration)| *duration).sum(),
+            phases,
+        }
+    }
+
+    fn file_result() -> FileResult {
+        FileResult {
+            id: "single".to_owned(),
+            file: "fixture \"quoted\".riv".to_owned(),
+            segments: 2,
+            cpp: summarize_samples(&[sample(1, 0, 2, 3), sample(2, 0, 2, 4), sample(1, 0, 2, 5)]),
+            rust: summarize_samples(&[sample(2, 0, 3, 4), sample(2, 0, 3, 5), sample(2, 0, 3, 6)]),
+        }
+    }
+
+    /// Minimal JSON validator: verifies the report parses as a single JSON
+    /// value without relying on external crates.
+    fn assert_valid_json(text: &str) {
+        fn skip_whitespace(bytes: &[u8], mut index: usize) -> usize {
+            while index < bytes.len() && bytes[index].is_ascii_whitespace() {
+                index += 1;
+            }
+            index
+        }
+
+        fn parse_value(bytes: &[u8], index: usize) -> Result<usize, String> {
+            let index = skip_whitespace(bytes, index);
+            match bytes.get(index) {
+                Some(b'{') => parse_container(bytes, index + 1, b'}', true),
+                Some(b'[') => parse_container(bytes, index + 1, b']', false),
+                Some(b'"') => parse_string(bytes, index),
+                Some(_) => parse_scalar(bytes, index),
+                None => Err("unexpected end of input".to_owned()),
+            }
+        }
+
+        fn parse_container(
+            bytes: &[u8],
+            mut index: usize,
+            close: u8,
+            is_object: bool,
+        ) -> Result<usize, String> {
+            index = skip_whitespace(bytes, index);
+            if bytes.get(index) == Some(&close) {
+                return Ok(index + 1);
+            }
+            loop {
+                if is_object {
+                    index = parse_string(bytes, skip_whitespace(bytes, index))?;
+                    index = skip_whitespace(bytes, index);
+                    if bytes.get(index) != Some(&b':') {
+                        return Err(format!("expected ':' at byte {index}"));
+                    }
+                    index += 1;
+                }
+                index = parse_value(bytes, index)?;
+                index = skip_whitespace(bytes, index);
+                match bytes.get(index) {
+                    Some(b',') => index += 1,
+                    Some(byte) if *byte == close => return Ok(index + 1),
+                    other => return Err(format!("unexpected {other:?} at byte {index}")),
+                }
+            }
+        }
+
+        fn parse_string(bytes: &[u8], index: usize) -> Result<usize, String> {
+            if bytes.get(index) != Some(&b'"') {
+                return Err(format!("expected string at byte {index}"));
+            }
+            let mut index = index + 1;
+            while let Some(byte) = bytes.get(index) {
+                match byte {
+                    b'\\' => index += 2,
+                    b'"' => return Ok(index + 1),
+                    _ => index += 1,
+                }
+            }
+            Err("unterminated string".to_owned())
+        }
+
+        fn parse_scalar(bytes: &[u8], index: usize) -> Result<usize, String> {
+            let end = (index..bytes.len())
+                .find(|&position| {
+                    matches!(bytes[position], b',' | b'}' | b']')
+                        || bytes[position].is_ascii_whitespace()
+                })
+                .unwrap_or(bytes.len());
+            let token = std::str::from_utf8(&bytes[index..end]).map_err(|e| e.to_string())?;
+            if token == "true"
+                || token == "false"
+                || token == "null"
+                || token.parse::<f64>().is_ok()
+            {
+                Ok(end)
+            } else {
+                Err(format!("invalid scalar {token:?} at byte {index}"))
+            }
+        }
+
+        let bytes = text.as_bytes();
+        let index = parse_value(bytes, 0).expect("report must be valid JSON");
+        assert_eq!(
+            skip_whitespace(bytes, index),
+            bytes.len(),
+            "trailing content after JSON value"
+        );
+    }
+
+    #[test]
+    fn renders_valid_json_report_with_phases_and_meta() {
+        let file = file_result();
+        let aggregate = aggregate_results(std::slice::from_ref(&file));
+        let options = Options::parse(vec![
+            "--file".to_owned(),
+            "fixture.riv".to_owned(),
+            "--runner-benchmark".to_owned(),
+            "--iterations".to_owned(),
+            "3".to_owned(),
+            "--meta".to_owned(),
+            "git_sha=abc123".to_owned(),
+            "--meta".to_owned(),
+            "build_profile=release".to_owned(),
+            "--meta".to_owned(),
+            "timestamp=2026-07-07T00:00:00Z".to_owned(),
+        ])
+        .expect("parse options");
+
+        let report = render_json_report(&options, std::slice::from_ref(&file), &aggregate);
+        assert_valid_json(&report);
+
+        assert!(report.contains("\"schema\":\"rive-perf-compare-json-v1\""));
+        assert!(report.contains("\"metric\":\"runner_hot_loop_ms\""));
+        // benchmark_repeat rides along whenever the hot-loop metric is used.
+        assert!(report.contains("\"benchmark_repeat\":1"));
+        assert!(report.contains("\"git_sha\":\"abc123\""));
+        assert!(report.contains("\"build_profile\":\"release\""));
+        assert!(report.contains("\"timestamp\":\"2026-07-07T00:00:00Z\""));
+        assert!(report.contains("\"fixture \\\"quoted\\\".riv\""));
+        // Per-phase stats and ratios for every hot-loop phase plus the total.
+        for phase in ["total", "advance", "input", "prepare", "draw"] {
+            assert!(
+                report.contains(&format!("\"{phase}\":{{\"median_ms\":")),
+                "missing phase stats for {phase}"
+            );
+        }
+        assert!(report.contains("\"rust_over_cpp_by_phase\":{\"total\":"));
+        assert!(report.contains("\"aggregate\":{\"entries\":1,\"segments\":2,"));
+        // cpp totals: 6,8,8 -> median 8; rust totals: 9,10,11 -> median 10.
+        assert!(report.contains("\"rust_over_cpp\":1.250000"));
+        // Zero-duration input phase must not produce NaN.
+        assert!(!report.contains("NaN"));
+        assert!(report.contains("\"input\":null") || report.contains("\"input\":0.000000"));
+    }
+
+    #[test]
+    fn deterministic_report_for_identical_inputs() {
+        let file = file_result();
+        let aggregate = aggregate_results(std::slice::from_ref(&file));
+        let options = Options::parse(vec![
+            "--file".to_owned(),
+            "fixture.riv".to_owned(),
+            "--meta".to_owned(),
+            "timestamp=fixed".to_owned(),
+        ])
+        .expect("parse options");
+        let first = render_json_report(&options, std::slice::from_ref(&file), &aggregate);
+        let second = render_json_report(&options, std::slice::from_ref(&file), &aggregate);
+        assert_eq!(first, second);
     }
 }

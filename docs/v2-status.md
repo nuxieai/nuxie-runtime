@@ -37,9 +37,16 @@ the only memory the next session has. Update it every commit.
    metadata functions. First process-level perf baseline exists via
    `make perf-compare`: default `shapetest.riv`, samples=0, iterations=5,
    warmups=1 reports C++ median 37.848ms, Rust median 5.131ms,
-   Rust/C++=0.136 on this machine. Highest priority next target is turning
-   that baseline into a corpus/hot-path advance+draw benchmark with an explicit
-   M7 target threshold; after that, expand the C ABI to instance advance/draw.
+   Rust/C++=0.136 on this machine. First corpus perf threshold exists via
+   `make perf-corpus`: focused verification with `PERF_CORPUS_LIMIT=5`,
+   `PERF_ITERATIONS=2`, `PERF_WARMUPS=1`, `PERF_MAX_RATIO=2.0` reports 5
+   exact entries / 10 segments, aggregate Rust/C++=1.183. Full
+   `cargo test --workspace` passes, and full `make golden-compare` remains
+   `exact=263`, `exact-segments=584`, `diverges=0`,
+   `unsupported-feature=32`, `not-yet=0`. Highest priority next target is the
+   in-process advance+draw benchmark and/or the
+   `ai_assitant` perf outlier (Rust/C++=4.715 in the focused corpus run);
+   after that, expand the C ABI to instance advance/draw.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -308,6 +315,19 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-07: [M7] Added corpus-mode performance thresholding to
+  `tools/perf-compare` and `make perf-corpus`. The tool now reads
+  `corpus.toml`, selects exact entries, preserves per-entry samples and input
+  scripts, resolves assets through `RIVE_RUNTIME_DIR`, sums median C++ and Rust
+  runner timings, and fails when aggregate Rust/C++ exceeds `--max-ratio`.
+  Focused verification with `PERF_CORPUS_LIMIT=5`, `PERF_ITERATIONS=2`,
+  `PERF_WARMUPS=1`, `PERF_MAX_RATIO=2.0` reports 5 exact entries / 10 segments,
+  aggregate Rust/C++=1.183 and passes the threshold. Full
+  `cargo test --workspace` passes, and full `make golden-compare` remains
+  `exact=263`, `exact-segments=584`, `diverges=0`,
+  `unsupported-feature=32`, `not-yet=0`. `ai_assitant.riv` is the visible
+  outlier at Rust/C++=4.715, so the next M7 perf slice should add an in-process
+  advance+draw benchmark and/or localize that file's Rust-side overhead.
 - 2026-07-07: [M7] Added the first C++/Rust performance baseline command,
   `make perf-compare`, backed by `tools/perf-compare`. It builds both golden
   runners, executes the same file/sample set with configurable iterations and

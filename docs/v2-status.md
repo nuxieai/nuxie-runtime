@@ -26,13 +26,15 @@ the only memory the next session has. Update it every commit.
 
 1. The active `not-yet` queue is empty. Continue M6 by picking the highest-value
    remaining unsupported queue that is not scripting/audio: start with
-   `nested-artboard-layout` (`superbowl.riv`) or
    `selected-root-skinned-clip-path` (`bullet_man.riv`,
-   `spotify_kids_demo.riv`). `echo_show_demo.riv` is now parked behind the
-   sharper `text-joystick-data-bind-divergence` diagnostic after a focused
-   probe reached draw but diverged from C++.
+   `spotify_kids_demo.riv`) or the nested data-bind diagnostics.
+   `echo_show_demo.riv` is now parked behind the sharper
+   `text-joystick-data-bind-divergence` diagnostic after a focused probe
+   reached draw but diverged from C++; `superbowl.riv` is parked behind the
+   sharper `state-machine-viewmodel-solo-image` diagnostic.
 2. Other parked one-file M6 queues include `text-joystick-data-bind-divergence`
-   (`echo_show_demo.riv`), `nested-artboard-layout` (`superbowl.riv`), and
+   (`echo_show_demo.riv`), `state-machine-viewmodel-solo-image`
+   (`superbowl.riv`), and
    `selected-root-skinned-clip-path` (`bullet_man.riv`,
    `spotify_kids_demo.riv`). The former
    `data-binding-nested-child` queue is five one-file diagnostics:
@@ -482,6 +484,18 @@ the only memory the next session has. Update it every commit.
   `unsupported-feature=52`, `not-yet=0`, parked
   `M6=10 gated=6 harness=36`. Next target is `nested-artboard-layout`,
   `selected-root-skinned-clip-path`, or the nested data-bind diagnostics.
+- 2026-07-06: [M6] Rechecked `superbowl.riv` and replaced the stale
+  `nested-artboard-layout` guard with
+  `state-machine-viewmodel-solo-image`. Rust now admits
+  `NestedArtboardLayout`/`NestedArtboardLeaf` static-text siblings; focused
+  `Logo` and `Side` streams show the first missing draw is an image under a
+  `Solo` whose active child is selected by a view-model enum state-machine
+  path, not by generic nested layout. The focused runner now emits
+  `unsupported: state-machine-viewmodel-solo-image` at image global `3567`,
+  and full `make golden-compare` reports `exact=243`,
+  `exact-segments=564`, `diverges=0`, `unsupported-feature=52`,
+  `not-yet=0`, parked `M6=10 gated=6 harness=36`. Next target is
+  `selected-root-skinned-clip-path` or the nested data-bind diagnostics.
 - 2026-07-02: `rive-runtime` owns static draw emission through
   `rive-render-api`; `rust-golden-runner` now only orchestrates import,
   artboard selection, stream markers, and recording output.

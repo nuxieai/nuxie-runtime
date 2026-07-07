@@ -921,6 +921,12 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
+    if let Some(global_id) = unsupported_state_machine_viewmodel_solo_image(runtime, artboard) {
+        bail!(
+            "unsupported: state-machine-viewmodel-solo-image in Rust golden runner (global {global_id})"
+        );
+    }
+
     if let Some(data_bind) = unsupported_joystick_data_bind_stream_divergence(artboard) {
         bail!(
             "unsupported: text-joystick-data-bind-divergence in Rust golden runner (data bind global {} target global {:?} property key {})",
@@ -1034,6 +1040,81 @@ fn ensure_static_draw_supported_for_artboard(
     }
 
     Ok(())
+}
+
+fn unsupported_state_machine_viewmodel_solo_image(
+    runtime: &RuntimeFile,
+    artboard: &ArtboardGraph,
+) -> Option<u32> {
+    if !runtime_has_type(runtime, "BindablePropertyEnum")
+        || !runtime_has_type(runtime, "TransitionValueEnumComparator")
+        || !artboard
+            .state_machines
+            .iter()
+            .any(|state_machine| !state_machine.data_binds.is_empty())
+    {
+        return None;
+    }
+
+    let active_component_key =
+        u64::from(schema_property_key_for_name("Solo", "activeComponentId")?);
+    let solo_locals = artboard
+        .components
+        .iter()
+        .filter(|component| component.type_name == "Solo")
+        .map(|component| component.local_id)
+        .collect::<BTreeSet<_>>();
+    if solo_locals.is_empty() {
+        return None;
+    }
+
+    let solo_image_globals = artboard
+        .components
+        .iter()
+        .filter(|component| component.type_name == "Image")
+        .filter(|component| {
+            component_has_solo_ancestor(artboard, component.parent_local, &solo_locals)
+        })
+        .map(|component| component.global_id)
+        .collect::<Vec<_>>();
+    if solo_image_globals.len() < 2 {
+        return None;
+    }
+
+    let active_solo_animation_count = artboard
+        .animations
+        .iter()
+        .flat_map(|animation| &animation.keyed_objects)
+        .filter(|keyed_object| {
+            usize::try_from(keyed_object.object_id)
+                .ok()
+                .is_some_and(|local| solo_locals.contains(&local))
+                && keyed_object
+                    .keyed_properties
+                    .iter()
+                    .any(|keyed_property| keyed_property.property_key == active_component_key)
+        })
+        .count();
+
+    (active_solo_animation_count >= 2).then_some(solo_image_globals[0])
+}
+
+fn component_has_solo_ancestor(
+    artboard: &ArtboardGraph,
+    mut parent_local: Option<usize>,
+    solo_locals: &BTreeSet<usize>,
+) -> bool {
+    while let Some(local_id) = parent_local {
+        if solo_locals.contains(&local_id) {
+            return true;
+        }
+        parent_local = artboard
+            .components
+            .iter()
+            .find(|component| component.local_id == local_id)
+            .and_then(|component| component.parent_local);
+    }
+    false
 }
 
 fn unsupported_joystick_data_bind_stream_divergence(

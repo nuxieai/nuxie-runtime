@@ -577,6 +577,8 @@ impl<'a> StaticTextSlice<'a> {
                         | "TrimPath"
                         | "Backboard"
                         | "NestedArtboard"
+                        | "NestedArtboardLayout"
+                        | "NestedArtboardLeaf"
                         | "NestedStateMachine"
                         | "NestedRemapAnimation"
                         | "Joystick"
@@ -658,8 +660,6 @@ impl<'a> StaticTextSlice<'a> {
                         | "TextShapeModifier"
                         | "TextVariationModifier"
                         | "TextTargetModifier"
-                        | "NestedArtboardLayout"
-                        | "NestedArtboardLeaf"
                 )
             )
         }) {

@@ -39,6 +39,7 @@ pub(crate) struct RuntimeJoystick {
     pub(crate) can_apply_before_update: bool,
     pub(crate) x_animation_index: Option<usize>,
     pub(crate) y_animation_index: Option<usize>,
+    pub(crate) nested_remap_dependents: Vec<usize>,
 }
 
 pub(crate) fn build_runtime_joysticks(
@@ -61,6 +62,11 @@ pub(crate) fn build_runtime_joysticks(
                     .iter()
                     .position(|animation| animation.global_id == global_id)
             }),
+            nested_remap_dependents: joystick
+                .nested_remap_dependents
+                .iter()
+                .map(|dependent| dependent.local_id)
+                .collect(),
         })
         .collect()
 }

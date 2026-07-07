@@ -905,6 +905,15 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
+    if let Some(data_bind) = unsupported_joystick_nested_remap_gradient_order(artboard) {
+        bail!(
+            "unsupported: text-joystick-nested-remap-gradient-order in Rust golden runner (data bind global {} target global {:?} property key {})",
+            data_bind.global_id,
+            data_bind.target_global,
+            data_bind.property_key
+        );
+    }
+
     if let Some((text, reason)) = artboard
         .local_objects
         .iter()
@@ -924,15 +933,6 @@ fn ensure_static_draw_supported_for_artboard(
     if let Some(global_id) = unsupported_state_machine_viewmodel_solo_image(runtime, artboard) {
         bail!(
             "unsupported: state-machine-viewmodel-solo-image in Rust golden runner (global {global_id})"
-        );
-    }
-
-    if let Some(data_bind) = unsupported_joystick_data_bind_stream_divergence(artboard) {
-        bail!(
-            "unsupported: text-joystick-data-bind-divergence in Rust golden runner (data bind global {} target global {:?} property key {})",
-            data_bind.global_id,
-            data_bind.target_global,
-            data_bind.property_key
         );
     }
 
@@ -1117,9 +1117,19 @@ fn component_has_solo_ancestor(
     false
 }
 
-fn unsupported_joystick_data_bind_stream_divergence(
+fn artboard_has_joystick_nested_remap_dependents(artboard: &ArtboardGraph) -> bool {
+    artboard
+        .joysticks
+        .iter()
+        .any(|joystick| !joystick.nested_remap_dependents.is_empty())
+}
+
+fn unsupported_joystick_nested_remap_gradient_order(
     artboard: &ArtboardGraph,
 ) -> Option<&rive_graph::DataBindNode> {
+    if !artboard_has_joystick_nested_remap_dependents(artboard) {
+        return None;
+    }
     let joystick_x_key = schema_property_key_for_name("Joystick", "x")?;
     let mut converted_x_binds = artboard.data_binds.iter().filter(|data_bind| {
         data_bind_source_to_target(data_bind)

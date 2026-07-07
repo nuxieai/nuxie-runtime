@@ -26,11 +26,14 @@ the only memory the next session has. Update it every commit.
 
 1. Active `not-yet`: none. The M6 queue is now explicit
    `unsupported-feature` diagnostics only.
-2. Highest-priority M6 slice: `echo_show_demo.riv`
-   (`rust-runner-unsupported:text-joystick-data-bind-divergence`). The stale
-   admission guard is gone and the file now reaches draw, so compare the
-   focused C++/Rust streams around the first shader creation and either promote
-   it or replace the guard with a sharper first-blocker diagnostic.
+2. Highest-priority M6 slice: `superbowl.riv`
+   (`rust-runner-unsupported:state-machine-viewmodel-solo-image`).
+   `echo_show_demo.riv` now has runtime Joystick nested-remap dependents wired
+   and is parked behind the sharper
+   `rust-runner-unsupported:text-joystick-nested-remap-gradient-order`
+   diagnostic. Do not reopen it until the golden runner can observe C++'s
+   intermediate gradient shader-cache side effects during Joystick-driven
+   `NestedRemapAnimation::advance(0, false)`.
 3. Other parked one-file M6 queues include `state-machine-viewmodel-solo-image`
    (`superbowl.riv`), `selected-root-skinned-ik-clip-path`
    (`bullet_man.riv`), `layout-component-paint` (`rewards_demo.riv`),
@@ -557,6 +560,20 @@ the only memory the next session has. Update it every commit.
   `M6=7 gated=6 harness=36`; `cargo test --workspace` passes. Next target is
   `echo_show_demo.riv`
   (`rust-runner-unsupported:text-joystick-data-bind-divergence`).
+- 2026-07-07: [M6] Narrowed `echo_show_demo.riv` by wiring
+  `RuntimeJoystick` to its graph-projected nested remap dependents and by
+  having `Joystick::apply` advance matching child `NestedRemapAnimation`
+  instances. A focused bypass run now reaches the same nested-remap application
+  path but still diverges at the first gradient shader allocation because C++
+  records intermediate child gradient shader-cache states during
+  `NestedRemapAnimation::advance(0, false)` and Rust's runner prepares the
+  final post-update state. The manifest/runner guard is sharpened from
+  `text-joystick-data-bind-divergence` to
+  `text-joystick-nested-remap-gradient-order`. Full `make golden-compare`
+  remains `exact=246`, `exact-segments=567`, `diverges=0`,
+  `unsupported-feature=49`, `not-yet=0`, parked
+  `M6=7 gated=6 harness=36`; `cargo test --workspace` passes. Next target is
+  `superbowl.riv` (`state-machine-viewmodel-solo-image`).
 - 2026-07-02: `rive-runtime` owns static draw emission through
   `rive-render-api`; `rust-golden-runner` now only orchestrates import,
   artboard selection, stream markers, and recording output.

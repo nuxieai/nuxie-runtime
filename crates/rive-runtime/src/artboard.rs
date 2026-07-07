@@ -1078,6 +1078,9 @@ impl ArtboardInstance {
                 changed |= self.apply_linear_animation(animation_index, seconds, 1.0);
             }
         }
+        for remap_local_id in &joystick.nested_remap_dependents {
+            changed |= self.advance_nested_remap_animation(*remap_local_id);
+        }
         changed
     }
 
@@ -1424,6 +1427,12 @@ impl ArtboardInstance {
             .any(|nested| nested.set_remap_time(remap_local_id, time))
     }
 
+    fn advance_nested_remap_animation(&mut self, remap_local_id: usize) -> bool {
+        self.nested_artboards
+            .values_mut()
+            .any(|nested| nested.advance_remap(remap_local_id))
+    }
+
     pub(crate) fn apply_component_collapse_changed(&mut self, local_id: usize) -> bool {
         self.propagate_solo_collapse(local_id)
     }
@@ -1633,6 +1642,24 @@ impl RuntimeNestedArtboardInstance {
                 .global_to_local_seconds(linear_animation.duration_seconds() * time);
             animation.set_time(linear_animation, seconds);
             return true;
+        }
+        false
+    }
+
+    fn advance_remap(&mut self, remap_local_id: usize) -> bool {
+        for animation in &mut self.animations {
+            let RuntimeNestedAnimationInstance::Remap {
+                local_id,
+                animation,
+                mix,
+            } = animation
+            else {
+                continue;
+            };
+            if *local_id != remap_local_id || *mix == 0.0 {
+                continue;
+            }
+            return self.child.apply_linear_animation_instance(animation, *mix);
         }
         false
     }

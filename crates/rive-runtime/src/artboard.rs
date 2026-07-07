@@ -391,6 +391,7 @@ impl ArtboardInstance {
             return false;
         }
         self.did_change = true;
+        self.apply_string_property_changed(local_id, property_key);
         true
     }
 
@@ -1174,6 +1175,41 @@ impl ArtboardInstance {
             }
             _ => false,
         }
+    }
+
+    pub(crate) fn apply_string_property_changed(
+        &mut self,
+        local_id: usize,
+        property_key: u16,
+    ) -> bool {
+        match self.slot(local_id).and_then(|slot| slot.type_name) {
+            Some("TextValueRun")
+                if property_key_for_name("TextValueRun", "text") == Some(property_key) =>
+            {
+                self.mark_text_value_run_shape_dirty(local_id)
+            }
+            _ => false,
+        }
+    }
+
+    fn mark_text_value_run_shape_dirty(&mut self, run_local_id: usize) -> bool {
+        let Some(parent_key) = property_key_for_name("Component", "parentId") else {
+            return false;
+        };
+        let Some(text_local) = self
+            .uint_property(run_local_id, parent_key)
+            .and_then(|parent_id| usize::try_from(parent_id).ok())
+        else {
+            return false;
+        };
+        if self.slot(text_local).and_then(|slot| slot.type_name) != Some("Text") {
+            return false;
+        }
+
+        let mut changed = false;
+        changed |= self.add_dirt(text_local, ComponentDirt::TEXT_SHAPE, false);
+        changed |= self.add_dirt(text_local, ComponentDirt::WORLD_TRANSFORM, true);
+        changed
     }
 
     pub(crate) fn apply_double_property_changed(

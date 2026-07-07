@@ -1374,7 +1374,23 @@ impl ArtboardInstance {
         if component.type_name == "NestedArtboardLayout"
             && let Some(bounds) = layout_bounds.and_then(|bounds| bounds.get(&local_id).copied())
         {
-            return Mat2D([1.0, 0.0, 0.0, 1.0, bounds.x, bounds.y]);
+            if mat2d_linear_is_identity(component.transform.local_transform) {
+                return Mat2D([1.0, 0.0, 0.0, 1.0, bounds.x, bounds.y]);
+            }
+            let (origin_x, origin_y) = self
+                .nested_artboards
+                .get(&local_id)
+                .map(|nested| {
+                    (
+                        nested.child.width * nested.child.origin_x,
+                        nested.child.height * nested.child.origin_y,
+                    )
+                })
+                .unwrap_or((0.0, 0.0));
+            let mut components = component.transform.local_transform.decompose();
+            components.x = bounds.x + origin_x;
+            components.y = bounds.y + origin_y;
+            return Mat2D::compose(components);
         }
         let Some(parent_local) = component.parent_local else {
             return component.transform.world_transform;
@@ -2803,12 +2819,11 @@ impl ArtboardInstance {
                 else {
                     continue;
                 };
-                let Some(path_world) = self
-                    .component(path.local_id)
-                    .map(|component| component.transform.world_transform)
-                else {
-                    continue;
-                };
+                let path_world = self.runtime_component_world_transform_with_bounds(
+                    path.local_id,
+                    graph,
+                    layout_bounds,
+                );
                 let runtime_path =
                     self.runtime_path_geometry_with_layout_control(path, layout_bounds);
                 let weighted_context = self.runtime_weighted_path_context(&runtime_path, graph);
@@ -3570,6 +3585,7 @@ impl TaffyRuntimeLayoutEngine {
                 "minWidth",
                 "minWidthUnitsValue",
                 false,
+                self.intrinsic_static_hug_min_is_auto(instance, graph, local, style_local, true)?,
             )?,
             height: self.dimension_style(
                 instance,
@@ -3577,6 +3593,7 @@ impl TaffyRuntimeLayoutEngine {
                 "minHeight",
                 "minHeightUnitsValue",
                 false,
+                self.intrinsic_static_hug_min_is_auto(instance, graph, local, style_local, false)?,
             )?,
         };
         style.max_size = Size {
@@ -3586,6 +3603,7 @@ impl TaffyRuntimeLayoutEngine {
                 "maxWidth",
                 "maxWidthUnitsValue",
                 true,
+                false,
             )?,
             height: self.dimension_style(
                 instance,
@@ -3593,6 +3611,7 @@ impl TaffyRuntimeLayoutEngine {
                 "maxHeight",
                 "maxHeightUnitsValue",
                 true,
+                false,
             )?,
         };
         let aspect_ratio = instance
@@ -4047,6 +4066,21 @@ impl TaffyRuntimeLayoutEngine {
         }))
     }
 
+    fn intrinsic_static_hug_min_is_auto(
+        &self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        layout_local: usize,
+        style_local: usize,
+        width_axis: bool,
+    ) -> Option<bool> {
+        const LAYOUT_SCALE_TYPE_HUG: u64 = 2;
+        if instance.runtime_layout_axis_scale(style_local, width_axis) != LAYOUT_SCALE_TYPE_HUG {
+            return Some(false);
+        }
+        self.layout_component_has_intrinsic_static_measure(instance, graph, layout_local)
+    }
+
     fn measure_layout_component(
         &self,
         runtime: &RuntimeFile,
@@ -4251,11 +4285,19 @@ impl TaffyRuntimeLayoutEngine {
         value_name: &str,
         unit_name: &str,
         zero_undefined_is_auto: bool,
+        nonzero_undefined_is_auto: bool,
     ) -> Option<Dimension> {
         let value = instance
             .runtime_layout_style_double(style_local, value_name)
             .unwrap_or(0.0);
         let units = instance.runtime_layout_style_uint_default(style_local, unit_name, 0);
+        if nonzero_undefined_is_auto
+            && units == 0
+            && value.abs() > f32::EPSILON
+            && matches!(value_name, "minWidth" | "minHeight")
+        {
+            return Some(Dimension::auto());
+        }
         if zero_undefined_is_auto && units == 0 && value.abs() <= f32::EPSILON {
             return Some(Dimension::auto());
         }
@@ -7022,6 +7064,10 @@ fn mat2d_has_visible_skew_or_rotation(mat: Mat2D) -> bool {
 
 fn mat2d_has_any_skew_or_rotation(mat: Mat2D) -> bool {
     mat.0[1] != 0.0 || mat.0[2] != 0.0
+}
+
+fn mat2d_linear_is_identity(mat: Mat2D) -> bool {
+    mat.0[0] == 1.0 && mat.0[1] == 0.0 && mat.0[2] == 0.0 && mat.0[3] == 1.0
 }
 
 fn runtime_blend_mode(value: u32) -> Result<RenderBlendMode> {

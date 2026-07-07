@@ -5,9 +5,9 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 565 across 244 files (strict
-  exact=558/237; tolerant=7/7; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=50, not-yet=1
+- Exact-status segments (file × sample): 566 across 245 files (strict
+  exact=558/237; tolerant=8/8; structural=0/0)
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=50, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=8 gated=6 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes**
 
@@ -24,24 +24,22 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. Active `not-yet`: `db_health_tracker.riv`
-   (`not-yet:nested-data-bind-text-path-divergence`). It now reaches Rust draw
-   after admitting direct/group TrimPath binds, interpolated layout size binds,
-   direct nested Node x/y binds, and `NestedSimpleAnimation` static-text
-   siblings. Focus next on the structural text/glyph path mismatch before
-   opening another broad nested data-bind lane.
-2. Other parked one-file M6 queues include `text-joystick-data-bind-divergence`
+1. Active `not-yet`: none. The M6 queue is now explicit
+   `unsupported-feature` diagnostics only.
+2. Highest-priority M6 slice: `nested_hug.riv`
+   (`rust-runner-unsupported:nested-artboard-root-transform`). This is
+   adjacent to the `db_health_tracker.riv` nested-layout transform work; bypass
+   the guard, compare focused C++/Rust streams and layout bounds, then either
+   promote it or replace the guard with a sharper first-blocker diagnostic.
+3. Other parked one-file M6 queues include `text-joystick-data-bind-divergence`
    (`echo_show_demo.riv`), `state-machine-viewmodel-solo-image`
    (`superbowl.riv`), `selected-root-skinned-ik-clip-path`
-   (`bullet_man.riv`), and `layout-component-paint` (`rewards_demo.riv`).
-   Remaining nested-child data-bind diagnostics are
-   `nested-artboard-root-transform` (`nested_hug.riv`),
+   (`bullet_man.riv`), `layout-component-paint` (`rewards_demo.riv`),
    `nested-node-transform-data-bind` (`car_widgets_v01.riv`),
    `nested-layout-clip-data-bind` (`stateful_multi_property.riv`), and
    `nested-stateful-view-model-property` (`stateful_nested.riv`). Gated
-   one-file diagnostics
-   include `scripted-data-context` (`scripted_data_context.riv`),
-   `scripted-transition-condition` (2 gated),
+   one-file diagnostics include `scripted-data-context`
+   (`scripted_data_context.riv`), `scripted-transition-condition` (2 gated),
    `scripted-path-effects` (1 gated), and `text-polygon-sibling`
    (`bankcard.riv`). Keep these parked queues as explicit unsupported/gated
    work until a focused slice can either promote a file or replace the guard
@@ -116,10 +114,9 @@ the only memory the next session has. Update it every commit.
 
 ## Known Divergences
 
-- No `status = "diverges"` entries in the active corpus. The active
-  `not-yet` entry is `db_health_tracker.riv`
-  (`not-yet:nested-data-bind-text-path-divergence`); remaining M6 work is
-  parked behind explicit unsupported-feature diagnostics.
+- No `status = "diverges"` or `status = "not-yet"` entries in the active
+  corpus. Remaining M6 work is parked behind explicit unsupported-feature
+  diagnostics.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -539,6 +536,19 @@ the only memory the next session has. Update it every commit.
   `diverges=0`, `unsupported-feature=50`, `not-yet=1`, parked
   `M6=8 gated=6 harness=36`. Next target is
   `db_health_tracker.riv`'s active not-yet mismatch.
+- 2026-07-07: [M6] Promoted `db_health_tracker.riv` under
+  `verification = "tolerant(0.0011)"` by binding
+  `DataConverterOperationValue.operationValue`, marking parent `Text` shapes
+  dirty when `TextValueRun.text` mutates, matching C++ trailing-hard-break text
+  measurement, applying layout bounds to clipping paths, preserving authored
+  non-identity transforms for nested artboard layout hosts, and treating
+  nonzero undefined min-size as auto only for intrinsic static-measured hug
+  layout nodes. `artboard_width_test.riv` stays strict exact after narrowing
+  identity nested-layout hosts back to bounds-only transforms. Full
+  `make golden-compare` reports `exact=245`, `exact-segments=566`,
+  `diverges=0`, `unsupported-feature=50`, `not-yet=0`, parked
+  `M6=8 gated=6 harness=36`; `cargo test --workspace` passes. Next target is
+  `nested_hug.riv` (`rust-runner-unsupported:nested-artboard-root-transform`).
 - 2026-07-02: `rive-runtime` owns static draw emission through
   `rive-render-api`; `rust-golden-runner` now only orchestrates import,
   artboard selection, stream markers, and recording output.

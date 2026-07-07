@@ -172,6 +172,7 @@ pub(crate) enum RuntimeDataBindGraphConverter {
         color_format: Vec<u8>,
     },
     OperationValue {
+        global_id: u32,
         operation_type: u64,
         operation_value: f32,
     },
@@ -258,6 +259,27 @@ impl RuntimeDataBindGraphConverter {
                 let mut changed = false;
                 for converter in converters {
                     changed |= converter.set_formula_token_value(token_id, value);
+                }
+                changed
+            }
+            _ => false,
+        }
+    }
+
+    pub(crate) fn set_operation_value(&mut self, target_global_id: u32, value: f32) -> bool {
+        match self {
+            RuntimeDataBindGraphConverter::OperationValue {
+                global_id,
+                operation_value,
+                ..
+            } if *global_id == target_global_id && *operation_value != value => {
+                *operation_value = value;
+                true
+            }
+            RuntimeDataBindGraphConverter::Group(converters) => {
+                let mut changed = false;
+                for converter in converters {
+                    changed |= converter.set_operation_value(target_global_id, value);
                 }
                 changed
             }
@@ -1129,6 +1151,7 @@ pub(crate) fn runtime_data_bind_graph_convert_value(
             RuntimeDataBindGraphConverter::OperationValue {
                 operation_type,
                 operation_value,
+                ..
             },
             RuntimeDataBindGraphValue::Number(value),
         ) => Some(RuntimeDataBindGraphValue::Number(
@@ -1142,6 +1165,7 @@ pub(crate) fn runtime_data_bind_graph_convert_value(
             RuntimeDataBindGraphConverter::OperationValue {
                 operation_type,
                 operation_value,
+                ..
             },
             RuntimeDataBindGraphValue::SymbolListIndex(value),
         ) => Some(RuntimeDataBindGraphValue::Number(
@@ -1351,6 +1375,7 @@ pub(crate) fn runtime_data_bind_graph_reverse_convert_value(
             RuntimeDataBindGraphConverter::OperationValue {
                 operation_type,
                 operation_value,
+                ..
             },
             RuntimeDataBindGraphValue::Number(value),
         ) => Some(RuntimeDataBindGraphValue::Number(
@@ -1900,6 +1925,7 @@ fn runtime_data_bind_graph_converter_for_object(
                 .to_vec(),
         },
         "DataConverterOperationValue" => RuntimeDataBindGraphConverter::OperationValue {
+            global_id: converter.id,
             operation_type: converter.uint_property("operationType").unwrap_or(0),
             operation_value: converter.double_property("operationValue").unwrap_or(1.0),
         },

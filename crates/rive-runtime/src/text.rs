@@ -3451,11 +3451,13 @@ fn split_static_text_lines(text: &str) -> Vec<StaticTextLine<'_>> {
         line_index += 1;
     }
 
-    lines.push(StaticTextLine {
-        text: &text[line_start_byte..],
-        char_start: line_start_char,
-        line_index,
-    });
+    if line_start_byte < text.len() || lines.is_empty() {
+        lines.push(StaticTextLine {
+            text: &text[line_start_byte..],
+            char_start: line_start_char,
+            line_index,
+        });
+    }
     lines
 }
 

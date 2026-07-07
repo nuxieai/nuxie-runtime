@@ -68,11 +68,17 @@ pub(super) struct RuntimeArtboardNumericSourceBindingInstance {
 
 #[derive(Debug, Clone)]
 pub(super) struct RuntimeArtboardFormulaTokenBindingInstance {
-    target_global_id: u32,
+    target: RuntimeArtboardFormulaBindingTarget,
     path: Vec<u32>,
     converter: Option<RuntimeDataBindGraphConverter>,
     converter_state: RuntimeDataBindGraphConverterState,
     default_value: RuntimeDataBindGraphValue,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(super) enum RuntimeArtboardFormulaBindingTarget {
+    FormulaToken { global_id: u32 },
+    OperationValue { global_id: u32 },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -833,10 +839,13 @@ pub(super) fn build_artboard_formula_token_bindings(
     let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
         return Vec::new();
     };
-    let Some(operation_value_key) = property_key_for_name("FormulaTokenValue", "operationValue")
-    else {
+    let formula_token_operation_value_key =
+        property_key_for_name("FormulaTokenValue", "operationValue");
+    let converter_operation_value_key =
+        property_key_for_name("DataConverterOperationValue", "operationValue");
+    if formula_token_operation_value_key.is_none() && converter_operation_value_key.is_none() {
         return Vec::new();
-    };
+    }
     let default_instance = artboard_default_view_model_instance(file, artboard_index);
 
     file.objects
@@ -856,12 +865,22 @@ pub(super) fn build_artboard_formula_token_bindings(
                 return None;
             }
             let target = file.data_bind_target_for_object(data_bind)?;
-            if target.type_name != "FormulaTokenValue" {
-                return None;
-            }
-            if u16::try_from(data_bind.uint_property("propertyKey")?).ok()? != operation_value_key {
-                return None;
-            }
+            let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
+            let target = match target.type_name {
+                "FormulaTokenValue" if Some(property_key) == formula_token_operation_value_key => {
+                    RuntimeArtboardFormulaBindingTarget::FormulaToken {
+                        global_id: target.id,
+                    }
+                }
+                "DataConverterOperationValue"
+                    if Some(property_key) == converter_operation_value_key =>
+                {
+                    RuntimeArtboardFormulaBindingTarget::OperationValue {
+                        global_id: target.id,
+                    }
+                }
+                _ => return None,
+            };
             let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
             let converter = runtime_data_bind_graph_converter(file, data_bind);
             if matches!(converter, Some(RuntimeDataBindGraphConverter::Unsupported)) {
@@ -888,7 +907,7 @@ pub(super) fn build_artboard_formula_token_bindings(
             }
 
             Some(RuntimeArtboardFormulaTokenBindingInstance {
-                target_global_id: target.id,
+                target,
                 path,
                 converter_state: RuntimeDataBindGraphConverterState::for_converter(
                     converter.as_ref(),
@@ -1635,12 +1654,18 @@ impl ArtboardInstance {
     fn update_artboard_formula_token_bindings(&mut self) -> bool {
         let mut changed = false;
         for index in 0..self.artboard_formula_token_bindings.len() {
-            let Some((token_id, value)) =
-                self.converted_artboard_formula_token_binding_value(index)
+            let Some((target, value)) = self.converted_artboard_formula_token_binding_value(index)
             else {
                 continue;
             };
-            changed |= self.set_artboard_formula_token_value(token_id, value);
+            changed |= match target {
+                RuntimeArtboardFormulaBindingTarget::FormulaToken { global_id } => {
+                    self.set_artboard_formula_token_value(global_id, value)
+                }
+                RuntimeArtboardFormulaBindingTarget::OperationValue { global_id } => {
+                    self.set_artboard_operation_value(global_id, value)
+                }
+            };
         }
         changed
     }
@@ -1648,7 +1673,7 @@ impl ArtboardInstance {
     fn converted_artboard_formula_token_binding_value(
         &mut self,
         index: usize,
-    ) -> Option<(u32, f32)> {
+    ) -> Option<(RuntimeArtboardFormulaBindingTarget, f32)> {
         let binding = self.artboard_formula_token_bindings.get_mut(index)?;
         let value = self
             .artboard_data_bind_values
@@ -1664,7 +1689,7 @@ impl ArtboardInstance {
             None => Some(value),
         }?;
         match converted {
-            RuntimeDataBindGraphValue::Number(value) => Some((binding.target_global_id, value)),
+            RuntimeDataBindGraphValue::Number(value) => Some((binding.target, value)),
             _ => None,
         }
     }
@@ -1685,6 +1710,29 @@ impl ArtboardInstance {
                 continue;
             };
             if converter.set_formula_token_value(token_id, value) {
+                binding.converter_state.reset_formula_randoms();
+                changed = true;
+            }
+        }
+        changed
+    }
+
+    fn set_artboard_operation_value(&mut self, target_global_id: u32, value: f32) -> bool {
+        let mut changed = false;
+        for binding in &mut self.artboard_property_bindings {
+            let Some(converter) = binding.converter.as_mut() else {
+                continue;
+            };
+            if converter.set_operation_value(target_global_id, value) {
+                binding.converter_state.reset_formula_randoms();
+                changed = true;
+            }
+        }
+        for binding in &mut self.artboard_custom_property_bindings {
+            let Some(converter) = binding.converter.as_mut() else {
+                continue;
+            };
+            if converter.set_operation_value(target_global_id, value) {
                 binding.converter_state.reset_formula_randoms();
                 changed = true;
             }

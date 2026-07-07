@@ -5,10 +5,10 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 566 across 245 files (strict
-  exact=558/237; tolerant=8/8; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=50, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=8 gated=6 harness=36
+- Exact-status segments (file × sample): 567 across 246 files (strict
+  exact=559/238; tolerant=8/8; structural=0/0)
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=49, not-yet=0
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=7 gated=6 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes**
 
 ## Milestones
@@ -26,13 +26,12 @@ the only memory the next session has. Update it every commit.
 
 1. Active `not-yet`: none. The M6 queue is now explicit
    `unsupported-feature` diagnostics only.
-2. Highest-priority M6 slice: `nested_hug.riv`
-   (`rust-runner-unsupported:nested-artboard-root-transform`). This is
-   adjacent to the `db_health_tracker.riv` nested-layout transform work; bypass
-   the guard, compare focused C++/Rust streams and layout bounds, then either
-   promote it or replace the guard with a sharper first-blocker diagnostic.
-3. Other parked one-file M6 queues include `text-joystick-data-bind-divergence`
-   (`echo_show_demo.riv`), `state-machine-viewmodel-solo-image`
+2. Highest-priority M6 slice: `echo_show_demo.riv`
+   (`rust-runner-unsupported:text-joystick-data-bind-divergence`). The stale
+   admission guard is gone and the file now reaches draw, so compare the
+   focused C++/Rust streams around the first shader creation and either promote
+   it or replace the guard with a sharper first-blocker diagnostic.
+3. Other parked one-file M6 queues include `state-machine-viewmodel-solo-image`
    (`superbowl.riv`), `selected-root-skinned-ik-clip-path`
    (`bullet_man.riv`), `layout-component-paint` (`rewards_demo.riv`),
    `nested-node-transform-data-bind` (`car_widgets_v01.riv`),
@@ -549,6 +548,15 @@ the only memory the next session has. Update it every commit.
   `diverges=0`, `unsupported-feature=50`, `not-yet=0`, parked
   `M6=8 gated=6 harness=36`; `cargo test --workspace` passes. Next target is
   `nested_hug.riv` (`rust-runner-unsupported:nested-artboard-root-transform`).
+- 2026-07-07: [M6] Promoted `nested_hug.riv` by admitting Artboard x/y nested
+  child data binds, sizing root Artboard hug axes through Taffy max-content/auto
+  layout, drawing Artboard backgrounds from runtime-backed root layout bounds,
+  and aligning `NestedArtboardLeaf` content against child root layout bounds.
+  Full `make golden-compare` reports `exact=246`, `exact-segments=567`,
+  `diverges=0`, `unsupported-feature=49`, `not-yet=0`, parked
+  `M6=7 gated=6 harness=36`; `cargo test --workspace` passes. Next target is
+  `echo_show_demo.riv`
+  (`rust-runner-unsupported:text-joystick-data-bind-divergence`).
 - 2026-07-02: `rive-runtime` owns static draw emission through
   `rive-render-api`; `rust-golden-runner` now only orchestrates import,
   artboard selection, stream markers, and recording output.

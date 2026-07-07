@@ -435,6 +435,12 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
                 .any(|name| property_key_for_name("Node", name) == Some(property_key))
                 && data_bind.converter_global.is_none()
         }
+        Some("Artboard") => {
+            ["x", "y"]
+                .into_iter()
+                .any(|name| property_key_for_name("Node", name) == Some(property_key))
+                && data_bind.converter_global.is_none()
+        }
         Some("Joystick") => {
             [joystick_x_property_key(), joystick_y_property_key()]
                 .into_iter()

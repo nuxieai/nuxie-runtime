@@ -885,19 +885,22 @@ impl ArtboardInstance {
             renderer.transform(self.artboard_origin_transform());
         }
 
+        let layout_bounds = self.runtime_taffy_layout_bounds(graph, Some(runtime));
         if let Some(background) = graph
             .shape_paint_containers
             .iter()
             .find(|container| container.local_id == 0)
         {
-            let background_bounds =
-                self.runtime_root_artboard_layout_bounds(graph)
-                    .unwrap_or(RuntimeLayoutBounds {
-                        x: 0.0,
-                        y: 0.0,
-                        width: self.width,
-                        height: self.height,
-                    });
+            let background_bounds = layout_bounds
+                .as_ref()
+                .and_then(|bounds| bounds.get(&0).copied())
+                .or_else(|| self.runtime_root_artboard_layout_bounds(graph))
+                .unwrap_or(RuntimeLayoutBounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: self.width,
+                    height: self.height,
+                });
             runtime_draw_background(
                 runtime,
                 self,
@@ -919,7 +922,6 @@ impl ArtboardInstance {
             .map(|object| (object.local_id, object.global_id))
             .collect::<BTreeMap<_, _>>();
 
-        let layout_bounds = self.runtime_taffy_layout_bounds(graph, Some(runtime));
         for command in self.draw_commands_with_layout_bounds(graph, layout_bounds.as_ref()) {
             runtime_draw_command(
                 runtime,
@@ -3204,13 +3206,11 @@ impl RuntimeLayoutEngine for TaffyRuntimeLayoutEngine {
         let mut build = TaffyLayoutBuild::default();
         let root_node =
             self.build_node(instance, graph, runtime, 0, true, &mut taffy, &mut build)?;
+        let available_space = self.root_available_space(instance)?;
         taffy
             .compute_layout_with_measure(
                 root_node,
-                Size {
-                    width: AvailableSpace::Definite(instance.width),
-                    height: AvailableSpace::Definite(instance.height),
-                },
+                available_space,
                 |known_dimensions, available_space, _node_id, node_context, _style| {
                     node_context
                         .and_then(|layout_local| {
@@ -3417,7 +3417,14 @@ impl TaffyRuntimeLayoutEngine {
                 TaffyDisplay::Flex
             },
             size: if is_root {
-                Size::from_lengths(instance.width, instance.height)
+                if let Some(style_local) = style_local {
+                    Size {
+                        width: self.root_axis_dimension(instance, style_local, true)?,
+                        height: self.root_axis_dimension(instance, style_local, false)?,
+                    }
+                } else {
+                    Size::from_lengths(instance.width, instance.height)
+                }
             } else {
                 let style_local = style_local?;
                 Size {
@@ -3624,6 +3631,51 @@ impl TaffyRuntimeLayoutEngine {
         self.apply_alignment(instance, style_local, &mut style);
         self.apply_flex_item_style(instance, local, style_local, parent_is_row, &mut style)?;
         Some(style)
+    }
+
+    fn root_available_space(&self, instance: &ArtboardInstance) -> Option<Size<AvailableSpace>> {
+        let style_local = instance.runtime_layout_component_style_local(0);
+        Some(Size {
+            width: self.root_axis_available_space(instance, style_local, true)?,
+            height: self.root_axis_available_space(instance, style_local, false)?,
+        })
+    }
+
+    fn root_axis_available_space(
+        &self,
+        instance: &ArtboardInstance,
+        style_local: Option<usize>,
+        width_axis: bool,
+    ) -> Option<AvailableSpace> {
+        if let Some(style_local) = style_local {
+            const LAYOUT_SCALE_TYPE_HUG: u64 = 2;
+            if instance.runtime_layout_axis_scale(style_local, width_axis) == LAYOUT_SCALE_TYPE_HUG
+            {
+                return Some(AvailableSpace::MaxContent);
+            }
+        }
+        Some(AvailableSpace::Definite(if width_axis {
+            instance.width
+        } else {
+            instance.height
+        }))
+    }
+
+    fn root_axis_dimension(
+        &self,
+        instance: &ArtboardInstance,
+        style_local: usize,
+        width_axis: bool,
+    ) -> Option<Dimension> {
+        const LAYOUT_SCALE_TYPE_HUG: u64 = 2;
+        if instance.runtime_layout_axis_scale(style_local, width_axis) == LAYOUT_SCALE_TYPE_HUG {
+            return Some(Dimension::auto());
+        }
+        Some(Dimension::length(if width_axis {
+            instance.width
+        } else {
+            instance.height
+        }))
     }
 
     fn nested_artboard_layout_style(
@@ -6286,6 +6338,7 @@ fn runtime_draw_nested_artboard(
                 instance,
                 graph,
                 local_id,
+                child_graph,
                 persistent_child,
                 layout_bounds,
             )?
@@ -6468,6 +6521,20 @@ impl RuntimeAabb {
         }
     }
 
+    fn from_artboard_with_layout(instance: &ArtboardInstance, graph: &ArtboardGraph) -> Self {
+        instance
+            .runtime_taffy_layout_bounds(graph, instance.runtime_file())
+            .and_then(|bounds| bounds.get(&0).copied())
+            .or_else(|| instance.runtime_root_artboard_layout_bounds(graph))
+            .map(|bounds| Self {
+                left: 0.0,
+                top: 0.0,
+                width: bounds.width,
+                height: bounds.height,
+            })
+            .unwrap_or_else(|| Self::from_artboard(instance))
+    }
+
     fn from_local_layout_bounds(bounds: RuntimeLayoutBounds) -> Self {
         Self {
             left: 0.0,
@@ -6482,6 +6549,7 @@ fn runtime_nested_artboard_leaf_world_transform(
     instance: &ArtboardInstance,
     graph: &ArtboardGraph,
     local_id: usize,
+    child_graph: &ArtboardGraph,
     child: Option<&ArtboardInstance>,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
 ) -> Result<Mat2D> {
@@ -6493,7 +6561,7 @@ fn runtime_nested_artboard_leaf_world_transform(
 
     let frame =
         runtime_nested_artboard_leaf_frame_bounds(instance, graph, local_id, child, layout_bounds)?;
-    let content = RuntimeAabb::from_artboard(child);
+    let content = RuntimeAabb::from_artboard_with_layout(child, child_graph);
     let fit_key = property_key_for_name("NestedArtboardLeaf", "fit")
         .context("missing NestedArtboardLeaf.fit")?;
     let alignment_x_key = property_key_for_name("NestedArtboardLeaf", "alignmentX")

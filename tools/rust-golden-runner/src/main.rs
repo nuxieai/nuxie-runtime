@@ -1896,6 +1896,10 @@ fn nested_child_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> boo
         || (data_bind.target_type_name == Some("RootBone")
             && matches!(data_bind.property_key, 90 | 91)
             && data_bind.converter_global.is_none())
+        || (data_bind.target_type_name == Some("Artboard")
+            // NodeBase::x/yPropertyKey in C++ generated/node_base.hpp.
+            && matches!(data_bind.property_key, 13 | 14)
+            && data_bind.converter_global.is_none())
         || (data_bind.target_type_name == Some("Node")
             // NodeBase::x/yPropertyKey in C++ generated/node_base.hpp.
             && matches!(data_bind.property_key, 13 | 14)

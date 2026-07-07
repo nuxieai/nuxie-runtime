@@ -27,10 +27,10 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Active `not-yet` queue is empty.
-2. Highest-priority M6 unsupported slice: `nested-node-transform-data-bind`
-   (`car_widgets_v01.riv`). The former `layout-component-paint` queue is
-   empty; `rewards_demo.riv` now has the sharper
-   `nested-feather-gradient-space` diagnostic.
+2. Highest-priority M6 unsupported slice: `nested-text-outline-contour-order`
+   (`car_widgets_v01.riv`). The former `nested-node-transform-data-bind` and
+   `layout-component-paint` queues are empty; `rewards_demo.riv` now has the
+   sharper `nested-feather-gradient-space` diagnostic.
 3. Other parked one-file M6 queues include `nested-feather-gradient-space`
    (`rewards_demo.riv`), `nested-layout-clip-data-bind`
    (`stateful_multi_property.riv`), and `nested-stateful-view-model-property`
@@ -178,8 +178,9 @@ the only memory the next session has. Update it every commit.
   source-to-target number binds with child artboard data-bind advancement,
   nested child `CustomPropertyString.propertyValue` string binds and
   `Rectangle.width/height` 20/21 binds, nested child `TextValueRun.text`
-  string, `SolidColor.colorValue` color, and converted `Shape.rotation` binds
-  backed by stateful child view-model values,
+  string, `SolidColor.colorValue` color, and converted
+  `Shape.rotation`/`Node.rotation` binds backed by stateful child view-model
+  values,
   authored-transparent Backboard/background draw suppression,
   custom-property trigger keyed-callback target-to-source binding,
   custom-property enum/boolean/color target-to-source binding, live data-bound
@@ -295,6 +296,18 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-07: [M6] Closed stale `nested-node-transform-data-bind` by admitting
+  nested child `Node.rotation` binds through `DataConverterGroup`, letting
+  static text accept the same target, inheriting normal static-text paint blend
+  from owning `Text.blendModeValue`, and making background shape paints inherit
+  their container blend. Focused `car_widgets_v01.riv` now reaches draw and
+  exposes a nested text-outline contour-order mismatch, so it is retagged as
+  `rust-runner-unsupported:nested-text-outline-contour-order`. Full
+  `make golden-compare` remains `exact=259`, `exact-segments=580`,
+  `diverges=0`, `unsupported-feature=36`, `not-yet=0`, parked
+  `M6=4 gated=6 harness=26`; `cargo test --workspace` passes. Next target is
+  `car_widgets_v01.riv`
+  (`rust-runner-unsupported:nested-text-outline-contour-order`).
 - 2026-07-07: [M6] Sharpened `rewards_demo.riv` from
   `layout-component-paint` to `nested-feather-gradient-space`. A focused
   exact-candidate bypass proved layout-paint admission alone was not enough:
@@ -307,7 +320,7 @@ the only memory the next session has. Update it every commit.
   `text-polygon-sibling` diagnostic. Full `make golden-compare` remains
   `exact=259`, `exact-segments=580`, `diverges=0`,
   `unsupported-feature=36`, `not-yet=0`, parked `M6=4 gated=6 harness=26`;
-  `cargo test --workspace` passes. Next target is `car_widgets_v01.riv`
+  `cargo test --workspace` passes. Next target then was `car_widgets_v01.riv`
   (`rust-runner-unsupported:nested-node-transform-data-bind`).
 - 2026-07-07: [M6] Promoted `echo_show_demo.riv` to exact by matching the
   C++ text line-metrics/bounds path instead of widening the nested-remap

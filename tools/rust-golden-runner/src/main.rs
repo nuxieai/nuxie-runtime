@@ -842,6 +842,12 @@ fn ensure_static_draw_supported_for_artboard(
                 focus_object.global_id
             );
         }
+        if let Some(text_global) = nested_text_outline_contour_order_global(runtime, artboard) {
+            bail!(
+                "unsupported: nested-text-outline-contour-order in Rust golden runner (nested artboard global {} text global {text_global})",
+                artboard.global_id
+            );
+        }
         if let Some(container_global) = nested_feather_gradient_space_global(runtime, artboard) {
             bail!(
                 "unsupported: nested-feather-gradient-space in Rust golden runner (nested artboard global {} paint container global {container_global})",
@@ -1824,6 +1830,10 @@ fn nested_child_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> boo
             && matches!(data_bind.property_key, 13 | 14)
             && data_bind.converter_global.is_none())
         || (data_bind.target_type_name == Some("Node")
+            // TransformComponentBase::rotationPropertyKey in C++ generated/transform_component_base.hpp.
+            && data_bind.property_key == 15
+            && data_bind.converter_type_name == Some("DataConverterGroup"))
+        || (data_bind.target_type_name == Some("Node")
             // WorldTransformComponentBase::opacityPropertyKey in C++ generated/world_transform_component_base.hpp.
             && data_bind.property_key == 18
             && data_bind.converter_global.is_none())
@@ -1866,6 +1876,28 @@ fn nested_child_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> boo
             && matches!(data_bind.property_key, 7 | 8)
             && (data_bind.converter_global.is_none()
                 || data_bind.converter_type_name == Some("DataConverterInterpolator")))
+}
+
+fn nested_text_outline_contour_order_global(
+    runtime: &RuntimeFile,
+    artboard: &ArtboardGraph,
+) -> Option<u32> {
+    let has_converted_node_rotation = artboard.data_binds.iter().any(|data_bind| {
+        data_bind.target_type_name == Some("Node")
+            && data_bind.property_key == 15
+            && data_bind.converter_type_name == Some("DataConverterGroup")
+    });
+    if !has_converted_node_rotation {
+        return None;
+    }
+
+    artboard.local_objects.iter().find_map(|object| {
+        if object.type_name != Some("Text") {
+            return None;
+        }
+        let text = runtime.object(object.global_id as usize)?;
+        (text.uint_property("blendModeValue").unwrap_or(3) != 3).then_some(object.global_id)
+    })
 }
 
 fn nested_child_data_bind_unsupported_feature(

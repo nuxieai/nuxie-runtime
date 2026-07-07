@@ -122,6 +122,7 @@ pub(crate) fn runtime_text_shape_paint_commands(
     // C++ text draw isolates the glyph path transform even when clipping
     // elides the drawable-level save.
     let needs_save_operation = true;
+    let text_blend_mode_value = slice.text_blend_mode_value(runtime, instance)?;
 
     let mut commands = Vec::new();
     for (style, path_buckets) in slice.styles.iter().zip(render_data.path_buckets_by_style) {
@@ -138,7 +139,7 @@ pub(crate) fn runtime_text_shape_paint_commands(
                 let mut command = runtime_shape_paint_command(
                     instance,
                     paint,
-                    container.blend_mode_value,
+                    text_blend_mode_value,
                     needs_save_operation,
                     render_opacity * path_bucket.opacity,
                     shape_world,
@@ -427,10 +428,12 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
                     && data_bind.converter_type_name == Some("DataConverterSystemDegsToRads"))
         }
         Some("Node") => {
-            ["x", "y"]
+            (["x", "y"]
                 .into_iter()
                 .any(|name| property_key_for_name("Node", name) == Some(property_key))
-                && data_bind.converter_global.is_none()
+                && data_bind.converter_global.is_none())
+                || (property_key_for_name("TransformComponent", "rotation") == Some(property_key)
+                    && data_bind.converter_type_name == Some("DataConverterGroup"))
         }
         Some("Artboard") => {
             ["x", "y"]
@@ -1962,6 +1965,23 @@ impl<'a> StaticTextSlice<'a> {
                     .and_then(|object| object.uint_property(property_name))
             })
             .unwrap_or(0))
+    }
+
+    fn text_blend_mode_value(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+    ) -> Result<u32> {
+        let property_key = property_key_for_name("Drawable", "blendModeValue")
+            .context("missing Drawable.blendModeValue key")?;
+        Ok(instance
+            .uint_property(self.text_local, property_key)
+            .or_else(|| {
+                runtime
+                    .object(self.text_global as usize)
+                    .and_then(|object| object.uint_property("blendModeValue"))
+            })
+            .unwrap_or(3) as u32)
     }
 
     fn should_apply_static_ellipsis(

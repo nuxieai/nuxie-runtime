@@ -5477,9 +5477,12 @@ fn runtime_draw_background(
         let object = runtime
             .object(paint.global_id as usize)
             .with_context(|| format!("missing paint global {}", paint.global_id))?;
-        let Some(runtime_paint) =
-            runtime_background_shape_paint_command(instance, paint, commands.clone())
-        else {
+        let Some(runtime_paint) = runtime_background_shape_paint_command(
+            instance,
+            paint,
+            container.blend_mode_value,
+            commands.clone(),
+        ) else {
             continue;
         };
         runtime_configure_paint(
@@ -5516,6 +5519,7 @@ fn runtime_draw_background(
 fn runtime_background_shape_paint_command(
     instance: &ArtboardInstance,
     paint: &ShapePaintNode,
+    container_blend_mode_value: u32,
     path_commands: Vec<RuntimePathCommand>,
 ) -> Option<RuntimeShapePaintCommand> {
     if !runtime_shape_paint_is_visible(instance, paint) {
@@ -5535,7 +5539,10 @@ fn runtime_background_shape_paint_command(
         paint_type: runtime_shape_paint_kind(paint.paint_type),
         path_kind: RuntimeShapePaintPathKind::Local,
         blend_mode_value: paint.blend_mode_value,
-        render_blend_mode_value: 3,
+        render_blend_mode_value: runtime_shape_paint_blend_mode_value(
+            paint.blend_mode_value,
+            container_blend_mode_value,
+        ),
         paint_state,
         feather_state: None,
         paint_space_transform: None,

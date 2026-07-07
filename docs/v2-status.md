@@ -282,6 +282,44 @@ the only memory the next session has. Update it every commit.
     directs. Full ComponentDirt bit inventory with consumers is in the
     scout transcript; component_dirt.hpp:8-81 is the source of truth.
 
+13. SCOUT REPORT — release flamegraph attribution (samply, release build,
+    null-renderer hot loop; profiles in session scratchpad). REORDERS the
+    item-12 combined sequence:
+    (0) NEW TOP SLICE — schema reflection in hot paths, ~36% of self time:
+        definition_by_name (rive-schema lib.rs:252, LINEAR SCAN + string
+        eq, 17.5%), definition_by_type_key (lib.rs:232 linear scan, 8.4%),
+        Definition::property_by_key (lib.rs:217, walks ancestors via
+        definition_by_name, 5.4%), property_key_for_name (properties.rs:
+        200, string->key per property READ, 5.4%). C++ uses compile-time
+        property-key constants + switch tables; runtime name/definition
+        resolution must not exist in the frame loop. Fix: precompute
+        typed accessor/key tables at instance build (fidelity-neutral —
+        this is invented Rust structure, not C++ behavior).
+    (1) Clone hypothesis CONFIRMED in direction, corrected in site:
+        allocator/copy traffic is 25-44% of self time, but ~70-85% of
+        clone samples come from ArtboardGraph deep clones in
+        artboard_data_bind.rs (~:1617, runtime_graph().cloned() in
+        update_*_source_bindings, multiple times per advance);
+        artboard.rs:594 is secondary (~5-11%), artboard.rs:510 minor.
+        Fix the data-bind clones FIRST, then item 10(1).
+    (2) ai_assitant's 16.1% TrimContour::get_segment: re-dashing every
+        frame with linear segment scans; C++ caches m_contours + dashed
+        result behind dirt (trim_path.cpp, contour_measure.cpp).
+    (3) Taffy node tree rebuilt every prepare+draw (60% inclusive on
+        blend file) with reflection-heavy style reads; C++ runs layout
+        only on markLayoutNodeDirty.
+    MEASUREMENT CORRECTIONS: (a) current tree measures 8.44x on
+    ai_assitant (not 37.5x — earlier number was different tree state);
+    (b) CRITICAL harness hazard: with --benchmark-repeat 4000, C++ drops
+    to ~1.5us/segment because dirt-gating makes frames 2..N nearly free —
+    the steady-state gap is orders of magnitude larger than the
+    single-pass ratio, and the ratio is extremely sensitive to
+    amortization. DEFINE the M7 perf target explicitly as STEADY-STATE
+    per-frame cost (high repeat count, cold frame excluded or reported
+    separately); the retention/dirt slices in items 10-12 are what close
+    the steady-state gap. Record the chosen definition as a Decision
+    before optimizing further.
+
 ## Known Divergences
 
 - There are no active `status = "not-yet"` entries.

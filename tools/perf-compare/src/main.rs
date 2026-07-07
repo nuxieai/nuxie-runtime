@@ -31,7 +31,7 @@ fn run_single(options: &Options, target: &RunTarget) -> Result<(), String> {
         "perf-compare samples={} iterations={} warmups={}",
         target.samples, options.iterations, options.warmups
     );
-    print_metric(options.runner_benchmark);
+    print_metric(options.runner_benchmark, options.benchmark_repeat);
     print_measurements("cpp", cpp);
     print_measurements("rust", rust);
     println!("rust_over_cpp={ratio:.3}");
@@ -70,7 +70,7 @@ fn run_corpus(options: &Options, corpus: &Path) -> Result<(), String> {
         options.iterations,
         options.warmups
     );
-    print_metric(options.runner_benchmark);
+    print_metric(options.runner_benchmark, options.benchmark_repeat);
     for target in &targets {
         let cpp = measure_runner("cpp", &options.cpp_runner, target, options)?;
         let rust = measure_runner("rust", &options.rust_runner, target, options)?;
@@ -107,13 +107,16 @@ fn print_measurements(label: &str, measurements: Measurements) {
     );
 }
 
-fn print_metric(runner_benchmark: bool) {
+fn print_metric(runner_benchmark: bool, benchmark_repeat: usize) {
     let metric = if runner_benchmark {
         "runner_hot_loop_ms"
     } else {
         "process_elapsed_ms"
     };
     println!("perf-compare metric={metric}");
+    if runner_benchmark {
+        println!("perf-compare benchmark_repeat={benchmark_repeat}");
+    }
 }
 
 fn check_max_ratio(ratio: f64, max_ratio: Option<f64>) -> Result<(), String> {
@@ -141,6 +144,7 @@ struct Options {
     corpus_limit: Option<usize>,
     max_ratio: Option<f64>,
     runner_benchmark: bool,
+    benchmark_repeat: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -172,6 +176,7 @@ impl Options {
         let mut corpus_limit = None;
         let mut max_ratio = None;
         let mut runner_benchmark = false;
+        let mut benchmark_repeat = 1usize;
 
         let mut index = 0;
         while index < args.len() {
@@ -194,6 +199,9 @@ impl Options {
                 }
                 "--max-ratio" => max_ratio = Some(parse_ratio(&value(arg)?)?),
                 "--runner-benchmark" => runner_benchmark = true,
+                "--benchmark-repeat" => {
+                    benchmark_repeat = parse_positive_usize(&value(arg)?, "--benchmark-repeat")?
+                }
                 "--artboard" => artboard = Some(value(arg)?),
                 "--state-machine" => state_machine = Some(value(arg)?),
                 "--input-script" => input_script = Some(PathBuf::from(value(arg)?)),
@@ -210,7 +218,7 @@ impl Options {
                 }
                 "--help" | "-h" => {
                     println!(
-                        "usage: perf-compare (--file <path> | --corpus corpus.toml) [--samples 0,0.5] [--iterations N] [--warmups N] [--max-ratio N] [--runner-benchmark] [--cpp-runner path] [--rust-runner path]"
+                        "usage: perf-compare (--file <path> | --corpus corpus.toml) [--samples 0,0.5] [--iterations N] [--warmups N] [--max-ratio N] [--runner-benchmark] [--benchmark-repeat N] [--cpp-runner path] [--rust-runner path]"
                     );
                     std::process::exit(0);
                 }
@@ -238,6 +246,14 @@ impl Options {
             }
             (None, None) => return Err("missing --file <path> or --corpus <path>".to_owned()),
         };
+        if benchmark_repeat > 1 && !runner_benchmark {
+            return Err("--benchmark-repeat requires --runner-benchmark".to_owned());
+        }
+        if benchmark_repeat > 1 {
+            if let Mode::Single(target) = &mode {
+                validate_benchmark_repeat_target(target)?;
+            }
+        }
 
         Ok(Self {
             cpp_runner,
@@ -249,6 +265,7 @@ impl Options {
             corpus_limit,
             max_ratio,
             runner_benchmark,
+            benchmark_repeat,
         })
     }
 }
@@ -294,6 +311,9 @@ fn measure_runner(
     target: &RunTarget,
     options: &Options,
 ) -> Result<Measurements, String> {
+    if options.benchmark_repeat > 1 {
+        validate_benchmark_repeat_target(target)?;
+    }
     for warmup in 0..options.warmups {
         run_once(label, runner, target, options, warmup + 1, true)?;
     }
@@ -320,7 +340,12 @@ fn run_once(
     iteration: usize,
     warmup: bool,
 ) -> Result<Duration, String> {
-    let mut command = runner_command(runner, target, options.runner_benchmark);
+    let mut command = runner_command(
+        runner,
+        target,
+        options.runner_benchmark,
+        options.benchmark_repeat,
+    );
     let start = Instant::now();
     let output = command
         .output()
@@ -356,7 +381,12 @@ fn run_once(
     Ok(elapsed)
 }
 
-fn runner_command(runner: &Path, target: &RunTarget, benchmark: bool) -> Command {
+fn runner_command(
+    runner: &Path,
+    target: &RunTarget,
+    benchmark: bool,
+    benchmark_repeat: usize,
+) -> Command {
     let mut command = Command::new(runner);
     command.arg("--file").arg(&target.file);
     if let Some(artboard) = &target.artboard {
@@ -371,8 +401,23 @@ fn runner_command(runner: &Path, target: &RunTarget, benchmark: bool) -> Command
     command.arg("--samples").arg(&target.samples);
     if benchmark {
         command.arg("--benchmark");
+        if benchmark_repeat > 1 {
+            command
+                .arg("--benchmark-repeat")
+                .arg(benchmark_repeat.to_string());
+        }
     }
     command
+}
+
+fn validate_benchmark_repeat_target(target: &RunTarget) -> Result<(), String> {
+    if target.input_script.is_some() {
+        return Err("--benchmark-repeat cannot be combined with --input-script".to_owned());
+    }
+    if target.segment_count != 1 {
+        return Err("--benchmark-repeat requires exactly one sample".to_owned());
+    }
+    Ok(())
 }
 
 fn parse_benchmark_hot_loop_duration(stdout: &[u8]) -> Result<Duration, String> {
@@ -703,6 +748,8 @@ mod tests {
             "--max-ratio".to_owned(),
             "1.5".to_owned(),
             "--runner-benchmark".to_owned(),
+            "--benchmark-repeat".to_owned(),
+            "11".to_owned(),
         ])
         .expect("parse options");
 
@@ -710,6 +757,7 @@ mod tests {
         assert_eq!(options.corpus_limit, Some(7));
         assert_eq!(options.max_ratio, Some(1.5));
         assert!(options.runner_benchmark);
+        assert_eq!(options.benchmark_repeat, 11);
     }
 
     #[test]
@@ -722,6 +770,63 @@ mod tests {
         ])
         .unwrap_err();
         assert!(error.contains("greater than 0"));
+    }
+
+    #[test]
+    fn rejects_benchmark_repeat_without_runner_benchmark() {
+        let error = Options::parse(vec![
+            "--file".to_owned(),
+            "fixture.riv".to_owned(),
+            "--benchmark-repeat".to_owned(),
+            "2".to_owned(),
+        ])
+        .unwrap_err();
+
+        assert!(error.contains("requires --runner-benchmark"));
+    }
+
+    #[test]
+    fn benchmark_repeat_is_passed_to_runner() {
+        let target = RunTarget {
+            id: "single".to_owned(),
+            file: PathBuf::from("fixture.riv"),
+            artboard: None,
+            state_machine: None,
+            input_script: None,
+            samples: "0".to_owned(),
+            segment_count: 1,
+        };
+        let command = runner_command(Path::new("runner"), &target, true, 17);
+        let args = command
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+
+        assert!(
+            args.windows(2)
+                .any(|args| args[0] == "--benchmark-repeat" && args[1] == "17")
+        );
+    }
+
+    #[test]
+    fn benchmark_repeat_requires_single_sample_without_inputs() {
+        let mut target = RunTarget {
+            id: "single".to_owned(),
+            file: PathBuf::from("fixture.riv"),
+            artboard: None,
+            state_machine: None,
+            input_script: None,
+            samples: "0,0.5".to_owned(),
+            segment_count: 2,
+        };
+        let error = validate_benchmark_repeat_target(&target).unwrap_err();
+        assert!(error.contains("exactly one sample"));
+
+        target.samples = "0".to_owned();
+        target.segment_count = 1;
+        target.input_script = Some(PathBuf::from("input.json"));
+        let error = validate_benchmark_repeat_target(&target).unwrap_err();
+        assert!(error.contains("cannot be combined"));
     }
 
     #[test]

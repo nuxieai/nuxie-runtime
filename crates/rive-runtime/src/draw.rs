@@ -34,6 +34,13 @@ use crate::text::{
 };
 use crate::{ArtboardInstance, Mat2D};
 
+macro_rules! cached_runtime_property_key {
+    ($type_name:literal, $property_name:literal) => {{
+        static KEY: OnceLock<Option<u16>> = OnceLock::new();
+        cached_property_key_for_name(&KEY, $type_name, $property_name)
+    }};
+}
+
 #[derive(Clone, Copy)]
 enum RuntimeGradientPaintFilter {
     All,
@@ -9749,6 +9756,167 @@ fn parametric_path_with_control_size(
     }
 }
 
+fn runtime_path_property_key_for_name(type_name: &str, property_name: &str) -> Option<u16> {
+    match (type_name, property_name) {
+        ("Path", "pathFlags") => cached_runtime_property_key!("Path", "pathFlags"),
+        ("Path", "isHole") => cached_runtime_property_key!("Path", "isHole"),
+        ("Path", "isClosed") => cached_runtime_property_key!("Path", "isClosed"),
+        ("PointsPath", "pathFlags") => cached_runtime_property_key!("PointsPath", "pathFlags"),
+        ("PointsPath", "isHole") => cached_runtime_property_key!("PointsPath", "isHole"),
+        ("PointsPath", "isClosed") => cached_runtime_property_key!("PointsPath", "isClosed"),
+        ("Ellipse", "pathFlags") => cached_runtime_property_key!("Ellipse", "pathFlags"),
+        ("Ellipse", "isHole") => cached_runtime_property_key!("Ellipse", "isHole"),
+        ("Ellipse", "isClosed") => cached_runtime_property_key!("Ellipse", "isClosed"),
+        ("Polygon", "pathFlags") => cached_runtime_property_key!("Polygon", "pathFlags"),
+        ("Polygon", "isHole") => cached_runtime_property_key!("Polygon", "isHole"),
+        ("Polygon", "isClosed") => cached_runtime_property_key!("Polygon", "isClosed"),
+        ("Star", "pathFlags") => cached_runtime_property_key!("Star", "pathFlags"),
+        ("Star", "isHole") => cached_runtime_property_key!("Star", "isHole"),
+        ("Star", "isClosed") => cached_runtime_property_key!("Star", "isClosed"),
+        ("Rectangle", "pathFlags") => cached_runtime_property_key!("Rectangle", "pathFlags"),
+        ("Rectangle", "isHole") => cached_runtime_property_key!("Rectangle", "isHole"),
+        ("Rectangle", "isClosed") => cached_runtime_property_key!("Rectangle", "isClosed"),
+        ("Triangle", "pathFlags") => cached_runtime_property_key!("Triangle", "pathFlags"),
+        ("Triangle", "isHole") => cached_runtime_property_key!("Triangle", "isHole"),
+        ("Triangle", "isClosed") => cached_runtime_property_key!("Triangle", "isClosed"),
+        ("StraightVertex", "x") => cached_runtime_property_key!("StraightVertex", "x"),
+        ("StraightVertex", "y") => cached_runtime_property_key!("StraightVertex", "y"),
+        ("StraightVertex", "radius") => cached_runtime_property_key!("StraightVertex", "radius"),
+        ("StraightVertex", "rotation") => {
+            cached_runtime_property_key!("StraightVertex", "rotation")
+        }
+        ("StraightVertex", "distance") => {
+            cached_runtime_property_key!("StraightVertex", "distance")
+        }
+        ("StraightVertex", "inRotation") => {
+            cached_runtime_property_key!("StraightVertex", "inRotation")
+        }
+        ("StraightVertex", "inDistance") => {
+            cached_runtime_property_key!("StraightVertex", "inDistance")
+        }
+        ("StraightVertex", "outRotation") => {
+            cached_runtime_property_key!("StraightVertex", "outRotation")
+        }
+        ("StraightVertex", "outDistance") => {
+            cached_runtime_property_key!("StraightVertex", "outDistance")
+        }
+        ("CubicMirroredVertex", "x") => cached_runtime_property_key!("CubicMirroredVertex", "x"),
+        ("CubicMirroredVertex", "y") => cached_runtime_property_key!("CubicMirroredVertex", "y"),
+        ("CubicMirroredVertex", "radius") => {
+            cached_runtime_property_key!("CubicMirroredVertex", "radius")
+        }
+        ("CubicMirroredVertex", "rotation") => {
+            cached_runtime_property_key!("CubicMirroredVertex", "rotation")
+        }
+        ("CubicMirroredVertex", "distance") => {
+            cached_runtime_property_key!("CubicMirroredVertex", "distance")
+        }
+        ("CubicMirroredVertex", "inRotation") => {
+            cached_runtime_property_key!("CubicMirroredVertex", "inRotation")
+        }
+        ("CubicMirroredVertex", "inDistance") => {
+            cached_runtime_property_key!("CubicMirroredVertex", "inDistance")
+        }
+        ("CubicMirroredVertex", "outRotation") => {
+            cached_runtime_property_key!("CubicMirroredVertex", "outRotation")
+        }
+        ("CubicMirroredVertex", "outDistance") => {
+            cached_runtime_property_key!("CubicMirroredVertex", "outDistance")
+        }
+        ("CubicAsymmetricVertex", "x") => {
+            cached_runtime_property_key!("CubicAsymmetricVertex", "x")
+        }
+        ("CubicAsymmetricVertex", "y") => {
+            cached_runtime_property_key!("CubicAsymmetricVertex", "y")
+        }
+        ("CubicAsymmetricVertex", "radius") => {
+            cached_runtime_property_key!("CubicAsymmetricVertex", "radius")
+        }
+        ("CubicAsymmetricVertex", "rotation") => {
+            cached_runtime_property_key!("CubicAsymmetricVertex", "rotation")
+        }
+        ("CubicAsymmetricVertex", "distance") => {
+            cached_runtime_property_key!("CubicAsymmetricVertex", "distance")
+        }
+        ("CubicAsymmetricVertex", "inRotation") => {
+            cached_runtime_property_key!("CubicAsymmetricVertex", "inRotation")
+        }
+        ("CubicAsymmetricVertex", "inDistance") => {
+            cached_runtime_property_key!("CubicAsymmetricVertex", "inDistance")
+        }
+        ("CubicAsymmetricVertex", "outRotation") => {
+            cached_runtime_property_key!("CubicAsymmetricVertex", "outRotation")
+        }
+        ("CubicAsymmetricVertex", "outDistance") => {
+            cached_runtime_property_key!("CubicAsymmetricVertex", "outDistance")
+        }
+        ("CubicDetachedVertex", "x") => cached_runtime_property_key!("CubicDetachedVertex", "x"),
+        ("CubicDetachedVertex", "y") => cached_runtime_property_key!("CubicDetachedVertex", "y"),
+        ("CubicDetachedVertex", "radius") => {
+            cached_runtime_property_key!("CubicDetachedVertex", "radius")
+        }
+        ("CubicDetachedVertex", "rotation") => {
+            cached_runtime_property_key!("CubicDetachedVertex", "rotation")
+        }
+        ("CubicDetachedVertex", "distance") => {
+            cached_runtime_property_key!("CubicDetachedVertex", "distance")
+        }
+        ("CubicDetachedVertex", "inRotation") => {
+            cached_runtime_property_key!("CubicDetachedVertex", "inRotation")
+        }
+        ("CubicDetachedVertex", "inDistance") => {
+            cached_runtime_property_key!("CubicDetachedVertex", "inDistance")
+        }
+        ("CubicDetachedVertex", "outRotation") => {
+            cached_runtime_property_key!("CubicDetachedVertex", "outRotation")
+        }
+        ("CubicDetachedVertex", "outDistance") => {
+            cached_runtime_property_key!("CubicDetachedVertex", "outDistance")
+        }
+        ("Ellipse", "width") => cached_runtime_property_key!("Ellipse", "width"),
+        ("Ellipse", "height") => cached_runtime_property_key!("Ellipse", "height"),
+        ("Ellipse", "originX") => cached_runtime_property_key!("Ellipse", "originX"),
+        ("Ellipse", "originY") => cached_runtime_property_key!("Ellipse", "originY"),
+        ("Polygon", "width") => cached_runtime_property_key!("Polygon", "width"),
+        ("Polygon", "height") => cached_runtime_property_key!("Polygon", "height"),
+        ("Polygon", "originX") => cached_runtime_property_key!("Polygon", "originX"),
+        ("Polygon", "originY") => cached_runtime_property_key!("Polygon", "originY"),
+        ("Polygon", "points") => cached_runtime_property_key!("Polygon", "points"),
+        ("Polygon", "cornerRadius") => cached_runtime_property_key!("Polygon", "cornerRadius"),
+        ("Star", "width") => cached_runtime_property_key!("Star", "width"),
+        ("Star", "height") => cached_runtime_property_key!("Star", "height"),
+        ("Star", "originX") => cached_runtime_property_key!("Star", "originX"),
+        ("Star", "originY") => cached_runtime_property_key!("Star", "originY"),
+        ("Star", "points") => cached_runtime_property_key!("Star", "points"),
+        ("Star", "cornerRadius") => cached_runtime_property_key!("Star", "cornerRadius"),
+        ("Star", "innerRadius") => cached_runtime_property_key!("Star", "innerRadius"),
+        ("Rectangle", "width") => cached_runtime_property_key!("Rectangle", "width"),
+        ("Rectangle", "height") => cached_runtime_property_key!("Rectangle", "height"),
+        ("Rectangle", "originX") => cached_runtime_property_key!("Rectangle", "originX"),
+        ("Rectangle", "originY") => cached_runtime_property_key!("Rectangle", "originY"),
+        ("Rectangle", "linkCornerRadius") => {
+            cached_runtime_property_key!("Rectangle", "linkCornerRadius")
+        }
+        ("Rectangle", "cornerRadiusTL") => {
+            cached_runtime_property_key!("Rectangle", "cornerRadiusTL")
+        }
+        ("Rectangle", "cornerRadiusTR") => {
+            cached_runtime_property_key!("Rectangle", "cornerRadiusTR")
+        }
+        ("Rectangle", "cornerRadiusBL") => {
+            cached_runtime_property_key!("Rectangle", "cornerRadiusBL")
+        }
+        ("Rectangle", "cornerRadiusBR") => {
+            cached_runtime_property_key!("Rectangle", "cornerRadiusBR")
+        }
+        ("Triangle", "width") => cached_runtime_property_key!("Triangle", "width"),
+        ("Triangle", "height") => cached_runtime_property_key!("Triangle", "height"),
+        ("Triangle", "originX") => cached_runtime_property_key!("Triangle", "originX"),
+        ("Triangle", "originY") => cached_runtime_property_key!("Triangle", "originY"),
+        _ => property_key_for_name(type_name, property_name),
+    }
+}
+
 fn runtime_path_double_property(
     artboard: &ArtboardInstance,
     local_id: usize,
@@ -9756,7 +9924,7 @@ fn runtime_path_double_property(
     property_name: &str,
     default: f32,
 ) -> f32 {
-    property_key_for_name(type_name, property_name)
+    runtime_path_property_key_for_name(type_name, property_name)
         .and_then(|key| artboard.double_property(local_id, key))
         .unwrap_or(default)
 }
@@ -9768,7 +9936,7 @@ fn runtime_path_bool_property(
     property_name: &str,
     default: bool,
 ) -> bool {
-    property_key_for_name(type_name, property_name)
+    runtime_path_property_key_for_name(type_name, property_name)
         .and_then(|key| artboard.bool_property(local_id, key))
         .unwrap_or(default)
 }
@@ -9780,7 +9948,7 @@ fn runtime_path_uint_property(
     property_name: &str,
     default: u64,
 ) -> u64 {
-    property_key_for_name(type_name, property_name)
+    runtime_path_property_key_for_name(type_name, property_name)
         .and_then(|key| artboard.uint_property(local_id, key))
         .unwrap_or(default)
 }

@@ -41,20 +41,23 @@ the only memory the next session has. Update it every commit.
    benchmark backends, so M7 perf checks exclude golden recording output. Both
    runners also support `--benchmark-repeat N` for long single-sample profiling
    runs. A release `ai_assitant.riv` profile found fixed schema-name property
-   lookup in the paint hot path; caching those fixed keys reduced Rust direct
-   `ai_assitant` 100-segment repeat time from about 1019 ms to about 255 ms.
-   Focused 10-iteration verification with `make perf-hot-loop
-   PERF_CORPUS_LIMIT=5 PERF_ITERATIONS=10 PERF_WARMUPS=1 PERF_MAX_RATIO=999`
-   now records aggregate Rust/C++=7.002 over 5 exact entries / 10 segments.
-   The strict `PERF_MAX_RATIO=2.0` target still fails at aggregate Rust/C++=7.503
-   (`animation_reset_cases`=24.990, `advance_blend_mode`=17.282,
-   `ai_assitant`=8.679). Fresh post-cache sampling points next at
-   `TrimContour::get_segment` / `TrimSegmentKind::extract` allocation and
-   remaining `runtime_path_geometry` property-key scans. Highest priority next
-   target is to audit the matching C++ trim/path-geometry code for retained
-   path/contour buffers or generated property IDs, port that optimization, and
-   rerun the 10-iteration strict threshold. After the perf target is real,
-   expand the C ABI to instance advance/draw.
+   lookup in the paint/path hot paths; caching fixed paint keys previously
+   reduced Rust direct `ai_assitant` 100-segment repeat time from about
+   1019 ms to about 255 ms, and the follow-up path-geometry key cache plus
+   repeat-aware `perf-compare` path now gives focused 10-iteration
+   verification with `make perf-hot-loop PERF_CORPUS_LIMIT=5
+   PERF_ITERATIONS=10 PERF_WARMUPS=1 PERF_MAX_RATIO=999` at aggregate
+   Rust/C++=6.387 over 5 exact entries / 10 segments (`ai_assitant`=7.514,
+   `advance_blend_mode`=16.822, `animation_reset_cases`=18.869). Strict
+   `PERF_MAX_RATIO=2.0` still fails by inspection of that ratio. M7 perf is
+   now explicitly defined as steady-state per-frame runtime cost; direct
+   `ai_assitant` with `--benchmark-repeat 100` reports Rust/C++=465.901,
+   confirming that C++ clean-frame dirt/retention is the dominant remaining
+   gap. Highest priority next target is to port the scout-ranked steady-state
+   slices: first remove `artboard_data_bind.rs` `runtime_graph().cloned()`
+   hot-loop clones, then port idempotent dirt raisers and draw/path retention
+   behind C++ dirt gates. After the perf target is real, expand the C ABI to
+   instance advance/draw.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -506,6 +509,26 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-07: [M7] Defined the perf exit target as steady-state per-frame
+  runtime cost, not process elapsed, serializer output, import, or cold first
+  frame. Decision-grade M7 perf proof must use release C++/Rust runners,
+  null-renderer benchmark mode, the pinned perf corpus, >=10 iterations with
+  median/spread, and a repeat-heavy or cold-excluded measurement where warm
+  frames dominate. The pass threshold remains Rust/C++ <=2.0 on
+  `advance_ms + input_ms + prepare_ms + draw_ms` per measured segment, with
+  exact corpus verification still green. `perf-hot-loop` now forwards
+  `PERF_BENCHMARK_REPEAT` through `perf-compare --benchmark-repeat` for
+  single-sample runner benchmarks; multi-sample/input corpus entries continue
+  using repeat=1 until the harness grows an explicit cold/steady split.
+- 2026-07-07: [M7] Extended the fixed schema-key cache from paint/effect
+  reads into runtime path geometry reads, mirroring C++ generated
+  `*PropertyKey` constants instead of doing schema name/property scans in the
+  frame loop. `make perf-hot-loop PERF_CORPUS_LIMIT=5 PERF_ITERATIONS=10
+  PERF_WARMUPS=1 PERF_MAX_RATIO=999` now reports aggregate Rust/C++=6.387
+  over 5 exact entries / 10 segments (`ai_assitant`=7.514). The new
+  repeat-aware path also shows direct `ai_assitant --benchmark-repeat 100`
+  at Rust/C++=465.901, so the next M7 slice must attack steady-state
+  dirt/retention rather than more single-pass fixed lookup cost.
 - 2026-07-07: [M7] Cached fixed schema property keys in the release
   null-renderer draw hot path after profiling `ai_assitant.riv`, mirroring the
   generated C++ property-key/member access at the same paint hot site. Both

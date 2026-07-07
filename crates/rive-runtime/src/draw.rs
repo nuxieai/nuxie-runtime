@@ -15,7 +15,7 @@ use rive_render_api::{
 };
 use rive_schema::definition_by_name;
 use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 use taffy::prelude::{
     AlignContent, AlignItems, AlignSelf, AvailableSpace, Dimension, Display as TaffyDisplay,
     FlexDirection, FlexWrap, JustifyContent, LengthPercentage, LengthPercentageAuto, NodeId,
@@ -477,8 +477,9 @@ impl ArtboardInstance {
         render_cache: &mut RuntimeRenderPathCache,
         defer_root_layout_gradients: bool,
     ) -> Result<()> {
-        let layout_bounds = self.runtime_taffy_layout_bounds(graph, Some(runtime));
-        let commands = self.draw_commands_with_layout_bounds(graph, layout_bounds.as_ref());
+        let prepared = render_cache.prepared_artboard_frame(self, graph, Some(runtime));
+        let layout_bounds = prepared.layout_bounds.as_ref().as_ref();
+        let commands = prepared.commands.as_slice();
         let defer_layout_gradients = defer_root_layout_gradients
             && commands.iter().any(runtime_draw_command_is_nested_artboard);
         if defer_layout_gradients {
@@ -490,8 +491,8 @@ impl ArtboardInstance {
                 paint_by_global,
                 nested_paint_caches,
                 render_cache,
-                layout_bounds.as_ref(),
-                &commands,
+                layout_bounds,
+                commands,
             );
         }
 
@@ -507,7 +508,7 @@ impl ArtboardInstance {
             factory,
             paint_by_global,
             render_cache,
-            layout_bounds.as_ref(),
+            layout_bounds,
             initial_filter,
         )?;
 
@@ -524,8 +525,8 @@ impl ArtboardInstance {
                 paint_by_global,
                 nested_paint_caches.as_deref_mut(),
                 render_cache,
-                layout_bounds.as_ref(),
-                &command,
+                layout_bounds,
+                command,
             )?;
         }
 
@@ -536,7 +537,7 @@ impl ArtboardInstance {
                 factory,
                 paint_by_global,
                 render_cache,
-                layout_bounds.as_ref(),
+                layout_bounds,
                 RuntimeGradientPaintFilter::OnlyLayoutComponents,
             )?;
         }
@@ -1000,14 +1001,14 @@ impl ArtboardInstance {
             renderer.transform(self.artboard_origin_transform());
         }
 
-        let layout_bounds = self.runtime_taffy_layout_bounds(graph, Some(runtime));
+        let prepared = path_cache.prepared_artboard_frame(self, graph, Some(runtime));
+        let layout_bounds = prepared.layout_bounds.as_ref().as_ref();
         if let Some(background) = graph
             .shape_paint_containers
             .iter()
             .find(|container| container.local_id == 0)
         {
             let background_bounds = layout_bounds
-                .as_ref()
                 .and_then(|bounds| bounds.get(&0).copied())
                 .or_else(|| self.runtime_root_artboard_layout_bounds(graph))
                 .unwrap_or(RuntimeLayoutBounds {
@@ -1031,14 +1032,14 @@ impl ArtboardInstance {
             )?;
         }
 
-        for command in self.draw_commands_with_layout_bounds(graph, layout_bounds.as_ref()) {
+        for command in prepared.commands.iter() {
             runtime_draw_command(
                 runtime,
                 self,
                 graph,
                 artboards,
                 command,
-                layout_bounds.as_ref(),
+                layout_bounds,
                 factory,
                 renderer,
                 paint_by_global,
@@ -4942,6 +4943,7 @@ struct RuntimeMeshRenderBuffers {
 
 #[derive(Default)]
 pub struct RuntimeRenderPathCache {
+    prepared_artboard: Option<RuntimePreparedArtboardFrame>,
     artboard_clip: Option<Box<dyn RenderPath>>,
     background_paths: BTreeMap<usize, Box<dyn RenderPath>>,
     clip_paths: BTreeMap<usize, Box<dyn RenderPath>>,
@@ -4949,6 +4951,19 @@ pub struct RuntimeRenderPathCache {
     draw_paths: BTreeMap<RuntimeDrawPathCacheKey, Box<dyn RenderPath>>,
     gradient_shaders: BTreeMap<u32, RuntimeGradientShaderCacheEntry>,
     nested_artboards: BTreeMap<u32, RuntimeRenderPathCache>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RuntimePreparedArtboardCacheKey {
+    graph_global_id: u32,
+    instance_epoch: u64,
+}
+
+#[derive(Clone)]
+struct RuntimePreparedArtboardFrame {
+    key: RuntimePreparedArtboardCacheKey,
+    layout_bounds: Arc<Option<BTreeMap<usize, RuntimeLayoutBounds>>>,
+    commands: Arc<Vec<RuntimeDrawCommand>>,
 }
 
 struct RuntimeGradientShaderCacheEntry {
@@ -4975,6 +4990,36 @@ enum RuntimeDrawPathCacheKind {
 }
 
 impl RuntimeRenderPathCache {
+    fn prepared_artboard_frame(
+        &mut self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        runtime: Option<&RuntimeFile>,
+    ) -> RuntimePreparedArtboardFrame {
+        let key = RuntimePreparedArtboardCacheKey {
+            graph_global_id: graph.global_id,
+            instance_epoch: instance.cache_epoch(),
+        };
+        if self
+            .prepared_artboard
+            .as_ref()
+            .is_none_or(|frame| frame.key != key)
+        {
+            let layout_bounds = instance.runtime_taffy_layout_bounds(graph, runtime);
+            let commands = instance.draw_commands_with_layout_bounds(graph, layout_bounds.as_ref());
+            self.prepared_artboard = Some(RuntimePreparedArtboardFrame {
+                key,
+                layout_bounds: Arc::new(layout_bounds),
+                commands: Arc::new(commands),
+            });
+        }
+
+        self.prepared_artboard
+            .as_ref()
+            .expect("prepared artboard frame was just populated")
+            .clone()
+    }
+
     fn artboard_clip_path(
         &mut self,
         factory: &mut dyn RenderFactory,
@@ -5863,7 +5908,7 @@ fn runtime_draw_command(
     instance: &ArtboardInstance,
     graph: &ArtboardGraph,
     artboards: &[ArtboardGraph],
-    command: RuntimeDrawCommand,
+    command: &RuntimeDrawCommand,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     factory: &mut dyn RenderFactory,
     renderer: &mut dyn Renderer,
@@ -6177,7 +6222,7 @@ fn runtime_draw_image(
     runtime: &RuntimeFile,
     instance: &ArtboardInstance,
     graph: &ArtboardGraph,
-    command: RuntimeDrawCommand,
+    command: &RuntimeDrawCommand,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     image_by_global: &BTreeMap<u32, Box<dyn RenderImage>>,
     mesh_by_local: &mut BTreeMap<usize, RuntimeMeshRenderBuffers>,
@@ -6521,7 +6566,7 @@ fn runtime_draw_nested_artboard(
     instance: &ArtboardInstance,
     graph: &ArtboardGraph,
     artboards: &[ArtboardGraph],
-    command: RuntimeDrawCommand,
+    command: &RuntimeDrawCommand,
     factory: &mut dyn RenderFactory,
     renderer: &mut dyn Renderer,
     paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
@@ -6945,7 +6990,7 @@ fn runtime_apply_nested_artboard_layout_child_bounds(
 fn runtime_draw_clip_start(
     instance: &ArtboardInstance,
     graph: &ArtboardGraph,
-    command: RuntimeDrawCommand,
+    command: &RuntimeDrawCommand,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     factory: &mut dyn RenderFactory,
     renderer: &mut dyn Renderer,
@@ -6981,7 +7026,7 @@ fn runtime_draw_clip_start(
 
 fn runtime_draw_clip_end(
     graph: &ArtboardGraph,
-    command: RuntimeDrawCommand,
+    command: &RuntimeDrawCommand,
     renderer: &mut dyn Renderer,
 ) {
     let Some(clipping_shape) = command

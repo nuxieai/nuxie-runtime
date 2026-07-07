@@ -87,6 +87,7 @@ pub struct ArtboardInstance {
     pub(crate) image_asset_overrides: BTreeMap<usize, Option<u32>>,
     pub(crate) dirt: ComponentDirt,
     pub(crate) dirt_depth: usize,
+    pub(crate) cache_epoch: u64,
     pub(crate) did_change: bool,
 }
 
@@ -285,6 +286,7 @@ impl ArtboardInstance {
             image_asset_overrides: BTreeMap::new(),
             dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,
+            cache_epoch: 1,
             did_change: true,
         };
         instance.apply_initial_layout_component_display_collapses();
@@ -364,7 +366,7 @@ impl ArtboardInstance {
         }
         self.width = width;
         self.height = height;
-        self.did_change = true;
+        self.mark_changed();
         true
     }
 
@@ -393,7 +395,7 @@ impl ArtboardInstance {
         {
             return false;
         }
-        self.did_change = true;
+        self.mark_changed();
         self.apply_color_property_changed(local_id, property_key);
         true
     }
@@ -414,7 +416,7 @@ impl ArtboardInstance {
         {
             return false;
         }
-        self.did_change = true;
+        self.mark_changed();
         self.apply_bool_property_changed(local_id, property_key, value);
         true
     }
@@ -443,7 +445,7 @@ impl ArtboardInstance {
             return false;
         }
         self.image_asset_overrides.insert(local_id, asset_global);
-        self.did_change = true;
+        self.mark_changed();
         true
     }
 
@@ -463,7 +465,7 @@ impl ArtboardInstance {
         {
             return false;
         }
-        self.did_change = true;
+        self.mark_changed();
         self.apply_double_property_changed(local_id, property_key, value);
         true
     }
@@ -480,7 +482,7 @@ impl ArtboardInstance {
         {
             return false;
         }
-        self.did_change = true;
+        self.mark_changed();
         self.apply_uint_property_changed(local_id, property_key);
         true
     }
@@ -501,7 +503,7 @@ impl ArtboardInstance {
         {
             return false;
         }
-        self.did_change = true;
+        self.mark_changed();
         self.apply_string_property_changed(local_id, property_key);
         true
     }
@@ -811,6 +813,15 @@ impl ArtboardInstance {
         self.did_change
     }
 
+    pub(crate) fn cache_epoch(&self) -> u64 {
+        self.cache_epoch
+    }
+
+    fn mark_changed(&mut self) {
+        self.did_change = true;
+        self.cache_epoch = self.cache_epoch.wrapping_add(1);
+    }
+
     pub fn clear_component_dirt(&mut self, local_id: usize) {
         if let Some(component) = self.component_mut(local_id) {
             component.dirt = ComponentDirt::NONE;
@@ -1039,7 +1050,7 @@ impl ArtboardInstance {
     }
 
     pub(crate) fn on_component_dirty(&mut self, local_id: usize) {
-        self.did_change = true;
+        self.mark_changed();
         self.dirt |= ComponentDirt::COMPONENTS;
 
         let Some(component) = self.component(local_id) else {
@@ -1466,10 +1477,22 @@ impl ArtboardInstance {
 
     pub(crate) fn set_nested_artboard_artboard_id(&mut self, local_id: usize, value: u64) -> bool {
         let Some(nested) = self.runtime_nested_artboard_instance_for_id(local_id, value) else {
-            return self.nested_artboards.remove(&local_id).is_some();
+            let changed = self.nested_artboards.remove(&local_id).is_some();
+            if changed {
+                self.mark_changed();
+            }
+            return changed;
         };
+        if self
+            .nested_artboards
+            .get(&local_id)
+            .is_some_and(|existing| existing.child.graph_global_id == nested.child.graph_global_id)
+        {
+            return false;
+        }
         self.nested_artboards.insert(local_id, nested);
         self.sync_nested_artboard_root_opacity(local_id);
+        self.mark_changed();
         true
     }
 
@@ -2258,6 +2281,7 @@ mod tests {
             image_asset_overrides: BTreeMap::new(),
             dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,
+            cache_epoch: 1,
             did_change: true,
         }
     }

@@ -45,19 +45,20 @@ the only memory the next session has. Update it every commit.
    reduced Rust direct `ai_assitant` 100-segment repeat time from about
    1019 ms to about 255 ms. Follow-up path-geometry key caching,
    repeat-aware `perf-compare`, removal of `artboard_data_bind.rs`
-   hot-loop graph/binding clones, and shallow sharing of immutable
-   animation/state-machine definition vectors now give focused
+   hot-loop graph/binding clones, shallow sharing of immutable
+   animation/state-machine definition vectors, and an epoch-keyed retained
+   prepared draw-command frame now give focused
    10-iteration verification with `make perf-hot-loop PERF_CORPUS_LIMIT=5
    PERF_ITERATIONS=10 PERF_WARMUPS=1 PERF_MAX_RATIO=999` at aggregate
-   Rust/C++=6.353 over 5 exact entries / 10 segments (`ai_assitant`=8.589,
-   `advance_blend_mode`=14.993, `animation_reset_cases`=13.461). This
+   Rust/C++=3.673 over 5 exact entries / 10 segments (`ai_assitant`=4.486,
+   `align_target`=2.023, `animated_clipping`=2.391). This
    focused ratio is noisy and strict `PERF_MAX_RATIO=2.0` still fails by
    inspection. M7 perf is now explicitly defined as steady-state per-frame
-   runtime cost; direct `ai_assitant` with `--benchmark-repeat 100` improves
-   from Rust/C++=355.870 to 316.968, confirming that definition cloning was
-   real but secondary and C++ clean-frame dirt/retention is still the
-   dominant gap. Highest priority next target is to port the scout-ranked
-   steady-state slices: port idempotent dirt raisers and draw/path retention
+   runtime cost; direct `ai_assitant` with `--benchmark-repeat 100` now
+   improves from Rust/C++=316.968 to 52.493, confirming retained frame
+   preparation is a real clean-frame win but lower-level C++ path/render
+   retention is still needed. Highest priority next target is to port the
+   scout-ranked retained `ShapePaintPath`/`RenderPath` and path dirt slices
    behind C++ dirt gates. After the perf target is real, expand the C ABI to
    instance advance/draw.
 3. The former `nested-stateful-view-model-property`,
@@ -540,6 +541,19 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-07: [M7] Retained prepared draw-command frames behind an
+  `ArtboardInstance` cache epoch that bumps on C++-style dirt/change
+  invalidation, and replay draw commands by reference so clean frames no
+  longer rebuild the sorted drawable/layout/path-command projection twice per
+  segment. `set_nested_artboard_artboard_id` is now idempotent for the same
+  referenced artboard so data-binding does not spuriously invalidate the
+  frame. Full `cargo test --workspace` and `make golden-compare` pass at
+  exact=263/exact-segments=584. Release hot-loop smoke with
+  `PERF_CORPUS_LIMIT=5 PERF_ITERATIONS=10 PERF_WARMUPS=1 PERF_MAX_RATIO=999`
+  reports aggregate Rust/C++=3.673 over 5 exact entries / 10 segments, and
+  direct `ai_assitant --benchmark-repeat 100` improves from 316.968 to
+  52.493. Next M7 target is lower-level C++ `ShapePaintPath`/`RenderPath`
+  retention and path dirt gating; strict Rust/C++ <=2.0 is still not met.
 - 2026-07-07: [M7] Defined the perf exit target as steady-state per-frame
   runtime cost, not process elapsed, serializer output, import, or cold first
   frame. Decision-grade M7 perf proof must use release C++/Rust runners,

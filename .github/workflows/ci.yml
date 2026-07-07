@@ -51,3 +51,69 @@ jobs:
       - name: Run Rust workspace tests
         working-directory: ${{ github.workspace }}/rive-rust
         run: cargo test --workspace
+
+  capi-smoke:
+    name: C ABI smoke test
+    runs-on: macos-14
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout rive-rust
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+
+      - name: Build and run C smoke test
+        run: make capi-smoke
+
+  # Optional perf artifact: continue-on-error keeps this job from affecting
+  # the workflow's pass/fail status.
+  perf-json:
+    name: Perf JSON artifact (optional)
+    runs-on: macos-14
+    continue-on-error: true
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout rive-rust
+        uses: actions/checkout@v4
+        with:
+          path: rive-rust
+
+      - name: Checkout reference rive-runtime
+        uses: actions/checkout@v4
+        with:
+          repository: rive-app/rive-runtime
+          ref: ${{ env.RIVE_RUNTIME_REF }}
+          path: rive-runtime
+
+      - name: Install Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+
+      - name: Build reference Rive runtime (release)
+        working-directory: ${{ env.RIVE_RUNTIME_DIR }}
+        run: |
+          RIVE_PREMAKE_ARGS="--file=premake5_v2.lua --with_rive_text --with_rive_layout" build/build_rive.sh release
+          echo "${RIVE_RUNTIME_DIR}/build/dependencies/premake-core/bin/${RIVE_PREMAKE_TAG}_release" >> "${GITHUB_PATH}"
+
+      - name: Generate perf JSON
+        working-directory: ${{ github.workspace }}/rive-rust
+        run: |
+          make perf-json PERF_JSON_META="--meta build_profile=release --meta git_sha=${GITHUB_SHA} --meta timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+      - name: Upload perf JSON artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-compare-json
+          path: rive-rust/target/perf-compare.json
+          if-no-files-found: ignore

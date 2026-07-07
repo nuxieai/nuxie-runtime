@@ -147,9 +147,8 @@ fn c_api_runs_embed_loop_with_state_machine_inputs() {
     assert_eq!(status, RiveStatus::Ok);
 
     // Missing input name vs. wrong input kind report distinct statuses.
-    let status = unsafe {
-        rive_state_machine_instance_set_bool(state_machine, missing_name.as_ptr(), true)
-    };
+    let status =
+        unsafe { rive_state_machine_instance_set_bool(state_machine, missing_name.as_ptr(), true) };
     assert_eq!(status, RiveStatus::NotFound);
     let status =
         unsafe { rive_state_machine_instance_set_number(state_machine, bool_name.as_ptr(), 1.0) };

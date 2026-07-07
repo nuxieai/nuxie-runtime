@@ -77,6 +77,21 @@ corpus.toml`, not backlog prose.
 - Match the existing code style; keep `rive-schema` and `rive-binary`
   stable — they are done.
 
+## Performance work (M7+)
+
+Perf claims require release-vs-release builds with serializer/harness cost
+excluded (null-renderer benchmark mode) and >=10 iterations reporting median
+and spread — debug-build or n=2 numbers are not decision-grade and must not
+set priorities. Each optimization slice: flamegraph attribution first, then
+read the C++ source at the same hot site and PORT the original authors'
+optimization when one exists (keyframe cursors, dirt gating, buffer reuse,
+retained caching); invent novel optimizations only where C++ has none.
+Fidelity while optimizing: never widen a verification tolerance for perf,
+never restructure geometry float math (no reassociation/fast-math), and never
+add skip/cache logic that does not mirror an audited C++ dirt gate — the
+ratchet only samples corpus timelines, so invented invalidation can break
+original-author semantics on the timelines it does not sample.
+
 ## Divergence protocol
 
 When a golden diff fails: first divergent render call → binary-search the

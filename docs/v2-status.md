@@ -34,9 +34,12 @@ the only memory the next session has. Update it every commit.
    artboard listing/selection, artboard instantiation, one-shot advance/draw
    through the renderer traits, and raw runtime/graph escape hatches. First C
    ABI facade exists at `crates/rive-capi` with import/free and artboard
-   metadata functions. Highest priority next target is the C++/Rust performance
-   baseline needed to ratchet M7; after that, expand the C ABI to instance
-   advance/draw once the ownership shape is measured.
+   metadata functions. First process-level perf baseline exists via
+   `make perf-compare`: default `shapetest.riv`, samples=0, iterations=5,
+   warmups=1 reports C++ median 37.848ms, Rust median 5.131ms,
+   Rust/C++=0.136 on this machine. Highest priority next target is turning
+   that baseline into a corpus/hot-path advance+draw benchmark with an explicit
+   M7 target threshold; after that, expand the C ABI to instance advance/draw.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -305,6 +308,18 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-07: [M7] Added the first C++/Rust performance baseline command,
+  `make perf-compare`, backed by `tools/perf-compare`. It builds both golden
+  runners, executes the same file/sample set with configurable iterations and
+  warmups, validates each run emitted a golden stream, and reports median/min/max
+  plus Rust/C++ ratio. Default `shapetest.riv` process-level baseline
+  (`samples=0`, `iterations=5`, `warmups=1`) reports C++ median 37.848ms, Rust
+  median 5.131ms, Rust/C++=0.136 on this machine. This is a first ratchet, not
+  final M7 perf proof: it includes process startup/import/serialization. Full
+  `cargo test --workspace` passes, and `make golden-compare` remains unchanged
+  at `exact=263`, `exact-segments=584`, `diverges=0`,
+  `unsupported-feature=32`, `not-yet=0`. Next M7 slice should add corpus or
+  in-process advance+draw timing and define the pass threshold.
 - 2026-07-07: [M7] Added the first runtime C ABI crate, `rive-capi`. It
   publishes an opaque `RiveFile` handle, `rive_file_import`/`rive_file_free`,
   artboard count/name accessors, animation/state-machine count accessors, and

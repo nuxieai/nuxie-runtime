@@ -9,6 +9,7 @@ members = [
     "crates/rive-runtime",
     "crates/rive-schema",
     "tools/golden-compare",
+    "tools/perf-compare",
     "tools/rive-codegen",
     "tools/rust-golden-runner",
 ]

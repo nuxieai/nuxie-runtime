@@ -165,6 +165,44 @@ the only memory the next session has. Update it every commit.
    audited C++ dirt gate — invented caching is how original-author
    decisions get silently broken on unsampled timelines.
 
+10. SCOUT REPORT — C++ animation-apply audit (port-ready, cited against
+    reference @7c778d13). Headline: C++ has NO keyframe cursor and NO
+    value-unchanged skip in the animation layer — do not invent them.
+    KeyedProperty::apply is a stateless binary search over CACHED
+    per-keyframe seconds (keyed_property.cpp:20-52) with an O(1)
+    past-last-frame fast path (:28-32); the unchanged-value short-circuit
+    lives in generated property setters (node_base.hpp:53-62), which
+    Rust's changed-bool setters already mirror. Port slices, ranked:
+    (1) STOP PER-FRAME DEEP CLONES — likely the dominant cost of the
+        21.9x: crates/rive-runtime/src/artboard.rs:510 clones the entire
+        RuntimeLinearAnimation (all keyed objects/keyframes incl. string
+        byte Vecs) on EVERY apply, and artboard.rs:594 clones the whole
+        RuntimeStateMachine on every advance. C++ applies from a shared
+        immutable definition (LinearAnimation::apply(...) const,
+        linear_animation.cpp:71-85) with mutation confined to the
+        instance. Restructure to shared immutable definitions
+        (Arc/index-based split borrows), apply by &ref.
+    (2) Cache keyframe seconds at build (KeyFrame::computeSeconds,
+        keyframe.cpp:10, called once at keyed_property_importer.cpp:15);
+        Rust recomputes frame/fps with a zero-branch on every comparison
+        of every search (animation.rs:1102-1107 + 5 sibling impls).
+    (3) Precompute cubic solver state at build: 11-entry bezier-x table
+        (cubic_interpolator_solver.cpp:28-95, built once at
+        cubic_interpolator.cpp:5-11) — Rust rebuilds it inside every
+        get_t call (animation.rs:145-156); also cache CubicValue
+        coefficients behind a from/to guard (cubic_value_interpolator
+        .cpp:26-35 vs animation.rs:128-139).
+    (4) Kill steady-state allocs in advance plumbing: persistent
+        reported-events buffers (state_machine_instance.hpp:336, drained
+        :2293-2317), blend instance lists built once with reserve
+        (blend_state_instance.hpp:51-71), pooled AnimationReset
+        (animation_reset_factory.cpp:226-235) — vs Rust fresh Vecs per
+        advance (artboard.rs:552-560, :601-604, :617-645).
+    Also: interpolator pointers resolve once at onAddedDirty, validation
+    is hoisted to init (invalid keyed objects erased), advanceAndApply
+    caps at 5 passes breaking when Components dirt clears
+    (state_machine_instance.cpp:2589-2616).
+
 ## Known Divergences
 
 - There are no active `status = "not-yet"` entries.

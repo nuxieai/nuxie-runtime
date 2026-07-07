@@ -1,0 +1,30 @@
+[package]
+name = "rive-scripting"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Scripting spike for the Rive Rust runtime: pure-Rust Luau VM (luaur) foundation."
+
+[features]
+# `luau` pulls in the pure-Rust Luau VM (luaur-rt). Default-on so
+# `cargo test --workspace` exercises the spike; nothing else in the
+# workspace depends on rive-scripting, so no dependency leaks into other
+# crates. Build with `--no-default-features` for the dependency-free
+# envelope-parsing subset.
+default = ["luau"]
+luau = ["dep:luaur-rt", "dep:luaur-vm"]
+
+[dependencies]
+# Pinned exactly: luaur-rt 0.1.8 (pure-Rust Luau translation, validated
+# against upstream Luau commit 8f33df9 per the luaur README).
+luaur-rt = { version = "=0.1.8", optional = true }
+# The raw C-style VM API (luau_load for precompiled bytecode). Same pinned
+# version as luaur-rt's own dependency so cargo unifies to one copy.
+luaur-vm = { version = "=0.1.8", optional = true }
+
+[dev-dependencies]
+# Read-only use of the corpus reader to pull ScriptAsset payloads out of
+# real .riv files in tests. dev-dependency only: rive-binary never becomes
+# part of rive-scripting's public dependency surface.
+rive-binary = { path = "../rive-binary" }

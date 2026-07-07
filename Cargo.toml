@@ -8,6 +8,7 @@ members = [
     "crates/rive-capi",
     "crates/rive-runtime",
     "crates/rive-schema",
+    "crates/rive-scripting",
     "tools/golden-compare",
     "tools/perf-compare",
     "tools/rive-codegen",

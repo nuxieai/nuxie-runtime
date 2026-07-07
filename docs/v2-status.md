@@ -356,6 +356,24 @@ the only memory the next session has. Update it every commit.
     lua_mat4, lua_buffer_ext, most of lua_image_decode, lua_audio.
     Signature verification (libhydrogen) deferrable — corpus unsigned.
 
+15. LANE MERGED (d8cf8cb): C ABI embed loop + perf JSON.
+    crates/rive-capi now covers file->artboard-instance->state-machine->
+    inputs->advance->draw via a caller-provided RiveRenderCallbacks
+    repr(C) vtable (FFI-renderer pattern, opaque u64 handles, balanced
+    release_* calls, nullable callbacks); `make capi-smoke` runs a real C
+    embed loop. perf-compare gained --json/--meta (phase-sum metrics,
+    benchmark_repeat recorded, meta passed in never computed) +
+    `make perf-json` + additive CI jobs (capi-smoke; perf-json artifact,
+    continue-on-error). Additive crates/rive API: Factory/Renderer
+    re-exports, Artboard::state_machine_name/default_state_machine_index,
+    ArtboardInstance::default_state_machine_instance/
+    advance_with_state_machine. Follow-ups: (a) once draw-frame retention
+    stabilizes, add an additive cache-holding draw so the C ABI reuses
+    render handles across frames; (b) pointer events + view-model
+    contexts are additive ABI gaps; (c) default-SM selection: capi
+    falls back to first (C++ defaultScene) while the golden runner uses
+    flagged-or-none — align once embed parity matters.
+
 ## Known Divergences
 
 - There are no active `status = "not-yet"` entries.

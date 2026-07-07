@@ -254,14 +254,22 @@ Decided libraries (2026-07-02):
   — never payload hashes across runtimes.
 - **Audio: `cpal`/`rodio`** (or `kira`) instead of miniaudio, ~1k of glue.
   Only when corpus files contain audio events.
-- **Scripting: `mlua` with the `luau` feature.** No mature pure-Rust Luau
-  exists; mlua vendors and compiles the official Roblox Luau (C++) sources
-  inside cargo and exposes safe bindings. Technically FFI, strategically
-  correct: scripting semantics are implementation-defined, and running the
-  same VM as the C++ runtime gives parity by construction, so scripted files
-  can still verify `exact`. Port the `src/lua/` glue (~16.4k) against mlua's
-  API, feature-gated, scheduled only when a corpus file demands it. This must
-  not become the next formula swamp.
+- **Scripting: `luaur` (`luaur-rt`).** Decided 2026-07-07 (supersedes the
+  earlier mlua choice): luaur is a line-for-line translation of the actual
+  Luau compiler/VM/type checker from C++17 to Rust
+  (https://github.com/pjankiewicz/luaur) — 5,347 ported unit tests pass and
+  all 293 upstream conformance scripts run byte-identically against the C++
+  VM, with bytecode compatibility. Under the engine-swap rule this counts as
+  the same engine (a verified faithful port, the HarfRust pattern), so
+  scripted files still target strict `exact`; the golden harness is the
+  third oracle — the C++ probe runs real Luau, so any luaur semantic drift
+  surfaces as a stream diff, attributable and reportable upstream. Cautions:
+  the project is young and research-grade — pin the version, and pin it
+  against the Luau version the reference runtime vendors. `luaur-rt`
+  deliberately mirrors mlua's API, so `mlua`+`luau` remains the untriggered
+  fallback behind the same scripting seam (the Taffy/Yoga-FFI pattern). Port
+  the `src/lua/` glue (~16.4k) against that seam, feature-gated,
+  corpus-file-by-corpus-file. This must not become the next formula swamp.
 
 ### Verification Modes
 

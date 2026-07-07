@@ -1150,6 +1150,19 @@ the only memory the next session has. Update it every commit.
   binding as blocked on component-list item instancing, draw, layout, and
   data-context parity; do not ship a partial runner convention.
 
+- 2026-07-07: Scripting VM decided (user directive, supersedes the mlua
+  plan): use `luaur` / `luaur-rt` (https://github.com/pjankiewicz/luaur),
+  a line-for-line Rust translation of the actual Luau compiler/VM/type
+  checker — all 293 upstream conformance scripts byte-identical vs C++
+  Luau, bytecode-compatible. Scripted corpus files still target strict
+  `exact`: the C++ probe runs real Luau, so any luaur drift appears as a
+  golden stream diff (report upstream, do not pin around it). PIN the
+  luaur version, and check its conformance-pinned Luau commit against the
+  Luau version vendored by the reference runtime. Integrate behind a thin
+  scripting seam; `mlua`+`luau` (same API shape) is the untriggered
+  fallback. Port `src/lua/` glue corpus-file-by-corpus-file — the fence
+  rules apply to the 16.4k-line binding surface more than anywhere else.
+
 ## Log
 
 - Completed-milestone entries (M0 through M5) are archived verbatim in

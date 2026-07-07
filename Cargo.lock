@@ -216,6 +216,7 @@ dependencies = [
  "rive-graph",
  "rive-render-api",
  "rive-runtime",
+ "rive-schema",
 ]
 
 [[package]]

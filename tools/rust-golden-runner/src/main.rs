@@ -921,6 +921,15 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
+    if let Some(data_bind) = unsupported_joystick_data_bind_stream_divergence(artboard) {
+        bail!(
+            "unsupported: text-joystick-data-bind-divergence in Rust golden runner (data bind global {} target global {:?} property key {})",
+            data_bind.global_id,
+            data_bind.target_global,
+            data_bind.property_key
+        );
+    }
+
     if let Some(data_bind) = artboard
         .data_binds
         .iter()
@@ -1025,6 +1034,33 @@ fn ensure_static_draw_supported_for_artboard(
     }
 
     Ok(())
+}
+
+fn unsupported_joystick_data_bind_stream_divergence(
+    artboard: &ArtboardGraph,
+) -> Option<&rive_graph::DataBindNode> {
+    let joystick_x_key = schema_property_key_for_name("Joystick", "x")?;
+    let mut converted_x_binds = artboard.data_binds.iter().filter(|data_bind| {
+        data_bind_source_to_target(data_bind)
+            && data_bind.target_type_name == Some("Joystick")
+            && data_bind.property_key == u64::from(joystick_x_key)
+            && data_bind.converter_type_name == Some("DataConverterGroup")
+    });
+    let first = converted_x_binds.next()?;
+    converted_x_binds.next().map(|_| first)
+}
+
+fn data_bind_source_to_target(data_bind: &rive_graph::DataBindNode) -> bool {
+    data_bind.flags & DATA_BIND_FLAG_TWO_WAY != 0
+        || data_bind.flags & DATA_BIND_FLAG_DIRECTION_TO_SOURCE == 0
+}
+
+fn schema_property_key_for_name(type_name: &str, property_name: &str) -> Option<u16> {
+    rive_schema::definition_by_name(type_name)?
+        .properties
+        .iter()
+        .find(|property| property.name == property_name)
+        .map(|property| property.key.int)
 }
 
 fn unsupported_layout_component_paint<'a>(

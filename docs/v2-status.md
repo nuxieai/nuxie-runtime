@@ -26,10 +26,12 @@ the only memory the next session has. Update it every commit.
 
 1. The active `not-yet` queue is empty. Continue M6 by picking the highest-value
    remaining unsupported queue that is not scripting/audio: start with
-   `text-joystick-data-bind` (`echo_show_demo.riv`), `nested-artboard-layout`
-   (`superbowl.riv`), or `selected-root-skinned-clip-path` (`bullet_man.riv`,
-   `spotify_kids_demo.riv`).
-2. Other parked one-file M6 queues include `text-joystick-data-bind`
+   `nested-artboard-layout` (`superbowl.riv`) or
+   `selected-root-skinned-clip-path` (`bullet_man.riv`,
+   `spotify_kids_demo.riv`). `echo_show_demo.riv` is now parked behind the
+   sharper `text-joystick-data-bind-divergence` diagnostic after a focused
+   probe reached draw but diverged from C++.
+2. Other parked one-file M6 queues include `text-joystick-data-bind-divergence`
    (`echo_show_demo.riv`), `nested-artboard-layout` (`superbowl.riv`), and
    `selected-root-skinned-clip-path` (`bullet_man.riv`,
    `spotify_kids_demo.riv`). The former
@@ -143,7 +145,8 @@ the only memory the next session has. Update it every commit.
   artboard property conversion, `Text.alignValue` enum/uint binds,
   ViewModel-vs-ViewModel transition comparators for number, bool, color,
   string, enum, asset, and artboard bindables, and
-  before-update joystick animation application, keyed double/color
+  before-update joystick animation application, single Joystick data binds
+  already covered by exact fixtures, keyed double/color
   interpolation for CubicEase/CubicValue/Elastic keyframe interpolators, and
   `DistanceConstraint` world-translation application and
   `TranslationConstraint` target/source/destination/min-max translation
@@ -465,6 +468,20 @@ the only memory the next session has. Update it every commit.
   `M6=10 gated=6 harness=36`. Next target is `text-joystick-data-bind`,
   `nested-artboard-layout`, `selected-root-skinned-clip-path`, or the nested
   data-bind diagnostics.
+- 2026-07-06: [M6] Rechecked `echo_show_demo.riv` and replaced the stale
+  `text-joystick-data-bind` guard with
+  `text-joystick-data-bind-divergence`. Rust now admits the static-text
+  Joystick/NestedRemapAnimation sibling scan and Joystick.x/y data-bind
+  targets, and exact Joystick bind fixtures (`coin.riv`,
+  `magic_alley_db_reduced_export.riv`, `joystick_flag_test.riv`,
+  `joystick_nested_remap.riv`) still pass. A direct C++/Rust probe of
+  `echo_show_demo.riv` reaches draw but diverges at first shader creation
+  after stream setup, so the file stays M6 parked behind a narrower
+  multiple-converted-Joystick.x diagnostic. Full `make golden-compare`
+  remains `exact=243`, `exact-segments=564`, `diverges=0`,
+  `unsupported-feature=52`, `not-yet=0`, parked
+  `M6=10 gated=6 harness=36`. Next target is `nested-artboard-layout`,
+  `selected-root-skinned-clip-path`, or the nested data-bind diagnostics.
 - 2026-07-02: `rive-runtime` owns static draw emission through
   `rive-render-api`; `rust-golden-runner` now only orchestrates import,
   artboard selection, stream markers, and recording output.

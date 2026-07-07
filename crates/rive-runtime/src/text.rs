@@ -22,7 +22,7 @@ use crate::draw::{
     RuntimeLayoutBounds, RuntimePathMeasure, runtime_path_geometry_commands,
     runtime_shape_paint_command,
 };
-use crate::properties::property_key_for_name;
+use crate::properties::{joystick_x_property_key, joystick_y_property_key, property_key_for_name};
 use crate::{ArtboardInstance, Mat2D, RuntimeDrawCommand, RuntimePathCommand};
 use crate::{RuntimeShapePaintCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind};
 use std::collections::BTreeMap;
@@ -429,6 +429,13 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
                 || (property_key_for_name("TransformComponent", "rotation") == Some(property_key)
                     && data_bind.converter_type_name == Some("DataConverterSystemDegsToRads"))
         }
+        Some("Joystick") => {
+            [joystick_x_property_key(), joystick_y_property_key()]
+                .into_iter()
+                .any(|key| key == Some(property_key))
+                && (data_bind.converter_global.is_none()
+                    || data_bind.converter_type_name == Some("DataConverterGroup"))
+        }
         Some("Ellipse" | "Polygon" | "Rectangle" | "Star" | "Triangle") => {
             ["width", "height"]
                 .into_iter()
@@ -571,6 +578,8 @@ impl<'a> StaticTextSlice<'a> {
                         | "Backboard"
                         | "NestedArtboard"
                         | "NestedStateMachine"
+                        | "NestedRemapAnimation"
+                        | "Joystick"
                         | "NestedBool"
                         | "NestedNumber"
                         | "ArtboardComponentList"

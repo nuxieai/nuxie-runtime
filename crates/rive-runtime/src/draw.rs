@@ -1390,6 +1390,20 @@ impl ArtboardInstance {
         {
             return component.transform.world_transform;
         }
+        if let Some(layout_local) = self.runtime_constrained_layout_ancestor(local_id) {
+            let layout_world = self.runtime_layout_component_world_transform_with_bounds(
+                layout_local,
+                graph,
+                layout_bounds,
+            );
+            let stored_layout_world = self
+                .component(layout_local)
+                .map(|component| component.transform.world_transform)
+                .unwrap_or(Mat2D::IDENTITY);
+            return layout_world
+                .multiply(stored_layout_world.invert_or_identity())
+                .multiply(component.transform.world_transform);
+        }
         self.runtime_component_world_transform_with_bounds(parent_local, graph, layout_bounds)
             .multiply(component.transform.local_transform)
     }
@@ -1405,6 +1419,21 @@ impl ArtboardInstance {
             local_id = parent_local;
         }
         false
+    }
+
+    fn runtime_constrained_layout_ancestor(&self, mut local_id: usize) -> Option<usize> {
+        let mut saw_constraint = false;
+        while let Some(component) = self.component(local_id) {
+            if component.type_name == "LayoutComponent" {
+                return saw_constraint.then_some(local_id);
+            }
+            saw_constraint |= !component.constraint_locals.is_empty();
+            let Some(parent_local) = component.parent_local else {
+                return None;
+            };
+            local_id = parent_local;
+        }
+        None
     }
 
     fn runtime_layout_component_world_transform(
@@ -2734,7 +2763,8 @@ impl ArtboardInstance {
                 layout_bounds,
             );
             let runtime_path = self.runtime_path_geometry_with_layout_control(path, layout_bounds);
-            let weighted_context = self.runtime_weighted_path_context(&runtime_path, graph);
+            let weighted_context =
+                self.runtime_weighted_path_context(&runtime_path, graph, layout_bounds);
             let path_transform = if weighted_context.is_some() {
                 Mat2D::IDENTITY
             } else {
@@ -2817,7 +2847,8 @@ impl ArtboardInstance {
                 );
                 let runtime_path =
                     self.runtime_path_geometry_with_layout_control(path, layout_bounds);
-                let weighted_context = self.runtime_weighted_path_context(&runtime_path, graph);
+                let weighted_context =
+                    self.runtime_weighted_path_context(&runtime_path, graph, layout_bounds);
                 let path_transform = if weighted_context.is_some() {
                     Mat2D::IDENTITY
                 } else {
@@ -2890,22 +2921,25 @@ impl ArtboardInstance {
         &self,
         path: &PathGeometryNode,
         graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) -> Option<WeightedPathContext> {
-        self.runtime_weighted_skinnable_context(path.local_id, graph)
+        self.runtime_weighted_skinnable_context(path.local_id, graph, layout_bounds)
     }
 
     fn runtime_weighted_mesh_context(
         &self,
         mesh: &MeshGeometryNode,
         graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) -> Option<WeightedPathContext> {
-        self.runtime_weighted_skinnable_context(mesh.local_id, graph)
+        self.runtime_weighted_skinnable_context(mesh.local_id, graph, layout_bounds)
     }
 
     fn runtime_weighted_skinnable_context(
         &self,
         skinnable_local: usize,
         graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) -> Option<WeightedPathContext> {
         let skin = graph
             .skeletal_skins
@@ -2913,12 +2947,14 @@ impl ArtboardInstance {
             .find(|skin| skin.skinnable_local == Some(skinnable_local))?;
         let mut bone_transforms = vec![Mat2D::IDENTITY];
         for tendon in &skin.tendons {
-            let bone = self.component(tendon.bone_local?)?;
-            bone_transforms.push(
-                bone.transform
-                    .world_transform
-                    .multiply(Mat2D(tendon.inverse_bind)),
+            let bone_local = tendon.bone_local?;
+            let bone_world = self.runtime_component_world_transform_with_bounds(
+                bone_local,
+                graph,
+                layout_bounds,
             );
+            let bone_transform = bone_world.multiply(Mat2D(tendon.inverse_bind));
+            bone_transforms.push(bone_transform);
         }
 
         Some(WeightedPathContext {
@@ -6103,7 +6139,7 @@ fn runtime_draw_mesh_image(
     image: &dyn RenderImage,
     renderer: &mut dyn Renderer,
 ) -> Result<()> {
-    let weighted_context = instance.runtime_weighted_mesh_context(mesh, graph);
+    let weighted_context = instance.runtime_weighted_mesh_context(mesh, graph, layout_bounds);
     if weighted_context.is_none() {
         let world = instance.runtime_component_world_transform_with_bounds(
             image_local,
@@ -9057,7 +9093,20 @@ pub(crate) fn runtime_path_geometry_commands(
     transform: Mat2D,
 ) -> Vec<RuntimePathCommand> {
     let path = runtime_path_geometry(artboard, path);
-    let mut commands = path_commands(&path, ShapePaintPathKind::World, transform, None);
+    let weighted_context = artboard
+        .runtime_graph()
+        .and_then(|graph| artboard.runtime_weighted_path_context(&path, graph, None));
+    let path_transform = if weighted_context.is_some() {
+        Mat2D::IDENTITY
+    } else {
+        transform
+    };
+    let mut commands = path_commands(
+        &path,
+        ShapePaintPathKind::World,
+        path_transform,
+        weighted_context.as_ref(),
+    );
     prune_empty_path_segments(&mut commands);
     commands
 }

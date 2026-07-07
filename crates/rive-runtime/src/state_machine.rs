@@ -2,7 +2,6 @@ use crate::ArtboardInstance;
 use crate::animation::{
     AnimationLoop, LinearAnimationInstance, RuntimeInterpolator, RuntimeLinearAnimation,
 };
-use crate::components::TransformProperty;
 use crate::data_bind_graph::data_bind_flags_apply_target_to_source;
 use crate::properties::{artboard_index_for_graph, property_key_for_name};
 use rive_binary::{RuntimeFile, RuntimeObject};
@@ -800,9 +799,14 @@ pub struct RuntimeLayerState {
 
 impl RuntimeLayerState {
     const RANDOM: u64 = 1 << 0;
+    const RESET: u64 = 1 << 1;
 
     fn uses_random_transition_selection(&self) -> bool {
         self.flags & Self::RANDOM == Self::RANDOM
+    }
+
+    fn resets_blend_values(&self) -> bool {
+        self.flags & Self::RESET == Self::RESET
     }
 
     fn perform_fire_actions(
@@ -1283,10 +1287,15 @@ impl RuntimeDirectBlendSource {
 pub(crate) struct BlendState1DInstance {
     source: RuntimeBlendState1DSource,
     animations: Vec<BlendAnimation1DInstance>,
+    animation_reset: Option<AnimationReset>,
 }
 
 impl BlendState1DInstance {
-    pub(crate) fn new(blend_state: &RuntimeBlendState1D, artboard: &ArtboardInstance) -> Self {
+    pub(crate) fn new(
+        blend_state: &RuntimeBlendState1D,
+        artboard: &ArtboardInstance,
+        reset_blend_values: bool,
+    ) -> Self {
         let animations = blend_state
             .animations
             .iter()
@@ -1303,10 +1312,21 @@ impl BlendState1DInstance {
                 })
             })
             .collect();
+        let animation_reset = if reset_blend_values {
+            let animation_indices = blend_state
+                .animations
+                .iter()
+                .map(|animation| animation.animation_index)
+                .collect::<Vec<_>>();
+            AnimationReset::from_animation_indices(artboard, &animation_indices, true)
+        } else {
+            None
+        };
 
         Self {
             source: blend_state.source.clone(),
             animations,
+            animation_reset,
         }
     }
 
@@ -1455,6 +1475,9 @@ impl BlendState1DInstance {
 
     pub(crate) fn apply(&self, artboard: &mut ArtboardInstance, mix: f32) -> bool {
         let mut changed = false;
+        if let Some(reset) = self.animation_reset.as_ref() {
+            changed |= reset.apply(artboard);
+        }
         for animation in &self.animations {
             let animation_mix = mix * animation.mix;
             if animation_mix == 0.0 {
@@ -2139,7 +2162,7 @@ pub(crate) struct StateMachineLayerInstance {
     transition_fire_actions: Vec<RuntimeStateMachineFireAction>,
     transition_listener_actions: Vec<RuntimeScheduledListenerAction>,
     transition_completed: bool,
-    transition_animation_reset: Option<TransitionAnimationReset>,
+    transition_animation_reset: Option<AnimationReset>,
     waiting_for_exit: bool,
 }
 
@@ -2151,49 +2174,89 @@ pub(crate) struct StateMachineLayerAdvance {
 }
 
 #[derive(Debug, Clone)]
-struct TransitionAnimationReset {
-    entries: Vec<TransitionAnimationResetEntry>,
+struct AnimationReset {
+    entries: Vec<AnimationResetEntry>,
 }
 
 #[derive(Debug, Clone)]
-struct TransitionAnimationResetEntry {
-    local_id: usize,
-    property: TransformProperty,
-    value: f32,
+enum AnimationResetEntry {
+    Double {
+        local_id: usize,
+        property_key: u16,
+        value: f32,
+    },
+    Color {
+        local_id: usize,
+        property_key: u16,
+        value: u32,
+    },
 }
 
-impl TransitionAnimationReset {
+impl AnimationReset {
     fn from_animation_indices(
         artboard: &ArtboardInstance,
         animation_indices: &[usize],
+        use_first_as_baseline: bool,
     ) -> Option<Self> {
         let mut entries = Vec::new();
         let mut seen = Vec::new();
 
-        for animation_index in animation_indices {
+        for (animation_order, animation_index) in animation_indices.iter().enumerate() {
             let Some(animation) = artboard.linear_animation(*animation_index) else {
                 continue;
             };
+            let use_baseline = use_first_as_baseline && animation_order == 0;
             for keyed_object in &animation.keyed_objects {
                 for keyed_property in &keyed_object.keyed_properties {
-                    let Some(property) = keyed_property.transform_property else {
+                    if !keyed_property.double_property && !keyed_property.color_property {
                         continue;
                     };
-                    let key = (keyed_object.target_local_id, property);
+                    let key = (keyed_object.target_local_id, keyed_property.property_key);
                     if seen.contains(&key) {
                         continue;
                     }
-                    let Some(value) =
-                        artboard.transform_property(keyed_object.target_local_id, property)
-                    else {
-                        continue;
-                    };
                     seen.push(key);
-                    entries.push(TransitionAnimationResetEntry {
-                        local_id: keyed_object.target_local_id,
-                        property,
-                        value,
-                    });
+                    if keyed_property.double_property {
+                        let value = if use_baseline {
+                            keyed_property.key_frames.first().map(|frame| frame.value)
+                        } else {
+                            current_animation_reset_double_value(
+                                artboard,
+                                keyed_object.target_local_id,
+                                keyed_property,
+                            )
+                        };
+                        if let Some(value) = value {
+                            entries.push(AnimationResetEntry::Double {
+                                local_id: keyed_object.target_local_id,
+                                property_key: keyed_property.property_key,
+                                value,
+                            });
+                        }
+                    } else if keyed_property.color_property {
+                        let value = if use_baseline {
+                            keyed_property
+                                .color_key_frames
+                                .first()
+                                .map(|frame| frame.value)
+                        } else {
+                            Some(
+                                artboard
+                                    .color_property(
+                                        keyed_object.target_local_id,
+                                        keyed_property.property_key,
+                                    )
+                                    .unwrap_or(keyed_property.color_source_value),
+                            )
+                        };
+                        if let Some(value) = value {
+                            entries.push(AnimationResetEntry::Color {
+                                local_id: keyed_object.target_local_id,
+                                property_key: keyed_property.property_key,
+                                value,
+                            });
+                        }
+                    }
                 }
             }
         }
@@ -2208,9 +2271,40 @@ impl TransitionAnimationReset {
     fn apply(&self, artboard: &mut ArtboardInstance) -> bool {
         let mut changed = false;
         for entry in &self.entries {
-            changed |= artboard.set_transform_property(entry.local_id, entry.property, entry.value);
+            match entry {
+                AnimationResetEntry::Double {
+                    local_id,
+                    property_key,
+                    value,
+                } => {
+                    changed |= artboard.set_double_property(*local_id, *property_key, *value);
+                }
+                AnimationResetEntry::Color {
+                    local_id,
+                    property_key,
+                    value,
+                } => {
+                    changed |= artboard.set_color_property(*local_id, *property_key, *value);
+                }
+            }
         }
         changed
+    }
+}
+
+fn current_animation_reset_double_value(
+    artboard: &ArtboardInstance,
+    local_id: usize,
+    keyed_property: &crate::animation::RuntimeKeyedProperty,
+) -> Option<f32> {
+    if let Some(property) = keyed_property.transform_property {
+        artboard.transform_property(local_id, property)
+    } else {
+        Some(
+            artboard
+                .double_property(local_id, keyed_property.property_key)
+                .unwrap_or(keyed_property.double_source_value),
+        )
     }
 }
 
@@ -2814,7 +2908,7 @@ impl StateMachineLayerInstance {
             reset_animation_indices.push(animation.animation_index);
         }
         let transition_animation_reset =
-            TransitionAnimationReset::from_animation_indices(artboard, &reset_animation_indices);
+            AnimationReset::from_animation_indices(artboard, &reset_animation_indices, false);
 
         if let Some(source_state_index) = previous_state_index {
             self.transition_source_state_index = Some(source_state_index);
@@ -2928,7 +3022,8 @@ impl StateMachineLayerInstance {
         };
         if let Some(blend_state) = state.blend_state_1d.as_ref() {
             self.current_animation = None;
-            let mut blend_instance = BlendState1DInstance::new(blend_state, artboard);
+            let mut blend_instance =
+                BlendState1DInstance::new(blend_state, artboard, state.resets_blend_values());
             blend_instance.advance(artboard, inputs, bindable_numbers, 0.0);
             self.current_blend_state_1d = Some(blend_instance);
             self.current_blend_state_direct = None;

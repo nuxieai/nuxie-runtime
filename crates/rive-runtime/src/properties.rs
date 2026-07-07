@@ -113,6 +113,8 @@ pub(crate) fn transform_property_for_key(property_key: u16) -> Option<TransformP
     [
         ("Node", "x", TransformProperty::X),
         ("Node", "y", TransformProperty::Y),
+        ("RootBone", "x", TransformProperty::X),
+        ("RootBone", "y", TransformProperty::Y),
         (
             "TransformComponent",
             "rotation",
@@ -220,5 +222,19 @@ pub(crate) fn mix_value(current: f32, value: f32, mix: f32) -> f32 {
         value
     } else {
         current * (1.0 - mix) + value * mix
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn root_bone_xy_keys_are_transform_properties() {
+        let x = property_key_for_name("RootBone", "x").expect("RootBone.x key");
+        let y = property_key_for_name("RootBone", "y").expect("RootBone.y key");
+
+        assert_eq!(transform_property_for_key(x), Some(TransformProperty::X));
+        assert_eq!(transform_property_for_key(y), Some(TransformProperty::Y));
     }
 }

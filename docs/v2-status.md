@@ -27,12 +27,18 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Active `not-yet` queue: `rewards_demo.riv`
-   (`not-yet:nested-feather-gradient-space`). Rust now matches the prior
-   Chest shader allocation/order block; the focused exact compare first fails
-   at line 492 on Chest `drawPath` geometry/local transform for render path
-   id 10. Rust and C++ use the same transform and shader there, but the path
-   points differ by a large local offset. Next work should localize that
-   nested layout/path-transform source, not add a broader runner gate.
+   (`not-yet:nested-feather-gradient-space`). Current slice fixed three
+   nested-runtime gaps: constrained descendants under layout overlays now use
+   the solved layout transform delta, skinned paths/meshes evaluate bone
+   transforms through those solved layout bounds, and flagged 1D blend states
+   now apply the C++ `AnimationResetFactory::fromAnimations(..., true)`
+   baseline reset for double/color keyed properties. `RootBone.x/y` are also
+   wired into transform-property animation. The focused exact compare now
+   first fails at line 694 on Chest nested feather path id 57 with a small
+   local Y residual (~2.4e-4 on the feather-expanded path, above the
+   1.3e-4 exact epsilon). Next work should localize that residual in keyed
+   interpolation/skin/feather math for the same Chest nested path, not reopen
+   layout transform or blend-state reset ordering.
 2. The former `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
    `nested-feather-gradient-space` unsupported queues are empty.
@@ -120,8 +126,7 @@ the only memory the next session has. Update it every commit.
 
 - `rewards_demo.riv` is the only active `status = "not-yet"` entry. It runs
   in both golden runners at sample 0; the current first focused diff is the
-  Chest nested-layout path geometry/local-transform divergence described in
-  Next.
+  small Chest nested feather local-path residual described in Next.
 - Remaining M6 parked work is behind explicit unsupported-feature diagnostics.
 
 ## Backlog (unsupported features awaiting corpus demand)
@@ -149,6 +154,8 @@ the only memory the next session has. Update it every commit.
   before-update joystick animation application, single Joystick data binds
   already covered by exact fixtures, keyed double/color
   interpolation for CubicEase/CubicValue/Elastic keyframe interpolators, and
+  flagged 1D blend-state double/color animation resets using the first blend
+  animation as the baseline like C++ `AnimationResetFactory`, and
   `DistanceConstraint` world-translation application and
   `TranslationConstraint` target/source/destination/min-max translation
   application, `RotationConstraint` compose/decompose rotation,

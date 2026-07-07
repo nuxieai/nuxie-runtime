@@ -917,7 +917,7 @@ impl<'a> StaticTextSlice<'a> {
         )?;
         let scaled_font_size = font_size * font_scale;
         let (baseline, line_height) = self
-            .max_static_line_metrics(runtime, instance, font_scale)?
+            .max_static_line_metrics(runtime, instance, font_scale, Some(&resolved_runs))?
             .unwrap_or_else(|| {
                 (
                     ascent * scaled_font_size / TEXT_SHAPE_SCALE_F32,
@@ -1172,7 +1172,14 @@ impl<'a> StaticTextSlice<'a> {
             disable_legacy_kern,
         )?;
         let scaled_font_size = font_size * font_scale;
-        let line_height = (ascent - descent) * scaled_font_size / TEXT_SHAPE_SCALE_F32;
+        let (baseline, line_height) = self
+            .max_static_line_metrics(runtime, instance, font_scale, Some(&resolved_runs))?
+            .unwrap_or_else(|| {
+                (
+                    ascent * scaled_font_size / TEXT_SHAPE_SCALE_F32,
+                    (ascent - descent) * scaled_font_size / TEXT_SHAPE_SCALE_F32,
+                )
+            });
         let scale = scaled_font_size / TEXT_SHAPE_SCALE_F32;
         let letter_spacing = self.letter_spacing(runtime, instance);
         let measured_width = lines
@@ -1197,7 +1204,7 @@ impl<'a> StaticTextSlice<'a> {
                     instance,
                     &lines,
                     &resolved_runs,
-                    ascent * scaled_font_size / TEXT_SHAPE_SCALE_F32,
+                    baseline,
                     line_height,
                     font_scale,
                 )?
@@ -1275,7 +1282,7 @@ impl<'a> StaticTextSlice<'a> {
         )?;
         let scaled_font_size = font_size * font_scale;
         let (baseline, line_height) = self
-            .max_static_line_metrics(runtime, instance, font_scale)?
+            .max_static_line_metrics(runtime, instance, font_scale, Some(&resolved_runs))?
             .unwrap_or_else(|| {
                 (
                     ascent * scaled_font_size / TEXT_SHAPE_SCALE_F32,
@@ -1412,10 +1419,22 @@ impl<'a> StaticTextSlice<'a> {
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
         font_scale: f32,
+        runs: Option<&[StaticResolvedRun]>,
     ) -> Result<Option<(f32, f32)>> {
+        let used_styles = runs.map(|runs| {
+            runs.iter()
+                .map(|run| run.style_local)
+                .collect::<BTreeSet<_>>()
+        });
         let mut baseline = 0.0f32;
         let mut line_height = 0.0f32;
         for style in &self.styles {
+            if used_styles
+                .as_ref()
+                .is_some_and(|styles| !styles.contains(&style.local_id))
+            {
+                continue;
+            }
             let Some(font_bytes) = style.font_bytes else {
                 continue;
             };
@@ -1692,7 +1711,7 @@ impl<'a> StaticTextSlice<'a> {
                 .into_iter()
                 .fold(0.0f32, f32::max);
             let line_height = self
-                .max_static_line_metrics(runtime, instance, font_scale)?
+                .max_static_line_metrics(runtime, instance, font_scale, Some(runs))?
                 .map(|(_, line_height)| line_height)
                 .unwrap_or(0.0);
             let height = line_height * lines.len().max(1) as f32;
@@ -2226,7 +2245,7 @@ impl<'a> StaticTextSlice<'a> {
         instance: &ArtboardInstance,
     ) -> Result<Vec<RuntimePathCommand>> {
         let (_, line_height) = self
-            .max_static_line_metrics(runtime, instance, 1.0)?
+            .max_static_line_metrics(runtime, instance, 1.0, None)?
             .unwrap_or((0.0, 0.0));
         Ok(vec![
             RuntimePathCommand::Move { x: 0.0, y: 0.0 },
@@ -3589,8 +3608,46 @@ struct StyledTextGlyph {
 fn harfbuzz_line_metrics(font: &SkrifaFontRef<'_>, location_ref: LocationRef<'_>) -> (f32, f32) {
     // Mirrors src/text/font_hb.cpp::make_lmx: HarfBuzz scales extents to
     // kStdScale and rounds them before Rive applies the authored font size.
+    // HarfBuzz prefers OS/2 typo metrics whenever that table exists, while
+    // Skrifa's public metrics follow platform selection flags. Match the
+    // HarfBuzz table policy and fold in MVAR deltas for variable fonts.
+    if let Some(metrics) = harfbuzz_table_line_metrics(font, location_ref) {
+        return metrics;
+    }
     let metrics = font.metrics(Size::new(TEXT_SHAPE_SCALE_F32), location_ref);
     (metrics.ascent.round(), metrics.descent.round())
+}
+
+fn harfbuzz_table_line_metrics(
+    font: &SkrifaFontRef<'_>,
+    location_ref: LocationRef<'_>,
+) -> Option<(f32, f32)> {
+    let units_per_em = font.head().ok()?.units_per_em();
+    if units_per_em == 0 {
+        return None;
+    }
+    let (mut ascent, mut descent) = if let Ok(os2) = font.os2() {
+        (os2.s_typo_ascender() as f32, os2.s_typo_descender() as f32)
+    } else if let Ok(hhea) = font.hhea() {
+        (
+            hhea.ascender().to_i16() as f32,
+            hhea.descender().to_i16() as f32,
+        )
+    } else {
+        return None;
+    };
+
+    if !location_ref.is_default()
+        && let Ok(mvar) = font.mvar()
+    {
+        use skrifa::raw::tables::mvar::tags::{HASC, HDSC};
+        let coords = location_ref.coords();
+        ascent += mvar.metric_delta(HASC, coords).unwrap_or_default().to_f64() as f32;
+        descent += mvar.metric_delta(HDSC, coords).unwrap_or_default().to_f64() as f32;
+    }
+
+    let scale = TEXT_SHAPE_SCALE_F32 / units_per_em as f32;
+    Some(((ascent * scale).round(), (descent * scale).round()))
 }
 
 fn harfbuzz_scaled_glyph_top(raw_edge: f32) -> f32 {

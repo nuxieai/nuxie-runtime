@@ -5,12 +5,12 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 579 across 258 files (strict
-  exact=570/249; tolerant=9/9; structural=0/0)
-- Current compare: `make golden-compare` reports exact=258,
-  exact-segments=579, diverges=0, unsupported-feature=37, not-yet=0
+- Exact-status segments (file × sample): 580 across 259 files (strict
+  exact=571/250; tolerant=9/9; structural=0/0)
+- Current compare: `make golden-compare` reports exact=259,
+  exact-segments=580, diverges=0, unsupported-feature=36, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
-  M6=5 gated=6 harness=26
+  M6=4 gated=6 harness=26
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes**
 
 ## Milestones
@@ -27,21 +27,13 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Active `not-yet` queue is empty.
-2. Highest-priority M6 unsupported slice: `echo_show_demo.riv`
-   (`rust-runner-unsupported:joystick-nested-remap-transform-update-order`).
-   Start from the focused bypass notes below: dependency-order deferred
-   gradient prep now interleaves root and nested artboards in C++ order, moving
-   the exact-candidate mismatch past the shader creation sequence. The current
-   first exact verification failure is line 1593:
-   Rust `transform matrix=[1.22242272,0,0,1.22242272,325.263824,230.126801]`
-   vs C++
-   `transform matrix=[1.22242272,0,0,1.22242272,325.263824,232.096527]`.
-   The remaining gap is nested-remap/transform update state after the initial
-   transition mix, not shader allocation order, generic prewarming,
-   final-state replay, the component-update broad hook, the outer-loop runner
-   shape, or non-before-joystick data-bind placement.
-3. Other parked one-file M6 queues include `layout-component-paint`
-   (`rewards_demo.riv`), `nested-node-transform-data-bind` (`car_widgets_v01.riv`),
+2. Highest-priority M6 unsupported slice: `layout-component-paint`
+   (`rewards_demo.riv`). This is the broadest remaining declared M6 queue:
+   solve or sharpen it before the narrower nested data-bind/layout queues.
+   Use a focused exact-candidate run first; keep the corpus guard unless the
+   full `make golden-compare` ratchet promotes the file.
+3. Other parked one-file M6 queues include `nested-node-transform-data-bind`
+   (`car_widgets_v01.riv`),
    `nested-layout-clip-data-bind` (`stateful_multi_property.riv`), and
    `nested-stateful-view-model-property` (`stateful_nested.riv`). Gated
    one-file diagnostics include `scripted-data-context`
@@ -304,6 +296,20 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-07: [M6] Promoted `echo_show_demo.riv` to exact by matching the
+  C++ text line-metrics/bounds path instead of widening the nested-remap
+  runtime surface. Rust text metrics now mirror
+  `src/text/font_hb.cpp::make_lmx`: prefer OS/2 typo extents when present,
+  fall back to hhea, and apply MVAR `HASC`/`HDSC` deltas before Rive scales the
+  authored font size. Rust text bounds now match C++ shaped-run scope by
+  computing max line metrics only from styles referenced by actual
+  `TextValueRun`s, not every `TextStylePaint` child on the `Text`. This fixed
+  the focused exact-candidate failures at lines 1593 and 1610, allowing removal
+  of the `joystick-nested-remap-transform-update-order` runner/corpus guard.
+  Full `make golden-compare` reports `exact=259`, `exact-segments=580`,
+  `diverges=0`, `unsupported-feature=36`, `not-yet=0`, parked
+  `M6=4 gated=6 harness=26`; `cargo test --workspace` passes. Next target is
+  `rewards_demo.riv` (`rust-runner-unsupported:layout-component-paint`).
 - 2026-07-07: [M6] Narrowed `echo_show_demo.riv` by making deferred layout
   gradient prep use dependency order for the whole artboard tree, including
   recursive nested prepass traversal. A focused exact-candidate bypass now

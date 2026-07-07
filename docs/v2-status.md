@@ -323,6 +323,35 @@ the only memory the next session has. Update it every commit.
     the steady-state gap. Record the chosen definition as a Decision
     before optimizing further.
 
+14. LANE MERGED (88fe434): scripting spike. `crates/rive-scripting`
+    (feature `luau`, default-on, zero deps leaking) proves luaur 0.1.8
+    (PINNED =0.1.8, upstream Luau commit 8f33df9): boots, loads real
+    Rive-editor Luau BYTECODE directly (ScriptAssets carry bytecode v6 in
+    a SignedContentHeader envelope — ported as rive_scripting::envelope;
+    the runtime never compiles source), executes corpus scripts
+    end-to-end (ArtboardGrid generator->instance with inputs), and
+    resolves the corpus require chain via C++-style registration retries
+    (mirrors ScriptingContext::performRegistration). mlua fallback NOT
+    needed on this evidence. Known gaps recorded in the lane report:
+    bytecode loads via one unsafe luau_load seam (upstream ask: safe
+    ChunkMode::Binary — file on pjankiewicz/luaur); sandbox parity
+    REQUIRED before real integration (C++ init order: open libs -> rive
+    globals -> luaL_sandbox -> load; GETIMPORT resolves globals at LOAD
+    time — install all globals first); bind Vector via luaur's native
+    vector type, not a table. Seam proposal: traits ScriptingVm /
+    ScriptInstance / ScriptHost defined IN rive-runtime (keeps luaur out
+    of its deps), implemented by rive-scripting, wired in crates/rive
+    behind a feature; method dispatch gated by SERIALIZED
+    OptionalScriptedMethods bitmask (script_asset.hpp:70-181), input
+    writes raise ScriptUpdate dirt. Bindings sizing from a census of all
+    57 corpus scripts: ~half of the 18.2k C++ glue needed, in order:
+    boot/registration+scripted_object protocol (~2.5k) -> Vector/Mat2D/
+    Color/Path/Paint/renderer verbs (~2.5k) -> artboards/animations
+    (~1k) -> DataValue+viewmodel properties (~2-3k) -> listener/input
+    tail (~1.5k). NOT needed by corpus: lua_gpu (3.7k), lua_promise,
+    lua_mat4, lua_buffer_ext, most of lua_image_decode, lua_audio.
+    Signature verification (libhydrogen) deferrable — corpus unsigned.
+
 ## Known Divergences
 
 - There are no active `status = "not-yet"` entries.

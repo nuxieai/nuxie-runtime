@@ -1897,6 +1897,10 @@ fn nested_child_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> boo
             && matches!(data_bind.property_key, 90 | 91)
             && data_bind.converter_global.is_none())
         || (data_bind.target_type_name == Some("Node")
+            // NodeBase::x/yPropertyKey in C++ generated/node_base.hpp.
+            && matches!(data_bind.property_key, 13 | 14)
+            && data_bind.converter_global.is_none())
+        || (data_bind.target_type_name == Some("Node")
             // WorldTransformComponentBase::opacityPropertyKey in C++ generated/world_transform_component_base.hpp.
             && data_bind.property_key == 18
             && data_bind.converter_global.is_none())
@@ -1929,6 +1933,16 @@ fn nested_child_data_bind_supported(data_bind: &rive_graph::DataBindNode) -> boo
             // ImageBase::assetIdPropertyKey in C++ generated/shapes/image_base.hpp.
             && data_bind.property_key == 206
             && data_bind.converter_global.is_none())
+        || (data_bind.target_type_name == Some("TrimPath")
+            // TrimPathBase::start/end/offsetPropertyKey in C++ generated/shapes/paint/trim_path_base.hpp.
+            && matches!(data_bind.property_key, 114 | 115 | 116)
+            && (data_bind.converter_global.is_none()
+                || data_bind.converter_type_name == Some("DataConverterGroup")))
+        || (data_bind.target_type_name == Some("LayoutComponent")
+            // LayoutComponentBase::width/heightPropertyKey in C++ generated/layout/layout_component_base.hpp.
+            && matches!(data_bind.property_key, 7 | 8)
+            && (data_bind.converter_global.is_none()
+                || data_bind.converter_type_name == Some("DataConverterInterpolator")))
 }
 
 fn nested_child_data_bind_unsupported_feature(
@@ -1939,9 +1953,8 @@ fn nested_child_data_bind_unsupported_feature(
         (Some("Artboard"), 13 | 14) => "nested-artboard-root-transform",
         (Some("Artboard"), 196) => "nested-layout-clip-data-bind",
         (Some("LayoutComponent"), 7 | 8) => "nested-layout-size-data-bind",
-        // TransformComponentBase::rotationPropertyKey can surface through a
-        // nested child Node target.
-        (Some("Node"), 15) => "nested-node-transform-data-bind",
+        // Transform properties can surface through nested child Node targets.
+        (Some("Node"), 13 | 14 | 15) => "nested-node-transform-data-bind",
         (
             Some(
                 "ViewModelInstanceBoolean"

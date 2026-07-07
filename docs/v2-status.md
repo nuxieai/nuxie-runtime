@@ -7,8 +7,8 @@ the only memory the next session has. Update it every commit.
 
 - Exact-status segments (file × sample): 565 across 244 files (strict
   exact=558/237; tolerant=7/7; structural=0/0)
-- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=51, not-yet=0
-- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=9 gated=6 harness=36
+- Current compare: `make golden-compare` reports diverges=0, unsupported-feature=50, not-yet=1
+- Parked breakdown: M5=0 by manifest query; `make golden-compare` reports M6=8 gated=6 harness=36
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes**
 
 ## Milestones
@@ -24,33 +24,29 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. The active `not-yet` queue is empty. Continue M6 by picking the highest-value
-   remaining unsupported queue that is not scripting/audio: start with
-   `selected-root-skinned-ik-clip-path` (`bullet_man.riv`) or the nested
-   data-bind diagnostics.
-   `echo_show_demo.riv` is now parked behind the sharper
-   `text-joystick-data-bind-divergence` diagnostic after a focused probe
-   reached draw but diverged from C++; `superbowl.riv` is parked behind the
-   sharper `state-machine-viewmodel-solo-image` diagnostic.
+1. Active `not-yet`: `db_health_tracker.riv`
+   (`not-yet:nested-data-bind-text-path-divergence`). It now reaches Rust draw
+   after admitting direct/group TrimPath binds, interpolated layout size binds,
+   direct nested Node x/y binds, and `NestedSimpleAnimation` static-text
+   siblings. Focus next on the structural text/glyph path mismatch before
+   opening another broad nested data-bind lane.
 2. Other parked one-file M6 queues include `text-joystick-data-bind-divergence`
    (`echo_show_demo.riv`), `state-machine-viewmodel-solo-image`
-   (`superbowl.riv`), and `selected-root-skinned-ik-clip-path`
-   (`bullet_man.riv`). The former
-   `data-binding-nested-child` queue is five one-file diagnostics:
-   `nested-trim-path-data-bind` (`db_health_tracker.riv`),
+   (`superbowl.riv`), `selected-root-skinned-ik-clip-path`
+   (`bullet_man.riv`), and `layout-component-paint` (`rewards_demo.riv`).
+   Remaining nested-child data-bind diagnostics are
    `nested-artboard-root-transform` (`nested_hug.riv`),
    `nested-node-transform-data-bind` (`car_widgets_v01.riv`),
    `nested-layout-clip-data-bind` (`stateful_multi_property.riv`), and
-   `nested-stateful-view-model-property` (`stateful_nested.riv`). The
-   `rewards_demo.riv` file now exposes the one-file
-   `nested-layout-size-data-bind` diagnostic. Gated one-file diagnostics
+   `nested-stateful-view-model-property` (`stateful_nested.riv`). Gated
+   one-file diagnostics
    include `scripted-data-context` (`scripted_data_context.riv`),
    `scripted-transition-condition` (2 gated),
    `scripted-path-effects` (1 gated), and `text-polygon-sibling`
    (`bankcard.riv`). Keep these parked queues as explicit unsupported/gated
    work until a focused slice can either promote a file or replace the guard
    with a sharper diagnostic.
-   The old `layout-component-paint` and `text-input` manifest queues are empty.
+   The old `text-input` manifest queue is empty.
 3. M5 is closed for the current corpus: `grep -B6 'milestone = "M5"'
    corpus.toml` is empty. Do not reopen data-binding work unless a newly added
    corpus entry exposes a pre-text/pre-layout data-binding diagnostic.
@@ -120,9 +116,10 @@ the only memory the next session has. Update it every commit.
 
 ## Known Divergences
 
-- None in the active corpus. `make golden-compare` reports `diverges=0` and
-  `not-yet=0`; remaining M6 work is parked behind explicit
-  unsupported-feature diagnostics.
+- No `status = "diverges"` entries in the active corpus. The active
+  `not-yet` entry is `db_health_tracker.riv`
+  (`not-yet:nested-data-bind-text-path-divergence`); remaining M6 work is
+  parked behind explicit unsupported-feature diagnostics.
 
 ## Backlog (unsupported features awaiting corpus demand)
 
@@ -529,6 +526,19 @@ the only memory the next session has. Update it every commit.
   `diverges=0`, `unsupported-feature=51`, `not-yet=0`, parked
   `M6=9 gated=6 harness=36`. Next target is
   `selected-root-skinned-ik-clip-path` or the nested data-bind diagnostics.
+- 2026-07-06: [M6] Opened the first `db_health_tracker.riv` nested data-bind
+  lane by admitting direct nested Node x/y binds, TrimPath start/end/offset
+  binds with no converter or `DataConverterGroup`, LayoutComponent
+  width/height binds with no converter or `DataConverterInterpolator`, and
+  `NestedSimpleAnimation` static-text siblings. The file now reaches Rust draw
+  and is parked as `not-yet:nested-data-bind-text-path-divergence` after a
+  focused exact compare found a structural text/glyph path mismatch near the
+  first differing drawPath. `rewards_demo.riv` advances from
+  `nested-layout-size-data-bind` to `layout-component-paint`. Full
+  `make golden-compare` reports `exact=244`, `exact-segments=565`,
+  `diverges=0`, `unsupported-feature=50`, `not-yet=1`, parked
+  `M6=8 gated=6 harness=36`. Next target is
+  `db_health_tracker.riv`'s active not-yet mismatch.
 - 2026-07-02: `rive-runtime` owns static draw emission through
   `rive-render-api`; `rust-golden-runner` now only orchestrates import,
   artboard selection, stream markers, and recording output.

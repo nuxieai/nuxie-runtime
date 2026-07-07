@@ -429,6 +429,12 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
                 || (property_key_for_name("TransformComponent", "rotation") == Some(property_key)
                     && data_bind.converter_type_name == Some("DataConverterSystemDegsToRads"))
         }
+        Some("Node") => {
+            ["x", "y"]
+                .into_iter()
+                .any(|name| property_key_for_name("Node", name) == Some(property_key))
+                && data_bind.converter_global.is_none()
+        }
         Some("Joystick") => {
             [joystick_x_property_key(), joystick_y_property_key()]
                 .into_iter()
@@ -449,11 +455,22 @@ fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
             property_key_for_name("ArtboardComponentList", "listSource") == Some(property_key)
         }
         Some("LayoutComponent") => {
-            property_key_for_name("LayoutComponent", "height") == Some(property_key)
+            ["width", "height"]
+                .into_iter()
+                .any(|name| property_key_for_name("LayoutComponent", name) == Some(property_key))
+                && (data_bind.converter_global.is_none()
+                    || data_bind.converter_type_name == Some("DataConverterInterpolator"))
         }
         Some("Solo") => property_key_for_name("Solo", "activeComponentId") == Some(property_key),
         Some("TextStylePaint") => {
             property_key_for_name("TextStyle", "fontSize") == Some(property_key)
+        }
+        Some("TrimPath") => {
+            ["start", "end", "offset"]
+                .into_iter()
+                .any(|name| property_key_for_name("TrimPath", name) == Some(property_key))
+                && (data_bind.converter_global.is_none()
+                    || data_bind.converter_type_name == Some("DataConverterGroup"))
         }
         Some("Text") => {
             [
@@ -579,6 +596,7 @@ impl<'a> StaticTextSlice<'a> {
                         | "NestedArtboard"
                         | "NestedArtboardLayout"
                         | "NestedArtboardLeaf"
+                        | "NestedSimpleAnimation"
                         | "NestedStateMachine"
                         | "NestedRemapAnimation"
                         | "Joystick"

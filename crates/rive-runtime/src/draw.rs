@@ -7228,9 +7228,26 @@ pub(crate) fn runtime_shape_paint_command(
     if suppress_authored_transparent && !runtime_shape_paint_state_is_visible(&paint_state) {
         return None;
     }
+    let mut path_commands = path_commands;
+    prune_empty_path_segments(&mut path_commands);
     let effect_path_commands = runtime_effect_path_commands(artboard, paint, &path_commands);
     let has_effect_path = effect_path_commands.is_some();
-    let feather_path_commands = effect_path_commands.as_deref().unwrap_or(&path_commands);
+    let mut effect_path_commands = effect_path_commands.unwrap_or_default();
+    prune_empty_path_segments(&mut effect_path_commands);
+    let feather_path_commands = if has_effect_path {
+        effect_path_commands.as_slice()
+    } else {
+        path_commands.as_slice()
+    };
+    let mut feather_state = runtime_feather_state(
+        artboard,
+        paint.feather.as_ref(),
+        feather_path_commands,
+        shape_world,
+    );
+    if let Some(feather_state) = feather_state.as_mut() {
+        prune_empty_path_segments(&mut feather_state.inner_path_commands);
+    }
     Some(RuntimeShapePaintCommand {
         paint_local: paint.local_id,
         mutator_local: paint.mutator_local,
@@ -7242,15 +7259,10 @@ pub(crate) fn runtime_shape_paint_command(
             container_blend_mode_value,
         ),
         paint_state,
-        feather_state: runtime_feather_state(
-            artboard,
-            paint.feather.as_ref(),
-            feather_path_commands,
-            shape_world,
-        ),
+        feather_state,
         paint_space_transform: runtime_shape_paint_space_transform(paint, shape_world),
         path_commands,
-        effect_path_commands: effect_path_commands.unwrap_or_default(),
+        effect_path_commands,
         has_effect_path,
         needs_save_operation,
         shape_world_override: None,
@@ -7760,12 +7772,19 @@ fn path_commands_backwards(commands: &[RuntimePathCommand]) -> Vec<RuntimePathCo
         }
     }
 
-    raw_path_parts_to_commands(&reversed_verbs, &reversed_points)
+    let mut commands = raw_path_parts_to_commands(&reversed_verbs, &reversed_points);
+    prune_empty_path_segments(&mut commands);
+    commands
 }
 
 // Coarsely translated from:
 // /Users/levi/dev/oss/rive-runtime/src/math/raw_path.cpp RawPath::pruneEmptySegments
 fn prune_empty_path_segments(commands: &mut Vec<RuntimePathCommand>) {
+    let multi_contour = commands
+        .iter()
+        .filter(|command| matches!(command, RuntimePathCommand::Move { .. }))
+        .count()
+        >= 2;
     let mut pruned = Vec::with_capacity(commands.len());
     let mut current = None::<(f32, f32)>;
     for command in commands.drain(..) {
@@ -7788,7 +7807,17 @@ fn prune_empty_path_segments(commands: &mut Vec<RuntimePathCommand>) {
                 x3,
                 y3,
             } => {
-                if current != Some((x1, y1)) || (x1, y1) != (x2, y2) || (x2, y2) != (x3, y3) {
+                let exact_empty =
+                    current == Some((x1, y1)) && (x1, y1) == (x2, y2) && (x2, y2) == (x3, y3);
+                // Rust-side reverse/transform assembly can leave sub-ulp cancellation
+                // noise in multi-contour paths that C++ has already collapsed.
+                let near_empty = multi_contour
+                    && current.is_some_and(|current| {
+                        path_points_match(current, (x1, y1))
+                            && path_points_match(current, (x2, y2))
+                            && path_points_match(current, (x3, y3))
+                    });
+                if !exact_empty && !near_empty {
                     pruned.push(RuntimePathCommand::Cubic {
                         x1,
                         y1,
@@ -7804,6 +7833,10 @@ fn prune_empty_path_segments(commands: &mut Vec<RuntimePathCommand>) {
         }
     }
     *commands = pruned;
+}
+
+fn path_points_match(left: (f32, f32), right: (f32, f32)) -> bool {
+    (left.0 - right.0).abs() <= f32::EPSILON && (left.1 - right.1).abs() <= f32::EPSILON
 }
 
 fn raw_path_parts(commands: &[RuntimePathCommand]) -> (Vec<RawPathVerb>, Vec<(f32, f32)>) {

@@ -5,12 +5,12 @@ the only memory the next session has. Update it every commit.
 
 ## Metric
 
-- Exact-status segments (file × sample): 580 across 259 files (strict
-  exact=571/250; tolerant=9/9; structural=0/0)
-- Current compare: `make golden-compare` reports exact=259,
-  exact-segments=580, diverges=0, unsupported-feature=36, not-yet=0
+- Exact-status segments (file × sample): 581 across 260 files (strict
+  exact=571/250; tolerant=10/10; structural=0/0)
+- Current compare: `make golden-compare` reports exact=260,
+  exact-segments=581, diverges=0, unsupported-feature=35, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
-  M6=4 gated=6 harness=26
+  M6=3 gated=6 harness=26
 - Current milestone: **M6 — Layout + Text Verified Per Declared Corpus Modes**
 
 ## Milestones
@@ -27,13 +27,12 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. Active `not-yet` queue is empty.
-2. Highest-priority M6 unsupported slice: `nested-text-outline-contour-order`
-   (`car_widgets_v01.riv`). The former `nested-node-transform-data-bind` and
-   `layout-component-paint` queues are empty; `rewards_demo.riv` now has the
-   sharper `nested-feather-gradient-space` diagnostic.
-3. Other parked one-file M6 queues include `nested-feather-gradient-space`
-   (`rewards_demo.riv`), `nested-layout-clip-data-bind`
-   (`stateful_multi_property.riv`), and `nested-stateful-view-model-property`
+2. Highest-priority M6 unsupported slice: `nested-feather-gradient-space`
+   (`rewards_demo.riv`). The former `nested-node-transform-data-bind`,
+   `nested-text-outline-contour-order`, and `layout-component-paint` queues
+   are empty.
+3. Other parked one-file M6 queues include `nested-layout-clip-data-bind`
+   (`stateful_multi_property.riv`) and `nested-stateful-view-model-property`
    (`stateful_nested.riv`). Gated one-file diagnostics include
    `scripted-data-context`
    (`scripted_data_context.riv`), `scripted-transition-condition` (2 gated),
@@ -296,6 +295,18 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-07: [M6] Promoted `car_widgets_v01.riv` to exact-status under
+  `verification = "tolerant(0.001)"`. The `nested-text-outline-contour-order`
+  guard was a coarse proxy: the first real failure was Rust retaining a
+  near-empty terminal cubic in a final multi-contour shape path where C++'s
+  render stream had already normalized it away. Runtime shape paint command
+  assembly now prunes base, effect, and inner-feather paths after final
+  assembly, preserving exact C++ empty-segment pruning but allowing
+  `f32::EPSILON` cancellation only for multi-contour cubic empties. Full
+  `make golden-compare` reports `exact=260`, `exact-segments=581`,
+  `diverges=0`, `unsupported-feature=35`, `not-yet=0`, parked
+  `M6=3 gated=6 harness=26`; `cargo test --workspace` passes. Next target is
+  `rewards_demo.riv` (`rust-runner-unsupported:nested-feather-gradient-space`).
 - 2026-07-07: [M6] Closed stale `nested-node-transform-data-bind` by admitting
   nested child `Node.rotation` binds through `DataConverterGroup`, letting
   static text accept the same target, inheriting normal static-text paint blend

@@ -1381,6 +1381,21 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Retain state-machine pending view-model action storage.
+  A release/null-renderer profile after render-paint slots showed
+  `StateMachineLayerInstance::advance`, `try_change_state`, and
+  data-bind/context propagation sharing the remaining `ai_assitant` hot path.
+  C++ `StateMachineInstance` keeps event/listener queues on the instance, so
+  Rust now retains the pending view-model listener-action scratch vector on
+  `StateMachineInstance` and passes it through layer advance instead of
+  allocating a fresh per-layer vector. This is retained instance scratch, not a
+  new skip/cache invalidation rule. Full `make golden-compare` remains
+  exact=263 / exact-segments=584 / diverges=0; `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check` pass. Fenced
+  repeat-aware hot-loop is noisy: the first post-slice run improved aggregate
+  Rust/C++ from 3.026 to 2.942, while final reruns report 3.298 then 2.925
+  with the best Rust median sum at 2.460 ms versus the baseline 2.580 ms. M7
+  remains open.
 - 2026-07-08: [M7] Store retained render paints in dense global-id slots. A
   release/null-renderer profile after nested-host source-local retention still
   showed draw replay/path-cache `BTreeMap` lookup time under
@@ -3285,6 +3300,19 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Retained state-machine pending view-model action storage on
+  `StateMachineInstance`, matching C++ instance-owned event/listener queues and
+  removing a fresh per-layer scratch vector allocation from
+  `StateMachineLayerInstance::advance`. `make golden-compare` remains
+  exact=263/exact-segments=584/diverges=0; `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check` pass. Fenced
+  repeat-aware hot-loop is noisy: first post-slice run was aggregate
+  Rust/C++=2.942, final reruns report 3.298 then 2.925, and the best
+  `ai_assitant` rust median is 1.010 ms versus the 1.092 ms baseline. Strict
+  <=2.0 remains open;
+  next profile remaining state-machine fixed overhead, nested data-bind
+  context-source propagation, and lower draw-path lookup under the existing
+  scout/perf fences.
 - 2026-07-08: [M7] Stored retained render paints in dense global-id slots
   instead of a draw-time `BTreeMap`. `make golden-compare` remains
   exact=263/exact-segments=584/diverges=0; `cargo test --workspace`,

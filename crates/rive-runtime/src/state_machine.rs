@@ -2182,7 +2182,7 @@ pub(crate) struct StateMachineLayerInstance {
 pub(crate) struct StateMachineLayerAdvance {
     pub(crate) changed_state: bool,
     pub(crate) keep_going: bool,
-    pub(crate) pending_view_model_actions: Vec<RuntimeScheduledListenerAction>,
+    pub(crate) has_pending_view_model_actions: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -2383,8 +2383,8 @@ impl StateMachineLayerInstance {
         data_context_view_model_bound: bool,
         view_model_triggers: &mut [StateMachineViewModelTriggerInstance],
         reported_events: &mut Vec<StateMachineReportedEvent>,
+        pending_view_model_actions: &mut Vec<RuntimeScheduledListenerAction>,
     ) -> StateMachineLayerAdvance {
-        let mut pending_view_model_actions = Vec::new();
         self.advance_current_animation(
             artboard,
             layer,
@@ -2399,7 +2399,7 @@ impl StateMachineLayerInstance {
             data_context_view_model_bound,
             view_model_triggers,
             reported_events,
-            &mut pending_view_model_actions,
+            pending_view_model_actions,
         );
         self.advance_transition_source_animation(
             artboard,
@@ -2433,7 +2433,7 @@ impl StateMachineLayerInstance {
                 data_context_view_model_bound,
                 view_model_triggers,
                 reported_events,
-                &mut pending_view_model_actions,
+                pending_view_model_actions,
             ) {
                 break;
             }
@@ -2443,13 +2443,13 @@ impl StateMachineLayerInstance {
 
         StateMachineLayerAdvance {
             changed_state,
+            has_pending_view_model_actions: !pending_view_model_actions.is_empty(),
             keep_going: changed_state
                 || input_changed
                 || !pending_view_model_actions.is_empty()
                 || self.is_transitioning()
                 || self.waiting_for_exit
                 || self.current_animation_keep_going,
-            pending_view_model_actions,
         }
     }
 

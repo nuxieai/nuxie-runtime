@@ -55,6 +55,7 @@ pub struct StateMachineInstance {
     transition_durations: Vec<StateMachineTransitionDurationInstance>,
     layers: Vec<StateMachineLayerInstance>,
     reported_events: Vec<StateMachineReportedEvent>,
+    pending_view_model_actions: Vec<RuntimeScheduledListenerAction>,
     changed_state_count: usize,
     needs_advance: bool,
     data_bind_graph: RuntimeDataBindGraph,
@@ -185,6 +186,7 @@ impl StateMachineInstance {
             transition_durations,
             layers,
             reported_events: Vec::new(),
+            pending_view_model_actions: Vec::new(),
             changed_state_count: 0,
             needs_advance: false,
             data_bind_graph: RuntimeDataBindGraph::new(state_machine),
@@ -3044,6 +3046,7 @@ impl StateMachineInstance {
             .enumerate()
             .take(self.layers.len())
         {
+            self.pending_view_model_actions.clear();
             let layer_result = {
                 let layer_instance = &mut self.layers[layer_index];
                 layer_instance.advance(
@@ -3067,17 +3070,20 @@ impl StateMachineInstance {
                     data_context_view_model_bound,
                     &mut self.view_model_triggers,
                     &mut self.reported_events,
+                    &mut self.pending_view_model_actions,
                 )
             };
             if layer_result.changed_state {
                 self.changed_state_count += 1;
             }
             keep_going |= layer_result.keep_going;
-            keep_going |= self.perform_scheduled_view_model_actions(
-                artboard,
-                &layer_result.pending_view_model_actions,
-            );
+            if layer_result.has_pending_view_model_actions {
+                let pending_actions = std::mem::take(&mut self.pending_view_model_actions);
+                keep_going |= self.perform_scheduled_view_model_actions(artboard, &pending_actions);
+                self.pending_view_model_actions = pending_actions;
+            }
         }
+        self.pending_view_model_actions.clear();
         for input in &mut self.inputs {
             input.advanced();
         }

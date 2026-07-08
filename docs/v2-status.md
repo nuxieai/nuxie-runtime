@@ -28,7 +28,8 @@ the only memory the next session has. Update it every commit.
   draw-path slots, graph-scoped dense path-geometry command slots, dense
   decoded-image slots, cached layout-adjusted draw world transforms, and dense
   mesh render-buffer slots, retained image layout local transforms, and
-  retained draw raw paths, full `make golden-compare` and
+  retained draw raw paths, plus no-nested clean paint-preparation skip, full
+  `make golden-compare` and
   `cargo test --workspace` remain green. The latest release/null-renderer
   sample is still directional only: `make perf-hot-loop PERF_MAX_RATIO=999`
   reports aggregate min Rust/C++=3.219, but the C++ min-sum was 1.037 ms,
@@ -39,7 +40,7 @@ the only memory the next session has. Update it every commit.
   caches, or shared shape path-command buffer scout; they preserved correctness
   but worsened or failed to move direct/fenced release timings. Next priority is
   a clean low-load/sanity-band release sample, then deeper draw-replay
-  fixed-overhead or clean-prepare-skip work under the same scout fences.
+  fixed-overhead or timing-harness work under the same scout fences.
 
 ## Milestones
 
@@ -1707,6 +1708,22 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Skip clean no-nested paint preparation before prepared
+  command lookup. A status-doc scout review keeps the current M7 findings in
+  force: min-based release/null-renderer repeat=100 is the only
+  decision-grade perf gate; state-machine fixed overhead is not the priority;
+  the remaining runtime target is draw-side clean-frame replay, while the
+  runner timing-read overhead is a separate methodology candidate. Rust paint
+  preparation now records whether a cached preparation frame saw nested
+  artboards; flat clean frames whose graph and instance epoch still match return
+  before touching the prepared artboard command frame. Nested artboard cases
+  still use the existing command scan and nested epoch, so this does not add a
+  new invalidation rule. Full `make golden-compare` remains exact=263 /
+  exact-segments=584 / diverges=0; `cargo check -p rive-runtime`,
+  `cargo test -p rive-runtime --quiet`, `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check` pass. M7 perf was not
+  rerun because load averages were 18.98/25.03/23.10, outside the acceptance
+  fence. Strict <=2.0 remains open.
 - 2026-07-08: [M7] Retain draw raw paths under the draw `RenderPath` cache.
   C++ `ShapePaintPath` owns both `m_rawPath` and `m_renderPath`; when dirty it
   rewinds and repopulates the retained render path from the retained raw path.
@@ -3772,6 +3789,20 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-08: [M7] Skipped clean no-nested paint preparation before prepared
+  command lookup. The scout review identified the binding fences for this
+  session: do not use high-load perf as decision-grade, do not chase
+  state-machine fixed overhead, keep rejected shallow image/command/path
+  wrapper scouts out, and treat timer-read block timing as a harness-methodology
+  candidate rather than a runtime shortcut. `RuntimePaintPreparationFrame` now
+  tracks whether the cached frame saw nested artboards; when it did not, a
+  matching graph/global plus instance epoch returns before prepared-command
+  frame work. Full `make golden-compare` remains
+  exact=263/exact-segments=584/diverges=0; `cargo check -p rive-runtime`,
+  `cargo test -p rive-runtime --quiet`, `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check` pass. Perf was not
+  rerun because load remained outside the M7 acceptance fence.
 
 - 2026-07-08: [M7] Retained draw raw paths beside cached draw `RenderPath`s.
   This ports C++ `ShapePaintPath::m_rawPath` ownership for the draw-path cache:

@@ -694,14 +694,29 @@ impl ArtboardInstance {
         render_cache: &mut RuntimeRenderPathCache,
         defer_root_layout_gradients: bool,
     ) -> Result<()> {
+        let preparation_graph_global_id = graph.global_id;
+        let preparation_instance_epoch = self.cache_epoch();
+        if paint_preparation
+            .as_ref()
+            .and_then(|preparation| preparation.as_ref())
+            .is_some_and(|preparation| {
+                preparation.can_skip_prepared_frame(
+                    preparation_graph_global_id,
+                    preparation_instance_epoch,
+                )
+            })
+        {
+            return Ok(());
+        }
+
         let prepared = render_cache.prepared_artboard_frame(self, graph, Some(runtime));
         let layout_bounds = prepared.layout_bounds.as_ref().as_ref();
         let commands = prepared.commands.as_slice();
-        let defer_layout_gradients = defer_root_layout_gradients
-            && commands.iter().any(runtime_draw_command_is_nested_artboard);
+        let has_nested_artboards = commands.iter().any(runtime_draw_command_is_nested_artboard);
+        let defer_layout_gradients = defer_root_layout_gradients && has_nested_artboards;
         let preparation_key = RuntimePaintPreparationCacheKey {
-            graph_global_id: graph.global_id,
-            instance_epoch: self.cache_epoch(),
+            graph_global_id: preparation_graph_global_id,
+            instance_epoch: preparation_instance_epoch,
             nested_epoch: if defer_layout_gradients {
                 self.runtime_nested_paint_preparation_epoch(commands)
             } else {
@@ -732,6 +747,7 @@ impl ArtboardInstance {
             if let Some(preparation) = paint_preparation.as_deref_mut() {
                 *preparation = Some(RuntimePaintPreparationFrame {
                     key: preparation_key,
+                    has_nested_artboards,
                 });
             }
             return Ok(());
@@ -776,6 +792,7 @@ impl ArtboardInstance {
         if let Some(preparation) = paint_preparation.as_deref_mut() {
             *preparation = Some(RuntimePaintPreparationFrame {
                 key: preparation_key,
+                has_nested_artboards,
             });
         }
 
@@ -5370,6 +5387,15 @@ struct RuntimePaintPreparationCacheKey {
 #[derive(Clone)]
 struct RuntimePaintPreparationFrame {
     key: RuntimePaintPreparationCacheKey,
+    has_nested_artboards: bool,
+}
+
+impl RuntimePaintPreparationFrame {
+    fn can_skip_prepared_frame(&self, graph_global_id: u32, instance_epoch: u64) -> bool {
+        !self.has_nested_artboards
+            && self.key.graph_global_id == graph_global_id
+            && self.key.instance_epoch == instance_epoch
+    }
 }
 
 #[derive(Default)]

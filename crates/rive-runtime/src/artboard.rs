@@ -71,7 +71,7 @@ pub struct ArtboardInstance {
     pub(crate) joysticks_apply_before_update: bool,
     pub(crate) update_order: Vec<usize>,
     pub(crate) linear_animations: Vec<RuntimeLinearAnimation>,
-    pub(crate) state_machines: Vec<RuntimeStateMachine>,
+    pub(crate) state_machines: Arc<Vec<RuntimeStateMachine>>,
     pub(crate) nested_artboards: BTreeMap<usize, RuntimeNestedArtboardInstance>,
     pub(crate) nested_artboard_locals: Vec<usize>,
     newly_uncollapsed_nested_artboards: BTreeSet<usize>,
@@ -313,7 +313,7 @@ impl ArtboardInstance {
             joysticks_apply_before_update: graph.joysticks_apply_before_update,
             update_order,
             linear_animations,
-            state_machines,
+            state_machines: Arc::new(state_machines),
             nested_artboards,
             nested_artboard_locals,
             newly_uncollapsed_nested_artboards: BTreeSet::new(),
@@ -411,7 +411,7 @@ impl ArtboardInstance {
     }
 
     pub fn state_machines(&self) -> &[RuntimeStateMachine] {
-        &self.state_machines
+        self.state_machines.as_slice()
     }
 
     pub fn set_artboard_dimensions(&mut self, width: f32, height: f32) -> bool {
@@ -681,11 +681,11 @@ impl ArtboardInstance {
         instance: &mut StateMachineInstance,
         elapsed_seconds: f32,
     ) -> bool {
-        let Some(state_machine) = self.state_machine(instance.state_machine_index()).cloned()
-        else {
+        let state_machines = Arc::clone(&self.state_machines);
+        let Some(state_machine) = state_machines.get(instance.state_machine_index()) else {
             return false;
         };
-        instance.advance(self, &state_machine, elapsed_seconds)
+        instance.advance(self, state_machine, elapsed_seconds)
     }
 
     pub fn advance_nested_artboards(&mut self, elapsed_seconds: f32) -> bool {
@@ -2669,7 +2669,7 @@ mod tests {
             joysticks_apply_before_update: true,
             update_order,
             linear_animations: Vec::new(),
-            state_machines: Vec::new(),
+            state_machines: Arc::new(Vec::new()),
             nested_artboards: BTreeMap::new(),
             nested_artboard_locals: Vec::new(),
             newly_uncollapsed_nested_artboards: BTreeSet::new(),

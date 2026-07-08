@@ -744,6 +744,18 @@ the only memory the next session has. Update it every commit.
    `ShapePaintPath` retention or another sampled audited data-bind/context
    target; do not retry shallow command-vector/path-wrapper caches without
    fenced release/null-renderer evidence.
+   Runtime state-machine definitions are now retained behind
+   `Arc<Vec<RuntimeStateMachine>>`, so `advance_state_machine_instance` clones
+   only the outer definition handle instead of cloning/dropping the
+   `RuntimeStateMachine` definition every advance. This mirrors C++
+   `StateMachineInstance` holding a stable `StateMachine` pointer and stays
+   within the scout/perf fences: immutable definition retention, not a new
+   skip/cache invalidation rule. Full `make golden-compare` remains exact=263 /
+   exact-segments=584 / diverges=0; `cargo test --workspace`, `cargo fmt --all
+   -- --check`, and `git diff --check` pass. Fenced repeat-aware hot-loop
+   reports aggregate Rust/C++=3.613 over the 5-entry / 10-segment corpus
+   (`ai_assitant`=3.299), so strict <=2.0 remains open. Next: profile the
+   remaining fixed overhead / advance-data-bind time under the same fences.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -1245,6 +1257,18 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Retain state-machine definitions during advance. A release
+  `ai_assitant` sample still showed per-frame `RuntimeStateMachine` clone/drop
+  traffic after the status-doc scout review had fenced off shallow
+  command/path-wrapper caches and broad converter/property writes. Rust now
+  retains the imported state-machine definition vector behind
+  `Arc<Vec<RuntimeStateMachine>>`; advancing a `StateMachineInstance` borrows
+  the stable definition through an outer `Arc` clone, matching C++'s
+  `StateMachineInstance` pointer to immutable `StateMachine` data. Full
+  `make golden-compare` remains exact=263 / exact-segments=584 / diverges=0;
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and `git diff
+  --check` pass. Fenced repeat-aware hot-loop reports aggregate Rust/C++=3.613,
+  so M7 remains open.
 - 2026-07-08: [M7] Retain path-geometry commands behind path/layout dirt.
   The status scout review keeps three fences binding: no broad
   converter/property writes after the RangeMapper scout, no shallow
@@ -3048,6 +3072,14 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Retained runtime state-machine definitions behind
+  `Arc<Vec<RuntimeStateMachine>>`, removing the per-advance definition
+  clone/drop in `ArtboardInstance::advance_state_machine_instance` while
+  preserving the public borrowed slice API. This is C++-shaped immutable
+  definition retention, not a new skip gate. `make golden-compare` remains
+  exact=263/exact-segments=584/diverges=0; `cargo test --workspace`, `cargo fmt
+  --all -- --check`, and `git diff --check` pass. Fenced repeat-aware hot-loop
+  reports aggregate Rust/C++=3.613; strict <=2.0 remains open.
 - 2026-07-08: [M7] Retained per-path runtime geometry commands by
   `path_epoch`/`layout_epoch` on `RuntimeRenderPathCache`, while keeping
   per-paint transform/NSlice/reversal/prune semantics intact. Also removed

@@ -25,18 +25,19 @@ the only memory the next session has. Update it every commit.
   claim it only with two pre/post runs. Debug builds, wall-clock process time,
   and serializer output are not M7 decision-grade.
 - Current standing: after retained path-composer graph lookups, dense
-  draw-path slots, and graph-scoped dense path-geometry command slots, full
-  `make golden-compare` and `cargo test --workspace` remain green. M7 perf was
-  not rerun because verification-time load averages were 25.13/42.76/45.72,
-  far outside the acceptance fence. The last directional fenced run remains
-  aggregate min Rust/C++=3.399 (`ai_assitant@0`=2.276,
-  `spotify_kids_demo@0`=5.500), with C++ min-sum outside the sanity band.
-  Strict <=2.0 remains open. Do not repeat the rejected shallow non-mesh image
-  draw-state cache scout, image mesh-index precompute scout, or shallow
-  command-vector/path wrapper caches; they preserved correctness but worsened
-  direct/fenced release timings. Next priority is a low-load release sample,
-  then actual image/`PathComposer`/raw-path retention or deeper draw-replay
-  fixed-overhead work under the same scout fences.
+  draw-path slots, graph-scoped dense path-geometry command slots, and dense
+  decoded-image slots, full `make golden-compare` and `cargo test --workspace`
+  remain green. A same-session release/null-renderer sample reports aggregate
+  min Rust/C++=3.254 (`ai_assitant@0`=2.243,
+  `spotify_kids_demo@0`=4.985), but the C++ min-sum was 1.035 ms, outside the
+  0.70-0.95 ms sanity band, and post-run load rose to 22.44/17.12/25.78.
+  Treat this as directional only. Strict <=2.0 remains open. Do not repeat the
+  rejected shallow non-mesh image draw-state cache scout, image mesh-index
+  precompute scout, or shallow command-vector/path wrapper caches; they
+  preserved correctness but worsened direct/fenced release timings. Next
+  priority is a clean low-load release sample, then actual image/
+  `PathComposer`/raw-path retention or deeper draw-replay fixed-overhead work
+  under the same scout fences.
 
 ## Milestones
 
@@ -1632,6 +1633,20 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Store decoded images in dense global-id slots. C++
+  `Image::draw` reaches the retained `RenderImage` through the `ImageAsset`
+  object, while Rust still looked decoded images up through a draw-time
+  `BTreeMap<u32, Box<dyn RenderImage>>`. `RuntimeRenderPaintCache` now stores
+  decoded images in `RuntimeRenderImages`, a dense global-id slot table shaped
+  like the existing retained render-paint slots. This removes an image draw
+  replay map lookup without adding transformed image-state caching, mesh-index
+  precompute, or new skip/invalidation logic. Full `make golden-compare`
+  remains exact=263 / exact-segments=584 / diverges=0; `cargo test
+  --workspace`, `cargo test -p rive-runtime --quiet`, the cargo fmt check, and
+  `git diff --check` pass. A same-session release/null-renderer sample reports
+  aggregate min Rust/C++=3.254 with `spotify_kids_demo@0`=4.985, but C++
+  min-sum=1.035 ms and post-run load 22.44/17.12/25.78 put it outside the
+  acceptance sanity band. M7 remains open.
 - 2026-07-08: [M7] Store path geometry commands in dense graph-local slots.
   C++ retains per-path raw/render path state on the path/ShapePaintPath object
   rather than looking it up through a draw-time map. Rust already retained the

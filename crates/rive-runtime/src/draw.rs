@@ -1221,6 +1221,7 @@ impl ArtboardInstance {
         path_cache: &mut RuntimeRenderPathCache,
     ) -> Result<()> {
         let mut mesh_buffers = BTreeMap::new();
+        let images = RuntimeRenderImages::default();
         self.draw_prepared_static_artboard_internal_with_path_cache(
             runtime,
             graph,
@@ -1228,7 +1229,7 @@ impl ArtboardInstance {
             factory,
             renderer,
             paint_by_global,
-            &BTreeMap::new(),
+            &images,
             &mut mesh_buffers,
             path_cache,
             None,
@@ -1271,7 +1272,7 @@ impl ArtboardInstance {
         factory: &mut dyn RenderFactory,
         renderer: &mut dyn Renderer,
         paint_by_global: &mut RuntimeRenderPaints,
-        image_by_global: &BTreeMap<u32, Box<dyn RenderImage>>,
+        image_by_global: &RuntimeRenderImages,
         mesh_by_local: &mut BTreeMap<usize, RuntimeMeshRenderBuffers>,
         path_cache: &mut RuntimeRenderPathCache,
         mut paint_configurations: Option<&mut BTreeMap<u32, RuntimeCachedRenderPaintConfiguration>>,
@@ -5222,7 +5223,7 @@ pub struct RuntimeRenderPaintCache {
     paints: RuntimeRenderPaints,
     paint_configurations: BTreeMap<u32, RuntimeCachedRenderPaintConfiguration>,
     preparation: Option<RuntimePaintPreparationFrame>,
-    images: BTreeMap<u32, Box<dyn RenderImage>>,
+    images: RuntimeRenderImages,
     meshes: BTreeMap<usize, RuntimeMeshRenderBuffers>,
     nested_artboards: BTreeMap<u32, RuntimeRenderPaintCache>,
 }
@@ -5263,8 +5264,29 @@ impl RuntimeRenderPaintCache {
         &mut self.paints
     }
 
-    pub fn root_images_mut(&mut self) -> &mut BTreeMap<u32, Box<dyn RenderImage>> {
+    pub fn root_images_mut(&mut self) -> &mut RuntimeRenderImages {
         &mut self.images
+    }
+}
+
+#[derive(Default)]
+pub struct RuntimeRenderImages {
+    images_by_global: Vec<Option<Box<dyn RenderImage>>>,
+}
+
+impl RuntimeRenderImages {
+    pub fn get(&self, global_id: u32) -> Option<&dyn RenderImage> {
+        self.images_by_global
+            .get(global_id as usize)
+            .and_then(|image| image.as_deref())
+    }
+
+    pub fn insert(&mut self, global_id: u32, image: Box<dyn RenderImage>) {
+        let slot = global_id as usize;
+        if self.images_by_global.len() <= slot {
+            self.images_by_global.resize_with(slot + 1, || None);
+        }
+        self.images_by_global[slot] = Some(image);
     }
 }
 
@@ -6075,7 +6097,7 @@ pub fn preallocate_render_paint_cache_for_artboard_tree(
         .collect::<Vec<_>>();
     let pre_source_image_assets =
         pre_source_image_asset_globals(runtime, graph, artboards, &image_asset_globals);
-    let mut images = BTreeMap::new();
+    let mut images = RuntimeRenderImages::default();
     for asset_global in image_asset_globals
         .iter()
         .copied()
@@ -6252,7 +6274,7 @@ fn predecode_render_image(
     runtime: &RuntimeFile,
     asset_global: u32,
     factory: &mut dyn RenderFactory,
-    images: &mut BTreeMap<u32, Box<dyn RenderImage>>,
+    images: &mut RuntimeRenderImages,
 ) {
     if let Some(bytes) = embedded_file_asset_bytes(runtime, asset_global) {
         images.insert(asset_global, factory.decode_image(bytes));
@@ -6340,7 +6362,7 @@ fn preallocate_source_mesh_render_buffers_for_artboards(
     runtime: &RuntimeFile,
     artboards: &[ArtboardGraph],
     factory: &mut dyn RenderFactory,
-    image_by_global: &BTreeMap<u32, Box<dyn RenderImage>>,
+    image_by_global: &RuntimeRenderImages,
 ) -> BTreeMap<(u32, usize), RuntimeSourceMeshRenderBuffers> {
     // Ported from C++ `src/shapes/mesh.cpp::Mesh::onAssetLoaded`: source
     // artboards allocate their mesh vertex/UV/index buffers before cloned
@@ -6402,7 +6424,7 @@ fn preallocate_source_mesh_render_buffers(
     graph: &ArtboardGraph,
     mesh: &MeshGeometryNode,
     factory: &mut dyn RenderFactory,
-    image_by_global: &BTreeMap<u32, Box<dyn RenderImage>>,
+    image_by_global: &RuntimeRenderImages,
 ) -> Option<RuntimeSourceMeshRenderBuffers> {
     let mesh_object = runtime.object(mesh.global_id as usize)?;
     let image_local = usize::try_from(mesh_object.uint_property("parentId")?).ok()?;
@@ -6413,7 +6435,7 @@ fn preallocate_source_mesh_render_buffers(
         .global_id;
     let image_object = runtime.object(image_global as usize)?;
     let image_asset = runtime.resolved_file_asset_for_referencer(image_object)?;
-    let image = image_by_global.get(&image_asset.id)?;
+    let image = image_by_global.get(image_asset.id)?;
     let indices = mesh_object.mesh_triangle_indices()?;
     let vertex_count = u32::try_from(mesh.vertices.len()).ok()?;
     let index_count = u32::try_from(indices.len()).ok()?;
@@ -6845,7 +6867,7 @@ fn runtime_draw_command(
     factory: &mut dyn RenderFactory,
     renderer: &mut dyn Renderer,
     paint_by_global: &mut RuntimeRenderPaints,
-    image_by_global: &BTreeMap<u32, Box<dyn RenderImage>>,
+    image_by_global: &RuntimeRenderImages,
     mesh_by_local: &mut BTreeMap<usize, RuntimeMeshRenderBuffers>,
     path_cache: &mut RuntimeRenderPathCache,
     mut paint_configurations: Option<&mut BTreeMap<u32, RuntimeCachedRenderPaintConfiguration>>,
@@ -7157,7 +7179,7 @@ fn runtime_draw_image(
     graph: &ArtboardGraph,
     command: &RuntimeDrawCommand,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
-    image_by_global: &BTreeMap<u32, Box<dyn RenderImage>>,
+    image_by_global: &RuntimeRenderImages,
     mesh_by_local: &mut BTreeMap<usize, RuntimeMeshRenderBuffers>,
     renderer: &mut dyn Renderer,
 ) -> Result<()> {
@@ -7168,7 +7190,7 @@ fn runtime_draw_image(
         .and_then(|global_id| runtime.object(global_id as usize));
     let Some(image) = command
         .resolved_image_asset_global
-        .and_then(|asset_global| image_by_global.get(&asset_global))
+        .and_then(|asset_global| image_by_global.get(asset_global))
     else {
         // C++ `Image::draw` returns before saving when the asset has no
         // decoded RenderImage, e.g. hosted images with no loader.
@@ -7192,7 +7214,7 @@ fn runtime_draw_image(
             mesh,
             buffers,
             layout_bounds,
-            image.as_ref(),
+            image,
             renderer,
         )?;
         if command.needs_save_operation {
@@ -7218,7 +7240,7 @@ fn runtime_draw_image(
         graph,
         local_id,
         image_object,
-        image.as_ref(),
+        image,
         layout_bounds,
         origin_x,
         origin_y,
@@ -7248,7 +7270,7 @@ fn runtime_draw_image(
         .map(|component| component.transform.render_opacity)
         .unwrap_or(1.0);
     renderer.draw_image(
-        Some(image.as_ref()),
+        Some(image),
         RenderImageSampler::LINEAR_CLAMP,
         runtime_blend_mode(u32::try_from(blend_mode_value).unwrap_or(3))?,
         opacity,
@@ -7504,7 +7526,7 @@ fn runtime_draw_nested_artboard(
     factory: &mut dyn RenderFactory,
     renderer: &mut dyn Renderer,
     paint_by_global: &mut RuntimeRenderPaints,
-    image_by_global: &BTreeMap<u32, Box<dyn RenderImage>>,
+    image_by_global: &RuntimeRenderImages,
     mesh_by_local: &mut BTreeMap<usize, RuntimeMeshRenderBuffers>,
     path_cache: &mut RuntimeRenderPathCache,
     mut paint_configurations: Option<&mut BTreeMap<u32, RuntimeCachedRenderPaintConfiguration>>,

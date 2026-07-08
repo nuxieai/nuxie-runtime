@@ -865,6 +865,21 @@ the only memory the next session has. Update it every commit.
    `runtime_draw_command` / `RuntimeRenderPathCache::draw_path` and the
    remaining data-bind queue drains; keep the source-queue vector-swap and
    borrowed retained-paint threading scouts rejected.
+   Retained render paints now live in dense global-id slots
+   (`RuntimeRenderPaints`) instead of a `BTreeMap`, so persistent draw and
+   gradient-prep paint access mirrors C++ retained `ShapePaint::renderPaint()`
+   pointer lookup while preserving the old factory allocation side effects for
+   golden ordering. Full `make golden-compare` remains exact=263 /
+   exact-segments=584 / diverges=0; `cargo test --workspace`,
+   `cargo fmt --all -- --check`, and `git diff --check` pass. Fenced
+   repeat-aware hot-loop reports aggregate Rust/C++=3.000 with
+   `ai_assitant`=2.799. Direct repeat=100 `ai_assitant` JSON at
+   `target/perf-ai-render-paint-slots-rerun.json` reports cpp median=0.576 ms,
+   rust median=1.437 ms, Rust/C++=2.495, with Rust draw median down to
+   0.289 ms from the previous artifact's 0.312 ms. Strict <=2.0 remains open.
+   Next: profile the remaining lower `RuntimeRenderPathCache::draw_path`
+   lookup and data-bind queue drains; keep source-queue vector swaps and
+   borrowed retained-paint threading rejected.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -1366,6 +1381,20 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Store retained render paints in dense global-id slots. A
+  release/null-renderer profile after nested-host source-local retention still
+  showed draw replay/path-cache `BTreeMap` lookup time under
+  `runtime_draw_command`. C++ stores the render paint on each retained
+  `ShapePaint`, so Rust now stores persistent render paints in
+  `RuntimeRenderPaints` dense global-id slots and uses slot access for gradient
+  prep/background/shape draw. The allocation helper still calls
+  `make_render_paint()` in the same occupied-slot cases as before so factory
+  side effects and golden ordering stay intact. Full `make golden-compare`
+  remains exact=263 / exact-segments=584 / diverges=0; `cargo test
+  --workspace`, `cargo fmt --all -- --check`, and `git diff --check` pass.
+  Fenced hot-loop reports aggregate Rust/C++=3.000, while direct repeat=100
+  `ai_assitant` JSON reports rust median=1.437 ms / Rust/C++=2.495, so M7
+  remains open.
 - 2026-07-08: [M7] Retain nested-host source locals by child binding index.
   A release/null-renderer `ai_assitant` sample after the shape-paint global-id
   slice still showed `stateful_nested_host_binding_value_for`,
@@ -3256,6 +3285,15 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Stored retained render paints in dense global-id slots
+  instead of a draw-time `BTreeMap`. `make golden-compare` remains
+  exact=263/exact-segments=584/diverges=0; `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check` pass. Fenced
+  repeat-aware hot-loop reports aggregate Rust/C++=3.000, and direct repeat=100
+  `ai_assitant` JSON at `target/perf-ai-render-paint-slots-rerun.json` reports
+  cpp median=0.576 ms, rust median=1.437 ms, Rust/C++=2.495. Strict <=2.0
+  remains open; next profile lower `RuntimeRenderPathCache::draw_path` lookup
+  and data-bind queue drains under the existing scout/perf fences.
 - 2026-07-08: [M7] Retained layout-topology facts on runtime components and
   routed component lookup through dense slot component indices instead of a
   frame-loop `BTreeMap`. `make golden-compare` remains

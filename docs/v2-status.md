@@ -771,6 +771,27 @@ the only memory the next session has. Update it every commit.
    remains open. Next: re-profile `ai_assitant` and the fixed-overhead files;
    likely remaining targets are advance/data-bind context lookup and lower
    draw/prepare retention, not shallow command/path-wrapper caches.
+   A follow-up `ai_assitant --benchmark-repeat 30000000` sample found
+   remaining Rust time split across paint/prepare, data-bind, and
+   layout-adjusted world-transform lookup. Runtime components now retain the
+   static layout-topology facts needed by
+   `runtime_component_world_transform_with_bounds`, and
+   `ArtboardInstance::component` / `component_mut` use each dense slot's
+   retained component index instead of a frame-loop `BTreeMap` lookup. This is
+   C++-shaped retained object/index traversal and does not add new skip/cache
+   invalidation. Full `make golden-compare` remains exact=263 /
+   exact-segments=584 / diverges=0; `cargo test -p rive-runtime`,
+   `cargo test --workspace`, `cargo fmt --all -- --check`, and
+   `git diff --check` pass. Fenced repeat-aware hot-loop baseline was
+   aggregate Rust/C++=3.515 with Rust median sum 2.429 ms; after the slice,
+   reruns report aggregate Rust/C++=3.326 and 3.392 with the better Rust
+   median sum at 2.342 ms. Direct repeat=100 `ai_assitant` JSON at
+   `target/perf-ai-layout-topology.json` reports cpp median=0.427 ms, rust
+   median=1.196 ms, Rust/C++=2.800. Strict <=2.0 remains open. Next:
+   re-profile `ai_assitant` plus the fixed-overhead files; likely targets
+   remain dependency-ordered paint/prepare work and
+   `advance_artboard_data_binds_with_root_transform`, not broad
+   converter-property writes or shallow command/path-wrapper caches.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -3100,6 +3121,16 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Retained layout-topology facts on runtime components and
+  routed component lookup through dense slot component indices instead of a
+  frame-loop `BTreeMap`. `make golden-compare` remains
+  exact=263/exact-segments=584/diverges=0; `cargo test -p rive-runtime`,
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check` pass. Fenced repeat-aware hot-loop baseline was
+  Rust/C++=3.515 with Rust median sum 2.429 ms; reruns after the slice report
+  Rust/C++=3.326 and 3.392, with the better Rust median sum at 2.342 ms. Direct
+  repeat=100 `ai_assitant` JSON is at `target/perf-ai-layout-topology.json`;
+  strict <=2.0 remains open.
 - 2026-07-08: [M7] Replaced dependency-ordered gradient paint-prep
   `BTreeMap`/`BTreeSet` temporaries with small vectors while preserving the old
   duplicate command rules. This follows the C++ retained object/vector traversal

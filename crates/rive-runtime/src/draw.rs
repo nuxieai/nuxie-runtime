@@ -1798,11 +1798,14 @@ impl ArtboardInstance {
         let Some(parent_local) = component.parent_local else {
             return component.transform.world_transform;
         };
-        if layout_bounds.is_none() || !self.runtime_parent_chain_has_layout_component(parent_local)
+        if layout_bounds.is_none()
+            || !self
+                .component(parent_local)
+                .is_some_and(|parent| parent.layout_chain_has_layout_component)
         {
             return component.transform.world_transform;
         }
-        if let Some(layout_local) = self.runtime_constrained_layout_ancestor(local_id) {
+        if let Some(layout_local) = component.constrained_layout_ancestor {
             let layout_world = self.runtime_layout_component_world_transform_with_bounds(
                 layout_local,
                 graph,
@@ -1818,34 +1821,6 @@ impl ArtboardInstance {
         }
         self.runtime_component_world_transform_with_bounds(parent_local, graph, layout_bounds)
             .multiply(component.transform.local_transform)
-    }
-
-    fn runtime_parent_chain_has_layout_component(&self, mut local_id: usize) -> bool {
-        while let Some(component) = self.component(local_id) {
-            if component.type_name == "LayoutComponent" {
-                return true;
-            }
-            let Some(parent_local) = component.parent_local else {
-                return false;
-            };
-            local_id = parent_local;
-        }
-        false
-    }
-
-    fn runtime_constrained_layout_ancestor(&self, mut local_id: usize) -> Option<usize> {
-        let mut saw_constraint = false;
-        while let Some(component) = self.component(local_id) {
-            if component.type_name == "LayoutComponent" {
-                return saw_constraint.then_some(local_id);
-            }
-            saw_constraint |= !component.constraint_locals.is_empty();
-            let Some(parent_local) = component.parent_local else {
-                return None;
-            };
-            local_id = parent_local;
-        }
-        None
     }
 
     fn runtime_layout_component_world_transform(

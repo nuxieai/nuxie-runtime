@@ -339,6 +339,8 @@ pub struct RuntimeComponent {
     pub parent_local: Option<usize>,
     pub constraint_locals: Vec<usize>,
     pub dependent_locals: Vec<usize>,
+    pub layout_chain_has_layout_component: bool,
+    pub constrained_layout_ancestor: Option<usize>,
     pub graph_order: usize,
     pub dirt: ComponentDirt,
     pub transform: TransformRuntimeState,
@@ -357,6 +359,8 @@ impl RuntimeComponent {
             parent_local: component.parent_local,
             constraint_locals: component.constraint_locals.clone(),
             dependent_locals: component.dependent_locals.clone(),
+            layout_chain_has_layout_component: false,
+            constrained_layout_ancestor: None,
             graph_order: component.graph_order.unwrap_or(0),
             dirt: ComponentDirt::FILTHY,
             transform: TransformRuntimeState::default(),
@@ -397,6 +401,61 @@ impl RuntimeComponent {
 
         self.transform.render_opacity = opacity * parent_opacity;
     }
+}
+
+pub(crate) fn retain_runtime_component_layout_topology(
+    components: &mut [RuntimeComponent],
+    component_by_local: &BTreeMap<usize, usize>,
+) {
+    for index in 0..components.len() {
+        let local_id = components[index].local_id;
+        components[index].layout_chain_has_layout_component =
+            runtime_layout_chain_has_layout_component(local_id, components, component_by_local);
+        components[index].constrained_layout_ancestor =
+            runtime_constrained_layout_ancestor(local_id, components, component_by_local);
+    }
+}
+
+fn runtime_layout_chain_has_layout_component(
+    mut local_id: usize,
+    components: &[RuntimeComponent],
+    component_by_local: &BTreeMap<usize, usize>,
+) -> bool {
+    while let Some(component) = component_by_local
+        .get(&local_id)
+        .and_then(|index| components.get(*index))
+    {
+        if component.type_name == "LayoutComponent" {
+            return true;
+        }
+        let Some(parent_local) = component.parent_local else {
+            return false;
+        };
+        local_id = parent_local;
+    }
+    false
+}
+
+fn runtime_constrained_layout_ancestor(
+    mut local_id: usize,
+    components: &[RuntimeComponent],
+    component_by_local: &BTreeMap<usize, usize>,
+) -> Option<usize> {
+    let mut saw_constraint = false;
+    while let Some(component) = component_by_local
+        .get(&local_id)
+        .and_then(|index| components.get(*index))
+    {
+        if component.type_name == "LayoutComponent" {
+            return saw_constraint.then_some(local_id);
+        }
+        saw_constraint |= !component.constraint_locals.is_empty();
+        let Some(parent_local) = component.parent_local else {
+            return None;
+        };
+        local_id = parent_local;
+    }
+    None
 }
 
 #[derive(Debug, Clone)]

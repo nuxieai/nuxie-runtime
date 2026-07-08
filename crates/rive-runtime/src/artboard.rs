@@ -30,6 +30,7 @@ use crate::artboard_data_bind::{
 use crate::components::{
     AuthoredTransform, ComponentDirt, Mat2D, RuntimeComponent, RuntimeSolo, TransformProperty,
     UpdateComponentsReport, apply_initial_solo_collapses, build_runtime_solos,
+    retain_runtime_component_layout_topology,
 };
 use crate::constraints::{
     RuntimeFollowPathConstraint, RuntimeIkConstraint, RuntimeListFollowPathConstraint,
@@ -275,6 +276,7 @@ impl ArtboardInstance {
             &artboard_solo_source_bindings,
         );
         apply_initial_solo_collapses(&objects, &solos, &mut components, &component_by_local);
+        retain_runtime_component_layout_topology(&mut components, &component_by_local);
         let nested_artboards = if inserted {
             build_runtime_nested_artboard_instances(
                 file,
@@ -357,9 +359,10 @@ impl ArtboardInstance {
     }
 
     pub fn component(&self, local_id: usize) -> Option<&RuntimeComponent> {
-        self.component_by_local
-            .get(&local_id)
-            .map(|index| &self.components[*index])
+        self.slots
+            .get(local_id)
+            .and_then(|slot| slot.component_index)
+            .and_then(|index| self.components.get(index))
     }
 
     pub fn slot(&self, local_id: usize) -> Option<&InstanceSlot> {
@@ -371,7 +374,7 @@ impl ArtboardInstance {
     }
 
     pub fn component_mut(&mut self, local_id: usize) -> Option<&mut RuntimeComponent> {
-        let index = *self.component_by_local.get(&local_id)?;
+        let index = self.slots.get(local_id)?.component_index?;
         Some(&mut self.components[index])
     }
 
@@ -2717,6 +2720,8 @@ mod tests {
             parent_local: None,
             constraint_locals: Vec::new(),
             dependent_locals: Vec::new(),
+            layout_chain_has_layout_component: false,
+            constrained_layout_ancestor: None,
             graph_order,
             dirt: ComponentDirt::NONE,
             transform: TransformRuntimeState::default(),

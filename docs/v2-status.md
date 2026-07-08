@@ -24,18 +24,21 @@ the only memory the next session has. Update it every commit.
 - Noise rule: ratio movement below about 0.08 is below single-run resolution;
   claim it only with two pre/post runs. Debug builds, wall-clock process time,
   and serializer output are not M7 decision-grade.
-- Current standing: after retained clipping-shape path geometry, direct
-  Rust-only `spotify_kids_demo --benchmark-repeat 1000000` improved from
-  elapsed/draw=18763/15899 ms to 14382/11420 ms and 14793/11743 ms on rerun.
-  Two `make perf-hot-loop PERF_MAX_RATIO=999` runs report aggregate min
-  Rust/C++=4.010 and 3.570, with `spotify_kids_demo@0`=7.920 and 6.283, but
-  C++ min-sums were 1.230 and 1.257 ms, outside the 0.70-0.95 sanity band, so
-  treat both as directional only. Strict <=2.0 remains open. Do not repeat the
-  rejected shallow non-mesh image draw-state cache scout or image mesh-index
-  precompute scout; both preserved correctness but worsened direct/fenced
-  release timings. Next priority is a fresh release sample and then the next
-  retained draw-replay/fixed-overhead slice, or a deeper instance-owned
-  `Image::updateImageScale()` sidecar if the image path returns to the top.
+- Current standing: after the N-slicer fast-miss slice, direct Rust-only
+  `spotify_kids_demo --benchmark-repeat 1000000` under high system load moved
+  from elapsed/draw=17402/13772 ms to 14017/10856 ms, and sampling showed
+  `runtime_nsliced_node_context_for_shape` falling from a top draw-stack
+  hotspot to a small leaf. `make perf-hot-loop PERF_MAX_RATIO=999` moved
+  directionally from aggregate min Rust/C++=3.743 and
+  `spotify_kids_demo@0`=6.389 to aggregate=3.671 and
+  `spotify_kids_demo@0`=5.886, but the 1-minute load was about 32 and C++
+  min-sum was 1.287 ms, outside the 0.70-0.95 sanity band, so this is not
+  acceptance-grade. Strict <=2.0 remains open. Do not repeat the rejected
+  shallow non-mesh image draw-state cache scout or image mesh-index precompute
+  scout; both preserved correctness but worsened direct/fenced release
+  timings. Next priority is a low-load release sample, then actual
+  `PathComposer`/raw-path retention or draw-replay fixed-overhead work rather
+  than wrapping cloned command vectors.
 
 ## Milestones
 
@@ -998,9 +1001,10 @@ the only memory the next session has. Update it every commit.
    --workspace`, `cargo fmt --all -- --check`, and `git diff --check` pass.
    Follow-up image micro-slices showed the shallow cache and mesh-index
    precompute layers are not the C++ optimization. Retained clipping-shape
-   path geometry now removes one sampled draw-replay rebuild path while
-   preserving the full ratchet. Next runtime target should be a fresh release
-   sample and then the next retained draw-replay/fixed-overhead slice, under
+   path geometry and the N-slicer fast-miss now remove two sampled draw-replay
+   rebuild/discovery paths while preserving the full ratchet. Next runtime
+   target should be a low-load release sample and then actual
+   `PathComposer`/raw-path retention or draw-replay fixed-overhead work, under
    the existing scout fences.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
@@ -3572,6 +3576,27 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-08: [M7] Added an N-slicer fast-miss in the shape draw path.
+  A fresh release/null-renderer sample under high load found
+  `spotify_kids_demo@0` back on top (`make perf-hot-loop PERF_MAX_RATIO=999`
+  aggregate min Rust/C++=3.743, `spotify_kids_demo@0`=6.389, but C++ min-sum
+  outside the sanity band). A macOS `sample` run of
+  `spotify_kids_demo --benchmark-repeat 10000000` showed
+  `runtime_nsliced_node_context_for_shape` as a top draw-stack cost even
+  though the active artboards have empty `n_slicer_details`; this mirrors the
+  C++ retained `NSlicedNode`/`ComponentDirt::NSlicer` boundary by returning
+  before scanning shape deformer rows when no N-slicer details exist.
+  Rebuilt release direct `spotify_kids_demo --benchmark-repeat 1000000`
+  improves from elapsed/draw=17402/13772 ms to 14017/10856 ms; post-change
+  sampling drops the helper from hundreds of samples to a small leaf. Full
+  `make golden-compare` remains exact=263/exact-segments=584/diverges=0;
+  `cargo test --workspace`, `cargo check -p rive-runtime`, and
+  `cargo fmt --all -- --check` pass. Fenced hot-loop moves directionally to
+  aggregate=3.671 and `spotify_kids_demo@0`=5.886, but load was about 32 and
+  C++ min-sum=1.287 ms, so strict <=2.0 remains open. Next: rerun a low-load
+  release sample, then port actual `PathComposer`/raw-path retention or
+  fixed-overhead draw replay instead of shallow command-vector caches.
 
 - 2026-07-08: [M7] Reused retained path-geometry command frames for
   clipping-shape draw replay. `runtime_clipping_shape_path_commands` now takes

@@ -11614,6 +11614,10 @@ fn runtime_nsliced_node_context_for_shape(
     shape_local: usize,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
 ) -> Option<RuntimeNSlicedNodeContext> {
+    if graph.n_slicer_details.is_empty() {
+        return None;
+    }
+
     let runtime = instance.runtime_file()?;
     let deformer = graph.shape_deformers.iter().find(|deformer| {
         deformer.shape_local == shape_local && deformer.deformer_type_name == Some("NSlicedNode")

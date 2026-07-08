@@ -195,6 +195,24 @@ the only memory the next session has. Update it every commit.
    focused 5-entry ratio moved to Rust/C++=2.614. The next attempt should port
    the actual C++ container lists and enrollment semantics, not add per-binding
    dirty booleans around the current scans.
+   Artboard source-to-target property/image binds now have container-owned
+   dirty target queues indexed by source path, seeded for initial apply and
+   enrolled through `set_artboard_data_bind_value_for_path`, formula token /
+   operation converter updates, and stateful converter advance. This mirrors
+   the C++ `DataBindContainer` dirty-list shape for the source-to-target
+   subset without yet moving polling target-to-source binds onto push queues.
+   Full `make golden-compare` remains exact=263 / exact-segments=584 /
+   diverges=0, and `cargo test --workspace` passes. A same-session
+   throwaway worktree at `988fc29` measured Rust-only repeat=100000 at
+   elapsed=3080.3 / advance=2392.7 ms and focused hot-loop aggregate
+   Rust/C++=2.723; this slice measures Rust-only repeat=100000 at
+   elapsed=2480.2 / advance=1859.1 ms and focused hot-loop aggregate
+   Rust/C++=2.371 / 2.599. Direct `ai_assitant --benchmark-repeat 100`
+   reports cpp median=0.666 ms, rust median=4.851 ms, Rust/C++=7.279.
+   Strict <=2.0 remains open. Next: complete the C++ data-bind container port
+   by adding to-source dirty/persisting queue semantics and push-style target
+   enrollment for generated setters, leaving computed targets on the polling
+   fallback like C++ `targetSupportsPush()`.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -696,6 +714,24 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Land path-indexed artboard source-to-target dirty queues
+  as the first C++ `DataBindContainer` queue slice. Unlike the rejected
+  per-binding `target_dirty` scout, this slice does not scan all bindings when
+  a source path changes: `ArtboardInstance` owns container queues indexed by
+  data-bind source path, seeds them for initial apply, enrolls affected
+  property/image targets from the source setter, and re-enrolls property
+  targets when formula token/operation values or stateful converters mutate
+  converter state. This mirrors the C++ dirty-list enrollment shape for
+  source-to-target artboard binds while leaving target-to-source binds on the
+  existing polling path until the next slice can port `targetSupportsPush()`
+  and the persisting/dirty-to-source lists. `make golden-compare` remains
+  exact=263 / exact-segments=584 / diverges=0 and `cargo test --workspace`
+  passes. Same-session baseline worktree `988fc29` measured Rust-only
+  repeat=100000 at elapsed=3080.3 ms / advance=2392.7 ms and focused
+  hot-loop aggregate Rust/C++=2.723; this slice measured Rust-only
+  repeat=100000 at elapsed=2480.2 ms / advance=1859.1 ms and focused
+  aggregate Rust/C++=2.371 / 2.599. Direct repeat-heavy `ai_assitant` remains
+  above the target at Rust/C++=7.279, so M7 stays open.
 - 2026-07-08: [M7] Do not land naive artboard binding `target_dirty` bits as
   the data-bind dirty-queue port. The scout added dirty booleans to
   source-to-target artboard property/image bindings, marked them when a source
@@ -1954,6 +1990,13 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Landed path-indexed artboard source-to-target dirty queues
+  for property/image data binds. `make golden-compare` remains
+  exact=263/exact-segments=584/diverges=0; `cargo test --workspace` passes;
+  same-session `988fc29` baseline was 3080.3/2392.7 ms elapsed/advance
+  Rust-only repeat=100000 and focused hot-loop Rust/C++=2.723, while this
+  slice is 2480.2/1859.1 ms and focused Rust/C++=2.371/2.599. Strict <=2.0
+  remains open; next port to-source dirty/persisting queues.
 - 2026-07-08: [M7] Borrowed nested owned-view-model context chains instead of
   cloning `Vec<Vec<usize>>` per host. `make golden-compare` remains
   exact=263/exact-segments=584/diverges=0; direct

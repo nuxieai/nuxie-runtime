@@ -123,6 +123,109 @@ pub(super) struct RuntimeArtboardImageAssetBindingInstance {
     default_value: RuntimeDataBindGraphValue,
 }
 
+#[derive(Debug, Clone, Copy)]
+enum RuntimeArtboardDataBindTargetRef {
+    Property(usize),
+    ImageAsset(usize),
+}
+
+#[derive(Debug, Clone, Default)]
+pub(super) struct RuntimeArtboardDataBindTargetQueues {
+    by_path: BTreeMap<Vec<u32>, Vec<RuntimeArtboardDataBindTargetRef>>,
+    dirty_properties: Vec<usize>,
+    dirty_property_flags: Vec<bool>,
+    dirty_image_assets: Vec<usize>,
+    dirty_image_asset_flags: Vec<bool>,
+}
+
+impl RuntimeArtboardDataBindTargetQueues {
+    pub(super) fn new(
+        property_bindings: &[RuntimeArtboardPropertyBindingInstance],
+        image_asset_bindings: &[RuntimeArtboardImageAssetBindingInstance],
+    ) -> Self {
+        let mut queues = Self {
+            dirty_property_flags: vec![false; property_bindings.len()],
+            dirty_image_asset_flags: vec![false; image_asset_bindings.len()],
+            ..Self::default()
+        };
+        for (index, binding) in property_bindings.iter().enumerate() {
+            queues
+                .by_path
+                .entry(binding.path.clone())
+                .or_default()
+                .push(RuntimeArtboardDataBindTargetRef::Property(index));
+            queues.enqueue_property(index);
+        }
+        for (index, binding) in image_asset_bindings.iter().enumerate() {
+            queues
+                .by_path
+                .entry(binding.path.clone())
+                .or_default()
+                .push(RuntimeArtboardDataBindTargetRef::ImageAsset(index));
+            queues.enqueue_image_asset(index);
+        }
+        queues
+    }
+
+    fn enqueue_path(&mut self, path: &[u32]) {
+        let Some(targets) = self.by_path.get(path).cloned() else {
+            return;
+        };
+        for target in targets {
+            match target {
+                RuntimeArtboardDataBindTargetRef::Property(index) => {
+                    self.enqueue_property(index);
+                }
+                RuntimeArtboardDataBindTargetRef::ImageAsset(index) => {
+                    self.enqueue_image_asset(index);
+                }
+            }
+        }
+    }
+
+    fn enqueue_property(&mut self, index: usize) {
+        let Some(flag) = self.dirty_property_flags.get_mut(index) else {
+            return;
+        };
+        if *flag {
+            return;
+        }
+        *flag = true;
+        self.dirty_properties.push(index);
+    }
+
+    fn enqueue_image_asset(&mut self, index: usize) {
+        let Some(flag) = self.dirty_image_asset_flags.get_mut(index) else {
+            return;
+        };
+        if *flag {
+            return;
+        }
+        *flag = true;
+        self.dirty_image_assets.push(index);
+    }
+
+    fn drain_dirty_properties(&mut self) -> Vec<usize> {
+        let dirty = std::mem::take(&mut self.dirty_properties);
+        for index in &dirty {
+            if let Some(flag) = self.dirty_property_flags.get_mut(*index) {
+                *flag = false;
+            }
+        }
+        dirty
+    }
+
+    fn drain_dirty_image_assets(&mut self) -> Vec<usize> {
+        let dirty = std::mem::take(&mut self.dirty_image_assets);
+        for index in &dirty {
+            if let Some(flag) = self.dirty_image_asset_flags.get_mut(*index) {
+                *flag = false;
+            }
+        }
+        dirty
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(super) struct RuntimeArtboardCustomPropertyBindingInstance {
     target_local_id: usize,
@@ -1323,16 +1426,19 @@ fn runtime_created_view_model_value_for_declared_property(
 }
 
 impl ArtboardInstance {
+    fn enqueue_artboard_data_bind_targets_for_path(&mut self, path: &[u32]) {
+        self.artboard_data_bind_target_queues.enqueue_path(path);
+    }
+
+    fn enqueue_artboard_property_binding_target(&mut self, index: usize) {
+        self.artboard_data_bind_target_queues
+            .enqueue_property(index);
+    }
+
     pub(crate) fn update_nested_artboard_data_binds_from_hosts(&mut self) -> bool {
         let mut changed = false;
         for source in self.collect_nested_artboard_context_source_values(Mat2D::IDENTITY) {
-            if self.artboard_data_bind_values.get(&source.path) == Some(&source.value) {
-                continue;
-            }
-            self.artboard_data_bind_values
-                .insert(source.path.clone(), source.value);
-            self.reset_artboard_property_formula_random_state_for_path(&source.path);
-            changed = true;
+            changed |= self.set_artboard_data_bind_value_for_path(&source.path, source.value);
         }
         changed
     }
@@ -1596,6 +1702,7 @@ impl ArtboardInstance {
         for path in paths {
             if self.artboard_data_bind_values.remove(&path).is_some() {
                 self.reset_artboard_property_formula_random_state_for_path(&path);
+                self.enqueue_artboard_data_bind_targets_for_path(&path);
                 changed = true;
             }
         }
@@ -1656,11 +1763,7 @@ impl ArtboardInstance {
             else {
                 continue;
             };
-            if self.artboard_data_bind_values.get(&path) != Some(&value) {
-                self.reset_artboard_property_formula_random_state_for_path(&path);
-                self.artboard_data_bind_values.insert(path, value);
-                changed = true;
-            }
+            changed |= self.set_artboard_data_bind_value_for_path(&path, value);
         }
         for binding in &mut self.artboard_list_bindings {
             let Some(source_value) = binding.default_value.resolve_from_view_model_instance(
@@ -1709,6 +1812,7 @@ impl ArtboardInstance {
         }
         self.artboard_data_bind_values.insert(path.to_vec(), value);
         self.reset_artboard_property_formula_random_state_for_path(path);
+        self.enqueue_artboard_data_bind_targets_for_path(path);
         true
     }
 
@@ -1767,13 +1871,8 @@ impl ArtboardInstance {
             );
             let Some(value) = value else { continue };
             let value = RuntimeDataBindGraphValue::Number(value);
-            if self.artboard_data_bind_values.get(&binding.path) == Some(&value) {
-                continue;
-            }
             let path = binding.path.clone();
-            self.artboard_data_bind_values.insert(path.clone(), value);
-            self.reset_artboard_property_formula_random_state_for_path(&path);
-            changed = true;
+            changed |= self.set_artboard_data_bind_value_for_path(&path, value);
         }
         changed
     }
@@ -1839,12 +1938,21 @@ impl ArtboardInstance {
 
     fn set_artboard_formula_token_value(&mut self, token_id: u32, value: f32) -> bool {
         let mut changed = false;
-        for binding in &mut self.artboard_property_bindings {
-            let Some(converter) = binding.converter.as_mut() else {
-                continue;
+        for index in 0..self.artboard_property_bindings.len() {
+            let binding_changed = {
+                let binding = &mut self.artboard_property_bindings[index];
+                let Some(converter) = binding.converter.as_mut() else {
+                    continue;
+                };
+                if converter.set_formula_token_value(token_id, value) {
+                    binding.converter_state.reset_formula_randoms();
+                    true
+                } else {
+                    false
+                }
             };
-            if converter.set_formula_token_value(token_id, value) {
-                binding.converter_state.reset_formula_randoms();
+            if binding_changed {
+                self.enqueue_artboard_property_binding_target(index);
                 changed = true;
             }
         }
@@ -1862,12 +1970,21 @@ impl ArtboardInstance {
 
     fn set_artboard_operation_value(&mut self, target_global_id: u32, value: f32) -> bool {
         let mut changed = false;
-        for binding in &mut self.artboard_property_bindings {
-            let Some(converter) = binding.converter.as_mut() else {
-                continue;
+        for index in 0..self.artboard_property_bindings.len() {
+            let binding_changed = {
+                let binding = &mut self.artboard_property_bindings[index];
+                let Some(converter) = binding.converter.as_mut() else {
+                    continue;
+                };
+                if converter.set_operation_value(target_global_id, value) {
+                    binding.converter_state.reset_formula_randoms();
+                    true
+                } else {
+                    false
+                }
             };
-            if converter.set_operation_value(target_global_id, value) {
-                binding.converter_state.reset_formula_randoms();
+            if binding_changed {
+                self.enqueue_artboard_property_binding_target(index);
                 changed = true;
             }
         }
@@ -1915,13 +2032,8 @@ impl ArtboardInstance {
             });
             let Some(value) = value else { continue };
             let value = RuntimeDataBindGraphValue::Number(value);
-            if self.artboard_data_bind_values.get(&binding.path) == Some(&value) {
-                continue;
-            }
             let path = binding.path.clone();
-            self.artboard_data_bind_values.insert(path.clone(), value);
-            self.reset_artboard_property_formula_random_state_for_path(&path);
-            changed = true;
+            changed |= self.set_artboard_data_bind_value_for_path(&path, value);
         }
         changed
     }
@@ -1958,7 +2070,10 @@ impl ArtboardInstance {
 
     fn apply_artboard_property_bindings(&mut self) -> bool {
         let mut changed = false;
-        for index in 0..self.artboard_property_bindings.len() {
+        for index in self
+            .artboard_data_bind_target_queues
+            .drain_dirty_properties()
+        {
             let Some((target_local_id, property_key, value)) =
                 self.converted_artboard_property_binding_value(index)
             else {
@@ -1972,14 +2087,25 @@ impl ArtboardInstance {
 
     fn apply_artboard_image_asset_bindings(&mut self) -> bool {
         let mut changed = false;
-        for binding in self.artboard_image_asset_bindings.clone() {
-            let value = self
-                .artboard_data_bind_values
-                .get(&binding.path)
-                .cloned()
-                .unwrap_or_else(|| binding.default_value.clone());
-            changed |=
-                self.apply_artboard_image_asset_binding_value(binding.target_local_id, &value);
+        for index in self
+            .artboard_data_bind_target_queues
+            .drain_dirty_image_assets()
+        {
+            let Some((target_local_id, value)) =
+                self.artboard_image_asset_bindings
+                    .get(index)
+                    .map(|binding| {
+                        let value = self
+                            .artboard_data_bind_values
+                            .get(&binding.path)
+                            .cloned()
+                            .unwrap_or_else(|| binding.default_value.clone());
+                        (binding.target_local_id, value)
+                    })
+            else {
+                continue;
+            };
+            changed |= self.apply_artboard_image_asset_binding_value(target_local_id, &value);
         }
         changed
     }
@@ -2049,11 +2175,17 @@ impl ArtboardInstance {
 
     fn advance_artboard_property_binding_converters(&mut self, elapsed_seconds: f32) -> bool {
         let mut changed = false;
-        for binding in &mut self.artboard_property_bindings {
-            let advance = binding
-                .converter_state
-                .advance_converter(binding.converter.as_ref(), elapsed_seconds);
-            changed |= advance.changed;
+        for index in 0..self.artboard_property_bindings.len() {
+            let advance = {
+                let binding = &mut self.artboard_property_bindings[index];
+                binding
+                    .converter_state
+                    .advance_converter(binding.converter.as_ref(), elapsed_seconds)
+            };
+            if advance.changed {
+                self.enqueue_artboard_property_binding_target(index);
+                changed = true;
+            }
         }
         changed
     }
@@ -2068,13 +2200,8 @@ impl ArtboardInstance {
             ) else {
                 continue;
             };
-            if self.artboard_data_bind_values.get(&binding.path) == Some(&value) {
-                continue;
-            }
             let path = binding.path.clone();
-            self.artboard_data_bind_values.insert(path.clone(), value);
-            self.reset_artboard_property_formula_random_state_for_path(&path);
-            changed = true;
+            changed |= self.set_artboard_data_bind_value_for_path(&path, value);
         }
         changed
     }
@@ -2149,12 +2276,7 @@ impl ArtboardInstance {
         else {
             return false;
         };
-        if self.artboard_data_bind_values.get(&path) == Some(&value) {
-            return false;
-        }
-        self.artboard_data_bind_values.insert(path.clone(), value);
-        self.reset_artboard_property_formula_random_state_for_path(&path);
-        true
+        self.set_artboard_data_bind_value_for_path(&path, value)
     }
 
     fn artboard_custom_property_binding_target_value(
@@ -2327,11 +2449,9 @@ impl ArtboardInstance {
             };
             let mut child_context_changed = false;
             for (path, value) in updates {
-                if nested.child.artboard_data_bind_values.get(&path) == Some(&value) {
-                    continue;
-                }
-                nested.child.artboard_data_bind_values.insert(path, value);
-                child_context_changed = true;
+                child_context_changed |= nested
+                    .child
+                    .set_artboard_data_bind_value_for_path(&path, value);
             }
             if child_context_changed {
                 changed = true;

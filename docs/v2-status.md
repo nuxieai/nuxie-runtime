@@ -153,14 +153,20 @@ the only memory the next session has. Update it every commit.
    `ai_assitant --benchmark-repeat 100` checks report about Rust/C++=19.5-20.0
    (rerun cpp median=0.595 ms, rust median=11.919 ms, Rust/C++=20.018), so the
    strict <=2.0 target remains open and long-repeat Rust median is still noisy.
-   The layout-split sample no longer shows `runtime_taffy_layout_bounds` in the
-   hot stack; remaining heat is data-bind/nested advance allocation and retained
-   path/paint dirt gates. The next M7 target should continue the scout ordering:
-   deeper
-   `ShapePaintPath`/raw-path retention and `PathComposer` dirt gating behind
-   C++ dirt gates, plus any idempotent dirt raisers needed to make clean frames
-   skip prepare. After the perf target is real, expand the C ABI to instance
-   advance/draw.
+   `RuntimeRenderPaintCache` now also records a paint-preparation key
+   `(graph_global_id, cache_epoch)` and skips repeated non-dependency-order
+   paint preparation when no Rust property setter or component dirt raiser
+   changed the instance since the last prepare, matching C++'s clean-frame
+   `updateComponents` early-out at Rust's conservative cache epoch boundary.
+   Focused release/null-renderer runs over the same 5 exact entries / 10
+   segments reported aggregate Rust/C++=2.493, 1.832, and 2.166; direct
+   `ai_assitant --benchmark-repeat 100` reports cpp median=0.582-0.603 ms,
+   rust median=5.149-5.885 ms, Rust/C++=8.852-9.756. This is a real
+   steady-state Rust win, but strict <=2.0 is still not reliable on the focused
+   corpus. The next M7 target should rerun the current flamegraph and continue
+   the C++ dirt/retention ordering where heat remains: actual
+   `ShapePaintPath`/raw-path retention, `PathComposer` dirt gating, and
+   data-bind/nested advance allocation.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -662,6 +668,25 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Cache clean-frame paint preparation behind the conservative
+  Rust instance cache epoch. `RuntimeRenderPaintCache` now stores a
+  `RuntimePaintPreparationFrame` keyed by `(graph_global_id, cache_epoch)` and
+  `prepare_static_artboard_tree_paints_internal` returns early for
+  non-dependency-order prepares when that key still matches. The key is tied to
+  Rust's existing idempotent property setters and `add_dirt` /
+  `on_component_dirty` path, so this mirrors the C++
+  `Artboard::updateComponents()` clean-frame first-branch return
+  conservatively rather than inventing a geometry invalidation shortcut. The
+  dependency-order layout-gradient path remains unskipped. Focused tests,
+  `cargo check -p rive-runtime`, and `make golden-compare` pass at exact=263 /
+  exact-segments=584 / diverges=0. Fenced release/null-renderer focused runs
+  reported aggregate Rust/C++=2.493, 1.832, and 2.166 over 5 entries / 10
+  segments; direct repeat-heavy `ai_assitant` improved to cpp median=0.582 /
+  0.603 ms and rust median=5.149 / 5.885 ms (Rust/C++=8.852 / 9.756), versus
+  the prior logged direct ratio around 20.0. M7 is still open because the
+  focused corpus does not reliably clear strict <=2.0. Next: profile the
+  current tree before choosing between deeper `ShapePaintPath`/`PathComposer`
+  retention and remaining data-bind/nested advance allocation.
 - 2026-07-08: [M7] Do not land shared shape path-command buffers as the
   `ShapePaintPath` retention slice. The experiment changed
   `RuntimeShapePaintCommand` path/effect/inner-feather payloads from owned
@@ -1844,6 +1869,12 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Cached clean-frame paint preparation in
+  `RuntimeRenderPaintCache` behind `(graph_global_id, cache_epoch)`. `make
+  golden-compare` remains exact=263/exact-segments=584/diverges=0; focused
+  release/null-renderer runs are Rust/C++=2.493, 1.832, and 2.166, while direct
+  `ai_assitant --benchmark-repeat 100` improves to Rust/C++=8.852-9.756.
+  Strict <=2.0 remains open.
 - 2026-07-07: [M7] Cached fixed data-bind property keys. `make golden-compare`
   remains exact=263/exact-segments=584 with diverges=0; `cargo test
   --workspace` passes. Focused release hot-loop is Rust/C++=3.096 aggregate,

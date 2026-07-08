@@ -613,6 +613,7 @@ impl ArtboardInstance {
             factory,
             &mut paint_cache.paints,
             Some(&mut paint_cache.paint_configurations),
+            Some(&mut paint_cache.preparation),
             Some(&mut paint_cache.nested_artboards),
             render_cache,
             true,
@@ -627,6 +628,7 @@ impl ArtboardInstance {
         factory: &mut dyn RenderFactory,
         paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
         mut paint_configurations: Option<&mut BTreeMap<u32, RuntimeRenderPaintConfiguration>>,
+        mut paint_preparation: Option<&mut Option<RuntimePaintPreparationFrame>>,
         mut nested_paint_caches: Option<&mut BTreeMap<u32, RuntimeRenderPaintCache>>,
         render_cache: &mut RuntimeRenderPathCache,
         defer_root_layout_gradients: bool,
@@ -636,6 +638,19 @@ impl ArtboardInstance {
         let commands = prepared.commands.as_slice();
         let defer_layout_gradients = defer_root_layout_gradients
             && commands.iter().any(runtime_draw_command_is_nested_artboard);
+        let can_skip_prepare = !defer_layout_gradients;
+        let preparation_key = RuntimePaintPreparationCacheKey {
+            graph_global_id: graph.global_id,
+            instance_epoch: self.cache_epoch(),
+        };
+        if can_skip_prepare
+            && paint_preparation
+                .as_ref()
+                .and_then(|preparation| preparation.as_ref())
+                .is_some_and(|preparation| preparation.key == preparation_key)
+        {
+            return Ok(());
+        }
         if defer_layout_gradients {
             return self.prepare_static_artboard_tree_paints_in_dependency_order(
                 runtime,
@@ -644,6 +659,7 @@ impl ArtboardInstance {
                 factory,
                 paint_by_global,
                 paint_configurations.as_deref_mut(),
+                paint_preparation.as_deref_mut(),
                 nested_paint_caches,
                 render_cache,
                 layout_bounds,
@@ -685,6 +701,12 @@ impl ArtboardInstance {
                 layout_bounds,
                 command,
             )?;
+        }
+
+        if can_skip_prepare && let Some(preparation) = paint_preparation.as_deref_mut() {
+            *preparation = Some(RuntimePaintPreparationFrame {
+                key: preparation_key,
+            });
         }
 
         if defer_layout_gradients {
@@ -760,6 +782,7 @@ impl ArtboardInstance {
                 Some((
                     &mut child_paint_cache.paints,
                     &mut child_paint_cache.paint_configurations,
+                    &mut child_paint_cache.preparation,
                     Some(&mut child_paint_cache.nested_artboards),
                 ))
             }
@@ -785,8 +808,12 @@ impl ArtboardInstance {
             } else {
                 child
             };
-            if let Some((child_paints, child_configurations, child_nested_paints)) =
-                child_paint_caches
+            if let Some((
+                child_paints,
+                child_configurations,
+                child_preparation,
+                child_nested_paints,
+            )) = child_paint_caches
             {
                 child.prepare_static_artboard_tree_paints_internal(
                     runtime,
@@ -795,6 +822,7 @@ impl ArtboardInstance {
                     factory,
                     child_paints,
                     Some(child_configurations),
+                    Some(child_preparation),
                     child_nested_paints,
                     child_cache,
                     true,
@@ -807,6 +835,7 @@ impl ArtboardInstance {
                     factory,
                     paint_by_global,
                     paint_configurations.as_deref_mut(),
+                    None,
                     None,
                     child_cache,
                     true,
@@ -826,7 +855,8 @@ impl ArtboardInstance {
             child.set_double_property(0, opacity_key, host_opacity);
         }
         child.update_pass();
-        if let Some((child_paints, child_configurations, child_nested_paints)) = child_paint_caches
+        if let Some((child_paints, child_configurations, child_preparation, child_nested_paints)) =
+            child_paint_caches
         {
             child.prepare_static_artboard_tree_paints_internal(
                 runtime,
@@ -835,6 +865,7 @@ impl ArtboardInstance {
                 factory,
                 child_paints,
                 Some(child_configurations),
+                Some(child_preparation),
                 child_nested_paints,
                 child_cache,
                 true,
@@ -847,6 +878,7 @@ impl ArtboardInstance {
                 factory,
                 paint_by_global,
                 paint_configurations.as_deref_mut(),
+                None,
                 None,
                 child_cache,
                 true,
@@ -863,6 +895,7 @@ impl ArtboardInstance {
         factory: &mut dyn RenderFactory,
         paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
         mut paint_configurations: Option<&mut BTreeMap<u32, RuntimeRenderPaintConfiguration>>,
+        _paint_preparation: Option<&mut Option<RuntimePaintPreparationFrame>>,
         mut nested_paint_caches: Option<&mut BTreeMap<u32, RuntimeRenderPaintCache>>,
         render_cache: &mut RuntimeRenderPathCache,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
@@ -5065,6 +5098,7 @@ pub struct RuntimeGradientStop {
 pub struct RuntimeRenderPaintCache {
     paints: BTreeMap<u32, Box<dyn RenderPaint>>,
     paint_configurations: BTreeMap<u32, RuntimeRenderPaintConfiguration>,
+    preparation: Option<RuntimePaintPreparationFrame>,
     images: BTreeMap<u32, Box<dyn RenderImage>>,
     meshes: BTreeMap<usize, RuntimeMeshRenderBuffers>,
     nested_artboards: BTreeMap<u32, RuntimeRenderPaintCache>,
@@ -5114,6 +5148,17 @@ struct RuntimeMeshRenderBuffers {
     vertex_count: u32,
     index_count: u32,
     last_vertex_bytes: Option<Vec<u8>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RuntimePaintPreparationCacheKey {
+    graph_global_id: u32,
+    instance_epoch: u64,
+}
+
+#[derive(Clone)]
+struct RuntimePaintPreparationFrame {
+    key: RuntimePaintPreparationCacheKey,
 }
 
 #[derive(Default)]
@@ -7019,6 +7064,7 @@ fn runtime_draw_nested_artboard(
                 factory,
                 &mut child_paint_cache.paints,
                 Some(&mut child_paint_cache.paint_configurations),
+                Some(&mut child_paint_cache.preparation),
                 Some(&mut child_paint_cache.nested_artboards),
                 child_cache,
                 false,
@@ -7045,6 +7091,7 @@ fn runtime_draw_nested_artboard(
                 factory,
                 paint_by_global,
                 paint_configurations.as_deref_mut(),
+                None,
                 None,
                 child_cache,
                 false,
@@ -7086,6 +7133,7 @@ fn runtime_draw_nested_artboard(
             factory,
             &mut child_paint_cache.paints,
             Some(&mut child_paint_cache.paint_configurations),
+            Some(&mut child_paint_cache.preparation),
             Some(&mut child_paint_cache.nested_artboards),
             child_cache,
             false,
@@ -7112,6 +7160,7 @@ fn runtime_draw_nested_artboard(
             factory,
             paint_by_global,
             paint_configurations.as_deref_mut(),
+            None,
             None,
             child_cache,
             false,

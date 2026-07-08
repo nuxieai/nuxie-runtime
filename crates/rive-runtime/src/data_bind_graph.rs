@@ -164,7 +164,9 @@ pub(crate) enum RuntimeDataBindGraphConverter {
     ToNumber,
     ListToLength,
     NumberToList {
-        has_view_model: bool,
+        global_id: u32,
+        view_model_id: u64,
+        view_model_count: usize,
     },
     ToString {
         global_id: u32,
@@ -436,6 +438,31 @@ impl RuntimeDataBindGraphConverter {
             _ => false,
         }
     }
+
+    pub(crate) fn set_number_to_list_view_model_id(
+        &mut self,
+        target_global_id: u32,
+        value: u64,
+    ) -> bool {
+        match self {
+            RuntimeDataBindGraphConverter::NumberToList {
+                global_id,
+                view_model_id,
+                ..
+            } if *global_id == target_global_id && *view_model_id != value => {
+                *view_model_id = value;
+                true
+            }
+            RuntimeDataBindGraphConverter::Group(converters) => {
+                let mut changed = false;
+                for converter in converters {
+                    changed |= converter.set_number_to_list_view_model_id(target_global_id, value);
+                }
+                changed
+            }
+            _ => false,
+        }
+    }
 }
 
 pub(crate) fn runtime_data_bind_graph_converter_requires_persisting_custom_property_source(
@@ -454,12 +481,12 @@ pub(crate) fn runtime_data_bind_graph_converter_requires_persisting_custom_prope
         | RuntimeDataBindGraphConverter::Rounder { .. }
         | RuntimeDataBindGraphConverter::Interpolator { .. }
         | RuntimeDataBindGraphConverter::OperationValue { .. }
+        | RuntimeDataBindGraphConverter::NumberToList { .. }
         | RuntimeDataBindGraphConverter::Formula { .. } => false,
         RuntimeDataBindGraphConverter::Group(converters) => converters
             .iter()
             .any(runtime_data_bind_graph_converter_requires_persisting_custom_property_source),
-        RuntimeDataBindGraphConverter::NumberToList { .. }
-        | RuntimeDataBindGraphConverter::OperationViewModel { .. }
+        RuntimeDataBindGraphConverter::OperationViewModel { .. }
         | RuntimeDataBindGraphConverter::SystemOperationValue { .. }
         | RuntimeDataBindGraphConverter::RangeMapper { .. }
         | RuntimeDataBindGraphConverter::Unsupported => true,
@@ -1273,10 +1300,17 @@ pub(crate) fn runtime_data_bind_graph_convert_value(
             item_count: *item_count,
         }),
         (
-            RuntimeDataBindGraphConverter::NumberToList { has_view_model },
+            RuntimeDataBindGraphConverter::NumberToList {
+                view_model_id,
+                view_model_count,
+                ..
+            },
             RuntimeDataBindGraphValue::Number(value),
         ) => Some(RuntimeDataBindGraphValue::List {
-            item_count: if *has_view_model {
+            item_count: if usize::try_from(*view_model_id)
+                .ok()
+                .is_some_and(|index| index < *view_model_count)
+            {
                 value.floor().max(0.0) as usize
             } else {
                 0
@@ -2091,9 +2125,11 @@ fn runtime_data_bind_graph_converter_for_object(
         "DataConverterToNumber" => RuntimeDataBindGraphConverter::ToNumber,
         "DataConverterListToLength" => RuntimeDataBindGraphConverter::ListToLength,
         "DataConverterNumberToList" => RuntimeDataBindGraphConverter::NumberToList {
-            has_view_model: file
-                .resolved_view_model_for_number_to_list_converter_object(converter)
-                .is_some(),
+            global_id: converter.id,
+            view_model_id: converter
+                .uint_property("viewModelId")
+                .unwrap_or(u64::from(u32::MAX)),
+            view_model_count: file.view_models().len(),
         },
         "DataConverterToString" => RuntimeDataBindGraphConverter::ToString {
             global_id: converter.id,

@@ -334,15 +334,25 @@ the only memory the next session has. Update it every commit.
    parents without broad DataBindContext converter-property writes; the existing
    stateful-converter advance queue continues to cover the in-flight
    `InterpolatorAdvancer::advance()` dirty edge. `Interpolator` now leaves the
+   converter-backed custom persisting lane.
+   `DataConverterNumberToList.viewModelIdChanged()` is now modeled through a
+   family-specific converter-property dirty lane: C++ clears cached
+   `m_listItems` and marks the converter dirty; Rust has no persistent
+   `ViewModelInstanceListItem` cache in this layer, so copied NumberToList
+   converters store `view_model_id` plus the file's view-model count and
+   recompute list size from the current id each conversion. Imported
+   NumberToList `viewModelId` binds are queued by source path, seeded for
+   initial application, update dependent copied converters by global id, and
+   enqueue their concrete property/custom/list parents without broad
+   DataBindContext converter-property writes. `NumberToList` now leaves the
    converter-backed custom persisting lane. Remaining conservative families are
-   `NumberToList`, operation-view-model / system operation, `RangeMapper`, and
-   unsupported converters. Full `make golden-compare` remains exact=263 /
+   operation-view-model / system operation, `RangeMapper`, and unsupported
+   converters. Full `make golden-compare` remains exact=263 /
    exact-segments=584 / diverges=0, `cargo test --workspace`,
    `cargo fmt --all -- --check`, and `git diff --check` pass, and fenced
-   hot-loop reports aggregate Rust/C++=2.180 then 2.264. Strict <=2.0 remains
-   open. Next: inspect `DataConverterNumberToList.viewModelIdChanged()`,
-   including its cached-list-item clearing semantics, before removing that
-   family from the persisting lane.
+   hot-loop reports aggregate Rust/C++=2.243. Strict <=2.0 remains open. Next:
+   inspect operation-view-model / system-operation converter-backed custom
+   sources and model only their exact C++ dirty/update surface.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -844,6 +854,23 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Remove `DataConverterNumberToList` custom sources from the
+  conservative polling lane. The C++ handwritten NumberToList class overrides
+  `viewModelIdChanged()` to clear its generated `m_listItems` cache and call
+  `DataConverter::markConverterDirty`. Rust now builds artboard NumberToList
+  `viewModelId` converter-property bindings, queues them by source path,
+  updates copied dependent converters by global id, and enqueues the concrete
+  property/custom/list parents already covered by target/source queues. The
+  C++ cached-list clearing edge is represented by the Rust converter carrying
+  the current `view_model_id` and file view-model count, then recomputing
+  `List { item_count }` on conversion; this runtime layer does not cache
+  generated `ViewModelInstanceListItem` objects. `make golden-compare` remains
+  exact=263 / exact-segments=584 / diverges=0; `cargo check -p rive-runtime`,
+  `cargo test -p rive-runtime queues`, `cargo test -p rive-runtime
+  number_to_list`, `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check` pass. Fenced release/null-renderer hot-loop reports
+  aggregate Rust/C++=2.243 over the 5-entry / 10-segment focused corpus, still
+  above strict <=2.0, so M7 remains open.
 - 2026-07-08: [M7] Remove `DataConverterInterpolator` custom sources from the
   conservative polling lane for the audited `duration` property only. The C++
   handwritten Interpolator class overrides `durationChanged()` to call
@@ -2275,6 +2302,12 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Removed `DataConverterNumberToList.viewModelId` custom
+  sources from the conservative persisting lane with a family-specific updater.
+  `make golden-compare` remains exact=263/exact-segments=584/diverges=0;
+  `cargo test --workspace` passes; focused hot-loop is Rust/C++=2.243. Strict
+  <=2.0 remains open; next inspect operation-view-model / system-operation
+  converter-backed custom sources.
 - 2026-07-08: [M7] Removed `DataConverterInterpolator.duration` custom sources
   from the conservative persisting lane with a family-specific updater.
   `make golden-compare` remains exact=263/exact-segments=584/diverges=0;

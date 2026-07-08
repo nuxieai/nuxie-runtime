@@ -510,6 +510,7 @@ pub(super) enum RuntimeArtboardConverterPropertyBindingTarget {
     StringPadText { global_id: u32 },
     StringPadPadType { global_id: u32 },
     InterpolatorDuration { global_id: u32 },
+    NumberToListViewModelId { global_id: u32 },
 }
 
 enum RuntimeArtboardConverterPropertyBindingUpdate {
@@ -520,6 +521,7 @@ enum RuntimeArtboardConverterPropertyBindingUpdate {
     StringPadText { global_id: u32, value: Vec<u8> },
     StringPadPadType { global_id: u32, value: u64 },
     InterpolatorDuration { global_id: u32, value: f32 },
+    NumberToListViewModelId { global_id: u32, value: u64 },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1414,6 +1416,8 @@ pub(super) fn build_artboard_converter_property_bindings(
         runtime_data_bind_property_key_for_name("DataConverterStringPad", "padType");
     let interpolator_duration_key =
         runtime_data_bind_property_key_for_name("DataConverterInterpolator", "duration");
+    let number_to_list_view_model_id_key =
+        runtime_data_bind_property_key_for_name("DataConverterNumberToList", "viewModelId");
     if decimals_key.is_none()
         && color_format_key.is_none()
         && string_trim_trim_type_key.is_none()
@@ -1421,6 +1425,7 @@ pub(super) fn build_artboard_converter_property_bindings(
         && string_pad_text_key.is_none()
         && string_pad_pad_type_key.is_none()
         && interpolator_duration_key.is_none()
+        && number_to_list_view_model_id_key.is_none()
     {
         return Vec::new();
     }
@@ -1479,6 +1484,13 @@ pub(super) fn build_artboard_converter_property_bindings(
                         global_id: target.id,
                     }
                 }
+                "DataConverterNumberToList"
+                    if Some(property_key) == number_to_list_view_model_id_key =>
+                {
+                    RuntimeArtboardConverterPropertyBindingTarget::NumberToListViewModelId {
+                        global_id: target.id,
+                    }
+                }
                 _ => return None,
             };
             let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
@@ -1518,6 +1530,9 @@ pub(super) fn build_artboard_converter_property_bindings(
                     RuntimeArtboardConverterPropertyBindingTarget::InterpolatorDuration {
                         ..
                     } => RuntimeDataBindGraphValue::Number(1.0),
+                    RuntimeArtboardConverterPropertyBindingTarget::NumberToListViewModelId {
+                        ..
+                    } => RuntimeDataBindGraphValue::Enum(u64::from(u32::MAX)),
                 });
             if !runtime_artboard_converter_property_binding_target_accepts_value(
                 target,
@@ -1553,7 +1568,8 @@ fn runtime_artboard_converter_property_binding_target_accepts_value(
         RuntimeArtboardConverterPropertyBindingTarget::ToStringDecimals { .. }
         | RuntimeArtboardConverterPropertyBindingTarget::StringTrimTrimType { .. }
         | RuntimeArtboardConverterPropertyBindingTarget::StringPadLength { .. }
-        | RuntimeArtboardConverterPropertyBindingTarget::StringPadPadType { .. } => {
+        | RuntimeArtboardConverterPropertyBindingTarget::StringPadPadType { .. }
+        | RuntimeArtboardConverterPropertyBindingTarget::NumberToListViewModelId { .. } => {
             matches!(
                 value,
                 RuntimeDataBindGraphValue::Number(_) | RuntimeDataBindGraphValue::Enum(_)
@@ -1651,6 +1667,24 @@ fn runtime_artboard_converter_property_binding_update(
             RuntimeDataBindGraphValue::Number(value),
         ) => Some(
             RuntimeArtboardConverterPropertyBindingUpdate::InterpolatorDuration {
+                global_id,
+                value,
+            },
+        ),
+        (
+            RuntimeArtboardConverterPropertyBindingTarget::NumberToListViewModelId { global_id },
+            RuntimeDataBindGraphValue::Number(value),
+        ) => Some(
+            RuntimeArtboardConverterPropertyBindingUpdate::NumberToListViewModelId {
+                global_id,
+                value: value.max(0.0).round() as u64,
+            },
+        ),
+        (
+            RuntimeArtboardConverterPropertyBindingTarget::NumberToListViewModelId { global_id },
+            RuntimeDataBindGraphValue::Enum(value),
+        ) => Some(
+            RuntimeArtboardConverterPropertyBindingUpdate::NumberToListViewModelId {
                 global_id,
                 value,
             },
@@ -2540,6 +2574,10 @@ impl ArtboardInstance {
                         global_id,
                         value,
                     } => self.set_artboard_interpolator_converter_duration(global_id, value),
+                    RuntimeArtboardConverterPropertyBindingUpdate::NumberToListViewModelId {
+                        global_id,
+                        value,
+                    } => self.set_artboard_number_to_list_converter_view_model_id(global_id, value),
                 };
             }
         }
@@ -2718,6 +2756,16 @@ impl ArtboardInstance {
     ) -> bool {
         self.refresh_artboard_converter_dependents(|converter| {
             converter.set_interpolator_duration(target_global_id, value)
+        })
+    }
+
+    fn set_artboard_number_to_list_converter_view_model_id(
+        &mut self,
+        target_global_id: u32,
+        value: u64,
+    ) -> bool {
+        self.refresh_artboard_converter_dependents(|converter| {
+            converter.set_number_to_list_view_model_id(target_global_id, value)
         })
     }
 
@@ -3596,6 +3644,16 @@ mod tests {
                     interpolator: None,
                 }),
             ),
+            custom_binding(
+                9,
+                29,
+                30,
+                Some(RuntimeDataBindGraphConverter::NumberToList {
+                    global_id: 905,
+                    view_model_id: 0,
+                    view_model_count: 1,
+                }),
+            ),
         ];
         let layout_bindings = vec![RuntimeArtboardLayoutComputedBindingInstance {
             target_local_id: 9,
@@ -3620,7 +3678,7 @@ mod tests {
 
         assert_eq!(
             queues.drain_custom_property_update_indices(),
-            vec![0, 1, 2, 3, 4, 5, 6, 7, 8]
+            vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         );
         assert_eq!(queues.drain_custom_property_update_indices(), vec![7]);
         assert_eq!(queues.drain_dirty_numeric_sources(), vec![0]);
@@ -3699,6 +3757,16 @@ mod tests {
 
         assert_eq!(queues.drain_custom_property_update_indices(), vec![7]);
         assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
+
+        queues.enqueue_target_property(29, 30, None);
+
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![9, 7]);
+        assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
+
+        queues.enqueue_target_property(29, 30, Some(9));
+
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![7]);
+        assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
     }
 
     #[test]
@@ -3726,6 +3794,12 @@ mod tests {
                     global_id: 904,
                 },
             ),
+            converter_property_binding(
+                vec![5],
+                RuntimeArtboardConverterPropertyBindingTarget::NumberToListViewModelId {
+                    global_id: 905,
+                },
+            ),
         ];
         let mut queues = RuntimeArtboardDataBindTargetQueues::new(
             &property_bindings,
@@ -3733,7 +3807,10 @@ mod tests {
             &converter_property_bindings,
         );
 
-        assert_eq!(queues.drain_dirty_converter_properties(), vec![0, 1, 2, 3]);
+        assert_eq!(
+            queues.drain_dirty_converter_properties(),
+            vec![0, 1, 2, 3, 4]
+        );
         assert_eq!(
             queues.drain_dirty_converter_properties(),
             Vec::<usize>::new()
@@ -3756,5 +3833,9 @@ mod tests {
         queues.enqueue_path(&[4]);
 
         assert_eq!(queues.drain_dirty_converter_properties(), vec![3]);
+
+        queues.enqueue_path(&[5]);
+
+        assert_eq!(queues.drain_dirty_converter_properties(), vec![4]);
     }
 }

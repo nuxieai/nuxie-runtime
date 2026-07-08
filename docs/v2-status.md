@@ -24,10 +24,11 @@ the only memory the next session has. Update it every commit.
 - Noise rule: ratio movement below about 0.08 is below single-run resolution;
   claim it only with two pre/post runs. Debug builds, wall-clock process time,
   and serializer output are not M7 decision-grade.
-- Current standing: after retained path-composer graph lookups, full
-  `make golden-compare` and `cargo test --workspace` remain green. M7 perf was
-  not rerun because verification-time load averages were 88.55/28.08/22.97,
-  far outside the acceptance fence. The last directional fenced run remains
+- Current standing: after retained path-composer graph lookups and dense
+  draw-path slots, full `make golden-compare` and `cargo test --workspace`
+  remain green. M7 perf was not rerun because verification-time load averages
+  were 62.40/62.92/45.19, far outside the acceptance fence. The last
+  directional fenced run remains
   aggregate min Rust/C++=3.399 (`ai_assitant@0`=2.276,
   `spotify_kids_demo@0`=5.500), with C++ min-sum outside the sanity band.
   Strict <=2.0 remains open. Do not repeat the rejected shallow non-mesh image
@@ -999,17 +1000,18 @@ the only memory the next session has. Update it every commit.
    Follow-up image micro-slices showed the shallow cache and mesh-index
    precompute layers are not the C++ optimization. Retained clipping-shape
    path geometry, the N-slicer fast-miss, retained draw-command object kinds,
-   and retained path-composer local-index lookups now remove sampled
-   draw-replay rebuild/discovery/string-dispatch/vector-scan paths while
-   preserving the full ratchet. Full `make golden-compare` remains exact=263 /
-   exact-segments=584 / diverges=0; `cargo test --workspace`,
-   `cargo fmt --all -- --check`, and `git diff --check` pass. A same-session
-   fenced run before the local-index slice reported aggregate min Rust/C++=3.399
-   but C++ min-sum=1.024 ms, outside the sanity band; the post-slice perf run
-   was deferred because verification-time load was 88.55/28.08/22.97. Strict
-   <=2.0 remains open. Next runtime target should be a low-load release sample
-   and then actual image/`PathComposer`/raw-path retention or deeper draw-replay
-   fixed-overhead work, under the existing scout fences.
+   retained path-composer local-index lookups, and dense draw-path retained
+   slots now remove sampled draw-replay rebuild/discovery/string-dispatch/
+   vector-scan/BTreeMap lookup paths while preserving the full ratchet. Full
+   `make golden-compare` remains exact=263 / exact-segments=584 / diverges=0;
+   `cargo test --workspace`, `cargo fmt --all -- --check`, and
+   `git diff --check` pass. A same-session fenced run before the local-index
+   slice reported aggregate min Rust/C++=3.399 but C++ min-sum=1.024 ms,
+   outside the sanity band; the post-slot perf run was deferred because
+   verification-time load was 62.40/62.92/45.19. Strict <=2.0 remains open.
+   Next runtime target should be a low-load release sample and then actual
+   image/`PathComposer`/raw-path retention or deeper draw-replay fixed-overhead
+   work, under the existing scout fences.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -1629,6 +1631,22 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Retain draw paths in dense slots. A status-doc review of
+  the scout/perf discoveries keeps the current M7 fences binding: use the
+  min-based release/null-renderer repeat=100 gate for decisions, do not revive
+  shallow command/path wrappers or image-sidecar caches without fenced evidence,
+  and target draw-replay dispatch before smaller state-machine fixed overhead.
+  `RuntimeRenderPathCache` now stores retained draw `RenderPath`s in dense
+  local/path-kind/path-slot vectors keyed by prepared
+  `RuntimeShapePaintCommand` slot indices. That matches the C++
+  `ShapePaintPath::m_renderPath` reuse shape more closely than a draw-time
+  `BTreeMap` key, while preserving the existing `path_epoch` invalidation and
+  avoiding command-vector caching. Full `make golden-compare` remains exact=263
+  / exact-segments=584 / diverges=0; `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check` pass. M7 perf was not
+  rerun because load averages were 62.40/62.92/45.19, outside the acceptance
+  fence. The last directional fenced run remains aggregate min Rust/C++=3.399
+  with C++ min-sum outside the sanity band. M7 remains open.
 - 2026-07-08: [M7] Use membership flags for data-bind source update queues. A
   release/null-renderer profile after optional nested-event collection still
   showed data-bind queue drains in the `ai_assitant` hot split. C++

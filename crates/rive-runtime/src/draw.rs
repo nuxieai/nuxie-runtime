@@ -5332,7 +5332,7 @@ pub struct RuntimeRenderPathCache {
     background_paths: BTreeMap<usize, Box<dyn RenderPath>>,
     clip_paths: BTreeMap<usize, Box<dyn RenderPath>>,
     layout_clip_paths: BTreeMap<usize, Box<dyn RenderPath>>,
-    draw_paths: BTreeMap<RuntimeDrawPathCacheKey, RuntimeCachedDrawPath>,
+    draw_paths: RuntimeDrawPathSlots,
     path_geometry_commands:
         BTreeMap<RuntimePathGeometryCommandsCacheSlot, RuntimeCachedPathGeometryCommands>,
     text_shape_paints: BTreeMap<RuntimeTextShapePaintCacheSlot, RuntimeCachedTextShapePaints>,
@@ -5488,12 +5488,60 @@ struct RuntimeCachedDrawPath {
     epoch: u64,
 }
 
+#[derive(Default)]
+struct RuntimeDrawPathSlots {
+    by_local: Vec<Option<RuntimeDrawPathKindSlots>>,
+    root: RuntimeDrawPathKindSlots,
+}
+
+impl RuntimeDrawPathSlots {
+    fn slot_mut(&mut self, key: RuntimeDrawPathCacheKey) -> &mut Option<RuntimeCachedDrawPath> {
+        match key.kind {
+            RuntimeDrawPathCacheKind::Draw => {}
+        }
+        let slots = if let Some(local_id) = key.local_id {
+            if self.by_local.len() <= local_id {
+                self.by_local.resize_with(local_id + 1, || None);
+            }
+            self.by_local[local_id].get_or_insert_with(RuntimeDrawPathKindSlots::default)
+        } else {
+            &mut self.root
+        }
+        .slots_mut(key.path_kind);
+
+        if slots.len() <= key.path_index {
+            slots.resize_with(key.path_index + 1, || None);
+        }
+        &mut slots[key.path_index]
+    }
+}
+
+#[derive(Default)]
+struct RuntimeDrawPathKindSlots {
+    local: Vec<Option<RuntimeCachedDrawPath>>,
+    local_clockwise: Vec<Option<RuntimeCachedDrawPath>>,
+    world: Vec<Option<RuntimeCachedDrawPath>>,
+}
+
+impl RuntimeDrawPathKindSlots {
+    fn slots_mut(
+        &mut self,
+        path_kind: RuntimeShapePaintPathKind,
+    ) -> &mut Vec<Option<RuntimeCachedDrawPath>> {
+        match path_kind {
+            RuntimeShapePaintPathKind::Local => &mut self.local,
+            RuntimeShapePaintPathKind::LocalClockwise => &mut self.local_clockwise,
+            RuntimeShapePaintPathKind::World => &mut self.world,
+        }
+    }
+}
+
 struct RuntimeGradientShaderResources<'a> {
     factory: &'a mut dyn RenderFactory,
     shaders: &'a mut BTreeMap<u32, RuntimeGradientShaderCacheEntry>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct RuntimeDrawPathCacheKey {
     kind: RuntimeDrawPathCacheKind,
     path_kind: RuntimeShapePaintPathKind,
@@ -5501,7 +5549,7 @@ struct RuntimeDrawPathCacheKey {
     path_index: usize,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RuntimeDrawPathCacheKind {
     Draw,
 }
@@ -5928,23 +5976,18 @@ impl RuntimeRenderPathCache {
         commands: &[RuntimePathCommand],
         fill_rule: RenderFillRule,
     ) -> &mut Box<dyn RenderPath> {
-        match self.draw_paths.entry(key) {
-            Entry::Occupied(entry) => {
-                let cached = entry.into_mut();
-                if cached.epoch != path_epoch {
-                    runtime_rebuild_path_preserving_fill_rule(cached.path.as_mut(), commands);
-                    cached.epoch = path_epoch;
-                }
-                &mut cached.path
-            }
-            Entry::Vacant(entry) => {
-                let cached = entry.insert(RuntimeCachedDrawPath {
-                    path: runtime_make_path(factory, commands, fill_rule),
-                    epoch: path_epoch,
-                });
-                &mut cached.path
-            }
+        let cached = self
+            .draw_paths
+            .slot_mut(key)
+            .get_or_insert_with(|| RuntimeCachedDrawPath {
+                path: runtime_make_path(factory, commands, fill_rule),
+                epoch: path_epoch,
+            });
+        if cached.epoch != path_epoch {
+            runtime_rebuild_path_preserving_fill_rule(cached.path.as_mut(), commands);
+            cached.epoch = path_epoch;
         }
+        &mut cached.path
     }
 }
 

@@ -809,11 +809,24 @@ the only memory the next session has. Update it every commit.
    aggregate Rust/C++=3.330; after the slice reruns report aggregate
    Rust/C++=3.110 and 3.067. Direct repeat=100 `ai_assitant` JSON at
    `target/perf-ai-dependency-prep-skip.json` reports cpp median=0.376 ms,
-   rust median=1.031 ms, Rust/C++=2.747. Strict <=2.0 remains open. Next:
-   re-profile after this dependency-prep skip; likely remaining targets are
-   draw replay / lower `RuntimeRenderPathCache::draw_path` work and
+   rust median=1.031 ms, Rust/C++=2.747. Strict <=2.0 remains open. A fresh
+   release/null-renderer sample after this dependency-prep skip found
+   `runtime_draw_command`, `advance_artboard_data_binds_with_root_transform`,
+   and `runtime_configure_paint_with_cache` as the leading Rust hot sites.
+   Draw-time render-paint config now carries the artboard `cache_epoch`, so
+   clean frames skip recomputing stroke/blend/shader/feather configuration
+   while gradient preparation can still invalidate by removing the cached
+   config when it mutates retained paint. Full `make golden-compare` remains
+   exact=263 / exact-segments=584 / diverges=0; `cargo test --workspace`,
+   `cargo fmt --all -- --check`, and `git diff --check` pass. Fenced
+   repeat-aware hot-loop improves from aggregate Rust/C++=3.260 to 2.903 and
+   3.105 on rerun; direct repeat=100 `ai_assitant` JSON at
+   `target/perf-ai-paint-config-epoch.json` reports cpp median=0.566 ms,
+   rust median=1.404 ms, Rust/C++=2.483. Strict <=2.0 remains open. Next:
+   re-profile; likely remaining targets are draw replay / lower
+   `RuntimeRenderPathCache::draw_path` map lookups and
    `advance_artboard_data_binds_with_root_transform`, not broad
-   converter-property writes or shallow command/path-wrapper caches.
+   converter-property writes or shallow path-command caches.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -1315,6 +1328,21 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Skip clean-frame paint configuration recomputation. A
+  release/null-renderer profile after the dependency-prep skip showed
+  `runtime_configure_paint_with_cache` beside `runtime_draw_command` and
+  `advance_artboard_data_binds_with_root_transform` in the remaining Rust hot
+  sites. C++ keeps `ShapePaint` render-paint state retained and updates it via
+  dirt/property changes, so Rust now stores each draw-time paint configuration
+  with the artboard `cache_epoch`: clean frames return before recomputing
+  stroke/blend/shader/feather configuration, epoch-changed but equivalent
+  configs only refresh the cached epoch, and gradient preparation still removes
+  the entry when it mutates retained paint. Full `make golden-compare` remains
+  exact=263 / exact-segments=584 / diverges=0; `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check` pass. Fenced
+  repeat-aware hot-loop improves from aggregate Rust/C++=3.260 to 2.903 and
+  3.105 on rerun, while direct repeat=100 `ai_assitant` JSON reports
+  Rust/C++=2.483, so M7 remains open.
 - 2026-07-08: [M7] Skip dependency-ordered paint prep on clean nested frames.
   A release `ai_assitant` sample after retained layout topology still showed
   `prepare_static_artboard_tree_paints_internal`,

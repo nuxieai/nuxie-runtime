@@ -206,6 +206,7 @@ pub(crate) enum RuntimeDataBindGraphConverter {
     },
     StringRemoveZeros,
     StringPad {
+        global_id: u32,
         length: u64,
         text: Vec<u8>,
         pad_type: u64,
@@ -354,6 +355,65 @@ impl RuntimeDataBindGraphConverter {
             _ => false,
         }
     }
+
+    pub(crate) fn set_string_pad_length(&mut self, target_global_id: u32, value: u64) -> bool {
+        match self {
+            RuntimeDataBindGraphConverter::StringPad {
+                global_id, length, ..
+            } if *global_id == target_global_id && *length != value => {
+                *length = value;
+                true
+            }
+            RuntimeDataBindGraphConverter::Group(converters) => {
+                let mut changed = false;
+                for converter in converters {
+                    changed |= converter.set_string_pad_length(target_global_id, value);
+                }
+                changed
+            }
+            _ => false,
+        }
+    }
+
+    pub(crate) fn set_string_pad_text(&mut self, target_global_id: u32, value: &[u8]) -> bool {
+        match self {
+            RuntimeDataBindGraphConverter::StringPad {
+                global_id, text, ..
+            } if *global_id == target_global_id && text.as_slice() != value => {
+                *text = value.to_vec();
+                true
+            }
+            RuntimeDataBindGraphConverter::Group(converters) => {
+                let mut changed = false;
+                for converter in converters {
+                    changed |= converter.set_string_pad_text(target_global_id, value);
+                }
+                changed
+            }
+            _ => false,
+        }
+    }
+
+    pub(crate) fn set_string_pad_pad_type(&mut self, target_global_id: u32, value: u64) -> bool {
+        match self {
+            RuntimeDataBindGraphConverter::StringPad {
+                global_id,
+                pad_type,
+                ..
+            } if *global_id == target_global_id && *pad_type != value => {
+                *pad_type = value;
+                true
+            }
+            RuntimeDataBindGraphConverter::Group(converters) => {
+                let mut changed = false;
+                for converter in converters {
+                    changed |= converter.set_string_pad_pad_type(target_global_id, value);
+                }
+                changed
+            }
+            _ => false,
+        }
+    }
 }
 
 pub(crate) fn runtime_data_bind_graph_converter_requires_persisting_custom_property_source(
@@ -368,6 +428,7 @@ pub(crate) fn runtime_data_bind_graph_converter_requires_persisting_custom_prope
         | RuntimeDataBindGraphConverter::StringRemoveZeros
         | RuntimeDataBindGraphConverter::ToString { .. }
         | RuntimeDataBindGraphConverter::StringTrim { .. }
+        | RuntimeDataBindGraphConverter::StringPad { .. }
         | RuntimeDataBindGraphConverter::OperationValue { .. }
         | RuntimeDataBindGraphConverter::Formula { .. } => false,
         RuntimeDataBindGraphConverter::Group(converters) => converters
@@ -378,7 +439,6 @@ pub(crate) fn runtime_data_bind_graph_converter_requires_persisting_custom_prope
         | RuntimeDataBindGraphConverter::SystemOperationValue { .. }
         | RuntimeDataBindGraphConverter::Rounder { .. }
         | RuntimeDataBindGraphConverter::RangeMapper { .. }
-        | RuntimeDataBindGraphConverter::StringPad { .. }
         | RuntimeDataBindGraphConverter::Interpolator { .. }
         | RuntimeDataBindGraphConverter::Unsupported => true,
     }
@@ -1385,6 +1445,7 @@ pub(crate) fn runtime_data_bind_graph_convert_value(
                 length,
                 text,
                 pad_type,
+                ..
             },
             RuntimeDataBindGraphValue::String(value),
         ) => Some(RuntimeDataBindGraphValue::String(
@@ -2054,6 +2115,7 @@ fn runtime_data_bind_graph_converter_for_object(
         },
         "DataConverterStringRemoveZeros" => RuntimeDataBindGraphConverter::StringRemoveZeros,
         "DataConverterStringPad" => RuntimeDataBindGraphConverter::StringPad {
+            global_id: converter.id,
             length: converter.uint_property("length").unwrap_or(1),
             text: converter
                 .string_property_bytes("text")

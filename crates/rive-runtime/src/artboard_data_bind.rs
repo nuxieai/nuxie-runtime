@@ -506,12 +506,18 @@ pub(super) enum RuntimeArtboardConverterPropertyBindingTarget {
     ToStringDecimals { global_id: u32 },
     ToStringColorFormat { global_id: u32 },
     StringTrimTrimType { global_id: u32 },
+    StringPadLength { global_id: u32 },
+    StringPadText { global_id: u32 },
+    StringPadPadType { global_id: u32 },
 }
 
 enum RuntimeArtboardConverterPropertyBindingUpdate {
     ToStringDecimals { global_id: u32, value: u64 },
     ToStringColorFormat { global_id: u32, value: Vec<u8> },
     StringTrimTrimType { global_id: u32, value: u64 },
+    StringPadLength { global_id: u32, value: u64 },
+    StringPadText { global_id: u32, value: Vec<u8> },
+    StringPadPadType { global_id: u32, value: u64 },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1398,7 +1404,19 @@ pub(super) fn build_artboard_converter_property_bindings(
         runtime_data_bind_property_key_for_name("DataConverterToString", "colorFormat");
     let string_trim_trim_type_key =
         runtime_data_bind_property_key_for_name("DataConverterStringTrim", "trimType");
-    if decimals_key.is_none() && color_format_key.is_none() && string_trim_trim_type_key.is_none() {
+    let string_pad_length_key =
+        runtime_data_bind_property_key_for_name("DataConverterStringPad", "length");
+    let string_pad_text_key =
+        runtime_data_bind_property_key_for_name("DataConverterStringPad", "text");
+    let string_pad_pad_type_key =
+        runtime_data_bind_property_key_for_name("DataConverterStringPad", "padType");
+    if decimals_key.is_none()
+        && color_format_key.is_none()
+        && string_trim_trim_type_key.is_none()
+        && string_pad_length_key.is_none()
+        && string_pad_text_key.is_none()
+        && string_pad_pad_type_key.is_none()
+    {
         return Vec::new();
     }
     let default_instance = artboard_default_view_model_instance(file, artboard_index);
@@ -1436,6 +1454,21 @@ pub(super) fn build_artboard_converter_property_bindings(
                         global_id: target.id,
                     }
                 }
+                "DataConverterStringPad" if Some(property_key) == string_pad_length_key => {
+                    RuntimeArtboardConverterPropertyBindingTarget::StringPadLength {
+                        global_id: target.id,
+                    }
+                }
+                "DataConverterStringPad" if Some(property_key) == string_pad_text_key => {
+                    RuntimeArtboardConverterPropertyBindingTarget::StringPadText {
+                        global_id: target.id,
+                    }
+                }
+                "DataConverterStringPad" if Some(property_key) == string_pad_pad_type_key => {
+                    RuntimeArtboardConverterPropertyBindingTarget::StringPadPadType {
+                        global_id: target.id,
+                    }
+                }
                 _ => return None,
             };
             let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
@@ -1463,6 +1496,15 @@ pub(super) fn build_artboard_converter_property_bindings(
                     RuntimeArtboardConverterPropertyBindingTarget::StringTrimTrimType {
                         ..
                     } => RuntimeDataBindGraphValue::Number(1.0),
+                    RuntimeArtboardConverterPropertyBindingTarget::StringPadLength { .. } => {
+                        RuntimeDataBindGraphValue::Number(1.0)
+                    }
+                    RuntimeArtboardConverterPropertyBindingTarget::StringPadText { .. } => {
+                        RuntimeDataBindGraphValue::String(Vec::new())
+                    }
+                    RuntimeArtboardConverterPropertyBindingTarget::StringPadPadType { .. } => {
+                        RuntimeDataBindGraphValue::Number(0.0)
+                    }
                 });
             if !runtime_artboard_converter_property_binding_target_accepts_value(
                 target,
@@ -1496,13 +1538,16 @@ fn runtime_artboard_converter_property_binding_target_accepts_value(
 ) -> bool {
     match target {
         RuntimeArtboardConverterPropertyBindingTarget::ToStringDecimals { .. }
-        | RuntimeArtboardConverterPropertyBindingTarget::StringTrimTrimType { .. } => {
+        | RuntimeArtboardConverterPropertyBindingTarget::StringTrimTrimType { .. }
+        | RuntimeArtboardConverterPropertyBindingTarget::StringPadLength { .. }
+        | RuntimeArtboardConverterPropertyBindingTarget::StringPadPadType { .. } => {
             matches!(
                 value,
                 RuntimeDataBindGraphValue::Number(_) | RuntimeDataBindGraphValue::Enum(_)
             )
         }
-        RuntimeArtboardConverterPropertyBindingTarget::ToStringColorFormat { .. } => {
+        RuntimeArtboardConverterPropertyBindingTarget::ToStringColorFormat { .. }
+        | RuntimeArtboardConverterPropertyBindingTarget::StringPadText { .. } => {
             matches!(value, RuntimeDataBindGraphValue::String(_))
         }
     }
@@ -1548,6 +1593,42 @@ fn runtime_artboard_converter_property_binding_update(
             RuntimeDataBindGraphValue::Enum(value),
         ) => Some(
             RuntimeArtboardConverterPropertyBindingUpdate::StringTrimTrimType { global_id, value },
+        ),
+        (
+            RuntimeArtboardConverterPropertyBindingTarget::StringPadLength { global_id },
+            RuntimeDataBindGraphValue::Number(value),
+        ) => Some(
+            RuntimeArtboardConverterPropertyBindingUpdate::StringPadLength {
+                global_id,
+                value: value.max(0.0).round() as u64,
+            },
+        ),
+        (
+            RuntimeArtboardConverterPropertyBindingTarget::StringPadLength { global_id },
+            RuntimeDataBindGraphValue::Enum(value),
+        ) => Some(
+            RuntimeArtboardConverterPropertyBindingUpdate::StringPadLength { global_id, value },
+        ),
+        (
+            RuntimeArtboardConverterPropertyBindingTarget::StringPadText { global_id },
+            RuntimeDataBindGraphValue::String(value),
+        ) => {
+            Some(RuntimeArtboardConverterPropertyBindingUpdate::StringPadText { global_id, value })
+        }
+        (
+            RuntimeArtboardConverterPropertyBindingTarget::StringPadPadType { global_id },
+            RuntimeDataBindGraphValue::Number(value),
+        ) => Some(
+            RuntimeArtboardConverterPropertyBindingUpdate::StringPadPadType {
+                global_id,
+                value: value.max(0.0).round() as u64,
+            },
+        ),
+        (
+            RuntimeArtboardConverterPropertyBindingTarget::StringPadPadType { global_id },
+            RuntimeDataBindGraphValue::Enum(value),
+        ) => Some(
+            RuntimeArtboardConverterPropertyBindingUpdate::StringPadPadType { global_id, value },
         ),
         _ => None,
     }
@@ -2418,6 +2499,18 @@ impl ArtboardInstance {
                         global_id,
                         value,
                     } => self.set_artboard_string_trim_converter_trim_type(global_id, value),
+                    RuntimeArtboardConverterPropertyBindingUpdate::StringPadLength {
+                        global_id,
+                        value,
+                    } => self.set_artboard_string_pad_converter_length(global_id, value),
+                    RuntimeArtboardConverterPropertyBindingUpdate::StringPadText {
+                        global_id,
+                        value,
+                    } => self.set_artboard_string_pad_converter_text(global_id, &value),
+                    RuntimeArtboardConverterPropertyBindingUpdate::StringPadPadType {
+                        global_id,
+                        value,
+                    } => self.set_artboard_string_pad_converter_pad_type(global_id, value),
                 };
             }
         }
@@ -2556,6 +2649,36 @@ impl ArtboardInstance {
     ) -> bool {
         self.refresh_artboard_converter_dependents(|converter| {
             converter.set_string_trim_trim_type(target_global_id, value)
+        })
+    }
+
+    fn set_artboard_string_pad_converter_length(
+        &mut self,
+        target_global_id: u32,
+        value: u64,
+    ) -> bool {
+        self.refresh_artboard_converter_dependents(|converter| {
+            converter.set_string_pad_length(target_global_id, value)
+        })
+    }
+
+    fn set_artboard_string_pad_converter_text(
+        &mut self,
+        target_global_id: u32,
+        value: &[u8],
+    ) -> bool {
+        self.refresh_artboard_converter_dependents(|converter| {
+            converter.set_string_pad_text(target_global_id, value)
+        })
+    }
+
+    fn set_artboard_string_pad_converter_pad_type(
+        &mut self,
+        target_global_id: u32,
+        value: u64,
+    ) -> bool {
+        self.refresh_artboard_converter_dependents(|converter| {
+            converter.set_string_pad_pad_type(target_global_id, value)
         })
     }
 
@@ -3395,6 +3518,17 @@ mod tests {
             ),
             custom_binding(
                 5,
+                23,
+                24,
+                Some(RuntimeDataBindGraphConverter::StringPad {
+                    global_id: 903,
+                    length: 4,
+                    text: b" ".to_vec(),
+                    pad_type: 0,
+                }),
+            ),
+            custom_binding(
+                6,
                 15,
                 16,
                 Some(RuntimeDataBindGraphConverter::RangeMapper {
@@ -3431,9 +3565,9 @@ mod tests {
 
         assert_eq!(
             queues.drain_custom_property_update_indices(),
-            vec![0, 1, 2, 3, 4, 5]
+            vec![0, 1, 2, 3, 4, 5, 6]
         );
-        assert_eq!(queues.drain_custom_property_update_indices(), vec![5]);
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![6]);
         assert_eq!(queues.drain_dirty_numeric_sources(), vec![0]);
         assert_eq!(queues.persisting_layout_computed(), &[0]);
         assert_eq!(queues.persisting_solo_sources(), &[0]);
@@ -3443,42 +3577,52 @@ mod tests {
         queues.enqueue_target_property(7, 11, None);
         queues.enqueue_target_property(99, 99, None);
 
-        assert_eq!(queues.drain_custom_property_update_indices(), vec![0, 5]);
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![0, 6]);
         assert_eq!(queues.drain_dirty_numeric_sources(), vec![0]);
 
         queues.enqueue_target_property(7, 11, Some(0));
 
-        assert_eq!(queues.drain_custom_property_update_indices(), vec![5]);
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![6]);
         assert_eq!(queues.drain_dirty_numeric_sources(), vec![0]);
 
         queues.enqueue_target_property(17, 18, None);
 
-        assert_eq!(queues.drain_custom_property_update_indices(), vec![2, 5]);
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![2, 6]);
         assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
 
         queues.enqueue_target_property(17, 18, Some(2));
 
-        assert_eq!(queues.drain_custom_property_update_indices(), vec![5]);
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![6]);
         assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
 
         queues.enqueue_target_property(19, 20, None);
 
-        assert_eq!(queues.drain_custom_property_update_indices(), vec![3, 5]);
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![3, 6]);
         assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
 
         queues.enqueue_target_property(19, 20, Some(3));
 
-        assert_eq!(queues.drain_custom_property_update_indices(), vec![5]);
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![6]);
         assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
 
         queues.enqueue_target_property(21, 22, None);
 
-        assert_eq!(queues.drain_custom_property_update_indices(), vec![4, 5]);
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![4, 6]);
         assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
 
         queues.enqueue_target_property(21, 22, Some(4));
 
-        assert_eq!(queues.drain_custom_property_update_indices(), vec![5]);
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![6]);
+        assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
+
+        queues.enqueue_target_property(23, 24, None);
+
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![5, 6]);
+        assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
+
+        queues.enqueue_target_property(23, 24, Some(5));
+
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![6]);
         assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
     }
 
@@ -3497,6 +3641,10 @@ mod tests {
                     global_id: 902,
                 },
             ),
+            converter_property_binding(
+                vec![3],
+                RuntimeArtboardConverterPropertyBindingTarget::StringPadText { global_id: 903 },
+            ),
         ];
         let mut queues = RuntimeArtboardDataBindTargetQueues::new(
             &property_bindings,
@@ -3504,7 +3652,7 @@ mod tests {
             &converter_property_bindings,
         );
 
-        assert_eq!(queues.drain_dirty_converter_properties(), vec![0, 1]);
+        assert_eq!(queues.drain_dirty_converter_properties(), vec![0, 1, 2]);
         assert_eq!(
             queues.drain_dirty_converter_properties(),
             Vec::<usize>::new()
@@ -3519,5 +3667,9 @@ mod tests {
             queues.drain_dirty_converter_properties(),
             Vec::<usize>::new()
         );
+
+        queues.enqueue_path(&[3]);
+
+        assert_eq!(queues.drain_dirty_converter_properties(), vec![2]);
     }
 }

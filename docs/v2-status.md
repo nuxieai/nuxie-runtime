@@ -634,6 +634,23 @@ the only memory the next session has. Update it every commit.
    Next: port a C++-aligned retained source binding/rebind path for artboard
    owned-context data binds, or first write that design if the invalidation
    surface is too large for one safe slice.
+   Artboard owned-context data binds now retain their resolved source
+   property path on property/image/custom bindings behind an
+   `(owned view-model index, context-chain)` key. This mirrors the C++
+   `DataBindContext::bindFromContext` source-retention boundary without
+   adding a value-read skip: each frame still reads the current source value
+   and routes changes through the existing data-bind value/target queues.
+   Full `make golden-compare` remains exact=263 / exact-segments=584 /
+   diverges=0; focused nested/data-bind tests, `cargo test --workspace`,
+   `cargo fmt --all -- --check`, and `git diff --check` pass. Fenced
+   release/null-renderer hot-loop reports noisy aggregate Rust/C++=2.154
+   then 2.438, but the targeted direct `ai_assitant --benchmark-repeat 100`
+   JSON at `/tmp/rive-ai-retained-owned-source-paths-perf.json` reports
+   cpp median=0.442 ms, rust median=1.420 ms, Rust/C++=3.212. Strict <=2.0
+   remains open. Next: profile the remaining `ai_assitant` advance/data-bind
+   time after retained source paths; likely targets are C++-aligned rebind
+   gating for owned context chains or remaining nested context-source
+   propagation, not scratch-only allocation helpers.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -1135,6 +1152,24 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Retain resolved artboard owned-context data-bind source
+  paths behind a context-chain key. C++ `DataBindContext::bindFromContext`
+  resolves through `DataContext` to a concrete source and retains that source
+  until the bound context/source identity changes. Rust now mirrors the safe
+  portion of that shape for artboard property/image/custom data binds: each
+  `ArtboardInstance` records the current `(owned view-model index,
+  context-chain)` key, clears retained source paths when that key changes, and
+  lets each binding reuse its resolved `Vec<usize>` source path for current
+  value reads. This intentionally does not skip source value reads or target
+  application; unchanged values still flow through
+  `set_artboard_data_bind_value_for_path` and the existing target queues.
+  `make golden-compare` remains exact=263 / exact-segments=584 / diverges=0;
+  focused nested/data-bind tests, `cargo test --workspace`, `cargo fmt --all
+  -- --check`, and `git diff --check` pass. Fenced hot-loop aggregate remains
+  noisy above target at Rust/C++=2.154 then 2.438, while direct repeat=100
+  `ai_assitant` reports cpp median=0.442 ms, rust median=1.420 ms,
+  Rust/C++=3.212. M7 remains open; next work should profile the remaining
+  advance/data-bind time after retained source paths.
 - 2026-07-08: [M7] Reject owned-context path scratch reuse as a standalone
   optimization. A scout reused a single `Vec<usize>` while resolving
   name-based paths through `bind_owned_view_model_artboard_context_chain`,
@@ -2854,6 +2889,16 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Retained resolved artboard owned-context source paths on
+  property/image/custom bindings behind an owned-view-model/context-chain key,
+  mirroring C++ `DataBindContext::bindFromContext` source retention without
+  skipping value reads. `make golden-compare` remains
+  exact=263/exact-segments=584/diverges=0; focused nested/data-bind tests and
+  `cargo test --workspace` pass; fenced hot-loop is noisy at Rust/C++=2.154
+  then 2.438, while direct `ai_assitant --benchmark-repeat 100` reports
+  cpp median=0.442 ms, rust median=1.420 ms, Rust/C++=3.212. Strict <=2.0
+  remains open; next profile remaining advance/data-bind time after retained
+  source paths.
 - 2026-07-08: [M7] Reviewed the status scout/perf fences around
   `bind_owned_view_model_artboard_context_chain` and backed out the
   scratch-only owned-context path scout. The scout kept focused nested/data-bind

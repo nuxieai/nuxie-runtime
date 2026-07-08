@@ -288,6 +288,7 @@ pub(super) struct RuntimeArtboardPropertyBindingInstance {
     property_key: u16,
     path: Vec<u32>,
     path_is_name_based: bool,
+    owned_context_source_path: Option<Vec<usize>>,
     enum_value_names: Vec<Vec<u8>>,
     converter: Option<RuntimeDataBindGraphConverter>,
     converter_state: RuntimeDataBindGraphConverterState,
@@ -298,7 +299,43 @@ pub(super) struct RuntimeArtboardPropertyBindingInstance {
 pub(super) struct RuntimeArtboardImageAssetBindingInstance {
     target_local_id: usize,
     path: Vec<u32>,
+    owned_context_source_path: Option<Vec<usize>>,
     default_value: RuntimeDataBindGraphValue,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RuntimeArtboardOwnedContextKey {
+    view_model_index: usize,
+    context_chain: Vec<Vec<usize>>,
+}
+
+impl RuntimeArtboardOwnedContextKey {
+    fn from_context_chain(
+        context: &RuntimeOwnedViewModelInstance,
+        context_chain: &[&[usize]],
+    ) -> Self {
+        Self {
+            view_model_index: context.view_model_index,
+            context_chain: context_chain
+                .iter()
+                .map(|context_path| context_path.to_vec())
+                .collect(),
+        }
+    }
+
+    fn matches_context_chain(
+        &self,
+        context: &RuntimeOwnedViewModelInstance,
+        context_chain: &[&[usize]],
+    ) -> bool {
+        self.view_model_index == context.view_model_index
+            && self.context_chain.len() == context_chain.len()
+            && self
+                .context_chain
+                .iter()
+                .zip(context_chain)
+                .all(|(stored, current)| stored.as_slice() == *current)
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -629,6 +666,7 @@ pub(super) struct RuntimeArtboardCustomPropertyBindingInstance {
     property_key: u16,
     path: Arc<[u32]>,
     path_is_name_based: bool,
+    owned_context_source_path: Option<Vec<usize>>,
     flags: u64,
     value_kind: RuntimeArtboardDataBindValueKind,
     converter: Option<RuntimeDataBindGraphConverter>,
@@ -825,35 +863,41 @@ fn runtime_owned_view_model_context_path_for_context_chain<'a>(
     })
 }
 
-fn runtime_owned_view_model_binding_value_for_context_chain(
+fn runtime_owned_view_model_binding_value_for_retained_context_chain(
     file: &RuntimeFile,
     context: &RuntimeOwnedViewModelInstance,
     context_chain: &[&[usize]],
     path: &[u32],
     path_is_name_based: bool,
     default_value: &RuntimeDataBindGraphValue,
+    retained_source_path: &mut Option<Vec<usize>>,
 ) -> Option<RuntimeDataBindGraphValue> {
-    context_chain.iter().find_map(|context_path| {
-        if !path_is_name_based {
-            return default_value.resolve_from_owned_view_model_context_path(
-                file,
-                context,
-                context_path,
-                path,
-            );
-        }
-        let property_path = context.property_path_for_context_source_path(
+    if let Some(source_path) = retained_source_path.as_deref()
+        && let Some(value) = runtime_owned_view_model_binding_value_for_property_path(
+            context,
+            source_path,
+            default_value,
+        )
+    {
+        return Some(value);
+    }
+
+    let (source_path, value) = context_chain.iter().find_map(|context_path| {
+        let source_path = context.property_path_for_context_source_path(
             file,
             context_path,
             path,
             path_is_name_based,
         )?;
-        runtime_owned_view_model_binding_value_for_property_path(
+        let value = runtime_owned_view_model_binding_value_for_property_path(
             context,
-            &property_path,
+            &source_path,
             default_value,
-        )
-    })
+        )?;
+        Some((source_path, value))
+    })?;
+    *retained_source_path = Some(source_path);
+    Some(value)
 }
 
 fn runtime_owned_view_model_binding_value_for_property_path(
@@ -1190,6 +1234,7 @@ pub(super) fn build_artboard_property_bindings(
                 property_key,
                 path: path.to_vec(),
                 path_is_name_based,
+                owned_context_source_path: None,
                 enum_value_names,
                 converter_state: RuntimeDataBindGraphConverterState::for_converter(
                     converter.as_ref(),
@@ -1257,6 +1302,7 @@ pub(super) fn build_artboard_image_asset_bindings(
             Some(RuntimeArtboardImageAssetBindingInstance {
                 target_local_id: data_bind.target_local_id?,
                 path,
+                owned_context_source_path: None,
                 default_value,
             })
         })
@@ -1532,6 +1578,7 @@ pub(super) fn build_artboard_custom_property_bindings(
                 path_is_name_based: file
                     .data_bind_is_name_based_for_object(data_bind.object)
                     .unwrap_or(false),
+                owned_context_source_path: None,
                 flags,
                 value_kind,
                 converter_state: RuntimeDataBindGraphConverterState::for_converter(
@@ -2420,6 +2467,7 @@ impl ArtboardInstance {
         context_chain: &[&[usize]],
         bind_self: bool,
     ) -> bool {
+        self.retain_owned_view_model_context_chain(context, context_chain);
         let mut changed = if bind_self {
             self.bind_owned_view_model_artboard_values(file, context, context_chain)
         } else {
@@ -2455,6 +2503,33 @@ impl ArtboardInstance {
         changed
     }
 
+    fn retain_owned_view_model_context_chain(
+        &mut self,
+        context: &RuntimeOwnedViewModelInstance,
+        context_chain: &[&[usize]],
+    ) {
+        if self
+            .artboard_owned_context_key
+            .as_ref()
+            .is_some_and(|key| key.matches_context_chain(context, context_chain))
+        {
+            return;
+        }
+        self.artboard_owned_context_key = Some(RuntimeArtboardOwnedContextKey::from_context_chain(
+            context,
+            context_chain,
+        ));
+        for binding in &mut self.artboard_property_bindings {
+            binding.owned_context_source_path = None;
+        }
+        for binding in &mut self.artboard_image_asset_bindings {
+            binding.owned_context_source_path = None;
+        }
+        for binding in &mut self.artboard_custom_property_bindings {
+            binding.owned_context_source_path = None;
+        }
+    }
+
     fn bind_owned_view_model_artboard_values(
         &mut self,
         file: &RuntimeFile,
@@ -2465,14 +2540,15 @@ impl ArtboardInstance {
 
         for index in 0..self.artboard_property_bindings.len() {
             let update = {
-                let binding = &self.artboard_property_bindings[index];
-                runtime_owned_view_model_binding_value_for_context_chain(
+                let binding = &mut self.artboard_property_bindings[index];
+                runtime_owned_view_model_binding_value_for_retained_context_chain(
                     file,
                     context,
                     context_chain,
                     &binding.path,
                     binding.path_is_name_based,
                     &binding.default_value,
+                    &mut binding.owned_context_source_path,
                 )
                 .or_else(|| {
                     runtime_owned_view_model_missing_binding_value_for_context_chain(
@@ -2493,14 +2569,15 @@ impl ArtboardInstance {
 
         for index in 0..self.artboard_image_asset_bindings.len() {
             let update = {
-                let binding = &self.artboard_image_asset_bindings[index];
-                runtime_owned_view_model_binding_value_for_context_chain(
+                let binding = &mut self.artboard_image_asset_bindings[index];
+                runtime_owned_view_model_binding_value_for_retained_context_chain(
                     file,
                     context,
                     context_chain,
                     &binding.path,
                     false,
                     &binding.default_value,
+                    &mut binding.owned_context_source_path,
                 )
             };
             if let Some(value) = update {
@@ -2515,14 +2592,15 @@ impl ArtboardInstance {
 
         for index in 0..self.artboard_custom_property_bindings.len() {
             let update = {
-                let binding = &self.artboard_custom_property_bindings[index];
-                runtime_owned_view_model_binding_value_for_context_chain(
+                let binding = &mut self.artboard_custom_property_bindings[index];
+                runtime_owned_view_model_binding_value_for_retained_context_chain(
                     file,
                     context,
                     context_chain,
                     binding.path.as_ref(),
                     binding.path_is_name_based,
                     &binding.default_value,
+                    &mut binding.owned_context_source_path,
                 )
             };
             if let Some(value) = update {
@@ -3873,6 +3951,7 @@ mod tests {
             property_key,
             path: shared_data_bind_path(vec![1]),
             path_is_name_based: false,
+            owned_context_source_path: None,
             flags: 0,
             value_kind: RuntimeArtboardDataBindValueKind::Number,
             converter,

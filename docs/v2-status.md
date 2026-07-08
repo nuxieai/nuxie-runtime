@@ -122,10 +122,21 @@ the only memory the next session has. Update it every commit.
    slice should either make steady frames skip prepare via audited
    idempotent dirt raisers, or port actual `RawPath`/`PathComposer`
    retention behind C++ dirt gates.
-   The layout-split sample no longer showed
-   `runtime_taffy_layout_bounds` in the hot stack; remaining heat is
-   data-bind/nested advance allocation and retained path/paint dirt gates. The
-   next M7 target should continue the scout ordering: deeper
+   Nested-artboard layout bounds are now retained on `ArtboardInstance` by
+   `(graph_global_id, layout_epoch)`, matching the C++ `markLayoutNodeDirty`
+   / `Artboard::markLayoutDirty` boundary for layout recomputation during
+   nested advance. Focused release/null-renderer verification reports
+   aggregate Rust/C++=2.329 over the same 5 exact entries / 10 segments
+   (`advance_blend_mode`=5.649, `ai_assitant`=2.221,
+   `align_target`=1.888, `animated_clipping`=2.461,
+   `animation_reset_cases`=4.264). Two direct
+   `ai_assitant --benchmark-repeat 100` checks report about Rust/C++=19.5-20.0
+   (rerun cpp median=0.595 ms, rust median=11.919 ms, Rust/C++=20.018), so the
+   strict <=2.0 target remains open and long-repeat Rust median is still noisy.
+   The layout-split sample no longer shows `runtime_taffy_layout_bounds` in the
+   hot stack; remaining heat is data-bind/nested advance allocation and retained
+   path/paint dirt gates. The next M7 target should continue the scout ordering:
+   deeper
    `ShapePaintPath`/raw-path retention and `PathComposer` dirt gating behind
    C++ dirt gates, plus any idempotent dirt raisers needed to make clean frames
    skip prepare. After the perf target is real, expand the C ABI to instance
@@ -631,6 +642,28 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Cached nested-artboard layout bounds by `layout_epoch`.
+  Rust nested advance previously recomputed `runtime_taffy_layout_bounds` and
+  cloned the artboard graph whenever any `NestedArtboardLayout` host existed.
+  `ArtboardInstance` now retains those bounds behind a
+  `(graph_global_id, layout_epoch)` key, so clean nested-advance frames reuse
+  the layout snapshot until the same layout dirt boundary Rust already uses for
+  draw-side Taffy bounds changes. This follows the C++ layout dirt model:
+  `LayoutComponent::markLayoutNodeDirty()` dirties the Yoga node and calls
+  `Artboard::markLayoutDirty()`, and `NestedArtboardLayout` routes host layout
+  dirt through that path. `make golden-compare` passes at exact=263 /
+  exact-segments=584 / diverges=0; `cargo test --workspace` passes, including
+  the focused `nested_layout_bounds_cache_tracks_layout_epoch` test. Focused
+  release/null-renderer `make perf-hot-loop PERF_CORPUS_LIMIT=5
+  PERF_ITERATIONS=10 PERF_WARMUPS=1 PERF_MAX_RATIO=999` reports aggregate
+  Rust/C++=2.329 over 5 exact entries / 10 segments
+  (`advance_blend_mode`=5.649, `ai_assitant`=2.221,
+  `align_target`=1.888, `animated_clipping`=2.461,
+  `animation_reset_cases`=4.264). Direct `ai_assitant --benchmark-repeat 100`
+  remains around Rust/C++=20.0 (rerun cpp median=0.595 ms, rust median=11.919
+  ms), so strict <=2.0 remains open. Next target remains the scout-ranked
+  `ShapePaintPath`/raw-path retention and `PathComposer` dirt gating path,
+  with idempotent dirt raisers only where audited against C++.
 - 2026-07-08: [M7] Scout review after the path-command cache experiment keeps
   the next slice scoped to C++ dirt/retention semantics. A private Rust
   `Shape` paint path-command cache was tested and then backed out: it preserved

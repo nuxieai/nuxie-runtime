@@ -72,6 +72,7 @@ pub struct ArtboardInstance {
     newly_uncollapsed_nested_artboards: BTreeSet<usize>,
     pub(crate) graph_global_id: u32,
     build_context: Option<RuntimeArtboardBuildContext>,
+    nested_layout_bounds: Option<RuntimeNestedLayoutBoundsFrame>,
     pub(crate) artboard_data_bind_values: BTreeMap<Vec<u32>, RuntimeDataBindGraphValue>,
     pub(crate) artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource,
     pub(crate) artboard_property_bindings: Vec<RuntimeArtboardPropertyBindingInstance>,
@@ -107,6 +108,18 @@ pub(crate) struct RuntimeNestedArtboardInstance {
 struct RuntimeArtboardBuildContext {
     file: Arc<RuntimeFile>,
     artboards: Arc<Vec<ArtboardGraph>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RuntimeNestedLayoutBoundsCacheKey {
+    graph_global_id: u32,
+    layout_epoch: u64,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeNestedLayoutBoundsFrame {
+    key: RuntimeNestedLayoutBoundsCacheKey,
+    bounds: Arc<Option<BTreeMap<usize, RuntimeLayoutBounds>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -273,6 +286,7 @@ impl ArtboardInstance {
             newly_uncollapsed_nested_artboards: BTreeSet::new(),
             graph_global_id: graph.global_id,
             build_context,
+            nested_layout_bounds: None,
             artboard_data_bind_values,
             artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource::default(),
             artboard_property_bindings,
@@ -661,7 +675,8 @@ impl ArtboardInstance {
             {
                 continue;
             }
-            changed |= self.apply_nested_artboard_layout_bounds(host_local, layout_bounds.as_ref());
+            changed |= self
+                .apply_nested_artboard_layout_bounds(host_local, layout_bounds.as_ref().as_ref());
             let mut reported_events = Vec::new();
             let nested_needs_update = self
                 .nested_artboards
@@ -683,6 +698,31 @@ impl ArtboardInstance {
     }
 
     fn runtime_nested_artboard_layout_bounds(
+        &mut self,
+    ) -> Arc<Option<BTreeMap<usize, RuntimeLayoutBounds>>> {
+        let key = RuntimeNestedLayoutBoundsCacheKey {
+            graph_global_id: self.graph_global_id,
+            layout_epoch: self.layout_epoch,
+        };
+        if self
+            .nested_layout_bounds
+            .as_ref()
+            .is_none_or(|frame| frame.key != key)
+        {
+            self.nested_layout_bounds = Some(RuntimeNestedLayoutBoundsFrame {
+                key,
+                bounds: Arc::new(self.compute_runtime_nested_artboard_layout_bounds()),
+            });
+        }
+
+        self.nested_layout_bounds
+            .as_ref()
+            .expect("nested layout bounds frame was just populated")
+            .bounds
+            .clone()
+    }
+
+    fn compute_runtime_nested_artboard_layout_bounds(
         &self,
     ) -> Option<BTreeMap<usize, RuntimeLayoutBounds>> {
         if !self.nested_artboards.keys().any(|local_id| {
@@ -2412,6 +2452,7 @@ mod tests {
             newly_uncollapsed_nested_artboards: BTreeSet::new(),
             graph_global_id: 0,
             build_context: None,
+            nested_layout_bounds: None,
             artboard_data_bind_values: BTreeMap::new(),
             artboard_formula_random_source: RuntimeDataBindGraphFormulaRandomSource::default(),
             artboard_property_bindings: Vec::new(),
@@ -2664,6 +2705,62 @@ mod tests {
         let layout_epoch = instance.layout_epoch();
         assert!(!instance.add_dirt(0, ComponentDirt::LAYOUT_STYLE, false));
         assert_eq!(instance.layout_epoch(), layout_epoch);
+    }
+
+    #[test]
+    fn nested_layout_bounds_cache_tracks_layout_epoch() {
+        let mut host = synthetic_component(0, 0);
+        host.type_name = "NestedArtboardLayout";
+        let mut instance = synthetic_instance(vec![host], vec![0]);
+        instance.nested_artboards.insert(
+            0,
+            RuntimeNestedArtboardInstance {
+                child: Box::new(synthetic_instance(
+                    vec![synthetic_component(10, 0)],
+                    vec![10],
+                )),
+                animations: Vec::new(),
+                is_paused: false,
+                speed: 1.0,
+                quantize: 0.0,
+                cumulated_seconds: 0.0,
+            },
+        );
+
+        let first_bounds = instance.runtime_nested_artboard_layout_bounds();
+        let first_frame = instance
+            .nested_layout_bounds
+            .as_ref()
+            .expect("nested layout bounds frame")
+            .clone();
+        assert_eq!(first_frame.key.layout_epoch, instance.layout_epoch());
+        assert!(Arc::ptr_eq(&first_bounds, &first_frame.bounds));
+
+        assert!(instance.add_dirt(0, ComponentDirt::PAINT, false));
+        let after_paint = instance.runtime_nested_artboard_layout_bounds();
+        assert_eq!(
+            instance
+                .nested_layout_bounds
+                .as_ref()
+                .expect("nested layout bounds frame")
+                .key
+                .layout_epoch,
+            instance.layout_epoch()
+        );
+        assert!(Arc::ptr_eq(&first_bounds, &after_paint));
+
+        assert!(instance.add_dirt(0, ComponentDirt::LAYOUT_STYLE, false));
+        let after_layout = instance.runtime_nested_artboard_layout_bounds();
+        assert_eq!(
+            instance
+                .nested_layout_bounds
+                .as_ref()
+                .expect("nested layout bounds frame")
+                .key
+                .layout_epoch,
+            instance.layout_epoch()
+        );
+        assert!(!Arc::ptr_eq(&first_bounds, &after_layout));
     }
 
     #[test]

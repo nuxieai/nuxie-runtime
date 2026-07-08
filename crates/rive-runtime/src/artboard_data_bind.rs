@@ -130,6 +130,7 @@ pub(super) struct RuntimeArtboardImageAssetBindingInstance {
 enum RuntimeArtboardDataBindTargetRef {
     Property(usize),
     ImageAsset(usize),
+    ToStringConverter(usize),
 }
 
 #[derive(Debug, Clone, Default)]
@@ -139,16 +140,20 @@ pub(super) struct RuntimeArtboardDataBindTargetQueues {
     dirty_property_flags: Vec<bool>,
     dirty_image_assets: Vec<usize>,
     dirty_image_asset_flags: Vec<bool>,
+    dirty_to_string_converters: Vec<usize>,
+    dirty_to_string_converter_flags: Vec<bool>,
 }
 
 impl RuntimeArtboardDataBindTargetQueues {
     pub(super) fn new(
         property_bindings: &[RuntimeArtboardPropertyBindingInstance],
         image_asset_bindings: &[RuntimeArtboardImageAssetBindingInstance],
+        to_string_converter_bindings: &[RuntimeArtboardToStringConverterBindingInstance],
     ) -> Self {
         let mut queues = Self {
             dirty_property_flags: vec![false; property_bindings.len()],
             dirty_image_asset_flags: vec![false; image_asset_bindings.len()],
+            dirty_to_string_converter_flags: vec![false; to_string_converter_bindings.len()],
             ..Self::default()
         };
         for (index, binding) in property_bindings.iter().enumerate() {
@@ -167,6 +172,14 @@ impl RuntimeArtboardDataBindTargetQueues {
                 .push(RuntimeArtboardDataBindTargetRef::ImageAsset(index));
             queues.enqueue_image_asset(index);
         }
+        for (index, binding) in to_string_converter_bindings.iter().enumerate() {
+            queues
+                .by_path
+                .entry(binding.path.clone())
+                .or_default()
+                .push(RuntimeArtboardDataBindTargetRef::ToStringConverter(index));
+            queues.enqueue_to_string_converter(index);
+        }
         queues
     }
 
@@ -181,6 +194,9 @@ impl RuntimeArtboardDataBindTargetQueues {
                 }
                 RuntimeArtboardDataBindTargetRef::ImageAsset(index) => {
                     self.enqueue_image_asset(index);
+                }
+                RuntimeArtboardDataBindTargetRef::ToStringConverter(index) => {
+                    self.enqueue_to_string_converter(index);
                 }
             }
         }
@@ -208,6 +224,17 @@ impl RuntimeArtboardDataBindTargetQueues {
         self.dirty_image_assets.push(index);
     }
 
+    fn enqueue_to_string_converter(&mut self, index: usize) {
+        let Some(flag) = self.dirty_to_string_converter_flags.get_mut(index) else {
+            return;
+        };
+        if *flag {
+            return;
+        }
+        *flag = true;
+        self.dirty_to_string_converters.push(index);
+    }
+
     fn drain_dirty_properties(&mut self) -> Vec<usize> {
         let dirty = std::mem::take(&mut self.dirty_properties);
         for index in &dirty {
@@ -222,6 +249,16 @@ impl RuntimeArtboardDataBindTargetQueues {
         let dirty = std::mem::take(&mut self.dirty_image_assets);
         for index in &dirty {
             if let Some(flag) = self.dirty_image_asset_flags.get_mut(*index) {
+                *flag = false;
+            }
+        }
+        dirty
+    }
+
+    fn drain_dirty_to_string_converters(&mut self) -> Vec<usize> {
+        let dirty = std::mem::take(&mut self.dirty_to_string_converters);
+        for index in &dirty {
+            if let Some(flag) = self.dirty_to_string_converter_flags.get_mut(*index) {
                 *flag = false;
             }
         }
@@ -453,6 +490,26 @@ pub(super) struct RuntimeArtboardFormulaTokenBindingInstance {
 pub(super) enum RuntimeArtboardFormulaBindingTarget {
     FormulaToken { global_id: u32 },
     OperationValue { global_id: u32 },
+}
+
+#[derive(Debug, Clone)]
+pub(super) struct RuntimeArtboardToStringConverterBindingInstance {
+    target: RuntimeArtboardToStringConverterBindingTarget,
+    path: Vec<u32>,
+    converter: Option<RuntimeDataBindGraphConverter>,
+    converter_state: RuntimeDataBindGraphConverterState,
+    default_value: RuntimeDataBindGraphValue,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(super) enum RuntimeArtboardToStringConverterBindingTarget {
+    Decimals { global_id: u32 },
+    ColorFormat { global_id: u32 },
+}
+
+enum RuntimeArtboardToStringConverterBindingUpdate {
+    Decimals { global_id: u32, value: u64 },
+    ColorFormat { global_id: u32, value: Vec<u8> },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1327,6 +1384,144 @@ pub(super) fn build_artboard_formula_token_bindings(
         .collect()
 }
 
+pub(super) fn build_artboard_to_string_converter_bindings(
+    file: &RuntimeFile,
+    graph: &ArtboardGraph,
+) -> Vec<RuntimeArtboardToStringConverterBindingInstance> {
+    let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
+        return Vec::new();
+    };
+    let decimals_key = runtime_data_bind_property_key_for_name("DataConverterToString", "decimals");
+    let color_format_key =
+        runtime_data_bind_property_key_for_name("DataConverterToString", "colorFormat");
+    if decimals_key.is_none() && color_format_key.is_none() {
+        return Vec::new();
+    }
+    let default_instance = artboard_default_view_model_instance(file, artboard_index);
+
+    file.objects
+        .iter()
+        .flatten()
+        .filter(|object| object.type_name == "DataBindContext")
+        .filter_map(|data_bind| {
+            let data_bind_id = usize::try_from(data_bind.id).ok()?;
+            if file.import_status(data_bind_id) != Some(rive_binary::RuntimeImportStatus::Imported)
+            {
+                return None;
+            }
+            if !data_bind_flags_apply_source_to_target(
+                data_bind.uint_property("flags").unwrap_or(0),
+            ) {
+                return None;
+            }
+            let target = file.data_bind_target_for_object(data_bind)?;
+            if target.type_name != "DataConverterToString" {
+                return None;
+            }
+            let property_key = u16::try_from(data_bind.uint_property("propertyKey")?).ok()?;
+            let target = match property_key {
+                key if Some(key) == decimals_key => {
+                    RuntimeArtboardToStringConverterBindingTarget::Decimals {
+                        global_id: target.id,
+                    }
+                }
+                key if Some(key) == color_format_key => {
+                    RuntimeArtboardToStringConverterBindingTarget::ColorFormat {
+                        global_id: target.id,
+                    }
+                }
+                _ => return None,
+            };
+            let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
+            let converter = runtime_data_bind_graph_converter(file, data_bind);
+            if matches!(converter, Some(RuntimeDataBindGraphConverter::Unsupported)) {
+                return None;
+            }
+            let default_value = default_instance
+                .as_ref()
+                .and_then(|default_instance| {
+                    file.data_context_view_model_property_for_instance(
+                        default_instance.object,
+                        &path,
+                    )
+                    .and_then(|source| runtime_created_view_model_value_for_source(file, source))
+                })
+                .or_else(|| runtime_created_view_model_value_for_declared_path(file, &path))
+                .unwrap_or_else(|| match target {
+                    RuntimeArtboardToStringConverterBindingTarget::Decimals { .. } => {
+                        RuntimeDataBindGraphValue::Number(0.0)
+                    }
+                    RuntimeArtboardToStringConverterBindingTarget::ColorFormat { .. } => {
+                        RuntimeDataBindGraphValue::String(Vec::new())
+                    }
+                });
+            if !runtime_artboard_to_string_converter_binding_target_accepts_value(
+                target,
+                converter
+                    .as_ref()
+                    .and_then(|converter| {
+                        runtime_data_bind_graph_convert_value(converter, &default_value)
+                    })
+                    .as_ref()
+                    .unwrap_or(&default_value),
+            ) {
+                return None;
+            }
+
+            Some(RuntimeArtboardToStringConverterBindingInstance {
+                target,
+                path,
+                converter_state: RuntimeDataBindGraphConverterState::for_converter(
+                    converter.as_ref(),
+                ),
+                converter,
+                default_value,
+            })
+        })
+        .collect()
+}
+
+fn runtime_artboard_to_string_converter_binding_target_accepts_value(
+    target: RuntimeArtboardToStringConverterBindingTarget,
+    value: &RuntimeDataBindGraphValue,
+) -> bool {
+    match target {
+        RuntimeArtboardToStringConverterBindingTarget::Decimals { .. } => {
+            matches!(
+                value,
+                RuntimeDataBindGraphValue::Number(_) | RuntimeDataBindGraphValue::Enum(_)
+            )
+        }
+        RuntimeArtboardToStringConverterBindingTarget::ColorFormat { .. } => {
+            matches!(value, RuntimeDataBindGraphValue::String(_))
+        }
+    }
+}
+
+fn runtime_artboard_to_string_converter_binding_update(
+    target: RuntimeArtboardToStringConverterBindingTarget,
+    value: RuntimeDataBindGraphValue,
+) -> Option<RuntimeArtboardToStringConverterBindingUpdate> {
+    match (target, value) {
+        (
+            RuntimeArtboardToStringConverterBindingTarget::Decimals { global_id },
+            RuntimeDataBindGraphValue::Number(value),
+        ) => Some(RuntimeArtboardToStringConverterBindingUpdate::Decimals {
+            global_id,
+            value: value.max(0.0).round() as u64,
+        }),
+        (
+            RuntimeArtboardToStringConverterBindingTarget::Decimals { global_id },
+            RuntimeDataBindGraphValue::Enum(value),
+        ) => Some(RuntimeArtboardToStringConverterBindingUpdate::Decimals { global_id, value }),
+        (
+            RuntimeArtboardToStringConverterBindingTarget::ColorFormat { global_id },
+            RuntimeDataBindGraphValue::String(value),
+        ) => Some(RuntimeArtboardToStringConverterBindingUpdate::ColorFormat { global_id, value }),
+        _ => None,
+    }
+}
+
 pub(super) fn build_artboard_layout_computed_bindings(
     file: &RuntimeFile,
     graph: &ArtboardGraph,
@@ -2050,6 +2245,7 @@ impl ArtboardInstance {
         changed |= self.update_artboard_solo_source_bindings();
         changed |= self.update_artboard_numeric_source_bindings();
         changed |= self.update_artboard_formula_token_bindings();
+        changed |= self.update_artboard_to_string_converter_bindings();
         changed |= self.apply_artboard_property_bindings();
         changed |= self.apply_artboard_image_asset_bindings();
         changed |= self.advance_artboard_property_binding_converters(elapsed_seconds);
@@ -2164,6 +2360,56 @@ impl ArtboardInstance {
         }
     }
 
+    fn update_artboard_to_string_converter_bindings(&mut self) -> bool {
+        let mut changed = false;
+        loop {
+            let indices = self
+                .artboard_data_bind_target_queues
+                .drain_dirty_to_string_converters();
+            if indices.is_empty() {
+                break;
+            }
+            for index in indices {
+                let Some(update) = self.converted_artboard_to_string_converter_binding_value(index)
+                else {
+                    continue;
+                };
+                changed |= match update {
+                    RuntimeArtboardToStringConverterBindingUpdate::Decimals {
+                        global_id,
+                        value,
+                    } => self.set_artboard_to_string_converter_decimals(global_id, value),
+                    RuntimeArtboardToStringConverterBindingUpdate::ColorFormat {
+                        global_id,
+                        value,
+                    } => self.set_artboard_to_string_converter_color_format(global_id, &value),
+                };
+            }
+        }
+        changed
+    }
+
+    fn converted_artboard_to_string_converter_binding_value(
+        &mut self,
+        index: usize,
+    ) -> Option<RuntimeArtboardToStringConverterBindingUpdate> {
+        let binding = self.artboard_to_string_converter_bindings.get_mut(index)?;
+        let value = self
+            .artboard_data_bind_values
+            .get(&binding.path)
+            .cloned()
+            .unwrap_or_else(|| binding.default_value.clone());
+        let converted = match binding.converter.as_ref() {
+            Some(converter) => binding.converter_state.convert_value_with_formula_randoms(
+                converter,
+                &value,
+                &mut self.artboard_formula_random_source,
+            ),
+            None => Some(value),
+        }?;
+        runtime_artboard_to_string_converter_binding_update(binding.target, converted)
+    }
+
     fn set_artboard_formula_token_value(&mut self, token_id: u32, value: f32) -> bool {
         let mut changed = false;
         for index in 0..self.artboard_property_bindings.len() {
@@ -2246,6 +2492,26 @@ impl ArtboardInstance {
             }
         }
         changed
+    }
+
+    fn set_artboard_to_string_converter_decimals(
+        &mut self,
+        target_global_id: u32,
+        value: u64,
+    ) -> bool {
+        self.refresh_artboard_converter_dependents(|converter| {
+            converter.set_to_string_decimals(target_global_id, value)
+        })
+    }
+
+    fn set_artboard_to_string_converter_color_format(
+        &mut self,
+        target_global_id: u32,
+        value: &[u8],
+    ) -> bool {
+        self.refresh_artboard_converter_dependents(|converter| {
+            converter.set_to_string_color_format(target_global_id, value)
+        })
     }
 
     fn artboard_shape_length(&self, shape_local_id: usize, graph: &ArtboardGraph) -> Option<f32> {
@@ -2466,6 +2732,18 @@ impl ArtboardInstance {
 
         for binding in &mut self.artboard_formula_token_bindings {
             if binding.converter.as_mut().is_some_and(&mut update) {
+                changed = true;
+            }
+        }
+
+        for index in 0..self.artboard_to_string_converter_bindings.len() {
+            let binding_changed = {
+                let binding = &mut self.artboard_to_string_converter_bindings[index];
+                binding.converter.as_mut().is_some_and(&mut update)
+            };
+            if binding_changed {
+                self.artboard_data_bind_target_queues
+                    .enqueue_to_string_converter(index);
                 changed = true;
             }
         }
@@ -3022,6 +3300,18 @@ mod tests {
         }
     }
 
+    fn to_string_converter_binding(
+        path: Vec<u32>,
+    ) -> RuntimeArtboardToStringConverterBindingInstance {
+        RuntimeArtboardToStringConverterBindingInstance {
+            target: RuntimeArtboardToStringConverterBindingTarget::Decimals { global_id: 901 },
+            path,
+            converter: None,
+            converter_state: RuntimeDataBindGraphConverterState::None,
+            default_value: RuntimeDataBindGraphValue::Number(0.0),
+        }
+    }
+
     #[test]
     fn source_queues_split_push_targets_from_persisting_targets() {
         let custom_bindings = vec![
@@ -3035,6 +3325,17 @@ mod tests {
                     global_id: 900,
                     operation_type: 2,
                     operation_value: 2.0,
+                }),
+            ),
+            custom_binding(
+                3,
+                19,
+                20,
+                Some(RuntimeDataBindGraphConverter::ToString {
+                    global_id: 901,
+                    flags: 0,
+                    decimals: 2,
+                    color_format: Vec::new(),
                 }),
             ),
             custom_binding(
@@ -3075,9 +3376,9 @@ mod tests {
 
         assert_eq!(
             queues.drain_custom_property_update_indices(),
-            vec![0, 1, 2, 3]
+            vec![0, 1, 2, 3, 4]
         );
-        assert_eq!(queues.drain_custom_property_update_indices(), vec![3]);
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![4]);
         assert_eq!(queues.drain_dirty_numeric_sources(), vec![0]);
         assert_eq!(queues.persisting_layout_computed(), &[0]);
         assert_eq!(queues.persisting_solo_sources(), &[0]);
@@ -3087,22 +3388,63 @@ mod tests {
         queues.enqueue_target_property(7, 11, None);
         queues.enqueue_target_property(99, 99, None);
 
-        assert_eq!(queues.drain_custom_property_update_indices(), vec![0, 3]);
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![0, 4]);
         assert_eq!(queues.drain_dirty_numeric_sources(), vec![0]);
 
         queues.enqueue_target_property(7, 11, Some(0));
 
-        assert_eq!(queues.drain_custom_property_update_indices(), vec![3]);
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![4]);
         assert_eq!(queues.drain_dirty_numeric_sources(), vec![0]);
 
         queues.enqueue_target_property(17, 18, None);
 
-        assert_eq!(queues.drain_custom_property_update_indices(), vec![2, 3]);
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![2, 4]);
         assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
 
         queues.enqueue_target_property(17, 18, Some(2));
 
-        assert_eq!(queues.drain_custom_property_update_indices(), vec![3]);
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![4]);
         assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
+
+        queues.enqueue_target_property(19, 20, None);
+
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![3, 4]);
+        assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
+
+        queues.enqueue_target_property(19, 20, Some(3));
+
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![4]);
+        assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
+    }
+
+    #[test]
+    fn target_queues_seed_and_dirty_to_string_converter_bindings() {
+        let property_bindings = Vec::new();
+        let image_asset_bindings = Vec::new();
+        let to_string_bindings = vec![
+            to_string_converter_binding(vec![1]),
+            to_string_converter_binding(vec![2]),
+        ];
+        let mut queues = RuntimeArtboardDataBindTargetQueues::new(
+            &property_bindings,
+            &image_asset_bindings,
+            &to_string_bindings,
+        );
+
+        assert_eq!(queues.drain_dirty_to_string_converters(), vec![0, 1]);
+        assert_eq!(
+            queues.drain_dirty_to_string_converters(),
+            Vec::<usize>::new()
+        );
+
+        queues.enqueue_path(&[2]);
+        queues.enqueue_path(&[2]);
+        queues.enqueue_path(&[99]);
+
+        assert_eq!(queues.drain_dirty_to_string_converters(), vec![1]);
+        assert_eq!(
+            queues.drain_dirty_to_string_converters(),
+            Vec::<usize>::new()
+        );
     }
 }

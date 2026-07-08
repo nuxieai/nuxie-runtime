@@ -167,6 +167,7 @@ pub(crate) enum RuntimeDataBindGraphConverter {
         has_view_model: bool,
     },
     ToString {
+        global_id: u32,
         flags: u64,
         decimals: u64,
         color_format: Vec<u8>,
@@ -286,6 +287,52 @@ impl RuntimeDataBindGraphConverter {
             _ => false,
         }
     }
+
+    pub(crate) fn set_to_string_decimals(&mut self, target_global_id: u32, value: u64) -> bool {
+        match self {
+            RuntimeDataBindGraphConverter::ToString {
+                global_id,
+                decimals,
+                ..
+            } if *global_id == target_global_id && *decimals != value => {
+                *decimals = value;
+                true
+            }
+            RuntimeDataBindGraphConverter::Group(converters) => {
+                let mut changed = false;
+                for converter in converters {
+                    changed |= converter.set_to_string_decimals(target_global_id, value);
+                }
+                changed
+            }
+            _ => false,
+        }
+    }
+
+    pub(crate) fn set_to_string_color_format(
+        &mut self,
+        target_global_id: u32,
+        value: &[u8],
+    ) -> bool {
+        match self {
+            RuntimeDataBindGraphConverter::ToString {
+                global_id,
+                color_format,
+                ..
+            } if *global_id == target_global_id && color_format.as_slice() != value => {
+                *color_format = value.to_vec();
+                true
+            }
+            RuntimeDataBindGraphConverter::Group(converters) => {
+                let mut changed = false;
+                for converter in converters {
+                    changed |= converter.set_to_string_color_format(target_global_id, value);
+                }
+                changed
+            }
+            _ => false,
+        }
+    }
 }
 
 pub(crate) fn runtime_data_bind_graph_converter_requires_persisting_custom_property_source(
@@ -298,13 +345,13 @@ pub(crate) fn runtime_data_bind_graph_converter_requires_persisting_custom_prope
         | RuntimeDataBindGraphConverter::ToNumber
         | RuntimeDataBindGraphConverter::ListToLength
         | RuntimeDataBindGraphConverter::StringRemoveZeros
+        | RuntimeDataBindGraphConverter::ToString { .. }
         | RuntimeDataBindGraphConverter::OperationValue { .. }
         | RuntimeDataBindGraphConverter::Formula { .. } => false,
         RuntimeDataBindGraphConverter::Group(converters) => converters
             .iter()
             .any(runtime_data_bind_graph_converter_requires_persisting_custom_property_source),
         RuntimeDataBindGraphConverter::NumberToList { .. }
-        | RuntimeDataBindGraphConverter::ToString { .. }
         | RuntimeDataBindGraphConverter::OperationViewModel { .. }
         | RuntimeDataBindGraphConverter::SystemOperationValue { .. }
         | RuntimeDataBindGraphConverter::Rounder { .. }
@@ -1945,6 +1992,7 @@ fn runtime_data_bind_graph_converter_for_object(
                 .is_some(),
         },
         "DataConverterToString" => RuntimeDataBindGraphConverter::ToString {
+            global_id: converter.id,
             flags: converter.uint_property("flags").unwrap_or(0),
             decimals: converter.uint_property("decimals").unwrap_or(0),
             color_format: converter

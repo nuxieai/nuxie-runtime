@@ -100,6 +100,7 @@ pub struct ArtboardInstance {
     pub(crate) dirt: ComponentDirt,
     pub(crate) dirt_depth: usize,
     pub(crate) cache_epoch: u64,
+    pub(crate) prepared_epoch: u64,
     pub(crate) path_epoch: u64,
     pub(crate) layout_epoch: u64,
     pub(crate) draw_order_epoch: u64,
@@ -340,6 +341,7 @@ impl ArtboardInstance {
             dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,
             cache_epoch: 1,
+            prepared_epoch: 1,
             path_epoch: 1,
             layout_epoch: 1,
             draw_order_epoch: 1,
@@ -450,6 +452,7 @@ impl ArtboardInstance {
         }
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         self.mark_changed();
+        self.mark_prepared_changed_for_property(local_id, property_key);
         self.apply_color_property_changed(local_id, property_key);
         true
     }
@@ -472,6 +475,7 @@ impl ArtboardInstance {
         }
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         self.mark_changed();
+        self.mark_prepared_changed_for_property(local_id, property_key);
         self.mark_layout_changed_for_property(local_id, property_key);
         if property_affects_effect_path_epoch(
             self.slot(local_id).and_then(|slot| slot.type_name),
@@ -508,6 +512,7 @@ impl ArtboardInstance {
         }
         self.image_asset_overrides.insert(local_id, asset_global);
         self.mark_changed();
+        self.mark_prepared_changed();
         true
     }
 
@@ -529,6 +534,7 @@ impl ArtboardInstance {
         }
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         self.mark_changed();
+        self.mark_prepared_changed_for_property(local_id, property_key);
         self.mark_layout_changed_for_property(local_id, property_key);
         if property_affects_effect_path_epoch(
             self.slot(local_id).and_then(|slot| slot.type_name),
@@ -554,6 +560,7 @@ impl ArtboardInstance {
         }
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         self.mark_changed();
+        self.mark_prepared_changed_for_property(local_id, property_key);
         self.mark_layout_changed_for_property(local_id, property_key);
         if property_affects_effect_path_epoch(
             self.slot(local_id).and_then(|slot| slot.type_name),
@@ -583,6 +590,7 @@ impl ArtboardInstance {
         }
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         self.mark_changed();
+        self.mark_prepared_changed_for_property(local_id, property_key);
         self.mark_layout_changed_for_property(local_id, property_key);
         self.apply_string_property_changed(local_id, property_key);
         true
@@ -923,6 +931,10 @@ impl ArtboardInstance {
         self.cache_epoch
     }
 
+    pub(crate) fn prepared_epoch(&self) -> u64 {
+        self.prepared_epoch
+    }
+
     pub(crate) fn path_epoch(&self) -> u64 {
         self.path_epoch
     }
@@ -940,16 +952,34 @@ impl ArtboardInstance {
         self.cache_epoch = self.cache_epoch.wrapping_add(1);
     }
 
+    fn mark_prepared_changed(&mut self) {
+        self.prepared_epoch = self.prepared_epoch.wrapping_add(1);
+    }
+
     fn mark_layout_changed(&mut self) {
         self.layout_epoch = self.layout_epoch.wrapping_add(1);
+        self.mark_prepared_changed();
     }
 
     fn mark_path_changed(&mut self) {
         self.path_epoch = self.path_epoch.wrapping_add(1);
+        self.mark_prepared_changed();
     }
 
     fn mark_draw_order_changed(&mut self) {
         self.draw_order_epoch = self.draw_order_epoch.wrapping_add(1);
+        self.mark_prepared_changed();
+    }
+
+    fn mark_render_opacity_changed(&mut self) {
+        self.mark_prepared_changed();
+    }
+
+    fn mark_prepared_changed_for_property(&mut self, local_id: usize, property_key: u16) {
+        let type_name = self.slot(local_id).and_then(|slot| slot.type_name);
+        if property_may_affect_prepared_frame(type_name, property_key) {
+            self.mark_prepared_changed();
+        }
     }
 
     fn mark_layout_changed_for_property(&mut self, local_id: usize, property_key: u16) {
@@ -1047,6 +1077,9 @@ impl ArtboardInstance {
         }
         if dirt.contains(ComponentDirt::DRAW_ORDER) {
             self.mark_draw_order_changed();
+        }
+        if dirt.contains(ComponentDirt::RENDER_OPACITY) {
+            self.mark_render_opacity_changed();
         }
         self.on_component_dirty(local_id);
 
@@ -1713,6 +1746,7 @@ impl ArtboardInstance {
                 self.remove_nested_artboard_local(local_id);
                 self.artboard_owned_context_key = None;
                 self.mark_changed();
+                self.mark_prepared_changed();
             }
             return changed;
         };
@@ -1728,6 +1762,7 @@ impl ArtboardInstance {
         self.artboard_owned_context_key = None;
         self.sync_nested_artboard_root_opacity(local_id);
         self.mark_changed();
+        self.mark_prepared_changed();
         true
     }
 
@@ -2393,6 +2428,81 @@ fn property_affects_effect_path_epoch(type_name: Option<&str>, property_key: u16
     }
 }
 
+fn property_may_affect_prepared_frame(type_name: Option<&str>, property_key: u16) -> bool {
+    let Some(type_name) = type_name else {
+        return true;
+    };
+
+    if matches!(
+        type_name,
+        "NestedNumber"
+            | "NestedBool"
+            | "NestedTrigger"
+            | "NestedInput"
+            | "NestedRemapAnimation"
+            | "NestedSimpleAnimation"
+            | "NestedStateMachine"
+            | "StateMachine"
+            | "StateMachineLayer"
+            | "StateMachineNumber"
+            | "StateMachineBool"
+            | "StateMachineTrigger"
+            | "AnimationState"
+            | "AnyState"
+            | "EntryState"
+            | "ExitState"
+            | "StateTransition"
+            | "TransitionNumberCondition"
+            | "TransitionBoolCondition"
+            | "TransitionTriggerCondition"
+            | "TransitionValueNumberComparator"
+            | "TransitionValueBooleanComparator"
+            | "TransitionPropertyArtboardComparator"
+            | "TransitionArtboardCondition"
+            | "BlendStateDirect"
+            | "BlendState1D"
+            | "BlendAnimationDirect"
+            | "BlendAnimation1D"
+            | "BlendStateTransition"
+            | "BlendState1DInput"
+            | "LinearAnimation"
+            | "KeyedObject"
+            | "KeyedProperty"
+            | "KeyFrameDouble"
+            | "KeyFrameColor"
+            | "KeyFrameBool"
+            | "KeyFrameString"
+            | "KeyFrameId"
+            | "ListenerTriggerChange"
+            | "ListenerAlignTarget"
+            | "StateMachineListener"
+            | "StateMachineListenerSingle"
+            | "FileAssetContents"
+            | "FontAsset"
+            | "ScriptAsset"
+            | "ScriptedDrawable"
+            | "ScriptedTransitionCondition"
+    ) {
+        return false;
+    }
+
+    if type_name.starts_with("ViewModel")
+        || type_name.starts_with("DataBind")
+        || type_name.starts_with("DataConverter")
+        || type_name.starts_with("DataEnum")
+        || type_name.starts_with("BindableProperty")
+        || type_name.starts_with("CustomProperty")
+    {
+        return false;
+    }
+
+    if type_name == "NestedArtboard" {
+        return property_key_for_name("NestedArtboard", "artboardId") == Some(property_key);
+    }
+
+    true
+}
+
 fn nested_simple_animation_instance(
     object: &rive_binary::RuntimeObject,
     child: &ArtboardInstance,
@@ -2587,6 +2697,7 @@ mod tests {
             dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,
             cache_epoch: 1,
+            prepared_epoch: 1,
             path_epoch: 1,
             layout_epoch: 1,
             draw_order_epoch: 1,
@@ -2845,6 +2956,62 @@ mod tests {
         instance.clear_component_dirt(0);
         assert!(instance.add_dirt(0, ComponentDirt::DRAW_ORDER, false));
         assert!(instance.draw_order_epoch() > draw_order_epoch);
+    }
+
+    #[test]
+    fn prepared_epoch_tracks_draw_affecting_properties_separately_from_cache_epoch() {
+        let mut solid = synthetic_component(0, 0);
+        solid.type_name = "SolidColor";
+        let mut instance = synthetic_instance(vec![solid], vec![0]);
+        let color_key =
+            property_key_for_name("SolidColor", "colorValue").expect("SolidColor.colorValue");
+
+        let initial_cache_epoch = instance.cache_epoch();
+        let initial_prepared_epoch = instance.prepared_epoch();
+        let initial_path_epoch = instance.path_epoch();
+        let initial_layout_epoch = instance.layout_epoch();
+        let initial_draw_order_epoch = instance.draw_order_epoch();
+
+        assert!(instance.set_color_property(0, color_key, 0xff00_ff00));
+
+        assert!(instance.cache_epoch() > initial_cache_epoch);
+        assert!(instance.prepared_epoch() > initial_prepared_epoch);
+        assert_eq!(instance.path_epoch(), initial_path_epoch);
+        assert_eq!(instance.layout_epoch(), initial_layout_epoch);
+        assert_eq!(instance.draw_order_epoch(), initial_draw_order_epoch);
+    }
+
+    #[test]
+    fn prepared_epoch_ignores_nested_input_proxy_value_changes() {
+        let mut nested_number = synthetic_component(0, 0);
+        nested_number.type_name = "NestedNumber";
+        let mut instance = synthetic_instance(vec![nested_number], vec![0]);
+        let nested_value =
+            property_key_for_name("NestedNumber", "nestedValue").expect("NestedNumber.nestedValue");
+
+        let initial_cache_epoch = instance.cache_epoch();
+        let initial_prepared_epoch = instance.prepared_epoch();
+
+        assert!(instance.set_double_property(0, nested_value, 1.0));
+
+        assert!(instance.cache_epoch() > initial_cache_epoch);
+        assert_eq!(instance.prepared_epoch(), initial_prepared_epoch);
+    }
+
+    #[test]
+    fn prepared_epoch_ignores_nested_artboard_animation_knobs() {
+        let mut nested_artboard = synthetic_component(0, 0);
+        nested_artboard.type_name = "NestedArtboard";
+        let mut instance = synthetic_instance(vec![nested_artboard], vec![0]);
+        let speed_key = property_key_for_name("NestedArtboard", "speed").expect("speed");
+
+        let initial_cache_epoch = instance.cache_epoch();
+        let initial_prepared_epoch = instance.prepared_epoch();
+
+        assert!(instance.set_double_property(0, speed_key, 2.0));
+
+        assert!(instance.cache_epoch() > initial_cache_epoch);
+        assert_eq!(instance.prepared_epoch(), initial_prepared_epoch);
     }
 
     #[test]

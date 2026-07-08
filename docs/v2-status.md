@@ -707,9 +707,26 @@ the only memory the next session has. Update it every commit.
    `advance_blend_mode@0.25`=8.619, `ai_assitant@0`=3.681,
    `align_target@0`=2.146, `animated_clipping@0`=2.857,
    `animation_reset_cases` samples around 4.0). Strict <=2.0 remains open.
-   Next: profile and port the small-file fixed overhead in
-   `advance_blend_mode` / `animation_reset_cases`; keep using the repeat-aware
-   focused score for M7 steady-state decisions.
+   Prepared draw-command frames are now keyed by
+   `(graph_global_id, prepared_epoch)` instead of the broad instance
+   `cache_epoch`. `prepared_epoch` is bumped by path/layout/draw-order/render
+   opacity/image/nested-artboard identity and draw-affecting properties, while
+   nested input proxy values, data-bind/view-model metadata, and
+   nested-artboard animation knobs keep only the broad cache epoch. This ports
+   the C++ `Artboard::updateComponents` / `ComponentDirt` retention boundary
+   without adding a new unaudited skip layer. Rust-only long-repeat
+   `advance_blend_mode --benchmark-repeat 1000000` improves from
+   elapsed=1382.1 / prepare=695.0 ms to elapsed=1269.1 / prepare=609.9 ms;
+   `animation_reset_cases` is roughly neutral at elapsed=516.3 ms. Focused
+   repeat-aware hot-loop is noisy/neutral at aggregate Rust/C++=3.897 then
+   3.852, and a fresh sample at
+   `/tmp/rive-advance-blend-prepared-epoch.sample.txt` still shows nested
+   prepared-frame rebuilds dominated by `runtime_shape_paint_path_commands`,
+   `path_commands`, `runtime_path_geometry`, and allocation. Strict <=2.0
+   remains open. Next: port lower-level C++ `RawPath`/`PathComposer` /
+   `ShapePaintPath` retention or another sampled audited data-bind/context
+   target; do not retry shallow command-vector/path-wrapper caches without
+   fenced release/null-renderer evidence.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -2999,6 +3016,19 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Split prepared draw-command invalidation from broad
+  instance cache invalidation. `RuntimeRenderPathCache::prepared_artboard_frame`
+  now keys frames by `ArtboardInstance::prepared_epoch`, which follows the
+  audited C++ dirt boundary for path/layout/draw-order/render opacity, image
+  override, nested-artboard identity, and draw-affecting property changes while
+  ignoring nested input proxy values and data-bind/view-model metadata. New
+  focused epoch tests cover both sides. `make golden-compare` remains
+  exact=263/exact-segments=584/diverges=0; `cargo test --workspace` passes;
+  `cargo fmt --all -- --check` passes. Rust-only 1M `advance_blend_mode`
+  improves elapsed/prepare from 1382.1/695.0 ms to 1269.1/609.9 ms, but
+  repeat-aware hot-loop is neutral at Rust/C++=3.897 then 3.852. Strict <=2.0
+  remains open; next target is lower-level C++ path/composer retention or a
+  sampled audited data-bind/context hotspot under the scout/perf fences.
 - 2026-07-08: [M7] Added repeat-aware corpus aggregation to `perf-compare`:
   `--benchmark-repeat N` now expands selected exact files into one target per
   sample segment after applying `--corpus-limit`, while still rejecting input

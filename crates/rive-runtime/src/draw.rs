@@ -5230,7 +5230,7 @@ pub struct RuntimeRenderPathCache {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct RuntimePreparedArtboardCacheKey {
     graph_global_id: u32,
-    instance_epoch: u64,
+    prepared_epoch: u64,
 }
 
 #[derive(Clone)]
@@ -5377,7 +5377,7 @@ impl RuntimeRenderPathCache {
     ) -> RuntimePreparedArtboardFrame {
         let key = RuntimePreparedArtboardCacheKey {
             graph_global_id: graph.global_id,
-            instance_epoch: instance.cache_epoch(),
+            prepared_epoch: instance.prepared_epoch(),
         };
         if self
             .prepared_artboard

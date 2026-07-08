@@ -186,6 +186,23 @@ pub(crate) fn build_nested_host_data_bind_source_locals(
     source_locals
 }
 
+pub(crate) fn build_nested_host_data_bind_source_local_slots(
+    child: &ArtboardInstance,
+    source_locals_by_path: &BTreeMap<Vec<u32>, usize>,
+) -> (Vec<Option<usize>>, Vec<Option<usize>>) {
+    let property_source_locals = child
+        .artboard_property_bindings
+        .iter()
+        .map(|binding| source_locals_by_path.get(binding.path.as_slice()).copied())
+        .collect();
+    let image_source_locals = child
+        .artboard_image_asset_bindings
+        .iter()
+        .map(|binding| source_locals_by_path.get(binding.path.as_slice()).copied())
+        .collect();
+    (property_source_locals, image_source_locals)
+}
+
 pub(crate) fn build_nested_host_view_model_instance_locals(
     slots: &[InstanceSlot],
     objects: &InstanceObjectArena,
@@ -3755,18 +3772,29 @@ impl ArtboardInstance {
                 continue;
             }
             let mut updates = Vec::new();
-            let mut source_locals_to_retain = Vec::new();
+            let mut property_source_locals_to_retain = Vec::new();
+            let mut image_source_locals_to_retain = Vec::new();
             for (index, binding) in nested.child.artboard_property_bindings.iter().enumerate() {
+                let source_local = nested
+                    .data_bind_property_source_locals
+                    .get(index)
+                    .copied()
+                    .flatten();
                 if let Some((value, source_local_to_retain)) = self
-                    .stateful_nested_host_binding_value(
+                    .stateful_nested_host_binding_value_for(
                         host_local_id,
                         &nested.data_bind_view_model_instance_locals_by_id,
-                        &nested.data_bind_source_locals_by_path,
-                        binding,
+                        source_local,
+                        &binding.path,
+                        &binding.default_value,
                     )
                 {
                     if let Some(source_local) = source_local_to_retain {
-                        source_locals_to_retain.push((binding.path.clone(), source_local));
+                        property_source_locals_to_retain.push((
+                            index,
+                            binding.path.clone(),
+                            source_local,
+                        ));
                     }
                     if let Some(value) = value
                         && nested
@@ -3785,17 +3813,26 @@ impl ArtboardInstance {
                 .iter()
                 .enumerate()
             {
+                let source_local = nested
+                    .data_bind_image_source_locals
+                    .get(index)
+                    .copied()
+                    .flatten();
                 if let Some((value, source_local_to_retain)) = self
                     .stateful_nested_host_binding_value_for(
                         host_local_id,
                         &nested.data_bind_view_model_instance_locals_by_id,
-                        &nested.data_bind_source_locals_by_path,
+                        source_local,
                         &binding.path,
                         &binding.default_value,
                     )
                 {
                     if let Some(source_local) = source_local_to_retain {
-                        source_locals_to_retain.push((binding.path.clone(), source_local));
+                        image_source_locals_to_retain.push((
+                            index,
+                            binding.path.clone(),
+                            source_local,
+                        ));
                     }
                     if let Some(value) = value
                         && nested
@@ -3808,13 +3845,28 @@ impl ArtboardInstance {
                     }
                 }
             }
-            if updates.is_empty() && source_locals_to_retain.is_empty() {
+            if updates.is_empty()
+                && property_source_locals_to_retain.is_empty()
+                && image_source_locals_to_retain.is_empty()
+            {
                 continue;
             }
             let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
                 continue;
             };
-            for (path, source_local) in source_locals_to_retain {
+            for (index, path, source_local) in property_source_locals_to_retain {
+                if let Some(slot) = nested.data_bind_property_source_locals.get_mut(index) {
+                    *slot = Some(source_local);
+                }
+                nested
+                    .data_bind_source_locals_by_path
+                    .entry(path)
+                    .or_insert(source_local);
+            }
+            for (index, path, source_local) in image_source_locals_to_retain {
+                if let Some(slot) = nested.data_bind_image_source_locals.get_mut(index) {
+                    *slot = Some(source_local);
+                }
                 nested
                     .data_bind_source_locals_by_path
                     .entry(path)
@@ -3854,32 +3906,16 @@ impl ArtboardInstance {
         changed
     }
 
-    fn stateful_nested_host_binding_value(
-        &self,
-        host_local_id: usize,
-        view_model_instance_locals_by_id: &BTreeMap<u32, usize>,
-        source_locals_by_path: &BTreeMap<Vec<u32>, usize>,
-        binding: &RuntimeArtboardPropertyBindingInstance,
-    ) -> Option<(Option<RuntimeDataBindGraphValue>, Option<usize>)> {
-        self.stateful_nested_host_binding_value_for(
-            host_local_id,
-            view_model_instance_locals_by_id,
-            source_locals_by_path,
-            &binding.path,
-            &binding.default_value,
-        )
-    }
-
     fn stateful_nested_host_binding_value_for(
         &self,
         host_local_id: usize,
         view_model_instance_locals_by_id: &BTreeMap<u32, usize>,
-        source_locals_by_path: &BTreeMap<Vec<u32>, usize>,
+        retained_source_local: Option<usize>,
         path: &[u32],
         default_value: &RuntimeDataBindGraphValue,
     ) -> Option<(Option<RuntimeDataBindGraphValue>, Option<usize>)> {
         let (source_local, source_local_to_retain) =
-            if let Some(source_local) = source_locals_by_path.get(path).copied() {
+            if let Some(source_local) = retained_source_local {
                 (source_local, None)
             } else {
                 let source_local = self.stateful_nested_host_value_local(

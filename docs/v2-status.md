@@ -844,6 +844,27 @@ the only memory the next session has. Update it every commit.
    re-profile; likely targets remain data-bind context/source-local lookup and
    lower `RuntimeRenderPathCache::draw_path` map lookup, not source-queue
    vector swaps or borrowed retained-paint threading.
+   Nested child data-context sync now retains resolved source locals by child
+   property/image binding index on `RuntimeNestedArtboardInstance`, seeded from
+   the existing path map and rebuilt with dynamic `artboardId` swaps. This ports
+   the C++ `DataContext`/`DataBind` retained-source shape without adding a new
+   skip gate: each frame still reads the current source value, while the steady
+   path avoids a per-binding path-map lookup before the fallback slot walk. Full
+   `make golden-compare` remains exact=263 / exact-segments=584 / diverges=0;
+   `cargo test --workspace`, `cargo fmt --all -- --check`, and
+   `git diff --check` pass. Fenced repeat-aware hot-loop is noisy at aggregate
+   Rust/C++=2.972 then 3.167, but Rust median sum was 3.331 then 2.724 ms and
+   `ai_assitant` Rust median improved to 1.414 then 1.140 ms. Direct repeat=100
+   `ai_assitant` JSON at `target/perf-ai-binding-source-local-slots.json`
+   reports cpp median=0.581 ms, rust median=1.462 ms, Rust/C++=2.516. A fresh
+   sample shows `stateful_nested_host_binding_value_for` and
+   `stateful_nested_host_value_local_for_slots` lower, with remaining time split
+   across draw replay/path-cache `BTreeMap` lookups, data-bind source queues,
+   converter advance, and state-machine advance. Strict <=2.0 remains open.
+   Next: profile the remaining draw `BTreeMap::get` under
+   `runtime_draw_command` / `RuntimeRenderPathCache::draw_path` and the
+   remaining data-bind queue drains; keep the source-queue vector-swap and
+   borrowed retained-paint threading scouts rejected.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -1345,6 +1366,21 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Retain nested-host source locals by child binding index.
+  A release/null-renderer `ai_assitant` sample after the shape-paint global-id
+  slice still showed `stateful_nested_host_binding_value_for`,
+  `stateful_nested_host_value_local_for_slots`, and `BTreeMap::get` in nested
+  data-context sync. C++ `DataContext` walks retained view-model/source
+  pointers, so Rust now seeds per-property/per-image source-local slots on
+  `RuntimeNestedArtboardInstance` from the existing path map and fills fallback
+  misses into those slots. The path map remains as a build/fallback table, but
+  steady child sync reads by binding index before falling back to the slot walk;
+  dynamic `artboardId` swaps rebuild the nested instance and slots. Full `make
+  golden-compare` remains exact=263 / exact-segments=584 / diverges=0; `cargo
+  test --workspace`, `cargo fmt --all -- --check`, and `git diff --check`
+  pass. Fenced hot-loop is noisy at aggregate Rust/C++=2.972 then 3.167, while
+  direct repeat=100 `ai_assitant` JSON reports rust median=1.462 ms, so M7
+  remains open.
 - 2026-07-08: [M7] Retain shape-paint global IDs in prepared draw commands.
   A release/null-renderer profile showed `runtime_draw_command` time with
   visible `BTreeMap::get` under draw replay after the paint-config epoch

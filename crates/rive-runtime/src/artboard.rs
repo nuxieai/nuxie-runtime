@@ -24,8 +24,8 @@ use crate::artboard_data_bind::{
     build_artboard_layout_computed_bindings, build_artboard_list_bindings,
     build_artboard_nested_host_bindings, build_artboard_numeric_source_bindings,
     build_artboard_property_bindings, build_artboard_solo_bindings,
-    build_artboard_solo_source_bindings, build_nested_host_data_bind_source_locals,
-    build_nested_host_view_model_instance_locals,
+    build_artboard_solo_source_bindings, build_nested_host_data_bind_source_local_slots,
+    build_nested_host_data_bind_source_locals, build_nested_host_view_model_instance_locals,
 };
 use crate::components::{
     AuthoredTransform, ComponentDirt, Mat2D, RuntimeComponent, RuntimeSolo, TransformProperty,
@@ -114,6 +114,8 @@ pub(crate) struct RuntimeNestedArtboardInstance {
     pub(crate) data_bind_resolved_path_ids: Option<Vec<u32>>,
     pub(crate) data_bind_view_model_instance_locals_by_id: BTreeMap<u32, usize>,
     pub(crate) data_bind_source_locals_by_path: BTreeMap<Vec<u32>, usize>,
+    pub(crate) data_bind_property_source_locals: Vec<Option<usize>>,
+    pub(crate) data_bind_image_source_locals: Vec<Option<usize>>,
     animations: Vec<RuntimeNestedAnimationInstance>,
     is_paused: bool,
     speed: f32,
@@ -2334,11 +2336,15 @@ fn build_runtime_nested_artboard_instance(
         &data_bind_view_model_instance_locals_by_id,
         &child,
     );
+    let (data_bind_property_source_locals, data_bind_image_source_locals) =
+        build_nested_host_data_bind_source_local_slots(&child, &data_bind_source_locals_by_path);
     Ok(RuntimeNestedArtboardInstance {
         child,
         data_bind_resolved_path_ids,
         data_bind_view_model_instance_locals_by_id,
         data_bind_source_locals_by_path,
+        data_bind_property_source_locals,
+        data_bind_image_source_locals,
         animations,
         is_paused,
         speed,
@@ -3034,6 +3040,8 @@ mod tests {
                 data_bind_resolved_path_ids: None,
                 data_bind_view_model_instance_locals_by_id: BTreeMap::new(),
                 data_bind_source_locals_by_path: BTreeMap::new(),
+                data_bind_property_source_locals: Vec::new(),
+                data_bind_image_source_locals: Vec::new(),
                 animations: Vec::new(),
                 is_paused: false,
                 speed: 1.0,

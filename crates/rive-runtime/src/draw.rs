@@ -1483,6 +1483,10 @@ impl ArtboardInstance {
                 drawable_local,
                 layout_bounds,
             )
+            .map(|mut commands| {
+                assign_shape_paint_path_slot_indices(&mut commands);
+                commands
+            })
             .unwrap_or_default();
         }
 
@@ -1546,7 +1550,7 @@ impl ArtboardInstance {
             )
         };
 
-        container
+        let mut commands = container
             .paints
             .iter()
             .filter_map(|paint| {
@@ -1603,7 +1607,9 @@ impl ArtboardInstance {
                 }
                 Some(command)
             })
-            .collect()
+            .collect::<Vec<_>>();
+        assign_shape_paint_path_slot_indices(&mut commands);
+        commands
     }
 
     fn runtime_layout_component_paint_path_commands(
@@ -5088,6 +5094,8 @@ pub struct RuntimeShapePaintCommand {
     pub mutator_local: Option<usize>,
     pub paint_type: RuntimeShapePaintKind,
     pub path_kind: RuntimeShapePaintPathKind,
+    pub path_slot_index: usize,
+    pub clip_path_slot_index: usize,
     pub blend_mode_value: u32,
     pub render_blend_mode_value: u32,
     pub paint_state: Option<RuntimeShapePaintState>,
@@ -6249,6 +6257,8 @@ fn runtime_background_shape_paint_command(
         mutator_local: paint.mutator_local,
         paint_type: runtime_shape_paint_kind(paint.paint_type),
         path_kind: RuntimeShapePaintPathKind::Local,
+        path_slot_index: 0,
+        clip_path_slot_index: 0,
         blend_mode_value: paint.blend_mode_value,
         render_blend_mode_value: runtime_shape_paint_blend_mode_value(
             paint.blend_mode_value,
@@ -6297,6 +6307,8 @@ fn runtime_prepare_gradient_paint_command(
             .path_kind
             .and_then(runtime_shape_paint_path_kind)
             .unwrap_or(RuntimeShapePaintPathKind::Local),
+        path_slot_index: 0,
+        clip_path_slot_index: 0,
         blend_mode_value: paint.blend_mode_value,
         render_blend_mode_value: runtime_shape_paint_blend_mode_value(
             paint.blend_mode_value,
@@ -6473,7 +6485,7 @@ fn runtime_draw_command(
         .unwrap_or(Mat2D::IDENTITY);
 
     let draws_text = command.type_name == "Text";
-    let text_shape_paints = if draws_text {
+    let mut text_shape_paints = if draws_text {
         let layout_constraint = command.local_id.and_then(|text_local| {
             instance.runtime_text_layout_constraint(text_local, layout_bounds)
         });
@@ -6488,6 +6500,9 @@ fn runtime_draw_command(
     } else {
         Vec::new()
     };
+    if draws_text {
+        assign_shape_paint_path_slot_indices(&mut text_shape_paints);
+    }
     let shape_paints = if draws_text {
         text_shape_paints.as_slice()
     } else {
@@ -6513,7 +6528,6 @@ fn runtime_draw_command(
         }
     }
     let mut text_temporary_paint_index = 0;
-    let mut draw_path_slots = Vec::<&[RuntimePathCommand]>::new();
     let draw_path_epoch = instance.path_epoch();
     let foreground_layout_path_cache_local = if command.type_name == "ForegroundLayoutDrawable" {
         command
@@ -6616,16 +6630,12 @@ fn runtime_draw_command(
                     saved = true;
                     renderer.save();
                 }
-                let clip_path_index = runtime_cached_path_slot_index(
-                    &mut draw_path_slots,
-                    effect_or_shape_path_commands,
-                );
                 let clip_path = path_cache.draw_path(
                     RuntimeDrawPathCacheKey {
                         kind: RuntimeDrawPathCacheKind::Draw,
                         path_kind: runtime_draw_path_cache_path_kind(paint),
                         local_id: draw_path_cache_local,
-                        path_index: clip_path_index,
+                        path_index: paint.clip_path_slot_index,
                     },
                     draw_path_epoch,
                     factory,
@@ -6643,13 +6653,12 @@ fn runtime_draw_command(
                 renderer.transform(runtime_translation(feather.offset_x, feather.offset_y));
             }
         }
-        let path_index = runtime_cached_path_slot_index(&mut draw_path_slots, draw_path_commands);
         let path = path_cache.draw_path(
             RuntimeDrawPathCacheKey {
                 kind: RuntimeDrawPathCacheKind::Draw,
                 path_kind: runtime_draw_path_cache_path_kind(paint),
                 local_id: inner_feather_path_cache_local,
-                path_index,
+                path_index: paint.path_slot_index,
             },
             draw_path_epoch,
             factory,
@@ -7538,6 +7547,33 @@ fn runtime_clipping_shape(graph: &ArtboardGraph, local_id: usize) -> Option<&Cli
         .find(|clipping_shape| clipping_shape.local_id == local_id)
 }
 
+fn assign_shape_paint_path_slot_indices(commands: &mut [RuntimeShapePaintCommand]) {
+    let mut path_slots = Vec::<&[RuntimePathCommand]>::new();
+    for command in commands {
+        let effect_or_shape_path_commands = if command.has_effect_path {
+            command.effect_path_commands.as_slice()
+        } else {
+            command.path_commands.as_slice()
+        };
+        if let Some(feather) = command
+            .feather_state
+            .as_ref()
+            .filter(|feather| feather.inner)
+        {
+            command.clip_path_slot_index =
+                runtime_cached_path_slot_index(&mut path_slots, effect_or_shape_path_commands);
+            command.path_slot_index = runtime_cached_path_slot_index(
+                &mut path_slots,
+                feather.inner_path_commands.as_slice(),
+            );
+        } else {
+            command.path_slot_index =
+                runtime_cached_path_slot_index(&mut path_slots, effect_or_shape_path_commands);
+            command.clip_path_slot_index = command.path_slot_index;
+        }
+    }
+}
+
 fn runtime_cached_path_slot_index<'a>(
     cache: &mut Vec<&'a [RuntimePathCommand]>,
     commands: &'a [RuntimePathCommand],
@@ -8172,6 +8208,8 @@ pub(crate) fn runtime_shape_paint_command(
         mutator_local: paint.mutator_local,
         paint_type: runtime_shape_paint_kind(paint.paint_type),
         path_kind: runtime_shape_paint_path_kind(paint.path_kind?)?,
+        path_slot_index: 0,
+        clip_path_slot_index: 0,
         blend_mode_value: paint.blend_mode_value,
         render_blend_mode_value: runtime_shape_paint_blend_mode_value(
             paint.blend_mode_value,

@@ -591,6 +591,25 @@ the only memory the next session has. Update it every commit.
    `bind_owned_view_model_artboard_context_chain` and
    `advance_artboard_data_binds_with_root_transform`, plus draw
    command/prepare retention below sorted order under the scout/perf fences.
+   Prepared shape-paint commands now retain their deterministic draw-path
+   cache slot indices instead of rebuilding the per-command path-slot vector
+   during every draw replay. Dynamic text shape-paint commands still assign
+   slots when the transient text commands are generated. This removes the
+   sampled `runtime_cached_path_slot_index` / `RawVec::grow_one` draw replay
+   site without changing draw invalidation or skip semantics.
+   Full `make golden-compare` remains exact=263 / exact-segments=584 /
+   diverges=0; focused draw/path tests, `cargo test --workspace`, `cargo fmt
+   --all -- --check`, and `git diff --check` pass. Fenced release/null-renderer
+   hot-loop reports aggregate Rust/C++=2.136 with `ai_assitant`=1.972. A
+   Rust-only `ai_assitant --benchmark-repeat 3000000` sample at
+   `/tmp/rive-ai-draw-slot.sample.txt` reports elapsed=23857.3 ms,
+   advance=12268.1 ms, prepare=5482.9 ms, draw=5939.5 ms, and no longer shows
+   `runtime_cached_path_slot_index` in the sampled draw replay. Strict <=2.0
+   remains open. Next: profile and port remaining data-bind/context-chain
+   hotspots first, especially `advance_artboard_data_binds_with_root_transform`
+   and `bind_owned_view_model_artboard_context_chain`; draw-side leftovers are
+   now lower-level `runtime_configure_paint_with_cache` and
+   `RuntimeRenderPathCache::draw_path`.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -1092,6 +1111,23 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Retain shape-paint draw path slot indices in prepared
+  commands. C++ retained draw replay does not rebuild a fresh slot-vector for
+  each command; Rust previously recomputed `runtime_cached_path_slot_index`
+  during every `runtime_draw_command`, including allocation/growth under the
+  sampled draw stack. Rust now assigns deterministic path and inner-feather
+  clip slot indices when `RuntimeShapePaintCommand` values are built, while
+  dynamic text commands assign their slots when their transient commands are
+  generated. Draw replay uses those retained indices for `RenderPath` cache
+  keys. This is prepared-frame annotation only: it does not add dirty skipping
+  or broaden path invalidation. `make golden-compare` remains exact=263 /
+  exact-segments=584 / diverges=0; focused draw/path tests, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, and `git diff --check` pass.
+  Fenced hot-loop reports aggregate Rust/C++=2.136 with `ai_assitant`=1.972.
+  A Rust-only 3M-segment sample drops draw time from the prior 6.82s sample to
+  5.94s and no longer shows `runtime_cached_path_slot_index` in the draw
+  replay. M7 remains open; next focus is the remaining data-bind/context-chain
+  hotspots.
 - 2026-07-08: [M7] Retain nested artboard host local order. C++ traverses
   retained nested host objects rather than rebuilding ordered key snapshots or
   range cursors each frame. Rust now stores `nested_artboard_locals` on
@@ -2767,6 +2803,15 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Retained shape-paint draw path slot indices on
+  `RuntimeShapePaintCommand`, replacing per-draw `runtime_cached_path_slot_index`
+  vector rebuilds for prepared shape/background commands while keeping dynamic
+  text assignment transient. `make golden-compare` remains
+  exact=263/exact-segments=584/diverges=0; `cargo test --workspace` passes;
+  focused hot-loop reports Rust/C++=2.136 with `ai_assitant`=1.972; the
+  3M-segment Rust-only sample drops draw time from about 6.82s to 5.94s and no
+  longer samples `runtime_cached_path_slot_index`. Strict <=2.0 remains open;
+  next profile/port remaining data-bind/context-chain hotspots first.
 - 2026-07-08: [M7] Retained nested artboard host local order on
   `ArtboardInstance`, replacing repeated BTree key/range walks in nested
   advance, owned context-chain binding, context-source propagation, and child

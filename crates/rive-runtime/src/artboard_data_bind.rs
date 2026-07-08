@@ -279,7 +279,7 @@ fn artboard_data_bind_values_have_same_kind(
 fn runtime_owned_view_model_context_path_for_context_chain(
     file: &RuntimeFile,
     context: &RuntimeOwnedViewModelInstance,
-    context_chain: &[Vec<usize>],
+    context_chain: &[&[usize]],
     path: &[u32],
 ) -> Option<Vec<usize>> {
     context_chain.iter().find_map(|context_path| {
@@ -294,7 +294,7 @@ fn runtime_owned_view_model_context_path_for_context_chain(
 fn runtime_owned_view_model_binding_value_for_context_chain(
     file: &RuntimeFile,
     context: &RuntimeOwnedViewModelInstance,
-    context_chain: &[Vec<usize>],
+    context_chain: &[&[usize]],
     path: &[u32],
     path_is_name_based: bool,
     default_value: &RuntimeDataBindGraphValue,
@@ -358,7 +358,7 @@ fn runtime_owned_view_model_binding_value_for_property_path(
 }
 
 fn runtime_owned_view_model_missing_binding_value_for_context_chain(
-    context_chain: &[Vec<usize>],
+    context_chain: &[&[usize]],
     binding: &RuntimeArtboardPropertyBindingInstance,
 ) -> Option<RuntimeDataBindGraphValue> {
     let text_property_key = runtime_data_bind_property_key_for_name("TextValueRun", "text")?;
@@ -1430,7 +1430,8 @@ impl ArtboardInstance {
         file: &RuntimeFile,
         context: &RuntimeOwnedViewModelInstance,
     ) -> bool {
-        self.bind_owned_view_model_artboard_context_chain(file, context, &[Vec::new()], true)
+        let context_chain: [&[usize]; 1] = [&[]];
+        self.bind_owned_view_model_artboard_context_chain(file, context, &context_chain, true)
     }
 
     pub fn bind_owned_view_model_nested_artboard_contexts(
@@ -1438,14 +1439,15 @@ impl ArtboardInstance {
         file: &RuntimeFile,
         context: &RuntimeOwnedViewModelInstance,
     ) -> bool {
-        self.bind_owned_view_model_artboard_context_chain(file, context, &[Vec::new()], false)
+        let context_chain: [&[usize]; 1] = [&[]];
+        self.bind_owned_view_model_artboard_context_chain(file, context, &context_chain, false)
     }
 
     fn bind_owned_view_model_artboard_context_chain(
         &mut self,
         file: &RuntimeFile,
         context: &RuntimeOwnedViewModelInstance,
-        context_chain: &[Vec<usize>],
+        context_chain: &[&[usize]],
         bind_self: bool,
     ) -> bool {
         let mut changed = if bind_self {
@@ -1455,26 +1457,31 @@ impl ArtboardInstance {
         };
         let host_locals = self.nested_artboards.keys().copied().collect::<Vec<_>>();
         for host_local_id in host_locals {
-            let child_context_chain = self
-                .owned_view_model_context_chain_for_nested_host(
-                    file,
-                    context,
-                    context_chain,
-                    host_local_id,
-                )
-                .unwrap_or_else(|| context_chain.to_vec());
+            let child_context = self.owned_view_model_context_chain_for_nested_host(
+                file,
+                context,
+                context_chain,
+                host_local_id,
+            );
+            let child_context_chain_storage;
+            let child_context_chain = if let Some(child_context) = child_context.as_deref() {
+                let mut chain = Vec::with_capacity(context_chain.len() + 1);
+                chain.push(child_context);
+                chain.extend_from_slice(context_chain);
+                child_context_chain_storage = chain;
+                child_context_chain_storage.as_slice()
+            } else {
+                context_chain
+            };
             let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
                 continue;
             };
-            changed |= nested.bind_owned_view_model_animation_contexts(
-                file,
-                context,
-                &child_context_chain,
-            );
+            changed |=
+                nested.bind_owned_view_model_animation_contexts(file, context, child_context_chain);
             changed |= nested.child.bind_owned_view_model_artboard_context_chain(
                 file,
                 context,
-                &child_context_chain,
+                child_context_chain,
                 true,
             );
         }
@@ -1485,7 +1492,7 @@ impl ArtboardInstance {
         &mut self,
         file: &RuntimeFile,
         context: &RuntimeOwnedViewModelInstance,
-        context_chain: &[Vec<usize>],
+        context_chain: &[&[usize]],
     ) -> bool {
         let mut changed = false;
 
@@ -1555,9 +1562,9 @@ impl ArtboardInstance {
         &self,
         file: &RuntimeFile,
         context: &RuntimeOwnedViewModelInstance,
-        context_chain: &[Vec<usize>],
+        context_chain: &[&[usize]],
         host_local_id: usize,
-    ) -> Option<Vec<Vec<usize>>> {
+    ) -> Option<Vec<usize>> {
         let host = self.slot(host_local_id)?;
         let host_object = file.object(host.source_global_id as usize)?;
         let path = file
@@ -1570,10 +1577,7 @@ impl ArtboardInstance {
             &path,
         )?;
         context.view_model_index_by_property_path(&child_context)?;
-        let mut child_chain = Vec::with_capacity(context_chain.len() + 1);
-        child_chain.push(child_context);
-        child_chain.extend(context_chain.iter().cloned());
-        Some(child_chain)
+        Some(child_context)
     }
 
     pub(crate) fn clear_default_text_property_context(&mut self) -> bool {

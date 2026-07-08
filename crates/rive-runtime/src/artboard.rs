@@ -1931,7 +1931,7 @@ impl RuntimeNestedArtboardInstance {
         &mut self,
         file: &RuntimeFile,
         context: &RuntimeOwnedViewModelInstance,
-        context_chain: &[Vec<usize>],
+        context_chain: &[&[usize]],
     ) -> bool {
         let mut changed = false;
         for animation in &mut self.animations {

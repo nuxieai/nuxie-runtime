@@ -174,10 +174,19 @@ the only memory the next session has. Update it every commit.
    repeat=100000 run moves from elapsed=4437.5 / advance=3476.3 ms to
    elapsed=3840.8 / advance=2936.9 ms. Focused release/null-renderer runs were
    still noisy (aggregate Rust/C++=2.517 and 2.776), so strict <=2.0 remains
-   open. The next M7 target should stay on C++ data-bind dirty/context
-   retention: profile after this cleanup, then port `DataBind::addDirt` /
-   `DataBindContainer` dirty queues or a retained data-context chain instead
-   of doing broad Rust-side scans.
+   open. Rust nested owned-view-model binding now passes borrowed context-path
+   slices instead of cloning a `Vec<Vec<usize>>` chain on every nested host,
+   matching C++ `DataContext` parent-chain lookup more closely without adding
+   new skip semantics. Full `make golden-compare` remains exact=263 /
+   exact-segments=584 / diverges=0. Direct
+   `ai_assitant --benchmark-repeat 100` reports cpp median=0.603 ms, rust
+   median=4.348 ms, Rust/C++=7.210; a fresh baseline worktree for the prior
+   commit ran Rust-only repeat=100000 at elapsed=4235.4 / advance=3275.3 ms,
+   while this slice runs elapsed=4109.3 / advance=3120.9 ms. Focused
+   release/null-renderer is still not completion-grade but moves to aggregate
+   Rust/C++=2.321. The next M7 target should stop doing context-chain allocation
+   cleanup and port actual C++ data-bind dirt retention: `DataBind::addDirt`,
+   `DataBindContainer` dirty queues, and push-driven target-to-source updates.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -679,6 +688,25 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Borrow nested owned-view-model context chains instead of
+  cloning them per host. The previous Rust path represented C++'s
+  `DataContext` parent chain as a `Vec<Vec<usize>>` and cloned the whole chain
+  in `bind_owned_view_model_artboard_context_chain` for every nested host. This
+  slice keeps the same lookup order but threads `&[&[usize]]` through
+  artboard, state-machine, and data-bind graph owned-view-model binding; it
+  only allocates a small vector of borrowed path slices when a nested host
+  contributes a child context path. This is not a dirty-queue port and does not
+  add skip semantics; it is a narrower translation of the C++
+  `DataContext::getViewModelProperty` parent traversal shape. Focused data-bind
+  cpp-probe tests, `cargo check -p rive-runtime`, and `make golden-compare`
+  pass at exact=263 / exact-segments=584 / diverges=0. Direct repeat-heavy
+  `ai_assitant` reports cpp median=0.603 ms, rust median=4.348 ms,
+  Rust/C++=7.210. A fresh baseline worktree at the prior commit measured
+  Rust-only repeat=100000 at elapsed=4235.4 ms / advance=3275.3 ms; this slice
+  measures elapsed=4109.3 ms / advance=3120.9 ms. Focused 5-entry hot-loop is
+  still above the strict target at Rust/C++=2.321, so M7 remains open. Next:
+  stop trimming context-chain containers and port the real C++
+  `DataBindContainer` dirty queues / `DataBind::addDirt` enrollment.
 - 2026-07-08: [M7] Trim owned view-model data-bind allocation in the profiled
   advance path. The post paint-preparation profile sampled
   `ai_assitant --benchmark-repeat 100000` and showed Rust time dominated by
@@ -1903,6 +1931,13 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Borrowed nested owned-view-model context chains instead of
+  cloning `Vec<Vec<usize>>` per host. `make golden-compare` remains
+  exact=263/exact-segments=584/diverges=0; direct
+  `ai_assitant --benchmark-repeat 100` is Rust/C++=7.210, focused 5-entry
+  hot-loop is Rust/C++=2.321, and same-session Rust-only repeat=100000 improves
+  from baseline 4235.4/3275.3 ms elapsed/advance to 4109.3/3120.9 ms. Strict
+  <=2.0 remains open; next is actual `DataBindContainer` dirty queues.
 - 2026-07-08: [M7] Trimmed owned view-model data-bind allocation by avoiding
   an intermediate context-source-path `Vec` and owned-view-model update staging
   vector. `make golden-compare` remains exact=263/exact-segments=584/diverges=0;

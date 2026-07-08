@@ -2862,7 +2862,7 @@ impl StateMachineInstance {
         &mut self,
         file: &RuntimeFile,
         context: &RuntimeOwnedViewModelInstance,
-        context_chain: &[Vec<usize>],
+        context_chain: &[&[usize]],
     ) -> bool {
         if !self
             .data_bind_graph

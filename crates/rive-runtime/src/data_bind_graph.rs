@@ -3069,7 +3069,7 @@ impl RuntimeDataBindGraph {
         &mut self,
         file: &RuntimeFile,
         context: &RuntimeOwnedViewModelInstance,
-        context_chain: &[Vec<usize>],
+        context_chain: &[&[usize]],
     ) -> bool {
         for source in &mut self.sources {
             if let Some(value) = context_chain.iter().find_map(|context_path| {

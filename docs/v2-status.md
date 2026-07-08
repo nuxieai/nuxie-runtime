@@ -921,6 +921,19 @@ the only memory the next session has. Update it every commit.
    profile remaining `runtime_draw_command` / `RuntimeRenderPathCache::draw_path`,
    state-machine fixed overhead, and remaining nested data-bind context-path
    work under these fences.
+   Solo target binding apply now walks the retained binding list without
+   cloning each `RuntimeArtboardSoloBindingInstance` before calling the Solo
+   update path, matching C++ `DataBindContainer` retained-list traversal plus
+   `context_value_{number,string,enum}` direct `Solo::updateByIndex` /
+   `Solo::updateByName` dispatch. Full `make golden-compare` remains exact=263
+   / exact-segments=584 / diverges=0, and `cargo test -p rive-runtime --quiet`
+   passes. Fenced repeat-aware hot-loop is noisy: aggregate Rust/C++=2.939
+   with Rust median sum 2.315 ms. The targeted single-file repeat=100 JSON at
+   `target/perf-ai-solo-binding-no-clone.json` reports cpp median=0.391 ms,
+   rust median=0.939 ms, Rust/C++=2.403, improving the prior `ai_assitant`
+   Rust median from 0.989 ms. Strict <=2.0 remains open. Next: profile the
+   remaining draw-path lookup, state-machine fixed overhead, and nested
+   data-bind context-path work.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -1235,6 +1248,45 @@ the only memory the next session has. Update it every commit.
     contexts are additive ABI gaps; (c) default-SM selection: capi
     falls back to first (C++ defaultScene) while the golden runner uses
     flagged-or-none — align once embed parity matters.
+
+16. SCOUT REPORT — gate protocol + phase-gap localization (decision-grade,
+    45 fenced runs; scripts/JSONs in session scratchpad). FOUR findings
+    that redirect M7 perf work:
+    (a) ADOPT MIN-BASED AGGREGATION NOW: the median-based aggregate has a
+        +-0.42 noise band per run (observed phantom 2.18 reading when
+        min-based truth was 2.95); sum of per-target min_ms over 10
+        iterations gives +-0.07 with the same central value. Contention
+        noise is one-sided; min recovers intrinsic cost, both sides
+        treated identically. Improvements < ~0.08 ratio are below
+        single-run resolution — don't claim them without 2 runs pre/post.
+    (b) PIN THE GATE DEFINITION: total(N) = first-frame + (N-1)*clean-
+        frame, and the two have different ratios — focused aggregate is
+        ~2.98 at repeat=100 but ~3.95 at repeat=1000 (pure steady state).
+        Decide and record which N the M7 gate means; track improvements
+        at fixed N.
+    (c) THE GAP IS RENDER-SIDE, NOT ADVANCE-SIDE: for text-bearing files
+        Rust ADVANCE is already FASTER than C++; the focused-corpus gap
+        concentrates in prepare+draw clean-frame replay plus ~0.5-1us/
+        frame fixed overhead (epoch checks) that dominates tiny files
+        (3.5-6.4x) vs heavy (2.1-2.6x). Recent data-bind/advance slices
+        target the smaller half of the remaining gap — shift to draw
+        replay cost and tiny-file fixed overhead.
+    (d) HEADLINE — IMAGE FILES ARE 10-170x AND INVISIBLE TO THE GATE:
+        car_widgets_v01=145-170x, echo_show_demo=81-112x,
+        jellyfish_test=61-65x, spotify_kids_demo=11x — draw-dominated,
+        LINEAR in repeat count (~4.6ms/frame steady on car_widgets => a
+        retained-draw cache is missed/rebuilt every frame on the image
+        path). PERF_CORPUS_LIMIT=5 takes the first five ALPHABETICAL
+        files, which contain no images. Fix the image draw retention AND
+        make the gate corpus deliberate (include >=1 image file, e.g.
+        spotify_kids_demo); track repeat=1000 as a secondary diagnostic.
+    GATE PROTOCOL (adopt as Decision): ratio-of-sums over per-target
+    min_ms, 10 iterations, repeat pinned; acceptance = 3 independent
+    invocations ALL <= 2.0 with 1-min load < ~8 and C++ min-sum inside
+    its 0.70-0.95ms sanity band. Current standing under protocol:
+    2.98 (band 2.82-3.06) at repeat=100; ~3.95 at repeat=1000. The
+    distance to 2.0 is real, not noise. Optional tool follow-ups:
+    --aggregate=min flag, --json in perf-hot-loop target.
 
 ## Known Divergences
 
@@ -3374,6 +3426,16 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Stopped cloning retained solo binding instances during
+  artboard solo target apply. This mirrors the C++ retained DataBind list plus
+  direct Solo update dispatch without adding a new skip gate. `make
+  golden-compare` remains exact=263/exact-segments=584/diverges=0; focused
+  `cargo test -p rive-runtime --quiet` passes. Fenced repeat-aware hot-loop
+  reports aggregate Rust/C++=2.939 with Rust median sum 2.315 ms, while direct
+  repeat=100 `ai_assitant` JSON at `target/perf-ai-solo-binding-no-clone.json`
+  improves Rust median from 0.989 ms to 0.939 ms / Rust/C++=2.403. Strict
+  <=2.0 remains open; next profile draw-path lookup, state-machine fixed
+  overhead, and nested data-bind context-path work.
 - 2026-07-08: [M7] Added data-bind source update queue membership flags and
   empty-lane early-outs, matching C++ `DataBindContainer` dirty/persisting queue
   shape without landing the rejected source-queue vector-swap scout. `make

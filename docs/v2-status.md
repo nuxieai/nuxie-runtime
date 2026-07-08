@@ -1331,6 +1331,38 @@ the only memory the next session has. Update it every commit.
     sections. Regime split for honest tracking: cold ai_assitant 2.41x,
     steady ~3.4x — item 16's pinned-N decision applies.
 
+18. SCOUT REPORT — build-profile parity audit (variants built from a
+    pinned snapshot in an isolated target dir; raw data + binaries in
+    session scratchpad). VERDICT: the gate is currently UNFAIR AGAINST
+    RUST. C++ librive.a builds at Rive's shipping config with FULL LTO
+    (-flto=full is the default in rive_build_config.lua; archive members
+    are LLVM bitcode) while the Rust workspace has NO [profile.release]
+    anywhere — bare cargo defaults (lto off, codegen-units=16), which is
+    not how a shipping Rust runtime is built. Measured, fidelity-verified
+    (full golden-compare, 263 exact, diverges=0 per variant):
+    (1) ADOPT: [profile.release] lto = "fat", codegen-units = 1 in the
+        root Cargo.toml — aggregate ratio ~2.80 -> ~2.58 (median-agg,
+        r=100), lopsided toward align_target (-12%) and animated_clipping
+        (-19%). If the 122s build hurts the loop, lto = "thin" (38s) is
+        also fidelity-clean; measure once before choosing.
+    (2) ADOPT (with one check): panic = "abort" in release — further
+        ~2.58 -> ~2.49. Verify no catch_unwind reliance in rive-capi
+        consumers first (none observed in the runner path).
+    (3) DO NOT ADOPT: -C target-cpu=native — passes fidelity (Rust FP is
+        IEEE-strict regardless of ISA) but fails FAIRNESS: C++ builds
+        generic arm64. Only symmetrically, only if a machine-tuned gate
+        is ever wanted.
+    (4) CODE-LEVEL NOTE, FENCED: C++ gets free FMA fusion from clang's
+        default -ffp-contract=on; Rust never contracts. Closing this
+        means explicit f32::mul_add at hot sites, which CHANGES float
+        results — each site requires golden re-verification and may flip
+        exact files; treat as last-resort under the geometry-float fence,
+        never as a bulk pass.
+    C++ side verdict: NOT under-built; nothing to fix there. After
+    (1)+(2), remaining ~2.5x is genuine runtime-architecture cost —
+    items 16/17 are the map for that. The Cargo.toml change is the
+    main loop's slice to land (single-writer rule).
+
 ## Known Divergences
 
 - There are no active `status = "not-yet"` entries.

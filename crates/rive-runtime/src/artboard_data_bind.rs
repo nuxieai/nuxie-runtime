@@ -21,7 +21,6 @@ use rive_binary::{RuntimeDataType, RuntimeFile, RuntimeObject};
 use rive_graph::ArtboardGraph;
 use rive_schema::FieldKind;
 use std::collections::BTreeMap;
-use std::ops::Bound::{Excluded, Unbounded};
 use std::sync::{Arc, OnceLock};
 
 macro_rules! cached_runtime_data_bind_property_key {
@@ -2302,25 +2301,13 @@ impl ArtboardInstance {
         changed
     }
 
-    fn next_nested_artboard_local_after(&self, after: Option<usize>) -> Option<usize> {
-        match after {
-            Some(after) => self
-                .nested_artboards
-                .range((Excluded(after), Unbounded))
-                .next()
-                .map(|(local_id, _)| *local_id),
-            None => self.nested_artboards.keys().next().copied(),
-        }
-    }
-
     fn collect_nested_artboard_context_source_values(
         &mut self,
         root_transform: Mat2D,
         values: &mut Vec<RuntimeArtboardContextSourceValue>,
     ) {
-        let mut host_local = self.next_nested_artboard_local_after(None);
-        while let Some(host_local_id) = host_local {
-            host_local = self.next_nested_artboard_local_after(Some(host_local_id));
+        for index in 0..self.nested_artboard_locals.len() {
+            let host_local_id = self.nested_artboard_locals[index];
             let host_world = self
                 .component(host_local_id)
                 .map(|component| component.transform.world_transform)
@@ -2438,9 +2425,8 @@ impl ArtboardInstance {
         } else {
             false
         };
-        let mut host_local = self.next_nested_artboard_local_after(None);
-        while let Some(host_local_id) = host_local {
-            host_local = self.next_nested_artboard_local_after(Some(host_local_id));
+        for index in 0..self.nested_artboard_locals.len() {
+            let host_local_id = self.nested_artboard_locals[index];
             let child_context = self.owned_view_model_context_chain_for_nested_host(
                 context,
                 context_chain,
@@ -3613,9 +3599,8 @@ impl ArtboardInstance {
         }
 
         let mut changed = false;
-        let mut host_local = self.next_nested_artboard_local_after(None);
-        while let Some(host_local_id) = host_local {
-            host_local = self.next_nested_artboard_local_after(Some(host_local_id));
+        for index in 0..self.nested_artboard_locals.len() {
+            let host_local_id = self.nested_artboard_locals[index];
             let Some(nested) = self.nested_artboards.get(&host_local_id) else {
                 continue;
             };

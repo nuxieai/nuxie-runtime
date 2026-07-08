@@ -72,6 +72,7 @@ pub struct ArtboardInstance {
     pub(crate) linear_animations: Vec<RuntimeLinearAnimation>,
     pub(crate) state_machines: Vec<RuntimeStateMachine>,
     pub(crate) nested_artboards: BTreeMap<usize, RuntimeNestedArtboardInstance>,
+    pub(crate) nested_artboard_locals: Vec<usize>,
     newly_uncollapsed_nested_artboards: BTreeSet<usize>,
     pub(crate) graph_global_id: u32,
     build_context: Option<RuntimeArtboardBuildContext>,
@@ -287,6 +288,7 @@ impl ArtboardInstance {
         if inserted {
             visiting.remove(&graph.global_id);
         }
+        let nested_artboard_locals = nested_artboards.keys().copied().collect::<Vec<_>>();
 
         let mut instance = Self {
             width: dimensions.width,
@@ -310,6 +312,7 @@ impl ArtboardInstance {
             linear_animations,
             state_machines,
             nested_artboards,
+            nested_artboard_locals,
             newly_uncollapsed_nested_artboards: BTreeSet::new(),
             graph_global_id: graph.global_id,
             build_context,
@@ -340,11 +343,7 @@ impl ArtboardInstance {
             did_change: true,
         };
         instance.apply_initial_layout_component_display_collapses();
-        let nested_host_locals = instance
-            .nested_artboards
-            .keys()
-            .copied()
-            .collect::<Vec<_>>();
+        let nested_host_locals = instance.nested_artboard_locals.clone();
         for host_local_id in nested_host_locals {
             instance.sync_nested_artboard_root_opacity(host_local_id);
         }
@@ -703,9 +702,9 @@ impl ArtboardInstance {
         nested_events: &mut Vec<(usize, Vec<StateMachineReportedEvent>)>,
     ) -> bool {
         let layout_bounds = self.runtime_nested_artboard_layout_bounds();
-        let host_locals = self.nested_artboards.keys().copied().collect::<Vec<_>>();
         let mut changed = false;
-        for host_local in host_locals {
+        for index in 0..self.nested_artboard_locals.len() {
+            let host_local = self.nested_artboard_locals[index];
             if self
                 .component(host_local)
                 .is_some_and(RuntimeComponent::is_collapsed)
@@ -762,7 +761,7 @@ impl ArtboardInstance {
     fn compute_runtime_nested_artboard_layout_bounds(
         &self,
     ) -> Option<BTreeMap<usize, RuntimeLayoutBounds>> {
-        if !self.nested_artboards.keys().any(|local_id| {
+        if !self.nested_artboard_locals.iter().any(|local_id| {
             self.component(*local_id)
                 .is_some_and(|component| component.type_name == "NestedArtboardLayout")
         }) {
@@ -1692,10 +1691,23 @@ impl ArtboardInstance {
         nested.set_quantize(value)
     }
 
+    fn insert_nested_artboard_local(&mut self, local_id: usize) {
+        if let Err(index) = self.nested_artboard_locals.binary_search(&local_id) {
+            self.nested_artboard_locals.insert(index, local_id);
+        }
+    }
+
+    fn remove_nested_artboard_local(&mut self, local_id: usize) {
+        if let Ok(index) = self.nested_artboard_locals.binary_search(&local_id) {
+            self.nested_artboard_locals.remove(index);
+        }
+    }
+
     pub(crate) fn set_nested_artboard_artboard_id(&mut self, local_id: usize, value: u64) -> bool {
         let Some(nested) = self.runtime_nested_artboard_instance_for_id(local_id, value) else {
             let changed = self.nested_artboards.remove(&local_id).is_some();
             if changed {
+                self.remove_nested_artboard_local(local_id);
                 self.mark_changed();
             }
             return changed;
@@ -1708,6 +1720,7 @@ impl ArtboardInstance {
             return false;
         }
         self.nested_artboards.insert(local_id, nested);
+        self.insert_nested_artboard_local(local_id);
         self.sync_nested_artboard_root_opacity(local_id);
         self.mark_changed();
         true
@@ -2543,6 +2556,7 @@ mod tests {
             linear_animations: Vec::new(),
             state_machines: Vec::new(),
             nested_artboards: BTreeMap::new(),
+            nested_artboard_locals: Vec::new(),
             newly_uncollapsed_nested_artboards: BTreeSet::new(),
             graph_global_id: 0,
             build_context: None,
@@ -2849,6 +2863,7 @@ mod tests {
                 cumulated_seconds: 0.0,
             },
         );
+        instance.nested_artboard_locals.push(0);
 
         let first_bounds = instance.runtime_nested_artboard_layout_bounds();
         let first_frame = instance

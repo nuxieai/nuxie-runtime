@@ -566,6 +566,31 @@ the only memory the next session has. Update it every commit.
    force: no broad converter-property writes, no StringPad-style RangeMapper
    retry, and no shallow command/path-wrapper caching without
    release/null-renderer evidence.
+   Nested host traversal now retains `nested_artboard_locals` on
+   `ArtboardInstance`, replacing repeated BTree key collection and range cursor
+   walks in nested advance, owned view-model context binding, nested
+   context-source propagation, and nested child data-context sync. The retained
+   ordered host list mirrors the current nested map keys and is updated only
+   when dynamic `artboardId` swaps create or remove a child instance. This
+   follows C++ retained object traversal and does not add new dirty or skip
+   semantics.
+   Full `make golden-compare` remains exact=263 / exact-segments=584 /
+   diverges=0; focused nested/data-bind tests, `cargo test --workspace`,
+   `cargo fmt --all -- --check`, and `git diff --check` pass. Fenced
+   release/null-renderer hot-loop reports aggregate Rust/C++=2.017, and a
+   closeout rerun reports aggregate Rust/C++=2.093
+   (`advance_blend_mode`=6.239, `ai_assitant`=1.820,
+   `align_target`=1.750, `animated_clipping`=2.337,
+   `animation_reset_cases`=4.105; rerun `ai_assitant`=1.877). A Rust-only
+   `ai_assitant --benchmark-repeat 3000000` sample at
+   `/tmp/rive-ai-retained-host-locals.sample.txt` reports elapsed=24583.5 ms,
+   advance=12061.8 ms, prepare=5582.8 ms, draw=6771.0 ms, and no longer shows
+   `find_leaf_edges_spanning_range` or `BTreeMap::` in the sampled nested host
+   traversal. Strict <=2.0 remains open. Next: profile the remaining
+   advance/data-bind time, especially
+   `bind_owned_view_model_artboard_context_chain` and
+   `advance_artboard_data_binds_with_root_transform`, plus draw
+   command/prepare retention below sorted order under the scout/perf fences.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -1067,6 +1092,23 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Retain nested artboard host local order. C++ traverses
+  retained nested host objects rather than rebuilding ordered key snapshots or
+  range cursors each frame. Rust now stores `nested_artboard_locals` on
+  `ArtboardInstance` immediately after building the `nested_artboards` map and
+  reuses that stable host-local order in nested advance, owned view-model
+  context binding, nested context-source propagation, and nested child
+  data-context sync. Dynamic `artboardId` swaps update this retained ordered
+  list only when they create or remove a child instance, preserving the old
+  BTreeMap traversal surface. This removes a sampled BTree range hot site
+  without adding dirty/skip semantics. `make golden-compare` remains exact=263
+  / exact-segments=584 / diverges=0; focused nested/data-bind tests,
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and `git diff
+  --check` pass. Fenced hot-loop reports aggregate Rust/C++=2.017, with
+  `ai_assitant`=1.820; closeout rerun reports aggregate Rust/C++=2.093, with
+  `ai_assitant`=1.877. A Rust-only 3M-segment sample no longer shows
+  `find_leaf_edges_spanning_range` or `BTreeMap::` in the sampled nested host
+  traversal. M7 remains open.
 - 2026-07-08: [M7] Retain sorted drawable order behind DrawOrder dirt. C++
   retains an intrusive drawable list and only resorts it when
   `ComponentDirt::DrawOrder` is raised by `DrawRules::drawTargetIdChanged()`
@@ -2725,6 +2767,14 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Retained nested artboard host local order on
+  `ArtboardInstance`, replacing repeated BTree key/range walks in nested
+  advance, owned context-chain binding, context-source propagation, and child
+  data-context sync. `make golden-compare` remains
+  exact=263/exact-segments=584/diverges=0; `cargo test --workspace` passes;
+  focused hot-loop is Rust/C++=2.017 to 2.093 with `ai_assitant`=1.820 to
+  1.877. Strict <=2.0 remains open; next profile remaining advance/data-bind
+  and lower draw/prepare retention under the scout/perf fences.
 - 2026-07-08: [M7] Retained sorted drawable order by `draw_order_epoch`,
   raised from the C++ `DrawRules.drawTargetId` / `DrawTarget.placementValue`
   dirt hooks, so prepared-frame rebuilds no longer redo draw-order BTree

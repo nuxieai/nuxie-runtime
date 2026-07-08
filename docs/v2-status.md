@@ -696,6 +696,20 @@ the only memory the next session has. Update it every commit.
    profile the small-file fixed overhead in `advance_blend_mode` /
    `animation_reset_cases`, and consider a repeat-aware corpus aggregation
    harness slice before using repeat-heavy evidence as the main M7 score.
+   `perf-compare` corpus mode now supports repeat-aware steady-state scoring:
+   when `--benchmark-repeat N` is used, the selected exact files are expanded
+   after `--corpus-limit` into one runner target per sample segment, preserving
+   the golden runners' single-sample repeat invariant while reporting a corpus
+   aggregate over the same file x sample segments. The first focused command,
+   `make perf-hot-loop PERF_CORPUS_LIMIT=5 PERF_ITERATIONS=10 PERF_WARMUPS=1
+   PERF_MAX_RATIO=999 PERF_BENCHMARK_REPEAT=100`, reports entries=10 /
+   segments=10 and aggregate Rust/C++=3.711 (`advance_blend_mode@0`=9.385,
+   `advance_blend_mode@0.25`=8.619, `ai_assitant@0`=3.681,
+   `align_target@0`=2.146, `animated_clipping@0`=2.857,
+   `animation_reset_cases` samples around 4.0). Strict <=2.0 remains open.
+   Next: profile and port the small-file fixed overhead in
+   `advance_blend_mode` / `animation_reset_cases`; keep using the repeat-aware
+   focused score for M7 steady-state decisions.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -1197,6 +1211,19 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Make corpus perf repeat-aware by sample segment.
+  `perf-compare --corpus --benchmark-repeat N` used to fail on multi-sample
+  exact files because the golden runners only repeat a single sample. Corpus
+  mode now preserves `--corpus-limit` as a file count, then expands each
+  selected exact file into one target per sample when repeat is requested; input
+  script entries still reject repeat mode. This makes M7's steady-state
+  release/null-renderer score measurable over the focused file x sample corpus
+  instead of relying on noisy repeat=1 medians. Targeted `cargo test -p
+  perf-compare` passes. The first repeat-aware focused run with
+  `PERF_BENCHMARK_REPEAT=100` reports entries=10 / segments=10 and aggregate
+  Rust/C++=3.711, so M7 remains open and the next runtime work should profile
+  the small-file fixed overhead in `advance_blend_mode` /
+  `animation_reset_cases`.
 - 2026-07-08: [M7] Retain static text shape-paint commands behind existing
   dirt epochs. The current `animated_clipping` scout/profiling target was not
   actually clipping math: a live `sample` run showed the Rust draw loop
@@ -2972,6 +2999,15 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Added repeat-aware corpus aggregation to `perf-compare`:
+  `--benchmark-repeat N` now expands selected exact files into one target per
+  sample segment after applying `--corpus-limit`, while still rejecting input
+  scripts. `cargo test -p perf-compare` passes. Focused
+  `make perf-hot-loop PERF_CORPUS_LIMIT=5 PERF_ITERATIONS=10 PERF_WARMUPS=1
+  PERF_MAX_RATIO=999 PERF_BENCHMARK_REPEAT=100` reports entries=10 /
+  segments=10, aggregate Rust/C++=3.711. Strict <=2.0 remains open; next
+  profile `advance_blend_mode` / `animation_reset_cases` fixed overhead under
+  this repeat-aware score.
 - 2026-07-08: [M7] Retained text shape-paint commands on
   `RuntimeRenderPathCache` behind graph/text plus path/layout/cache epochs,
   matching C++ `Text::buildRenderStyles()` / `Text::draw()` retained command

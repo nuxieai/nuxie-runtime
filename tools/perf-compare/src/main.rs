@@ -55,14 +55,7 @@ fn run_corpus(options: &Options, corpus: &Path) -> Result<(), String> {
         .map(Path::to_path_buf)
         .unwrap_or_else(|| PathBuf::from("."));
 
-    let mut targets = entries
-        .into_iter()
-        .filter(|entry| entry.status == Status::Exact)
-        .map(|entry| RunTarget::from_corpus_entry(&entry, &options.rive_runtime_dir, &corpus_dir))
-        .collect::<Vec<_>>();
-    if let Some(limit) = options.corpus_limit {
-        targets.truncate(limit);
-    }
+    let targets = corpus_targets(entries, options, &corpus_dir)?;
     if targets.is_empty() {
         return Err(format!(
             "corpus {} has no selected exact entries",
@@ -110,6 +103,37 @@ fn run_corpus(options: &Options, corpus: &Path) -> Result<(), String> {
     );
     write_json_report_if_requested(options, &files, &aggregate)?;
     check_max_ratio(aggregate.rust_over_cpp, options.max_ratio)
+}
+
+fn corpus_targets(
+    entries: Vec<CorpusEntry>,
+    options: &Options,
+    corpus_dir: &Path,
+) -> Result<Vec<RunTarget>, String> {
+    let mut entries = entries
+        .into_iter()
+        .filter(|entry| entry.status == Status::Exact)
+        .collect::<Vec<_>>();
+    if let Some(limit) = options.corpus_limit {
+        entries.truncate(limit);
+    }
+
+    let mut targets = Vec::new();
+    for entry in entries {
+        if options.benchmark_repeat > 1 {
+            targets.extend(RunTarget::from_corpus_entry_repeated_samples(
+                &entry,
+                &options.rive_runtime_dir,
+            )?);
+        } else {
+            targets.push(RunTarget::from_corpus_entry(
+                &entry,
+                &options.rive_runtime_dir,
+                corpus_dir,
+            ));
+        }
+    }
+    Ok(targets)
 }
 
 fn print_measurements(label: &str, measurements: Measurements) {
@@ -530,6 +554,32 @@ impl RunTarget {
             samples: samples_csv(&entry.samples),
             segment_count: entry.samples.len(),
         }
+    }
+
+    fn from_corpus_entry_repeated_samples(
+        entry: &CorpusEntry,
+        rive_runtime_dir: &Path,
+    ) -> Result<Vec<Self>, String> {
+        if entry.input_script.is_some() {
+            return Err(format!(
+                "--benchmark-repeat cannot be combined with input_script entry {}",
+                entry.id
+            ));
+        }
+
+        Ok(entry
+            .samples
+            .iter()
+            .map(|sample| Self {
+                id: format!("{}@{}", entry.id, sample),
+                file: resolve_asset_path(&entry.path, rive_runtime_dir),
+                artboard: entry.artboard.clone(),
+                state_machine: entry.state_machine.clone(),
+                input_script: None,
+                samples: sample.to_string(),
+                segment_count: 1,
+            })
+            .collect())
     }
 }
 
@@ -1196,6 +1246,102 @@ status = "unsupported-feature"
             entries[1].input_script.as_deref(),
             Some("tests/input_scripts/click.txt")
         );
+    }
+
+    #[test]
+    fn corpus_benchmark_repeat_expands_samples_after_file_limit() {
+        let path = env::temp_dir().join(format!(
+            "perf-compare-repeat-corpus-{}.toml",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            r#"
+[[file]]
+id = "first"
+path = "tests/unit_tests/assets/first.riv"
+samples = [0.0, 0.25]
+status = "exact"
+
+[[file]]
+id = "second"
+path = "tests/unit_tests/assets/second.riv"
+samples = [0.5]
+status = "exact"
+
+[[file]]
+id = "third"
+path = "tests/unit_tests/assets/third.riv"
+samples = [0.75]
+status = "exact"
+"#,
+        )
+        .expect("write corpus");
+
+        let options = Options::parse(vec![
+            "--corpus".to_owned(),
+            path.display().to_string(),
+            "--corpus-limit".to_owned(),
+            "2".to_owned(),
+            "--runner-benchmark".to_owned(),
+            "--benchmark-repeat".to_owned(),
+            "11".to_owned(),
+        ])
+        .expect("parse options");
+        let entries = parse_corpus(&path).expect("parse corpus");
+        let targets =
+            corpus_targets(entries, &options, path.parent().unwrap()).expect("corpus targets");
+        fs::remove_file(path).ok();
+
+        assert_eq!(
+            targets
+                .iter()
+                .map(|target| target.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["first@0", "first@0.25", "second@0.5"]
+        );
+        assert_eq!(
+            targets
+                .iter()
+                .map(|target| target.samples.as_str())
+                .collect::<Vec<_>>(),
+            vec!["0", "0.25", "0.5"]
+        );
+        assert!(targets.iter().all(|target| target.segment_count == 1));
+    }
+
+    #[test]
+    fn corpus_benchmark_repeat_rejects_input_script_entries() {
+        let path = env::temp_dir().join(format!(
+            "perf-compare-repeat-input-corpus-{}.toml",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            r#"
+[[file]]
+id = "scripted"
+path = "tests/unit_tests/assets/scripted.riv"
+input_script = "inputs/scripted.json"
+samples = [0.0]
+status = "exact"
+"#,
+        )
+        .expect("write corpus");
+
+        let options = Options::parse(vec![
+            "--corpus".to_owned(),
+            path.display().to_string(),
+            "--runner-benchmark".to_owned(),
+            "--benchmark-repeat".to_owned(),
+            "11".to_owned(),
+        ])
+        .expect("parse options");
+        let entries = parse_corpus(&path).expect("parse corpus");
+        let error = corpus_targets(entries, &options, path.parent().unwrap()).unwrap_err();
+        fs::remove_file(path).ok();
+
+        assert!(error.contains("cannot be combined with input_script entry scripted"));
     }
 
     #[test]

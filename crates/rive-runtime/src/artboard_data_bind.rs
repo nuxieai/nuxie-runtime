@@ -6,7 +6,7 @@ use crate::data_bind_graph::{
     runtime_data_bind_graph_refresh_operation_view_model_number_converter_for_path,
 };
 use crate::draw::{RuntimePathMeasure, runtime_path_geometry_commands};
-use crate::objects::InstanceObjectArena;
+use crate::objects::{InstanceObjectArena, InstanceSlot};
 use crate::properties::{
     RuntimeLayoutComputedProperty, artboard_index_for_graph, cached_property_key_for_name,
     layout_computed_property_for_key, property_key_for_name, solid_color_value_property_key,
@@ -145,6 +145,101 @@ fn runtime_data_bind_view_model_instance_enum_value_key() -> Option<u16> {
 
 fn runtime_data_bind_view_model_instance_asset_value_key() -> Option<u16> {
     cached_runtime_data_bind_property_key!("ViewModelInstanceAssetImage", "propertyValue")
+}
+
+pub(crate) fn build_nested_host_data_bind_source_locals(
+    slots: &[InstanceSlot],
+    objects: &InstanceObjectArena,
+    host_local_id: usize,
+    child: &ArtboardInstance,
+) -> BTreeMap<Vec<u32>, usize> {
+    if child.artboard_property_bindings.is_empty() && child.artboard_image_asset_bindings.is_empty()
+    {
+        return BTreeMap::new();
+    }
+
+    let mut source_locals = BTreeMap::new();
+    for path in child
+        .artboard_property_bindings
+        .iter()
+        .map(|binding| binding.path.as_slice())
+        .chain(
+            child
+                .artboard_image_asset_bindings
+                .iter()
+                .map(|binding| binding.path.as_slice()),
+        )
+    {
+        if source_locals.contains_key(path) {
+            continue;
+        }
+        if let Some(source_local) =
+            stateful_nested_host_value_local_for_slots(slots, objects, host_local_id, path)
+        {
+            source_locals.insert(path.to_vec(), source_local);
+        }
+    }
+    source_locals
+}
+
+fn stateful_nested_host_value_local_for_slots(
+    slots: &[InstanceSlot],
+    objects: &InstanceObjectArena,
+    host_local_id: usize,
+    path: &[u32],
+) -> Option<usize> {
+    let (view_model_id, property_path) = path.split_first()?;
+    let mut current_local = stateful_nested_host_view_model_instance_local_for_slots(
+        slots,
+        objects,
+        host_local_id,
+        *view_model_id,
+    )?;
+    for property_id in property_path {
+        current_local = view_model_instance_value_child_local_for_slots(
+            slots,
+            objects,
+            current_local,
+            *property_id,
+        )?;
+    }
+    Some(current_local)
+}
+
+fn stateful_nested_host_view_model_instance_local_for_slots(
+    slots: &[InstanceSlot],
+    objects: &InstanceObjectArena,
+    host_local_id: usize,
+    view_model_id: u32,
+) -> Option<usize> {
+    let parent_key = runtime_data_bind_component_parent_id_key()?;
+    let view_model_key = runtime_data_bind_view_model_instance_view_model_id_key()?;
+    slots.iter().find_map(|slot| {
+        (slot.type_name == Some("ViewModelInstance")
+            && objects.uint_property(slot.local_id, parent_key) == Some(host_local_id as u64)
+            && objects.uint_property(slot.local_id, view_model_key)
+                == Some(u64::from(view_model_id)))
+        .then_some(slot.local_id)
+    })
+}
+
+fn view_model_instance_value_child_local_for_slots(
+    slots: &[InstanceSlot],
+    objects: &InstanceObjectArena,
+    parent_local_id: usize,
+    view_model_property_id: u32,
+) -> Option<usize> {
+    let parent_key = runtime_data_bind_component_parent_id_key()?;
+    let property_key = runtime_data_bind_view_model_instance_value_property_id_key()?;
+    slots.iter().find_map(|slot| {
+        let type_name = slot.type_name?;
+        (type_name.starts_with("ViewModelInstance")
+            && type_name != "ViewModelInstance"
+            && objects.uint_property(slot.local_id, parent_key) == Some(parent_local_id as u64)
+            && objects.uint_property(slot.local_id, property_key)
+                == Some(u64::from(view_model_property_id)))
+        .then_some(slot.local_id)
+    })
 }
 
 #[derive(Debug, Clone)]
@@ -3477,9 +3572,10 @@ impl ArtboardInstance {
             ImageAsset(usize, RuntimeDataBindGraphValue),
         }
 
-        let host_locals = self.nested_artboards.keys().copied().collect::<Vec<_>>();
         let mut changed = false;
-        for host_local_id in host_locals {
+        let mut host_local = self.next_nested_artboard_local_after(None);
+        while let Some(host_local_id) = host_local {
+            host_local = self.next_nested_artboard_local_after(Some(host_local_id));
             let Some(nested) = self.nested_artboards.get(&host_local_id) else {
                 continue;
             };
@@ -3490,8 +3586,11 @@ impl ArtboardInstance {
             }
             let mut updates = Vec::new();
             for (index, binding) in nested.child.artboard_property_bindings.iter().enumerate() {
-                if let Some(value) = self.stateful_nested_host_binding_value(host_local_id, binding)
-                {
+                if let Some(value) = self.stateful_nested_host_binding_value(
+                    host_local_id,
+                    &nested.data_bind_source_locals_by_path,
+                    binding,
+                ) {
                     updates.push(NestedChildContextUpdate::Property(index, value));
                 }
             }
@@ -3503,6 +3602,7 @@ impl ArtboardInstance {
             {
                 if let Some(value) = self.stateful_nested_host_binding_value_for(
                     host_local_id,
+                    &nested.data_bind_source_locals_by_path,
                     &binding.path,
                     &binding.default_value,
                 ) {
@@ -3549,10 +3649,12 @@ impl ArtboardInstance {
     fn stateful_nested_host_binding_value(
         &self,
         host_local_id: usize,
+        source_locals_by_path: &BTreeMap<Vec<u32>, usize>,
         binding: &RuntimeArtboardPropertyBindingInstance,
     ) -> Option<RuntimeDataBindGraphValue> {
         self.stateful_nested_host_binding_value_for(
             host_local_id,
+            source_locals_by_path,
             &binding.path,
             &binding.default_value,
         )
@@ -3561,10 +3663,14 @@ impl ArtboardInstance {
     fn stateful_nested_host_binding_value_for(
         &self,
         host_local_id: usize,
+        source_locals_by_path: &BTreeMap<Vec<u32>, usize>,
         path: &[u32],
         default_value: &RuntimeDataBindGraphValue,
     ) -> Option<RuntimeDataBindGraphValue> {
-        let source_local = self.stateful_nested_host_value_local(host_local_id, path)?;
+        let source_local = source_locals_by_path
+            .get(path)
+            .copied()
+            .or_else(|| self.stateful_nested_host_value_local(host_local_id, path))?;
         match default_value {
             RuntimeDataBindGraphValue::Number(_) => {
                 let property_value_key = runtime_data_bind_view_model_instance_number_value_key()?;
@@ -3605,48 +3711,7 @@ impl ArtboardInstance {
         host_local_id: usize,
         path: &[u32],
     ) -> Option<usize> {
-        let (view_model_id, property_path) = path.split_first()?;
-        let mut current_local =
-            self.stateful_nested_host_view_model_instance_local(host_local_id, *view_model_id)?;
-        for property_id in property_path {
-            current_local =
-                self.view_model_instance_value_child_local(current_local, *property_id)?;
-        }
-        Some(current_local)
-    }
-
-    fn stateful_nested_host_view_model_instance_local(
-        &self,
-        host_local_id: usize,
-        view_model_id: u32,
-    ) -> Option<usize> {
-        let parent_key = runtime_data_bind_component_parent_id_key()?;
-        let view_model_key = runtime_data_bind_view_model_instance_view_model_id_key()?;
-        self.slots.iter().find_map(|slot| {
-            (slot.type_name == Some("ViewModelInstance")
-                && self.uint_property(slot.local_id, parent_key) == Some(host_local_id as u64)
-                && self.uint_property(slot.local_id, view_model_key)
-                    == Some(u64::from(view_model_id)))
-            .then_some(slot.local_id)
-        })
-    }
-
-    fn view_model_instance_value_child_local(
-        &self,
-        parent_local_id: usize,
-        view_model_property_id: u32,
-    ) -> Option<usize> {
-        let parent_key = runtime_data_bind_component_parent_id_key()?;
-        let property_key = runtime_data_bind_view_model_instance_value_property_id_key()?;
-        self.slots.iter().find_map(|slot| {
-            let type_name = slot.type_name?;
-            (type_name.starts_with("ViewModelInstance")
-                && type_name != "ViewModelInstance"
-                && self.uint_property(slot.local_id, parent_key) == Some(parent_local_id as u64)
-                && self.uint_property(slot.local_id, property_key)
-                    == Some(u64::from(view_model_property_id)))
-            .then_some(slot.local_id)
-        })
+        stateful_nested_host_value_local_for_slots(&self.slots, &self.objects, host_local_id, path)
     }
 
     pub fn artboard_list_binding_source_list_size_for_data_bind(

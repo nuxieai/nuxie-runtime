@@ -24,6 +24,7 @@ use crate::artboard_data_bind::{
     build_artboard_list_bindings, build_artboard_nested_host_bindings,
     build_artboard_numeric_source_bindings, build_artboard_property_bindings,
     build_artboard_solo_bindings, build_artboard_solo_source_bindings,
+    build_nested_host_data_bind_source_locals,
 };
 use crate::components::{
     AuthoredTransform, ComponentDirt, Mat2D, RuntimeComponent, RuntimeSolo, TransformProperty,
@@ -105,6 +106,7 @@ pub struct ArtboardInstance {
 pub(crate) struct RuntimeNestedArtboardInstance {
     pub(crate) child: Box<ArtboardInstance>,
     pub(crate) data_bind_resolved_path_ids: Option<Vec<u32>>,
+    pub(crate) data_bind_source_locals_by_path: BTreeMap<Vec<u32>, usize>,
     animations: Vec<RuntimeNestedAnimationInstance>,
     is_paused: bool,
     speed: f32,
@@ -272,6 +274,8 @@ impl ArtboardInstance {
                 file,
                 graph,
                 artboards,
+                &slots,
+                &objects,
                 visiting,
                 build_context.clone(),
             )?
@@ -1722,6 +1726,8 @@ impl ArtboardInstance {
             &context.file,
             parent_graph,
             context.artboards.as_slice(),
+            &self.slots,
+            &self.objects,
             host_local_id,
             child_graph,
             &mut visiting,
@@ -2154,6 +2160,8 @@ fn build_runtime_nested_artboard_instances(
     file: &RuntimeFile,
     graph: &ArtboardGraph,
     artboards: &[ArtboardGraph],
+    slots: &[InstanceSlot],
+    objects: &InstanceObjectArena,
     visiting: &mut BTreeSet<u32>,
     build_context: Option<RuntimeArtboardBuildContext>,
 ) -> Result<BTreeMap<usize, RuntimeNestedArtboardInstance>> {
@@ -2193,6 +2201,8 @@ fn build_runtime_nested_artboard_instances(
             file,
             graph,
             artboards,
+            slots,
+            objects,
             host.local_id,
             child_graph,
             visiting,
@@ -2212,6 +2222,8 @@ fn build_runtime_nested_artboard_instance(
     file: &RuntimeFile,
     parent_graph: &ArtboardGraph,
     artboards: &[ArtboardGraph],
+    parent_slots: &[InstanceSlot],
+    parent_objects: &InstanceObjectArena,
     host_local_id: usize,
     child_graph: &ArtboardGraph,
     visiting: &mut BTreeSet<u32>,
@@ -2233,9 +2245,16 @@ fn build_runtime_nested_artboard_instance(
         child.clear_default_text_property_context();
     }
     let animations = runtime_nested_animation_instances(file, parent_graph, host_local_id, &child);
+    let data_bind_source_locals_by_path = build_nested_host_data_bind_source_locals(
+        parent_slots,
+        parent_objects,
+        host_local_id,
+        &child,
+    );
     Ok(RuntimeNestedArtboardInstance {
         child,
         data_bind_resolved_path_ids,
+        data_bind_source_locals_by_path,
         animations,
         is_paused,
         speed,
@@ -2771,6 +2790,7 @@ mod tests {
                     vec![10],
                 )),
                 data_bind_resolved_path_ids: None,
+                data_bind_source_locals_by_path: BTreeMap::new(),
                 animations: Vec::new(),
                 is_paused: false,
                 speed: 1.0,

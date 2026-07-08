@@ -474,6 +474,25 @@ the only memory the next session has. Update it every commit.
    remaining advance/data-bind time before landing more context allocation
    cleanup; if no clear C++ retention/dirt slice appears, move to a
    higher-leverage audited dirt/retention target.
+   Nested-host source locals for child data-context sync are now retained on
+   `RuntimeNestedArtboardInstance` by child binding path and rebuilt during
+   dynamic `artboardId` swaps. `sync_nested_child_artboard_data_contexts`
+   consumes the retained path-to-local map and falls back to the old slot walk
+   for unresolved paths; that loop also walks the retained host map directly
+   instead of snapshotting keys into a temporary vector. This mirrors C++
+   `DataContext`/view-model instance pointer walks without adding a new
+   skip/cache invalidation rule. Full `make golden-compare` remains exact=263 /
+   exact-segments=584 / diverges=0; `cargo test --workspace`,
+   `cargo fmt --all -- --check`, and `git diff --check` pass. Direct Rust-only
+   `ai_assitant --benchmark-repeat 1000000` improves from elapsed=11884.7 /
+   advance=6753.7 ms to elapsed=11658.6 / advance=6683.3 ms. Single-file
+   repeat=100 JSON at `/tmp/rive-ai-retained-source-locals-perf.json` reports
+   cpp median=0.389 ms, rust median=1.898 ms, Rust/C++=4.880. Focused
+   release/null-renderer hot-loop is improved but still noisy at aggregate
+   Rust/C++=2.024 then 2.253, so strict <=2.0 remains open. Next: profile the
+   remaining advance/data-bind time again before choosing between another
+   audited retained data-context lookup and a higher-leverage dirt/retention
+   target.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -975,6 +994,26 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Retain nested-host source locals for child data-context sync.
+  The previous Rust path still resolved each nested child property/image
+  binding by scanning the parent artboard slots for a matching
+  `ViewModelInstance`, then scanning child value slots for each path segment.
+  C++ keeps view-model instance/value pointers and `DataBindPath` buffers on
+  the data-context path, so Rust now builds a
+  `RuntimeNestedArtboardInstance::data_bind_source_locals_by_path` table from
+  the child artboard's binding paths when the nested instance is created,
+  including dynamic `artboardId` swaps. The steady sync path uses the retained
+  source local first and falls back to the old slot walk for unresolved paths;
+  `sync_nested_child_artboard_data_contexts` also walks the retained host map
+  directly instead of allocating a temporary host-key vector. This is retained
+  import/build lookup data, not a new invalidation or skip rule. `make
+  golden-compare` remains exact=263 / exact-segments=584 / diverges=0; focused
+  nested/data-bind tests, `cargo test --workspace`, `cargo fmt --all
+  -- --check`, and `git diff --check` pass. Direct Rust-only
+  `ai_assitant --benchmark-repeat 1000000` improves to elapsed=11658.6 /
+  advance=6683.3 ms; single-file repeat=100 improves to Rust/C++=4.880; focused
+  release/null-renderer hot-loop reports aggregate Rust/C++=2.024 then 2.253,
+  so M7 remains open.
 - 2026-07-08: [M7] Share source-producing artboard data-bind paths as immutable
   slices. The previous Rust path retained custom-property/layout-computed/solo
   source paths as `Vec<u32>` and cloned those vectors while collecting nested
@@ -2547,6 +2586,13 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Retained nested-host child data-context source locals by
+  binding path and removed the remaining host-key snapshot from
+  `sync_nested_child_artboard_data_contexts`. `make golden-compare` remains
+  exact=263/exact-segments=584/diverges=0; `cargo test --workspace` passes;
+  single-file repeat=100 improves to Rust/C++=4.880 and focused hot-loop is
+  Rust/C++=2.024 then 2.253. Strict <=2.0 remains open; next profile the
+  remaining advance/data-bind path before another slice.
 - 2026-07-08: [M7] Shared source-producing artboard data-bind paths as
   immutable `Arc<[u32]>` slices to avoid per-context-source path Vec allocation.
   `make golden-compare` remains exact=263/exact-segments=584/diverges=0;

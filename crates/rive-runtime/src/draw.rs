@@ -67,6 +67,16 @@ fn runtime_gradient_container_is_root_artboard(container: &ShapePaintContainerNo
 
 fn runtime_draw_property_key_for_name(type_name: &str, property_name: &str) -> Option<u16> {
     match (type_name, property_name) {
+        ("Artboard", "opacity") => cached_runtime_property_key!("Artboard", "opacity"),
+        ("DrawRules", "drawTargetId") => {
+            cached_runtime_property_key!("DrawRules", "drawTargetId")
+        }
+        ("DrawTarget", "placementValue") => {
+            cached_runtime_property_key!("DrawTarget", "placementValue")
+        }
+        ("Drawable", "blendModeValue") => {
+            cached_runtime_property_key!("Drawable", "blendModeValue")
+        }
         ("Stroke", "thickness") => {
             static KEY: OnceLock<Option<u16>> = OnceLock::new();
             cached_property_key_for_name(&KEY, "Stroke", "thickness")
@@ -178,6 +188,26 @@ fn runtime_draw_property_key_for_name(type_name: &str, property_name: &str) -> O
         ("TrimPath", "end") => {
             static KEY: OnceLock<Option<u16>> = OnceLock::new();
             cached_property_key_for_name(&KEY, "TrimPath", "end")
+        }
+        ("Image", "assetId") => cached_runtime_property_key!("Image", "assetId"),
+        ("Image", "originX") => cached_runtime_property_key!("Image", "originX"),
+        ("Image", "originY") => cached_runtime_property_key!("Image", "originY"),
+        ("Image", "fit") => cached_runtime_property_key!("Image", "fit"),
+        ("Image", "alignmentX") => cached_runtime_property_key!("Image", "alignmentX"),
+        ("Image", "alignmentY") => cached_runtime_property_key!("Image", "alignmentY"),
+        ("Vertex", "x") => cached_runtime_property_key!("Vertex", "x"),
+        ("Vertex", "y") => cached_runtime_property_key!("Vertex", "y"),
+        ("NestedArtboard", "artboardId") => {
+            cached_runtime_property_key!("NestedArtboard", "artboardId")
+        }
+        ("NestedArtboardLeaf", "fit") => {
+            cached_runtime_property_key!("NestedArtboardLeaf", "fit")
+        }
+        ("NestedArtboardLeaf", "alignmentX") => {
+            cached_runtime_property_key!("NestedArtboardLeaf", "alignmentX")
+        }
+        ("NestedArtboardLeaf", "alignmentY") => {
+            cached_runtime_property_key!("NestedArtboardLeaf", "alignmentY")
         }
         _ => property_key_for_name(type_name, property_name),
     }
@@ -391,10 +421,13 @@ impl ArtboardInstance {
     }
 
     fn runtime_sorted_drawable_order(&self, graph: &ArtboardGraph) -> Vec<SortedDrawableNode> {
-        let Some(draw_target_id_key) = property_key_for_name("DrawRules", "drawTargetId") else {
+        let Some(draw_target_id_key) =
+            runtime_draw_property_key_for_name("DrawRules", "drawTargetId")
+        else {
             return graph.sorted_drawable_order.clone();
         };
-        let Some(placement_value_key) = property_key_for_name("DrawTarget", "placementValue")
+        let Some(placement_value_key) =
+            runtime_draw_property_key_for_name("DrawTarget", "placementValue")
         else {
             return graph.sorted_drawable_order.clone();
         };
@@ -850,7 +883,7 @@ impl ArtboardInstance {
             .and_then(|local_id| self.component(local_id))
             .map(|component| component.transform.render_opacity)
             .unwrap_or(1.0);
-        if let Some(opacity_key) = property_key_for_name("Artboard", "opacity") {
+        if let Some(opacity_key) = runtime_draw_property_key_for_name("Artboard", "opacity") {
             child.set_double_property(0, opacity_key, host_opacity);
         }
         child.update_pass();
@@ -5654,7 +5687,7 @@ fn heuristic_pre_source_image_decode_count(
     let has_asset_image_bind = artboards.iter().any(|artboard| {
         artboard.data_binds.iter().any(|data_bind| {
             data_bind.target_type_name == Some("Image")
-                && property_key_for_name("Image", "assetId")
+                && runtime_draw_property_key_for_name("Image", "assetId")
                     .is_some_and(|key| data_bind.property_key == u64::from(key))
         })
     });
@@ -5686,7 +5719,7 @@ fn heuristic_pre_source_image_decode_count(
 
         artboard.data_binds.iter().any(|data_bind| {
             data_bind.target_type_name == Some("Image")
-                && property_key_for_name("Image", "assetId")
+                && runtime_draw_property_key_for_name("Image", "assetId")
                     .is_some_and(|key| data_bind.property_key == u64::from(key))
         })
     });
@@ -6658,9 +6691,9 @@ fn runtime_draw_image(
     }
 
     let origin_x_key =
-        property_key_for_name("Image", "originX").context("missing Image.originX")?;
+        runtime_draw_property_key_for_name("Image", "originX").context("missing Image.originX")?;
     let origin_y_key =
-        property_key_for_name("Image", "originY").context("missing Image.originY")?;
+        runtime_draw_property_key_for_name("Image", "originY").context("missing Image.originY")?;
     let origin_x = instance
         .double_property(local_id, origin_x_key)
         .or_else(|| image_object.and_then(|object| object.double_property("originX")))
@@ -6693,7 +6726,7 @@ fn runtime_draw_image(
         -(image.height() as f32 * origin_y),
     ]));
 
-    let blend_mode_key = property_key_for_name("Drawable", "blendModeValue")
+    let blend_mode_key = runtime_draw_property_key_for_name("Drawable", "blendModeValue")
         .context("missing Drawable.blendModeValue")?;
     let blend_mode_value = instance
         .uint_property(local_id, blend_mode_key)
@@ -6753,7 +6786,7 @@ fn runtime_draw_mesh_image(
 
     runtime_update_mesh_vertex_buffer(runtime, instance, mesh, weighted_context.as_ref(), buffers)?;
 
-    let blend_mode_key = property_key_for_name("Drawable", "blendModeValue")
+    let blend_mode_key = runtime_draw_property_key_for_name("Drawable", "blendModeValue")
         .context("missing Drawable.blendModeValue")?;
     let blend_mode_value = instance
         .uint_property(image_local, blend_mode_key)
@@ -6817,8 +6850,8 @@ fn runtime_mesh_vertex_render_translation(
     let vertex_object = runtime
         .object(vertex.global_id as usize)
         .with_context(|| format!("missing mesh vertex global {}", vertex.global_id))?;
-    let x_key = property_key_for_name("Vertex", "x").context("missing Vertex.x")?;
-    let y_key = property_key_for_name("Vertex", "y").context("missing Vertex.y")?;
+    let x_key = runtime_draw_property_key_for_name("Vertex", "x").context("missing Vertex.x")?;
+    let y_key = runtime_draw_property_key_for_name("Vertex", "y").context("missing Vertex.y")?;
     let x = instance
         .double_property(vertex.local_id, x_key)
         .or_else(|| vertex_object.double_property("x"))
@@ -6873,11 +6906,12 @@ fn runtime_image_world_transform(
         return Ok(None);
     };
 
-    let fit_key = property_key_for_name("Image", "fit").context("missing Image.fit")?;
-    let alignment_x_key =
-        property_key_for_name("Image", "alignmentX").context("missing Image.alignmentX")?;
-    let alignment_y_key =
-        property_key_for_name("Image", "alignmentY").context("missing Image.alignmentY")?;
+    let fit_key =
+        runtime_draw_property_key_for_name("Image", "fit").context("missing Image.fit")?;
+    let alignment_x_key = runtime_draw_property_key_for_name("Image", "alignmentX")
+        .context("missing Image.alignmentX")?;
+    let alignment_y_key = runtime_draw_property_key_for_name("Image", "alignmentY")
+        .context("missing Image.alignmentY")?;
     let fit = instance
         .uint_property(local_id, fit_key)
         .or_else(|| image_object.and_then(|object| object.uint_property("fit")))
@@ -6967,7 +7001,8 @@ fn runtime_draw_nested_artboard(
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
 ) -> Result<()> {
     if let Some(local_id) = command.local_id
-        && let Some(artboard_id_key) = property_key_for_name("NestedArtboard", "artboardId")
+        && let Some(artboard_id_key) =
+            runtime_draw_property_key_for_name("NestedArtboard", "artboardId")
         && instance.uint_property(local_id, artboard_id_key) == Some(u64::from(u32::MAX))
     {
         return Ok(());
@@ -7119,7 +7154,7 @@ fn runtime_draw_nested_artboard(
 
     let mut child = ArtboardInstance::from_graph(runtime, child_graph)?;
     runtime_apply_nested_artboard_layout_child_bounds(&mut child, &command, layout_bounds)?;
-    if let Some(opacity_key) = property_key_for_name("Artboard", "opacity") {
+    if let Some(opacity_key) = runtime_draw_property_key_for_name("Artboard", "opacity") {
         child.set_double_property(0, opacity_key, host_opacity);
     }
     child.update_pass();
@@ -7245,11 +7280,11 @@ fn runtime_nested_artboard_leaf_world_transform(
     let frame =
         runtime_nested_artboard_leaf_frame_bounds(instance, graph, local_id, child, layout_bounds)?;
     let content = RuntimeAabb::from_artboard_with_layout(child, child_graph);
-    let fit_key = property_key_for_name("NestedArtboardLeaf", "fit")
+    let fit_key = runtime_draw_property_key_for_name("NestedArtboardLeaf", "fit")
         .context("missing NestedArtboardLeaf.fit")?;
-    let alignment_x_key = property_key_for_name("NestedArtboardLeaf", "alignmentX")
+    let alignment_x_key = runtime_draw_property_key_for_name("NestedArtboardLeaf", "alignmentX")
         .context("missing NestedArtboardLeaf.alignmentX")?;
-    let alignment_y_key = property_key_for_name("NestedArtboardLeaf", "alignmentY")
+    let alignment_y_key = runtime_draw_property_key_for_name("NestedArtboardLeaf", "alignmentY")
         .context("missing NestedArtboardLeaf.alignmentY")?;
     let fit = instance.uint_property(local_id, fit_key).unwrap_or(0);
     let alignment_x = instance

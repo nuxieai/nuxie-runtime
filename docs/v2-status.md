@@ -532,6 +532,23 @@ the only memory the next session has. Update it every commit.
    remains open. Next: re-profile after this schema-classification cleanup and
    pick the next C++-audited retained/dirt or hot BTree target from the new
    sample.
+   Fixed draw/image/mesh/nested property keys now also route through the
+   cached runtime draw-key helper instead of calling the generic
+   `property_key_for_name` dispatcher for literal schema pairs in the frame
+   loop. This covers `DrawRules.drawTargetId`, `DrawTarget.placementValue`,
+   `Drawable.blendModeValue`, `Image.assetId/origin/fit/alignment`,
+   `Vertex.x/y`, `NestedArtboard.artboardId`, `NestedArtboardLeaf`
+   fit/alignment, and `Artboard.opacity`. It is C++-shaped generated-key
+   retention, not a new skip/cache invalidation rule. Full `make
+   golden-compare` remains exact=263 / exact-segments=584 / diverges=0;
+   `cargo test --workspace`, focused draw tests, `cargo fmt --all -- --check`,
+   and `git diff --check` pass. Single-file repeat=100 JSON at
+   `/tmp/rive-ai-draw-property-keys-perf.json` reports cpp median=0.531 ms,
+   rust median=1.586 ms, Rust/C++=2.985. Focused release/null-renderer
+   hot-loop reports aggregate Rust/C++=2.187 then 2.122, so strict <=2.0
+   remains open. Next: re-profile after this fixed-key cleanup and choose
+   between the sampled hot BTree/draw-order path and remaining audited
+   data-context retention work.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -1033,6 +1050,20 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Cache fixed draw/image/nested property keys. A post
+  draw-classifier sample still had generic schema/property lookup under
+  draw/prepare through literal `property_key_for_name` calls. C++ uses
+  generated property-key constants instead of name lookup in draw/update
+  paths, so Rust now extends `runtime_draw_property_key_for_name` to cover the
+  fixed draw-order, image, mesh vertex, nested-artboard, and artboard-opacity
+  keys used by `draw.rs`, while leaving dynamic component helper fallbacks
+  untouched. This removes reflected schema lookup from fixed frame-loop reads;
+  it is not a skip cache or dirty invalidation change. `make golden-compare`
+  remains exact=263 / exact-segments=584 / diverges=0; focused draw tests,
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and `git diff
+  --check` pass. Repeat=100 JSON reports cpp median=0.531 ms, rust
+  median=1.586 ms, Rust/C++=2.985; focused hot-loop reports aggregate
+  Rust/C++=2.187 then 2.122. M7 remains open.
 - 2026-07-08: [M7] Remove draw-time schema lookup from fixed drawable
   classification. A post root-local sample still showed schema
   `definition_by_name` under draw/prepare even after generated switch tables
@@ -2662,6 +2693,14 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Cached fixed draw/image/mesh/nested property keys in
+  `runtime_draw_property_key_for_name`, replacing literal frame-loop
+  `property_key_for_name` calls without changing dirty or skip semantics.
+  `make golden-compare` remains exact=263/exact-segments=584/diverges=0;
+  `cargo test --workspace` passes; repeat=100 JSON reports Rust/C++=2.985 and
+  focused hot-loop reports Rust/C++=2.187 then 2.122. Strict <=2.0 remains
+  open; next re-profile and choose between sampled BTree/draw-order work and
+  remaining audited data-context retention.
 - 2026-07-08: [M7] Removed draw-time schema lookup from render-opacity and
   nested-artboard drawable classification by replacing
   `definition_by_name(...).is_a(...)` with C++-shaped fixed type checks. `make

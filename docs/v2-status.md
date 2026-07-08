@@ -87,13 +87,21 @@ the only memory the next session has. Update it every commit.
    `animated_clipping`=2.400). Direct `ai_assitant --benchmark-repeat 100`
    reports cpp median=0.398 ms, rust median=7.700 ms, Rust/C++=19.356; the
    ratio remains C++-median-sensitive, but Rust steady-state time improved.
+   Retained render-paint draw configuration in `RuntimeRenderPaintCache` now
+   records the last persistent paint type/stroke/blend/shader/feather config,
+   skips redundant draw-time paint setters, and invalidates that config when
+   gradient preparation mutates a retained paint. Focused 10-iteration
+   verification reports aggregate Rust/C++=2.518 over the same 5 exact entries
+   / 10 segments (`ai_assitant`=2.583, `align_target`=1.864,
+   `animated_clipping`=2.422). Direct `ai_assitant --benchmark-repeat 100`
+   reports cpp median=0.393 ms, rust median=7.341 ms, Rust/C++=18.668.
    The layout-split sample no longer showed
    `runtime_taffy_layout_bounds` in the hot stack; remaining heat is
-   data-bind/nested advance allocation and retained paint/path dirt gates. The
-   next M7 target is actual C++ `Paint|Stops|RenderOpacity` dirt-gated
-   render-paint mutation or `ShapePaintPath` retention before lower-priority
-   clip rebuild leftovers. After the perf target is real, expand the C ABI to
-   instance advance/draw.
+   data-bind/nested advance allocation and retained path/paint dirt gates. The
+   next M7 target should follow the scout ordering: `ShapePaintPath`/raw-path
+   retention behind C++ dirt gates, plus any idempotent dirt raisers needed to
+   make clean frames skip prepare. After the perf target is real, expand the C
+   ABI to instance advance/draw.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -595,6 +603,25 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Retained render-paint draw configuration in
+  `RuntimeRenderPaintCache`. Persistent draw paints now remember the last
+  applied paint type, stroke thickness/cap/join, blend mode, solid color or
+  preserved gradient shader, and feather strength. Draw-time configuration is
+  skipped when the retained `RenderPaint` already matches; temporary text paints
+  stay uncached, and gradient preparation removes the cached config before
+  mutating a retained paint so shader/style state cannot go stale. This is a
+  narrow C++-aligned retention slice, not a new runtime behavior gate. `cargo
+  fmt --all -- --check`, focused runtime test
+  `draw_path_reuses_render_path_until_instance_epoch_changes`, `cargo test
+  --workspace`, and `make golden-compare` pass at exact=263 /
+  exact-segments=584 / diverges=0. Focused release/null-renderer `make
+  perf-hot-loop PERF_CORPUS_LIMIT=5 PERF_ITERATIONS=10 PERF_WARMUPS=1
+  PERF_MAX_RATIO=999` reports aggregate Rust/C++=2.518 over 5 exact entries /
+  10 segments (`ai_assitant`=2.583, `align_target`=1.864,
+  `animated_clipping`=2.422). Direct `ai_assitant --benchmark-repeat 100`
+  reports cpp median=0.393 ms, rust median=7.341 ms, Rust/C++=18.668; strict
+  <=2.0 remains open. Next target should return to the scout-ranked
+  `ShapePaintPath`/raw-path retention and clean-frame dirt-gating path.
 - 2026-07-08: [M7] Retained gradient paint preparation grouping/order in
   `RuntimeRenderPathCache`. Rust paint prep now caches graph-static gradient
   mutator buckets plus dependency/dependency-insertion order vectors by live

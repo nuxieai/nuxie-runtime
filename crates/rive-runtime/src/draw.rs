@@ -509,6 +509,7 @@ impl ArtboardInstance {
             graph,
             factory,
             paint_by_global,
+            None,
             render_cache,
             None,
             RuntimeGradientPaintFilter::All,
@@ -521,6 +522,7 @@ impl ArtboardInstance {
         graph: &ArtboardGraph,
         factory: &mut dyn RenderFactory,
         paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
+        mut paint_configurations: Option<&mut BTreeMap<u32, RuntimeRenderPaintConfiguration>>,
         render_cache: &mut RuntimeRenderPathCache,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
         filter: RuntimeGradientPaintFilter,
@@ -574,6 +576,9 @@ impl ArtboardInstance {
                     factory,
                     shaders: &mut render_cache.gradient_shaders,
                 };
+                if let Some(configurations) = paint_configurations.as_mut() {
+                    configurations.remove(&paint.global_id);
+                }
                 runtime_configure_paint(
                     paint_by_global
                         .get_mut(&paint.global_id)
@@ -607,6 +612,7 @@ impl ArtboardInstance {
             artboards,
             factory,
             &mut paint_cache.paints,
+            Some(&mut paint_cache.paint_configurations),
             Some(&mut paint_cache.nested_artboards),
             render_cache,
             true,
@@ -620,6 +626,7 @@ impl ArtboardInstance {
         artboards: &[ArtboardGraph],
         factory: &mut dyn RenderFactory,
         paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
+        mut paint_configurations: Option<&mut BTreeMap<u32, RuntimeRenderPaintConfiguration>>,
         mut nested_paint_caches: Option<&mut BTreeMap<u32, RuntimeRenderPaintCache>>,
         render_cache: &mut RuntimeRenderPathCache,
         defer_root_layout_gradients: bool,
@@ -636,6 +643,7 @@ impl ArtboardInstance {
                 artboards,
                 factory,
                 paint_by_global,
+                paint_configurations.as_deref_mut(),
                 nested_paint_caches,
                 render_cache,
                 layout_bounds,
@@ -654,6 +662,7 @@ impl ArtboardInstance {
             graph,
             factory,
             paint_by_global,
+            paint_configurations.as_deref_mut(),
             render_cache,
             layout_bounds,
             initial_filter,
@@ -670,6 +679,7 @@ impl ArtboardInstance {
                 artboards,
                 factory,
                 paint_by_global,
+                paint_configurations.as_deref_mut(),
                 nested_paint_caches.as_deref_mut(),
                 render_cache,
                 layout_bounds,
@@ -683,6 +693,7 @@ impl ArtboardInstance {
                 graph,
                 factory,
                 paint_by_global,
+                paint_configurations.as_deref_mut(),
                 render_cache,
                 layout_bounds,
                 RuntimeGradientPaintFilter::OnlyLayoutComponents,
@@ -722,6 +733,7 @@ impl ArtboardInstance {
         artboards: &[ArtboardGraph],
         factory: &mut dyn RenderFactory,
         paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
+        mut paint_configurations: Option<&mut BTreeMap<u32, RuntimeRenderPaintConfiguration>>,
         nested_paint_caches: Option<&mut BTreeMap<u32, RuntimeRenderPaintCache>>,
         render_cache: &mut RuntimeRenderPathCache,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
@@ -747,6 +759,7 @@ impl ArtboardInstance {
                 let child_paint_cache = caches.entry(cache_key).or_default();
                 Some((
                     &mut child_paint_cache.paints,
+                    &mut child_paint_cache.paint_configurations,
                     Some(&mut child_paint_cache.nested_artboards),
                 ))
             }
@@ -772,13 +785,16 @@ impl ArtboardInstance {
             } else {
                 child
             };
-            if let Some((child_paints, child_nested_paints)) = child_paint_caches {
+            if let Some((child_paints, child_configurations, child_nested_paints)) =
+                child_paint_caches
+            {
                 child.prepare_static_artboard_tree_paints_internal(
                     runtime,
                     child_graph,
                     artboards,
                     factory,
                     child_paints,
+                    Some(child_configurations),
                     child_nested_paints,
                     child_cache,
                     true,
@@ -790,6 +806,7 @@ impl ArtboardInstance {
                     artboards,
                     factory,
                     paint_by_global,
+                    paint_configurations.as_deref_mut(),
                     None,
                     child_cache,
                     true,
@@ -809,13 +826,15 @@ impl ArtboardInstance {
             child.set_double_property(0, opacity_key, host_opacity);
         }
         child.update_pass();
-        if let Some((child_paints, child_nested_paints)) = child_paint_caches {
+        if let Some((child_paints, child_configurations, child_nested_paints)) = child_paint_caches
+        {
             child.prepare_static_artboard_tree_paints_internal(
                 runtime,
                 child_graph,
                 artboards,
                 factory,
                 child_paints,
+                Some(child_configurations),
                 child_nested_paints,
                 child_cache,
                 true,
@@ -827,6 +846,7 @@ impl ArtboardInstance {
                 artboards,
                 factory,
                 paint_by_global,
+                paint_configurations.as_deref_mut(),
                 None,
                 child_cache,
                 true,
@@ -842,6 +862,7 @@ impl ArtboardInstance {
         artboards: &[ArtboardGraph],
         factory: &mut dyn RenderFactory,
         paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
+        mut paint_configurations: Option<&mut BTreeMap<u32, RuntimeRenderPaintConfiguration>>,
         mut nested_paint_caches: Option<&mut BTreeMap<u32, RuntimeRenderPaintCache>>,
         render_cache: &mut RuntimeRenderPathCache,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
@@ -881,6 +902,7 @@ impl ArtboardInstance {
                 paint_by_global,
                 render_cache,
                 layout_bounds,
+                paint_configurations.as_deref_mut(),
                 &gradient_preparation,
                 &mut prepared_paints,
                 RuntimeGradientPaintFilter::ExcludeRootArtboard,
@@ -899,6 +921,7 @@ impl ArtboardInstance {
                 artboards,
                 factory,
                 paint_by_global,
+                paint_configurations.as_deref_mut(),
                 nested_paint_caches.as_deref_mut(),
                 render_cache,
                 layout_bounds,
@@ -918,6 +941,7 @@ impl ArtboardInstance {
                 paint_by_global,
                 render_cache,
                 layout_bounds,
+                paint_configurations.as_deref_mut(),
                 &gradient_preparation,
                 &mut prepared_paints,
                 RuntimeGradientPaintFilter::OnlyRootArtboard,
@@ -936,6 +960,7 @@ impl ArtboardInstance {
         paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
         render_cache: &mut RuntimeRenderPathCache,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+        mut paint_configurations: Option<&mut BTreeMap<u32, RuntimeRenderPaintConfiguration>>,
         gradient_preparation: &RuntimeGradientPreparationFrame,
         prepared: &mut BTreeSet<u32>,
         filter: RuntimeGradientPaintFilter,
@@ -984,6 +1009,9 @@ impl ArtboardInstance {
                 factory,
                 shaders: &mut render_cache.gradient_shaders,
             };
+            if let Some(configurations) = paint_configurations.as_mut() {
+                configurations.remove(&paint.global_id);
+            }
             runtime_configure_paint(
                 paint_by_global
                     .get_mut(&paint.global_id)
@@ -1057,6 +1085,7 @@ impl ArtboardInstance {
             &mut mesh_buffers,
             path_cache,
             None,
+            None,
             true,
         )
     }
@@ -1081,6 +1110,7 @@ impl ArtboardInstance {
             &paint_cache.images,
             &mut paint_cache.meshes,
             path_cache,
+            Some(&mut paint_cache.paint_configurations),
             Some(&mut paint_cache.nested_artboards),
             true,
         )
@@ -1097,6 +1127,7 @@ impl ArtboardInstance {
         image_by_global: &BTreeMap<u32, Box<dyn RenderImage>>,
         mesh_by_local: &mut BTreeMap<usize, RuntimeMeshRenderBuffers>,
         path_cache: &mut RuntimeRenderPathCache,
+        mut paint_configurations: Option<&mut BTreeMap<u32, RuntimeRenderPaintConfiguration>>,
         mut nested_paint_caches: Option<&mut BTreeMap<u32, RuntimeRenderPaintCache>>,
         apply_origin_transform: bool,
     ) -> Result<()> {
@@ -1161,6 +1192,7 @@ impl ArtboardInstance {
                 renderer,
                 paint_by_global,
                 path_cache,
+                paint_configurations.as_deref_mut(),
             )?;
         }
 
@@ -1178,6 +1210,7 @@ impl ArtboardInstance {
                 image_by_global,
                 mesh_by_local,
                 path_cache,
+                paint_configurations.as_deref_mut(),
                 match &mut nested_paint_caches {
                     Some(caches) => Some(&mut **caches),
                     None => None,
@@ -5031,6 +5064,7 @@ pub struct RuntimeGradientStop {
 #[derive(Default)]
 pub struct RuntimeRenderPaintCache {
     paints: BTreeMap<u32, Box<dyn RenderPaint>>,
+    paint_configurations: BTreeMap<u32, RuntimeRenderPaintConfiguration>,
     images: BTreeMap<u32, Box<dyn RenderImage>>,
     meshes: BTreeMap<usize, RuntimeMeshRenderBuffers>,
     nested_artboards: BTreeMap<u32, RuntimeRenderPaintCache>,
@@ -5044,6 +5078,24 @@ impl RuntimeRenderPaintCache {
     pub fn root_images_mut(&mut self) -> &mut BTreeMap<u32, Box<dyn RenderImage>> {
         &mut self.images
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct RuntimeRenderPaintConfiguration {
+    paint_type: RuntimeShapePaintKind,
+    stroke_thickness: Option<f32>,
+    stroke_cap: Option<RenderStrokeCap>,
+    stroke_join: Option<RenderStrokeJoin>,
+    blend_mode: RenderBlendMode,
+    shader: RuntimeRenderPaintShaderConfiguration,
+    feather: f32,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum RuntimeRenderPaintShaderConfiguration {
+    None,
+    SolidColor(u32),
+    PreserveGradientShader,
 }
 
 struct RuntimeSourceMeshRenderBuffers {
@@ -5990,6 +6042,7 @@ fn runtime_draw_background(
     renderer: &mut dyn Renderer,
     paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
     path_cache: &mut RuntimeRenderPathCache,
+    mut paint_configurations: Option<&mut BTreeMap<u32, RuntimeRenderPaintConfiguration>>,
 ) -> Result<()> {
     let left = -origin_x * width;
     let top = -origin_y * height;
@@ -6006,16 +6059,22 @@ fn runtime_draw_background(
         ) else {
             continue;
         };
-        runtime_configure_paint(
-            paint_by_global
-                .get_mut(&paint.global_id)
-                .with_context(|| format!("missing render paint for global {}", paint.global_id))?
-                .as_mut(),
-            instance,
-            object,
-            &runtime_paint,
-            None,
-        )?;
+        let render_paint = paint_by_global
+            .get_mut(&paint.global_id)
+            .with_context(|| format!("missing render paint for global {}", paint.global_id))?
+            .as_mut();
+        if let Some(configurations) = paint_configurations.as_mut() {
+            runtime_configure_paint_with_cache(
+                render_paint,
+                configurations,
+                paint.global_id,
+                instance,
+                object,
+                &runtime_paint,
+            )?;
+        } else {
+            runtime_configure_paint(render_paint, instance, object, &runtime_paint, None)?;
+        }
         renderer.save();
         renderer.transform(RenderMat2D::IDENTITY);
         let path = path_cache.background_path(
@@ -6191,6 +6250,7 @@ fn runtime_draw_command(
     image_by_global: &BTreeMap<u32, Box<dyn RenderImage>>,
     mesh_by_local: &mut BTreeMap<usize, RuntimeMeshRenderBuffers>,
     path_cache: &mut RuntimeRenderPathCache,
+    mut paint_configurations: Option<&mut BTreeMap<u32, RuntimeRenderPaintConfiguration>>,
     nested_paint_caches: Option<&mut BTreeMap<u32, RuntimeRenderPaintCache>>,
 ) -> Result<()> {
     match command.kind {
@@ -6255,6 +6315,7 @@ fn runtime_draw_command(
             image_by_global,
             mesh_by_local,
             path_cache,
+            paint_configurations.as_deref_mut(),
             nested_paint_caches,
             layout_bounds,
         );
@@ -6359,16 +6420,22 @@ fn runtime_draw_command(
             runtime_configure_paint(render_paint.as_mut(), instance, object, paint, None)?;
             Some(index)
         } else {
-            runtime_configure_paint(
-                paint_by_global
-                    .get_mut(&global_id)
-                    .with_context(|| format!("missing render paint for global {global_id}"))?
-                    .as_mut(),
-                instance,
-                object,
-                paint,
-                None,
-            )?;
+            let render_paint = paint_by_global
+                .get_mut(&global_id)
+                .with_context(|| format!("missing render paint for global {global_id}"))?
+                .as_mut();
+            if let Some(configurations) = paint_configurations.as_mut() {
+                runtime_configure_paint_with_cache(
+                    render_paint,
+                    configurations,
+                    global_id,
+                    instance,
+                    object,
+                    paint,
+                )?;
+            } else {
+                runtime_configure_paint(render_paint, instance, object, paint, None)?;
+            }
             None
         };
         let mut saved = !paint.needs_save_operation;
@@ -6851,6 +6918,7 @@ fn runtime_draw_nested_artboard(
     image_by_global: &BTreeMap<u32, Box<dyn RenderImage>>,
     mesh_by_local: &mut BTreeMap<usize, RuntimeMeshRenderBuffers>,
     path_cache: &mut RuntimeRenderPathCache,
+    mut paint_configurations: Option<&mut BTreeMap<u32, RuntimeRenderPaintConfiguration>>,
     nested_paint_caches: Option<&mut BTreeMap<u32, RuntimeRenderPaintCache>>,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
 ) -> Result<()> {
@@ -6950,6 +7018,7 @@ fn runtime_draw_nested_artboard(
                 artboards,
                 factory,
                 &mut child_paint_cache.paints,
+                Some(&mut child_paint_cache.paint_configurations),
                 Some(&mut child_paint_cache.nested_artboards),
                 child_cache,
                 false,
@@ -6964,6 +7033,7 @@ fn runtime_draw_nested_artboard(
                 image_by_global,
                 &mut child_paint_cache.meshes,
                 child_cache,
+                Some(&mut child_paint_cache.paint_configurations),
                 Some(&mut child_paint_cache.nested_artboards),
                 false,
             )?;
@@ -6974,6 +7044,7 @@ fn runtime_draw_nested_artboard(
                 artboards,
                 factory,
                 paint_by_global,
+                paint_configurations.as_deref_mut(),
                 None,
                 child_cache,
                 false,
@@ -6988,6 +7059,7 @@ fn runtime_draw_nested_artboard(
                 image_by_global,
                 mesh_by_local,
                 child_cache,
+                paint_configurations.as_deref_mut(),
                 None,
                 false,
             )?;
@@ -7013,6 +7085,7 @@ fn runtime_draw_nested_artboard(
             artboards,
             factory,
             &mut child_paint_cache.paints,
+            Some(&mut child_paint_cache.paint_configurations),
             Some(&mut child_paint_cache.nested_artboards),
             child_cache,
             false,
@@ -7027,6 +7100,7 @@ fn runtime_draw_nested_artboard(
             image_by_global,
             &mut child_paint_cache.meshes,
             child_cache,
+            Some(&mut child_paint_cache.paint_configurations),
             Some(&mut child_paint_cache.nested_artboards),
             false,
         )?;
@@ -7037,6 +7111,7 @@ fn runtime_draw_nested_artboard(
             artboards,
             factory,
             paint_by_global,
+            paint_configurations.as_deref_mut(),
             None,
             child_cache,
             false,
@@ -7051,6 +7126,7 @@ fn runtime_draw_nested_artboard(
             image_by_global,
             mesh_by_local,
             child_cache,
+            paint_configurations.as_deref_mut(),
             None,
             false,
         )?;
@@ -7334,6 +7410,83 @@ fn runtime_cached_path_slot_index<'a>(
     }
     cache.push(commands);
     cache.len() - 1
+}
+
+fn runtime_render_paint_configuration(
+    instance: &ArtboardInstance,
+    object: &RuntimeObject,
+    paint: &RuntimeShapePaintCommand,
+) -> Result<RuntimeRenderPaintConfiguration> {
+    let (stroke_thickness, stroke_cap, stroke_join) = match paint.paint_type {
+        RuntimeShapePaintKind::Fill => (None, None, None),
+        RuntimeShapePaintKind::Stroke => (
+            Some(runtime_stroke_thickness(
+                instance,
+                object,
+                paint.paint_local,
+            )),
+            Some(runtime_stroke_cap(runtime_stroke_uint_property(
+                instance,
+                object,
+                paint.paint_local,
+                "cap",
+                0,
+            ))?),
+            Some(runtime_stroke_join(runtime_stroke_uint_property(
+                instance,
+                object,
+                paint.paint_local,
+                "join",
+                0,
+            ))?),
+        ),
+        RuntimeShapePaintKind::Unknown => anyhow::bail!("unsupported: unknown shape paint"),
+    };
+    let shader = match paint.paint_state.as_ref() {
+        Some(RuntimeShapePaintState::SolidColor { render_color, .. }) => {
+            RuntimeRenderPaintShaderConfiguration::SolidColor(*render_color)
+        }
+        Some(
+            RuntimeShapePaintState::LinearGradient { .. }
+            | RuntimeShapePaintState::RadialGradient { .. },
+        ) => RuntimeRenderPaintShaderConfiguration::PreserveGradientShader,
+        None => RuntimeRenderPaintShaderConfiguration::None,
+    };
+
+    Ok(RuntimeRenderPaintConfiguration {
+        paint_type: paint.paint_type,
+        stroke_thickness,
+        stroke_cap,
+        stroke_join,
+        blend_mode: runtime_blend_mode(paint.render_blend_mode_value)?,
+        shader,
+        feather: paint
+            .feather_state
+            .as_ref()
+            .map(|feather| feather.strength)
+            .unwrap_or(0.0),
+    })
+}
+
+fn runtime_configure_paint_with_cache(
+    render_paint: &mut dyn RenderPaint,
+    configurations: &mut BTreeMap<u32, RuntimeRenderPaintConfiguration>,
+    paint_global_id: u32,
+    instance: &ArtboardInstance,
+    object: &RuntimeObject,
+    paint: &RuntimeShapePaintCommand,
+) -> Result<()> {
+    let configuration = runtime_render_paint_configuration(instance, object, paint)?;
+    if configurations
+        .get(&paint_global_id)
+        .is_some_and(|cached| cached == &configuration)
+    {
+        return Ok(());
+    }
+
+    runtime_configure_paint(render_paint, instance, object, paint, None)?;
+    configurations.insert(paint_global_id, configuration);
+    Ok(())
 }
 
 fn runtime_configure_paint(

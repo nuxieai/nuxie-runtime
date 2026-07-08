@@ -934,6 +934,15 @@ the only memory the next session has. Update it every commit.
    Rust median from 0.989 ms. Strict <=2.0 remains open. Next: profile the
    remaining draw-path lookup, state-machine fixed overhead, and nested
    data-bind context-path work.
+   A same-session dense paint-configuration sidecar scout was intentionally not
+   landed. It replaced the draw-time `BTreeMap<u32,
+   RuntimeCachedRenderPaintConfiguration>` with global-id slots, mirroring the
+   retained render-paint slot shape, but fenced release/null-renderer evidence
+   rejected it: focused hot-loop moved to aggregate Rust/C++=3.001 and direct
+   repeat=100 `ai_assitant` worsened from rust median=0.939 ms to 0.997 ms
+   (`target/perf-ai-dense-paint-config.json`). The sampled BTree hit is not
+   enough by itself; keep profiling draw replay and prefer a deeper C++
+   retained-path / object-identity slice over another sidecar container swap.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -3511,6 +3520,14 @@ the only memory the next session has. Update it every commit.
   improves Rust median from 0.989 ms to 0.939 ms / Rust/C++=2.403. Strict
   <=2.0 remains open; next profile draw-path lookup, state-machine fixed
   overhead, and nested data-bind context-path work.
+- 2026-07-08: [M7] Rejected a dense paint-configuration sidecar scout after a
+  fresh `ai_assitant --benchmark-repeat 30000000` sample showed draw replay and
+  `runtime_configure_paint_with_cache` map lookups. The code kept
+  `cargo check -p rive-runtime`, focused runtime tests, and formatting green,
+  but fenced repeat-aware hot-loop worsened to aggregate Rust/C++=3.001 and
+  direct repeat=100 `ai_assitant` worsened from rust median=0.939 ms to
+  0.997 ms. Code backed out; next draw-side work should be deeper C++
+  retained-path/object-identity work, not another sidecar container swap.
 - 2026-07-08: [M7] Added data-bind source update queue membership flags and
   empty-lane early-outs, matching C++ `DataBindContainer` dirty/persisting queue
   shape without landing the rejected source-queue vector-swap scout. `make

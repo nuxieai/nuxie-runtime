@@ -5922,13 +5922,12 @@ impl RuntimeOwnedViewModelInstance {
         if usize::try_from(source_path[0]).ok()? != view_model_index {
             return None;
         }
-        let mut property_path = context_path.to_vec();
-        property_path.extend(
-            source_path[1..]
-                .iter()
-                .map(|property_index| usize::try_from(*property_index).ok())
-                .collect::<Option<Vec<_>>>()?,
-        );
+        let mut property_path =
+            Vec::with_capacity(context_path.len() + source_path.len().saturating_sub(1));
+        property_path.extend_from_slice(context_path);
+        for property_index in &source_path[1..] {
+            property_path.push(usize::try_from(*property_index).ok()?);
+        }
         Some(property_path)
     }
 
@@ -5947,7 +5946,8 @@ impl RuntimeOwnedViewModelInstance {
             .and_then(|path_id| manifest.resolve_path(*path_id))
             .filter(|resolved_path| !resolved_path.is_empty())
             .unwrap_or(source_path);
-        let mut property_path = context_path.to_vec();
+        let mut property_path = Vec::with_capacity(context_path.len() + source_path.len());
+        property_path.extend_from_slice(context_path);
         for name_id in source_path {
             let property_name = manifest.resolve_name(*name_id)?;
             let property_index = if property_path.is_empty() {

@@ -1488,10 +1488,10 @@ impl ArtboardInstance {
         context_chain: &[Vec<usize>],
     ) -> bool {
         let mut changed = false;
-        let updates = self
-            .artboard_property_bindings
-            .iter()
-            .filter_map(|binding| {
+
+        for index in 0..self.artboard_property_bindings.len() {
+            let update = {
+                let binding = &self.artboard_property_bindings[index];
                 runtime_owned_view_model_binding_value_for_context_chain(
                     file,
                     context,
@@ -1507,40 +1507,46 @@ impl ArtboardInstance {
                     )
                 })
                 .map(|value| (binding.path.clone(), value))
-            })
-            .chain(
-                self.artboard_image_asset_bindings
-                    .iter()
-                    .filter_map(|binding| {
-                        runtime_owned_view_model_binding_value_for_context_chain(
-                            file,
-                            context,
-                            context_chain,
-                            &binding.path,
-                            false,
-                            &binding.default_value,
-                        )
-                        .map(|value| (binding.path.clone(), value))
-                    }),
-            )
-            .chain(
-                self.artboard_custom_property_bindings
-                    .iter()
-                    .filter_map(|binding| {
-                        runtime_owned_view_model_binding_value_for_context_chain(
-                            file,
-                            context,
-                            context_chain,
-                            &binding.path,
-                            binding.path_is_name_based,
-                            &binding.default_value,
-                        )
-                        .map(|value| (binding.path.clone(), value))
-                    }),
-            )
-            .collect::<Vec<_>>();
-        for (path, value) in updates {
-            changed |= self.set_artboard_data_bind_value_for_path(&path, value);
+            };
+            if let Some((path, value)) = update {
+                changed |= self.set_artboard_data_bind_value_for_path(&path, value);
+            }
+        }
+
+        for index in 0..self.artboard_image_asset_bindings.len() {
+            let update = {
+                let binding = &self.artboard_image_asset_bindings[index];
+                runtime_owned_view_model_binding_value_for_context_chain(
+                    file,
+                    context,
+                    context_chain,
+                    &binding.path,
+                    false,
+                    &binding.default_value,
+                )
+                .map(|value| (binding.path.clone(), value))
+            };
+            if let Some((path, value)) = update {
+                changed |= self.set_artboard_data_bind_value_for_path(&path, value);
+            }
+        }
+
+        for index in 0..self.artboard_custom_property_bindings.len() {
+            let update = {
+                let binding = &self.artboard_custom_property_bindings[index];
+                runtime_owned_view_model_binding_value_for_context_chain(
+                    file,
+                    context,
+                    context_chain,
+                    &binding.path,
+                    binding.path_is_name_based,
+                    &binding.default_value,
+                )
+                .map(|value| (binding.path.clone(), value))
+            };
+            if let Some((path, value)) = update {
+                changed |= self.set_artboard_data_bind_value_for_path(&path, value);
+            }
         }
         changed
     }

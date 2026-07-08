@@ -163,10 +163,21 @@ the only memory the next session has. Update it every commit.
    `ai_assitant --benchmark-repeat 100` reports cpp median=0.582-0.603 ms,
    rust median=5.149-5.885 ms, Rust/C++=8.852-9.756. This is a real
    steady-state Rust win, but strict <=2.0 is still not reliable on the focused
-   corpus. The next M7 target should rerun the current flamegraph and continue
-   the C++ dirt/retention ordering where heat remains: actual
-   `ShapePaintPath`/raw-path retention, `PathComposer` dirt gating, and
-   data-bind/nested advance allocation.
+   corpus. A follow-up macOS `sample` profile of
+   `ai_assitant --benchmark-repeat 100000` showed the remaining Rust time
+   dominated by advance/data-bind, especially owned view-model nested artboard
+   context-chain rebinding and property-path allocation. A narrow allocation
+   cleanup now avoids the extra collected `Vec` while resolving context source
+   paths and avoids staging owned-view-model artboard binding updates in a
+   temporary vector. Direct `ai_assitant --benchmark-repeat 100` reports rust
+   median=4.553-4.764 ms (Rust/C++=7.731-9.399), and the Rust-only
+   repeat=100000 run moves from elapsed=4437.5 / advance=3476.3 ms to
+   elapsed=3840.8 / advance=2936.9 ms. Focused release/null-renderer runs were
+   still noisy (aggregate Rust/C++=2.517 and 2.776), so strict <=2.0 remains
+   open. The next M7 target should stay on C++ data-bind dirty/context
+   retention: profile after this cleanup, then port `DataBind::addDirt` /
+   `DataBindContainer` dirty queues or a retained data-context chain instead
+   of doing broad Rust-side scans.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -668,6 +679,29 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Trim owned view-model data-bind allocation in the profiled
+  advance path. The post paint-preparation profile sampled
+  `ai_assitant --benchmark-repeat 100000` and showed Rust time dominated by
+  `advance_ms` (elapsed=4437.5 ms, advance=3476.3 ms, prepare=400.3 ms,
+  draw=552.3 ms), with top stacks in owned view-model nested artboard
+  context-chain rebinding and `property_path_for_context_source_path`
+  allocation. This slice keeps behavior unchanged but removes two Rust-only
+  allocation layers: resolved context source paths no longer collect an
+  intermediate `Vec` before extending the real property path, and
+  `bind_owned_view_model_artboard_values` applies each owned-view-model
+  property/image/custom-property update directly instead of staging a temporary
+  update vector. This follows the C++ shape in `DataContext::getViewModelProperty`
+  and `DataBind::addDirt`: C++ walks retained context/source pointers and
+  queues dirty data binds rather than rebuilding owned path/update containers
+  every frame. Focused data-bind cpp-probe tests, `cargo check -p
+  rive-runtime`, and `make golden-compare` pass at exact=263 /
+  exact-segments=584 / diverges=0. Direct repeat-heavy `ai_assitant` improved
+  to rust median=4.553 / 4.764 ms (Rust/C++=7.731 / 9.399); Rust-only
+  repeat=100000 improved to elapsed=3840.8 ms, advance=2936.9 ms. Focused
+  5-entry hot-loop ratios were noisy and not completion-grade
+  (Rust/C++=2.517 and 2.776), so M7 remains open. Next stay in data-bind:
+  profile again, then port actual `DataBindContainer` dirty queues or retained
+  data-context chains before returning to path retention.
 - 2026-07-08: [M7] Cache clean-frame paint preparation behind the conservative
   Rust instance cache epoch. `RuntimeRenderPaintCache` now stores a
   `RuntimePaintPreparationFrame` keyed by `(graph_global_id, cache_epoch)` and
@@ -1869,6 +1903,12 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Trimmed owned view-model data-bind allocation by avoiding
+  an intermediate context-source-path `Vec` and owned-view-model update staging
+  vector. `make golden-compare` remains exact=263/exact-segments=584/diverges=0;
+  direct `ai_assitant --benchmark-repeat 100` improves to Rust/C++=7.731-9.399,
+  and Rust-only repeat=100000 drops elapsed/advance to 3840.8/2936.9 ms.
+  Focused corpus strict <=2.0 remains open.
 - 2026-07-08: [M7] Cached clean-frame paint preparation in
   `RuntimeRenderPaintCache` behind `(graph_global_id, cache_epoch)`. `make
   golden-compare` remains exact=263/exact-segments=584/diverges=0; focused

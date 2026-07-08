@@ -5100,6 +5100,7 @@ struct RuntimeMeshRenderBuffers {
 #[derive(Default)]
 pub struct RuntimeRenderPathCache {
     prepared_artboard: Option<RuntimePreparedArtboardFrame>,
+    layout_bounds: Option<RuntimeLayoutBoundsFrame>,
     artboard_clip: Option<Box<dyn RenderPath>>,
     background_paths: BTreeMap<usize, Box<dyn RenderPath>>,
     clip_paths: BTreeMap<usize, Box<dyn RenderPath>>,
@@ -5120,6 +5121,18 @@ struct RuntimePreparedArtboardFrame {
     key: RuntimePreparedArtboardCacheKey,
     layout_bounds: Arc<Option<BTreeMap<usize, RuntimeLayoutBounds>>>,
     commands: Arc<Vec<RuntimeDrawCommand>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RuntimeLayoutBoundsCacheKey {
+    graph_global_id: u32,
+    layout_epoch: u64,
+}
+
+#[derive(Clone)]
+struct RuntimeLayoutBoundsFrame {
+    key: RuntimeLayoutBoundsCacheKey,
+    bounds: Arc<Option<BTreeMap<usize, RuntimeLayoutBounds>>>,
 }
 
 struct RuntimeGradientShaderCacheEntry {
@@ -5166,11 +5179,12 @@ impl RuntimeRenderPathCache {
             .as_ref()
             .is_none_or(|frame| frame.key != key)
         {
-            let layout_bounds = instance.runtime_taffy_layout_bounds(graph, runtime);
-            let commands = instance.draw_commands_with_layout_bounds(graph, layout_bounds.as_ref());
+            let layout_bounds = self.layout_bounds_frame(instance, graph, runtime);
+            let commands =
+                instance.draw_commands_with_layout_bounds(graph, layout_bounds.as_ref().as_ref());
             self.prepared_artboard = Some(RuntimePreparedArtboardFrame {
                 key,
-                layout_bounds: Arc::new(layout_bounds),
+                layout_bounds,
                 commands: Arc::new(commands),
             });
         }
@@ -5178,6 +5192,34 @@ impl RuntimeRenderPathCache {
         self.prepared_artboard
             .as_ref()
             .expect("prepared artboard frame was just populated")
+            .clone()
+    }
+
+    fn layout_bounds_frame(
+        &mut self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        runtime: Option<&RuntimeFile>,
+    ) -> Arc<Option<BTreeMap<usize, RuntimeLayoutBounds>>> {
+        let key = RuntimeLayoutBoundsCacheKey {
+            graph_global_id: graph.global_id,
+            layout_epoch: instance.layout_epoch(),
+        };
+        if self
+            .layout_bounds
+            .as_ref()
+            .is_none_or(|frame| frame.key != key)
+        {
+            self.layout_bounds = Some(RuntimeLayoutBoundsFrame {
+                key,
+                bounds: Arc::new(instance.runtime_taffy_layout_bounds(graph, runtime)),
+            });
+        }
+
+        self.layout_bounds
+            .as_ref()
+            .expect("layout bounds frame was just populated")
+            .bounds
             .clone()
     }
 

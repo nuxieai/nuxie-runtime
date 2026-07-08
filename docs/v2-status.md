@@ -68,11 +68,25 @@ the only memory the next session has. Update it every commit.
    aggregate Rust/C++=2.543 over the same 5 exact entries / 10 segments
    (`ai_assitant`=2.611, `align_target`=1.831, `animated_clipping`=2.460).
    Direct `ai_assitant --benchmark-repeat 100` improves to Rust/C++=17.233
-   (cpp median=0.625 ms, rust median=10.766 ms). The next M7 target is a fresh
-   release profile, then C++-aligned dirty-gated layout/paint preparation
-   retention (`markLayoutNodeDirty`, Paint|Stops|RenderOpacity gates) before
-   lower-priority path/clip rebuild leftovers. After the perf target is real,
-   expand the C ABI to instance advance/draw.
+   (cpp median=0.625 ms, rust median=10.766 ms). A fresh release sample then
+   split Taffy layout bounds behind a `layout_epoch`, mirroring C++
+   `markLayoutNodeDirty` without invalidating layout for paint/color and
+   non-text string updates; text-shape string/style changes and fractional
+   layout sizing still invalidate layout like C++. Focused 10-iteration
+   verification after the text/fractional safety pass reports aggregate
+   Rust/C++=2.699 over the same 5 exact entries / 10 segments
+   (`ai_assitant`=2.785, `align_target`=2.399,
+   `animated_clipping`=2.406). Direct `ai_assitant --benchmark-repeat 100`
+   now reports Rust/C++=13.850 (cpp median=0.591 ms, rust median=8.183 ms);
+   C++ median variance makes the ratio noisy, but Rust steady-state time
+   improved. The layout-split sample no longer showed
+   `runtime_taffy_layout_bounds` in the hot stack; remaining heat is
+   data-bind/nested advance allocation and retained paint/path dirt gates. The
+   next M7 target is data-bind/nested
+   advance allocation or C++ `Paint|Stops|RenderOpacity` /
+   `ShapePaintPath` dirt retention before lower-priority clip rebuild
+   leftovers. After the perf target is real, expand the C ABI to instance
+   advance/draw.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -574,6 +588,30 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-07: [M7] Split retained Taffy layout bounds from the coarse draw
+  cache epoch. `ArtboardInstance` now tracks a `layout_epoch` bumped by
+  C++-aligned layout dirt/property changes (`LayoutStyle`, layout
+  width/height/style/fractional sizing, text-shape sizing/style/text changes,
+  nested-artboard layout sizing, collapse), while paint/color and non-text
+  string changes only invalidate the full prepared draw-command frame.
+  `RuntimeRenderPathCache` reuses layout bounds across non-layout
+  frame-cache changes, mirroring `LayoutComponent::markLayoutNodeDirty`
+  without inventing paint invalidation. Full `cargo fmt --all -- --check`,
+  `cargo test --workspace`, and `make golden-compare` pass at
+  exact=263/exact-segments=584. Release sample with `/usr/bin/sample` on
+  `ai_assitant --benchmark-repeat 100000` no longer shows
+  `runtime_taffy_layout_bounds` in the hot stack; heat has moved to
+  data-bind/nested advance allocation. Focused
+  `make perf-hot-loop PERF_CORPUS_LIMIT=5 PERF_ITERATIONS=10 PERF_WARMUPS=1
+  PERF_MAX_RATIO=999` first reported aggregate Rust/C++=2.228, then the
+  C++-aligned text/fractional invalidation safety pass reran at 2.699 over 5
+  exact entries / 10 segments (`ai_assitant`=2.785,
+  `align_target`=2.399, `animated_clipping`=2.406). Direct
+  `ai_assitant --benchmark-repeat 100` improves Rust median from 10.766 ms to
+  8.183 ms, though the C++ median variance makes the reported ratio
+  Rust/C++=13.850 on this run. Strict <=2.0 remains open; next target is
+  data-bind/nested advance allocation or C++ `Paint|Stops|RenderOpacity` /
+  `ShapePaintPath` dirt retention.
 - 2026-07-07: [M7] Generated switch-table schema lookups from `rive-codegen`
   and routed the public `rive-schema` definition/property/core-registry helpers
   through them. This removes linear `DEFINITIONS` / ancestor scans from the

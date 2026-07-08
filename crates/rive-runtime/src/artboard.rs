@@ -88,6 +88,7 @@ pub struct ArtboardInstance {
     pub(crate) dirt: ComponentDirt,
     pub(crate) dirt_depth: usize,
     pub(crate) cache_epoch: u64,
+    pub(crate) layout_epoch: u64,
     pub(crate) did_change: bool,
 }
 
@@ -287,6 +288,7 @@ impl ArtboardInstance {
             dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,
             cache_epoch: 1,
+            layout_epoch: 1,
             did_change: true,
         };
         instance.apply_initial_layout_component_display_collapses();
@@ -367,6 +369,7 @@ impl ArtboardInstance {
         self.width = width;
         self.height = height;
         self.mark_changed();
+        self.mark_layout_changed();
         true
     }
 
@@ -417,6 +420,7 @@ impl ArtboardInstance {
             return false;
         }
         self.mark_changed();
+        self.mark_layout_changed_for_property(local_id, property_key);
         self.apply_bool_property_changed(local_id, property_key, value);
         true
     }
@@ -466,6 +470,7 @@ impl ArtboardInstance {
             return false;
         }
         self.mark_changed();
+        self.mark_layout_changed_for_property(local_id, property_key);
         self.apply_double_property_changed(local_id, property_key, value);
         true
     }
@@ -483,6 +488,7 @@ impl ArtboardInstance {
             return false;
         }
         self.mark_changed();
+        self.mark_layout_changed_for_property(local_id, property_key);
         self.apply_uint_property_changed(local_id, property_key);
         true
     }
@@ -504,6 +510,7 @@ impl ArtboardInstance {
             return false;
         }
         self.mark_changed();
+        self.mark_layout_changed_for_property(local_id, property_key);
         self.apply_string_property_changed(local_id, property_key);
         true
     }
@@ -817,9 +824,84 @@ impl ArtboardInstance {
         self.cache_epoch
     }
 
+    pub(crate) fn layout_epoch(&self) -> u64 {
+        self.layout_epoch
+    }
+
     fn mark_changed(&mut self) {
         self.did_change = true;
         self.cache_epoch = self.cache_epoch.wrapping_add(1);
+    }
+
+    fn mark_layout_changed(&mut self) {
+        self.layout_epoch = self.layout_epoch.wrapping_add(1);
+    }
+
+    fn mark_layout_changed_for_property(&mut self, local_id: usize, property_key: u16) {
+        if self.property_affects_layout(local_id, property_key) {
+            self.mark_layout_changed();
+        }
+    }
+
+    fn property_affects_layout(&self, local_id: usize, property_key: u16) -> bool {
+        let type_name = self.slot(local_id).and_then(|slot| slot.type_name);
+        if matches!(
+            type_name,
+            Some("LayoutComponentStyle" | "NestedArtboardLayout")
+        ) {
+            return true;
+        }
+
+        if matches!(type_name, Some("Text")) {
+            return [
+                "alignValue",
+                "sizingValue",
+                "overflowValue",
+                "width",
+                "height",
+                "verticalTrimValue",
+            ]
+            .into_iter()
+            .any(|name| property_key_for_name("Text", name) == Some(property_key));
+        }
+
+        if matches!(type_name, Some("TextStyle" | "TextStylePaint")) {
+            return ["fontSize", "lineHeight", "letterSpacing"]
+                .into_iter()
+                .any(|name| property_key_for_name("TextStyle", name) == Some(property_key));
+        }
+
+        if matches!(type_name, Some("TextValueRun")) {
+            return property_key_for_name("TextValueRun", "text") == Some(property_key)
+                || property_key_for_name("TextValueRun", "styleId") == Some(property_key);
+        }
+
+        if matches!(type_name, Some("TextInput")) {
+            return property_key_for_name("TextInput", "text") == Some(property_key)
+                || property_key_for_name("TextInput", "multiline") == Some(property_key);
+        }
+
+        matches!(
+            type_name,
+            Some("Artboard" | "LayoutComponent" | "NestedArtboard")
+        ) && (property_key_for_name("Artboard", "width") == Some(property_key)
+            || property_key_for_name("Artboard", "height") == Some(property_key)
+            || property_key_for_name("LayoutComponent", "width") == Some(property_key)
+            || property_key_for_name("LayoutComponent", "height") == Some(property_key)
+            || property_key_for_name("LayoutComponent", "styleId") == Some(property_key)
+            || property_key_for_name("LayoutComponent", "fractionalWidth") == Some(property_key)
+            || property_key_for_name("LayoutComponent", "fractionalHeight") == Some(property_key)
+            || property_key_for_name("NestedArtboardLayout", "instanceWidthScaleType")
+                == Some(property_key)
+            || property_key_for_name("NestedArtboardLayout", "instanceHeightScaleType")
+                == Some(property_key)
+            || property_key_for_name("NestedArtboardLayout", "instanceWidthUnitsValue")
+                == Some(property_key)
+            || property_key_for_name("NestedArtboardLayout", "instanceHeightUnitsValue")
+                == Some(property_key)
+            || property_key_for_name("NestedArtboardLayout", "instanceWidth") == Some(property_key)
+            || property_key_for_name("NestedArtboardLayout", "instanceHeight")
+                == Some(property_key))
     }
 
     pub fn clear_component_dirt(&mut self, local_id: usize) {
@@ -842,6 +924,9 @@ impl ArtboardInstance {
         }
 
         self.components[index].dirt |= dirt;
+        if dirt.contains(ComponentDirt::LAYOUT_STYLE) {
+            self.mark_layout_changed();
+        }
         self.on_component_dirty(local_id);
 
         if recurse {
@@ -871,6 +956,7 @@ impl ArtboardInstance {
                 self.newly_uncollapsed_nested_artboards.insert(local_id);
             }
         }
+        self.mark_layout_changed();
         self.on_component_dirty(local_id);
         self.apply_component_collapse_changed(local_id);
         true
@@ -2282,6 +2368,7 @@ mod tests {
             dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,
             cache_epoch: 1,
+            layout_epoch: 1,
             did_change: true,
         }
     }
@@ -2408,6 +2495,55 @@ mod tests {
         assert!(instance.has_dirt(ComponentDirt::COMPONENTS));
 
         assert!(!instance.add_dirt(0, ComponentDirt::PATH, true));
+    }
+
+    #[test]
+    fn layout_epoch_tracks_layout_dirt_separately_from_draw_cache_epoch() {
+        let component = synthetic_component(0, 0);
+        let mut instance = synthetic_instance(vec![component], vec![0]);
+
+        let initial_layout_epoch = instance.layout_epoch();
+        let initial_cache_epoch = instance.cache_epoch();
+        assert!(instance.add_dirt(0, ComponentDirt::PAINT, false));
+        assert_eq!(instance.layout_epoch(), initial_layout_epoch);
+        assert!(instance.cache_epoch() > initial_cache_epoch);
+
+        let paint_cache_epoch = instance.cache_epoch();
+        assert!(instance.add_dirt(0, ComponentDirt::LAYOUT_STYLE, false));
+        assert!(instance.layout_epoch() > initial_layout_epoch);
+        assert!(instance.cache_epoch() > paint_cache_epoch);
+
+        let layout_epoch = instance.layout_epoch();
+        assert!(!instance.add_dirt(0, ComponentDirt::LAYOUT_STYLE, false));
+        assert_eq!(instance.layout_epoch(), layout_epoch);
+    }
+
+    #[test]
+    fn layout_epoch_tracks_cpp_layout_property_changes() {
+        let mut layout = synthetic_component(0, 0);
+        layout.type_name = "LayoutComponent";
+        let mut text_run = synthetic_component(1, 1);
+        text_run.type_name = "TextValueRun";
+        let mut solid = synthetic_component(2, 2);
+        solid.type_name = "SolidColor";
+        let mut instance = synthetic_instance(vec![layout, text_run, solid], vec![0, 1, 2]);
+
+        let fractional_width =
+            property_key_for_name("LayoutComponent", "fractionalWidth").expect("fractional width");
+        let text = property_key_for_name("TextValueRun", "text").expect("text run text");
+        let color = property_key_for_name("SolidColor", "colorValue").expect("solid color");
+
+        let mut layout_epoch = instance.layout_epoch();
+        assert!(instance.set_double_property(0, fractional_width, 0.5));
+        assert!(instance.layout_epoch() > layout_epoch);
+
+        layout_epoch = instance.layout_epoch();
+        assert!(instance.set_string_property(1, text, b"hello".to_vec()));
+        assert!(instance.layout_epoch() > layout_epoch);
+
+        layout_epoch = instance.layout_epoch();
+        assert!(instance.set_color_property(2, color, 0xff00ff00));
+        assert_eq!(instance.layout_epoch(), layout_epoch);
     }
 
     #[test]

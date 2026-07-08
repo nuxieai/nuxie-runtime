@@ -899,9 +899,28 @@ the only memory the next session has. Update it every commit.
    2.476 ms and 2.488 ms on rerun; aggregate reports Rust/C++=3.041 and 3.073
    because C++ median sum also dropped. Direct repeat=100 `ai_assitant` JSON at
    `target/perf-ai-nested-event-option.json` reports cpp median=0.413 ms, rust
-   median=1.041 ms, Rust/C++=2.521. Strict <=2.0 remains open. Next: profile
-   remaining `runtime_draw_command` / `RuntimeRenderPathCache::draw_path`,
-   data-bind queue drains, and state-machine fixed overhead under these fences.
+   median=1.041 ms, Rust/C++=2.521. Strict <=2.0 remains open.
+   A follow-up profile after the optional nested-event slice showed the hot
+   split across `advance_artboard_data_binds_with_root_transform`,
+   `runtime_draw_command`, nested-event collection, state-machine advance, and
+   nested data-context lookup. C++ `DataBindContainer` owns persistent and dirty
+   vectors and uses membership state to avoid duplicate dirty-list enrollment.
+   Rust now uses a per-binding `custom_property_update_flags` bitmap when
+   merging dirty and persisting custom-property source updates, and skips both
+   custom-property and numeric source update-index construction for empty lanes.
+   This keeps the source-queue vector-swap scout rejected while porting the
+   C++ queue-membership shape. Full `make golden-compare` remains exact=263 /
+   exact-segments=584 / diverges=0; `cargo test --workspace`, `cargo fmt --all
+   -- --check`, and `git diff --check` pass. Fenced repeat-aware hot-loop is
+   noisy: the baseline after nested-event collection was aggregate Rust/C++=2.877
+   with Rust median sum 2.467 ms; the post-slice rerun reports aggregate
+   Rust/C++=3.007 with Rust median sum 2.319 ms, while the first post-slice run
+   regressed to Rust median sum 2.667 ms. Direct repeat=100 `ai_assitant` JSON
+   at `target/perf-ai-data-bind-queue-flags.json` reports cpp median=0.379 ms,
+   rust median=0.989 ms, Rust/C++=2.613. Strict <=2.0 remains open. Next:
+   profile remaining `runtime_draw_command` / `RuntimeRenderPathCache::draw_path`,
+   state-machine fixed overhead, and remaining nested data-bind context-path
+   work under these fences.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -1403,6 +1422,21 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Use membership flags for data-bind source update queues. A
+  release/null-renderer profile after optional nested-event collection still
+  showed data-bind queue drains in the `ai_assitant` hot split. C++
+  `DataBindContainer` stores persistent and dirty lists, and `DataBind` carries
+  dirty-list membership state so repeated dirt raises do not require scanning
+  the queued indices. Rust now keeps `custom_property_update_flags` beside the
+  recycled custom-property update index buffer, dedupes dirty plus persisting
+  updates through that bitmap, and returns early when custom-property or numeric
+  source lanes are empty. This is retained queue membership storage, not the
+  rejected source-queue vector-swap scout. Full `make golden-compare` remains
+  exact=263 / exact-segments=584 / diverges=0; `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check` pass. Fenced perf is
+  noisy but directionally useful: focused baseline Rust median sum was 2.467 ms,
+  post-slice rerun is 2.319 ms, and direct repeat=100 `ai_assitant` reports
+  rust median=0.989 ms versus 1.041 ms before. M7 remains open.
 - 2026-07-08: [M7] Skip nested event collection when callers ignore reports.
   A status-doc review kept the scout/perf discoveries in force: broad
   converter-property writes, RangeMapper retries, scratch-only context-path
@@ -3340,6 +3374,17 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Added data-bind source update queue membership flags and
+  empty-lane early-outs, matching C++ `DataBindContainer` dirty/persisting queue
+  shape without landing the rejected source-queue vector-swap scout. `make
+  golden-compare` remains exact=263/exact-segments=584/diverges=0; `cargo test
+  --workspace`, `cargo fmt --all -- --check`, and `git diff --check` pass.
+  Fenced repeat-aware hot-loop is noisy: baseline Rust median sum after the
+  nested-event slice was 2.467 ms, the post-slice rerun is 2.319 ms, and direct
+  repeat=100 `ai_assitant` JSON reports rust median=0.989 ms / Rust/C++=2.613.
+  Strict <=2.0 remains open; next profile draw-path lookup, state-machine fixed
+  overhead, and remaining nested data-bind context-path work under the scout
+  fences.
 - 2026-07-08: [M7] Made nested artboard reported-event collection optional,
   matching C++ nested advance / state-machine-owned event queues and preserving
   state-machine propagation order when reports are requested. `make

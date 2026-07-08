@@ -517,6 +517,7 @@ pub(super) struct RuntimeArtboardDataBindSourceQueues {
     dirty_custom_property_flags: Vec<bool>,
     persisting_custom_properties: Vec<usize>,
     custom_property_update_indices: Vec<usize>,
+    custom_property_update_flags: Vec<bool>,
     dirty_numeric_sources: Vec<usize>,
     dirty_numeric_source_flags: Vec<bool>,
     persisting_layout_computed: Vec<usize>,
@@ -534,6 +535,7 @@ impl RuntimeArtboardDataBindSourceQueues {
     ) -> Self {
         let mut queues = Self {
             dirty_custom_property_flags: vec![false; custom_property_bindings.len()],
+            custom_property_update_flags: vec![false; custom_property_bindings.len()],
             dirty_numeric_source_flags: vec![false; numeric_source_bindings.len()],
             persisting_layout_computed: (0..layout_computed_bindings.len()).collect(),
             persisting_solo_sources: (0..solo_source_bindings.len()).collect(),
@@ -656,20 +658,45 @@ impl RuntimeArtboardDataBindSourceQueues {
         self.dirty_numeric_sources.push(index);
     }
 
+    fn has_custom_property_update_indices(&self) -> bool {
+        !self.dirty_custom_properties.is_empty() || !self.persisting_custom_properties.is_empty()
+    }
+
+    fn has_numeric_source_update_indices(&self) -> bool {
+        !self.dirty_numeric_sources.is_empty() || !self.persisting_numeric_sources.is_empty()
+    }
+
     fn take_custom_property_update_indices(&mut self) -> Vec<usize> {
         let mut indices = std::mem::take(&mut self.custom_property_update_indices);
         indices.clear();
+        let mut included_indices = std::mem::take(&mut self.custom_property_update_flags);
         for index in self.dirty_custom_properties.drain(..) {
             if let Some(flag) = self.dirty_custom_property_flags.get_mut(index) {
                 *flag = false;
             }
-            indices.push(index);
+            let Some(included) = included_indices.get_mut(index) else {
+                continue;
+            };
+            if !*included {
+                *included = true;
+                indices.push(index);
+            }
         }
         for index in &self.persisting_custom_properties {
-            if !indices.contains(index) {
+            let Some(included) = included_indices.get_mut(*index) else {
+                continue;
+            };
+            if !*included {
+                *included = true;
                 indices.push(*index);
             }
         }
+        for index in &indices {
+            if let Some(included) = included_indices.get_mut(*index) {
+                *included = false;
+            }
+        }
+        self.custom_property_update_flags = included_indices;
         indices
     }
 
@@ -2863,14 +2890,19 @@ impl ArtboardInstance {
         elapsed_seconds: f32,
     ) -> bool {
         let mut changed = false;
-        let custom_property_update_indices = self
+        if self
             .artboard_data_bind_source_queues
-            .take_custom_property_update_indices();
-        for index in custom_property_update_indices.iter().copied() {
-            changed |= self.update_artboard_custom_property_binding(index);
+            .has_custom_property_update_indices()
+        {
+            let custom_property_update_indices = self
+                .artboard_data_bind_source_queues
+                .take_custom_property_update_indices();
+            for index in custom_property_update_indices.iter().copied() {
+                changed |= self.update_artboard_custom_property_binding(index);
+            }
+            self.artboard_data_bind_source_queues
+                .recycle_custom_property_update_indices(custom_property_update_indices);
         }
-        self.artboard_data_bind_source_queues
-            .recycle_custom_property_update_indices(custom_property_update_indices);
         changed |= self.update_artboard_layout_computed_bindings(root_transform);
         changed |= self.update_artboard_solo_source_bindings();
         changed |= self.update_artboard_numeric_source_bindings();
@@ -2905,6 +2937,12 @@ impl ArtboardInstance {
     }
 
     fn update_artboard_numeric_source_bindings(&mut self) -> bool {
+        if !self
+            .artboard_data_bind_source_queues
+            .has_numeric_source_update_indices()
+        {
+            return false;
+        }
         let mut changed = false;
         let indices = self
             .artboard_data_bind_source_queues

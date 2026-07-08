@@ -792,6 +792,28 @@ the only memory the next session has. Update it every commit.
    remain dependency-ordered paint/prepare work and
    `advance_artboard_data_binds_with_root_transform`, not broad
    converter-property writes or shallow command/path-wrapper caches.
+   A fresh `ai_assitant --benchmark-repeat 30000000` sample found the current
+   Rust time still split across dependency-ordered paint preparation, draw
+   replay, and artboard data-bind/context propagation. Dependency-ordered
+   paint preparation now uses the existing retained preparation frame even
+   when nested layout gradients force dependency ordering: the cache key
+   includes the root `cache_epoch` plus nested command identity and child
+   `cache_epoch` values, so clean nested paint frames skip the prep pass while
+   child animation/data-bind changes still invalidate it. Artboard data-bind
+   source queues also stop cloning target-source vectors during enqueue and
+   recycle their update-index buffers across frames, matching C++ retained
+   `DataBindContainer` dirty-list storage without adding new skip semantics.
+   Full `make golden-compare` remains exact=263 / exact-segments=584 /
+   diverges=0; `cargo test --workspace`, `cargo fmt --all -- --check`, and
+   `git diff --check` pass. Fenced repeat-aware hot-loop baseline was
+   aggregate Rust/C++=3.330; after the slice reruns report aggregate
+   Rust/C++=3.110 and 3.067. Direct repeat=100 `ai_assitant` JSON at
+   `target/perf-ai-dependency-prep-skip.json` reports cpp median=0.376 ms,
+   rust median=1.031 ms, Rust/C++=2.747. Strict <=2.0 remains open. Next:
+   re-profile after this dependency-prep skip; likely remaining targets are
+   draw replay / lower `RuntimeRenderPathCache::draw_path` work and
+   `advance_artboard_data_binds_with_root_transform`, not broad
+   converter-property writes or shallow command/path-wrapper caches.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -1293,6 +1315,22 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Skip dependency-ordered paint prep on clean nested frames.
+  A release `ai_assitant` sample after retained layout topology still showed
+  `prepare_static_artboard_tree_paints_internal`,
+  `prepare_static_gradient_paints_for_dependency_local`, data-bind queue
+  draining, and draw replay as the main Rust hot sites. C++ clean frames return
+  from `Artboard::updateComponents()` before visiting component prep work, so
+  Rust now allows dependency-ordered nested paint preparation to reuse the
+  retained `RuntimePaintPreparationFrame` when the root cache epoch and nested
+  child cache epochs are unchanged. The cache key includes nested command
+  identity plus child `cache_epoch`, preserving invalidation when nested
+  animation/data-bind changes. Artboard source queues also retain their dirty
+  update-index buffers and enqueue target-source refs without cloning the
+  vector. Full `make golden-compare` remains exact=263 / exact-segments=584 /
+  diverges=0; `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check` pass. Fenced repeat-aware hot-loop improves from
+  aggregate Rust/C++=3.330 to 3.110 and 3.067 on rerun, so M7 remains open.
 - 2026-07-08: [M7] Replace dependency-ordered paint-prep trees with vectors.
   The current release sample showed `ai_assitant` time split between
   advance/data-bind and draw/prepare, with gradient paint preparation still

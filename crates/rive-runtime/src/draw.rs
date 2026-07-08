@@ -697,21 +697,24 @@ impl ArtboardInstance {
         let commands = prepared.commands.as_slice();
         let defer_layout_gradients = defer_root_layout_gradients
             && commands.iter().any(runtime_draw_command_is_nested_artboard);
-        let can_skip_prepare = !defer_layout_gradients;
         let preparation_key = RuntimePaintPreparationCacheKey {
             graph_global_id: graph.global_id,
             instance_epoch: self.cache_epoch(),
+            nested_epoch: if defer_layout_gradients {
+                self.runtime_nested_paint_preparation_epoch(commands)
+            } else {
+                0
+            },
         };
-        if can_skip_prepare
-            && paint_preparation
-                .as_ref()
-                .and_then(|preparation| preparation.as_ref())
-                .is_some_and(|preparation| preparation.key == preparation_key)
+        if paint_preparation
+            .as_ref()
+            .and_then(|preparation| preparation.as_ref())
+            .is_some_and(|preparation| preparation.key == preparation_key)
         {
             return Ok(());
         }
         if defer_layout_gradients {
-            return self.prepare_static_artboard_tree_paints_in_dependency_order(
+            self.prepare_static_artboard_tree_paints_in_dependency_order(
                 runtime,
                 graph,
                 artboards,
@@ -723,7 +726,13 @@ impl ArtboardInstance {
                 render_cache,
                 layout_bounds,
                 commands,
-            );
+            )?;
+            if let Some(preparation) = paint_preparation.as_deref_mut() {
+                *preparation = Some(RuntimePaintPreparationFrame {
+                    key: preparation_key,
+                });
+            }
+            return Ok(());
         }
 
         let initial_filter = if defer_layout_gradients {
@@ -762,7 +771,7 @@ impl ArtboardInstance {
             )?;
         }
 
-        if can_skip_prepare && let Some(preparation) = paint_preparation.as_deref_mut() {
+        if let Some(preparation) = paint_preparation.as_deref_mut() {
             *preparation = Some(RuntimePaintPreparationFrame {
                 key: preparation_key,
             });
@@ -782,6 +791,31 @@ impl ArtboardInstance {
         }
 
         Ok(())
+    }
+
+    fn runtime_nested_paint_preparation_epoch(&self, commands: &[RuntimeDrawCommand]) -> u64 {
+        let mut epoch = 0xcbf29ce484222325u64;
+        for command in commands {
+            if command.referenced_artboard_global.is_none()
+                || !runtime_draw_command_is_nested_artboard(command)
+            {
+                continue;
+            }
+            let local_id = command.local_id.unwrap_or(usize::MAX);
+            epoch =
+                epoch.wrapping_mul(0x100000001b3) ^ command.global_id.unwrap_or_default() as u64;
+            epoch = epoch.wrapping_mul(0x100000001b3) ^ local_id as u64;
+            epoch = epoch.wrapping_mul(0x100000001b3)
+                ^ command.referenced_artboard_global.unwrap_or_default() as u64;
+            if let Some(child) = command
+                .local_id
+                .and_then(|local_id| self.nested_artboards.get(&local_id))
+                .map(|nested| nested.child.as_ref())
+            {
+                epoch = epoch.wrapping_mul(0x100000001b3) ^ child.cache_epoch();
+            }
+        }
+        epoch
     }
 
     fn runtime_nested_artboard_preparation_commands_by_local(
@@ -5222,6 +5256,7 @@ struct RuntimeMeshRenderBuffers {
 struct RuntimePaintPreparationCacheKey {
     graph_global_id: u32,
     instance_epoch: u64,
+    nested_epoch: u64,
 }
 
 #[derive(Clone)]

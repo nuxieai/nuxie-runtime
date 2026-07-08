@@ -499,11 +499,13 @@ pub(super) struct RuntimeArtboardDataBindSourceQueues {
     dirty_custom_properties: Vec<usize>,
     dirty_custom_property_flags: Vec<bool>,
     persisting_custom_properties: Vec<usize>,
+    custom_property_update_indices: Vec<usize>,
     dirty_numeric_sources: Vec<usize>,
     dirty_numeric_source_flags: Vec<bool>,
     persisting_layout_computed: Vec<usize>,
     persisting_solo_sources: Vec<usize>,
     persisting_numeric_sources: Vec<usize>,
+    numeric_source_update_indices: Vec<usize>,
 }
 
 impl RuntimeArtboardDataBindSourceQueues {
@@ -566,14 +568,18 @@ impl RuntimeArtboardDataBindSourceQueues {
         property_key: u16,
         suppressed_data_bind_index: Option<usize>,
     ) {
-        let Some(sources) = self
-            .by_target_property
-            .get(&(local_id, property_key))
-            .cloned()
-        else {
+        let Self {
+            by_target_property,
+            dirty_custom_properties,
+            dirty_custom_property_flags,
+            dirty_numeric_sources,
+            dirty_numeric_source_flags,
+            ..
+        } = self;
+        let Some(sources) = by_target_property.get(&(local_id, property_key)) else {
             return;
         };
-        for source in sources {
+        for source in sources.iter().copied() {
             match source {
                 RuntimeArtboardDataBindSourceRef::CustomProperty {
                     index,
@@ -582,7 +588,14 @@ impl RuntimeArtboardDataBindSourceQueues {
                     if Some(data_bind_index) == suppressed_data_bind_index {
                         continue;
                     }
-                    self.enqueue_custom_property(index);
+                    let Some(flag) = dirty_custom_property_flags.get_mut(index) else {
+                        continue;
+                    };
+                    if *flag {
+                        continue;
+                    }
+                    *flag = true;
+                    dirty_custom_properties.push(index);
                 }
                 RuntimeArtboardDataBindSourceRef::NumericSource {
                     index,
@@ -591,7 +604,14 @@ impl RuntimeArtboardDataBindSourceQueues {
                     if Some(data_bind_index) == suppressed_data_bind_index {
                         continue;
                     }
-                    self.enqueue_numeric_source(index);
+                    let Some(flag) = dirty_numeric_source_flags.get_mut(index) else {
+                        continue;
+                    };
+                    if *flag {
+                        continue;
+                    }
+                    *flag = true;
+                    dirty_numeric_sources.push(index);
                 }
             }
         }
@@ -619,18 +639,15 @@ impl RuntimeArtboardDataBindSourceQueues {
         self.dirty_numeric_sources.push(index);
     }
 
-    fn drain_dirty_custom_properties(&mut self) -> Vec<usize> {
-        let dirty = std::mem::take(&mut self.dirty_custom_properties);
-        for index in &dirty {
-            if let Some(flag) = self.dirty_custom_property_flags.get_mut(*index) {
+    fn take_custom_property_update_indices(&mut self) -> Vec<usize> {
+        let mut indices = std::mem::take(&mut self.custom_property_update_indices);
+        indices.clear();
+        for index in self.dirty_custom_properties.drain(..) {
+            if let Some(flag) = self.dirty_custom_property_flags.get_mut(index) {
                 *flag = false;
             }
+            indices.push(index);
         }
-        dirty
-    }
-
-    fn drain_custom_property_update_indices(&mut self) -> Vec<usize> {
-        let mut indices = self.drain_dirty_custom_properties();
         for index in &self.persisting_custom_properties {
             if !indices.contains(index) {
                 indices.push(*index);
@@ -639,12 +656,42 @@ impl RuntimeArtboardDataBindSourceQueues {
         indices
     }
 
-    fn drain_dirty_numeric_sources(&mut self) -> Vec<usize> {
-        let dirty = std::mem::take(&mut self.dirty_numeric_sources);
-        for index in &dirty {
-            if let Some(flag) = self.dirty_numeric_source_flags.get_mut(*index) {
+    fn recycle_custom_property_update_indices(&mut self, mut indices: Vec<usize>) {
+        indices.clear();
+        self.custom_property_update_indices = indices;
+    }
+
+    fn take_numeric_source_update_indices(&mut self) -> Vec<usize> {
+        let mut indices = std::mem::take(&mut self.numeric_source_update_indices);
+        indices.clear();
+        indices.extend(self.persisting_numeric_sources.iter().copied());
+        for index in self.dirty_numeric_sources.drain(..) {
+            if let Some(flag) = self.dirty_numeric_source_flags.get_mut(index) {
                 *flag = false;
             }
+            indices.push(index);
+        }
+        indices
+    }
+
+    fn recycle_numeric_source_update_indices(&mut self, mut indices: Vec<usize>) {
+        indices.clear();
+        self.numeric_source_update_indices = indices;
+    }
+
+    #[cfg(test)]
+    fn drain_custom_property_update_indices(&mut self) -> Vec<usize> {
+        self.take_custom_property_update_indices()
+    }
+
+    #[cfg(test)]
+    fn drain_dirty_numeric_sources(&mut self) -> Vec<usize> {
+        let mut dirty = Vec::new();
+        for index in self.dirty_numeric_sources.drain(..) {
+            if let Some(flag) = self.dirty_numeric_source_flags.get_mut(index) {
+                *flag = false;
+            }
+            dirty.push(index);
         }
         dirty
     }
@@ -657,6 +704,7 @@ impl RuntimeArtboardDataBindSourceQueues {
         &self.persisting_solo_sources
     }
 
+    #[cfg(test)]
     fn persisting_numeric_sources(&self) -> &[usize] {
         &self.persisting_numeric_sources
     }
@@ -2798,12 +2846,14 @@ impl ArtboardInstance {
         elapsed_seconds: f32,
     ) -> bool {
         let mut changed = false;
-        for index in self
+        let custom_property_update_indices = self
             .artboard_data_bind_source_queues
-            .drain_custom_property_update_indices()
-        {
+            .take_custom_property_update_indices();
+        for index in custom_property_update_indices.iter().copied() {
             changed |= self.update_artboard_custom_property_binding(index);
         }
+        self.artboard_data_bind_source_queues
+            .recycle_custom_property_update_indices(custom_property_update_indices);
         changed |= self.update_artboard_layout_computed_bindings(root_transform);
         changed |= self.update_artboard_solo_source_bindings();
         changed |= self.update_artboard_numeric_source_bindings();
@@ -2839,15 +2889,10 @@ impl ArtboardInstance {
 
     fn update_artboard_numeric_source_bindings(&mut self) -> bool {
         let mut changed = false;
-        let mut indices = self
+        let indices = self
             .artboard_data_bind_source_queues
-            .persisting_numeric_sources()
-            .to_vec();
-        indices.extend(
-            self.artboard_data_bind_source_queues
-                .drain_dirty_numeric_sources(),
-        );
-        for index in indices {
+            .take_numeric_source_update_indices();
+        for index in indices.iter().copied() {
             let Some(binding) = self.artboard_numeric_source_bindings.get(index) else {
                 continue;
             };
@@ -2861,6 +2906,8 @@ impl ArtboardInstance {
             let path = binding.path.clone();
             changed |= self.set_artboard_data_bind_value_for_path(&path, value);
         }
+        self.artboard_data_bind_source_queues
+            .recycle_numeric_source_update_indices(indices);
         changed
     }
 

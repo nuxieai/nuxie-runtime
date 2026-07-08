@@ -122,6 +122,15 @@ the only memory the next session has. Update it every commit.
    slice should either make steady frames skip prepare via audited
    idempotent dirt raisers, or port actual `RawPath`/`PathComposer`
    retention behind C++ dirt gates.
+   A follow-up scout that retained artboard/background/layout/clip
+   `RenderPath` handles behind the existing layout/path epochs was also
+   intentionally not landed. It kept focused tests and `make golden-compare`
+   green, but the fenced release/null-renderer perf gate moved the focused
+   aggregate to Rust/C++=2.705 and then 3.338; direct
+   `ai_assitant --benchmark-repeat 100` was only neutral at Rust/C++=19.424.
+   Treat this as too shallow a layer: clip/layout/background path rebuild
+   gating can wait until the lower-level `ShapePaintPath`/`PathComposer`
+   retention has landed or a profile shows it on the hot path.
    Nested-artboard layout bounds are now retained on `ArtboardInstance` by
    `(graph_global_id, layout_epoch)`, matching the C++ `markLayoutNodeDirty`
    / `Artboard::markLayoutDirty` boundary for layout recomputation during
@@ -642,6 +651,22 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Do not land the retained clip/layout/background path cache
+  scout as a standalone optimization. The experiment changed
+  `RuntimeRenderPathCache` so artboard clips, clipping shapes, layout clips,
+  and backgrounds reused retained `RenderPath` handles until the existing
+  layout/path epoch or fill rule changed, with separate artboard clip slots for
+  origin-transformed and root-space clips. Focused runtime tests,
+  `cargo check -p rive-runtime`, and `make golden-compare` stayed green at
+  exact=263 / exact-segments=584 / diverges=0, but the M7 perf fence rejected
+  it: two release/null-renderer hot-loop runs reported aggregate Rust/C++=2.705
+  and 3.338 over the 5-entry / 10-segment focused corpus, worse than the
+  previous logged 2.329 baseline. Direct repeat-heavy `ai_assitant` was neutral
+  rather than decisive (cpp median=0.813 ms, rust median=15.786 ms,
+  Rust/C++=19.424). The useful finding is priority, not code: do not spend the
+  next slice on shallow clip/layout/background cache wrappers. Continue with
+  the scout-ranked lower-level `ShapePaintPath` retained RawPath/RenderPath and
+  `PathComposer` Path|NSlicer dirt gating work.
 - 2026-07-08: [M7] Cached nested-artboard layout bounds by `layout_epoch`.
   Rust nested advance previously recomputed `runtime_taffy_layout_bounds` and
   cloned the artboard graph whenever any `NestedArtboardLayout` host existed.

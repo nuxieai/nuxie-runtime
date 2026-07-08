@@ -5648,6 +5648,91 @@ impl RuntimeOwnedViewModelInstance {
         Some(view_model)
     }
 
+    fn combined_context_source_property_index(
+        context_path: &[usize],
+        source_tail: &[u32],
+        index: usize,
+    ) -> Option<usize> {
+        if index < context_path.len() {
+            Some(context_path[index])
+        } else {
+            usize::try_from(*source_tail.get(index - context_path.len())?).ok()
+        }
+    }
+
+    fn view_model_by_context_source_property_prefix(
+        &self,
+        context_path: &[usize],
+        source_tail: &[u32],
+        prefix_len: usize,
+    ) -> Option<&RuntimeOwnedViewModelViewModel> {
+        if prefix_len == 0 {
+            return None;
+        }
+        let first_property_index =
+            Self::combined_context_source_property_index(context_path, source_tail, 0)?;
+        let mut view_model = self
+            .view_models
+            .iter()
+            .find(|view_model| view_model.property_index == first_property_index)?;
+        for index in 1..prefix_len {
+            let property_index =
+                Self::combined_context_source_property_index(context_path, source_tail, index)?;
+            view_model = view_model
+                .active_children()?
+                .iter()
+                .find(|view_model| view_model.property_index == property_index)?;
+        }
+        Some(view_model)
+    }
+
+    fn context_source_value_target(
+        &self,
+        context_path: &[usize],
+        source_path: &[u32],
+    ) -> Option<(Option<&RuntimeOwnedViewModelViewModel>, usize)> {
+        if source_path.is_empty() {
+            return None;
+        }
+        let view_model_index = self.view_model_index_by_property_path(context_path)?;
+        if usize::try_from(source_path[0]).ok()? != view_model_index {
+            return None;
+        }
+        let source_tail = &source_path[1..];
+        let path_len = context_path.len() + source_tail.len();
+        if path_len == 0 {
+            return None;
+        }
+        let property_index =
+            Self::combined_context_source_property_index(context_path, source_tail, path_len - 1)?;
+        if path_len == 1 {
+            return Some((None, property_index));
+        }
+        let parent = self.view_model_by_context_source_property_prefix(
+            context_path,
+            source_tail,
+            path_len - 1,
+        )?;
+        Some((Some(parent), property_index))
+    }
+
+    fn context_source_view_model_target(
+        &self,
+        context_path: &[usize],
+        source_path: &[u32],
+    ) -> Option<&RuntimeOwnedViewModelViewModel> {
+        if source_path.is_empty() {
+            return None;
+        }
+        let view_model_index = self.view_model_index_by_property_path(context_path)?;
+        if usize::try_from(source_path[0]).ok()? != view_model_index {
+            return None;
+        }
+        let source_tail = &source_path[1..];
+        let path_len = context_path.len() + source_tail.len();
+        self.view_model_by_context_source_property_prefix(context_path, source_tail, path_len)
+    }
+
     fn view_model_by_property_path_mut(
         &mut self,
         property_path: &[usize],
@@ -5727,6 +5812,26 @@ impl RuntimeOwnedViewModelInstance {
         view_model.active_number_value_by_property_index(*property_index)
     }
 
+    pub(crate) fn number_value_by_context_source_path(
+        &self,
+        file: &RuntimeFile,
+        context_path: &[usize],
+        source_path: &[u32],
+        name_based: bool,
+    ) -> Option<f32> {
+        if name_based {
+            let property_path =
+                self.property_path_for_context_source_path(file, context_path, source_path, true)?;
+            return self.number_value_by_property_path(&property_path);
+        }
+        let (parent, property_index) =
+            self.context_source_value_target(context_path, source_path)?;
+        match parent {
+            Some(view_model) => view_model.active_number_value_by_property_index(property_index),
+            None => self.number_value_by_property_index(property_index),
+        }
+    }
+
     fn boolean_value_by_property_index(&self, property_index: usize) -> Option<bool> {
         self.booleans
             .iter()
@@ -5741,6 +5846,26 @@ impl RuntimeOwnedViewModelInstance {
         let (property_index, view_model_path) = property_path.split_last()?;
         let view_model = self.view_model_by_property_path(view_model_path)?;
         view_model.active_boolean_value_by_property_index(*property_index)
+    }
+
+    pub(crate) fn boolean_value_by_context_source_path(
+        &self,
+        file: &RuntimeFile,
+        context_path: &[usize],
+        source_path: &[u32],
+        name_based: bool,
+    ) -> Option<bool> {
+        if name_based {
+            let property_path =
+                self.property_path_for_context_source_path(file, context_path, source_path, true)?;
+            return self.boolean_value_by_property_path(&property_path);
+        }
+        let (parent, property_index) =
+            self.context_source_value_target(context_path, source_path)?;
+        match parent {
+            Some(view_model) => view_model.active_boolean_value_by_property_index(property_index),
+            None => self.boolean_value_by_property_index(property_index),
+        }
     }
 
     fn string_value_by_property_index(&self, property_index: usize) -> Option<&[u8]> {
@@ -5759,6 +5884,26 @@ impl RuntimeOwnedViewModelInstance {
         view_model.active_string_value_by_property_index(*property_index)
     }
 
+    pub(crate) fn string_value_by_context_source_path(
+        &self,
+        file: &RuntimeFile,
+        context_path: &[usize],
+        source_path: &[u32],
+        name_based: bool,
+    ) -> Option<&[u8]> {
+        if name_based {
+            let property_path =
+                self.property_path_for_context_source_path(file, context_path, source_path, true)?;
+            return self.string_value_by_property_path(&property_path);
+        }
+        let (parent, property_index) =
+            self.context_source_value_target(context_path, source_path)?;
+        match parent {
+            Some(view_model) => view_model.active_string_value_by_property_index(property_index),
+            None => self.string_value_by_property_index(property_index),
+        }
+    }
+
     fn color_value_by_property_index(&self, property_index: usize) -> Option<u32> {
         self.colors
             .iter()
@@ -5775,6 +5920,26 @@ impl RuntimeOwnedViewModelInstance {
         view_model.active_color_value_by_property_index(*property_index)
     }
 
+    pub(crate) fn color_value_by_context_source_path(
+        &self,
+        file: &RuntimeFile,
+        context_path: &[usize],
+        source_path: &[u32],
+        name_based: bool,
+    ) -> Option<u32> {
+        if name_based {
+            let property_path =
+                self.property_path_for_context_source_path(file, context_path, source_path, true)?;
+            return self.color_value_by_property_path(&property_path);
+        }
+        let (parent, property_index) =
+            self.context_source_value_target(context_path, source_path)?;
+        match parent {
+            Some(view_model) => view_model.active_color_value_by_property_index(property_index),
+            None => self.color_value_by_property_index(property_index),
+        }
+    }
+
     fn enum_value_by_property_index(&self, property_index: usize) -> Option<u64> {
         self.enums
             .iter()
@@ -5789,6 +5954,26 @@ impl RuntimeOwnedViewModelInstance {
         let (property_index, view_model_path) = property_path.split_last()?;
         let view_model = self.view_model_by_property_path(view_model_path)?;
         view_model.active_enum_value_by_property_index(*property_index)
+    }
+
+    pub(crate) fn enum_value_by_context_source_path(
+        &self,
+        file: &RuntimeFile,
+        context_path: &[usize],
+        source_path: &[u32],
+        name_based: bool,
+    ) -> Option<u64> {
+        if name_based {
+            let property_path =
+                self.property_path_for_context_source_path(file, context_path, source_path, true)?;
+            return self.enum_value_by_property_path(&property_path);
+        }
+        let (parent, property_index) =
+            self.context_source_value_target(context_path, source_path)?;
+        match parent {
+            Some(view_model) => view_model.active_enum_value_by_property_index(property_index),
+            None => self.enum_value_by_property_index(property_index),
+        }
     }
 
     fn symbol_list_index_value_by_property_index(&self, property_index: usize) -> Option<u64> {
@@ -5810,6 +5995,28 @@ impl RuntimeOwnedViewModelInstance {
         view_model.active_symbol_list_index_value_by_property_index(*property_index)
     }
 
+    pub(crate) fn symbol_list_index_value_by_context_source_path(
+        &self,
+        file: &RuntimeFile,
+        context_path: &[usize],
+        source_path: &[u32],
+        name_based: bool,
+    ) -> Option<u64> {
+        if name_based {
+            let property_path =
+                self.property_path_for_context_source_path(file, context_path, source_path, true)?;
+            return self.symbol_list_index_value_by_property_path(&property_path);
+        }
+        let (parent, property_index) =
+            self.context_source_value_target(context_path, source_path)?;
+        match parent {
+            Some(view_model) => {
+                view_model.active_symbol_list_index_value_by_property_index(property_index)
+            }
+            None => self.symbol_list_index_value_by_property_index(property_index),
+        }
+    }
+
     fn list_item_count_by_property_index(&self, property_index: usize) -> Option<usize> {
         self.lists
             .iter()
@@ -5829,6 +6036,26 @@ impl RuntimeOwnedViewModelInstance {
         view_model.active_list_item_count_by_property_index(*property_index)
     }
 
+    pub(crate) fn list_item_count_by_context_source_path(
+        &self,
+        file: &RuntimeFile,
+        context_path: &[usize],
+        source_path: &[u32],
+        name_based: bool,
+    ) -> Option<usize> {
+        if name_based {
+            let property_path =
+                self.property_path_for_context_source_path(file, context_path, source_path, true)?;
+            return self.list_item_count_by_property_path(&property_path);
+        }
+        let (parent, property_index) =
+            self.context_source_value_target(context_path, source_path)?;
+        match parent {
+            Some(view_model) => view_model.active_list_item_count_by_property_index(property_index),
+            None => self.list_item_count_by_property_index(property_index),
+        }
+    }
+
     fn asset_value_by_property_index(&self, property_index: usize) -> Option<u64> {
         self.assets
             .iter()
@@ -5843,6 +6070,26 @@ impl RuntimeOwnedViewModelInstance {
         let (property_index, view_model_path) = property_path.split_last()?;
         let view_model = self.view_model_by_property_path(view_model_path)?;
         view_model.active_asset_value_by_property_index(*property_index)
+    }
+
+    pub(crate) fn asset_value_by_context_source_path(
+        &self,
+        file: &RuntimeFile,
+        context_path: &[usize],
+        source_path: &[u32],
+        name_based: bool,
+    ) -> Option<u64> {
+        if name_based {
+            let property_path =
+                self.property_path_for_context_source_path(file, context_path, source_path, true)?;
+            return self.asset_value_by_property_path(&property_path);
+        }
+        let (parent, property_index) =
+            self.context_source_value_target(context_path, source_path)?;
+        match parent {
+            Some(view_model) => view_model.active_asset_value_by_property_index(property_index),
+            None => self.asset_value_by_property_index(property_index),
+        }
     }
 
     fn artboard_value_by_property_index(&self, property_index: usize) -> Option<u64> {
@@ -5861,6 +6108,26 @@ impl RuntimeOwnedViewModelInstance {
         view_model.active_artboard_value_by_property_index(*property_index)
     }
 
+    pub(crate) fn artboard_value_by_context_source_path(
+        &self,
+        file: &RuntimeFile,
+        context_path: &[usize],
+        source_path: &[u32],
+        name_based: bool,
+    ) -> Option<u64> {
+        if name_based {
+            let property_path =
+                self.property_path_for_context_source_path(file, context_path, source_path, true)?;
+            return self.artboard_value_by_property_path(&property_path);
+        }
+        let (parent, property_index) =
+            self.context_source_value_target(context_path, source_path)?;
+        match parent {
+            Some(view_model) => view_model.active_artboard_value_by_property_index(property_index),
+            None => self.artboard_value_by_property_index(property_index),
+        }
+    }
+
     pub(crate) fn trigger_value_by_property_index(&self, property_index: usize) -> Option<u64> {
         self.triggers
             .iter()
@@ -5877,11 +6144,47 @@ impl RuntimeOwnedViewModelInstance {
         view_model.active_trigger_value_by_property_index(*property_index)
     }
 
+    pub(crate) fn trigger_value_by_context_source_path(
+        &self,
+        file: &RuntimeFile,
+        context_path: &[usize],
+        source_path: &[u32],
+        name_based: bool,
+    ) -> Option<u64> {
+        if name_based {
+            let property_path =
+                self.property_path_for_context_source_path(file, context_path, source_path, true)?;
+            return self.trigger_value_by_property_path(&property_path);
+        }
+        let (parent, property_index) =
+            self.context_source_value_target(context_path, source_path)?;
+        match parent {
+            Some(view_model) => view_model.active_trigger_value_by_property_index(property_index),
+            None => self.trigger_value_by_property_index(property_index),
+        }
+    }
+
     pub(crate) fn view_model_value_by_property_path(
         &self,
         property_path: &[usize],
     ) -> Option<RuntimeViewModelPointer> {
         self.view_model_by_property_path(property_path)
+            .map(|view_model| view_model.value)
+    }
+
+    pub(crate) fn view_model_value_by_context_source_path(
+        &self,
+        file: &RuntimeFile,
+        context_path: &[usize],
+        source_path: &[u32],
+        name_based: bool,
+    ) -> Option<RuntimeViewModelPointer> {
+        if name_based {
+            let property_path =
+                self.property_path_for_context_source_path(file, context_path, source_path, true)?;
+            return self.view_model_value_by_property_path(&property_path);
+        }
+        self.context_source_view_model_target(context_path, source_path)
             .map(|view_model| view_model.value)
     }
 

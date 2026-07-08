@@ -694,6 +694,14 @@ fn runtime_owned_view_model_binding_value_for_context_chain(
     default_value: &RuntimeDataBindGraphValue,
 ) -> Option<RuntimeDataBindGraphValue> {
     context_chain.iter().find_map(|context_path| {
+        if !path_is_name_based {
+            return default_value.resolve_from_owned_view_model_context_path(
+                file,
+                context,
+                context_path,
+                path,
+            );
+        }
         let property_path = context.property_path_for_context_source_path(
             file,
             context_path,
@@ -765,6 +773,50 @@ fn runtime_owned_view_model_missing_binding_value_for_context_chain(
     match binding.default_value {
         RuntimeDataBindGraphValue::String(_) => Some(RuntimeDataBindGraphValue::String(Vec::new())),
         _ => None,
+    }
+}
+
+const RUNTIME_OWNED_VIEW_MODEL_CONTEXT_CHAIN_INLINE: usize = 8;
+
+enum RuntimeOwnedViewModelContextChainStorage<'a> {
+    Borrowed(&'a [&'a [usize]]),
+    Inline {
+        paths: [&'a [usize]; RUNTIME_OWNED_VIEW_MODEL_CONTEXT_CHAIN_INLINE],
+        len: usize,
+    },
+    Heap(Vec<&'a [usize]>),
+}
+
+impl<'a> RuntimeOwnedViewModelContextChainStorage<'a> {
+    fn with_child_context(
+        context_chain: &'a [&'a [usize]],
+        child_context: Option<&'a [usize]>,
+    ) -> Self {
+        let Some(child_context) = child_context else {
+            return Self::Borrowed(context_chain);
+        };
+        let len = context_chain.len() + 1;
+        if len <= RUNTIME_OWNED_VIEW_MODEL_CONTEXT_CHAIN_INLINE {
+            let empty: &'a [usize] = &[];
+            let mut paths = [empty; RUNTIME_OWNED_VIEW_MODEL_CONTEXT_CHAIN_INLINE];
+            paths[0] = child_context;
+            for (index, context_path) in context_chain.iter().enumerate() {
+                paths[index + 1] = *context_path;
+            }
+            return Self::Inline { paths, len };
+        }
+        let mut paths = Vec::with_capacity(len);
+        paths.push(child_context);
+        paths.extend_from_slice(context_chain);
+        Self::Heap(paths)
+    }
+
+    fn as_slice(&self) -> &[&'a [usize]] {
+        match self {
+            Self::Borrowed(paths) => paths,
+            Self::Inline { paths, len } => &paths[..*len],
+            Self::Heap(paths) => paths.as_slice(),
+        }
     }
 }
 
@@ -2178,16 +2230,12 @@ impl ArtboardInstance {
                 context_chain,
                 host_local_id,
             );
-            let child_context_chain_storage;
-            let child_context_chain = if let Some(child_context) = child_context.as_deref() {
-                let mut chain = Vec::with_capacity(context_chain.len() + 1);
-                chain.push(child_context);
-                chain.extend_from_slice(context_chain);
-                child_context_chain_storage = chain;
-                child_context_chain_storage.as_slice()
-            } else {
-                context_chain
-            };
+            let child_context_chain_storage =
+                RuntimeOwnedViewModelContextChainStorage::with_child_context(
+                    context_chain,
+                    child_context.as_deref(),
+                );
+            let child_context_chain = child_context_chain_storage.as_slice();
             let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
                 continue;
             };
@@ -2228,9 +2276,13 @@ impl ArtboardInstance {
                         binding,
                     )
                 })
-                .map(|value| (binding.path.clone(), value))
             };
-            if let Some((path, value)) = update {
+            if let Some(value) = update {
+                let path = self.artboard_property_bindings[index].path.as_slice();
+                if self.artboard_data_bind_values.get(path) == Some(&value) {
+                    continue;
+                }
+                let path = self.artboard_property_bindings[index].path.clone();
                 changed |= self.set_artboard_data_bind_value_for_path(&path, value);
             }
         }
@@ -2246,9 +2298,13 @@ impl ArtboardInstance {
                     false,
                     &binding.default_value,
                 )
-                .map(|value| (binding.path.clone(), value))
             };
-            if let Some((path, value)) = update {
+            if let Some(value) = update {
+                let path = self.artboard_image_asset_bindings[index].path.as_slice();
+                if self.artboard_data_bind_values.get(path) == Some(&value) {
+                    continue;
+                }
+                let path = self.artboard_image_asset_bindings[index].path.clone();
                 changed |= self.set_artboard_data_bind_value_for_path(&path, value);
             }
         }
@@ -2264,9 +2320,15 @@ impl ArtboardInstance {
                     binding.path_is_name_based,
                     &binding.default_value,
                 )
-                .map(|value| (binding.path.clone(), value))
             };
-            if let Some((path, value)) = update {
+            if let Some(value) = update {
+                let path = self.artboard_custom_property_bindings[index]
+                    .path
+                    .as_slice();
+                if self.artboard_data_bind_values.get(path) == Some(&value) {
+                    continue;
+                }
+                let path = self.artboard_custom_property_bindings[index].path.clone();
                 changed |= self.set_artboard_data_bind_value_for_path(&path, value);
             }
         }

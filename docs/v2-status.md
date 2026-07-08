@@ -398,6 +398,31 @@ the only memory the next session has. Update it every commit.
    path change while keeping the scout fences in force: no broad
    DataBindContext converter-property writes, no StringPad-style RangeMapper
    retry, and no shallow command/path-wrapper caching without fenced evidence.
+   A fresh release sample after the retained-path slice found the remaining
+   Rust time still concentrated in owned view-model nested artboard
+   data-context propagation, with allocations in context-source path lookup and
+   smaller retained animation/state-machine name clone/drop traffic. Rust now
+   walks numeric owned-view-model context-source paths directly through active
+   child property lists, retaining the existing name-based fallback; nested
+   host context-chain prepends use stack storage for the common shallow case;
+   artboard property/image/custom binding paths are cloned only after equality
+   proves a changed value; and retained linear-animation/state-machine names
+   share `Arc<str>` definitions. This follows C++ `DataContext` pointer walks
+   and immutable definition sharing without adding new invalidation or skip
+   caching. Full `make golden-compare` remains exact=263 /
+   exact-segments=584 / diverges=0; `cargo test --workspace`,
+   `cargo fmt --all -- --check`, and `git diff --check` pass. Direct
+   Rust-only `ai_assitant --benchmark-repeat 100000` improves from
+   elapsed=1408.5 / advance=902.0 ms to elapsed=1225.7 / advance=706.0 ms.
+   Single-file release/null-renderer `ai_assitant --benchmark-repeat 100`
+   reports cpp median=0.429 ms, rust median=1.928 ms, Rust/C++=4.496, and the
+   focused 5-entry hot-loop reports aggregate Rust/C++=2.363. Strict <=2.0
+   remains open. Next: profile the remaining
+   `bind_owned_view_model_artboard_context_chain` /
+   `collect_nested_artboard_context_source_values` time and continue only
+   audited C++ retention/dirt slices; keep the scout fences in force: no broad
+   converter-property writes, no StringPad-style RangeMapper retry, and no
+   shallow command/path-wrapper caching without release/null-renderer evidence.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -899,6 +924,29 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Trim owned view-model context-path allocation without
+  widening skip/cache semantics. A release `ai_assitant` sample after the
+  retained nested-host path slice still showed owned view-model/nested artboard
+  data-context propagation hot, especially context-source path allocation and
+  smaller retained animation/state-machine name clone/drop traffic. Rust now
+  resolves numeric context-source paths by walking active child property lists
+  directly, while keeping the existing name-based fallback; nested host
+  context-chain prepends use stack storage for shallow chains; artboard
+  property/image/custom binding paths are cloned only after equality shows a
+  changed value; and retained linear-animation/state-machine names share
+  `Arc<str>` definitions. This is a C++-shaped allocation cleanup
+  (`DataContext` pointer walks plus immutable definitions), not a new dirt or
+  skip cache. The status-doc scout review remains binding: no broad
+  DataBindContext converter-property writes after the `db_health_tracker`
+  RangeMapper failures, no StringPad-style RangeMapper retry without deeper
+  ownership/order analysis, and no shallow command/path-wrapper caching without
+  release/null-renderer evidence. `make golden-compare` remains exact=263 /
+  exact-segments=584 / diverges=0; `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check` pass. Direct Rust-only
+  `ai_assitant --benchmark-repeat 100000` improves from elapsed=1408.5 /
+  advance=902.0 ms to elapsed=1225.7 / advance=706.0 ms; single-file
+  release/null-renderer repeat=100 reports Rust/C++=4.496; focused hot-loop
+  reports aggregate Rust/C++=2.363. Strict <=2.0 remains open.
 - 2026-07-08: [M7] Retain nested-host data-bind paths outside the steady frame.
   C++ keeps the host `DataBindPath` on the nested artboard and lazily resolves
   the path buffer once; Rust now stores the resolved path ids on
@@ -2394,6 +2442,16 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Trimmed owned view-model context-source path allocation,
+  stack-prepended shallow nested context chains, avoided unchanged binding path
+  clones, and shared retained animation/state-machine names as `Arc<str>`.
+  `make golden-compare` remains exact=263/exact-segments=584/diverges=0;
+  `cargo test --workspace` passes; direct Rust-only repeat=100000
+  `ai_assitant` improves to elapsed=1225.7/advance=706.0 ms. Single-file
+  release/null-renderer repeat=100 is Rust/C++=4.496 and focused hot-loop is
+  Rust/C++=2.363, so strict <=2.0 remains open. Scout/perf fences remain:
+  no broad converter-property writes, no StringPad-style RangeMapper retry, and
+  no shallow command/path-wrapper caching without fenced evidence.
 - 2026-07-08: [M7] Retained nested-host data-bind resolved paths on
   `RuntimeNestedArtboardInstance`, including dynamic `artboardId` swaps.
   `make golden-compare` remains exact=263/exact-segments=584/diverges=0;

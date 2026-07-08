@@ -323,7 +323,7 @@ pub(crate) fn build_linear_animations(
         if object.type_name == "LinearAnimation" {
             animations.push(RuntimeLinearAnimation {
                 global_id: global_id as u32,
-                name: object.string_property("name").map(ToOwned::to_owned),
+                name: object.string_property("name").map(Arc::<str>::from),
                 fps: object.uint_property("fps").unwrap_or(60),
                 duration: object.uint_property("duration").unwrap_or(60),
                 speed: object.double_property("speed").unwrap_or(1.0),
@@ -637,7 +637,7 @@ fn runtime_key_frame_interpolator(
 #[derive(Debug, Clone)]
 pub struct RuntimeLinearAnimation {
     pub global_id: u32,
-    pub name: Option<String>,
+    pub name: Option<Arc<str>>,
     pub fps: u64,
     pub duration: u64,
     pub speed: f32,
@@ -1580,7 +1580,7 @@ mod tests {
     fn animation_with_work_area(enable_work_area: bool) -> RuntimeLinearAnimation {
         RuntimeLinearAnimation {
             global_id: 1,
-            name: Some("work area".to_owned()),
+            name: Some(Arc::<str>::from("work area")),
             fps: 60,
             duration: 60,
             speed: 1.0,

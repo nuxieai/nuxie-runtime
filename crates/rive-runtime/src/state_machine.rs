@@ -98,7 +98,7 @@ pub(crate) fn runtime_state_machine_input(
 #[derive(Debug, Clone)]
 pub struct RuntimeStateMachine {
     pub global_id: u32,
-    pub name: Option<String>,
+    pub name: Option<Arc<str>>,
     pub inputs: Arc<Vec<RuntimeStateMachineInput>>,
     pub(crate) listeners: Arc<Vec<RuntimeStateMachineListener>>,
     pub layers: Arc<Vec<RuntimeStateMachineLayer>>,
@@ -191,7 +191,7 @@ pub(crate) fn build_state_machines(
                 name: state_machine
                     .object
                     .string_property("name")
-                    .map(ToOwned::to_owned),
+                    .map(Arc::<str>::from),
                 inputs: Arc::new(
                     state_machine
                         .inputs

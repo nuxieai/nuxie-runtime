@@ -2686,42 +2686,40 @@ impl RuntimeDataBindGraphValue {
         context_path: &[usize],
         path: &[u32],
     ) -> Option<Self> {
-        let property_path =
-            context.property_path_for_context_source_path(file, context_path, path, false)?;
         match self {
             Self::Number(_) => context
-                .number_value_by_property_path(&property_path)
+                .number_value_by_context_source_path(file, context_path, path, false)
                 .map(Self::Number),
             Self::Boolean(_) => context
-                .boolean_value_by_property_path(&property_path)
+                .boolean_value_by_context_source_path(file, context_path, path, false)
                 .map(Self::Boolean),
             Self::String(_) => context
-                .string_value_by_property_path(&property_path)
+                .string_value_by_context_source_path(file, context_path, path, false)
                 .map(|value| Self::String(value.to_vec())),
             Self::Color(_) => context
-                .color_value_by_property_path(&property_path)
+                .color_value_by_context_source_path(file, context_path, path, false)
                 .map(Self::Color),
             Self::Enum(_) => context
-                .enum_value_by_property_path(&property_path)
+                .enum_value_by_context_source_path(file, context_path, path, false)
                 .map(Self::Enum),
             Self::SymbolListIndex(_) => context
-                .symbol_list_index_value_by_property_path(&property_path)
+                .symbol_list_index_value_by_context_source_path(file, context_path, path, false)
                 .map(Self::SymbolListIndex),
             Self::List { .. } => context
-                .list_item_count_by_property_path(&property_path)
+                .list_item_count_by_context_source_path(file, context_path, path, false)
                 .map(|item_count| Self::List { item_count }),
             Self::ListLength(_) => None,
             Self::Asset(_) => context
-                .asset_value_by_property_path(&property_path)
+                .asset_value_by_context_source_path(file, context_path, path, false)
                 .map(Self::Asset),
             Self::Artboard(_) => context
-                .artboard_value_by_property_path(&property_path)
+                .artboard_value_by_context_source_path(file, context_path, path, false)
                 .map(Self::Artboard),
             Self::Trigger(_) => context
-                .trigger_value_by_property_path(&property_path)
+                .trigger_value_by_context_source_path(file, context_path, path, false)
                 .map(Self::Trigger),
             Self::ViewModel(_) => context
-                .view_model_value_by_property_path(&property_path)
+                .view_model_value_by_context_source_path(file, context_path, path, false)
                 .map(Self::ViewModel),
         }
     }

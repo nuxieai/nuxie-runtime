@@ -440,6 +440,23 @@ the only memory the next session has. Update it every commit.
    remains open. Next: profile and port the remaining child-context
    construction in `bind_owned_view_model_artboard_context_chain` rather than
    broadening to fenced-off converter/property caches.
+   Nested owned-view-model child-context paths now use borrowed/inline stack
+   storage for the common numeric `DataBindPath` case instead of allocating a
+   `Vec<usize>` before prepending the child to the parent context chain. This
+   keeps C++'s `DataContext::getViewModelInstance` shape: check the current
+   context root, walk the numeric tail, then fall through to parent contexts;
+   it does not add a new skip/cache invalidation rule. Full
+   `make golden-compare` remains exact=263 / exact-segments=584 /
+   diverges=0; `cargo test --workspace`, `cargo fmt --all -- --check`, and
+   `git diff --check` pass. Focused release/null-renderer hot-loop improves
+   the 5-entry / 10-segment aggregate from Rust/C++=2.281 to 2.169
+   (`ai_assitant`=1.921). Direct Rust-only `ai_assitant
+   --benchmark-repeat 1000000` is noisy but roughly neutral/slightly improved
+   in one same-session run, elapsed=11715.7 / advance=6692.8 ms before and
+   elapsed=11580.4 / advance=6636.0 ms after. Strict <=2.0 remains open.
+   Next: profile remaining `bind_owned_view_model_artboard_context_chain` and
+   `collect_nested_artboard_context_source_values` time, keeping the scout
+   fences in force.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -941,6 +958,26 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Inline nested owned-view-model child context paths for
+  numeric retained `DataBindPath` lookups. The previous Rust path still
+  combined the matched parent context path and child source tail into an owned
+  `Vec<usize>` before constructing the child context chain. C++ keeps a
+  `DataContext` pointer chain and resolves a nested artboard's
+  `DataBindPath::resolvedPath()` by checking the current view-model instance
+  root, walking the path tail, and then falling through to the parent context.
+  Rust now mirrors that representation more closely with borrowed/inline
+  storage for the common shallow numeric path and heap allocation only for
+  unusually deep paths. The same view-model-target validation still runs
+  before binding animations or recursively binding the child artboard, and no
+  new skip/cache invalidation rule was added. `make golden-compare` remains
+  exact=263 / exact-segments=584 / diverges=0; `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check` pass. Focused
+  release/null-renderer hot-loop improves from aggregate Rust/C++=2.281 to
+  2.169 over the 5-entry / 10-segment corpus, still above strict <=2.0, so M7
+  remains open. A post-change sample still shows time in
+  `bind_owned_view_model_artboard_context_chain` and
+  `collect_nested_artboard_context_source_values`; profile those before the
+  next slice, and keep the converter/property-cache scout fences in force.
 - 2026-07-08: [M7] Accumulate nested context-source propagation without
   per-host descendant vectors. A release `ai_assitant` sample showed
   `collect_nested_artboard_context_source_values` still allocating and cloning
@@ -2478,6 +2515,14 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Replaced per-host child-context `Vec<usize>` construction
+  with borrowed/inline storage for numeric retained nested `DataBindPath`
+  lookups. `make golden-compare` remains
+  exact=263/exact-segments=584/diverges=0; `cargo test --workspace` passes;
+  focused hot-loop improves to Rust/C++=2.169, still above strict <=2.0. Next
+  profile remaining `bind_owned_view_model_artboard_context_chain` /
+  `collect_nested_artboard_context_source_values` time under the existing scout
+  fences.
 - 2026-07-08: [M7] Reworked nested context-source propagation to append into a
   single accumulator and walk retained nested host keys without temporary
   vectors. `make golden-compare` remains

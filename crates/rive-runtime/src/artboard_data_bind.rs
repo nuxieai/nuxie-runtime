@@ -671,18 +671,19 @@ fn artboard_data_bind_values_have_same_kind(
     )
 }
 
-fn runtime_owned_view_model_context_path_for_context_chain(
-    file: &RuntimeFile,
+fn runtime_owned_view_model_context_path_for_context_chain<'a>(
     context: &RuntimeOwnedViewModelInstance,
-    context_chain: &[&[usize]],
+    context_chain: &'a [&'a [usize]],
     path: &[u32],
-) -> Option<Vec<usize>> {
+) -> Option<RuntimeOwnedViewModelContextPathStorage<'a>> {
     context_chain.iter().find_map(|context_path| {
-        let property_path =
-            context.property_path_for_context_source_path(file, context_path, path, false)?;
-        context
-            .view_model_index_by_property_path(&property_path)
-            .map(|_| property_path)
+        let property_path = RuntimeOwnedViewModelContextPathStorage::from_context_source_path(
+            context,
+            context_path,
+            path,
+        )?;
+        context.view_model_index_by_property_path(property_path.as_slice())?;
+        Some(property_path)
     })
 }
 
@@ -778,6 +779,59 @@ fn runtime_owned_view_model_missing_binding_value_for_context_chain(
 }
 
 const RUNTIME_OWNED_VIEW_MODEL_CONTEXT_CHAIN_INLINE: usize = 8;
+const RUNTIME_OWNED_VIEW_MODEL_CONTEXT_PATH_INLINE: usize = 8;
+
+enum RuntimeOwnedViewModelContextPathStorage<'a> {
+    Borrowed(&'a [usize]),
+    Inline {
+        path: [usize; RUNTIME_OWNED_VIEW_MODEL_CONTEXT_PATH_INLINE],
+        len: usize,
+    },
+    Heap(Vec<usize>),
+}
+
+impl<'a> RuntimeOwnedViewModelContextPathStorage<'a> {
+    fn from_context_source_path(
+        context: &RuntimeOwnedViewModelInstance,
+        context_path: &'a [usize],
+        source_path: &[u32],
+    ) -> Option<Self> {
+        if source_path.is_empty() {
+            return None;
+        }
+        let view_model_index = context.view_model_index_by_property_path(context_path)?;
+        if usize::try_from(source_path[0]).ok()? != view_model_index {
+            return None;
+        }
+        let source_tail = &source_path[1..];
+        if source_tail.is_empty() {
+            return Some(Self::Borrowed(context_path));
+        }
+        let len = context_path.len() + source_tail.len();
+        if len <= RUNTIME_OWNED_VIEW_MODEL_CONTEXT_PATH_INLINE {
+            let mut path = [0; RUNTIME_OWNED_VIEW_MODEL_CONTEXT_PATH_INLINE];
+            path[..context_path.len()].copy_from_slice(context_path);
+            for (index, property_index) in source_tail.iter().enumerate() {
+                path[context_path.len() + index] = usize::try_from(*property_index).ok()?;
+            }
+            return Some(Self::Inline { path, len });
+        }
+        let mut path = Vec::with_capacity(len);
+        path.extend_from_slice(context_path);
+        for property_index in source_tail {
+            path.push(usize::try_from(*property_index).ok()?);
+        }
+        Some(Self::Heap(path))
+    }
+
+    fn as_slice(&self) -> &[usize] {
+        match self {
+            Self::Borrowed(path) => path,
+            Self::Inline { path, len } => &path[..*len],
+            Self::Heap(path) => path.as_slice(),
+        }
+    }
+}
 
 enum RuntimeOwnedViewModelContextChainStorage<'a> {
     Borrowed(&'a [&'a [usize]]),
@@ -2235,7 +2289,6 @@ impl ArtboardInstance {
         while let Some(host_local_id) = host_local {
             host_local = self.next_nested_artboard_local_after(Some(host_local_id));
             let child_context = self.owned_view_model_context_chain_for_nested_host(
-                file,
                 context,
                 context_chain,
                 host_local_id,
@@ -2243,7 +2296,9 @@ impl ArtboardInstance {
             let child_context_chain_storage =
                 RuntimeOwnedViewModelContextChainStorage::with_child_context(
                     context_chain,
-                    child_context.as_deref(),
+                    child_context
+                        .as_ref()
+                        .map(RuntimeOwnedViewModelContextPathStorage::as_slice),
                 );
             let child_context_chain = child_context_chain_storage.as_slice();
             let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
@@ -2345,26 +2400,18 @@ impl ArtboardInstance {
         changed
     }
 
-    fn owned_view_model_context_chain_for_nested_host(
+    fn owned_view_model_context_chain_for_nested_host<'a>(
         &self,
-        file: &RuntimeFile,
         context: &RuntimeOwnedViewModelInstance,
-        context_chain: &[&[usize]],
+        context_chain: &'a [&'a [usize]],
         host_local_id: usize,
-    ) -> Option<Vec<usize>> {
+    ) -> Option<RuntimeOwnedViewModelContextPathStorage<'a>> {
         let path = self
             .nested_artboards
             .get(&host_local_id)?
             .data_bind_resolved_path_ids
             .as_deref()?;
-        let child_context = runtime_owned_view_model_context_path_for_context_chain(
-            file,
-            context,
-            context_chain,
-            path,
-        )?;
-        context.view_model_index_by_property_path(&child_context)?;
-        Some(child_context)
+        runtime_owned_view_model_context_path_for_context_chain(context, context_chain, path)
     }
 
     pub(crate) fn clear_default_text_property_context(&mut self) -> bool {

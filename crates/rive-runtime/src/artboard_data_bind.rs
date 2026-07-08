@@ -306,6 +306,7 @@ pub(super) struct RuntimeArtboardImageAssetBindingInstance {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RuntimeArtboardOwnedContextKey {
     view_model_index: usize,
+    mutation_generation: u64,
     context_chain: Vec<Vec<usize>>,
 }
 
@@ -316,6 +317,7 @@ impl RuntimeArtboardOwnedContextKey {
     ) -> Self {
         Self {
             view_model_index: context.view_model_index,
+            mutation_generation: context.mutation_generation(),
             context_chain: context_chain
                 .iter()
                 .map(|context_path| context_path.to_vec())
@@ -329,6 +331,7 @@ impl RuntimeArtboardOwnedContextKey {
         context_chain: &[&[usize]],
     ) -> bool {
         self.view_model_index == context.view_model_index
+            && self.mutation_generation == context.mutation_generation()
             && self.context_chain.len() == context_chain.len()
             && self
                 .context_chain
@@ -2467,8 +2470,8 @@ impl ArtboardInstance {
         context_chain: &[&[usize]],
         bind_self: bool,
     ) -> bool {
-        self.retain_owned_view_model_context_chain(context, context_chain);
-        let mut changed = if bind_self {
+        let rebind_self = self.retain_owned_view_model_context_chain(context, context_chain);
+        let mut changed = if bind_self && rebind_self {
             self.bind_owned_view_model_artboard_values(file, context, context_chain)
         } else {
             false
@@ -2491,8 +2494,13 @@ impl ArtboardInstance {
             let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
                 continue;
             };
-            changed |=
-                nested.bind_owned_view_model_animation_contexts(file, context, child_context_chain);
+            if rebind_self {
+                changed |= nested.bind_owned_view_model_animation_contexts(
+                    file,
+                    context,
+                    child_context_chain,
+                );
+            }
             changed |= nested.child.bind_owned_view_model_artboard_context_chain(
                 file,
                 context,
@@ -2507,13 +2515,13 @@ impl ArtboardInstance {
         &mut self,
         context: &RuntimeOwnedViewModelInstance,
         context_chain: &[&[usize]],
-    ) {
+    ) -> bool {
         if self
             .artboard_owned_context_key
             .as_ref()
             .is_some_and(|key| key.matches_context_chain(context, context_chain))
         {
-            return;
+            return false;
         }
         self.artboard_owned_context_key = Some(RuntimeArtboardOwnedContextKey::from_context_chain(
             context,
@@ -2528,6 +2536,7 @@ impl ArtboardInstance {
         for binding in &mut self.artboard_custom_property_bindings {
             binding.owned_context_source_path = None;
         }
+        true
     }
 
     fn bind_owned_view_model_artboard_values(

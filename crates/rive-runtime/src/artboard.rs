@@ -1711,6 +1711,7 @@ impl ArtboardInstance {
             let changed = self.nested_artboards.remove(&local_id).is_some();
             if changed {
                 self.remove_nested_artboard_local(local_id);
+                self.artboard_owned_context_key = None;
                 self.mark_changed();
             }
             return changed;
@@ -1724,6 +1725,7 @@ impl ArtboardInstance {
         }
         self.nested_artboards.insert(local_id, nested);
         self.insert_nested_artboard_local(local_id);
+        self.artboard_owned_context_key = None;
         self.sync_nested_artboard_root_opacity(local_id);
         self.mark_changed();
         true

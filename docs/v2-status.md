@@ -651,6 +651,32 @@ the only memory the next session has. Update it every commit.
    time after retained source paths; likely targets are C++-aligned rebind
    gating for owned context chains or remaining nested context-source
    propagation, not scratch-only allocation helpers.
+   Owned-context artboard rebinds are now gated by the root owned
+   view-model's mutation generation plus the retained context-chain identity.
+   `RuntimeOwnedViewModelInstance` bumps the generation for public owned-value
+   mutations and view-model relinks; `RuntimeArtboardOwnedContextKey` includes
+   that generation; and each artboard skips only its own bind/apply and nested
+   animation-context rebind when its key is clean while still descending into
+   children so local dynamic `artboardId` swaps can invalidate themselves.
+   This keeps the status-doc scout/perf fences in force: it ports the C++
+   `DataBindContext::bindFromContext` rebind boundary, not the rejected
+   scratch-path reuse or shallow path-command cache layers. Full
+   `make golden-compare` remains exact=263 / exact-segments=584 /
+   diverges=0, and `cargo test --workspace` passes. Fenced
+   release/null-renderer hot-loop reports aggregate Rust/C++=2.073 then
+   2.274 over the 5-entry / 10-segment focused corpus (`ai_assitant`=1.875
+   then 2.165). Single-file repeat=100 JSON at
+   `/tmp/rive-ai-owned-context-generation-perf.json` reports cpp median=0.420
+   ms, rust median=1.411 ms, Rust/C++=3.357. A Rust-only 3M
+   `ai_assitant` repeat improves from the prior retained-source-path baseline
+   elapsed=23231.2 / advance=11731.1 ms to elapsed=20152.4 /
+   advance=8773.6 ms. Strict <=2.0 remains open. Next: profile the focused
+   outliers (`animated_clipping`, the small-file fixed overhead in
+   `advance_blend_mode` / `animation_reset_cases`, and `ai_assitant` if it
+   stays >2 on rerun) under the same scout/perf fences: no broad
+   DataBindContext converter-property writes, no StringPad-style RangeMapper
+   retry, no scratch-only owned-context path reuse, and no shallow
+   command/path-wrapper caching without release/null-renderer evidence.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -1152,6 +1178,25 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Gate owned-context artboard rebinds by owned view-model
+  mutation generation. After reviewing the status scout/perf fences, the safe
+  next step was the C++ `DataBindContext::bindFromContext` rebind boundary, not
+  the rejected scratch-path reuse layer. Rust now tracks a root
+  `RuntimeOwnedViewModelInstance` mutation generation, includes it in each
+  artboard's retained owned-context key, and skips only that artboard's own
+  owned-context bind/apply and nested animation-context rebind when the
+  view-model, context chain, and generation are unchanged. Traversal still
+  descends into children so dynamic nested-artboard swaps can invalidate a
+  descendant locally. Dynamic `artboardId` swaps clear the affected artboard
+  key. `make golden-compare` remains exact=263 / exact-segments=584 /
+  diverges=0; focused nested/data-bind and owned-viewmodel probes,
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check` pass. Fenced hot-loop reports aggregate Rust/C++=2.073
+  then 2.274; direct repeat=100 `ai_assitant` reports cpp median=0.420 ms,
+  rust median=1.411 ms, Rust/C++=3.357; Rust-only 3M `ai_assitant` improves
+  to elapsed=20152.4 / advance=8773.6 ms from the prior retained-source-path
+  baseline's elapsed=23231.2 / advance=11731.1 ms. M7 remains open; next
+  profile the remaining focused outliers under the same scout/perf fences.
 - 2026-07-08: [M7] Retain resolved artboard owned-context data-bind source
   paths behind a context-chain key. C++ `DataBindContext::bindFromContext`
   resolves through `DataContext` to a concrete source and retains that source
@@ -2899,6 +2944,18 @@ the only memory the next session has. Update it every commit.
   cpp median=0.442 ms, rust median=1.420 ms, Rust/C++=3.212. Strict <=2.0
   remains open; next profile remaining advance/data-bind time after retained
   source paths.
+- 2026-07-08: [M7] Gated owned-context artboard rebinds by root owned
+  view-model mutation generation after reviewing the status scout/perf fences.
+  Each artboard now skips its own clean rebind/apply work when the retained
+  owned-context key is unchanged, while still descending to children so local
+  dynamic nested-artboard swaps can invalidate themselves. `make
+  golden-compare` remains exact=263/exact-segments=584/diverges=0; focused
+  nested/data-bind and owned-viewmodel probes, `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check` pass. Fenced hot-loop
+  reports aggregate Rust/C++=2.073 then 2.274; direct repeat=100
+  `ai_assitant` reports Rust/C++=3.357; Rust-only 3M `ai_assitant` improves
+  to elapsed=20152.4/advance=8773.6 ms. Strict <=2.0 remains open; next
+  profile focused outliers under the existing scout/perf fences.
 - 2026-07-08: [M7] Reviewed the status scout/perf fences around
   `bind_owned_view_model_artboard_context_chain` and backed out the
   scratch-only owned-context path scout. The scout kept focused nested/data-bind

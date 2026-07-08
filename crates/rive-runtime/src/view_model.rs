@@ -1507,6 +1507,7 @@ impl RuntimeImportedViewModelInstanceContext {
 #[derive(Debug, Clone)]
 pub struct RuntimeOwnedViewModelInstance {
     pub(crate) view_model_index: usize,
+    mutation_generation: u64,
     property_names: Vec<(String, usize)>,
     numbers: Vec<RuntimeOwnedViewModelNumber>,
     booleans: Vec<RuntimeOwnedViewModelBoolean>,
@@ -4015,6 +4016,21 @@ fn runtime_owned_view_model_property_children(
 }
 
 impl RuntimeOwnedViewModelInstance {
+    pub(crate) fn mutation_generation(&self) -> u64 {
+        self.mutation_generation
+    }
+
+    fn mark_mutated(&mut self) {
+        self.mutation_generation = self.mutation_generation.wrapping_add(1);
+    }
+
+    fn track_mutation(&mut self, changed: bool) -> bool {
+        if changed {
+            self.mark_mutated();
+        }
+        changed
+    }
+
     pub fn new(file: &RuntimeFile, view_model_index: usize) -> Option<Self> {
         Self::from_view_model(file, view_model_index, None)
     }
@@ -4103,6 +4119,7 @@ impl RuntimeOwnedViewModelInstance {
         );
         Some(Self {
             view_model_index,
+            mutation_generation: 0,
             property_names: runtime_owned_view_model_property_names(file, view_model_index),
             numbers,
             booleans,
@@ -4201,7 +4218,8 @@ impl RuntimeOwnedViewModelInstance {
         ) {
             return false;
         }
-        view_model.set_number_by_property_name(number_name, value)
+        let changed = view_model.set_number_by_property_name(number_name, value);
+        self.track_mutation(changed)
     }
 
     pub(crate) fn set_number_by_property_path(
@@ -4224,7 +4242,8 @@ impl RuntimeOwnedViewModelInstance {
         ) {
             return false;
         }
-        view_model.set_number_by_property_index(*number_index, value)
+        let changed = view_model.set_number_by_property_index(*number_index, value);
+        self.track_mutation(changed)
     }
 
     fn number_property_path_by_names(&self, property_path: &[&str]) -> Option<Vec<usize>> {
@@ -4271,6 +4290,7 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         }
         boolean.value = value;
+        self.mark_mutated();
         true
     }
 
@@ -4338,7 +4358,8 @@ impl RuntimeOwnedViewModelInstance {
         ) {
             return false;
         }
-        view_model.set_boolean_by_property_name(boolean_name, value)
+        let changed = view_model.set_boolean_by_property_name(boolean_name, value);
+        self.track_mutation(changed)
     }
 
     pub(crate) fn set_boolean_by_property_path(
@@ -4361,7 +4382,8 @@ impl RuntimeOwnedViewModelInstance {
         ) {
             return false;
         }
-        view_model.set_boolean_by_property_index(*boolean_index, value)
+        let changed = view_model.set_boolean_by_property_index(*boolean_index, value);
+        self.track_mutation(changed)
     }
 
     fn boolean_property_path_by_names(&self, property_path: &[&str]) -> Option<Vec<usize>> {
@@ -4408,6 +4430,7 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         }
         string.value = value.to_vec();
+        self.mark_mutated();
         true
     }
 
@@ -4475,7 +4498,8 @@ impl RuntimeOwnedViewModelInstance {
         ) {
             return false;
         }
-        view_model.set_string_by_property_name(string_name, value)
+        let changed = view_model.set_string_by_property_name(string_name, value);
+        self.track_mutation(changed)
     }
 
     pub(crate) fn set_string_by_property_path(
@@ -4498,7 +4522,8 @@ impl RuntimeOwnedViewModelInstance {
         ) {
             return false;
         }
-        view_model.set_string_by_property_index(*string_index, value)
+        let changed = view_model.set_string_by_property_index(*string_index, value);
+        self.track_mutation(changed)
     }
 
     fn string_property_path_by_names(&self, property_path: &[&str]) -> Option<Vec<usize>> {
@@ -4543,6 +4568,7 @@ impl RuntimeOwnedViewModelInstance {
         };
         if color.value != value {
             color.value = value;
+            self.mark_mutated();
         }
         true
     }
@@ -4616,7 +4642,8 @@ impl RuntimeOwnedViewModelInstance {
         ) {
             return false;
         }
-        view_model.set_color_by_property_name(color_name, value)
+        let changed = view_model.set_color_by_property_name(color_name, value);
+        self.track_mutation(changed)
     }
 
     pub(crate) fn set_color_by_property_path(
@@ -4639,7 +4666,8 @@ impl RuntimeOwnedViewModelInstance {
         ) {
             return false;
         }
-        view_model.set_color_by_property_index(*color_index, value)
+        let changed = view_model.set_color_by_property_index(*color_index, value);
+        self.track_mutation(changed)
     }
 
     fn color_property_path_by_names(&self, property_path: &[&str]) -> Option<Vec<usize>> {
@@ -4753,7 +4781,8 @@ impl RuntimeOwnedViewModelInstance {
         ) {
             return false;
         }
-        view_model.set_enum_by_property_name(enum_name, value)
+        let changed = view_model.set_enum_by_property_name(enum_name, value);
+        self.track_mutation(changed)
     }
 
     pub(crate) fn set_enum_by_property_path(
@@ -4776,7 +4805,8 @@ impl RuntimeOwnedViewModelInstance {
         ) {
             return false;
         }
-        view_model.set_enum_by_property_index(*enum_index, value)
+        let changed = view_model.set_enum_by_property_index(*enum_index, value);
+        self.track_mutation(changed)
     }
 
     fn enum_property_path_by_names(&self, property_path: &[&str]) -> Option<Vec<usize>> {
@@ -4827,6 +4857,7 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         }
         symbol_list_index.value = value;
+        self.mark_mutated();
         true
     }
 
@@ -4906,7 +4937,9 @@ impl RuntimeOwnedViewModelInstance {
         ) {
             return false;
         }
-        view_model.set_symbol_list_index_by_property_name(symbol_list_index_name, value)
+        let changed =
+            view_model.set_symbol_list_index_by_property_name(symbol_list_index_name, value);
+        self.track_mutation(changed)
     }
 
     pub(crate) fn set_symbol_list_index_by_property_path(
@@ -4929,7 +4962,8 @@ impl RuntimeOwnedViewModelInstance {
         ) {
             return false;
         }
-        view_model.set_symbol_list_index_by_property_index(*symbol_list_index, value)
+        let changed = view_model.set_symbol_list_index_by_property_index(*symbol_list_index, value);
+        self.track_mutation(changed)
     }
 
     fn symbol_list_index_property_path_by_names(
@@ -4983,6 +5017,7 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         }
         list.item_count = item_count;
+        self.mark_mutated();
         true
     }
 
@@ -5062,7 +5097,8 @@ impl RuntimeOwnedViewModelInstance {
         ) {
             return false;
         }
-        view_model.set_list_item_count_by_property_name(list_name, item_count)
+        let changed = view_model.set_list_item_count_by_property_name(list_name, item_count);
+        self.track_mutation(changed)
     }
 
     pub(crate) fn set_list_item_count_by_property_path(
@@ -5085,7 +5121,8 @@ impl RuntimeOwnedViewModelInstance {
         ) {
             return false;
         }
-        view_model.set_list_item_count_by_property_index(*list_index, item_count)
+        let changed = view_model.set_list_item_count_by_property_index(*list_index, item_count);
+        self.track_mutation(changed)
     }
 
     fn list_property_path_by_names(&self, property_path: &[&str]) -> Option<Vec<usize>> {
@@ -5132,6 +5169,7 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         }
         asset.value = value;
+        self.mark_mutated();
         true
     }
 
@@ -5199,7 +5237,8 @@ impl RuntimeOwnedViewModelInstance {
         ) {
             return false;
         }
-        view_model.set_asset_by_property_name(asset_name, value)
+        let changed = view_model.set_asset_by_property_name(asset_name, value);
+        self.track_mutation(changed)
     }
 
     pub(crate) fn set_asset_by_property_path(
@@ -5222,7 +5261,8 @@ impl RuntimeOwnedViewModelInstance {
         ) {
             return false;
         }
-        view_model.set_asset_by_property_index(*asset_index, value)
+        let changed = view_model.set_asset_by_property_index(*asset_index, value);
+        self.track_mutation(changed)
     }
 
     fn asset_property_path_by_names(&self, property_path: &[&str]) -> Option<Vec<usize>> {
@@ -5336,7 +5376,8 @@ impl RuntimeOwnedViewModelInstance {
         ) {
             return false;
         }
-        view_model.set_artboard_by_property_name(artboard_name, value)
+        let changed = view_model.set_artboard_by_property_name(artboard_name, value);
+        self.track_mutation(changed)
     }
 
     pub(crate) fn set_artboard_by_property_path(
@@ -5359,7 +5400,8 @@ impl RuntimeOwnedViewModelInstance {
         ) {
             return false;
         }
-        view_model.set_artboard_by_property_index(*artboard_index, value)
+        let changed = view_model.set_artboard_by_property_index(*artboard_index, value);
+        self.track_mutation(changed)
     }
 
     fn artboard_property_path_by_names(&self, property_path: &[&str]) -> Option<Vec<usize>> {
@@ -5406,6 +5448,7 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         }
         trigger.value = value;
+        self.mark_mutated();
         true
     }
 
@@ -5473,7 +5516,8 @@ impl RuntimeOwnedViewModelInstance {
         ) {
             return false;
         }
-        view_model.set_trigger_by_property_name(trigger_name, value)
+        let changed = view_model.set_trigger_by_property_name(trigger_name, value);
+        self.track_mutation(changed)
     }
 
     pub(crate) fn set_trigger_by_property_path(
@@ -5496,7 +5540,8 @@ impl RuntimeOwnedViewModelInstance {
         ) {
             return false;
         }
-        view_model.set_trigger_by_property_index(*trigger_index, value)
+        let changed = view_model.set_trigger_by_property_index(*trigger_index, value);
+        self.track_mutation(changed)
     }
 
     fn trigger_property_path_by_names(&self, property_path: &[&str]) -> Option<Vec<usize>> {
@@ -5592,6 +5637,7 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         }
         view_model.value = value;
+        self.mark_mutated();
         true
     }
 
@@ -5627,6 +5673,7 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         }
         view_model.value = value;
+        self.mark_mutated();
         true
     }
 

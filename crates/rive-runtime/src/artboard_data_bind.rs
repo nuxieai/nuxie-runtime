@@ -106,6 +106,42 @@ fn runtime_data_bind_property_key_for_name(type_name: &str, property_name: &str)
     }
 }
 
+fn runtime_data_bind_component_parent_id_key() -> Option<u16> {
+    cached_runtime_data_bind_property_key!("Component", "parentId")
+}
+
+fn runtime_data_bind_view_model_instance_view_model_id_key() -> Option<u16> {
+    cached_runtime_data_bind_property_key!("ViewModelInstance", "viewModelId")
+}
+
+fn runtime_data_bind_view_model_instance_value_property_id_key() -> Option<u16> {
+    cached_runtime_data_bind_property_key!("ViewModelInstanceValue", "viewModelPropertyId")
+}
+
+fn runtime_data_bind_view_model_instance_number_value_key() -> Option<u16> {
+    cached_runtime_data_bind_property_key!("ViewModelInstanceNumber", "propertyValue")
+}
+
+fn runtime_data_bind_view_model_instance_string_value_key() -> Option<u16> {
+    cached_runtime_data_bind_property_key!("ViewModelInstanceString", "propertyValue")
+}
+
+fn runtime_data_bind_view_model_instance_color_value_key() -> Option<u16> {
+    cached_runtime_data_bind_property_key!("ViewModelInstanceColor", "propertyValue")
+}
+
+fn runtime_data_bind_view_model_instance_boolean_value_key() -> Option<u16> {
+    cached_runtime_data_bind_property_key!("ViewModelInstanceBoolean", "propertyValue")
+}
+
+fn runtime_data_bind_view_model_instance_enum_value_key() -> Option<u16> {
+    cached_runtime_data_bind_property_key!("ViewModelInstanceEnum", "propertyValue")
+}
+
+fn runtime_data_bind_view_model_instance_asset_value_key() -> Option<u16> {
+    cached_runtime_data_bind_property_key!("ViewModelInstanceAssetImage", "propertyValue")
+}
+
 #[derive(Debug, Clone)]
 pub(super) struct RuntimeArtboardPropertyBindingInstance {
     data_bind_index: usize,
@@ -3290,37 +3326,43 @@ impl ArtboardInstance {
     }
 
     fn sync_nested_child_artboard_data_contexts(&mut self) -> bool {
+        enum NestedChildContextUpdate {
+            Property(usize, RuntimeDataBindGraphValue),
+            ImageAsset(usize, RuntimeDataBindGraphValue),
+        }
+
         let host_locals = self.nested_artboards.keys().copied().collect::<Vec<_>>();
         let mut changed = false;
         for host_local_id in host_locals {
-            let Some((property_bindings, image_asset_bindings)) =
-                self.nested_artboards.get(&host_local_id).map(|nested| {
-                    (
-                        nested.child.artboard_property_bindings.clone(),
-                        nested.child.artboard_image_asset_bindings.clone(),
-                    )
-                })
-            else {
+            let Some(nested) = self.nested_artboards.get(&host_local_id) else {
                 continue;
             };
-            if property_bindings.is_empty() && image_asset_bindings.is_empty() {
+            if nested.child.artboard_property_bindings.is_empty()
+                && nested.child.artboard_image_asset_bindings.is_empty()
+            {
                 continue;
             }
-            let updates = property_bindings
+            let mut updates = Vec::new();
+            for (index, binding) in nested.child.artboard_property_bindings.iter().enumerate() {
+                if let Some(value) = self.stateful_nested_host_binding_value(host_local_id, binding)
+                {
+                    updates.push(NestedChildContextUpdate::Property(index, value));
+                }
+            }
+            for (index, binding) in nested
+                .child
+                .artboard_image_asset_bindings
                 .iter()
-                .filter_map(|binding| {
-                    self.stateful_nested_host_binding_value(host_local_id, binding)
-                        .map(|value| (binding.path.clone(), value))
-                })
-                .chain(image_asset_bindings.iter().filter_map(|binding| {
-                    self.stateful_nested_host_binding_value_for(
-                        host_local_id,
-                        &binding.path,
-                        &binding.default_value,
-                    )
-                    .map(|value| (binding.path.clone(), value))
-                }))
-                .collect::<Vec<_>>();
+                .enumerate()
+            {
+                if let Some(value) = self.stateful_nested_host_binding_value_for(
+                    host_local_id,
+                    &binding.path,
+                    &binding.default_value,
+                ) {
+                    updates.push(NestedChildContextUpdate::ImageAsset(index, value));
+                }
+            }
             if updates.is_empty() {
                 continue;
             }
@@ -3328,7 +3370,23 @@ impl ArtboardInstance {
                 continue;
             };
             let mut child_context_changed = false;
-            for (path, value) in updates {
+            for update in updates {
+                let (path, value) = match update {
+                    NestedChildContextUpdate::Property(index, value) => {
+                        let Some(binding) = nested.child.artboard_property_bindings.get(index)
+                        else {
+                            continue;
+                        };
+                        (binding.path.clone(), value)
+                    }
+                    NestedChildContextUpdate::ImageAsset(index, value) => {
+                        let Some(binding) = nested.child.artboard_image_asset_bindings.get(index)
+                        else {
+                            continue;
+                        };
+                        (binding.path.clone(), value)
+                    }
+                };
                 child_context_changed |= nested
                     .child
                     .set_artboard_data_bind_value_for_path(&path, value);
@@ -3363,50 +3421,32 @@ impl ArtboardInstance {
         let source_local = self.stateful_nested_host_value_local(host_local_id, path)?;
         match default_value {
             RuntimeDataBindGraphValue::Number(_) => {
-                let property_value_key = runtime_data_bind_property_key_for_name(
-                    "ViewModelInstanceNumber",
-                    "propertyValue",
-                )?;
+                let property_value_key = runtime_data_bind_view_model_instance_number_value_key()?;
                 self.double_property(source_local, property_value_key)
                     .map(RuntimeDataBindGraphValue::Number)
             }
             RuntimeDataBindGraphValue::String(_) => {
-                let property_value_key = runtime_data_bind_property_key_for_name(
-                    "ViewModelInstanceString",
-                    "propertyValue",
-                )?;
+                let property_value_key = runtime_data_bind_view_model_instance_string_value_key()?;
                 self.string_property(source_local, property_value_key)
                     .map(|value| RuntimeDataBindGraphValue::String(value.to_vec()))
             }
             RuntimeDataBindGraphValue::Color(_) => {
-                let property_value_key = runtime_data_bind_property_key_for_name(
-                    "ViewModelInstanceColor",
-                    "propertyValue",
-                )?;
+                let property_value_key = runtime_data_bind_view_model_instance_color_value_key()?;
                 self.color_property(source_local, property_value_key)
                     .map(RuntimeDataBindGraphValue::Color)
             }
             RuntimeDataBindGraphValue::Boolean(_) => {
-                let property_value_key = runtime_data_bind_property_key_for_name(
-                    "ViewModelInstanceBoolean",
-                    "propertyValue",
-                )?;
+                let property_value_key = runtime_data_bind_view_model_instance_boolean_value_key()?;
                 self.bool_property(source_local, property_value_key)
                     .map(RuntimeDataBindGraphValue::Boolean)
             }
             RuntimeDataBindGraphValue::Enum(_) => {
-                let property_value_key = runtime_data_bind_property_key_for_name(
-                    "ViewModelInstanceEnum",
-                    "propertyValue",
-                )?;
+                let property_value_key = runtime_data_bind_view_model_instance_enum_value_key()?;
                 self.uint_property(source_local, property_value_key)
                     .map(RuntimeDataBindGraphValue::Enum)
             }
             RuntimeDataBindGraphValue::Asset(_) => {
-                let property_value_key = runtime_data_bind_property_key_for_name(
-                    "ViewModelInstanceAssetImage",
-                    "propertyValue",
-                )?;
+                let property_value_key = runtime_data_bind_view_model_instance_asset_value_key()?;
                 self.uint_property(source_local, property_value_key)
                     .map(RuntimeDataBindGraphValue::Asset)
             }
@@ -3434,9 +3474,8 @@ impl ArtboardInstance {
         host_local_id: usize,
         view_model_id: u32,
     ) -> Option<usize> {
-        let parent_key = runtime_data_bind_property_key_for_name("Component", "parentId")?;
-        let view_model_key =
-            runtime_data_bind_property_key_for_name("ViewModelInstance", "viewModelId")?;
+        let parent_key = runtime_data_bind_component_parent_id_key()?;
+        let view_model_key = runtime_data_bind_view_model_instance_view_model_id_key()?;
         self.slots.iter().find_map(|slot| {
             (slot.type_name == Some("ViewModelInstance")
                 && self.uint_property(slot.local_id, parent_key) == Some(host_local_id as u64)
@@ -3451,11 +3490,8 @@ impl ArtboardInstance {
         parent_local_id: usize,
         view_model_property_id: u32,
     ) -> Option<usize> {
-        let parent_key = runtime_data_bind_property_key_for_name("Component", "parentId")?;
-        let property_key = runtime_data_bind_property_key_for_name(
-            "ViewModelInstanceValue",
-            "viewModelPropertyId",
-        )?;
+        let parent_key = runtime_data_bind_component_parent_id_key()?;
+        let property_key = runtime_data_bind_view_model_instance_value_property_id_key()?;
         self.slots.iter().find_map(|slot| {
             let type_name = slot.type_name?;
             (type_name.starts_with("ViewModelInstance")

@@ -363,6 +363,24 @@ the only memory the next session has. Update it every commit.
    reports aggregate Rust/C++=2.111. Strict <=2.0 remains open. Next: profile
    remaining advance/data-bind time or audit RangeMapper C++ ownership/update
    order before another fallback-removal attempt.
+   A follow-up release `ai_assitant --benchmark-repeat 1000000` sample found
+   the remaining Rust time still concentrated in owned view-model/nested
+   artboard data-context propagation: `bind_owned_view_model_artboard_context_chain`,
+   `sync_nested_child_artboard_data_contexts`, and
+   `RuntimeFile::data_bind_path_for_referencer_object`. Rust now mirrors C++'s
+   pointer-walking context propagation more closely by no longer cloning nested
+   child property/image binding vectors during every sync pass, and by using
+   fixed cached generated-property keys for the sampled nested-host
+   `ViewModelInstance*` lookups instead of the generic name dispatcher.
+   Long-repeat Rust-only `ai_assitant` improves from elapsed=2095.6 /
+   advance=1602.2 ms to elapsed=1734.9 / advance=1233.3 ms for 100000
+   segments. Full `make golden-compare` remains exact=263 /
+   exact-segments=584 / diverges=0; `cargo test --workspace`,
+   `cargo fmt --all -- --check`, and `git diff --check` pass. Fenced
+   release/null-renderer hot-loop is still noisy/neutral at aggregate
+   Rust/C++=2.119, so strict <=2.0 remains open. Next: port the C++ retained
+   `DataBindPath`/data-context lookup shape for nested hosts so Rust stops
+   resolving `data_bind_path_for_referencer_object` inside the steady frame.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -864,6 +882,21 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Remove Rust-only nested child data-bind cloning from the
+  steady owned-view-model context path. A release `ai_assitant` sample showed
+  `sync_nested_child_artboard_data_contexts` cloning child property/image
+  binding vectors and repeatedly entering the generic data-bind property-key
+  dispatcher while C++ propagates nested data contexts through retained
+  objects/pointers. Rust now stages only `(binding index, value)` updates before
+  mutating the child, and the sampled nested-host `ViewModelInstance*`
+  property lookups use fixed cached generated-property keys. This does not add
+  a new skip/cache invalidation rule. `make golden-compare` remains exact=263 /
+  exact-segments=584 / diverges=0; `cargo test --workspace`, format check, and
+  `git diff --check` pass. Long-repeat Rust-only `ai_assitant`
+  improves from elapsed=2095.6 / advance=1602.2 ms to elapsed=1734.9 /
+  advance=1233.3 ms for 100000 segments; fenced release/null-renderer hot-loop
+  reports aggregate Rust/C++=2.119 over the 5-entry / 10-segment focused
+  corpus, still above strict <=2.0, so M7 remains open.
 - 2026-07-08: [M7] Remove operation-view-model/system-operation custom sources
   from the conservative polling lane while preserving the scout/perf fences.
   `DataConverterOperationViewModel` has no C++ converter-property dirty callback
@@ -2329,6 +2362,13 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Removed Rust-only nested child binding-vector clones and
+  dynamic nested-host property-key lookups from the sampled owned-view-model
+  context path. `make golden-compare` remains
+  exact=263/exact-segments=584/diverges=0; `cargo test --workspace` passes;
+  long-repeat `ai_assitant` improves to elapsed=1734.9/advance=1233.3 ms for
+  100000 segments, while focused hot-loop is Rust/C++=2.119. Strict <=2.0
+  remains open; next port retained nested-host `DataBindPath` lookup shape.
 - 2026-07-08: [M7] Removed operation-view-model/system-operation custom sources
   from the conservative persisting lane after reviewing the scout/perf fences.
   `make golden-compare` remains exact=263/exact-segments=584/diverges=0;

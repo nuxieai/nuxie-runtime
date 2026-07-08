@@ -493,6 +493,29 @@ the only memory the next session has. Update it every commit.
    remaining advance/data-bind time again before choosing between another
    audited retained data-context lookup and a higher-leverage dirt/retention
    target.
+   Nested-host root `ViewModelInstance` locals are now retained on
+   `RuntimeNestedArtboardInstance` by `viewModelId`, rebuilt with dynamic
+   `artboardId` swaps, and reused by child data-context sync before walking
+   property values. Successful fallback source-local resolutions are also
+   retained by binding path even when the current sync pass does not materialize
+   a value. This mirrors C++ `DataContext` root pointers plus
+   `DataBindPath::resolvedPath()` retention without adding a negative cache or
+   invented skip invalidation. Full `make golden-compare` remains exact=263 /
+   exact-segments=584 / diverges=0; `cargo test --workspace`,
+   `cargo fmt --all -- --check`, and `git diff --check` pass. Direct Rust-only
+   `ai_assitant --benchmark-repeat 1000000` improves from elapsed=11658.6 /
+   advance=6683.3 ms to elapsed=9791.6 / advance=4650.2 ms. Single-file
+   repeat=100 JSON at `/tmp/rive-ai-root-locals-perf-final.json` reports
+   cpp median=0.463 ms, rust median=1.717 ms, Rust/C++=3.710. A 3M sample
+   shows `stateful_nested_host_value_local_for_slots` dropping from 775 to 48
+   samples; the new top is draw/prepare plus schema `definition_by_name`,
+   `bind_owned_view_model_artboard_context_chain`, and BTree range lookups.
+   Focused release/null-renderer hot-loop reports aggregate Rust/C++=2.136
+   (`ai_assitant`=1.852), so strict <=2.0 remains open. Next: profile/port the
+   remaining C++-audited retained/dirt targets in
+   `bind_owned_view_model_artboard_context_chain` / context-source BTree
+   lookups or address remaining schema lookup in sampled draw/prepare without
+   violating the scout fences.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -994,6 +1017,26 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Retain nested-host root view-model locals for child
+  data-context sync. The previous retained source-local table still paid one
+  scan through parent artboard slots to find the root `ViewModelInstance` for
+  each unresolved child binding path, then walked property values from there.
+  C++ `DataContext` keeps a root `ViewModelInstance` pointer and
+  `DataBindPath::resolvedPath()` buffer, so Rust now stores the nested host's
+  root `ViewModelInstance` locals by `viewModelId`, preserves first-match
+  import order, rebuilds the table on dynamic `artboardId` swaps, and reuses
+  it both while pre-resolving child source locals and during fallback sync.
+  Successful fallback source-local resolutions are retained by path after they
+  resolve; unsupported value kinds still do not create child updates. This is
+  retained C++-shaped pointer/path data, not a new skip or negative-cache
+  invalidation rule. `make golden-compare` remains exact=263 /
+  exact-segments=584 / diverges=0; focused nested tests, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, and `git diff --check` pass.
+  Direct Rust-only `ai_assitant --benchmark-repeat 1000000` improves from
+  elapsed=11658.6 / advance=6683.3 ms to elapsed=9791.6 / advance=4650.2 ms;
+  repeat=100 JSON reports cpp median=0.463 ms, rust median=1.717 ms,
+  Rust/C++=3.710; focused hot-loop reports aggregate Rust/C++=2.136. M7 remains
+  open.
 - 2026-07-08: [M7] Retain nested-host source locals for child data-context sync.
   The previous Rust path still resolved each nested child property/image
   binding by scanning the parent artboard slots for a matching
@@ -2586,6 +2629,15 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Retained nested-host root `ViewModelInstance` locals by
+  `viewModelId` and lazily retained successful fallback child source-local
+  resolutions. `make golden-compare` remains
+  exact=263/exact-segments=584/diverges=0; `cargo test --workspace` passes;
+  direct Rust-only repeat=1000000 `ai_assitant` improves from
+  elapsed=11658.6/advance=6683.3 ms to elapsed=9791.6/advance=4650.2 ms;
+  repeat=100 JSON reports Rust/C++=3.710 and focused hot-loop reports
+  Rust/C++=2.136. Strict <=2.0 remains open; next profile remaining
+  context-chain/BTree lookup or schema lookup time under the scout fences.
 - 2026-07-08: [M7] Retained nested-host child data-context source locals by
   binding path and removed the remaining host-key snapshot from
   `sync_nested_child_artboard_data_contexts`. `make golden-compare` remains

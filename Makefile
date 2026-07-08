@@ -10,7 +10,7 @@ GOLDEN_RUNNER ?= $(CURDIR)/tools/golden-runner/build/$(shell uname -s | tr A-Z a
 RUST_GOLDEN_RUNNER ?= $(CURDIR)/target/$(RUST_PROFILE)/rust-golden-runner
 PERF_FILE ?= $(RIVE_RUNTIME_DIR)/tests/unit_tests/assets/shapetest.riv
 PERF_SAMPLES ?= 0
-PERF_ITERATIONS ?= 5
+PERF_ITERATIONS ?= 10
 PERF_WARMUPS ?= 1
 PERF_CORPUS ?= corpus.toml
 PERF_CORPUS_LIMIT ?= 10
@@ -18,7 +18,7 @@ PERF_CORPUS_IDS ?= advance_blend_mode,ai_assitant,align_target,animated_clipping
 PERF_CORPUS_SELECTION = $(if $(strip $(PERF_CORPUS_IDS)),--corpus-ids "$(PERF_CORPUS_IDS)",--corpus-limit "$(PERF_CORPUS_LIMIT)")
 PERF_AGGREGATE ?= min
 PERF_MAX_RATIO ?= 2.0
-PERF_BENCHMARK_REPEAT ?= 1
+PERF_BENCHMARK_REPEAT ?= 100
 PERF_JSON_OUT ?= $(CURDIR)/target/perf-compare.json
 PERF_JSON_META ?= --meta build_profile=release --meta git_sha=$(shell git rev-parse HEAD 2>/dev/null || echo unknown) --meta timestamp=$(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 CAPI_SMOKE_FIXTURE ?= fixtures/animation/smi_test.riv

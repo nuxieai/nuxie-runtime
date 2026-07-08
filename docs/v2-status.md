@@ -963,10 +963,12 @@ the only memory the next session has. Update it every commit.
    median and min sums in JSON, and supports `--corpus-ids` so focused perf is
    not alphabetical truncation. `make perf-hot-loop` defaults to
    `PERF_AGGREGATE=min` and the deliberate focused corpus
-   `advance_blend_mode,ai_assitant,align_target,animated_clipping,animation_reset_cases,spotify_kids_demo`.
-   Fenced release/null-renderer smoke with `PERF_BENCHMARK_REPEAT=100` reports
-   aggregate min Rust/C++=4.702 over 11 file/sample entries; the newly visible
-   image path dominates (`spotify_kids_demo@0` min Rust/C++=10.263), followed
+   `advance_blend_mode,ai_assitant,align_target,animated_clipping,animation_reset_cases,spotify_kids_demo`,
+   with default `PERF_ITERATIONS=10` and `PERF_BENCHMARK_REPEAT=100` so bare
+   `make perf-hot-loop` runs the adopted fence rather than a smoke-only path.
+   Fenced release/null-renderer smoke with the defaults reports aggregate min
+   Rust/C++=4.758 over 11 file/sample entries; the newly visible image path
+   dominates (`spotify_kids_demo@0` min Rust/C++=10.413), followed
    by the known tiny-file fixed overhead outliers. Full `make golden-compare`
    remains exact=263 / exact-segments=584 / diverges=0; `cargo test
    --workspace`, `cargo fmt --all -- --check`, and `git diff --check` pass.
@@ -1323,8 +1325,9 @@ the only memory the next session has. Update it every commit.
     invocations ALL <= 2.0 with 1-min load < ~8 and C++ min-sum inside
     its 0.70-0.95ms sanity band. Current standing under protocol:
     2.98 (band 2.82-3.06) at repeat=100; ~3.95 at repeat=1000. The
-    distance to 2.0 is real, not noise. Optional tool follow-ups:
-    --aggregate=min flag, --json in perf-hot-loop target.
+    distance to 2.0 is real, not noise. Tool follow-ups landed:
+    --aggregate=min flag, deliberate --corpus-ids gate, and make defaults for
+    10 iterations / repeat=100 on perf-hot-loop.
 
 17. SCOUT REPORT — fresh flamegraph of TODAY'S tree (samply, release,
     steady + cold regimes profiled separately; C++ steady profile captured
@@ -3539,6 +3542,18 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Made the focused perf-gate defaults match the scout fence.
+  `make perf-hot-loop` now defaults to `PERF_ITERATIONS=10` and
+  `PERF_BENCHMARK_REPEAT=100`, keeping the existing min aggregation and
+  deliberate image-bearing corpus, so bare M7 perf runs are decision-grade
+  instead of five-iteration/repeat-one smoke checks. Pre-change
+  `make golden-compare` remains exact=263/exact-segments=584/diverges=0.
+  Post-change `make perf-hot-loop PERF_MAX_RATIO=999` exercises the defaults
+  and reports aggregate min Rust/C++=4.758; `spotify_kids_demo@0` remains the
+  largest outlier at min Rust/C++=10.413. Full post-change `make
+  golden-compare`, `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check` pass. Next: profile/port the highest current gate
+  outlier under these defaults.
 - 2026-07-08: [M7] Landed min-based and deliberate focused perf-gate tooling.
   `perf-compare` now accepts `--aggregate median|min`, applies the selected
   statistic to per-entry ratios, aggregate ratio, JSON selected sums, and

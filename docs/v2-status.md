@@ -943,6 +943,21 @@ the only memory the next session has. Update it every commit.
    (`target/perf-ai-dense-paint-config.json`). The sampled BTree hit is not
    enough by itself; keep profiling draw replay and prefer a deeper C++
    retained-path / object-identity slice over another sidecar container swap.
+   The release Rust profile now matches the build-profile parity scout's
+   shipping-runtime recommendation: root `Cargo.toml` sets `lto = "fat"`,
+   `codegen-units = 1`, and `panic = "abort"` for `[profile.release]`, after a
+   `catch_unwind`/`resume_unwind` search found no C ABI unwind reliance. Full
+   `make golden-compare` remains exact=263 / exact-segments=584 / diverges=0;
+   `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff --check`,
+   and `cargo build --release -p rive-capi` pass. Fenced repeat-aware hot-loop
+   with the LTO profile reports noisy median aggregates Rust/C++=3.371 then
+   2.760; direct repeat=100 `ai_assitant` JSON at
+   `target/perf-ai-release-profile.json` reports cpp median=0.423 ms,
+   rust median=1.352 ms, Rust/C++=3.195, while min timings are cpp=0.388 ms
+   and rust=0.981 ms (~2.53x). Strict <=2.0 remains open. Next: implement the
+   scout's min-based/deliberate perf gate (`--aggregate=min` and image-bearing
+   focused corpus) before using focused perf numbers to choose another runtime
+   slice.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -3510,6 +3525,19 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Landed the release build-profile parity slice from the
+  scout report: root `[profile.release]` now uses fat LTO, one codegen unit,
+  and aborting release panics, matching C++'s full-LTO shipping build more
+  fairly without machine-specific `target-cpu=native` or float contraction.
+  No C ABI `catch_unwind`/`resume_unwind` reliance was found. Full
+  `make golden-compare` remains exact=263/exact-segments=584/diverges=0;
+  `cargo test --workspace`, `cargo fmt --all -- --check`, `git diff --check`,
+  and `cargo build --release -p rive-capi` pass. Fenced repeat-aware hot-loop
+  under the new profile reports noisy median aggregates Rust/C++=3.371 then
+  2.760; direct repeat=100 `ai_assitant` JSON at
+  `target/perf-ai-release-profile.json` reports median Rust/C++=3.195 and min
+  timing ratio about 2.53x. Strict <=2.0 remains open; next land the
+  min-based/deliberate perf gate before choosing the next runtime hotspot.
 - 2026-07-08: [M7] Stopped cloning retained solo binding instances during
   artboard solo target apply. This mirrors the C++ retained DataBind list plus
   direct Solo update dispatch without adding a new skip gate. `make

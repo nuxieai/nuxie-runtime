@@ -20,3 +20,8 @@ resolver = "3"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/rive-app/rive-rust"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"

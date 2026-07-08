@@ -621,6 +621,7 @@ impl ArtboardInstance {
                     graph,
                     container,
                     layout_bounds,
+                    render_cache,
                 );
                 let runtime_paint = runtime_prepare_gradient_paint_command(
                     self,
@@ -1142,6 +1143,7 @@ impl ArtboardInstance {
                 graph,
                 container,
                 layout_bounds,
+                render_cache,
             );
             let runtime_paint = runtime_prepare_gradient_paint_command(
                 self,
@@ -3161,8 +3163,12 @@ impl ArtboardInstance {
             return Vec::new();
         };
 
-        let shape_world =
-            self.runtime_component_world_transform_with_bounds(shape_local, graph, layout_bounds);
+        let shape_world = path_cache.component_world_transform_with_bounds(
+            self,
+            graph,
+            shape_local,
+            layout_bounds,
+        );
         let inverse_shape_world = shape_world.invert_or_identity();
         let nsliced_context =
             runtime_nsliced_node_context_for_shape(self, graph, shape_local, layout_bounds);
@@ -3175,9 +3181,10 @@ impl ArtboardInstance {
             let Some(path) = path_lookup.path(graph, path_ref.local_id) else {
                 continue;
             };
-            let path_world = self.runtime_component_world_transform_with_bounds(
-                path.local_id,
+            let path_world = path_cache.component_world_transform_with_bounds(
+                self,
                 graph,
+                path.local_id,
                 layout_bounds,
             );
             let path_frame =
@@ -3267,9 +3274,10 @@ impl ArtboardInstance {
             let Some(composer) = path_lookup.composer(graph, *shape_local) else {
                 continue;
             };
-            let shape_world = self.runtime_component_world_transform_with_bounds(
-                *shape_local,
+            let shape_world = path_cache.component_world_transform_with_bounds(
+                self,
                 graph,
+                *shape_local,
                 layout_bounds,
             );
             let inverse_shape_world = shape_world.invert_or_identity();
@@ -3283,9 +3291,10 @@ impl ArtboardInstance {
                 let Some(path) = path_lookup.path(graph, path_ref.local_id) else {
                     continue;
                 };
-                let path_world = self.runtime_component_world_transform_with_bounds(
-                    path.local_id,
+                let path_world = path_cache.component_world_transform_with_bounds(
+                    self,
                     graph,
+                    path.local_id,
                     layout_bounds,
                 );
                 let path_frame =
@@ -5356,6 +5365,7 @@ pub struct RuntimeRenderPathCache {
     layout_clip_paths: BTreeMap<usize, Box<dyn RenderPath>>,
     draw_paths: RuntimeDrawPathSlots,
     path_geometry_commands: RuntimePathGeometryCommandSlots,
+    world_transforms: RuntimeWorldTransformSlots,
     text_shape_paints: BTreeMap<RuntimeTextShapePaintCacheSlot, RuntimeCachedTextShapePaints>,
     gradient_preparation: Option<RuntimeGradientPreparationFrame>,
     gradient_shaders: BTreeMap<u32, RuntimeGradientShaderCacheEntry>,
@@ -5475,6 +5485,61 @@ struct RuntimeCachedPathGeometryCommands {
     path: Arc<PathGeometryNode>,
     commands: Arc<Vec<RuntimePathCommand>>,
     has_weighted_context: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RuntimeWorldTransformCacheKey {
+    cache_epoch: u64,
+    layout_epoch: u64,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RuntimeCachedWorldTransform {
+    key: RuntimeWorldTransformCacheKey,
+    transform: Mat2D,
+}
+
+#[derive(Default)]
+struct RuntimeWorldTransformSlots {
+    graph_global_id: Option<u32>,
+    by_local: Vec<Option<RuntimeCachedWorldTransform>>,
+}
+
+impl RuntimeWorldTransformSlots {
+    fn get(
+        &mut self,
+        graph_global_id: u32,
+        local_id: usize,
+        key: RuntimeWorldTransformCacheKey,
+    ) -> Option<Mat2D> {
+        if self.graph_global_id != Some(graph_global_id) {
+            self.graph_global_id = Some(graph_global_id);
+            self.by_local.clear();
+            return None;
+        }
+        self.by_local
+            .get(local_id)
+            .and_then(|cached| cached.as_ref())
+            .filter(|cached| cached.key == key)
+            .map(|cached| cached.transform)
+    }
+
+    fn insert(
+        &mut self,
+        graph_global_id: u32,
+        local_id: usize,
+        key: RuntimeWorldTransformCacheKey,
+        transform: Mat2D,
+    ) {
+        if self.graph_global_id != Some(graph_global_id) {
+            self.graph_global_id = Some(graph_global_id);
+            self.by_local.clear();
+        }
+        if self.by_local.len() <= local_id {
+            self.by_local.resize(local_id + 1, None);
+        }
+        self.by_local[local_id] = Some(RuntimeCachedWorldTransform { key, transform });
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -5684,6 +5749,108 @@ fn runtime_nested_preparation_command(
 }
 
 impl RuntimeRenderPathCache {
+    fn component_world_transform_with_bounds(
+        &mut self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        local_id: usize,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    ) -> Mat2D {
+        let Some(layout_bounds) = layout_bounds else {
+            return instance.runtime_component_world_transform_with_bounds(local_id, graph, None);
+        };
+        let key = RuntimeWorldTransformCacheKey {
+            cache_epoch: instance.cache_epoch(),
+            layout_epoch: instance.layout_epoch(),
+        };
+        if let Some(transform) = self.world_transforms.get(graph.global_id, local_id, key) {
+            return transform;
+        }
+
+        let transform = self.compute_component_world_transform_with_layout_bounds(
+            instance,
+            graph,
+            local_id,
+            layout_bounds,
+        );
+        self.world_transforms
+            .insert(graph.global_id, local_id, key, transform);
+        transform
+    }
+
+    fn compute_component_world_transform_with_layout_bounds(
+        &mut self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        local_id: usize,
+        layout_bounds: &BTreeMap<usize, RuntimeLayoutBounds>,
+    ) -> Mat2D {
+        let Some(component) = instance.component(local_id) else {
+            return Mat2D::IDENTITY;
+        };
+        if component.type_name == "Artboard" {
+            return component.transform.world_transform;
+        }
+        if component.type_name == "LayoutComponent" {
+            return instance.runtime_layout_component_world_transform_with_bounds(
+                local_id,
+                graph,
+                Some(layout_bounds),
+            );
+        }
+        if component.type_name == "NestedArtboardLayout"
+            && let Some(bounds) = layout_bounds.get(&local_id).copied()
+        {
+            if mat2d_linear_is_identity(component.transform.local_transform) {
+                return Mat2D([1.0, 0.0, 0.0, 1.0, bounds.x, bounds.y]);
+            }
+            let (origin_x, origin_y) = instance
+                .nested_artboards
+                .get(&local_id)
+                .map(|nested| {
+                    (
+                        nested.child.width * nested.child.origin_x,
+                        nested.child.height * nested.child.origin_y,
+                    )
+                })
+                .unwrap_or((0.0, 0.0));
+            let mut components = component.transform.local_transform.decompose();
+            components.x = bounds.x + origin_x;
+            components.y = bounds.y + origin_y;
+            return Mat2D::compose(components);
+        }
+        let Some(parent_local) = component.parent_local else {
+            return component.transform.world_transform;
+        };
+        if !instance
+            .component(parent_local)
+            .is_some_and(|parent| parent.layout_chain_has_layout_component)
+        {
+            return component.transform.world_transform;
+        }
+        if let Some(layout_local) = component.constrained_layout_ancestor {
+            let layout_world = instance.runtime_layout_component_world_transform_with_bounds(
+                layout_local,
+                graph,
+                Some(layout_bounds),
+            );
+            let stored_layout_world = instance
+                .component(layout_local)
+                .map(|component| component.transform.world_transform)
+                .unwrap_or(Mat2D::IDENTITY);
+            return layout_world
+                .multiply(stored_layout_world.invert_or_identity())
+                .multiply(component.transform.world_transform);
+        }
+        self.component_world_transform_with_bounds(
+            instance,
+            graph,
+            parent_local,
+            Some(layout_bounds),
+        )
+        .multiply(component.transform.local_transform)
+    }
+
     fn prepared_artboard_frame(
         &mut self,
         instance: &ArtboardInstance,
@@ -6810,11 +6977,13 @@ fn runtime_shape_paint_container_world_transform(
     graph: &ArtboardGraph,
     container: &ShapePaintContainerNode,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    path_cache: &mut RuntimeRenderPathCache,
 ) -> Mat2D {
     match container.type_name {
-        "LayoutComponent" => instance.runtime_layout_component_world_transform_with_bounds(
-            container.local_id,
+        "LayoutComponent" => path_cache.component_world_transform_with_bounds(
+            instance,
             graph,
+            container.local_id,
             layout_bounds,
         ),
         "ForegroundLayoutDrawable" => {
@@ -6829,15 +6998,17 @@ fn runtime_shape_paint_container_world_transform(
                         .is_some_and(|component| component.type_name == "LayoutComponent")
                 })
                 .unwrap_or(container.local_id);
-            instance.runtime_layout_component_world_transform_with_bounds(
-                layout_local,
+            path_cache.component_world_transform_with_bounds(
+                instance,
                 graph,
+                layout_local,
                 layout_bounds,
             )
         }
-        _ => instance.runtime_component_world_transform_with_bounds(
-            container.local_id,
+        _ => path_cache.component_world_transform_with_bounds(
+            instance,
             graph,
+            container.local_id,
             layout_bounds,
         ),
     }
@@ -6950,6 +7121,7 @@ fn runtime_draw_command(
             layout_bounds,
             image_by_global,
             mesh_by_local,
+            path_cache,
             renderer,
         );
     }
@@ -6957,7 +7129,12 @@ fn runtime_draw_command(
     let shape_world = command
         .local_id
         .map(|local_id| {
-            instance.runtime_component_world_transform_with_bounds(local_id, graph, layout_bounds)
+            path_cache.component_world_transform_with_bounds(
+                instance,
+                graph,
+                local_id,
+                layout_bounds,
+            )
         })
         .unwrap_or(Mat2D::IDENTITY);
 
@@ -7181,6 +7358,7 @@ fn runtime_draw_image(
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     image_by_global: &RuntimeRenderImages,
     mesh_by_local: &mut BTreeMap<usize, RuntimeMeshRenderBuffers>,
+    path_cache: &mut RuntimeRenderPathCache,
     renderer: &mut dyn Renderer,
 ) -> Result<()> {
     // Ported from C++ `src/shapes/image.cpp::Image::draw`.
@@ -7215,6 +7393,7 @@ fn runtime_draw_image(
             buffers,
             layout_bounds,
             image,
+            path_cache,
             renderer,
         )?;
         if command.needs_save_operation {
@@ -7244,9 +7423,10 @@ fn runtime_draw_image(
         layout_bounds,
         origin_x,
         origin_y,
+        path_cache,
     )?
     .unwrap_or_else(|| {
-        instance.runtime_component_world_transform_with_bounds(local_id, graph, layout_bounds)
+        path_cache.component_world_transform_with_bounds(instance, graph, local_id, layout_bounds)
     });
     renderer.transform(runtime_render_mat(world));
 
@@ -7305,13 +7485,15 @@ fn runtime_draw_mesh_image(
     buffers: &mut RuntimeMeshRenderBuffers,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     image: &dyn RenderImage,
+    path_cache: &mut RuntimeRenderPathCache,
     renderer: &mut dyn Renderer,
 ) -> Result<()> {
     let weighted_context = instance.runtime_weighted_mesh_context(mesh, graph, layout_bounds);
     if weighted_context.is_none() {
-        let world = instance.runtime_component_world_transform_with_bounds(
-            image_local,
+        let world = path_cache.component_world_transform_with_bounds(
+            instance,
             graph,
+            image_local,
             layout_bounds,
         );
         renderer.transform(runtime_render_mat(world));
@@ -7419,6 +7601,7 @@ fn runtime_image_world_transform(
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     origin_x: f32,
     origin_y: f32,
+    path_cache: &mut RuntimeRenderPathCache,
 ) -> Result<Option<Mat2D>> {
     let Some(layout_bounds) = layout_bounds else {
         return Ok(None);
@@ -7509,9 +7692,10 @@ fn runtime_image_world_transform(
     components.scale_y = scale_y;
     components.x += offset_x;
     components.y += offset_y;
-    let parent_world = instance.runtime_component_world_transform_with_bounds(
-        parent_local,
+    let parent_world = path_cache.component_world_transform_with_bounds(
+        instance,
         graph,
+        parent_local,
         Some(layout_bounds),
     );
     Ok(Some(parent_world.multiply(Mat2D::compose(components))))
@@ -7562,9 +7746,10 @@ fn runtime_draw_nested_artboard(
         RuntimeDrawCommandObjectKind::NestedArtboardLayout => command
             .local_id
             .map(|local_id| {
-                instance.runtime_component_world_transform_with_bounds(
-                    local_id,
+                path_cache.component_world_transform_with_bounds(
+                    instance,
                     graph,
+                    local_id,
                     layout_bounds,
                 )
             })
@@ -7580,14 +7765,16 @@ fn runtime_draw_nested_artboard(
                 child_graph,
                 persistent_child,
                 layout_bounds,
+                path_cache,
             )?
         }
         _ => command
             .local_id
             .map(|local_id| {
-                instance.runtime_component_world_transform_with_bounds(
-                    local_id,
+                path_cache.component_world_transform_with_bounds(
+                    instance,
                     graph,
+                    local_id,
                     layout_bounds,
                 )
             })
@@ -7803,9 +7990,10 @@ fn runtime_nested_artboard_leaf_world_transform(
     child_graph: &ArtboardGraph,
     child: Option<&ArtboardInstance>,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    path_cache: &mut RuntimeRenderPathCache,
 ) -> Result<Mat2D> {
     let host_world =
-        instance.runtime_component_world_transform_with_bounds(local_id, graph, layout_bounds);
+        path_cache.component_world_transform_with_bounds(instance, graph, local_id, layout_bounds);
     let Some(child) = child else {
         return Ok(host_world);
     };

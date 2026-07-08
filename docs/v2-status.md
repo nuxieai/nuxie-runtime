@@ -25,19 +25,20 @@ the only memory the next session has. Update it every commit.
   claim it only with two pre/post runs. Debug builds, wall-clock process time,
   and serializer output are not M7 decision-grade.
 - Current standing: after retained path-composer graph lookups, dense
-  draw-path slots, graph-scoped dense path-geometry command slots, and dense
-  decoded-image slots, full `make golden-compare` and `cargo test --workspace`
-  remain green. A same-session release/null-renderer sample reports aggregate
+  draw-path slots, graph-scoped dense path-geometry command slots, dense
+  decoded-image slots, and cached layout-adjusted draw world transforms, full
+  `make golden-compare` and `cargo test --workspace` remain green. The latest
+  release/null-renderer sample is still directional only: aggregate
   min Rust/C++=3.254 (`ai_assitant@0`=2.243,
   `spotify_kids_demo@0`=4.985), but the C++ min-sum was 1.035 ms, outside the
-  0.70-0.95 ms sanity band, and post-run load rose to 22.44/17.12/25.78.
-  Treat this as directional only. Strict <=2.0 remains open. Do not repeat the
-  rejected shallow non-mesh image draw-state cache scout, image mesh-index
-  precompute scout, or shallow command-vector/path wrapper caches; they
-  preserved correctness but worsened direct/fenced release timings. Next
-  priority is a clean low-load release sample, then actual image/
-  `PathComposer`/raw-path retention or deeper draw-replay fixed-overhead work
-  under the same scout fences.
+  0.70-0.95 ms sanity band. The transform-cache slice did not rerun the perf
+  gate because load was 24.90/37.27/29.64, outside the acceptance fence.
+  Strict <=2.0 remains open. Do not repeat the rejected shallow non-mesh image
+  draw-state cache scout, image mesh-index precompute scout, or shallow
+  command-vector/path wrapper caches; they preserved correctness but worsened
+  direct/fenced release timings. Next priority is a clean low-load release
+  sample, then actual image/`PathComposer`/raw-path retention or deeper
+  draw-replay fixed-overhead work under the same scout fences.
 
 ## Milestones
 
@@ -1014,6 +1015,22 @@ the only memory the next session has. Update it every commit.
    should be a low-load release sample and then actual image/`PathComposer`/
    raw-path retention or deeper draw-replay fixed-overhead work, under the
    existing scout fences.
+   Layout-adjusted draw world transforms are now cached in
+   `RuntimeRenderPathCache` dense local slots behind the existing
+   `(cache_epoch, layout_epoch)` dirt boundary. Shape path prep, clipping prep,
+   gradient paint prep, image draw, mesh-image draw, and nested-artboard host
+   draw now route through this cache when a layout-bounds frame exists, while
+   no-layout calls keep using the retained component transform directly. This
+   targets scout item 17's draw-replay world-transform recompute bucket without
+   adding a new image draw-state cache, mesh-index precompute, or geometry
+   float-math rewrite. Full `make golden-compare` remains exact=263 /
+   exact-segments=584 / diverges=0; `cargo check -p rive-runtime`,
+   `cargo test -p rive-runtime --quiet`, `cargo test --workspace`,
+   `cargo fmt --all -- --check`, and `git diff --check` pass. Perf was not
+   rerun because load was 24.90/37.27/29.64, outside the acceptance fence.
+   Strict <=2.0 remains open. Next: run a clean low-load `make perf-hot-loop`,
+   then profile/port the remaining image/`PathComposer`/raw-path retention or
+   deeper draw-replay fixed-overhead work under the scout fences.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -1633,6 +1650,22 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Cache layout-adjusted draw world transforms in retained
+  dense slots. C++ updates component/world transforms behind dirt and draw
+  sites reuse those retained matrices; Rust still recomputed layout-adjusted
+  world transforms during shape path prep, clipping prep, gradient paint prep,
+  image draw, mesh-image draw, and nested-artboard host draw.
+  `RuntimeRenderPathCache` now keeps graph-scoped dense local transform slots
+  keyed by the existing `(cache_epoch, layout_epoch)` boundary, using the
+  retained component transform directly when no layout-bounds frame is active.
+  This ports the scout's
+  transform-dirt cache direction without adding a rejected image draw-state
+  cache, mesh-index precompute, or new geometry float math. Full
+  `make golden-compare` remains exact=263 / exact-segments=584 / diverges=0;
+  `cargo check -p rive-runtime`, `cargo test -p rive-runtime --quiet`,
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check` pass. Perf was not rerun because load was
+  24.90/37.27/29.64, outside the M7 acceptance fence. M7 remains open.
 - 2026-07-08: [M7] Store decoded images in dense global-id slots. C++
   `Image::draw` reaches the retained `RenderImage` through the `ImageAsset`
   object, while Rust still looked decoded images up through a draw-time

@@ -2,6 +2,7 @@ use crate::data_bind_graph::{
     DATA_BIND_FLAG_DIRECTION_TO_SOURCE, RuntimeDataBindGraphConverterState,
     runtime_data_bind_graph_convert_value, runtime_data_bind_graph_converter,
     runtime_data_bind_graph_converter_contains_source_change_random,
+    runtime_data_bind_graph_converter_requires_persisting_custom_property_source,
     runtime_data_bind_graph_refresh_operation_view_model_number_converter_for_path,
 };
 use crate::draw::{RuntimePathMeasure, runtime_path_geometry_commands};
@@ -277,11 +278,12 @@ impl RuntimeArtboardDataBindSourceQueues {
                     data_bind_index: binding.data_bind_index,
                 });
             queues.enqueue_custom_property(index);
-            if binding.converter.is_some() {
+            if binding.converter.as_ref().is_some_and(
+                runtime_data_bind_graph_converter_requires_persisting_custom_property_source,
+            ) {
                 // C++ data converters dirty their parent DataBind through
-                // converter-owned dependencies. Keep converter-backed
-                // custom source binds on a conservative polling lane until
-                // every converter dirty edge is represented explicitly here.
+                // converter-owned dependencies. Keep only converter families
+                // with unmodeled dirt edges on the conservative polling lane.
                 queues.persisting_custom_properties.push(index);
             }
         }
@@ -2989,7 +2991,7 @@ mod tests {
         data_bind_index: usize,
         target_local_id: usize,
         property_key: u16,
-        has_converter: bool,
+        converter: Option<RuntimeDataBindGraphConverter>,
     ) -> RuntimeArtboardCustomPropertyBindingInstance {
         RuntimeArtboardCustomPropertyBindingInstance {
             data_bind_index,
@@ -2999,7 +3001,7 @@ mod tests {
             path_is_name_based: false,
             flags: 0,
             value_kind: RuntimeArtboardDataBindValueKind::Number,
-            converter: has_converter.then_some(RuntimeDataBindGraphConverter::PassThrough),
+            converter,
             converter_state: RuntimeDataBindGraphConverterState::None,
             default_value: RuntimeDataBindGraphValue::Number(0.0),
         }
@@ -3023,8 +3025,22 @@ mod tests {
     #[test]
     fn source_queues_split_push_targets_from_persisting_targets() {
         let custom_bindings = vec![
-            custom_binding(0, 7, 11, false),
-            custom_binding(1, 8, 12, true),
+            custom_binding(0, 7, 11, None),
+            custom_binding(1, 8, 12, Some(RuntimeDataBindGraphConverter::PassThrough)),
+            custom_binding(
+                4,
+                15,
+                16,
+                Some(RuntimeDataBindGraphConverter::RangeMapper {
+                    min_input: 0.0,
+                    max_input: 1.0,
+                    min_output: 0.0,
+                    max_output: 1.0,
+                    flags: 0,
+                    interpolation_type: 0,
+                    interpolator: None,
+                }),
+            ),
         ];
         let layout_bindings = vec![RuntimeArtboardLayoutComputedBindingInstance {
             target_local_id: 9,
@@ -3047,8 +3063,8 @@ mod tests {
             &solo_bindings,
         );
 
-        assert_eq!(queues.drain_custom_property_update_indices(), vec![0, 1]);
-        assert_eq!(queues.drain_custom_property_update_indices(), vec![1]);
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![0, 1, 2]);
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![2]);
         assert_eq!(queues.drain_dirty_numeric_sources(), vec![0]);
         assert_eq!(queues.persisting_layout_computed(), &[0]);
         assert_eq!(queues.persisting_solo_sources(), &[0]);
@@ -3058,12 +3074,12 @@ mod tests {
         queues.enqueue_target_property(7, 11, None);
         queues.enqueue_target_property(99, 99, None);
 
-        assert_eq!(queues.drain_custom_property_update_indices(), vec![0, 1]);
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![0, 2]);
         assert_eq!(queues.drain_dirty_numeric_sources(), vec![0]);
 
         queues.enqueue_target_property(7, 11, Some(0));
 
-        assert_eq!(queues.drain_custom_property_update_indices(), vec![1]);
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![2]);
         assert_eq!(queues.drain_dirty_numeric_sources(), vec![0]);
     }
 }

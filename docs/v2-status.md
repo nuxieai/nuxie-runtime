@@ -234,6 +234,19 @@ the only memory the next session has. Update it every commit.
    aggregate Rust/C++=2.592. Next: enumerate and port concrete C++
    converter-parent dirty edges one converter family at a time before removing
    the persisting fallback.
+   Converter-backed custom-property sources now narrow that fallback by
+   converter family instead of treating every converter as persisting:
+   `PassThrough`, `BooleanNegate`, `TriggerIncrement`, `ToNumber`,
+   `ListToLength`, `StringRemoveZeros`, `Formula`, and groups containing only
+   push-safe children leave the conservative polling lane. Families with
+   unmodeled converter-owned dirt edges remain persisting: `NumberToList`,
+   `ToString`, operation/system operation, `Rounder`, `RangeMapper`,
+   `StringTrim`, `StringPad`, `Interpolator`, and unsupported converters.
+   Full `make golden-compare` remains exact=263 / exact-segments=584 /
+   diverges=0, `cargo test --workspace` passes, and fenced hot-loop improves
+   the current focused aggregate to Rust/C++=2.409. Strict <=2.0 remains open.
+   Next: port concrete C++ converter-property dirty setters family-by-family,
+   then shrink this predicate again.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -735,6 +748,23 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Narrow converter-backed custom-property polling to
+  converter families with unmodeled C++ dirty edges. The status review keeps
+  the scout/perf fences in force: release/null-renderer hot loops are the
+  decision-grade metric, shallow cached command wrappers stay rejected, and
+  data-bind work should follow C++ `DataBindContainer` queues plus audited
+  converter-parent dirt. C++ converter dirt flows through
+  `DataConverter::markConverterDirty`; the Rust source queue now treats pure
+  and explicit-token converter families as push-safe, while `RangeMapper`,
+  `StringPad`, `StringTrim`, `ToString`, `Interpolator`, `NumberToList`,
+  operation/system-operation, and unsupported converters stay on the
+  conservative persisting lane until their property dirty callbacks are
+  modeled directly. `make golden-compare` remains exact=263 /
+  exact-segments=584 / diverges=0; `cargo test --workspace`, `cargo fmt --all
+  -- --check`, and `git diff --check` pass. Fenced release/null-renderer
+  hot-loop reports aggregate Rust/C++=2.409 over the 5-entry / 10-segment
+  focused corpus, improved from the previous converter-edge slice's 2.592 but
+  still above the strict <=2.0 target, so M7 remains open.
 - 2026-07-08: [M7] Land the OperationViewModel-number converter-parent dirty
   edge only. Artboard source-path number changes now refresh dependent
   OperationViewModel converters across property, custom-property, formula-token,

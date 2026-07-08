@@ -288,6 +288,34 @@ impl RuntimeDataBindGraphConverter {
     }
 }
 
+pub(crate) fn runtime_data_bind_graph_converter_requires_persisting_custom_property_source(
+    converter: &RuntimeDataBindGraphConverter,
+) -> bool {
+    match converter {
+        RuntimeDataBindGraphConverter::PassThrough
+        | RuntimeDataBindGraphConverter::BooleanNegate
+        | RuntimeDataBindGraphConverter::TriggerIncrement
+        | RuntimeDataBindGraphConverter::ToNumber
+        | RuntimeDataBindGraphConverter::ListToLength
+        | RuntimeDataBindGraphConverter::StringRemoveZeros
+        | RuntimeDataBindGraphConverter::Formula { .. } => false,
+        RuntimeDataBindGraphConverter::Group(converters) => converters
+            .iter()
+            .any(runtime_data_bind_graph_converter_requires_persisting_custom_property_source),
+        RuntimeDataBindGraphConverter::NumberToList { .. }
+        | RuntimeDataBindGraphConverter::ToString { .. }
+        | RuntimeDataBindGraphConverter::OperationValue { .. }
+        | RuntimeDataBindGraphConverter::OperationViewModel { .. }
+        | RuntimeDataBindGraphConverter::SystemOperationValue { .. }
+        | RuntimeDataBindGraphConverter::Rounder { .. }
+        | RuntimeDataBindGraphConverter::RangeMapper { .. }
+        | RuntimeDataBindGraphConverter::StringTrim { .. }
+        | RuntimeDataBindGraphConverter::StringPad { .. }
+        | RuntimeDataBindGraphConverter::Interpolator { .. }
+        | RuntimeDataBindGraphConverter::Unsupported => true,
+    }
+}
+
 pub(crate) fn runtime_data_bind_graph_converter_contains_source_change_random(
     converter: &RuntimeDataBindGraphConverter,
 ) -> bool {

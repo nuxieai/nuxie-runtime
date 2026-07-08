@@ -310,8 +310,23 @@ the only memory the next session has. Update it every commit.
    `cargo test --workspace`, `cargo fmt --all -- --check`, and
    `git diff --check` pass, and fenced hot-loop reports aggregate
    Rust/C++=2.310 then 2.181. Strict <=2.0 remains open.
-   Next: inspect `RangeMapper` or `Interpolator` family-by-family, still
-   avoiding broad converter-property writes.
+   A 2026-07-08 family-specific `RangeMapper` scout was intentionally not
+   landed. It added artboard converter-property bindings only for the four C++
+   dirty callbacks (`minInputChanged()`, `maxInputChanged()`,
+   `minOutputChanged()`, `maxOutputChanged()`), kept `flags`,
+   `interpolationType`, and `interpolatorId` out of the lane because their
+   generated callbacks are empty, and moved RangeMapper custom sources out of
+   the persisting fallback. `cargo check -p rive-runtime`,
+   `cargo test -p rive-runtime queues`, and
+   `cargo test -p rive-runtime range_mapper` passed, but full
+   `make golden-compare` failed `db_health_tracker` at line 3390 with the same
+   clip-path x-position drift as the earlier broad RangeMapper scout
+   (Rust first point x=48.2119293 vs C++ x=64.2483139). The code was backed out.
+   Treat RangeMapper as requiring deeper C++ DataBind/DataConverter ownership
+   and ordering analysis before another fallback-removal attempt; do not retry
+   the StringPad-style copied-converter updater for this family.
+   Next: inspect `DataConverterInterpolator.durationChanged()` family-by-family,
+   still avoiding broad converter-property writes.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -813,6 +828,20 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Do not land the family-specific RangeMapper converter-property
+  updater as the fallback-removal path. The scout followed the C++ dirty surface
+  more narrowly than the earlier broad converter-property write: it covered only
+  `minInput`, `maxInput`, `minOutput`, and `maxOutput`, left generated-empty
+  `flags`, `interpolationType`, and `interpolatorId` alone, and treated
+  RangeMapper custom sources as push-safe. Focused checks passed
+  (`cargo check -p rive-runtime`, `cargo test -p rive-runtime queues`, and
+  `cargo test -p rive-runtime range_mapper`), and the full compare passed the
+  early C++ stream for `db_health_tracker`, but `make golden-compare` failed the
+  actual tolerant comparison for that file at line 3390 with clip-path x-position
+  drift (Rust first point x=48.2119293 vs C++ x=64.2483139). The code was backed
+  out. Keep RangeMapper on the conservative persisting lane until the C++
+  DataBind/DataConverter ownership and update-order semantics are audited more
+  deeply.
 - 2026-07-08: [M7] Remove `DataConverterRounder` custom sources from the
   conservative polling lane. The C++ generated `decimalsChanged()` hook is
   empty, and the handwritten `DataConverterRounder` class does not override it;

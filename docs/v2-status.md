@@ -457,6 +457,23 @@ the only memory the next session has. Update it every commit.
    Next: profile remaining `bind_owned_view_model_artboard_context_chain` and
    `collect_nested_artboard_context_source_values` time, keeping the scout
    fences in force.
+   Source-producing artboard data-bind paths are now shared as immutable
+   `Arc<[u32]>` slices for custom-property, layout-computed, solo-source, and
+   nested context-source values, so context-source propagation clones a retained
+   path handle instead of allocating a fresh path `Vec`. This is import/build
+   data sharing, not a skip/cache invalidation rule. Full `make golden-compare`
+   remains exact=263 / exact-segments=584 / diverges=0; `cargo test
+   --workspace`, `cargo fmt --all -- --check`, and `git diff --check` pass.
+   Focused release/null-renderer hot-loop is a tiny/noisy aggregate improvement
+   from Rust/C++=2.169 to 2.164 over the 5-entry / 10-segment corpus
+   (`ai_assitant`=1.936). Direct Rust-only `ai_assitant
+   --benchmark-repeat 1000000` is noisy/slightly worse at elapsed=11884.7 /
+   advance=6753.7 ms, and single-file repeat=100 JSON at
+   `/tmp/rive-ai-shared-paths-perf.json` reports cpp median=0.371 ms, rust
+   median=1.988 ms, Rust/C++=5.363. Strict <=2.0 remains open. Next: profile
+   remaining advance/data-bind time before landing more context allocation
+   cleanup; if no clear C++ retention/dirt slice appears, move to a
+   higher-leverage audited dirt/retention target.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -958,6 +975,21 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Share source-producing artboard data-bind paths as immutable
+  slices. The previous Rust path retained custom-property/layout-computed/solo
+  source paths as `Vec<u32>` and cloned those vectors while collecting nested
+  context-source values. C++ keeps the resolved import-time path buffer on the
+  binding/context object and passes pointers during context propagation, so Rust
+  now stores those source-producing paths as `Arc<[u32]>` and clones the shared
+  handle when a context-source value is emitted. This preserves the existing
+  equality checks and data-bind value map semantics; it does not add a new
+  invalidation or skip rule. `make golden-compare` remains exact=263 /
+  exact-segments=584 / diverges=0; `cargo test --workspace`, `cargo fmt --all
+  -- --check`, and `git diff --check` pass. Focused release/null-renderer
+  hot-loop is effectively neutral/slightly positive at aggregate Rust/C++=2.164
+  over the 5-entry / 10-segment corpus (`ai_assitant`=1.936), while direct
+  Rust-only repeat=1000000 is noisy/slightly worse at elapsed=11884.7 /
+  advance=6753.7 ms. M7 remains open.
 - 2026-07-08: [M7] Inline nested owned-view-model child context paths for
   numeric retained `DataBindPath` lookups. The previous Rust path still
   combined the matched parent context path and child source tail into an owned
@@ -2515,6 +2547,12 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Shared source-producing artboard data-bind paths as
+  immutable `Arc<[u32]>` slices to avoid per-context-source path Vec allocation.
+  `make golden-compare` remains exact=263/exact-segments=584/diverges=0;
+  `cargo test --workspace` passes; focused hot-loop is Rust/C++=2.164, still
+  above strict <=2.0. Next profile remaining advance/data-bind time before
+  further context allocation cleanup.
 - 2026-07-08: [M7] Replaced per-host child-context `Vec<usize>` construction
   with borrowed/inline storage for numeric retained nested `DataBindPath`
   lookups. `make golden-compare` remains

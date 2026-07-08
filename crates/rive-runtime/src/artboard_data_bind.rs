@@ -22,7 +22,7 @@ use rive_graph::ArtboardGraph;
 use rive_schema::FieldKind;
 use std::collections::BTreeMap;
 use std::ops::Bound::{Excluded, Unbounded};
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 macro_rules! cached_runtime_data_bind_property_key {
     ($type_name:literal, $property_name:literal) => {{
@@ -105,6 +105,10 @@ fn runtime_data_bind_property_key_for_name(type_name: &str, property_name: &str)
         }
         _ => property_key_for_name(type_name, property_name),
     }
+}
+
+fn shared_data_bind_path(path: Vec<u32>) -> Arc<[u32]> {
+    Arc::from(path.into_boxed_slice())
 }
 
 fn runtime_data_bind_component_parent_id_key() -> Option<u16> {
@@ -489,7 +493,7 @@ pub(super) struct RuntimeArtboardCustomPropertyBindingInstance {
     data_bind_index: usize,
     target_local_id: usize,
     property_key: u16,
-    path: Vec<u32>,
+    path: Arc<[u32]>,
     path_is_name_based: bool,
     flags: u64,
     value_kind: RuntimeArtboardDataBindValueKind,
@@ -502,7 +506,7 @@ pub(super) struct RuntimeArtboardCustomPropertyBindingInstance {
 pub(super) struct RuntimeArtboardLayoutComputedBindingInstance {
     target_local_id: usize,
     property: RuntimeLayoutComputedProperty,
-    path: Vec<u32>,
+    path: Arc<[u32]>,
 }
 
 #[derive(Debug, Clone)]
@@ -569,7 +573,7 @@ enum RuntimeArtboardNumericSourceProperty {
 
 #[derive(Debug, Clone)]
 struct RuntimeArtboardContextSourceValue {
-    path: Vec<u32>,
+    path: Arc<[u32]>,
     value: RuntimeDataBindGraphValue,
 }
 
@@ -583,7 +587,7 @@ pub(super) struct RuntimeArtboardSoloBindingInstance {
 #[derive(Debug, Clone)]
 pub(super) struct RuntimeArtboardSoloSourceBindingInstance {
     target_local_id: usize,
-    path: Vec<u32>,
+    path: Arc<[u32]>,
     enum_value_names: Vec<Vec<u8>>,
 }
 
@@ -1390,7 +1394,7 @@ pub(super) fn build_artboard_custom_property_bindings(
                 data_bind_index,
                 target_local_id,
                 property_key,
-                path,
+                path: shared_data_bind_path(path),
                 path_is_name_based: file
                     .data_bind_is_name_based_for_object(data_bind.object)
                     .unwrap_or(false),
@@ -1862,7 +1866,9 @@ pub(super) fn build_artboard_layout_computed_bindings(
             Some(RuntimeArtboardLayoutComputedBindingInstance {
                 target_local_id: data_bind.target_local_id?,
                 property,
-                path: file.data_bind_context_source_path_ids_for_object(data_bind.object)?,
+                path: shared_data_bind_path(
+                    file.data_bind_context_source_path_ids_for_object(data_bind.object)?,
+                ),
             })
         })
         .collect::<Vec<_>>();
@@ -1955,7 +1961,7 @@ pub(super) fn build_artboard_solo_source_bindings(
             }
             Some(RuntimeArtboardSoloSourceBindingInstance {
                 target_local_id: data_bind.target_local_id?,
-                path,
+                path: shared_data_bind_path(path),
                 enum_value_names,
             })
         })
@@ -2215,7 +2221,11 @@ impl ArtboardInstance {
                 + self.artboard_solo_source_bindings.len(),
         );
         for binding in &self.artboard_layout_computed_bindings {
-            if let Some(value) = self.artboard_data_bind_values.get(&binding.path).cloned() {
+            if let Some(value) = self
+                .artboard_data_bind_values
+                .get(binding.path.as_ref())
+                .cloned()
+            {
                 values.push(RuntimeArtboardContextSourceValue {
                     path: binding.path.clone(),
                     value,
@@ -2223,7 +2233,11 @@ impl ArtboardInstance {
             }
         }
         for binding in &self.artboard_custom_property_bindings {
-            if let Some(value) = self.artboard_data_bind_values.get(&binding.path).cloned() {
+            if let Some(value) = self
+                .artboard_data_bind_values
+                .get(binding.path.as_ref())
+                .cloned()
+            {
                 values.push(RuntimeArtboardContextSourceValue {
                     path: binding.path.clone(),
                     value,
@@ -2231,7 +2245,11 @@ impl ArtboardInstance {
             }
         }
         for binding in &self.artboard_solo_source_bindings {
-            if let Some(value) = self.artboard_data_bind_values.get(&binding.path).cloned() {
+            if let Some(value) = self
+                .artboard_data_bind_values
+                .get(binding.path.as_ref())
+                .cloned()
+            {
                 values.push(RuntimeArtboardContextSourceValue {
                     path: binding.path.clone(),
                     value,
@@ -2381,20 +2399,18 @@ impl ArtboardInstance {
                     file,
                     context,
                     context_chain,
-                    &binding.path,
+                    binding.path.as_ref(),
                     binding.path_is_name_based,
                     &binding.default_value,
                 )
             };
             if let Some(value) = update {
-                let path = self.artboard_custom_property_bindings[index]
-                    .path
-                    .as_slice();
+                let path = self.artboard_custom_property_bindings[index].path.as_ref();
                 if self.artboard_data_bind_values.get(path) == Some(&value) {
                     continue;
                 }
                 let path = self.artboard_custom_property_bindings[index].path.clone();
-                changed |= self.set_artboard_data_bind_value_for_path(&path, value);
+                changed |= self.set_artboard_data_bind_value_for_path(path.as_ref(), value);
             }
         }
         changed
@@ -2455,7 +2471,7 @@ impl ArtboardInstance {
             .chain(
                 self.artboard_custom_property_bindings
                     .iter()
-                    .map(|binding| binding.path.clone()),
+                    .map(|binding| binding.path.as_ref().to_vec()),
             )
             .chain(
                 self.artboard_solo_bindings
@@ -2465,7 +2481,7 @@ impl ArtboardInstance {
             .chain(
                 self.artboard_solo_source_bindings
                     .iter()
-                    .map(|binding| binding.path.clone()),
+                    .map(|binding| binding.path.as_ref().to_vec()),
             )
             .chain(
                 self.artboard_nested_host_bindings
@@ -2976,7 +2992,7 @@ impl ArtboardInstance {
             let Some(value) = value else { continue };
             let value = RuntimeDataBindGraphValue::Number(value);
             let path = binding.path.clone();
-            changed |= self.set_artboard_data_bind_value_for_path(&path, value);
+            changed |= self.set_artboard_data_bind_value_for_path(path.as_ref(), value);
         }
         changed
     }
@@ -3247,7 +3263,7 @@ impl ArtboardInstance {
                 continue;
             };
             let path = binding.path.clone();
-            changed |= self.set_artboard_data_bind_value_for_path(&path, value);
+            changed |= self.set_artboard_data_bind_value_for_path(path.as_ref(), value);
         }
         changed
     }
@@ -3322,7 +3338,7 @@ impl ArtboardInstance {
         else {
             return false;
         };
-        self.set_artboard_data_bind_value_for_path(&path, value)
+        self.set_artboard_data_bind_value_for_path(path.as_ref(), value)
     }
 
     fn artboard_custom_property_binding_target_value(
@@ -3356,7 +3372,7 @@ impl ArtboardInstance {
         &mut self,
         index: usize,
         value: &RuntimeDataBindGraphValue,
-    ) -> Option<(Vec<u32>, RuntimeDataBindGraphValue)> {
+    ) -> Option<(Arc<[u32]>, RuntimeDataBindGraphValue)> {
         let binding = self.artboard_custom_property_bindings.get_mut(index)?;
         let converted = match binding.converter.as_ref() {
             None => value.clone(),
@@ -3698,7 +3714,7 @@ mod tests {
             data_bind_index,
             target_local_id,
             property_key,
-            path: vec![1],
+            path: shared_data_bind_path(vec![1]),
             path_is_name_based: false,
             flags: 0,
             value_kind: RuntimeArtboardDataBindValueKind::Number,
@@ -3848,7 +3864,7 @@ mod tests {
         let layout_bindings = vec![RuntimeArtboardLayoutComputedBindingInstance {
             target_local_id: 9,
             property: RuntimeLayoutComputedProperty::WorldX,
-            path: vec![3],
+            path: shared_data_bind_path(vec![3]),
         }];
         let numeric_bindings = vec![
             numeric_binding(2, 7, 11, RuntimeArtboardNumericSourceProperty::DirectDouble),
@@ -3856,7 +3872,7 @@ mod tests {
         ];
         let solo_bindings = vec![RuntimeArtboardSoloSourceBindingInstance {
             target_local_id: 14,
-            path: vec![4],
+            path: shared_data_bind_path(vec![4]),
             enum_value_names: vec![b"first".to_vec()],
         }];
         let mut queues = RuntimeArtboardDataBindSourceQueues::new(

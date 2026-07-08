@@ -390,7 +390,13 @@ impl ArtboardInstance {
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) -> Vec<RuntimeDrawCommand> {
         let sorted = self.runtime_sorted_drawable_order(graph);
-        self.draw_commands_with_sorted_drawable_order(graph, layout_bounds, &sorted)
+        let mut path_cache = RuntimeRenderPathCache::default();
+        self.draw_commands_with_sorted_drawable_order(
+            graph,
+            layout_bounds,
+            &sorted,
+            &mut path_cache,
+        )
     }
 
     fn draw_commands_with_sorted_drawable_order(
@@ -398,6 +404,7 @@ impl ArtboardInstance {
         graph: &ArtboardGraph,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
         sorted_drawable_order: &[SortedDrawableNode],
+        path_cache: &mut RuntimeRenderPathCache,
     ) -> Vec<RuntimeDrawCommand> {
         let mut commands = Vec::new();
         let mut pending_clip_operations = Vec::<&SortedDrawableNode>::new();
@@ -420,11 +427,21 @@ impl ArtboardInstance {
                 }
 
                 commands.extend(pending_clip_operations.drain(..).map(|pending_clip| {
-                    self.runtime_draw_command_for_node(pending_clip, graph, layout_bounds)
+                    self.runtime_draw_command_for_node(
+                        pending_clip,
+                        graph,
+                        layout_bounds,
+                        path_cache,
+                    )
                 }));
             }
 
-            commands.push(self.runtime_draw_command_for_node(drawable, graph, layout_bounds));
+            commands.push(self.runtime_draw_command_for_node(
+                drawable,
+                graph,
+                layout_bounds,
+                path_cache,
+            ));
         }
 
         commands
@@ -771,13 +788,15 @@ impl ArtboardInstance {
         &self,
         graph: &ArtboardGraph,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+        path_cache: &mut RuntimeRenderPathCache,
     ) -> BTreeMap<usize, RuntimeDrawCommand> {
         let mut commands = BTreeMap::new();
         for drawable in &graph.sorted_drawable_order {
             if drawable.referenced_artboard_global.is_none() {
                 continue;
             }
-            let command = self.runtime_draw_command_for_node(drawable, graph, layout_bounds);
+            let command =
+                self.runtime_draw_command_for_node(drawable, graph, layout_bounds, path_cache);
             if command.referenced_artboard_global.is_none()
                 || !runtime_draw_command_is_nested_artboard(&command)
             {
@@ -959,7 +978,11 @@ impl ArtboardInstance {
             .any(|component| component.type_name == "LayoutComponent")
         {
             nested_command_by_local.extend(
-                self.runtime_nested_artboard_preparation_commands_by_local(graph, layout_bounds),
+                self.runtime_nested_artboard_preparation_commands_by_local(
+                    graph,
+                    layout_bounds,
+                    render_cache,
+                ),
             );
         }
         let mut prepared_paints = BTreeSet::new();
@@ -1418,11 +1441,12 @@ impl ArtboardInstance {
 
     fn runtime_component_is_effectively_collapsed(&self, local_id: usize) -> bool {
         let mut current = Some(local_id);
-        let mut visited = BTreeSet::new();
+        let mut remaining = self.components.len().saturating_add(1);
         while let Some(component_local) = current {
-            if !visited.insert(component_local) {
+            if remaining == 0 {
                 return false;
             }
+            remaining -= 1;
             let Some(component) = self.component(component_local) else {
                 return false;
             };
@@ -1441,6 +1465,7 @@ impl ArtboardInstance {
         drawable: &SortedDrawableNode,
         graph: &ArtboardGraph,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+        path_cache: &mut RuntimeRenderPathCache,
     ) -> RuntimeDrawCommand {
         let local_id = match drawable.kind {
             DrawableOrderKind::LayoutProxy => drawable.layout_local,
@@ -1462,7 +1487,12 @@ impl ArtboardInstance {
                 .resolved_image_asset_global(local_id, drawable.resolved_image_asset_global),
             clipping_shape_local: drawable.clipping_shape_local,
             needs_save_operation: drawable.needs_save_operation,
-            shape_paints: self.runtime_shape_paint_commands(drawable, graph, layout_bounds),
+            shape_paints: self.runtime_shape_paint_commands(
+                drawable,
+                graph,
+                layout_bounds,
+                path_cache,
+            ),
         }
     }
 
@@ -1471,6 +1501,7 @@ impl ArtboardInstance {
         drawable: &SortedDrawableNode,
         graph: &ArtboardGraph,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+        path_cache: &mut RuntimeRenderPathCache,
     ) -> Vec<RuntimeShapePaintCommand> {
         if drawable.kind == DrawableOrderKind::Drawable
             && is_text_input_drawable_type(drawable.type_name)
@@ -1560,6 +1591,7 @@ impl ArtboardInstance {
                         paint,
                         graph,
                         layout_bounds,
+                        path_cache,
                     ),
                     "LayoutComponent" => self.runtime_layout_component_paint_path_commands(
                         container_local,
@@ -3093,6 +3125,7 @@ impl ArtboardInstance {
         paint: &ShapePaintNode,
         graph: &ArtboardGraph,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+        path_cache: &mut RuntimeRenderPathCache,
     ) -> Vec<RuntimePathCommand> {
         let Some(path_kind) = paint.path_kind else {
             return Vec::new();
@@ -3128,10 +3161,10 @@ impl ArtboardInstance {
                 graph,
                 layout_bounds,
             );
-            let runtime_path = self.runtime_path_geometry_with_layout_control(path, layout_bounds);
-            let weighted_context =
-                self.runtime_weighted_path_context(&runtime_path, graph, layout_bounds);
-            let path_transform = if weighted_context.is_some() {
+            let path_frame =
+                path_cache.path_geometry_commands_frame(self, graph, path, layout_bounds);
+            let runtime_path = path_frame.path.as_ref();
+            let path_transform = if path_frame.has_weighted_context {
                 Mat2D::IDENTITY
             } else {
                 path_world
@@ -3158,14 +3191,9 @@ impl ArtboardInstance {
             };
 
             let mut path_commands = if let Some(nsliced_context) = nsliced_context.as_ref()
-                && weighted_context.is_none()
+                && !path_frame.has_weighted_context
             {
-                let mut path_commands = path_commands(
-                    &runtime_path,
-                    ShapePaintPathKind::World,
-                    Mat2D::IDENTITY,
-                    None,
-                );
+                let mut path_commands = path_frame.commands.as_ref().clone();
                 runtime_deform_path_commands_with_nsliced_node(
                     &mut path_commands,
                     nsliced_context,
@@ -3182,12 +3210,13 @@ impl ArtboardInstance {
                     path_commands
                 }
             } else {
-                let mut path_commands = path_commands(
-                    &runtime_path,
-                    path_kind,
-                    transform,
-                    weighted_context.as_ref(),
-                );
+                let mut path_commands = path_frame.commands.as_ref().clone();
+                transform_path_commands(&mut path_commands, transform);
+                if path_kind == ShapePaintPathKind::LocalClockwise
+                    && path_needs_clockwise_reversal(runtime_path, transform)
+                {
+                    path_commands = path_commands_backwards(&path_commands);
+                }
                 if let Some(nsliced_context) = nsliced_context.as_ref() {
                     runtime_deform_path_commands_with_nsliced_node(
                         &mut path_commands,
@@ -5221,6 +5250,8 @@ pub struct RuntimeRenderPathCache {
     clip_paths: BTreeMap<usize, Box<dyn RenderPath>>,
     layout_clip_paths: BTreeMap<usize, Box<dyn RenderPath>>,
     draw_paths: BTreeMap<RuntimeDrawPathCacheKey, RuntimeCachedDrawPath>,
+    path_geometry_commands:
+        BTreeMap<RuntimePathGeometryCommandsCacheSlot, RuntimeCachedPathGeometryCommands>,
     text_shape_paints: BTreeMap<RuntimeTextShapePaintCacheSlot, RuntimeCachedTextShapePaints>,
     gradient_preparation: Option<RuntimeGradientPreparationFrame>,
     gradient_shaders: BTreeMap<u32, RuntimeGradientShaderCacheEntry>,
@@ -5262,6 +5293,26 @@ struct RuntimeLayoutBoundsCacheKey {
 struct RuntimeLayoutBoundsFrame {
     key: RuntimeLayoutBoundsCacheKey,
     bounds: Arc<Option<BTreeMap<usize, RuntimeLayoutBounds>>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct RuntimePathGeometryCommandsCacheSlot {
+    graph_global_id: u32,
+    path_local: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RuntimePathGeometryCommandsCacheKey {
+    path_epoch: u64,
+    layout_epoch: u64,
+}
+
+#[derive(Clone)]
+struct RuntimeCachedPathGeometryCommands {
+    key: RuntimePathGeometryCommandsCacheKey,
+    path: Arc<PathGeometryNode>,
+    commands: Arc<Vec<RuntimePathCommand>>,
+    has_weighted_context: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -5390,6 +5441,7 @@ impl RuntimeRenderPathCache {
                 graph,
                 layout_bounds.as_ref().as_ref(),
                 sorted_drawable_order.as_slice(),
+                self,
             );
             self.prepared_artboard = Some(RuntimePreparedArtboardFrame {
                 key,
@@ -5456,6 +5508,54 @@ impl RuntimeRenderPathCache {
             .as_ref()
             .expect("layout bounds frame was just populated")
             .bounds
+            .clone()
+    }
+
+    fn path_geometry_commands_frame(
+        &mut self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        path: &PathGeometryNode,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    ) -> RuntimeCachedPathGeometryCommands {
+        let slot = RuntimePathGeometryCommandsCacheSlot {
+            graph_global_id: graph.global_id,
+            path_local: path.local_id,
+        };
+        let key = RuntimePathGeometryCommandsCacheKey {
+            path_epoch: instance.path_epoch(),
+            layout_epoch: instance.layout_epoch(),
+        };
+
+        if self
+            .path_geometry_commands
+            .get(&slot)
+            .is_none_or(|cached| cached.key != key)
+        {
+            let runtime_path =
+                instance.runtime_path_geometry_with_layout_control(path, layout_bounds);
+            let weighted_context =
+                instance.runtime_weighted_path_context(&runtime_path, graph, layout_bounds);
+            let commands = path_commands(
+                &runtime_path,
+                ShapePaintPathKind::World,
+                Mat2D::IDENTITY,
+                weighted_context.as_ref(),
+            );
+            self.path_geometry_commands.insert(
+                slot,
+                RuntimeCachedPathGeometryCommands {
+                    key,
+                    path: Arc::new(runtime_path),
+                    commands: Arc::new(commands),
+                    has_weighted_context: weighted_context.is_some(),
+                },
+            );
+        }
+
+        self.path_geometry_commands
+            .get(&slot)
+            .expect("path geometry command cache was just populated")
             .clone()
     }
 
@@ -8812,19 +8912,19 @@ fn prune_empty_path_segments(commands: &mut Vec<RuntimePathCommand>) {
         .filter(|command| matches!(command, RuntimePathCommand::Move { .. }))
         .count()
         >= 2;
-    let mut pruned = Vec::with_capacity(commands.len());
     let mut current = None::<(f32, f32)>;
-    for command in commands.drain(..) {
-        match command {
+    let mut write = 0usize;
+    for read in 0..commands.len() {
+        let command = commands[read];
+        let keep = match command {
             RuntimePathCommand::Move { x, y } => {
                 current = Some((x, y));
-                pruned.push(RuntimePathCommand::Move { x, y });
+                true
             }
             RuntimePathCommand::Line { x, y } => {
-                if current != Some((x, y)) {
-                    pruned.push(RuntimePathCommand::Line { x, y });
-                }
+                let keep = current != Some((x, y));
                 current = Some((x, y));
+                keep
             }
             RuntimePathCommand::Cubic {
                 x1,
@@ -8845,21 +8945,21 @@ fn prune_empty_path_segments(commands: &mut Vec<RuntimePathCommand>) {
                             && path_points_match(current, (x3, y3))
                     });
                 if !exact_empty && !near_empty {
-                    pruned.push(RuntimePathCommand::Cubic {
-                        x1,
-                        y1,
-                        x2,
-                        y2,
-                        x3,
-                        y3,
-                    });
+                    current = Some((x3, y3));
+                    true
+                } else {
+                    current = Some((x3, y3));
+                    false
                 }
-                current = Some((x3, y3));
             }
-            RuntimePathCommand::Close => pruned.push(RuntimePathCommand::Close),
+            RuntimePathCommand::Close => true,
+        };
+        if keep {
+            commands[write] = command;
+            write += 1;
         }
     }
-    *commands = pruned;
+    commands.truncate(write);
 }
 
 fn path_points_match(left: (f32, f32), right: (f32, f32)) -> bool {

@@ -142,6 +142,23 @@ the only memory the next session has. Update it every commit.
    improved only to Rust/C++=18.598. The next attempt should stop clean
    frames from entering prepare at all via audited C++ dirt gates, or port
    actual `PathComposer`/raw-path retention, not wrap prepared command vectors.
+   Retained path-geometry command frames now live on
+   `RuntimeRenderPathCache` by `(graph_global_id, path_local)` and
+   `(path_epoch, layout_epoch)`, so prepared-frame rebuilds reuse C++
+   `ShapePaintPath` / `RawPath`-shaped runtime geometry command streams for
+   clean paths instead of rerunning `runtime_path_geometry` and
+   `path_commands` for every paint path. Shape paint paths still transform,
+   NSlice, reverse, and prune per composed path. Collapse checks now use a
+   component-count cycle guard instead of allocating a `BTreeSet`, and
+   RawPath-style empty-segment pruning compacts in place. Full
+   `make golden-compare` remains exact=263 / exact-segments=584 /
+   diverges=0; `cargo test --workspace`, `cargo fmt --all -- --check`, and
+   `git diff --check` pass. Same-turn fenced repeat-aware hot-loop improves
+   from aggregate Rust/C++=3.809 to 3.616. Strict <=2.0 remains open. Next:
+   profile remaining `advance_blend_mode` / `animation_reset_cases` fixed
+   overhead and `ai_assitant` advance/data-bind after this path-retention
+   cleanup; likely next targets are prepared-frame clean-skip/idempotent dirt
+   or sampled data-bind/context hotspots, not shallow command-vector caches.
    Nested-artboard layout bounds are now retained on `ArtboardInstance` by
    `(graph_global_id, layout_epoch)`, matching the C++ `markLayoutNodeDirty`
    / `Artboard::markLayoutDirty` boundary for layout recomputation during
@@ -1228,6 +1245,21 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Retain path-geometry commands behind path/layout dirt.
+  The status scout review keeps three fences binding: no broad
+  converter/property writes after the RangeMapper scout, no shallow
+  command-vector/path-wrapper caches after fenced perf rejected them, and no
+  perf claim without release/null-renderer evidence. This slice ports the
+  lower-level C++ retention shape instead: `RuntimeRenderPathCache` retains
+  runtime path geometry commands by `(graph_global_id, path_local)` plus
+  `path_epoch`/`layout_epoch`, then shape paint composition applies transforms,
+  NSlicing, clockwise reversal, and pruning on top. Collapse checks drop their
+  per-call `BTreeSet`, and empty segment pruning now compacts in place. Full
+  `make golden-compare` remains exact=263 / exact-segments=584 / diverges=0;
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and `git diff
+  --check` pass. Same-turn fenced repeat-aware hot-loop improves from
+  aggregate Rust/C++=3.809 to 3.616, so M7 remains open and next work should
+  profile the remaining fixed overhead / data-bind time under the same fences.
 - 2026-07-08: [M7] Make corpus perf repeat-aware by sample segment.
   `perf-compare --corpus --benchmark-repeat N` used to fail on multi-sample
   exact files because the golden runners only repeat a single sample. Corpus
@@ -3016,6 +3048,16 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Retained per-path runtime geometry commands by
+  `path_epoch`/`layout_epoch` on `RuntimeRenderPathCache`, while keeping
+  per-paint transform/NSlice/reversal/prune semantics intact. Also removed
+  hot-loop allocation from collapse checks and compacted empty path-segment
+  pruning in place. `make golden-compare` remains
+  exact=263/exact-segments=584/diverges=0; `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check` pass. Fenced
+  repeat-aware hot-loop improves from same-turn baseline Rust/C++=3.809 to
+  3.616. Strict <=2.0 remains open; next profile remaining small-file fixed
+  overhead and `ai_assitant` advance/data-bind under the scout/perf fences.
 - 2026-07-08: [M7] Split prepared draw-command invalidation from broad
   instance cache invalidation. `RuntimeRenderPathCache::prepared_artboard_frame`
   now keys frames by `ArtboardInstance::prepared_epoch`, which follows the

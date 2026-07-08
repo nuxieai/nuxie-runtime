@@ -24,21 +24,17 @@ the only memory the next session has. Update it every commit.
 - Noise rule: ratio movement below about 0.08 is below single-run resolution;
   claim it only with two pre/post runs. Debug builds, wall-clock process time,
   and serializer output are not M7 decision-grade.
-- Current standing: after the N-slicer fast-miss slice, direct Rust-only
-  `spotify_kids_demo --benchmark-repeat 1000000` under high system load moved
-  from elapsed/draw=17402/13772 ms to 14017/10856 ms, and sampling showed
-  `runtime_nsliced_node_context_for_shape` falling from a top draw-stack
-  hotspot to a small leaf. `make perf-hot-loop PERF_MAX_RATIO=999` moved
-  directionally from aggregate min Rust/C++=3.743 and
-  `spotify_kids_demo@0`=6.389 to aggregate=3.671 and
-  `spotify_kids_demo@0`=5.886, but the 1-minute load was about 32 and C++
-  min-sum was 1.287 ms, outside the 0.70-0.95 sanity band, so this is not
-  acceptance-grade. Strict <=2.0 remains open. Do not repeat the rejected
-  shallow non-mesh image draw-state cache scout or image mesh-index precompute
-  scout; both preserved correctness but worsened direct/fenced release
-  timings. Next priority is a low-load release sample, then actual
-  `PathComposer`/raw-path retention or draw-replay fixed-overhead work rather
-  than wrapping cloned command vectors.
+- Current standing: after retained draw-command object-kind classification,
+  `make perf-hot-loop PERF_MAX_RATIO=999` reports aggregate min
+  Rust/C++=3.399 (`ai_assitant@0`=2.276, `spotify_kids_demo@0`=5.500), but
+  C++ min-sum was 1.024 ms and the 5/15-minute load averages were still high,
+  so this is directional rather than acceptance-grade. Strict <=2.0 remains
+  open. Do not repeat the rejected shallow non-mesh image draw-state cache
+  scout, image mesh-index precompute scout, or shallow command-vector/path
+  wrapper caches; they preserved correctness but worsened direct/fenced
+  release timings. Next priority is a low-load release sample, then actual
+  image/`PathComposer`/raw-path retention or deeper draw-replay fixed-overhead
+  work under the same scout fences.
 
 ## Milestones
 
@@ -1001,11 +997,16 @@ the only memory the next session has. Update it every commit.
    --workspace`, `cargo fmt --all -- --check`, and `git diff --check` pass.
    Follow-up image micro-slices showed the shallow cache and mesh-index
    precompute layers are not the C++ optimization. Retained clipping-shape
-   path geometry and the N-slicer fast-miss now remove two sampled draw-replay
-   rebuild/discovery paths while preserving the full ratchet. Next runtime
-   target should be a low-load release sample and then actual
-   `PathComposer`/raw-path retention or draw-replay fixed-overhead work, under
-   the existing scout fences.
+   path geometry, the N-slicer fast-miss, and retained draw-command object
+   kinds now remove sampled draw-replay rebuild/discovery/string-dispatch paths
+   while preserving the full ratchet. Full `make golden-compare` remains
+   exact=263 / exact-segments=584 / diverges=0; `cargo test --workspace`,
+   `cargo fmt --all -- --check`, and `git diff --check` pass. A same-session
+   fenced run reports aggregate min Rust/C++=3.399 but C++ min-sum=1.024 ms,
+   outside the sanity band, so strict <=2.0 remains open. Next runtime target
+   should be a low-load release sample and then actual image/`PathComposer`/
+   raw-path retention or deeper draw-replay fixed-overhead work, under the
+   existing scout fences.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -3576,6 +3577,20 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-08: [M7] Retained draw-command object kinds for replay dispatch.
+  `RuntimeDrawCommand` now stores a precomputed concrete object-kind enum during
+  prepared-command construction and uses it for the hot nested/image/text/
+  layout dispatch path, matching C++ concrete type dispatch instead of repeated
+  `type_name` string checks in draw replay. Full `make golden-compare` remains
+  exact=263/exact-segments=584/diverges=0; `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check` pass. Fenced
+  release/null-renderer hot-loop is directional only: aggregate min
+  Rust/C++=3.399, `spotify_kids_demo@0`=5.500, with C++ min-sum=1.024 ms
+  outside the 0.70-0.95 sanity band and high 5/15-minute load. Strict <=2.0
+  remains open. Next: rerun low-load release perf, then port actual image/
+  `PathComposer`/raw-path retention or deeper draw-replay fixed overhead under
+  the scout fences.
 
 - 2026-07-08: [M7] Added an N-slicer fast-miss in the shape draw path.
   A fresh release/null-renderer sample under high load found

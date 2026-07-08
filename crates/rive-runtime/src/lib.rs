@@ -27,9 +27,9 @@ pub(crate) use data_bind_graph::{
     data_bind_flags_apply_source_to_target, data_bind_flags_apply_target_to_source,
 };
 pub use draw::{
-    RuntimeDrawCommand, RuntimeDrawCommandKind, RuntimeFeatherState, RuntimeGradientStop,
-    RuntimeLayoutBoundsReport, RuntimePathCommand, RuntimeRenderPaintCache, RuntimeRenderPaints,
-    RuntimeRenderPathCache, RuntimeShapePaintCommand, RuntimeShapePaintKind,
+    RuntimeDrawCommand, RuntimeDrawCommandKind, RuntimeDrawCommandObjectKind, RuntimeFeatherState,
+    RuntimeGradientStop, RuntimeLayoutBoundsReport, RuntimePathCommand, RuntimeRenderPaintCache,
+    RuntimeRenderPaints, RuntimeRenderPathCache, RuntimeShapePaintCommand, RuntimeShapePaintKind,
     RuntimeShapePaintPathKind, RuntimeShapePaintState,
     preallocate_render_paint_cache_for_artboard_tree, preallocate_render_paints,
     preallocate_render_paints_for_artboard_tree,

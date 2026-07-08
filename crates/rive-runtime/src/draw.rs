@@ -890,7 +890,8 @@ impl ArtboardInstance {
             .map(|nested| nested.child.as_ref())
         {
             let layout_child;
-            let child = if command.type_name == "NestedArtboardLayout" {
+            let child = if command.object_kind == RuntimeDrawCommandObjectKind::NestedArtboardLayout
+            {
                 let mut cloned = child.clone();
                 runtime_apply_nested_artboard_layout_child_bounds(
                     &mut cloned,
@@ -1527,6 +1528,7 @@ impl ArtboardInstance {
                     RuntimeDrawCommandKind::Draw
                 }
             },
+            object_kind: RuntimeDrawCommandObjectKind::from_type_name(drawable.type_name),
             local_id,
             global_id: drawable.global_id,
             type_name: drawable.type_name,
@@ -3605,9 +3607,46 @@ pub enum RuntimeDrawCommandKind {
     ClipEnd,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeDrawCommandObjectKind {
+    DrawableProxy,
+    ForegroundLayoutDrawable,
+    Image,
+    LayoutComponent,
+    NestedArtboard,
+    NestedArtboardLeaf,
+    NestedArtboardLayout,
+    Text,
+    Other,
+}
+
+impl RuntimeDrawCommandObjectKind {
+    fn from_type_name(type_name: &str) -> Self {
+        match type_name {
+            "DrawableProxy" => Self::DrawableProxy,
+            "ForegroundLayoutDrawable" => Self::ForegroundLayoutDrawable,
+            "Image" => Self::Image,
+            "LayoutComponent" => Self::LayoutComponent,
+            "NestedArtboard" => Self::NestedArtboard,
+            "NestedArtboardLeaf" => Self::NestedArtboardLeaf,
+            "NestedArtboardLayout" => Self::NestedArtboardLayout,
+            "Text" => Self::Text,
+            _ => Self::Other,
+        }
+    }
+
+    fn is_nested_artboard(self) -> bool {
+        matches!(
+            self,
+            Self::NestedArtboard | Self::NestedArtboardLeaf | Self::NestedArtboardLayout
+        )
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct RuntimeDrawCommand {
     pub kind: RuntimeDrawCommandKind,
+    pub object_kind: RuntimeDrawCommandObjectKind,
     pub local_id: Option<usize>,
     pub global_id: Option<u32>,
     pub type_name: &'static str,
@@ -6703,7 +6742,7 @@ fn runtime_draw_command(
         RuntimeDrawCommandKind::Draw => {}
     }
 
-    if command.type_name == "DrawableProxy"
+    if command.object_kind == RuntimeDrawCommandObjectKind::DrawableProxy
         && let Some(layout_local) = command.local_id
         && instance.runtime_layout_component_clip_enabled(layout_local)
     {
@@ -6724,7 +6763,7 @@ fn runtime_draw_command(
         }
     }
 
-    if command.type_name == "LayoutComponent"
+    if command.object_kind == RuntimeDrawCommandObjectKind::LayoutComponent
         && let Some(layout_local) = command.local_id
         && instance.runtime_layout_component_clip_enabled(layout_local)
     {
@@ -6732,7 +6771,7 @@ fn runtime_draw_command(
         return Ok(());
     }
 
-    if sorted_drawable_is_nested_artboard(command.type_name) {
+    if command.object_kind.is_nested_artboard() {
         return runtime_draw_nested_artboard(
             runtime,
             instance,
@@ -6751,7 +6790,7 @@ fn runtime_draw_command(
         );
     }
 
-    if command.type_name == "Image" {
+    if command.object_kind == RuntimeDrawCommandObjectKind::Image {
         return runtime_draw_image(
             runtime,
             instance,
@@ -6771,7 +6810,7 @@ fn runtime_draw_command(
         })
         .unwrap_or(Mat2D::IDENTITY);
 
-    let draws_text = command.type_name == "Text";
+    let draws_text = command.object_kind == RuntimeDrawCommandObjectKind::Text;
     let text_shape_paints = if draws_text {
         Some(path_cache.text_shape_paint_commands(
             runtime,
@@ -6812,13 +6851,14 @@ fn runtime_draw_command(
     }
     let mut text_temporary_paint_index = 0;
     let draw_path_epoch = instance.path_epoch();
-    let foreground_layout_path_cache_local = if command.type_name == "ForegroundLayoutDrawable" {
-        command
-            .local_id
-            .and_then(|local_id| runtime_foreground_layout_parent_local(instance, local_id))
-    } else {
-        None
-    };
+    let foreground_layout_path_cache_local =
+        if command.object_kind == RuntimeDrawCommandObjectKind::ForegroundLayoutDrawable {
+            command
+                .local_id
+                .and_then(|local_id| runtime_foreground_layout_parent_local(instance, local_id))
+        } else {
+            None
+        };
     for paint in shape_paints {
         let global_id = paint.paint_global_id;
         let object = runtime
@@ -7367,8 +7407,8 @@ fn runtime_draw_nested_artboard(
         .local_id
         .and_then(|local_id| instance.nested_artboards.get(&local_id))
         .map(|nested| nested.child.as_ref());
-    let host_world = match command.type_name {
-        "NestedArtboardLayout" => command
+    let host_world = match command.object_kind {
+        RuntimeDrawCommandObjectKind::NestedArtboardLayout => command
             .local_id
             .map(|local_id| {
                 instance.runtime_component_world_transform_with_bounds(
@@ -7378,7 +7418,7 @@ fn runtime_draw_nested_artboard(
                 )
             })
             .unwrap_or(host_component.transform.world_transform),
-        "NestedArtboardLeaf" => {
+        RuntimeDrawCommandObjectKind::NestedArtboardLeaf => {
             let local_id = command
                 .local_id
                 .context("nested artboard leaf command missing local id")?;
@@ -7418,7 +7458,7 @@ fn runtime_draw_nested_artboard(
 
     if let Some(child) = persistent_child {
         let layout_child;
-        let child = if command.type_name == "NestedArtboardLayout" {
+        let child = if command.object_kind == RuntimeDrawCommandObjectKind::NestedArtboardLayout {
             let mut cloned = child.clone();
             runtime_apply_nested_artboard_layout_child_bounds(
                 &mut cloned,
@@ -7747,7 +7787,7 @@ fn runtime_apply_nested_artboard_layout_child_bounds(
     command: &RuntimeDrawCommand,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
 ) -> Result<()> {
-    if command.type_name != "NestedArtboardLayout" {
+    if command.object_kind != RuntimeDrawCommandObjectKind::NestedArtboardLayout {
         return Ok(());
     }
     let local_id = command
@@ -12233,8 +12273,7 @@ fn sorted_drawable_is_nested_artboard(type_name: &str) -> bool {
 }
 
 fn runtime_draw_command_is_nested_artboard(command: &RuntimeDrawCommand) -> bool {
-    sorted_drawable_is_nested_artboard(command.type_name)
-        || command.referenced_artboard_global.is_some()
+    command.object_kind.is_nested_artboard() || command.referenced_artboard_global.is_some()
 }
 
 #[cfg(test)]

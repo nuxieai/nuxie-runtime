@@ -269,7 +269,20 @@ the only memory the next session has. Update it every commit.
    `make golden-compare` remains exact=263 / exact-segments=584 / diverges=0,
    `cargo test --workspace` passes, and fenced hot-loop is noisy but roughly
    neutral at aggregate Rust/C++=2.238 then 2.195. Strict <=2.0 remains open.
-   Next: port `StringTrim` or `StringPad` converter-property dirty setters
+   `DataConverterStringTrim::trimTypeChanged()` is now modeled through the same
+   family-specific converter-property dirty lane: imported StringTrim `trimType`
+   binds are queued by source path, seeded for initial application, update
+   dependent copied converters by target converter id, and enqueue their
+   property/custom parents without broad DataBindContext converter-property
+   writes. `StringTrim` now leaves the converter-backed custom persisting lane.
+   Remaining conservative families are `NumberToList`, operation-view-model /
+   system operation, `Rounder`, `RangeMapper`, `StringPad`, `Interpolator`, and
+   unsupported converters. Full `make golden-compare` remains exact=263 /
+   exact-segments=584 / diverges=0, `cargo test --workspace`,
+   `cargo fmt --all -- --check`, and `git diff --check` pass, and fenced
+   hot-loop is noisy but roughly neutral at aggregate Rust/C++=2.173 then
+   2.239. Strict <=2.0 remains open.
+   Next: port `StringPad` converter-property dirty setters
    family-by-family, still avoiding broad converter-property writes.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
@@ -772,6 +785,20 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Remove `DataConverterStringTrim` custom sources from the
+  conservative polling lane. The C++ family has one bindable property callback,
+  `trimTypeChanged()`, which calls `DataConverter::markConverterDirty`. Rust
+  now builds artboard StringTrim converter-property bindings for `trimType`,
+  queues them by source path through `RuntimeArtboardDataBindTargetQueues`,
+  seeds them for initial apply, and updates copied dependent converters by the
+  target converter's global id. The updater then enqueues the concrete
+  property/custom parents already covered by the target/source queues, keeping
+  the rejected broad converter-property-write scout out of the runtime.
+  `make golden-compare` remains exact=263 / exact-segments=584 / diverges=0;
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check` pass. Fenced release/null-renderer hot-loop reports
+  aggregate Rust/C++=2.173 and 2.239 over the 5-entry / 10-segment focused
+  corpus, still above strict <=2.0, so M7 remains open.
 - 2026-07-08: [M7] Remove `DataConverterToString` custom sources from the
   conservative polling lane. The C++ family has two bindable property callbacks,
   `decimalsChanged()` and `colorFormatChanged()`, and both call

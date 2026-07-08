@@ -11,20 +11,19 @@ use crate::animation::{
     build_linear_animations, build_runtime_joysticks,
 };
 use crate::artboard_data_bind::{
-    RuntimeArtboardCustomPropertyBindingInstance, RuntimeArtboardDataBindSourceQueues,
-    RuntimeArtboardDataBindTargetQueues, RuntimeArtboardFormulaTokenBindingInstance,
-    RuntimeArtboardImageAssetBindingInstance, RuntimeArtboardLayoutComputedBindingInstance,
-    RuntimeArtboardListBindingInstance, RuntimeArtboardNestedHostBindingInstance,
-    RuntimeArtboardNumericSourceBindingInstance, RuntimeArtboardPropertyBindingInstance,
-    RuntimeArtboardSoloBindingInstance, RuntimeArtboardSoloSourceBindingInstance,
-    RuntimeArtboardToStringConverterBindingInstance,
-    apply_artboard_name_based_color_data_bind_defaults, build_artboard_custom_property_bindings,
+    RuntimeArtboardConverterPropertyBindingInstance, RuntimeArtboardCustomPropertyBindingInstance,
+    RuntimeArtboardDataBindSourceQueues, RuntimeArtboardDataBindTargetQueues,
+    RuntimeArtboardFormulaTokenBindingInstance, RuntimeArtboardImageAssetBindingInstance,
+    RuntimeArtboardLayoutComputedBindingInstance, RuntimeArtboardListBindingInstance,
+    RuntimeArtboardNestedHostBindingInstance, RuntimeArtboardNumericSourceBindingInstance,
+    RuntimeArtboardPropertyBindingInstance, RuntimeArtboardSoloBindingInstance,
+    RuntimeArtboardSoloSourceBindingInstance, apply_artboard_name_based_color_data_bind_defaults,
+    build_artboard_converter_property_bindings, build_artboard_custom_property_bindings,
     build_artboard_default_view_model_values, build_artboard_formula_token_bindings,
     build_artboard_image_asset_bindings, build_artboard_layout_computed_bindings,
     build_artboard_list_bindings, build_artboard_nested_host_bindings,
     build_artboard_numeric_source_bindings, build_artboard_property_bindings,
     build_artboard_solo_bindings, build_artboard_solo_source_bindings,
-    build_artboard_to_string_converter_bindings,
 };
 use crate::components::{
     AuthoredTransform, ComponentDirt, Mat2D, RuntimeComponent, RuntimeSolo, TransformProperty,
@@ -87,8 +86,8 @@ pub struct ArtboardInstance {
     pub(crate) artboard_layout_computed_bindings: Vec<RuntimeArtboardLayoutComputedBindingInstance>,
     pub(crate) artboard_numeric_source_bindings: Vec<RuntimeArtboardNumericSourceBindingInstance>,
     pub(crate) artboard_formula_token_bindings: Vec<RuntimeArtboardFormulaTokenBindingInstance>,
-    pub(crate) artboard_to_string_converter_bindings:
-        Vec<RuntimeArtboardToStringConverterBindingInstance>,
+    pub(crate) artboard_converter_property_bindings:
+        Vec<RuntimeArtboardConverterPropertyBindingInstance>,
     pub(crate) artboard_solo_bindings: Vec<RuntimeArtboardSoloBindingInstance>,
     pub(crate) artboard_solo_source_bindings: Vec<RuntimeArtboardSoloSourceBindingInstance>,
     pub(crate) artboard_nested_host_bindings: Vec<RuntimeArtboardNestedHostBindingInstance>,
@@ -249,12 +248,12 @@ impl ArtboardInstance {
             build_artboard_layout_computed_bindings(file, graph);
         let artboard_numeric_source_bindings = build_artboard_numeric_source_bindings(file, graph);
         let artboard_formula_token_bindings = build_artboard_formula_token_bindings(file, graph);
-        let artboard_to_string_converter_bindings =
-            build_artboard_to_string_converter_bindings(file, graph);
+        let artboard_converter_property_bindings =
+            build_artboard_converter_property_bindings(file, graph);
         let artboard_data_bind_target_queues = RuntimeArtboardDataBindTargetQueues::new(
             &artboard_property_bindings,
             &artboard_image_asset_bindings,
-            &artboard_to_string_converter_bindings,
+            &artboard_converter_property_bindings,
         );
         let artboard_solo_bindings = build_artboard_solo_bindings(file, graph);
         let artboard_solo_source_bindings = build_artboard_solo_source_bindings(file, graph);
@@ -319,7 +318,7 @@ impl ArtboardInstance {
             artboard_layout_computed_bindings,
             artboard_numeric_source_bindings,
             artboard_formula_token_bindings,
-            artboard_to_string_converter_bindings,
+            artboard_converter_property_bindings,
             artboard_solo_bindings,
             artboard_solo_source_bindings,
             artboard_nested_host_bindings,
@@ -1175,7 +1174,7 @@ impl ArtboardInstance {
             || !self.artboard_layout_computed_bindings.is_empty()
             || !self.artboard_numeric_source_bindings.is_empty()
             || !self.artboard_formula_token_bindings.is_empty()
-            || !self.artboard_to_string_converter_bindings.is_empty()
+            || !self.artboard_converter_property_bindings.is_empty()
             || !self.artboard_solo_bindings.is_empty()
             || !self.artboard_solo_source_bindings.is_empty()
             || !self.artboard_nested_host_bindings.is_empty()
@@ -2495,7 +2494,7 @@ mod tests {
             artboard_layout_computed_bindings: Vec::new(),
             artboard_numeric_source_bindings: Vec::new(),
             artboard_formula_token_bindings: Vec::new(),
-            artboard_to_string_converter_bindings: Vec::new(),
+            artboard_converter_property_bindings: Vec::new(),
             artboard_solo_bindings: Vec::new(),
             artboard_solo_source_bindings: Vec::new(),
             artboard_nested_host_bindings: Vec::new(),

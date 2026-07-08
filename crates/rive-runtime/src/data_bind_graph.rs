@@ -201,6 +201,7 @@ pub(crate) enum RuntimeDataBindGraphConverter {
         interpolator: Option<RuntimeTransitionInterpolator>,
     },
     StringTrim {
+        global_id: u32,
         trim_type: u64,
     },
     StringRemoveZeros,
@@ -333,6 +334,26 @@ impl RuntimeDataBindGraphConverter {
             _ => false,
         }
     }
+
+    pub(crate) fn set_string_trim_trim_type(&mut self, target_global_id: u32, value: u64) -> bool {
+        match self {
+            RuntimeDataBindGraphConverter::StringTrim {
+                global_id,
+                trim_type,
+            } if *global_id == target_global_id && *trim_type != value => {
+                *trim_type = value;
+                true
+            }
+            RuntimeDataBindGraphConverter::Group(converters) => {
+                let mut changed = false;
+                for converter in converters {
+                    changed |= converter.set_string_trim_trim_type(target_global_id, value);
+                }
+                changed
+            }
+            _ => false,
+        }
+    }
 }
 
 pub(crate) fn runtime_data_bind_graph_converter_requires_persisting_custom_property_source(
@@ -346,6 +367,7 @@ pub(crate) fn runtime_data_bind_graph_converter_requires_persisting_custom_prope
         | RuntimeDataBindGraphConverter::ListToLength
         | RuntimeDataBindGraphConverter::StringRemoveZeros
         | RuntimeDataBindGraphConverter::ToString { .. }
+        | RuntimeDataBindGraphConverter::StringTrim { .. }
         | RuntimeDataBindGraphConverter::OperationValue { .. }
         | RuntimeDataBindGraphConverter::Formula { .. } => false,
         RuntimeDataBindGraphConverter::Group(converters) => converters
@@ -356,7 +378,6 @@ pub(crate) fn runtime_data_bind_graph_converter_requires_persisting_custom_prope
         | RuntimeDataBindGraphConverter::SystemOperationValue { .. }
         | RuntimeDataBindGraphConverter::Rounder { .. }
         | RuntimeDataBindGraphConverter::RangeMapper { .. }
-        | RuntimeDataBindGraphConverter::StringTrim { .. }
         | RuntimeDataBindGraphConverter::StringPad { .. }
         | RuntimeDataBindGraphConverter::Interpolator { .. }
         | RuntimeDataBindGraphConverter::Unsupported => true,
@@ -1346,7 +1367,7 @@ pub(crate) fn runtime_data_bind_graph_convert_value(
             Some(RuntimeDataBindGraphValue::Number(0.0))
         }
         (
-            RuntimeDataBindGraphConverter::StringTrim { trim_type },
+            RuntimeDataBindGraphConverter::StringTrim { trim_type, .. },
             RuntimeDataBindGraphValue::String(value),
         ) => Some(RuntimeDataBindGraphValue::String(
             rive_binary::data_converter_string_trim_value(value, *trim_type),
@@ -2028,6 +2049,7 @@ fn runtime_data_bind_graph_converter_for_object(
             runtime_data_bind_graph_range_mapper_converter(file, converter)
         }
         "DataConverterStringTrim" => RuntimeDataBindGraphConverter::StringTrim {
+            global_id: converter.id,
             trim_type: converter.uint_property("trimType").unwrap_or(1),
         },
         "DataConverterStringRemoveZeros" => RuntimeDataBindGraphConverter::StringRemoveZeros,

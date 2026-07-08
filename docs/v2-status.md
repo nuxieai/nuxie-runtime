@@ -423,6 +423,23 @@ the only memory the next session has. Update it every commit.
    audited C++ retention/dirt slices; keep the scout fences in force: no broad
    converter-property writes, no StringPad-style RangeMapper retry, and no
    shallow command/path-wrapper caching without release/null-renderer evidence.
+   Nested artboard context-source propagation now uses a single accumulator
+   while walking descendants instead of allocating a descendant-value `Vec` at
+   each host, cloning that vector into the parent, and then replaying the owned
+   values into the child. Nested host loops also walk the retained host map
+   directly instead of snapshotting keys into a temporary vector. This mirrors
+   C++'s retained object traversal shape and does not add skip/cache
+   invalidation. Full `make golden-compare` remains exact=263 /
+   exact-segments=584 / diverges=0; `cargo test --workspace`,
+   `cargo fmt --all -- --check`, and `git diff --check` pass. Direct Rust-only
+   `ai_assitant --benchmark-repeat 1000000` improves from elapsed=11839.2 /
+   advance=6853.7 ms to elapsed=11624.2 / advance=6594.8 ms. Focused
+   release/null-renderer hot-loop reports aggregate Rust/C++=2.281 over the
+   5-entry / 10-segment corpus, while single-file repeat=100 reports
+   cpp median=0.373 ms, rust median=1.944 ms, Rust/C++=5.207. Strict <=2.0
+   remains open. Next: profile and port the remaining child-context
+   construction in `bind_owned_view_model_artboard_context_chain` rather than
+   broadening to fenced-off converter/property caches.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -924,6 +941,25 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Accumulate nested context-source propagation without
+  per-host descendant vectors. A release `ai_assitant` sample showed
+  `collect_nested_artboard_context_source_values` still allocating and cloning
+  under owned view-model/nested artboard data-context propagation. Rust now
+  appends descendant context-source values into one accumulator, replays the
+  just-appended range into the immediate child by reference, and appends that
+  child's own context-source values after its data-bind advance. Nested host
+  loops also walk the retained host map directly instead of allocating a key
+  snapshot vector. This preserves the existing propagation order and mirrors
+  C++ retained object traversal; it is not a skip/cache invalidation rule.
+  `make golden-compare` remains exact=263 / exact-segments=584 / diverges=0;
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check` pass. Direct Rust-only `ai_assitant
+  --benchmark-repeat 1000000` improves from elapsed=11839.2 / advance=6853.7
+  ms to elapsed=11624.2 / advance=6594.8 ms; focused release/null-renderer
+  hot-loop reports aggregate Rust/C++=2.281. Single-file repeat=100 reports
+  Rust/C++=5.207 because the C++ median moved, so strict <=2.0 remains open.
+  Next target is the remaining child-context path construction in
+  `bind_owned_view_model_artboard_context_chain`.
 - 2026-07-08: [M7] Trim owned view-model context-path allocation without
   widening skip/cache semantics. A release `ai_assitant` sample after the
   retained nested-host path slice still showed owned view-model/nested artboard
@@ -2442,6 +2478,16 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Reworked nested context-source propagation to append into a
+  single accumulator and walk retained nested host keys without temporary
+  vectors. `make golden-compare` remains
+  exact=263/exact-segments=584/diverges=0; `cargo test --workspace` passes;
+  direct Rust-only repeat=1000000 `ai_assitant` improves from
+  elapsed=11839.2/advance=6853.7 ms to elapsed=11624.2/advance=6594.8 ms.
+  Focused hot-loop is Rust/C++=2.281, while repeat=100 single-file is
+  Rust/C++=5.207 due to C++ median movement. Strict <=2.0 remains open; next
+  profile child-context path construction in
+  `bind_owned_view_model_artboard_context_chain`.
 - 2026-07-08: [M7] Trimmed owned view-model context-source path allocation,
   stack-prepended shallow nested context chains, avoided unchanged binding path
   clones, and shared retained animation/state-machine names as `Arc<str>`.

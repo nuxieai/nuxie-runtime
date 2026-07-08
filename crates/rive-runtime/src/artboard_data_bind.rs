@@ -21,6 +21,7 @@ use rive_binary::{RuntimeDataType, RuntimeFile, RuntimeObject};
 use rive_graph::ArtboardGraph;
 use rive_schema::FieldKind;
 use std::collections::BTreeMap;
+use std::ops::Bound::{Excluded, Unbounded};
 use std::sync::OnceLock;
 
 macro_rules! cached_runtime_data_bind_property_key {
@@ -2098,19 +2099,33 @@ impl ArtboardInstance {
 
     pub(crate) fn update_nested_artboard_data_binds_from_hosts(&mut self) -> bool {
         let mut changed = false;
-        for source in self.collect_nested_artboard_context_source_values(Mat2D::IDENTITY) {
+        let mut values = Vec::new();
+        self.collect_nested_artboard_context_source_values(Mat2D::IDENTITY, &mut values);
+        for source in values {
             changed |= self.set_artboard_data_bind_value_for_path(&source.path, source.value);
         }
         changed
     }
 
+    fn next_nested_artboard_local_after(&self, after: Option<usize>) -> Option<usize> {
+        match after {
+            Some(after) => self
+                .nested_artboards
+                .range((Excluded(after), Unbounded))
+                .next()
+                .map(|(local_id, _)| *local_id),
+            None => self.nested_artboards.keys().next().copied(),
+        }
+    }
+
     fn collect_nested_artboard_context_source_values(
         &mut self,
         root_transform: Mat2D,
-    ) -> Vec<RuntimeArtboardContextSourceValue> {
-        let host_locals = self.nested_artboards.keys().copied().collect::<Vec<_>>();
-        let mut values = Vec::new();
-        for host_local_id in host_locals {
+        values: &mut Vec<RuntimeArtboardContextSourceValue>,
+    ) {
+        let mut host_local = self.next_nested_artboard_local_after(None);
+        while let Some(host_local_id) = host_local {
+            host_local = self.next_nested_artboard_local_after(Some(host_local_id));
             let host_world = self
                 .component(host_local_id)
                 .map(|component| component.transform.world_transform)
@@ -2119,62 +2134,56 @@ impl ArtboardInstance {
             let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
                 continue;
             };
-            let descendant_values = nested
+            let descendant_start = values.len();
+            nested
                 .child
-                .collect_nested_artboard_context_source_values(child_root_transform);
-            values.extend(descendant_values.iter().cloned());
-            for source in descendant_values {
+                .collect_nested_artboard_context_source_values(child_root_transform, values);
+            let descendant_end = values.len();
+            for source in &values[descendant_start..descendant_end] {
                 nested
                     .child
-                    .set_artboard_data_bind_value_for_path(&source.path, source.value);
+                    .set_artboard_data_bind_value_for_path_ref(&source.path, &source.value);
             }
             nested
                 .child
                 .advance_artboard_data_binds_with_root_transform(child_root_transform, 0.0);
-            values.extend(nested.child.artboard_context_source_values());
+            nested.child.append_artboard_context_source_values(values);
         }
-        values
     }
 
-    fn artboard_context_source_values(&self) -> Vec<RuntimeArtboardContextSourceValue> {
-        self.artboard_layout_computed_bindings
-            .iter()
-            .filter_map(|binding| {
-                self.artboard_data_bind_values
-                    .get(&binding.path)
-                    .cloned()
-                    .map(|value| RuntimeArtboardContextSourceValue {
-                        path: binding.path.clone(),
-                        value,
-                    })
-            })
-            .chain(
-                self.artboard_custom_property_bindings
-                    .iter()
-                    .filter_map(|binding| {
-                        self.artboard_data_bind_values
-                            .get(&binding.path)
-                            .cloned()
-                            .map(|value| RuntimeArtboardContextSourceValue {
-                                path: binding.path.clone(),
-                                value,
-                            })
-                    }),
-            )
-            .chain(
-                self.artboard_solo_source_bindings
-                    .iter()
-                    .filter_map(|binding| {
-                        self.artboard_data_bind_values
-                            .get(&binding.path)
-                            .cloned()
-                            .map(|value| RuntimeArtboardContextSourceValue {
-                                path: binding.path.clone(),
-                                value,
-                            })
-                    }),
-            )
-            .collect()
+    fn append_artboard_context_source_values(
+        &self,
+        values: &mut Vec<RuntimeArtboardContextSourceValue>,
+    ) {
+        values.reserve(
+            self.artboard_layout_computed_bindings.len()
+                + self.artboard_custom_property_bindings.len()
+                + self.artboard_solo_source_bindings.len(),
+        );
+        for binding in &self.artboard_layout_computed_bindings {
+            if let Some(value) = self.artboard_data_bind_values.get(&binding.path).cloned() {
+                values.push(RuntimeArtboardContextSourceValue {
+                    path: binding.path.clone(),
+                    value,
+                });
+            }
+        }
+        for binding in &self.artboard_custom_property_bindings {
+            if let Some(value) = self.artboard_data_bind_values.get(&binding.path).cloned() {
+                values.push(RuntimeArtboardContextSourceValue {
+                    path: binding.path.clone(),
+                    value,
+                });
+            }
+        }
+        for binding in &self.artboard_solo_source_bindings {
+            if let Some(value) = self.artboard_data_bind_values.get(&binding.path).cloned() {
+                values.push(RuntimeArtboardContextSourceValue {
+                    path: binding.path.clone(),
+                    value,
+                });
+            }
+        }
     }
 
     pub fn bind_default_view_model_artboard_list_context(&mut self, file: &RuntimeFile) -> bool {
@@ -2222,8 +2231,9 @@ impl ArtboardInstance {
         } else {
             false
         };
-        let host_locals = self.nested_artboards.keys().copied().collect::<Vec<_>>();
-        for host_local_id in host_locals {
+        let mut host_local = self.next_nested_artboard_local_after(None);
+        while let Some(host_local_id) = host_local {
+            host_local = self.next_nested_artboard_local_after(Some(host_local_id));
             let child_context = self.owned_view_model_context_chain_for_nested_host(
                 file,
                 context,
@@ -2494,6 +2504,17 @@ impl ArtboardInstance {
             );
         }
         true
+    }
+
+    fn set_artboard_data_bind_value_for_path_ref(
+        &mut self,
+        path: &[u32],
+        value: &RuntimeDataBindGraphValue,
+    ) -> bool {
+        if self.artboard_data_bind_values.get(path) == Some(value) {
+            return false;
+        }
+        self.set_artboard_data_bind_value_for_path(path, value.clone())
     }
 
     pub fn advance_artboard_data_binds_with_elapsed(&mut self, elapsed_seconds: f32) -> bool {

@@ -110,6 +110,18 @@ the only memory the next session has. Update it every commit.
    `animation_reset_cases`=3.966). Direct
    `ai_assitant --benchmark-repeat 100` reports cpp median=0.363 ms, rust
    median=7.695 ms, Rust/C++=21.222.
+   A 2026-07-08 scout implementation of a Rust-only `Shape` paint
+   path-command cache was intentionally not landed. While present it kept
+   focused tests, `make golden-compare`, and `cargo test --workspace` green,
+   but the fenced release hot-loop did not show a completion-grade win:
+   focused 5-entry aggregate moved to Rust/C++=2.588, and direct
+   `ai_assitant --benchmark-repeat 100` reported cpp median=0.555 ms, rust
+   median=10.197 ms, Rust/C++=18.375. The useful finding is the layer
+   boundary: caching cloned `Vec<RuntimePathCommand>` above
+   `RuntimeShapePaintCommand` is not the C++ optimization. The next landing
+   slice should either make steady frames skip prepare via audited
+   idempotent dirt raisers, or port actual `RawPath`/`PathComposer`
+   retention behind C++ dirt gates.
    The layout-split sample no longer showed
    `runtime_taffy_layout_bounds` in the hot stack; remaining heat is
    data-bind/nested advance allocation and retained path/paint dirt gates. The
@@ -619,6 +631,16 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Scout review after the path-command cache experiment keeps
+  the next slice scoped to C++ dirt/retention semantics. A private Rust
+  `Shape` paint path-command cache was tested and then backed out: it preserved
+  correctness while present, but focused release/null-renderer perf was not a
+  clear improvement (5-entry aggregate Rust/C++=2.588; direct
+  `ai_assitant --benchmark-repeat 100` cpp median=0.555 ms, rust median=10.197
+  ms, Rust/C++=18.375). Do not repeat this as a standalone cache layer. The
+  scout reports say the next landed work should be either audited idempotent
+  dirt raisers that let steady frames skip prepare, or actual
+  `ShapePaintPath`/`PathComposer` RawPath retention behind C++ dirt gates.
 - 2026-07-08: [M7] Split retained draw-path invalidation onto
   `ArtboardInstance::path_epoch`. The scout result says C++ draw() should replay
   retained handles and geometry rebuilds belong behind dirt/update gates; this

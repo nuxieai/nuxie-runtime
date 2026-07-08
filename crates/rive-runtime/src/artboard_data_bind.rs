@@ -3554,32 +3554,43 @@ impl ArtboardInstance {
 
     fn apply_artboard_nested_host_bindings(&mut self) -> bool {
         let mut changed = false;
-        for binding in self.artboard_nested_host_bindings.clone() {
-            let Some(value) = self.artboard_data_bind_values.get(&binding.path).cloned() else {
+        for index in 0..self.artboard_nested_host_bindings.len() {
+            let Some((target_local_id, property, value)) = self
+                .artboard_nested_host_bindings
+                .get(index)
+                .and_then(|binding| {
+                    self.artboard_data_bind_values
+                        .get(&binding.path)
+                        .cloned()
+                        .map(|value| (binding.target_local_id, binding.property, value))
+                })
+            else {
                 continue;
             };
-            changed |= self.apply_artboard_nested_host_binding_value(&binding, &value);
+            changed |=
+                self.apply_artboard_nested_host_binding_value(target_local_id, property, &value);
         }
         changed
     }
 
     fn apply_artboard_nested_host_binding_value(
         &mut self,
-        binding: &RuntimeArtboardNestedHostBindingInstance,
+        target_local_id: usize,
+        property: RuntimeArtboardNestedHostProperty,
         value: &RuntimeDataBindGraphValue,
     ) -> bool {
-        match (binding.property, value) {
+        match (property, value) {
             (
                 RuntimeArtboardNestedHostProperty::ArtboardId { property_key },
                 RuntimeDataBindGraphValue::Artboard(value),
             ) => {
-                let changed = self.set_uint_property(binding.target_local_id, property_key, *value);
-                changed || self.set_nested_artboard_artboard_id(binding.target_local_id, *value)
+                let changed = self.set_uint_property(target_local_id, property_key, *value);
+                changed || self.set_nested_artboard_artboard_id(target_local_id, *value)
             }
             (
                 RuntimeArtboardNestedHostProperty::IsPaused { property_key },
                 RuntimeDataBindGraphValue::Boolean(value),
-            ) => self.set_bool_property(binding.target_local_id, property_key, *value),
+            ) => self.set_bool_property(target_local_id, property_key, *value),
             (
                 RuntimeArtboardNestedHostProperty::Speed { property_key },
                 RuntimeDataBindGraphValue::Number(value),
@@ -3587,7 +3598,7 @@ impl ArtboardInstance {
             | (
                 RuntimeArtboardNestedHostProperty::Quantize { property_key },
                 RuntimeDataBindGraphValue::Number(value),
-            ) => self.set_double_property(binding.target_local_id, property_key, *value),
+            ) => self.set_double_property(target_local_id, property_key, *value),
             _ => false,
         }
     }
@@ -3623,7 +3634,13 @@ impl ArtboardInstance {
                     if let Some(source_local) = source_local_to_retain {
                         source_locals_to_retain.push((binding.path.clone(), source_local));
                     }
-                    if let Some(value) = value {
+                    if let Some(value) = value
+                        && nested
+                            .child
+                            .artboard_data_bind_values
+                            .get(binding.path.as_slice())
+                            != Some(&value)
+                    {
                         updates.push(NestedChildContextUpdate::Property(index, value));
                     }
                 }
@@ -3646,7 +3663,13 @@ impl ArtboardInstance {
                     if let Some(source_local) = source_local_to_retain {
                         source_locals_to_retain.push((binding.path.clone(), source_local));
                     }
-                    if let Some(value) = value {
+                    if let Some(value) = value
+                        && nested
+                            .child
+                            .artboard_data_bind_values
+                            .get(binding.path.as_slice())
+                            != Some(&value)
+                    {
                         updates.push(NestedChildContextUpdate::ImageAsset(index, value));
                     }
                 }

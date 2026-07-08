@@ -610,6 +610,17 @@ the only memory the next session has. Update it every commit.
    and `bind_owned_view_model_artboard_context_chain`; draw-side leftovers are
    now lower-level `runtime_configure_paint_with_cache` and
    `RuntimeRenderPathCache::draw_path`.
+   Nested-host data-bind application now reuses retained binding entries
+   instead of cloning `artboard_nested_host_bindings` every advance, and nested
+   child data-context sync now drops same-value child updates before allocating
+   update work. This is a direct no-op removal around C++'s retained
+   `DataBind`/`DataContext` references, not a new dirty gate. Full
+   `make golden-compare` remains exact=263 / exact-segments=584 / diverges=0;
+   focused nested/data-bind tests, `cargo test --workspace`, `cargo fmt --all
+   -- --check`, and `git diff --check` pass. Fenced release/null-renderer
+   hot-loop reports aggregate Rust/C++=2.105 with `ai_assitant`=1.939. Strict
+   <=2.0 remains open. Next: profile and port the larger
+   `bind_owned_view_model_artboard_context_chain` path-resolution hotspot.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -1111,6 +1122,20 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Avoid nested-host data-bind no-op work on clean frames.
+  C++ keeps `DataBind` and `DataContext` references on the owning objects;
+  Rust was cloning `artboard_nested_host_bindings` every advance and queueing
+  nested child context updates even when the child already held the same
+  value. Rust now copies only the small nested-host target/property identity
+  while reading retained bindings, and checks the child context value before
+  pushing property/image update work. This does not add a new dirty gate: it
+  removes work that the existing `set_artboard_data_bind_value_for_path`
+  would have rejected as unchanged. `make golden-compare` remains exact=263 /
+  exact-segments=584 / diverges=0; focused nested/data-bind tests, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, and `git diff --check` pass.
+  Fenced hot-loop reports aggregate Rust/C++=2.105 with `ai_assitant`=1.939.
+  M7 remains open; next focus is the larger
+  `bind_owned_view_model_artboard_context_chain` path-resolution hotspot.
 - 2026-07-08: [M7] Retain shape-paint draw path slot indices in prepared
   commands. C++ retained draw replay does not rebuild a fresh slot-vector for
   each command; Rust previously recomputed `runtime_cached_path_slot_index`
@@ -2803,6 +2828,14 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Removed nested-host data-bind clean-frame no-op work by
+  reusing retained binding entries instead of cloning
+  `artboard_nested_host_bindings`, and by skipping same-value nested child
+  context updates before queueing them. `make golden-compare` remains
+  exact=263/exact-segments=584/diverges=0; `cargo test --workspace` passes;
+  focused hot-loop reports Rust/C++=2.105 with `ai_assitant`=1.939. Strict
+  <=2.0 remains open; next target is the larger owned-view-model context-chain
+  path-resolution hotspot.
 - 2026-07-08: [M7] Retained shape-paint draw path slot indices on
   `RuntimeShapePaintCommand`, replacing per-draw `runtime_cached_path_slot_index`
   vector rebuilds for prepared shape/background commands while keeping dynamic

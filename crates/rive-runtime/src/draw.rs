@@ -5221,6 +5221,7 @@ pub struct RuntimeRenderPathCache {
     clip_paths: BTreeMap<usize, Box<dyn RenderPath>>,
     layout_clip_paths: BTreeMap<usize, Box<dyn RenderPath>>,
     draw_paths: BTreeMap<RuntimeDrawPathCacheKey, RuntimeCachedDrawPath>,
+    text_shape_paints: BTreeMap<RuntimeTextShapePaintCacheSlot, RuntimeCachedTextShapePaints>,
     gradient_preparation: Option<RuntimeGradientPreparationFrame>,
     gradient_shaders: BTreeMap<u32, RuntimeGradientShaderCacheEntry>,
     nested_artboards: BTreeMap<u32, RuntimeRenderPathCache>,
@@ -5261,6 +5262,25 @@ struct RuntimeLayoutBoundsCacheKey {
 struct RuntimeLayoutBoundsFrame {
     key: RuntimeLayoutBoundsCacheKey,
     bounds: Arc<Option<BTreeMap<usize, RuntimeLayoutBounds>>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct RuntimeTextShapePaintCacheSlot {
+    graph_global_id: u32,
+    text_local: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RuntimeTextShapePaintCacheKey {
+    path_epoch: u64,
+    layout_epoch: u64,
+    instance_epoch: u64,
+}
+
+#[derive(Clone)]
+struct RuntimeCachedTextShapePaints {
+    key: RuntimeTextShapePaintCacheKey,
+    commands: Arc<Vec<RuntimeShapePaintCommand>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -5437,6 +5457,60 @@ impl RuntimeRenderPathCache {
             .expect("layout bounds frame was just populated")
             .bounds
             .clone()
+    }
+
+    fn text_shape_paint_commands(
+        &mut self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        command: &RuntimeDrawCommand,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    ) -> Result<Arc<Vec<RuntimeShapePaintCommand>>> {
+        let text_local = command
+            .local_id
+            .context("text draw command missing local id")?;
+        let slot = RuntimeTextShapePaintCacheSlot {
+            graph_global_id: graph.global_id,
+            text_local,
+        };
+        let key = RuntimeTextShapePaintCacheKey {
+            path_epoch: instance.path_epoch(),
+            layout_epoch: instance.layout_epoch(),
+            instance_epoch: instance.cache_epoch(),
+        };
+
+        if self
+            .text_shape_paints
+            .get(&slot)
+            .is_none_or(|cached| cached.key != key)
+        {
+            let layout_constraint =
+                instance.runtime_text_layout_constraint(text_local, layout_bounds);
+            let mut commands = runtime_text_shape_paint_commands(
+                runtime,
+                instance,
+                graph,
+                command,
+                layout_bounds,
+                layout_constraint,
+            )?;
+            assign_shape_paint_path_slot_indices(&mut commands);
+            self.text_shape_paints.insert(
+                slot,
+                RuntimeCachedTextShapePaints {
+                    key,
+                    commands: Arc::new(commands),
+                },
+            );
+        }
+
+        Ok(self
+            .text_shape_paints
+            .get(&slot)
+            .expect("text shape paint cache was just populated")
+            .commands
+            .clone())
     }
 
     fn gradient_preparation_frame(
@@ -6485,26 +6559,22 @@ fn runtime_draw_command(
         .unwrap_or(Mat2D::IDENTITY);
 
     let draws_text = command.type_name == "Text";
-    let mut text_shape_paints = if draws_text {
-        let layout_constraint = command.local_id.and_then(|text_local| {
-            instance.runtime_text_layout_constraint(text_local, layout_bounds)
-        });
-        runtime_text_shape_paint_commands(
+    let text_shape_paints = if draws_text {
+        Some(path_cache.text_shape_paint_commands(
             runtime,
             instance,
             graph,
-            &command,
+            command,
             layout_bounds,
-            layout_constraint,
-        )?
+        )?)
     } else {
-        Vec::new()
+        None
     };
-    if draws_text {
-        assign_shape_paint_path_slot_indices(&mut text_shape_paints);
-    }
     let shape_paints = if draws_text {
-        text_shape_paints.as_slice()
+        text_shape_paints
+            .as_ref()
+            .expect("text shape paints were just populated")
+            .as_slice()
     } else {
         command.shape_paints.as_slice()
     };

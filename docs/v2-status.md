@@ -677,6 +677,25 @@ the only memory the next session has. Update it every commit.
    DataBindContext converter-property writes, no StringPad-style RangeMapper
    retry, no scratch-only owned-context path reuse, and no shallow
    command/path-wrapper caching without release/null-renderer evidence.
+   Text shape-paint commands are now retained in `RuntimeRenderPathCache` by
+   graph/text plus `path_epoch`, `layout_epoch`, and the conservative instance
+   cache epoch. The profile target was `animated_clipping`: a live macOS sample
+   showed `runtime_draw_command` spending almost all time in
+   `runtime_text_shape_paint_commands` / `StaticTextSlice::render_data` /
+   HarfRust shaping, while C++ `Text::buildRenderStyles()` retains
+   `m_drawCommands` and `Text::draw()` replays them until `markShapeDirty`.
+   Rust-only `animated_clipping --benchmark-repeat 3000000` improves from
+   elapsed=147254.8 / draw=146414.0 ms to elapsed=4008.4 / draw=3348.1 ms.
+   Full `make golden-compare` remains exact=263 / exact-segments=584 /
+   diverges=0, `cargo test --workspace`, `cargo fmt --all -- --check`, and
+   `git diff --check` pass. Fenced repeat=1 hot-loop remains noisy above
+   target at aggregate Rust/C++=2.395 then 2.223; direct repeat=100
+   `animated_clipping` JSON at
+   `/tmp/rive-animated-clipping-text-cache-perf.json` reports cpp median=0.100
+   ms, rust median=0.397 ms, Rust/C++=3.954. Strict <=2.0 remains open. Next:
+   profile the small-file fixed overhead in `advance_blend_mode` /
+   `animation_reset_cases`, and consider a repeat-aware corpus aggregation
+   harness slice before using repeat-heavy evidence as the main M7 score.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -1178,6 +1197,25 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Retain static text shape-paint commands behind existing
+  dirt epochs. The current `animated_clipping` scout/profiling target was not
+  actually clipping math: a live `sample` run showed the Rust draw loop
+  repeatedly entering `runtime_text_shape_paint_commands`,
+  `StaticTextSlice::render_data`, and HarfRust shaping. C++'s corresponding
+  boundary is `Text::buildRenderStyles()` / `RawText::update()`: shape, style
+  paths, and draw commands are rebuilt on text shape dirt, then
+  `Text::draw()` replays retained commands. Rust now stores text shape-paint
+  commands on `RuntimeRenderPathCache` by graph/text plus `path_epoch`,
+  `layout_epoch`, and instance `cache_epoch`, and assigns draw-path slot
+  indices when that cache entry is built. `make golden-compare` remains
+  exact=263 / exact-segments=584 / diverges=0; `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check` pass. Rust-only
+  `animated_clipping --benchmark-repeat 3000000` improves from
+  elapsed=147254.8 / draw=146414.0 ms to elapsed=4008.4 / draw=3348.1 ms.
+  Fenced repeat=1 hot-loop remains noisy above target at Rust/C++=2.395 then
+  2.223, and direct repeat=100 `animated_clipping` reports cpp median=0.100 ms,
+  rust median=0.397 ms, Rust/C++=3.954. M7 remains open; next profile the
+  small-file fixed overhead and consider repeat-aware corpus aggregation.
 - 2026-07-08: [M7] Gate owned-context artboard rebinds by owned view-model
   mutation generation. After reviewing the status scout/perf fences, the safe
   next step was the C++ `DataBindContext::bindFromContext` rebind boundary, not
@@ -2934,6 +2972,17 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Retained text shape-paint commands on
+  `RuntimeRenderPathCache` behind graph/text plus path/layout/cache epochs,
+  matching C++ `Text::buildRenderStyles()` / `Text::draw()` retained command
+  replay. `make golden-compare` remains exact=263/exact-segments=584/diverges=0;
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and `git diff
+  --check` pass. Rust-only 3M `animated_clipping` improves from
+  elapsed=147254.8/draw=146414.0 ms to elapsed=4008.4/draw=3348.1 ms; fenced
+  repeat=1 hot-loop remains above target at Rust/C++=2.395 then 2.223. Strict
+  <=2.0 remains open; next profile `advance_blend_mode` /
+  `animation_reset_cases` fixed overhead and decide whether to add
+  repeat-aware corpus aggregation.
 - 2026-07-08: [M7] Retained resolved artboard owned-context source paths on
   property/image/custom bindings behind an owned-view-model/context-chain key,
   mirroring C++ `DataBindContext::bindFromContext` source retention without

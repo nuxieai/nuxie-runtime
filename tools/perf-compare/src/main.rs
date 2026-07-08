@@ -24,7 +24,6 @@ fn run() -> Result<(), String> {
 fn run_single(options: &Options, target: &RunTarget) -> Result<(), String> {
     let cpp = measure_runner("cpp", &options.cpp_runner, target, options)?;
     let rust = measure_runner("rust", &options.rust_runner, target, options)?;
-    let ratio = rust.total.median.as_secs_f64() / cpp.total.median.as_secs_f64();
 
     println!("perf-compare file={}", target.file.display());
     println!(
@@ -32,10 +31,9 @@ fn run_single(options: &Options, target: &RunTarget) -> Result<(), String> {
         target.samples, options.iterations, options.warmups
     );
     print_metric(options.runner_benchmark, options.benchmark_repeat);
+    print_aggregate_mode(options.aggregate);
     print_measurements("cpp", cpp.total);
     print_measurements("rust", rust.total);
-    println!("rust_over_cpp={ratio:.3}");
-
     let file = FileResult {
         id: target.id.clone(),
         file: target.file.display().to_string(),
@@ -43,7 +41,10 @@ fn run_single(options: &Options, target: &RunTarget) -> Result<(), String> {
         cpp,
         rust,
     };
-    let aggregate = aggregate_results(std::slice::from_ref(&file));
+    let ratio = file.rust_over_cpp(options.aggregate);
+    println!("rust_over_cpp={ratio:.3}");
+
+    let aggregate = aggregate_results(std::slice::from_ref(&file), options.aggregate);
     write_json_report_if_requested(options, std::slice::from_ref(&file), &aggregate)?;
     check_max_ratio(ratio, options.max_ratio)
 }
@@ -72,16 +73,20 @@ fn run_corpus(options: &Options, corpus: &Path) -> Result<(), String> {
         options.warmups
     );
     print_metric(options.runner_benchmark, options.benchmark_repeat);
+    print_aggregate_mode(options.aggregate);
     for target in &targets {
         let cpp = measure_runner("cpp", &options.cpp_runner, target, options)?;
         let rust = measure_runner("rust", &options.rust_runner, target, options)?;
-        let ratio = rust.total.median.as_secs_f64() / cpp.total.median.as_secs_f64();
+        let ratio = measurement_value(rust.total, options.aggregate).as_secs_f64()
+            / measurement_value(cpp.total, options.aggregate).as_secs_f64();
         println!(
-            "entry id={} segments={} cpp_median_ms={:.3} rust_median_ms={:.3} rust_over_cpp={ratio:.3}",
+            "entry id={} segments={} cpp_median_ms={:.3} rust_median_ms={:.3} cpp_min_ms={:.3} rust_min_ms={:.3} rust_over_cpp={ratio:.3}",
             target.id,
             target.segment_count,
             millis(cpp.total.median),
-            millis(rust.total.median)
+            millis(rust.total.median),
+            millis(cpp.total.min),
+            millis(rust.total.min)
         );
         files.push(FileResult {
             id: target.id.clone(),
@@ -92,13 +97,14 @@ fn run_corpus(options: &Options, corpus: &Path) -> Result<(), String> {
         });
     }
 
-    let aggregate = aggregate_results(&files);
+    let aggregate = aggregate_results(&files, options.aggregate);
     println!(
-        "aggregate entries={} segments={} cpp_median_ms_sum={:.3} rust_median_ms_sum={:.3} rust_over_cpp={:.3}",
+        "aggregate mode={} entries={} segments={} cpp_ms_sum={:.3} rust_ms_sum={:.3} rust_over_cpp={:.3}",
+        aggregate.mode.as_str(),
         aggregate.entries,
         aggregate.segments,
-        millis(aggregate.cpp_median_sum),
-        millis(aggregate.rust_median_sum),
+        millis(aggregate.cpp_selected_sum()),
+        millis(aggregate.rust_selected_sum()),
         aggregate.rust_over_cpp
     );
     write_json_report_if_requested(options, &files, &aggregate)?;
@@ -114,7 +120,18 @@ fn corpus_targets(
         .into_iter()
         .filter(|entry| entry.status == Status::Exact)
         .collect::<Vec<_>>();
-    if let Some(limit) = options.corpus_limit {
+    if let Some(corpus_ids) = &options.corpus_ids {
+        let mut selected = Vec::with_capacity(corpus_ids.len());
+        for id in corpus_ids {
+            let Some(index) = entries.iter().position(|entry| &entry.id == id) else {
+                return Err(format!(
+                    "--corpus-ids entry {id} was not found among exact corpus entries"
+                ));
+            };
+            selected.push(entries.remove(index));
+        }
+        entries = selected;
+    } else if let Some(limit) = options.corpus_limit {
         entries.truncate(limit);
     }
 
@@ -158,6 +175,10 @@ fn print_metric(runner_benchmark: bool, benchmark_repeat: usize) {
     if runner_benchmark {
         println!("perf-compare benchmark_repeat={benchmark_repeat}");
     }
+}
+
+fn print_aggregate_mode(mode: AggregateMode) {
+    println!("perf-compare aggregate={}", mode.as_str());
 }
 
 /// Write the machine-readable report when `--json` was passed. Runs before
@@ -216,7 +237,7 @@ fn render_json_report(options: &Options, files: &[FileResult], aggregate: &Aggre
         if index > 0 {
             out.push(',');
         }
-        push_file_result(&mut out, file);
+        push_file_result(&mut out, file, options.aggregate);
     }
     out.push_str("],");
 
@@ -228,11 +249,26 @@ fn render_json_report(options: &Options, files: &[FileResult], aggregate: &Aggre
     push_json_key(&mut out, "segments");
     out.push_str(&aggregate.segments.to_string());
     out.push(',');
+    push_json_key(&mut out, "mode");
+    push_json_string(&mut out, aggregate.mode.as_str());
+    out.push(',');
     push_json_key(&mut out, "cpp_median_ms_sum");
     push_json_number(&mut out, millis(aggregate.cpp_median_sum));
     out.push(',');
     push_json_key(&mut out, "rust_median_ms_sum");
     push_json_number(&mut out, millis(aggregate.rust_median_sum));
+    out.push(',');
+    push_json_key(&mut out, "cpp_min_ms_sum");
+    push_json_number(&mut out, millis(aggregate.cpp_min_sum));
+    out.push(',');
+    push_json_key(&mut out, "rust_min_ms_sum");
+    push_json_number(&mut out, millis(aggregate.rust_min_sum));
+    out.push(',');
+    push_json_key(&mut out, "cpp_selected_ms_sum");
+    push_json_number(&mut out, millis(aggregate.cpp_selected_sum()));
+    out.push(',');
+    push_json_key(&mut out, "rust_selected_ms_sum");
+    push_json_number(&mut out, millis(aggregate.rust_selected_sum()));
     out.push(',');
     push_json_key(&mut out, "rust_over_cpp");
     push_json_number(&mut out, aggregate.rust_over_cpp);
@@ -243,7 +279,7 @@ fn render_json_report(options: &Options, files: &[FileResult], aggregate: &Aggre
     out
 }
 
-fn push_file_result(out: &mut String, file: &FileResult) {
+fn push_file_result(out: &mut String, file: &FileResult, aggregate: AggregateMode) {
     out.push('{');
     push_json_key(out, "id");
     push_json_string(out, &file.id);
@@ -265,13 +301,13 @@ fn push_file_result(out: &mut String, file: &FileResult) {
     out.push_str("},");
 
     push_json_key(out, "rust_over_cpp");
-    push_json_number(out, file.rust_over_cpp());
+    push_json_number(out, file.rust_over_cpp(aggregate));
     out.push(',');
 
     push_json_key(out, "rust_over_cpp_by_phase");
     out.push('{');
     push_json_key(out, "total");
-    push_json_number(out, file.rust_over_cpp());
+    push_json_number(out, file.rust_over_cpp(aggregate));
     for (name, cpp_phase) in &file.cpp.phases {
         let Some((_, rust_phase)) = file
             .rust
@@ -285,7 +321,8 @@ fn push_file_result(out: &mut String, file: &FileResult) {
         push_json_key(out, name);
         push_json_number(
             out,
-            rust_phase.median.as_secs_f64() / cpp_phase.median.as_secs_f64(),
+            measurement_value(*rust_phase, aggregate).as_secs_f64()
+                / measurement_value(*cpp_phase, aggregate).as_secs_f64(),
         );
     }
     out.push('}');
@@ -380,7 +417,9 @@ struct Options {
     mode: Mode,
     iterations: usize,
     warmups: usize,
+    aggregate: AggregateMode,
     corpus_limit: Option<usize>,
+    corpus_ids: Option<Vec<String>>,
     max_ratio: Option<f64>,
     runner_benchmark: bool,
     benchmark_repeat: usize,
@@ -392,6 +431,29 @@ struct Options {
 enum Mode {
     Single(RunTarget),
     Corpus(PathBuf),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AggregateMode {
+    Median,
+    Min,
+}
+
+impl AggregateMode {
+    fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "median" => Ok(Self::Median),
+            "min" => Ok(Self::Min),
+            other => Err(format!("unknown aggregate mode: {other}")),
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Median => "median",
+            Self::Min => "min",
+        }
+    }
 }
 
 impl Options {
@@ -414,7 +476,9 @@ impl Options {
         let mut sample_count = 1usize;
         let mut iterations = 5usize;
         let mut warmups = 0usize;
+        let mut aggregate = AggregateMode::Median;
         let mut corpus_limit = None;
+        let mut corpus_ids = None;
         let mut max_ratio = None;
         let mut runner_benchmark = false;
         let mut benchmark_repeat = 1usize;
@@ -440,6 +504,8 @@ impl Options {
                 "--corpus-limit" => {
                     corpus_limit = Some(parse_positive_usize(&value(arg)?, "--corpus-limit")?)
                 }
+                "--corpus-ids" => corpus_ids = Some(parse_csv_ids(&value(arg)?, "--corpus-ids")?),
+                "--aggregate" => aggregate = AggregateMode::parse(&value(arg)?)?,
                 "--max-ratio" => max_ratio = Some(parse_ratio(&value(arg)?)?),
                 "--runner-benchmark" => runner_benchmark = true,
                 "--benchmark-repeat" => {
@@ -463,7 +529,7 @@ impl Options {
                 }
                 "--help" | "-h" => {
                     println!(
-                        "usage: perf-compare (--file <path> | --corpus corpus.toml) [--samples 0,0.5] [--iterations N] [--warmups N] [--max-ratio N] [--runner-benchmark] [--benchmark-repeat N] [--json path] [--meta key=value ...] [--cpp-runner path] [--rust-runner path]"
+                        "usage: perf-compare (--file <path> | --corpus corpus.toml) [--samples 0,0.5] [--iterations N] [--warmups N] [--aggregate median|min] [--corpus-limit N | --corpus-ids a,b] [--max-ratio N] [--runner-benchmark] [--benchmark-repeat N] [--json path] [--meta key=value ...] [--cpp-runner path] [--rust-runner path]"
                     );
                     std::process::exit(0);
                 }
@@ -499,6 +565,9 @@ impl Options {
         {
             validate_benchmark_repeat_target(target)?;
         }
+        if corpus_limit.is_some() && corpus_ids.is_some() {
+            return Err("choose either --corpus-limit or --corpus-ids, not both".to_owned());
+        }
 
         Ok(Self {
             cpp_runner,
@@ -507,7 +576,9 @@ impl Options {
             mode,
             iterations,
             warmups,
+            aggregate,
             corpus_limit,
+            corpus_ids,
             max_ratio,
             runner_benchmark,
             benchmark_repeat,
@@ -527,6 +598,24 @@ fn parse_meta(value: &str) -> Result<(String, String), String> {
         return Err(format!("--meta expects a non-empty key, got {value}"));
     }
     Ok((key.to_owned(), meta_value.to_owned()))
+}
+
+fn parse_csv_ids(value: &str, option: &str) -> Result<Vec<String>, String> {
+    let mut ids = Vec::new();
+    for part in value.split(',') {
+        let id = part.trim();
+        if id.is_empty() {
+            return Err(format!("{option} must not contain empty ids"));
+        }
+        if ids.iter().any(|existing| existing == id) {
+            return Err(format!("{option} contains duplicate id {id}"));
+        }
+        ids.push(id.to_owned());
+    }
+    if ids.is_empty() {
+        return Err(format!("{option} must include at least one id"));
+    }
+    Ok(ids)
 }
 
 #[derive(Debug, Clone)]
@@ -623,8 +712,9 @@ struct FileResult {
 }
 
 impl FileResult {
-    fn rust_over_cpp(&self) -> f64 {
-        self.rust.total.median.as_secs_f64() / self.cpp.total.median.as_secs_f64()
+    fn rust_over_cpp(&self, mode: AggregateMode) -> f64 {
+        measurement_value(self.rust.total, mode).as_secs_f64()
+            / measurement_value(self.cpp.total, mode).as_secs_f64()
     }
 }
 
@@ -632,20 +722,59 @@ impl FileResult {
 struct Aggregate {
     entries: usize,
     segments: usize,
+    mode: AggregateMode,
     cpp_median_sum: Duration,
     rust_median_sum: Duration,
+    cpp_min_sum: Duration,
+    rust_min_sum: Duration,
     rust_over_cpp: f64,
 }
 
-fn aggregate_results(files: &[FileResult]) -> Aggregate {
+impl Aggregate {
+    fn cpp_selected_sum(&self) -> Duration {
+        match self.mode {
+            AggregateMode::Median => self.cpp_median_sum,
+            AggregateMode::Min => self.cpp_min_sum,
+        }
+    }
+
+    fn rust_selected_sum(&self) -> Duration {
+        match self.mode {
+            AggregateMode::Median => self.rust_median_sum,
+            AggregateMode::Min => self.rust_min_sum,
+        }
+    }
+}
+
+fn measurement_value(measurements: Measurements, mode: AggregateMode) -> Duration {
+    match mode {
+        AggregateMode::Median => measurements.median,
+        AggregateMode::Min => measurements.min,
+    }
+}
+
+fn aggregate_results(files: &[FileResult], mode: AggregateMode) -> Aggregate {
     let cpp_median_sum = files.iter().map(|file| file.cpp.total.median).sum();
     let rust_median_sum: Duration = files.iter().map(|file| file.rust.total.median).sum();
+    let cpp_min_sum = files.iter().map(|file| file.cpp.total.min).sum();
+    let rust_min_sum: Duration = files.iter().map(|file| file.rust.total.min).sum();
+    let cpp_selected_sum = match mode {
+        AggregateMode::Median => cpp_median_sum,
+        AggregateMode::Min => cpp_min_sum,
+    };
+    let rust_selected_sum = match mode {
+        AggregateMode::Median => rust_median_sum,
+        AggregateMode::Min => rust_min_sum,
+    };
     Aggregate {
         entries: files.len(),
         segments: files.iter().map(|file| file.segments).sum(),
+        mode,
         cpp_median_sum,
         rust_median_sum,
-        rust_over_cpp: rust_median_sum.as_secs_f64() / cpp_median_sum.as_secs_f64(),
+        cpp_min_sum,
+        rust_min_sum,
+        rust_over_cpp: rust_selected_sum.as_secs_f64() / cpp_selected_sum.as_secs_f64(),
     }
 }
 
@@ -1146,6 +1275,54 @@ mod tests {
     }
 
     #[test]
+    fn parses_aggregate_mode_and_corpus_ids() {
+        let options = Options::parse(vec![
+            "--corpus".to_owned(),
+            "corpus.toml".to_owned(),
+            "--aggregate".to_owned(),
+            "min".to_owned(),
+            "--corpus-ids".to_owned(),
+            "ai_assitant, spotify_kids_demo".to_owned(),
+        ])
+        .expect("parse options");
+
+        assert_eq!(options.aggregate, AggregateMode::Min);
+        assert_eq!(
+            options.corpus_ids,
+            Some(vec![
+                "ai_assitant".to_owned(),
+                "spotify_kids_demo".to_owned(),
+            ])
+        );
+    }
+
+    #[test]
+    fn rejects_ambiguous_corpus_selection() {
+        let error = Options::parse(vec![
+            "--corpus".to_owned(),
+            "corpus.toml".to_owned(),
+            "--corpus-limit".to_owned(),
+            "5".to_owned(),
+            "--corpus-ids".to_owned(),
+            "ai_assitant".to_owned(),
+        ])
+        .unwrap_err();
+        assert!(error.contains("choose either --corpus-limit or --corpus-ids"));
+    }
+
+    #[test]
+    fn rejects_unknown_aggregate_mode() {
+        let error = Options::parse(vec![
+            "--file".to_owned(),
+            "fixture.riv".to_owned(),
+            "--aggregate".to_owned(),
+            "fastest-ish".to_owned(),
+        ])
+        .unwrap_err();
+        assert!(error.contains("unknown aggregate mode"));
+    }
+
+    #[test]
     fn rejects_zero_iterations() {
         let error = Options::parse(vec![
             "--file".to_owned(),
@@ -1311,6 +1488,69 @@ status = "exact"
     }
 
     #[test]
+    fn corpus_ids_select_exact_entries_in_requested_order() {
+        let path = env::temp_dir().join(format!(
+            "perf-compare-corpus-ids-{}.toml",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            r#"
+[[file]]
+id = "first"
+path = "tests/unit_tests/assets/first.riv"
+samples = [0.0]
+status = "exact"
+
+[[file]]
+id = "second"
+path = "tests/unit_tests/assets/second.riv"
+samples = [0.5]
+status = "exact"
+
+[[file]]
+id = "parked"
+path = "tests/unit_tests/assets/parked.riv"
+samples = [0.75]
+status = "unsupported-feature"
+"#,
+        )
+        .expect("write corpus");
+
+        let options = Options::parse(vec![
+            "--corpus".to_owned(),
+            path.display().to_string(),
+            "--corpus-ids".to_owned(),
+            "second,first".to_owned(),
+        ])
+        .expect("parse options");
+        let entries = parse_corpus(&path).expect("parse corpus");
+        let targets =
+            corpus_targets(entries, &options, path.parent().unwrap()).expect("corpus targets");
+
+        assert_eq!(
+            targets
+                .iter()
+                .map(|target| target.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["second", "first"]
+        );
+
+        let entries = parse_corpus(&path).expect("parse corpus");
+        let missing = Options::parse(vec![
+            "--corpus".to_owned(),
+            path.display().to_string(),
+            "--corpus-ids".to_owned(),
+            "parked".to_owned(),
+        ])
+        .expect("parse options");
+        let error = corpus_targets(entries, &missing, path.parent().unwrap()).unwrap_err();
+        fs::remove_file(path).ok();
+
+        assert!(error.contains("was not found among exact corpus entries"));
+    }
+
+    #[test]
     fn corpus_benchmark_repeat_rejects_input_script_entries() {
         let path = env::temp_dir().join(format!(
             "perf-compare-repeat-input-corpus-{}.toml",
@@ -1354,6 +1594,20 @@ status = "exact"
         assert_eq!(summary.min, Duration::from_millis(10));
         assert_eq!(summary.median, Duration::from_millis(20));
         assert_eq!(summary.max, Duration::from_millis(30));
+    }
+
+    #[test]
+    fn aggregate_mode_selects_threshold_statistic() {
+        let file = file_result();
+        let median = aggregate_results(std::slice::from_ref(&file), AggregateMode::Median);
+        let min = aggregate_results(std::slice::from_ref(&file), AggregateMode::Min);
+
+        assert_eq!(median.cpp_selected_sum(), Duration::from_millis(8));
+        assert_eq!(median.rust_selected_sum(), Duration::from_millis(10));
+        assert_eq!(median.rust_over_cpp, 1.25);
+        assert_eq!(min.cpp_selected_sum(), Duration::from_millis(6));
+        assert_eq!(min.rust_selected_sum(), Duration::from_millis(9));
+        assert!((min.rust_over_cpp - 1.5).abs() < 1e-12);
     }
 
     #[test]
@@ -1539,7 +1793,7 @@ status = "exact"
     #[test]
     fn renders_valid_json_report_with_phases_and_meta() {
         let file = file_result();
-        let aggregate = aggregate_results(std::slice::from_ref(&file));
+        let aggregate = aggregate_results(std::slice::from_ref(&file), AggregateMode::Median);
         let options = Options::parse(vec![
             "--file".to_owned(),
             "fixture.riv".to_owned(),
@@ -1575,6 +1829,11 @@ status = "exact"
         }
         assert!(report.contains("\"rust_over_cpp_by_phase\":{\"total\":"));
         assert!(report.contains("\"aggregate\":{\"entries\":1,\"segments\":2,"));
+        assert!(report.contains("\"mode\":\"median\""));
+        assert!(report.contains("\"cpp_min_ms_sum\":6.000000"));
+        assert!(report.contains("\"rust_min_ms_sum\":9.000000"));
+        assert!(report.contains("\"cpp_selected_ms_sum\":8.000000"));
+        assert!(report.contains("\"rust_selected_ms_sum\":10.000000"));
         // cpp totals: 6,8,8 -> median 8; rust totals: 9,10,11 -> median 10.
         assert!(report.contains("\"rust_over_cpp\":1.250000"));
         // Zero-duration input phase must not produce NaN.
@@ -1585,7 +1844,7 @@ status = "exact"
     #[test]
     fn deterministic_report_for_identical_inputs() {
         let file = file_result();
-        let aggregate = aggregate_results(std::slice::from_ref(&file));
+        let aggregate = aggregate_results(std::slice::from_ref(&file), AggregateMode::Median);
         let options = Options::parse(vec![
             "--file".to_owned(),
             "fixture.riv".to_owned(),

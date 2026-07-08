@@ -958,6 +958,20 @@ the only memory the next session has. Update it every commit.
    scout's min-based/deliberate perf gate (`--aggregate=min` and image-bearing
    focused corpus) before using focused perf numbers to choose another runtime
    slice.
+   The min-based/deliberate gate tooling is now landed: `perf-compare` accepts
+   `--aggregate median|min`, thresholds the selected statistic, preserves both
+   median and min sums in JSON, and supports `--corpus-ids` so focused perf is
+   not alphabetical truncation. `make perf-hot-loop` defaults to
+   `PERF_AGGREGATE=min` and the deliberate focused corpus
+   `advance_blend_mode,ai_assitant,align_target,animated_clipping,animation_reset_cases,spotify_kids_demo`.
+   Fenced release/null-renderer smoke with `PERF_BENCHMARK_REPEAT=100` reports
+   aggregate min Rust/C++=4.702 over 11 file/sample entries; the newly visible
+   image path dominates (`spotify_kids_demo@0` min Rust/C++=10.263), followed
+   by the known tiny-file fixed overhead outliers. Full `make golden-compare`
+   remains exact=263 / exact-segments=584 / diverges=0; `cargo test
+   --workspace`, `cargo fmt --all -- --check`, and `git diff --check` pass.
+   Next runtime target should be the image draw-retention path first, then
+   tiny-file fixed overhead/draw replay, under the existing scout fences.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -3525,6 +3539,20 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Landed min-based and deliberate focused perf-gate tooling.
+  `perf-compare` now accepts `--aggregate median|min`, applies the selected
+  statistic to per-entry ratios, aggregate ratio, JSON selected sums, and
+  `--max-ratio`, while preserving median/min fields for downstream reports.
+  Corpus mode also accepts ordered `--corpus-ids`; `make perf-hot-loop` now
+  defaults to min aggregation and a named focused corpus including
+  `spotify_kids_demo` so image draw cost is visible. Full
+  `make golden-compare` remains exact=263/exact-segments=584/diverges=0;
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check` pass. Fenced release/null-renderer smoke with
+  `PERF_BENCHMARK_REPEAT=100` reports aggregate min Rust/C++=4.702 over 11
+  entries; `spotify_kids_demo@0` is the dominant focused outlier at min
+  Rust/C++=10.263. Strict <=2.0 remains open; next profile/port image
+  draw-retention before returning to smaller draw-replay/fixed-overhead items.
 - 2026-07-08: [M7] Landed the release build-profile parity slice from the
   scout report: root `[profile.release]` now uses fat LTO, one codegen unit,
   and aborting release panics, matching C++'s full-LTO shipping build more

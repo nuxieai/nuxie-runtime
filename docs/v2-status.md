@@ -187,6 +187,14 @@ the only memory the next session has. Update it every commit.
    Rust/C++=2.321. The next M7 target should stop doing context-chain allocation
    cleanup and port actual C++ data-bind dirt retention: `DataBind::addDirt`,
    `DataBindContainer` dirty queues, and push-driven target-to-source updates.
+   A follow-up scout that added naive `target_dirty` bits directly to
+   artboard property/image bindings was intentionally not landed: it kept
+   focused probes and `make golden-compare` green, but repeat-heavy
+   `ai_assitant` regressed to Rust/C++=10.962 and 15.381, Rust-only
+   repeat=100000 regressed to elapsed=4766.0 / advance=3385.2 ms, and the
+   focused 5-entry ratio moved to Rust/C++=2.614. The next attempt should port
+   the actual C++ container lists and enrollment semantics, not add per-binding
+   dirty booleans around the current scans.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -688,6 +696,21 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Do not land naive artboard binding `target_dirty` bits as
+  the data-bind dirty-queue port. The scout added dirty booleans to
+  source-to-target artboard property/image bindings, marked them when a source
+  path changed, and drained only dirty targets in the existing two apply phases.
+  This preserved correctness while present: focused data-bind cpp-probe tests
+  passed and `make golden-compare` remained exact=263 / exact-segments=584 /
+  diverges=0. It failed the M7 perf fence: direct repeat-heavy
+  `ai_assitant --benchmark-repeat 100` reported Rust/C++=10.962 and 15.381
+  versus the landed borrowed-chain result of 7.210; Rust-only repeat=100000
+  regressed to elapsed=4766.0 ms / advance=3385.2 ms; focused 5-entry
+  hot-loop moved to Rust/C++=2.614. The useful finding is scope: the next
+  data-bind performance slice must port the real C++ `DataBindContainer`
+  dirty/persisting vectors and `DataBind::addDirt` enrollment, not wrap the
+  current broad scans in per-binding target booleans. The scout code was backed
+  out before commit.
 - 2026-07-08: [M7] Borrow nested owned-view-model context chains instead of
   cloning them per host. The previous Rust path represented C++'s
   `DataContext` parent chain as a `Vec<Vec<usize>>` and cloned the whole chain
@@ -1938,6 +1961,13 @@ the only memory the next session has. Update it every commit.
   hot-loop is Rust/C++=2.321, and same-session Rust-only repeat=100000 improves
   from baseline 4235.4/3275.3 ms elapsed/advance to 4109.3/3120.9 ms. Strict
   <=2.0 remains open; next is actual `DataBindContainer` dirty queues.
+- 2026-07-08: [M7] Rejected a naive per-binding `target_dirty` scout for
+  artboard property/image data binds. Correctness stayed green at exact=263 /
+  exact-segments=584 / diverges=0, but repeat-heavy `ai_assitant` regressed to
+  Rust/C++=10.962 and 15.381, Rust-only repeat=100000 regressed to
+  4766.0/3385.2 ms elapsed/advance, and focused hot-loop moved to
+  Rust/C++=2.614. Code backed out; next port the real C++ container dirty
+  vectors/enrollment.
 - 2026-07-08: [M7] Trimmed owned view-model data-bind allocation by avoiding
   an intermediate context-source-path `Vec` and owned-view-model update staging
   vector. `make golden-compare` remains exact=263/exact-segments=584/diverges=0;

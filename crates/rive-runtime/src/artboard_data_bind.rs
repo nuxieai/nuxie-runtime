@@ -106,6 +106,7 @@ fn runtime_data_bind_property_key_for_name(type_name: &str, property_name: &str)
 
 #[derive(Debug, Clone)]
 pub(super) struct RuntimeArtboardPropertyBindingInstance {
+    data_bind_index: usize,
     target_local_id: usize,
     property_key: u16,
     path: Vec<u32>,
@@ -226,8 +227,189 @@ impl RuntimeArtboardDataBindTargetQueues {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+enum RuntimeArtboardDataBindSourceRef {
+    CustomProperty {
+        index: usize,
+        data_bind_index: usize,
+    },
+    NumericSource {
+        index: usize,
+        data_bind_index: usize,
+    },
+}
+
+#[derive(Debug, Clone, Default)]
+pub(super) struct RuntimeArtboardDataBindSourceQueues {
+    by_target_property: BTreeMap<(usize, u16), Vec<RuntimeArtboardDataBindSourceRef>>,
+    dirty_custom_properties: Vec<usize>,
+    dirty_custom_property_flags: Vec<bool>,
+    persisting_custom_properties: Vec<usize>,
+    dirty_numeric_sources: Vec<usize>,
+    dirty_numeric_source_flags: Vec<bool>,
+    persisting_layout_computed: Vec<usize>,
+    persisting_solo_sources: Vec<usize>,
+    persisting_numeric_sources: Vec<usize>,
+}
+
+impl RuntimeArtboardDataBindSourceQueues {
+    pub(super) fn new(
+        custom_property_bindings: &[RuntimeArtboardCustomPropertyBindingInstance],
+        layout_computed_bindings: &[RuntimeArtboardLayoutComputedBindingInstance],
+        numeric_source_bindings: &[RuntimeArtboardNumericSourceBindingInstance],
+        solo_source_bindings: &[RuntimeArtboardSoloSourceBindingInstance],
+    ) -> Self {
+        let mut queues = Self {
+            dirty_custom_property_flags: vec![false; custom_property_bindings.len()],
+            dirty_numeric_source_flags: vec![false; numeric_source_bindings.len()],
+            persisting_layout_computed: (0..layout_computed_bindings.len()).collect(),
+            persisting_solo_sources: (0..solo_source_bindings.len()).collect(),
+            ..Self::default()
+        };
+        for (index, binding) in custom_property_bindings.iter().enumerate() {
+            queues
+                .by_target_property
+                .entry((binding.target_local_id, binding.property_key))
+                .or_default()
+                .push(RuntimeArtboardDataBindSourceRef::CustomProperty {
+                    index,
+                    data_bind_index: binding.data_bind_index,
+                });
+            queues.enqueue_custom_property(index);
+            if binding.converter.is_some() {
+                // C++ data converters dirty their parent DataBind through
+                // converter-owned dependencies. Keep converter-backed
+                // custom source binds on a conservative polling lane until
+                // every converter dirty edge is represented explicitly here.
+                queues.persisting_custom_properties.push(index);
+            }
+        }
+        for (index, binding) in numeric_source_bindings.iter().enumerate() {
+            match binding.property {
+                RuntimeArtboardNumericSourceProperty::DirectDouble => {
+                    queues
+                        .by_target_property
+                        .entry((binding.target_local_id, binding.property_key))
+                        .or_default()
+                        .push(RuntimeArtboardDataBindSourceRef::NumericSource {
+                            index,
+                            data_bind_index: binding.data_bind_index,
+                        });
+                    queues.enqueue_numeric_source(index);
+                }
+                RuntimeArtboardNumericSourceProperty::ShapeLength => {
+                    queues.persisting_numeric_sources.push(index);
+                }
+            }
+        }
+        queues
+    }
+
+    fn enqueue_target_property(
+        &mut self,
+        local_id: usize,
+        property_key: u16,
+        suppressed_data_bind_index: Option<usize>,
+    ) {
+        let Some(sources) = self
+            .by_target_property
+            .get(&(local_id, property_key))
+            .cloned()
+        else {
+            return;
+        };
+        for source in sources {
+            match source {
+                RuntimeArtboardDataBindSourceRef::CustomProperty {
+                    index,
+                    data_bind_index,
+                } => {
+                    if Some(data_bind_index) == suppressed_data_bind_index {
+                        continue;
+                    }
+                    self.enqueue_custom_property(index);
+                }
+                RuntimeArtboardDataBindSourceRef::NumericSource {
+                    index,
+                    data_bind_index,
+                } => {
+                    if Some(data_bind_index) == suppressed_data_bind_index {
+                        continue;
+                    }
+                    self.enqueue_numeric_source(index);
+                }
+            }
+        }
+    }
+
+    fn enqueue_custom_property(&mut self, index: usize) {
+        let Some(flag) = self.dirty_custom_property_flags.get_mut(index) else {
+            return;
+        };
+        if *flag {
+            return;
+        }
+        *flag = true;
+        self.dirty_custom_properties.push(index);
+    }
+
+    fn enqueue_numeric_source(&mut self, index: usize) {
+        let Some(flag) = self.dirty_numeric_source_flags.get_mut(index) else {
+            return;
+        };
+        if *flag {
+            return;
+        }
+        *flag = true;
+        self.dirty_numeric_sources.push(index);
+    }
+
+    fn drain_dirty_custom_properties(&mut self) -> Vec<usize> {
+        let dirty = std::mem::take(&mut self.dirty_custom_properties);
+        for index in &dirty {
+            if let Some(flag) = self.dirty_custom_property_flags.get_mut(*index) {
+                *flag = false;
+            }
+        }
+        dirty
+    }
+
+    fn drain_custom_property_update_indices(&mut self) -> Vec<usize> {
+        let mut indices = self.drain_dirty_custom_properties();
+        for index in &self.persisting_custom_properties {
+            if !indices.contains(index) {
+                indices.push(*index);
+            }
+        }
+        indices
+    }
+
+    fn drain_dirty_numeric_sources(&mut self) -> Vec<usize> {
+        let dirty = std::mem::take(&mut self.dirty_numeric_sources);
+        for index in &dirty {
+            if let Some(flag) = self.dirty_numeric_source_flags.get_mut(*index) {
+                *flag = false;
+            }
+        }
+        dirty
+    }
+
+    fn persisting_layout_computed(&self) -> &[usize] {
+        &self.persisting_layout_computed
+    }
+
+    fn persisting_solo_sources(&self) -> &[usize] {
+        &self.persisting_solo_sources
+    }
+
+    fn persisting_numeric_sources(&self) -> &[usize] {
+        &self.persisting_numeric_sources
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(super) struct RuntimeArtboardCustomPropertyBindingInstance {
+    data_bind_index: usize,
     target_local_id: usize,
     property_key: u16,
     path: Vec<u32>,
@@ -248,6 +430,7 @@ pub(super) struct RuntimeArtboardLayoutComputedBindingInstance {
 
 #[derive(Debug, Clone)]
 pub(super) struct RuntimeArtboardNumericSourceBindingInstance {
+    data_bind_index: usize,
     target_local_id: usize,
     property_key: u16,
     property: RuntimeArtboardNumericSourceProperty,
@@ -567,7 +750,8 @@ pub(super) fn build_artboard_property_bindings(
 
     file.artboard_data_binds(artboard_index)
         .into_iter()
-        .filter_map(|data_bind| {
+        .enumerate()
+        .filter_map(|(data_bind_index, data_bind)| {
             if !data_bind_flags_apply_source_to_target(
                 data_bind.object.uint_property("flags").unwrap_or(0),
             ) {
@@ -648,6 +832,7 @@ pub(super) fn build_artboard_property_bindings(
             }
 
             Some(RuntimeArtboardPropertyBindingInstance {
+                data_bind_index,
                 target_local_id,
                 property_key,
                 path: path.to_vec(),
@@ -901,7 +1086,8 @@ pub(super) fn build_artboard_custom_property_bindings(
 
     file.artboard_data_binds(artboard_index)
         .into_iter()
-        .filter_map(|data_bind| {
+        .enumerate()
+        .filter_map(|(data_bind_index, data_bind)| {
             let flags = data_bind.object.uint_property("flags").unwrap_or(0);
             if !data_bind_flags_apply_target_to_source(flags) {
                 return None;
@@ -986,6 +1172,7 @@ pub(super) fn build_artboard_custom_property_bindings(
                 })
                 .unwrap_or_else(|| runtime_artboard_data_bind_default_value_for_kind(value_kind));
             Some(RuntimeArtboardCustomPropertyBindingInstance {
+                data_bind_index,
                 target_local_id,
                 property_key,
                 path,
@@ -1017,7 +1204,8 @@ pub(super) fn build_artboard_numeric_source_bindings(
 
     file.artboard_data_binds(artboard_index)
         .into_iter()
-        .filter_map(|data_bind| {
+        .enumerate()
+        .filter_map(|(data_bind_index, data_bind)| {
             if !data_bind_flags_apply_target_to_source(
                 data_bind.object.uint_property("flags").unwrap_or(0),
             ) {
@@ -1039,6 +1227,7 @@ pub(super) fn build_artboard_numeric_source_bindings(
                 _ => return None,
             };
             Some(RuntimeArtboardNumericSourceBindingInstance {
+                data_bind_index,
                 target_local_id: data_bind.target_local_id?,
                 property_key,
                 property,
@@ -1435,6 +1624,19 @@ impl ArtboardInstance {
             .enqueue_property(index);
     }
 
+    pub(crate) fn notify_artboard_data_bind_target_property_changed(
+        &mut self,
+        local_id: usize,
+        property_key: u16,
+    ) {
+        self.artboard_data_bind_source_queues
+            .enqueue_target_property(
+                local_id,
+                property_key,
+                self.artboard_data_bind_suppressed_target_data_bind,
+            );
+    }
+
     pub(crate) fn update_nested_artboard_data_binds_from_hosts(&mut self) -> bool {
         let mut changed = false;
         for source in self.collect_nested_artboard_context_source_values(Mat2D::IDENTITY) {
@@ -1826,7 +2028,10 @@ impl ArtboardInstance {
         elapsed_seconds: f32,
     ) -> bool {
         let mut changed = false;
-        for index in 0..self.artboard_custom_property_bindings.len() {
+        for index in self
+            .artboard_data_bind_source_queues
+            .drain_custom_property_update_indices()
+        {
             changed |= self.update_artboard_custom_property_binding(index);
         }
         changed |= self.update_artboard_layout_computed_bindings(root_transform);
@@ -1836,6 +2041,7 @@ impl ArtboardInstance {
         changed |= self.apply_artboard_property_bindings();
         changed |= self.apply_artboard_image_asset_bindings();
         changed |= self.advance_artboard_property_binding_converters(elapsed_seconds);
+        changed |= self.advance_artboard_custom_property_binding_converters(elapsed_seconds);
         changed |= self.apply_artboard_property_bindings();
         changed |= self.apply_artboard_image_asset_bindings();
         for binding in &mut self.artboard_list_bindings {
@@ -1862,8 +2068,18 @@ impl ArtboardInstance {
 
     fn update_artboard_numeric_source_bindings(&mut self) -> bool {
         let mut changed = false;
-        for index in 0..self.artboard_numeric_source_bindings.len() {
-            let binding = &self.artboard_numeric_source_bindings[index];
+        let mut indices = self
+            .artboard_data_bind_source_queues
+            .persisting_numeric_sources()
+            .to_vec();
+        indices.extend(
+            self.artboard_data_bind_source_queues
+                .drain_dirty_numeric_sources(),
+        );
+        for index in indices {
+            let Some(binding) = self.artboard_numeric_source_bindings.get(index) else {
+                continue;
+            };
             let value = self.artboard_numeric_source_binding_value(
                 binding.target_local_id,
                 binding.property_key,
@@ -1956,12 +2172,22 @@ impl ArtboardInstance {
                 changed = true;
             }
         }
-        for binding in &mut self.artboard_custom_property_bindings {
-            let Some(converter) = binding.converter.as_mut() else {
-                continue;
+        for index in 0..self.artboard_custom_property_bindings.len() {
+            let binding_changed = {
+                let binding = &mut self.artboard_custom_property_bindings[index];
+                let Some(converter) = binding.converter.as_mut() else {
+                    continue;
+                };
+                if converter.set_formula_token_value(token_id, value) {
+                    binding.converter_state.reset_formula_randoms();
+                    true
+                } else {
+                    false
+                }
             };
-            if converter.set_formula_token_value(token_id, value) {
-                binding.converter_state.reset_formula_randoms();
+            if binding_changed {
+                self.artboard_data_bind_source_queues
+                    .enqueue_custom_property(index);
                 changed = true;
             }
         }
@@ -1988,12 +2214,22 @@ impl ArtboardInstance {
                 changed = true;
             }
         }
-        for binding in &mut self.artboard_custom_property_bindings {
-            let Some(converter) = binding.converter.as_mut() else {
-                continue;
+        for index in 0..self.artboard_custom_property_bindings.len() {
+            let binding_changed = {
+                let binding = &mut self.artboard_custom_property_bindings[index];
+                let Some(converter) = binding.converter.as_mut() else {
+                    continue;
+                };
+                if converter.set_operation_value(target_global_id, value) {
+                    binding.converter_state.reset_formula_randoms();
+                    true
+                } else {
+                    false
+                }
             };
-            if converter.set_operation_value(target_global_id, value) {
-                binding.converter_state.reset_formula_randoms();
+            if binding_changed {
+                self.artboard_data_bind_source_queues
+                    .enqueue_custom_property(index);
                 changed = true;
             }
         }
@@ -2020,8 +2256,14 @@ impl ArtboardInstance {
 
     fn update_artboard_layout_computed_bindings(&mut self, root_transform: Mat2D) -> bool {
         let mut changed = false;
-        for index in 0..self.artboard_layout_computed_bindings.len() {
-            let binding = &self.artboard_layout_computed_bindings[index];
+        let indices = self
+            .artboard_data_bind_source_queues
+            .persisting_layout_computed()
+            .to_vec();
+        for index in indices {
+            let Some(binding) = self.artboard_layout_computed_bindings.get(index) else {
+                continue;
+            };
             let value = self.runtime_graph().and_then(|graph| {
                 self.artboard_layout_computed_binding_value(
                     binding.target_local_id,
@@ -2074,13 +2316,16 @@ impl ArtboardInstance {
             .artboard_data_bind_target_queues
             .drain_dirty_properties()
         {
-            let Some((target_local_id, property_key, value)) =
+            let Some((data_bind_index, target_local_id, property_key, value)) =
                 self.converted_artboard_property_binding_value(index)
             else {
                 continue;
             };
+            let previous_suppression = self.artboard_data_bind_suppressed_target_data_bind;
+            self.artboard_data_bind_suppressed_target_data_bind = Some(data_bind_index);
             changed |=
                 self.apply_artboard_property_binding_value(target_local_id, property_key, &value);
+            self.artboard_data_bind_suppressed_target_data_bind = previous_suppression;
         }
         changed
     }
@@ -2131,7 +2376,7 @@ impl ArtboardInstance {
     fn converted_artboard_property_binding_value(
         &mut self,
         index: usize,
-    ) -> Option<(usize, u16, RuntimeDataBindGraphValue)> {
+    ) -> Option<(usize, usize, u16, RuntimeDataBindGraphValue)> {
         let binding = self.artboard_property_bindings.get_mut(index)?;
         let value = self.artboard_data_bind_values.get(&binding.path).cloned()?;
         let converted = match binding.converter.as_ref() {
@@ -2157,7 +2402,12 @@ impl ArtboardInstance {
             ),
             None => Some(value),
         }?;
-        Some((binding.target_local_id, binding.property_key, converted))
+        Some((
+            binding.data_bind_index,
+            binding.target_local_id,
+            binding.property_key,
+            converted,
+        ))
     }
 
     fn reset_artboard_property_formula_random_state_for_path(&mut self, path: &[u32]) {
@@ -2190,10 +2440,37 @@ impl ArtboardInstance {
         changed
     }
 
+    fn advance_artboard_custom_property_binding_converters(
+        &mut self,
+        elapsed_seconds: f32,
+    ) -> bool {
+        let mut changed = false;
+        for index in 0..self.artboard_custom_property_bindings.len() {
+            let advance = {
+                let binding = &mut self.artboard_custom_property_bindings[index];
+                binding
+                    .converter_state
+                    .advance_converter(binding.converter.as_ref(), elapsed_seconds)
+            };
+            if advance.changed {
+                self.artboard_data_bind_source_queues
+                    .enqueue_custom_property(index);
+                changed = true;
+            }
+        }
+        changed
+    }
+
     fn update_artboard_solo_source_bindings(&mut self) -> bool {
         let mut changed = false;
-        for index in 0..self.artboard_solo_source_bindings.len() {
-            let binding = &self.artboard_solo_source_bindings[index];
+        let indices = self
+            .artboard_data_bind_source_queues
+            .persisting_solo_sources()
+            .to_vec();
+        for index in indices {
+            let Some(binding) = self.artboard_solo_source_bindings.get(index) else {
+                continue;
+            };
             let Some(value) = self.artboard_solo_source_binding_value(
                 binding.target_local_id,
                 &binding.enum_value_names,
@@ -2635,5 +2912,92 @@ impl ArtboardInstance {
             .iter()
             .find(|binding| binding.data_bind_index == data_bind_index)
             .map(|binding| binding.should_reset_instances)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn custom_binding(
+        data_bind_index: usize,
+        target_local_id: usize,
+        property_key: u16,
+        has_converter: bool,
+    ) -> RuntimeArtboardCustomPropertyBindingInstance {
+        RuntimeArtboardCustomPropertyBindingInstance {
+            data_bind_index,
+            target_local_id,
+            property_key,
+            path: vec![1],
+            path_is_name_based: false,
+            flags: 0,
+            value_kind: RuntimeArtboardDataBindValueKind::Number,
+            converter: has_converter.then_some(RuntimeDataBindGraphConverter::PassThrough),
+            converter_state: RuntimeDataBindGraphConverterState::None,
+            default_value: RuntimeDataBindGraphValue::Number(0.0),
+        }
+    }
+
+    fn numeric_binding(
+        data_bind_index: usize,
+        target_local_id: usize,
+        property_key: u16,
+        property: RuntimeArtboardNumericSourceProperty,
+    ) -> RuntimeArtboardNumericSourceBindingInstance {
+        RuntimeArtboardNumericSourceBindingInstance {
+            data_bind_index,
+            target_local_id,
+            property_key,
+            property,
+            path: vec![2],
+        }
+    }
+
+    #[test]
+    fn source_queues_split_push_targets_from_persisting_targets() {
+        let custom_bindings = vec![
+            custom_binding(0, 7, 11, false),
+            custom_binding(1, 8, 12, true),
+        ];
+        let layout_bindings = vec![RuntimeArtboardLayoutComputedBindingInstance {
+            target_local_id: 9,
+            property: RuntimeLayoutComputedProperty::WorldX,
+            path: vec![3],
+        }];
+        let numeric_bindings = vec![
+            numeric_binding(2, 7, 11, RuntimeArtboardNumericSourceProperty::DirectDouble),
+            numeric_binding(3, 10, 13, RuntimeArtboardNumericSourceProperty::ShapeLength),
+        ];
+        let solo_bindings = vec![RuntimeArtboardSoloSourceBindingInstance {
+            target_local_id: 14,
+            path: vec![4],
+            enum_value_names: vec![b"first".to_vec()],
+        }];
+        let mut queues = RuntimeArtboardDataBindSourceQueues::new(
+            &custom_bindings,
+            &layout_bindings,
+            &numeric_bindings,
+            &solo_bindings,
+        );
+
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![0, 1]);
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![1]);
+        assert_eq!(queues.drain_dirty_numeric_sources(), vec![0]);
+        assert_eq!(queues.persisting_layout_computed(), &[0]);
+        assert_eq!(queues.persisting_solo_sources(), &[0]);
+        assert_eq!(queues.persisting_numeric_sources(), &[1]);
+
+        queues.enqueue_target_property(7, 11, None);
+        queues.enqueue_target_property(7, 11, None);
+        queues.enqueue_target_property(99, 99, None);
+
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![0, 1]);
+        assert_eq!(queues.drain_dirty_numeric_sources(), vec![0]);
+
+        queues.enqueue_target_property(7, 11, Some(0));
+
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![1]);
+        assert_eq!(queues.drain_dirty_numeric_sources(), vec![0]);
     }
 }

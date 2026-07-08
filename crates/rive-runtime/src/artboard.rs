@@ -11,18 +11,18 @@ use crate::animation::{
     build_linear_animations, build_runtime_joysticks,
 };
 use crate::artboard_data_bind::{
-    RuntimeArtboardCustomPropertyBindingInstance, RuntimeArtboardDataBindTargetQueues,
-    RuntimeArtboardFormulaTokenBindingInstance, RuntimeArtboardImageAssetBindingInstance,
-    RuntimeArtboardLayoutComputedBindingInstance, RuntimeArtboardListBindingInstance,
-    RuntimeArtboardNestedHostBindingInstance, RuntimeArtboardNumericSourceBindingInstance,
-    RuntimeArtboardPropertyBindingInstance, RuntimeArtboardSoloBindingInstance,
-    RuntimeArtboardSoloSourceBindingInstance, apply_artboard_name_based_color_data_bind_defaults,
-    build_artboard_custom_property_bindings, build_artboard_default_view_model_values,
-    build_artboard_formula_token_bindings, build_artboard_image_asset_bindings,
-    build_artboard_layout_computed_bindings, build_artboard_list_bindings,
-    build_artboard_nested_host_bindings, build_artboard_numeric_source_bindings,
-    build_artboard_property_bindings, build_artboard_solo_bindings,
-    build_artboard_solo_source_bindings,
+    RuntimeArtboardCustomPropertyBindingInstance, RuntimeArtboardDataBindSourceQueues,
+    RuntimeArtboardDataBindTargetQueues, RuntimeArtboardFormulaTokenBindingInstance,
+    RuntimeArtboardImageAssetBindingInstance, RuntimeArtboardLayoutComputedBindingInstance,
+    RuntimeArtboardListBindingInstance, RuntimeArtboardNestedHostBindingInstance,
+    RuntimeArtboardNumericSourceBindingInstance, RuntimeArtboardPropertyBindingInstance,
+    RuntimeArtboardSoloBindingInstance, RuntimeArtboardSoloSourceBindingInstance,
+    apply_artboard_name_based_color_data_bind_defaults, build_artboard_custom_property_bindings,
+    build_artboard_default_view_model_values, build_artboard_formula_token_bindings,
+    build_artboard_image_asset_bindings, build_artboard_layout_computed_bindings,
+    build_artboard_list_bindings, build_artboard_nested_host_bindings,
+    build_artboard_numeric_source_bindings, build_artboard_property_bindings,
+    build_artboard_solo_bindings, build_artboard_solo_source_bindings,
 };
 use crate::components::{
     AuthoredTransform, ComponentDirt, Mat2D, RuntimeComponent, RuntimeSolo, TransformProperty,
@@ -79,6 +79,8 @@ pub struct ArtboardInstance {
     pub(crate) artboard_property_bindings: Vec<RuntimeArtboardPropertyBindingInstance>,
     pub(crate) artboard_image_asset_bindings: Vec<RuntimeArtboardImageAssetBindingInstance>,
     pub(crate) artboard_data_bind_target_queues: RuntimeArtboardDataBindTargetQueues,
+    pub(crate) artboard_data_bind_source_queues: RuntimeArtboardDataBindSourceQueues,
+    pub(crate) artboard_data_bind_suppressed_target_data_bind: Option<usize>,
     pub(crate) artboard_custom_property_bindings: Vec<RuntimeArtboardCustomPropertyBindingInstance>,
     pub(crate) artboard_layout_computed_bindings: Vec<RuntimeArtboardLayoutComputedBindingInstance>,
     pub(crate) artboard_numeric_source_bindings: Vec<RuntimeArtboardNumericSourceBindingInstance>,
@@ -251,6 +253,12 @@ impl ArtboardInstance {
         let artboard_solo_source_bindings = build_artboard_solo_source_bindings(file, graph);
         let artboard_nested_host_bindings = build_artboard_nested_host_bindings(file, graph);
         let artboard_list_bindings = build_artboard_list_bindings(file, graph);
+        let artboard_data_bind_source_queues = RuntimeArtboardDataBindSourceQueues::new(
+            &artboard_custom_property_bindings,
+            &artboard_layout_computed_bindings,
+            &artboard_numeric_source_bindings,
+            &artboard_solo_source_bindings,
+        );
         apply_initial_solo_collapses(&objects, &solos, &mut components, &component_by_local);
         let nested_artboards = if inserted {
             build_runtime_nested_artboard_instances(
@@ -298,6 +306,8 @@ impl ArtboardInstance {
             artboard_property_bindings,
             artboard_image_asset_bindings,
             artboard_data_bind_target_queues,
+            artboard_data_bind_source_queues,
+            artboard_data_bind_suppressed_target_data_bind: None,
             artboard_custom_property_bindings,
             artboard_layout_computed_bindings,
             artboard_numeric_source_bindings,
@@ -421,6 +431,7 @@ impl ArtboardInstance {
         {
             return false;
         }
+        self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         self.mark_changed();
         self.apply_color_property_changed(local_id, property_key);
         true
@@ -442,6 +453,7 @@ impl ArtboardInstance {
         {
             return false;
         }
+        self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         self.mark_changed();
         self.mark_layout_changed_for_property(local_id, property_key);
         if property_affects_effect_path_epoch(
@@ -498,6 +510,7 @@ impl ArtboardInstance {
         {
             return false;
         }
+        self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         self.mark_changed();
         self.mark_layout_changed_for_property(local_id, property_key);
         if property_affects_effect_path_epoch(
@@ -522,6 +535,7 @@ impl ArtboardInstance {
         {
             return false;
         }
+        self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         self.mark_changed();
         self.mark_layout_changed_for_property(local_id, property_key);
         if property_affects_effect_path_epoch(
@@ -550,6 +564,7 @@ impl ArtboardInstance {
         {
             return false;
         }
+        self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         self.mark_changed();
         self.mark_layout_changed_for_property(local_id, property_key);
         self.apply_string_property_changed(local_id, property_key);
@@ -2465,6 +2480,8 @@ mod tests {
             artboard_property_bindings: Vec::new(),
             artboard_image_asset_bindings: Vec::new(),
             artboard_data_bind_target_queues: RuntimeArtboardDataBindTargetQueues::default(),
+            artboard_data_bind_source_queues: RuntimeArtboardDataBindSourceQueues::default(),
+            artboard_data_bind_suppressed_target_data_bind: None,
             artboard_custom_property_bindings: Vec::new(),
             artboard_layout_computed_bindings: Vec::new(),
             artboard_numeric_source_bindings: Vec::new(),

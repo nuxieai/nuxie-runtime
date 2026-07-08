@@ -209,10 +209,20 @@ the only memory the next session has. Update it every commit.
    elapsed=2480.2 / advance=1859.1 ms and focused hot-loop aggregate
    Rust/C++=2.371 / 2.599. Direct `ai_assitant --benchmark-repeat 100`
    reports cpp median=0.666 ms, rust median=4.851 ms, Rust/C++=7.279.
-   Strict <=2.0 remains open. Next: complete the C++ data-bind container port
-   by adding to-source dirty/persisting queue semantics and push-style target
-   enrollment for generated setters, leaving computed targets on the polling
-   fallback like C++ `targetSupportsPush()`.
+   Artboard target-to-source binds now have container-owned source queues:
+   generated property setters enroll push-capable custom-property and direct
+   numeric source binds, source-to-target applies suppress self-notification by
+   data-bind index like C++ `DataBind::suppressDirt`, computed layout/solo/shape
+   sources stay on polling fallback, and converter-backed custom sources stay
+   on a conservative persisting lane until every converter dirty edge is modeled
+   explicitly. Full `make golden-compare` remains exact=263 /
+   exact-segments=584 / diverges=0, and `cargo test --workspace` passes.
+   Focused release/null-renderer hot-loop runs report aggregate Rust/C++=2.784
+   and 2.500; direct repeat-heavy `ai_assitant --benchmark-repeat 100` reports
+   cpp median=0.569 ms, rust median=4.019 ms, Rust/C++=7.060. Strict <=2.0
+   remains open. Next: profile remaining advance/data-bind time, then replace
+   the converter-backed custom persisting fallback with explicit C++
+   converter-parent dirty edges before widening this queue pattern further.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -714,6 +724,25 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Land artboard target-to-source dirty/persisting source
+  queues. `ArtboardInstance` now owns a C++-shaped source queue for
+  target-to-source artboard binds: push-capable custom-property and direct
+  numeric targets are indexed by `(target local, property key)`, generated
+  setters enqueue those sources, source-to-target property applies suppress
+  only the currently writing data-bind index, and layout-computed, solo
+  `activeComponentId`, and shape-length sources remain on polling fallback
+  like C++ `targetSupportsPush()`. Converter-backed custom-property sources
+  remain on a conservative persisting lane because C++ converters dirty their
+  parent `DataBind` through converter-owned dependencies, and Rust still needs
+  explicit coverage for every converter dirty edge. `make golden-compare`
+  remains exact=263 / exact-segments=584 / diverges=0, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, and `git diff --check` pass.
+  Fenced release/null-renderer focused hot-loop runs report aggregate
+  Rust/C++=2.784 and 2.500; direct repeat-heavy `ai_assitant
+  --benchmark-repeat 100` reports cpp median=0.569 ms, rust median=4.019 ms,
+  Rust/C++=7.060. M7 remains open; next remove the conservative converter
+  persisting fallback by porting explicit C++ converter-parent dirty
+  enrollment, then re-profile before widening the data-bind queue pattern.
 - 2026-07-08: [M7] Land path-indexed artboard source-to-target dirty queues
   as the first C++ `DataBindContainer` queue slice. Unlike the rejected
   per-binding `target_dirty` scout, this slice does not scan all bindings when

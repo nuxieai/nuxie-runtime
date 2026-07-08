@@ -240,13 +240,25 @@ the only memory the next session has. Update it every commit.
    `ListToLength`, `StringRemoveZeros`, `Formula`, and groups containing only
    push-safe children leave the conservative polling lane. Families with
    unmodeled converter-owned dirt edges remain persisting: `NumberToList`,
-   `ToString`, operation/system operation, `Rounder`, `RangeMapper`,
+   `ToString`, operation-view-model/system operation, `Rounder`, `RangeMapper`,
    `StringTrim`, `StringPad`, `Interpolator`, and unsupported converters.
    Full `make golden-compare` remains exact=263 / exact-segments=584 /
    diverges=0, `cargo test --workspace` passes, and fenced hot-loop improves
    the current focused aggregate to Rust/C++=2.409. Strict <=2.0 remains open.
    Next: port concrete C++ converter-property dirty setters family-by-family,
    then shrink this predicate again.
+   `DataConverterOperationValue.operationValueChanged()` is now the next
+   landed concrete family: artboard `OperationValue` converters leave the
+   persisting lane because Rust already updates them through
+   `set_artboard_operation_value`, resets formula randoms, and enqueues
+   dependent property/custom parents. System-operation subclasses remain
+   conservative because their bind-target path is not modeled by that exact
+   updater. Full `make golden-compare` remains exact=263 /
+   exact-segments=584 / diverges=0, `cargo test --workspace` passes, and
+   fenced hot-loop improves the focused aggregate to Rust/C++=2.201. Strict
+   <=2.0 remains open. Next: port one of the remaining multi-property
+   converter families, preferably `ToString` or `StringTrim`, without using
+   broad DataBindContext converter-property writes.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -748,6 +760,20 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Remove plain `DataConverterOperationValue` custom sources
+  from the conservative polling lane. The C++ family has a single dirty
+  callback, `operationValueChanged()`, which calls
+  `DataConverter::markConverterDirty`; Rust's artboard data-bind path already
+  models that callback through `set_artboard_operation_value`, updating
+  dependent `OperationValue` converters and enqueuing their property/custom
+  parents. The queue predicate now treats only plain `OperationValue` as
+  push-safe; `SystemOperationValue` subclasses stay persisting until their
+  inherited `operationValue` bind-target path is modeled directly. `make
+  golden-compare` remains exact=263 / exact-segments=584 / diverges=0; `cargo
+  test --workspace`, `cargo fmt --all -- --check`, and `git diff --check`
+  pass. Fenced release/null-renderer hot-loop reports aggregate Rust/C++=2.201
+  over the 5-entry / 10-segment focused corpus, improved from the previous
+  2.409 but still above strict <=2.0, so M7 remains open.
 - 2026-07-08: [M7] Narrow converter-backed custom-property polling to
   converter families with unmodeled C++ dirty edges. The status review keeps
   the scout/perf fences in force: release/null-renderer hot loops are the

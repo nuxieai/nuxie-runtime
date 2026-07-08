@@ -298,13 +298,13 @@ pub(crate) fn runtime_data_bind_graph_converter_requires_persisting_custom_prope
         | RuntimeDataBindGraphConverter::ToNumber
         | RuntimeDataBindGraphConverter::ListToLength
         | RuntimeDataBindGraphConverter::StringRemoveZeros
+        | RuntimeDataBindGraphConverter::OperationValue { .. }
         | RuntimeDataBindGraphConverter::Formula { .. } => false,
         RuntimeDataBindGraphConverter::Group(converters) => converters
             .iter()
             .any(runtime_data_bind_graph_converter_requires_persisting_custom_property_source),
         RuntimeDataBindGraphConverter::NumberToList { .. }
         | RuntimeDataBindGraphConverter::ToString { .. }
-        | RuntimeDataBindGraphConverter::OperationValue { .. }
         | RuntimeDataBindGraphConverter::OperationViewModel { .. }
         | RuntimeDataBindGraphConverter::SystemOperationValue { .. }
         | RuntimeDataBindGraphConverter::Rounder { .. }

@@ -3028,6 +3028,16 @@ mod tests {
             custom_binding(0, 7, 11, None),
             custom_binding(1, 8, 12, Some(RuntimeDataBindGraphConverter::PassThrough)),
             custom_binding(
+                2,
+                17,
+                18,
+                Some(RuntimeDataBindGraphConverter::OperationValue {
+                    global_id: 900,
+                    operation_type: 2,
+                    operation_value: 2.0,
+                }),
+            ),
+            custom_binding(
                 4,
                 15,
                 16,
@@ -3063,8 +3073,11 @@ mod tests {
             &solo_bindings,
         );
 
-        assert_eq!(queues.drain_custom_property_update_indices(), vec![0, 1, 2]);
-        assert_eq!(queues.drain_custom_property_update_indices(), vec![2]);
+        assert_eq!(
+            queues.drain_custom_property_update_indices(),
+            vec![0, 1, 2, 3]
+        );
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![3]);
         assert_eq!(queues.drain_dirty_numeric_sources(), vec![0]);
         assert_eq!(queues.persisting_layout_computed(), &[0]);
         assert_eq!(queues.persisting_solo_sources(), &[0]);
@@ -3074,12 +3087,22 @@ mod tests {
         queues.enqueue_target_property(7, 11, None);
         queues.enqueue_target_property(99, 99, None);
 
-        assert_eq!(queues.drain_custom_property_update_indices(), vec![0, 2]);
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![0, 3]);
         assert_eq!(queues.drain_dirty_numeric_sources(), vec![0]);
 
         queues.enqueue_target_property(7, 11, Some(0));
 
-        assert_eq!(queues.drain_custom_property_update_indices(), vec![2]);
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![3]);
         assert_eq!(queues.drain_dirty_numeric_sources(), vec![0]);
+
+        queues.enqueue_target_property(17, 18, None);
+
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![2, 3]);
+        assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
+
+        queues.enqueue_target_property(17, 18, Some(2));
+
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![3]);
+        assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
     }
 }

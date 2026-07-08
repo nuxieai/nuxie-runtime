@@ -186,6 +186,7 @@ pub(crate) enum RuntimeDataBindGraphConverter {
         source_path: Option<Vec<u32>>,
     },
     SystemOperationValue {
+        global_id: u32,
         operation_type: u64,
         operation_value: f32,
         reverse: bool,
@@ -275,6 +276,14 @@ impl RuntimeDataBindGraphConverter {
     pub(crate) fn set_operation_value(&mut self, target_global_id: u32, value: f32) -> bool {
         match self {
             RuntimeDataBindGraphConverter::OperationValue {
+                global_id,
+                operation_value,
+                ..
+            } if *global_id == target_global_id && *operation_value != value => {
+                *operation_value = value;
+                true
+            }
+            RuntimeDataBindGraphConverter::SystemOperationValue {
                 global_id,
                 operation_value,
                 ..
@@ -482,13 +491,13 @@ pub(crate) fn runtime_data_bind_graph_converter_requires_persisting_custom_prope
         | RuntimeDataBindGraphConverter::Interpolator { .. }
         | RuntimeDataBindGraphConverter::OperationValue { .. }
         | RuntimeDataBindGraphConverter::NumberToList { .. }
+        | RuntimeDataBindGraphConverter::OperationViewModel { .. }
+        | RuntimeDataBindGraphConverter::SystemOperationValue { .. }
         | RuntimeDataBindGraphConverter::Formula { .. } => false,
         RuntimeDataBindGraphConverter::Group(converters) => converters
             .iter()
             .any(runtime_data_bind_graph_converter_requires_persisting_custom_property_source),
-        RuntimeDataBindGraphConverter::OperationViewModel { .. }
-        | RuntimeDataBindGraphConverter::SystemOperationValue { .. }
-        | RuntimeDataBindGraphConverter::RangeMapper { .. }
+        RuntimeDataBindGraphConverter::RangeMapper { .. }
         | RuntimeDataBindGraphConverter::Unsupported => true,
     }
 }
@@ -1426,6 +1435,7 @@ pub(crate) fn runtime_data_bind_graph_convert_value(
                 operation_type,
                 operation_value,
                 reverse,
+                ..
             },
             RuntimeDataBindGraphValue::Number(value),
         ) => Some(RuntimeDataBindGraphValue::Number(if *reverse {
@@ -1652,6 +1662,7 @@ pub(crate) fn runtime_data_bind_graph_reverse_convert_value(
                 operation_type,
                 operation_value,
                 reverse,
+                ..
             },
             RuntimeDataBindGraphValue::Number(value),
         ) => Some(RuntimeDataBindGraphValue::Number(if *reverse {
@@ -2075,6 +2086,7 @@ fn runtime_data_bind_graph_system_operation_value_converter(
         let to_target = flags & 0b10 != 0 || flags & 0b1 == 0;
         if to_target {
             RuntimeDataBindGraphConverter::SystemOperationValue {
+                global_id: converter.id,
                 operation_type: converter.uint_property("operationType").unwrap_or(0),
                 operation_value: converter.double_property("operationValue").unwrap_or(1.0),
                 reverse: flags & 0b1 != 0,

@@ -1350,6 +1350,8 @@ pub(super) fn build_artboard_formula_token_bindings(
                     }
                 }
                 "DataConverterOperationValue"
+                | "DataConverterSystemDegsToRads"
+                | "DataConverterSystemNormalizer"
                     if Some(property_key) == converter_operation_value_key =>
                 {
                     RuntimeArtboardFormulaBindingTarget::OperationValue {
@@ -3654,6 +3656,28 @@ mod tests {
                     view_model_count: 1,
                 }),
             ),
+            custom_binding(
+                10,
+                31,
+                32,
+                Some(RuntimeDataBindGraphConverter::OperationViewModel {
+                    operation_type: 2,
+                    operation_value: 3.0,
+                    default_operation_value: 3.0,
+                    source_path: Some(vec![1]),
+                }),
+            ),
+            custom_binding(
+                11,
+                33,
+                34,
+                Some(RuntimeDataBindGraphConverter::SystemOperationValue {
+                    global_id: 906,
+                    operation_type: 2,
+                    operation_value: 2.0,
+                    reverse: false,
+                }),
+            ),
         ];
         let layout_bindings = vec![RuntimeArtboardLayoutComputedBindingInstance {
             target_local_id: 9,
@@ -3678,7 +3702,7 @@ mod tests {
 
         assert_eq!(
             queues.drain_custom_property_update_indices(),
-            vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+            vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
         );
         assert_eq!(queues.drain_custom_property_update_indices(), vec![7]);
         assert_eq!(queues.drain_dirty_numeric_sources(), vec![0]);
@@ -3764,6 +3788,26 @@ mod tests {
         assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
 
         queues.enqueue_target_property(29, 30, Some(9));
+
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![7]);
+        assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
+
+        queues.enqueue_target_property(31, 32, None);
+
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![10, 7]);
+        assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
+
+        queues.enqueue_target_property(31, 32, Some(10));
+
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![7]);
+        assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
+
+        queues.enqueue_target_property(33, 34, None);
+
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![11, 7]);
+        assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
+
+        queues.enqueue_target_property(33, 34, Some(11));
 
         assert_eq!(queues.drain_custom_property_update_indices(), vec![7]);
         assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());

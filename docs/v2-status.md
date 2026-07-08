@@ -345,14 +345,24 @@ the only memory the next session has. Update it every commit.
    initial application, update dependent copied converters by global id, and
    enqueue their concrete property/custom/list parents without broad
    DataBindContext converter-property writes. `NumberToList` now leaves the
-   converter-backed custom persisting lane. Remaining conservative families are
-   operation-view-model / system operation, `RangeMapper`, and unsupported
-   converters. Full `make golden-compare` remains exact=263 /
-   exact-segments=584 / diverges=0, `cargo test --workspace`,
-   `cargo fmt --all -- --check`, and `git diff --check` pass, and fenced
-   hot-loop reports aggregate Rust/C++=2.243. Strict <=2.0 remains open. Next:
-   inspect operation-view-model / system-operation converter-backed custom
-   sources and model only their exact C++ dirty/update surface.
+   converter-backed custom persisting lane.
+   Operation-view-model and system-operation custom sources now leave the
+   conservative persisting lane. The status-doc scout review keeps the
+   RangeMapper and perf-methodology fences in force: no broad DataBindContext
+   converter-property writes, no StringPad-style RangeMapper retry, and no
+   shallow command/path-wrapper caching without release/null-renderer hot-loop
+   evidence. `DataConverterOperationViewModel` has no C++ converter-property
+   dirty callback to model here; Rust relies on the existing source-path
+   dependent refresh edges. `DataConverterSystemDegsToRads` and
+   `DataConverterSystemNormalizer` inherit `DataConverterOperationValue`, so
+   their `operationValue` binds now use the same explicit updater by converter
+   global id and enqueue concrete parents. Remaining conservative families are
+   `RangeMapper` and unsupported converters. Full `make golden-compare` remains
+   exact=263 / exact-segments=584 / diverges=0; `cargo test --workspace`,
+   `cargo fmt --all -- --check`, and `git diff --check` pass; fenced hot-loop
+   reports aggregate Rust/C++=2.111. Strict <=2.0 remains open. Next: profile
+   remaining advance/data-bind time or audit RangeMapper C++ ownership/update
+   order before another fallback-removal attempt.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -854,6 +864,23 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Remove operation-view-model/system-operation custom sources
+  from the conservative polling lane while preserving the scout/perf fences.
+  `DataConverterOperationViewModel` has no C++ converter-property dirty callback
+  for this layer; Rust already refreshes dependent operation-view-model numbers
+  from source-path changes. `DataConverterSystemDegsToRads` and
+  `DataConverterSystemNormalizer` inherit `DataConverterOperationValue`, whose
+  `operationValueChanged()` calls `markConverterDirty`, so Rust now builds
+  artboard `operationValue` converter-property bindings for those subclasses,
+  updates copied dependent converters by global id, and enqueues the concrete
+  property/custom parents already covered by target/source queues. This keeps
+  the rejected broad DataBindContext converter-property write and rejected
+  RangeMapper fallback-removal scouts out of the runtime. `make golden-compare`
+  remains exact=263 / exact-segments=584 / diverges=0; `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check` pass. Fenced
+  release/null-renderer hot-loop reports aggregate Rust/C++=2.111 over the
+  5-entry / 10-segment focused corpus, still above strict <=2.0, so M7 remains
+  open.
 - 2026-07-08: [M7] Remove `DataConverterNumberToList` custom sources from the
   conservative polling lane. The C++ handwritten NumberToList class overrides
   `viewModelIdChanged()` to clear its generated `m_listItems` cache and call
@@ -2302,6 +2329,12 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Removed operation-view-model/system-operation custom sources
+  from the conservative persisting lane after reviewing the scout/perf fences.
+  `make golden-compare` remains exact=263/exact-segments=584/diverges=0;
+  `cargo test --workspace` passes; focused hot-loop is Rust/C++=2.111. Strict
+  <=2.0 remains open; next profile remaining data-bind/advance or audit
+  RangeMapper ownership/order before retrying that family.
 - 2026-07-08: [M7] Removed `DataConverterNumberToList.viewModelId` custom
   sources from the conservative persisting lane with a family-specific updater.
   `make golden-compare` remains exact=263/exact-segments=584/diverges=0;

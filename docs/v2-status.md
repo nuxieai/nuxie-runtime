@@ -621,6 +621,19 @@ the only memory the next session has. Update it every commit.
    hot-loop reports aggregate Rust/C++=2.105 with `ai_assitant`=1.939. Strict
    <=2.0 remains open. Next: profile and port the larger
    `bind_owned_view_model_artboard_context_chain` path-resolution hotspot.
+   A follow-up scratch-reuse scout for name-based owned view-model context
+   source paths was intentionally not landed. It reused a caller-owned
+   `Vec<usize>` while resolving `bind_owned_view_model_artboard_context_chain`
+   and kept focused nested/data-bind tests plus `make golden-compare` green
+   at exact=263 / exact-segments=584 / diverges=0, but fenced
+   release/null-renderer hot-loop rejected it: aggregate Rust/C++ worsened to
+   2.250 and then 2.478. The useful finding is the layer boundary: C++
+   `DataBindContext::bindFromContext` resolves and retains a concrete
+   `ViewModelInstanceValue` source via `DataContext`; Rust's artboard owned
+   context path still recomputes the context-chain source lookup every frame.
+   Next: port a C++-aligned retained source binding/rebind path for artboard
+   owned-context data binds, or first write that design if the invalidation
+   surface is too large for one safe slice.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -1122,6 +1135,19 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Reject owned-context path scratch reuse as a standalone
+  optimization. A scout reused a single `Vec<usize>` while resolving
+  name-based paths through `bind_owned_view_model_artboard_context_chain`,
+  but it still repeated the full context-chain/source lookup every frame.
+  Focused nested/data-bind tests and `make golden-compare` stayed green at
+  exact=263 / exact-segments=584 / diverges=0, but the fenced
+  release/null-renderer hot-loop rejected the slice: aggregate Rust/C++ moved
+  to 2.250 and then 2.478, worse than the prior 2.105 run. C++'s relevant
+  shape is `DataBindContext::bindFromContext`: resolve through `DataContext`
+  to a concrete `ViewModelInstanceValue` source, retain it, and rebind only
+  when the source identity changes. Next M7 data-bind work should port that
+  retained source/rebind model for artboard owned-context bindings instead of
+  adding scratch-only path allocation helpers.
 - 2026-07-08: [M7] Avoid nested-host data-bind no-op work on clean frames.
   C++ keeps `DataBind` and `DataContext` references on the owning objects;
   Rust was cloning `artboard_nested_host_bindings` every advance and queueing
@@ -2828,6 +2854,15 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Reviewed the status scout/perf fences around
+  `bind_owned_view_model_artboard_context_chain` and backed out the
+  scratch-only owned-context path scout. The scout kept focused nested/data-bind
+  tests and `make golden-compare` green at exact=263/exact-segments=584/
+  diverges=0, but fenced release/null-renderer hot-loop reported aggregate
+  Rust/C++=2.250 and then 2.478, worse than the prior 2.105 run. No runtime
+  code from the scout remains. Next implementation target is the C++-aligned
+  retained source/rebind model for artboard owned-context bindings, not
+  temporary path-buffer reuse.
 - 2026-07-08: [M7] Removed nested-host data-bind clean-frame no-op work by
   reusing retained binding entries instead of cloning
   `artboard_nested_host_bindings`, and by skipping same-value nested child

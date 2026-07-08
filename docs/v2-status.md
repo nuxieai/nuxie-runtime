@@ -826,7 +826,24 @@ the only memory the next session has. Update it every commit.
    re-profile; likely remaining targets are draw replay / lower
    `RuntimeRenderPathCache::draw_path` map lookups and
    `advance_artboard_data_binds_with_root_transform`, not broad
-   converter-property writes or shallow path-command caches.
+   converter-property writes or shallow path-command caches. The next profile
+   found `runtime_draw_command`, data-bind context propagation, retained path
+   lookups, and state-machine advance as the remaining split. Two same-turn
+   scouts were backed out: source-queue vector take/recycle worsened fenced
+   hot-loop aggregate to Rust/C++=3.119 and 3.077, and carrying a borrowed
+   retained `RenderPaint` through draw gave direct `ai_assitant` Rust/C++=2.658
+   versus the prior 2.483. Prepared shape-paint commands now retain
+   `paint_global_id`, matching C++'s retained `ShapePaint` object identity and
+   removing a draw-time local-to-global map lookup. Full `make golden-compare`
+   remains exact=263 / exact-segments=584 / diverges=0; `cargo test
+   --workspace`, `cargo fmt --all -- --check`, and `git diff --check` pass.
+   Fenced hot-loop is noisy: aggregate Rust/C++=3.038 then 2.889; direct
+   repeat=100 `ai_assitant` JSON at
+   `target/perf-ai-shape-paint-global-id.json` reports cpp median=0.604 ms,
+   rust median=1.495 ms, Rust/C++=2.477. Strict <=2.0 remains open. Next:
+   re-profile; likely targets remain data-bind context/source-local lookup and
+   lower `RuntimeRenderPathCache::draw_path` map lookup, not source-queue
+   vector swaps or borrowed retained-paint threading.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -1328,6 +1345,22 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Retain shape-paint global IDs in prepared draw commands.
+  A release/null-renderer profile showed `runtime_draw_command` time with
+  visible `BTreeMap::get` under draw replay after the paint-config epoch
+  slice. C++ draws from retained `ShapePaint` objects, so Rust now stores each
+  prepared `RuntimeShapePaintCommand`'s `paint_global_id` when the command is
+  built and uses it directly at draw time instead of resolving
+  `paint_local -> global_id` through `graph.local_objects` every frame.
+  Two nearby scouts were rejected and backed out by the perf fence:
+  source-queue vector take/recycle worsened focused aggregate to Rust/C++=3.119
+  and 3.077, and carrying a borrowed retained `RenderPaint` through draw gave
+  direct `ai_assitant` Rust/C++=2.658 versus the prior 2.483. Full `make
+  golden-compare` remains exact=263 / exact-segments=584 / diverges=0; `cargo
+  test --workspace`, `cargo fmt --all -- --check`, and `git diff --check`
+  pass. Fenced hot-loop is noisy at aggregate Rust/C++=3.038 then 2.889, while
+  direct repeat=100 `ai_assitant` JSON reports Rust/C++=2.477, so M7 remains
+  open.
 - 2026-07-08: [M7] Skip clean-frame paint configuration recomputation. A
   release/null-renderer profile after the dependency-prep skip showed
   `runtime_configure_paint_with_cache` beside `runtime_draw_command` and

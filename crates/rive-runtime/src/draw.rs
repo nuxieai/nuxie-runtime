@@ -5143,6 +5143,7 @@ pub enum RuntimeShapePaintPathKind {
 #[derive(Debug, Clone, PartialEq)]
 pub struct RuntimeShapePaintCommand {
     pub paint_local: usize,
+    pub paint_global_id: u32,
     pub mutator_local: Option<usize>,
     pub paint_type: RuntimeShapePaintKind,
     pub path_kind: RuntimeShapePaintPathKind,
@@ -6512,6 +6513,7 @@ fn runtime_background_shape_paint_command(
     }
     Some(RuntimeShapePaintCommand {
         paint_local: paint.local_id,
+        paint_global_id: paint.global_id,
         mutator_local: paint.mutator_local,
         paint_type: runtime_shape_paint_kind(paint.paint_type),
         path_kind: RuntimeShapePaintPathKind::Local,
@@ -6559,6 +6561,7 @@ fn runtime_prepare_gradient_paint_command(
     );
     RuntimeShapePaintCommand {
         paint_local: paint.local_id,
+        paint_global_id: paint.global_id,
         mutator_local: paint.mutator_local,
         paint_type: runtime_shape_paint_kind(paint.paint_type),
         path_kind: paint
@@ -6791,11 +6794,7 @@ fn runtime_draw_command(
         None
     };
     for paint in shape_paints {
-        let global_id = graph
-            .local_objects
-            .get(paint.paint_local)
-            .map(|object| object.global_id)
-            .with_context(|| format!("missing paint local {}", paint.paint_local))?;
+        let global_id = paint.paint_global_id;
         let object = runtime
             .object(global_id as usize)
             .with_context(|| format!("missing paint global {global_id}"))?;
@@ -8473,6 +8472,7 @@ pub(crate) fn runtime_shape_paint_command(
     }
     Some(RuntimeShapePaintCommand {
         paint_local: paint.local_id,
+        paint_global_id: paint.global_id,
         mutator_local: paint.mutator_local,
         paint_type: runtime_shape_paint_kind(paint.paint_type),
         path_kind: runtime_shape_paint_path_kind(paint.path_kind?)?,

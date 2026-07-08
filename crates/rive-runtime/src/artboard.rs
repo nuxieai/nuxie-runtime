@@ -104,6 +104,7 @@ pub struct ArtboardInstance {
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeNestedArtboardInstance {
     pub(crate) child: Box<ArtboardInstance>,
+    pub(crate) data_bind_resolved_path_ids: Option<Vec<u32>>,
     animations: Vec<RuntimeNestedAnimationInstance>,
     is_paused: bool,
     speed: f32,
@@ -1706,6 +1707,15 @@ impl ArtboardInstance {
             .artboards
             .iter()
             .find(|artboard| artboard.global_id == self.graph_global_id)?;
+        let data_bind_resolved_path_ids = self
+            .slot(host_local_id)
+            .and_then(|host| context.file.object(host.source_global_id as usize))
+            .and_then(|host_object| {
+                context
+                    .file
+                    .data_bind_path_for_referencer_object(host_object)
+            })
+            .map(|path| path.resolved_path_ids);
         let mut visiting = BTreeSet::new();
         visiting.insert(self.graph_global_id);
         build_runtime_nested_artboard_instance(
@@ -1716,6 +1726,7 @@ impl ArtboardInstance {
             child_graph,
             &mut visiting,
             Some(context.clone()),
+            data_bind_resolved_path_ids,
             self.bool_property(
                 host_local_id,
                 property_key_for_name("NestedArtboard", "isPaused")?,
@@ -2165,6 +2176,9 @@ fn build_runtime_nested_artboard_instances(
         let Some(referenced) = file.resolved_artboard_for_referencer_object(host_object) else {
             continue;
         };
+        let data_bind_resolved_path_ids = file
+            .data_bind_path_for_referencer_object(host_object)
+            .map(|path| path.resolved_path_ids);
         let Some(child_graph) = artboards
             .iter()
             .find(|artboard| artboard.global_id == referenced.id)
@@ -2183,6 +2197,7 @@ fn build_runtime_nested_artboard_instances(
             child_graph,
             visiting,
             build_context.clone(),
+            data_bind_resolved_path_ids,
             host_object.bool_property("isPaused").unwrap_or(false),
             host_object.double_property("speed").unwrap_or(1.0),
             host_object.double_property("quantize").unwrap_or(-1.0),
@@ -2201,6 +2216,7 @@ fn build_runtime_nested_artboard_instance(
     child_graph: &ArtboardGraph,
     visiting: &mut BTreeSet<u32>,
     build_context: Option<RuntimeArtboardBuildContext>,
+    data_bind_resolved_path_ids: Option<Vec<u32>>,
     is_paused: bool,
     speed: f32,
     quantize: f32,
@@ -2219,6 +2235,7 @@ fn build_runtime_nested_artboard_instance(
     let animations = runtime_nested_animation_instances(file, parent_graph, host_local_id, &child);
     Ok(RuntimeNestedArtboardInstance {
         child,
+        data_bind_resolved_path_ids,
         animations,
         is_paused,
         speed,
@@ -2753,6 +2770,7 @@ mod tests {
                     vec![synthetic_component(10, 0)],
                     vec![10],
                 )),
+                data_bind_resolved_path_ids: None,
                 animations: Vec::new(),
                 is_paused: false,
                 speed: 1.0,

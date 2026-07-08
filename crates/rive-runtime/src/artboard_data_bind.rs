@@ -2280,16 +2280,16 @@ impl ArtboardInstance {
         context_chain: &[&[usize]],
         host_local_id: usize,
     ) -> Option<Vec<usize>> {
-        let host = self.slot(host_local_id)?;
-        let host_object = file.object(host.source_global_id as usize)?;
-        let path = file
-            .data_bind_path_for_referencer_object(host_object)?
-            .resolved_path_ids;
+        let path = self
+            .nested_artboards
+            .get(&host_local_id)?
+            .data_bind_resolved_path_ids
+            .as_deref()?;
         let child_context = runtime_owned_view_model_context_path_for_context_chain(
             file,
             context,
             context_chain,
-            &path,
+            path,
         )?;
         context.view_model_index_by_property_path(&child_context)?;
         Some(child_context)

@@ -381,6 +381,23 @@ the only memory the next session has. Update it every commit.
    Rust/C++=2.119, so strict <=2.0 remains open. Next: port the C++ retained
    `DataBindPath`/data-context lookup shape for nested hosts so Rust stops
    resolving `data_bind_path_for_referencer_object` inside the steady frame.
+   Nested host `DataBindPath` resolution is now retained on
+   `RuntimeNestedArtboardInstance`, including dynamic `artboardId` swaps,
+   mirroring C++ `NestedArtboard::dataBindPath()` plus lazy
+   `DataBindPath::resolvedPath()` retention. The steady owned-view-model nested
+   context path now consumes the retained path slice instead of calling
+   `RuntimeFile::data_bind_path_for_referencer_object`. This is immutable
+   import/build data retention, not a new skip/cache invalidation rule. Full
+   `make golden-compare` remains exact=263 / exact-segments=584 / diverges=0;
+   `cargo test --workspace`, `cargo fmt --all -- --check`, and
+   `git diff --check` pass. Long-repeat Rust-only `ai_assitant` improves from
+   elapsed=1734.9 / advance=1233.3 ms to elapsed=1408.5 / advance=902.0 ms for
+   100000 segments. Fenced release/null-renderer hot-loop reports aggregate
+   Rust/C++=2.338 then 2.430, so strict <=2.0 remains open. Next: profile
+   remaining release/null-renderer advance/data-bind time after the retained
+   path change while keeping the scout fences in force: no broad
+   DataBindContext converter-property writes, no StringPad-style RangeMapper
+   retry, and no shallow command/path-wrapper caching without fenced evidence.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -882,6 +899,21 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Retain nested-host data-bind paths outside the steady frame.
+  C++ keeps the host `DataBindPath` on the nested artboard and lazily resolves
+  the path buffer once; Rust now stores the resolved path ids on
+  `RuntimeNestedArtboardInstance` during initial host construction and dynamic
+  `artboardId` swaps. The owned view-model nested context path consumes that
+  retained slice instead of resolving
+  `RuntimeFile::data_bind_path_for_referencer_object` every sync pass. This
+  preserves the scout/perf fences: it is immutable import/build data retention,
+  not invented skip/cache invalidation. `make golden-compare` remains exact=263
+  / exact-segments=584 / diverges=0; `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check` pass. Long-repeat
+  Rust-only `ai_assitant` improves from elapsed=1734.9 / advance=1233.3 ms to
+  elapsed=1408.5 / advance=902.0 ms for 100000 segments; fenced
+  release/null-renderer hot-loop reports aggregate Rust/C++=2.338 then 2.430,
+  still above strict <=2.0, so M7 remains open.
 - 2026-07-08: [M7] Remove Rust-only nested child data-bind cloning from the
   steady owned-view-model context path. A release `ai_assitant` sample showed
   `sync_nested_child_artboard_data_contexts` cloning child property/image
@@ -2362,6 +2394,14 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Retained nested-host data-bind resolved paths on
+  `RuntimeNestedArtboardInstance`, including dynamic `artboardId` swaps.
+  `make golden-compare` remains exact=263/exact-segments=584/diverges=0;
+  `cargo test --workspace` passes; long-repeat `ai_assitant` improves to
+  elapsed=1408.5/advance=902.0 ms for 100000 segments, while focused hot-loop
+  is Rust/C++=2.338 then 2.430. Strict <=2.0 remains open; next profile
+  remaining release/null-renderer advance/data-bind time under the scout/perf
+  fences.
 - 2026-07-08: [M7] Removed Rust-only nested child binding-vector clones and
   dynamic nested-host property-key lookups from the sampled owned-view-model
   context path. `make golden-compare` remains

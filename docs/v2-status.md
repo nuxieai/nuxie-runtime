@@ -13,6 +13,24 @@ the only memory the next session has. Update it every commit.
   gated=6 harness=26
 - Current milestone: **M7 — Public `rive` API + C ABI; perf within target of C++**
 
+## M7 Perf Fence
+
+- Gate command: bare `make perf-hot-loop`, which now uses release/null-renderer
+  phase sums, min aggregation, the deliberate image-bearing focused corpus,
+  `PERF_ITERATIONS=10`, and `PERF_BENCHMARK_REPEAT=100`.
+- Acceptance: three independent invocations must all report aggregate min
+  Rust/C++ <= 2.0, with 1-minute load below about 8 and the C++ min-sum inside
+  its 0.70-0.95 ms sanity band.
+- Noise rule: ratio movement below about 0.08 is below single-run resolution;
+  claim it only with two pre/post runs. Debug builds, wall-clock process time,
+  and serializer output are not M7 decision-grade.
+- Current standing: `make perf-hot-loop PERF_MAX_RATIO=999` reports aggregate
+  min Rust/C++=4.758 over 11 file/sample entries; `spotify_kids_demo@0` is the
+  largest outlier at 10.413. Current priority is image draw-retention first,
+  then tiny-file draw replay/fixed overhead. Scout item 17's transform-key
+  cold-frame reflection finding remains the next/fallback target if image
+  retention requires deeper analysis before a safe slice can land.
+
 ## Milestones
 
 - [x] M0: Golden diff harness + corpus manifest + one exact file
@@ -1300,10 +1318,11 @@ the only memory the next session has. Update it every commit.
         treated identically. Improvements < ~0.08 ratio are below
         single-run resolution — don't claim them without 2 runs pre/post.
     (b) PIN THE GATE DEFINITION: total(N) = first-frame + (N-1)*clean-
-        frame, and the two have different ratios — focused aggregate is
-        ~2.98 at repeat=100 but ~3.95 at repeat=1000 (pure steady state).
-        Decide and record which N the M7 gate means; track improvements
-        at fixed N.
+        frame, and the two have different ratios. Scout-time focused
+        aggregate was ~2.98 at repeat=100 but ~3.95 at repeat=1000
+        (pure steady state), before the deliberate image-bearing default
+        gate made the current standing worse. The adopted M7 gate is
+        repeat=100; track improvements at that fixed N.
     (c) THE GAP IS RENDER-SIDE, NOT ADVANCE-SIDE: for text-bearing files
         Rust ADVANCE is already FASTER than C++; the focused-corpus gap
         concentrates in prepare+draw clean-frame replay plus ~0.5-1us/
@@ -1323,9 +1342,11 @@ the only memory the next session has. Update it every commit.
     GATE PROTOCOL (adopt as Decision): ratio-of-sums over per-target
     min_ms, 10 iterations, repeat pinned; acceptance = 3 independent
     invocations ALL <= 2.0 with 1-min load < ~8 and C++ min-sum inside
-    its 0.70-0.95ms sanity band. Current standing under protocol:
-    2.98 (band 2.82-3.06) at repeat=100; ~3.95 at repeat=1000. The
-    distance to 2.0 is real, not noise. Tool follow-ups landed:
+    its 0.70-0.95ms sanity band. Scout-time standing before the
+    image-bearing default gate was 2.98 (band 2.82-3.06) at repeat=100
+    and ~3.95 at repeat=1000; see the top-level M7 Perf Fence for the
+    current standing. The distance to 2.0 is real, not noise. Tool
+    follow-ups landed:
     --aggregate=min flag, deliberate --corpus-ids gate, and make defaults for
     10 iterations / repeat=100 on perf-hot-loop.
 
@@ -3542,6 +3563,15 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Clarified the adopted perf fence at the top of this status
+  file so `/goal` sessions can choose M7 work without rereading buried scout
+  notes. The fence is bare `make perf-hot-loop` with release/null-renderer
+  phase sums, min aggregation, deliberate image-bearing corpus,
+  `PERF_ITERATIONS=10`, and `PERF_BENCHMARK_REPEAT=100`; acceptance remains
+  three independent aggregate-min runs <=2.0 with load and C++ min-sum sanity
+  checks. The older 2.98/3.95 scout standings are now labeled historical,
+  and the current priority is explicit: profile/port image draw retention
+  before smaller draw-replay/fixed-overhead work.
 - 2026-07-08: [M7] Made the focused perf-gate defaults match the scout fence.
   `make perf-hot-loop` now defaults to `PERF_ITERATIONS=10` and
   `PERF_BENCHMARK_REPEAT=100`, keeping the existing min aggregation and

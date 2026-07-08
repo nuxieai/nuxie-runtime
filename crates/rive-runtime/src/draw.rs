@@ -9,9 +9,10 @@ use rive_graph::{
 };
 use rive_render_api::{
     BlendMode as RenderBlendMode, Factory as RenderFactory, FillRule as RenderFillRule,
-    ImageSampler as RenderImageSampler, Mat2D as RenderMat2D, RenderBuffer, RenderBufferFlags,
-    RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader,
-    Renderer, StrokeCap as RenderStrokeCap, StrokeJoin as RenderStrokeJoin, Vec2D as RenderVec2D,
+    ImageSampler as RenderImageSampler, Mat2D as RenderMat2D, RawPath, RenderBuffer,
+    RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath,
+    RenderShader, Renderer, StrokeCap as RenderStrokeCap, StrokeJoin as RenderStrokeJoin,
+    Vec2D as RenderVec2D,
 };
 use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 use std::sync::{Arc, OnceLock};
@@ -5669,6 +5670,7 @@ struct RuntimeGradientShaderCacheEntry {
 
 struct RuntimeCachedDrawPath {
     path: Box<dyn RenderPath>,
+    raw_path: RawPath,
     epoch: u64,
 }
 
@@ -6324,15 +6326,20 @@ impl RuntimeRenderPathCache {
         commands: &[RuntimePathCommand],
         fill_rule: RenderFillRule,
     ) -> &mut Box<dyn RenderPath> {
-        let cached = self
-            .draw_paths
-            .slot_mut(key)
-            .get_or_insert_with(|| RuntimeCachedDrawPath {
-                path: runtime_make_path(factory, commands, fill_rule),
+        let cached = self.draw_paths.slot_mut(key).get_or_insert_with(|| {
+            let raw_path = runtime_raw_path_from_commands(commands);
+            RuntimeCachedDrawPath {
+                path: runtime_make_path_from_raw_path(factory, &raw_path, fill_rule),
+                raw_path,
                 epoch: path_epoch,
-            });
+            }
+        });
         if cached.epoch != path_epoch {
-            runtime_rebuild_path_preserving_fill_rule(cached.path.as_mut(), commands);
+            runtime_rebuild_raw_path_from_commands(&mut cached.raw_path, commands);
+            runtime_rebuild_path_from_raw_path_preserving_fill_rule(
+                cached.path.as_mut(),
+                &cached.raw_path,
+            );
             cached.epoch = path_epoch;
         }
         &mut cached.path
@@ -8820,6 +8827,16 @@ fn runtime_make_path(
     path
 }
 
+fn runtime_make_path_from_raw_path(
+    factory: &mut dyn RenderFactory,
+    raw_path: &RawPath,
+    fill_rule: RenderFillRule,
+) -> Box<dyn RenderPath> {
+    let mut path = factory.make_empty_render_path();
+    runtime_rebuild_path_from_raw_path(path.as_mut(), raw_path, fill_rule);
+    path
+}
+
 fn runtime_cached_render_path<'a>(
     slot: &'a mut Option<Box<dyn RenderPath>>,
     factory: &mut dyn RenderFactory,
@@ -8846,14 +8863,37 @@ fn runtime_rebuild_path(
     runtime_append_path_commands(path, commands);
 }
 
-fn runtime_rebuild_path_preserving_fill_rule(
+fn runtime_rebuild_path_from_raw_path(
     path: &mut dyn RenderPath,
-    commands: &[RuntimePathCommand],
+    raw_path: &RawPath,
+    fill_rule: RenderFillRule,
 ) {
     path.rewind();
+    path.reserve(raw_path.verbs().len(), raw_path.points().len());
+    path.fill_rule(fill_rule);
+    path.add_raw_path(raw_path);
+}
+
+fn runtime_rebuild_path_from_raw_path_preserving_fill_rule(
+    path: &mut dyn RenderPath,
+    raw_path: &RawPath,
+) {
+    path.rewind();
+    path.reserve(raw_path.verbs().len(), raw_path.points().len());
+    path.add_raw_path(raw_path);
+}
+
+fn runtime_raw_path_from_commands(commands: &[RuntimePathCommand]) -> RawPath {
+    let mut raw_path = RawPath::new();
+    runtime_rebuild_raw_path_from_commands(&mut raw_path, commands);
+    raw_path
+}
+
+fn runtime_rebuild_raw_path_from_commands(raw_path: &mut RawPath, commands: &[RuntimePathCommand]) {
+    raw_path.rewind();
     let (verbs, points) = runtime_path_command_counts(commands);
-    path.reserve(verbs, points);
-    runtime_append_path_commands(path, commands);
+    raw_path.reserve(verbs, points);
+    runtime_append_commands_to_raw_path(raw_path, commands);
 }
 
 fn runtime_path_command_counts(commands: &[RuntimePathCommand]) -> (usize, usize) {
@@ -8866,6 +8906,24 @@ fn runtime_path_command_counts(commands: &[RuntimePathCommand]) -> (usize, usize
         };
     }
     (commands.len(), points)
+}
+
+fn runtime_append_commands_to_raw_path(raw_path: &mut RawPath, commands: &[RuntimePathCommand]) {
+    for command in commands {
+        match *command {
+            RuntimePathCommand::Move { x, y } => raw_path.move_to(x, y),
+            RuntimePathCommand::Line { x, y } => raw_path.line_to(x, y),
+            RuntimePathCommand::Cubic {
+                x1,
+                y1,
+                x2,
+                y2,
+                x3,
+                y3,
+            } => raw_path.cubic_to(x1, y1, x2, y2, x3, y3),
+            RuntimePathCommand::Close => raw_path.close(),
+        }
+    }
 }
 
 fn runtime_append_path_commands(path: &mut dyn RenderPath, commands: &[RuntimePathCommand]) {
@@ -12775,7 +12833,7 @@ fn runtime_draw_command_is_nested_artboard(command: &RuntimeDrawCommand) -> bool
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rive_render_api::{ColorInt, RawPath};
+    use rive_render_api::ColorInt;
     use std::any::Any;
     use std::cell::Cell;
     use std::rc::Rc;
@@ -12784,6 +12842,7 @@ mod tests {
     struct CountingStats {
         make_empty_paths: Cell<usize>,
         rewinds: Cell<usize>,
+        add_raw_paths: Cell<usize>,
         lines: Cell<usize>,
         closes: Cell<usize>,
     }
@@ -12819,6 +12878,9 @@ mod tests {
         fn add_render_path_backwards(&mut self, _path: &dyn RenderPath, _transform: RenderMat2D) {}
 
         fn add_raw_path(&mut self, path: &RawPath) {
+            self.stats
+                .add_raw_paths
+                .set(self.stats.add_raw_paths.get() + 1);
             self.raw_path.add_path(path, RenderMat2D::IDENTITY);
         }
 
@@ -13015,7 +13077,8 @@ mod tests {
 
         assert_eq!(stats.make_empty_paths.get(), 1);
         assert_eq!(stats.rewinds.get(), 1);
-        assert_eq!(stats.lines.get(), 1);
+        assert_eq!(stats.add_raw_paths.get(), 1);
+        assert_eq!(stats.lines.get(), 0);
 
         let second_id = {
             let path = cache.draw_path(key, 10, &mut factory, &commands, RenderFillRule::Clockwise);
@@ -13028,9 +13091,10 @@ mod tests {
         assert_eq!(second_id, first_id);
         assert_eq!(stats.make_empty_paths.get(), 1);
         assert_eq!(stats.rewinds.get(), 1);
-        assert_eq!(stats.lines.get(), 1);
+        assert_eq!(stats.add_raw_paths.get(), 1);
+        assert_eq!(stats.lines.get(), 0);
 
-        let third_id = {
+        let (third_id, third_verbs, third_points) = {
             let path = cache.draw_path(
                 key,
                 11,
@@ -13038,16 +13102,24 @@ mod tests {
                 &changed_commands,
                 RenderFillRule::Clockwise,
             );
-            path.as_any()
+            let path = path
+                .as_any()
                 .downcast_ref::<CountingRenderPath>()
-                .expect("counting path")
-                .id
+                .expect("counting path");
+            (
+                path.id,
+                path.raw_path.verbs().len(),
+                path.raw_path.points().len(),
+            )
         };
 
         assert_eq!(third_id, first_id);
         assert_eq!(stats.make_empty_paths.get(), 1);
         assert_eq!(stats.rewinds.get(), 2);
-        assert_eq!(stats.lines.get(), 2);
-        assert_eq!(stats.closes.get(), 1);
+        assert_eq!(stats.add_raw_paths.get(), 2);
+        assert_eq!(stats.lines.get(), 0);
+        assert_eq!(stats.closes.get(), 0);
+        assert_eq!(third_verbs, 3);
+        assert_eq!(third_points, 2);
     }
 }

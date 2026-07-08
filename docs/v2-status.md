@@ -27,17 +27,19 @@ the only memory the next session has. Update it every commit.
 - Current standing: after retained path-composer graph lookups, dense
   draw-path slots, graph-scoped dense path-geometry command slots, dense
   decoded-image slots, cached layout-adjusted draw world transforms, and dense
-  mesh render-buffer slots, and retained image layout local transforms, full
-  `make golden-compare` and `cargo test --workspace` remain green. The latest
-  release/null-renderer sample is still directional only:
-  `make perf-hot-loop PERF_MAX_RATIO=999` reports aggregate min Rust/C++=3.225,
-  but the C++ min-sum was 1.043 ms, outside the 0.70-0.95 ms sanity band.
-  Strict <=2.0 remains open. Do not repeat the rejected shallow non-mesh image
-  draw-state cache scout, image mesh-index precompute scout, or shallow
-  command-vector/path wrapper caches; they preserved correctness but worsened
-  direct/fenced release timings. Next priority is a clean low-load/sanity-band
-  release sample, then actual `PathComposer`/raw-path retention or deeper
-  draw-replay fixed-overhead work under the same scout fences.
+  mesh render-buffer slots, retained image layout local transforms, and
+  retained draw raw paths, full `make golden-compare` and
+  `cargo test --workspace` remain green. The latest release/null-renderer
+  sample is still directional only: `make perf-hot-loop PERF_MAX_RATIO=999`
+  reports aggregate min Rust/C++=3.219, but the C++ min-sum was 1.037 ms,
+  outside the 0.70-0.95 ms sanity band. Movement from the previous 3.225
+  directional sample is below the 0.08 noise floor. Strict <=2.0 remains open.
+  Do not repeat the rejected shallow non-mesh image draw-state cache scout,
+  image mesh-index precompute scout, shallow command-vector/path wrapper
+  caches, or shared shape path-command buffer scout; they preserved correctness
+  but worsened or failed to move direct/fenced release timings. Next priority is
+  a clean low-load/sanity-band release sample, then deeper draw-replay
+  fixed-overhead or clean-prepare-skip work under the same scout fences.
 
 ## Milestones
 
@@ -1066,6 +1068,26 @@ the only memory the next session has. Update it every commit.
    <=2.0 remains open. Next: run a clean low-load/sanity-band
    `make perf-hot-loop`, then continue actual `PathComposer`/raw-path retention
    or deeper draw-replay fixed-overhead work under the scout fences.
+   Draw `RenderPath` cache entries now retain the raw path payload used to
+   rebuild the renderer path, mirroring C++ `ShapePaintPath::m_rawPath` /
+   `ShapePaintPath::renderPath`. On a path-epoch miss Rust rebuilds the cached
+   `RawPath` in place with `rewind()` capacity reuse, then calls
+   `RenderPath::add_raw_path`; clean frames keep reusing the retained
+   `RenderPath` as before. This does not reintroduce the rejected shared
+   shape path-command buffer/cache layer and does not change path geometry
+   math, fill-rule handling, or the existing `path_epoch` invalidation
+   boundary. Full `make golden-compare` remains exact=263 /
+   exact-segments=584 / diverges=0; `cargo check -p rive-runtime`, the focused
+   draw-path reuse test, `cargo test --workspace`,
+   `cargo fmt --all -- --check`, and `git diff --check` pass. A same-session
+   release/null-renderer sample before
+   the final capacity-reuse polish reported aggregate min Rust/C++=3.219, but
+   C++ min-sum=1.037 ms is outside the 0.70-0.95 ms sanity band and movement
+   versus 3.225 is below the noise floor; no decision-grade post-polish perf
+   sample was taken because load rose to 21.26/15.84/13.92. Strict <=2.0
+   remains open. Next: rerun a clean low-load/sanity-band `make perf-hot-loop`,
+   then profile/deepen draw-replay fixed overhead or clean-prepare-skip work
+   rather than extending raw-path wrappers.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -1685,6 +1707,24 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Retain draw raw paths under the draw `RenderPath` cache.
+  C++ `ShapePaintPath` owns both `m_rawPath` and `m_renderPath`; when dirty it
+  rewinds and repopulates the retained render path from the retained raw path.
+  Rust already retained the draw `RenderPath` by `path_epoch`, but rebuilt it
+  directly from `RuntimePathCommand` slices on an epoch miss. Draw path cache
+  entries now retain a `RawPath`, rebuild that raw path in place with
+  `rewind()` capacity reuse when `path_epoch` changes, and feed the renderer
+  path through `RenderPath::add_raw_path`. This ports the lower-level raw-path
+  ownership shape without changing geometry math, fill-rule handling, or
+  invalidation, and does not revive the rejected shared shape path-command
+  buffer/cache scout. Full `make golden-compare` remains exact=263 /
+  exact-segments=584 / diverges=0; `cargo check -p rive-runtime`, the focused
+  draw-path reuse test, `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check` pass. Same-session
+  `make perf-hot-loop
+  PERF_MAX_RATIO=999` before the final capacity-reuse polish reported
+  aggregate min Rust/C++=3.219, but C++ min-sum=1.037 ms is outside the M7
+  sanity band and the movement is below the noise floor. M7 remains open.
 - 2026-07-08: [M7] Retain image layout local transforms. C++
   `Image::updateImageScale` stores layout-driven scale in the image local
   transform and keeps `m_layoutOffsetX/Y` on the `Image` object, so clean draws
@@ -3732,6 +3772,20 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-08: [M7] Retained draw raw paths beside cached draw `RenderPath`s.
+  This ports C++ `ShapePaintPath::m_rawPath` ownership for the draw-path cache:
+  path-epoch misses rebuild the cached `RawPath` in place with `rewind()`
+  capacity reuse and then call `RenderPath::add_raw_path`, while clean frames
+  keep reusing the retained `RenderPath`. Full `make golden-compare` remains
+  exact=263/exact-segments=584/diverges=0; `cargo check -p rive-runtime`, the
+  focused draw-path reuse test, `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check` pass. Same-session perf
+  before the final capacity-reuse polish was directional only: aggregate min
+  Rust/C++=3.219 with C++ min-sum 1.037 ms outside the sanity band, and
+  movement versus 3.225 is below the noise floor. Strict <=2.0 remains open;
+  next step is a clean low-load/sanity-band release sample, then deeper
+  draw-replay fixed-overhead or clean-prepare-skip work under the scout fences.
 
 - 2026-07-08: [M7] Retained image layout local transforms behind existing
   cache/layout epochs. This ports C++ `Image::updateImageScale` state without

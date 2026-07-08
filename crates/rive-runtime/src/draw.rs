@@ -5384,6 +5384,7 @@ pub struct RuntimeRenderPathCache {
     draw_paths: RuntimeDrawPathSlots,
     path_geometry_commands: RuntimePathGeometryCommandSlots,
     world_transforms: RuntimeWorldTransformSlots,
+    image_layout_transforms: RuntimeImageLayoutTransformSlots,
     text_shape_paints: BTreeMap<RuntimeTextShapePaintCacheSlot, RuntimeCachedTextShapePaints>,
     gradient_preparation: Option<RuntimeGradientPreparationFrame>,
     gradient_shaders: BTreeMap<u32, RuntimeGradientShaderCacheEntry>,
@@ -5557,6 +5558,68 @@ impl RuntimeWorldTransformSlots {
             self.by_local.resize(local_id + 1, None);
         }
         self.by_local[local_id] = Some(RuntimeCachedWorldTransform { key, transform });
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RuntimeImageLayoutTransformCacheKey {
+    cache_epoch: u64,
+    layout_epoch: u64,
+    image_width_bits: u32,
+    image_height_bits: u32,
+    layout_width_bits: u32,
+    layout_height_bits: u32,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RuntimeCachedImageLayoutTransform {
+    key: RuntimeImageLayoutTransformCacheKey,
+    local_transform: Mat2D,
+}
+
+#[derive(Default)]
+struct RuntimeImageLayoutTransformSlots {
+    graph_global_id: Option<u32>,
+    by_local: Vec<Option<RuntimeCachedImageLayoutTransform>>,
+}
+
+impl RuntimeImageLayoutTransformSlots {
+    fn get(
+        &mut self,
+        graph_global_id: u32,
+        local_id: usize,
+        key: RuntimeImageLayoutTransformCacheKey,
+    ) -> Option<Mat2D> {
+        if self.graph_global_id != Some(graph_global_id) {
+            self.graph_global_id = Some(graph_global_id);
+            self.by_local.clear();
+            return None;
+        }
+        self.by_local
+            .get(local_id)
+            .and_then(|cached| cached.as_ref())
+            .filter(|cached| cached.key == key)
+            .map(|cached| cached.local_transform)
+    }
+
+    fn insert(
+        &mut self,
+        graph_global_id: u32,
+        local_id: usize,
+        key: RuntimeImageLayoutTransformCacheKey,
+        local_transform: Mat2D,
+    ) {
+        if self.graph_global_id != Some(graph_global_id) {
+            self.graph_global_id = Some(graph_global_id);
+            self.by_local.clear();
+        }
+        if self.by_local.len() <= local_id {
+            self.by_local.resize(local_id + 1, None);
+        }
+        self.by_local[local_id] = Some(RuntimeCachedImageLayoutTransform {
+            key,
+            local_transform,
+        });
     }
 }
 
@@ -5867,6 +5930,77 @@ impl RuntimeRenderPathCache {
             Some(layout_bounds),
         )
         .multiply(component.transform.local_transform)
+    }
+
+    fn image_world_transform_with_bounds(
+        &mut self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        local_id: usize,
+        image_object: Option<&RuntimeObject>,
+        image: &dyn RenderImage,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+        has_vertex_mesh: bool,
+    ) -> Result<Option<Mat2D>> {
+        let Some(layout_bounds) = layout_bounds else {
+            return Ok(None);
+        };
+        let Some(component) = instance.component(local_id) else {
+            return Ok(None);
+        };
+        let Some(parent_local) = component.parent_local else {
+            return Ok(None);
+        };
+        if !instance
+            .component(parent_local)
+            .is_some_and(|parent| parent.type_name == "LayoutComponent")
+        {
+            return Ok(None);
+        }
+        let Some(parent_bounds) = layout_bounds.get(&parent_local) else {
+            return Ok(None);
+        };
+
+        let image_width = image.width() as f32;
+        let image_height = image.height() as f32;
+        let key = RuntimeImageLayoutTransformCacheKey {
+            cache_epoch: instance.cache_epoch(),
+            layout_epoch: instance.layout_epoch(),
+            image_width_bits: image_width.to_bits(),
+            image_height_bits: image_height.to_bits(),
+            layout_width_bits: parent_bounds.width.to_bits(),
+            layout_height_bits: parent_bounds.height.to_bits(),
+        };
+
+        let local_transform = if let Some(local_transform) =
+            self.image_layout_transforms
+                .get(graph.global_id, local_id, key)
+        {
+            local_transform
+        } else {
+            let local_transform = runtime_image_layout_local_transform(
+                instance,
+                local_id,
+                image_object,
+                component.transform.local_transform,
+                image_width,
+                image_height,
+                parent_bounds.width,
+                parent_bounds.height,
+                has_vertex_mesh,
+            )?;
+            self.image_layout_transforms
+                .insert(graph.global_id, local_id, key, local_transform);
+            local_transform
+        };
+
+        let parent_world = self.component_world_transform_with_bounds(
+            instance,
+            graph,
+            parent_local,
+            Some(layout_bounds),
+        );
+        Ok(Some(parent_world.multiply(local_transform)))
     }
 
     fn prepared_artboard_frame(
@@ -7432,20 +7566,24 @@ fn runtime_draw_image(
         .double_property(local_id, origin_y_key)
         .or_else(|| image_object.and_then(|object| object.double_property("originY")))
         .unwrap_or(0.5);
-    let world = runtime_image_world_transform(
-        instance,
-        graph,
-        local_id,
-        image_object,
-        image,
-        layout_bounds,
-        origin_x,
-        origin_y,
-        path_cache,
-    )?
-    .unwrap_or_else(|| {
-        path_cache.component_world_transform_with_bounds(instance, graph, local_id, layout_bounds)
-    });
+    let world = path_cache
+        .image_world_transform_with_bounds(
+            instance,
+            graph,
+            local_id,
+            image_object,
+            image,
+            layout_bounds,
+            false,
+        )?
+        .unwrap_or_else(|| {
+            path_cache.component_world_transform_with_bounds(
+                instance,
+                graph,
+                local_id,
+                layout_bounds,
+            )
+        });
     renderer.transform(runtime_render_mat(world));
 
     renderer.transform(RenderMat2D([
@@ -7508,12 +7646,24 @@ fn runtime_draw_mesh_image(
 ) -> Result<()> {
     let weighted_context = instance.runtime_weighted_mesh_context(mesh, graph, layout_bounds);
     if weighted_context.is_none() {
-        let world = path_cache.component_world_transform_with_bounds(
-            instance,
-            graph,
-            image_local,
-            layout_bounds,
-        );
+        let world = path_cache
+            .image_world_transform_with_bounds(
+                instance,
+                graph,
+                image_local,
+                image_object,
+                image,
+                layout_bounds,
+                true,
+            )?
+            .unwrap_or_else(|| {
+                path_cache.component_world_transform_with_bounds(
+                    instance,
+                    graph,
+                    image_local,
+                    layout_bounds,
+                )
+            });
         renderer.transform(runtime_render_mat(world));
     }
 
@@ -7610,38 +7760,24 @@ fn runtime_mesh_vertex_render_translation(
     Ok((x, y))
 }
 
-fn runtime_image_world_transform(
+fn runtime_image_layout_local_transform(
     instance: &ArtboardInstance,
-    graph: &ArtboardGraph,
     local_id: usize,
     image_object: Option<&RuntimeObject>,
-    image: &dyn RenderImage,
-    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
-    origin_x: f32,
-    origin_y: f32,
-    path_cache: &mut RuntimeRenderPathCache,
-) -> Result<Option<Mat2D>> {
-    let Some(layout_bounds) = layout_bounds else {
-        return Ok(None);
-    };
-    let Some(component) = instance.component(local_id) else {
-        return Ok(None);
-    };
-    let Some(parent_local) = component.parent_local else {
-        return Ok(None);
-    };
-    if !instance
-        .component(parent_local)
-        .is_some_and(|parent| parent.type_name == "LayoutComponent")
-    {
-        return Ok(None);
-    }
-    let Some(parent_bounds) = layout_bounds.get(&parent_local) else {
-        return Ok(None);
-    };
-
+    base_local_transform: Mat2D,
+    image_width: f32,
+    image_height: f32,
+    layout_width: f32,
+    layout_height: f32,
+    has_vertex_mesh: bool,
+) -> Result<Mat2D> {
+    // Ported from C++ `src/shapes/image.cpp::Image::updateImageScale`.
     let fit_key =
         runtime_draw_property_key_for_name("Image", "fit").context("missing Image.fit")?;
+    let origin_x_key =
+        runtime_draw_property_key_for_name("Image", "originX").context("missing Image.originX")?;
+    let origin_y_key =
+        runtime_draw_property_key_for_name("Image", "originY").context("missing Image.originY")?;
     let alignment_x_key = runtime_draw_property_key_for_name("Image", "alignmentX")
         .context("missing Image.alignmentX")?;
     let alignment_y_key = runtime_draw_property_key_for_name("Image", "alignmentY")
@@ -7650,6 +7786,14 @@ fn runtime_image_world_transform(
         .uint_property(local_id, fit_key)
         .or_else(|| image_object.and_then(|object| object.uint_property("fit")))
         .unwrap_or(0);
+    let origin_x = instance
+        .double_property(local_id, origin_x_key)
+        .or_else(|| image_object.and_then(|object| object.double_property("originX")))
+        .unwrap_or(0.5);
+    let origin_y = instance
+        .double_property(local_id, origin_y_key)
+        .or_else(|| image_object.and_then(|object| object.double_property("originY")))
+        .unwrap_or(0.5);
     let alignment_x = instance
         .double_property(local_id, alignment_x_key)
         .or_else(|| image_object.and_then(|object| object.double_property("alignmentX")))
@@ -7659,10 +7803,6 @@ fn runtime_image_world_transform(
         .or_else(|| image_object.and_then(|object| object.double_property("alignmentY")))
         .unwrap_or(0.0);
 
-    let layout_width = parent_bounds.width;
-    let layout_height = parent_bounds.height;
-    let image_width = image.width() as f32;
-    let image_height = image.height() as f32;
     let width_scale = layout_width / image_width;
     let height_scale = layout_height / image_height;
     let (mut scale_x, mut scale_y) = match fit {
@@ -7693,8 +7833,13 @@ fn runtime_image_world_transform(
 
     let (mut offset_x, mut offset_y) = (0.0, 0.0);
     if fit != 0 {
-        let bounds_left = -image_width * origin_x;
-        let bounds_top = -image_height * origin_y;
+        let (bounds_origin_x, bounds_origin_y) = if has_vertex_mesh {
+            (0.5, 0.5)
+        } else {
+            (origin_x, origin_y)
+        };
+        let bounds_left = -image_width * bounds_origin_x;
+        let bounds_top = -image_height * bounds_origin_y;
         let x_align = (alignment_x + 1.0) * 0.5;
         let y_align = (alignment_y + 1.0) * 0.5;
         let scaled_left = bounds_left * scale_x;
@@ -7705,18 +7850,12 @@ fn runtime_image_world_transform(
         offset_y = -scaled_top + height_remainder * y_align;
     }
 
-    let mut components = component.transform.local_transform.decompose();
+    let mut components = base_local_transform.decompose();
     components.scale_x = scale_x;
     components.scale_y = scale_y;
     components.x += offset_x;
     components.y += offset_y;
-    let parent_world = path_cache.component_world_transform_with_bounds(
-        instance,
-        graph,
-        parent_local,
-        Some(layout_bounds),
-    );
-    Ok(Some(parent_world.multiply(Mat2D::compose(components))))
+    Ok(Mat2D::compose(components))
 }
 
 fn runtime_draw_nested_artboard(

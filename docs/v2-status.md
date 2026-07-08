@@ -27,17 +27,17 @@ the only memory the next session has. Update it every commit.
 - Current standing: after retained path-composer graph lookups, dense
   draw-path slots, graph-scoped dense path-geometry command slots, dense
   decoded-image slots, cached layout-adjusted draw world transforms, and dense
-  mesh render-buffer slots, full `make golden-compare` and
-  `cargo test --workspace` remain green. The latest release/null-renderer sample
-  is still directional only: two `make perf-hot-loop PERF_MAX_RATIO=999` runs
-  report aggregate min Rust/C++=3.219 then 3.176, but the C++ min-sums were
-  0.992 ms and 1.053 ms, outside the 0.70-0.95 ms sanity band. Strict <=2.0
-  remains open. Do not repeat the rejected shallow non-mesh image draw-state
-  cache scout, image mesh-index precompute scout, or shallow command-vector/path
-  wrapper caches; they preserved correctness but worsened direct/fenced release
-  timings. Next priority is a clean low-load/sanity-band release sample, then
-  actual image/`PathComposer`/raw-path retention or deeper draw-replay
-  fixed-overhead work under the same scout fences.
+  mesh render-buffer slots, and retained image layout local transforms, full
+  `make golden-compare` and `cargo test --workspace` remain green. The latest
+  release/null-renderer sample is still directional only:
+  `make perf-hot-loop PERF_MAX_RATIO=999` reports aggregate min Rust/C++=3.225,
+  but the C++ min-sum was 1.043 ms, outside the 0.70-0.95 ms sanity band.
+  Strict <=2.0 remains open. Do not repeat the rejected shallow non-mesh image
+  draw-state cache scout, image mesh-index precompute scout, or shallow
+  command-vector/path wrapper caches; they preserved correctness but worsened
+  direct/fenced release timings. Next priority is a clean low-load/sanity-band
+  release sample, then actual `PathComposer`/raw-path retention or deeper
+  draw-replay fixed-overhead work under the same scout fences.
 
 ## Milestones
 
@@ -1049,6 +1049,23 @@ the only memory the next session has. Update it every commit.
    low-load/sanity-band `make perf-hot-loop`, then continue actual
    image/`PathComposer`/raw-path retention or deeper draw-replay fixed-overhead
    work under the scout fences.
+   Image layout local transforms are now retained in `RuntimeRenderPathCache`
+   behind the existing `(cache_epoch, layout_epoch)` dirt boundary plus image
+   and layout dimensions. This ports the C++ `Image::updateImageScale` shape:
+   clean frames reuse the computed image scale/offset local transform, then
+   multiply it by the cached parent layout world transform. Mesh-image draw now
+   also routes through this retained image world transform, matching C++
+   `Mesh::draw`'s use of the parent image `worldTransform()`. The slice does
+   not cache blend/opacity/draw state and does not repeat the rejected shallow
+   image draw-state cache. Full `make golden-compare` remains exact=263 /
+   exact-segments=584 / diverges=0; `cargo check -p rive-runtime`,
+   `cargo test -p rive-runtime --quiet`, `cargo test --workspace`,
+   `cargo fmt --all -- --check`, and `git diff --check` pass. A post-slice
+   `make perf-hot-loop PERF_MAX_RATIO=999` reports aggregate min Rust/C++=3.225,
+   but C++ min-sum=1.043 ms is outside the 0.70-0.95 ms sanity band. Strict
+   <=2.0 remains open. Next: run a clean low-load/sanity-band
+   `make perf-hot-loop`, then continue actual `PathComposer`/raw-path retention
+   or deeper draw-replay fixed-overhead work under the scout fences.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -1668,6 +1685,26 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Retain image layout local transforms. C++
+  `Image::updateImageScale` stores layout-driven scale in the image local
+  transform and keeps `m_layoutOffsetX/Y` on the `Image` object, so clean draws
+  reuse that object state before `Image::draw` applies only the image-origin
+  translation. Rust had recomputed the layout fit/alignment/origin math in
+  `runtime_image_world_transform` on every image draw, and mesh-image draw used
+  the generic component world transform instead of the C++ parent image
+  `worldTransform()`. `RuntimeRenderPathCache` now retains the image layout
+  local transform in dense slots keyed by graph/local plus cache epoch, layout
+  epoch, image dimensions, and layout dimensions; both normal image draw and
+  mesh-image draw multiply that retained local transform by the cached parent
+  layout world transform. This keeps blend/opacity/draw state uncached and does
+  not revive the rejected shallow image draw-state cache. Full
+  `make golden-compare` remains exact=263 / exact-segments=584 / diverges=0;
+  `cargo check -p rive-runtime`, `cargo test -p rive-runtime --quiet`,
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check` pass. Post-slice
+  `make perf-hot-loop PERF_MAX_RATIO=999` reports aggregate min Rust/C++=3.225,
+  but C++ min-sum=1.043 ms is outside the M7 sanity band, so the sample is
+  directional only. M7 remains open.
 - 2026-07-08: [M7] Store mesh render buffers in dense local slots. C++
   `MeshDrawable` owns `m_VertexRenderBuffer`, `m_UVRenderBuffer`, and
   `m_IndexRenderBuffer` on the mesh object, while Rust kept
@@ -3695,6 +3732,20 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-08: [M7] Retained image layout local transforms behind existing
+  cache/layout epochs. This ports C++ `Image::updateImageScale` state without
+  caching blend/opacity/draw state, and routes mesh-image draw through the
+  parent image layout transform like C++ `Mesh::draw`. Full
+  `make golden-compare` remains exact=263/exact-segments=584/diverges=0;
+  `cargo check -p rive-runtime`, `cargo test -p rive-runtime --quiet`,
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check` pass. Post-slice `make perf-hot-loop PERF_MAX_RATIO=999`
+  reports aggregate min Rust/C++=3.225, but C++ min-sum=1.043 ms is outside the
+  sanity band, so it is directional only. Strict <=2.0 remains open; next step
+  is a low-load/sanity-band release sample, then actual
+  `PathComposer`/raw-path retention or deeper draw-replay fixed-overhead work
+  under the scout fences.
 
 - 2026-07-08: [M7] Stored retained mesh render buffers in dense local-id slots.
   This ports C++ `MeshDrawable` buffer ownership without changing mesh

@@ -859,9 +859,13 @@ impl ArtboardInstance {
         if current == value {
             return false;
         }
+        let property_key = self.components[index].transform_property_key(property);
+        let Some(property_key) = property_key else {
+            return false;
+        };
         if !self
             .objects
-            .set_double_property_by_name(local_id, property.property_name(), value)
+            .set_double_property(local_id, property_key, value)
         {
             return false;
         }
@@ -883,11 +887,14 @@ impl ArtboardInstance {
     }
 
     pub fn transform_property(&self, local_id: usize, property: TransformProperty) -> Option<f32> {
-        self.component(local_id)
+        let component = self
+            .component(local_id)
             .filter(|component| component.capabilities.transform)?;
-        self.objects
-            .double_property_by_name(local_id, property.property_name())
-            .or_else(|| Some(property.default_value()))
+        let value = component
+            .transform_property_key(property)
+            .and_then(|property_key| self.objects.double_property(local_id, property_key))
+            .unwrap_or_else(|| property.default_value());
+        Some(value)
     }
 
     pub(crate) fn authored_transform(&self, local_id: usize) -> AuthoredTransform {
@@ -2737,6 +2744,7 @@ mod tests {
             local_id,
             global_id: local_id as u32,
             type_name: "Node",
+            transform_property_keys: crate::components::TransformPropertyKeys::for_type("Node"),
             capabilities: RuntimeComponentCapabilities {
                 world_transform: true,
                 transform: true,

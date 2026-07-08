@@ -157,6 +157,7 @@ impl InstanceObjectArena {
         object.double_property(property.key.int)
     }
 
+    #[cfg(test)]
     pub(crate) fn set_double_property_by_name(
         &mut self,
         local_id: usize,

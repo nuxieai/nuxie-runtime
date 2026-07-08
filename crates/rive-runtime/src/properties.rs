@@ -108,24 +108,29 @@ fn runtime_object_string_property_bytes_by_key(
 
 pub(crate) fn transform_property_for_key(property_key: u16) -> Option<TransformProperty> {
     [
-        ("Node", "x", TransformProperty::X),
-        ("Node", "y", TransformProperty::Y),
-        ("RootBone", "x", TransformProperty::X),
-        ("RootBone", "y", TransformProperty::Y),
-        (
-            "TransformComponent",
-            "rotation",
-            TransformProperty::Rotation,
-        ),
-        ("TransformComponent", "scaleX", TransformProperty::ScaleX),
-        ("TransformComponent", "scaleY", TransformProperty::ScaleY),
-        ("TransformComponent", "opacity", TransformProperty::Opacity),
-        ("Artboard", "opacity", TransformProperty::Opacity),
+        TransformProperty::X.property_key_for_type("Node"),
+        TransformProperty::Y.property_key_for_type("Node"),
+        TransformProperty::X.property_key_for_type("RootBone"),
+        TransformProperty::Y.property_key_for_type("RootBone"),
+        TransformProperty::Rotation.property_key_for_type("TransformComponent"),
+        TransformProperty::ScaleX.property_key_for_type("TransformComponent"),
+        TransformProperty::ScaleY.property_key_for_type("TransformComponent"),
+        TransformProperty::Opacity.property_key_for_type("TransformComponent"),
+        TransformProperty::Opacity.property_key_for_type("Artboard"),
     ]
     .into_iter()
-    .find_map(|(type_name, property_name, property)| {
-        (property_key_for_name(type_name, property_name) == Some(property_key)).then_some(property)
-    })
+    .zip([
+        TransformProperty::X,
+        TransformProperty::Y,
+        TransformProperty::X,
+        TransformProperty::Y,
+        TransformProperty::Rotation,
+        TransformProperty::ScaleX,
+        TransformProperty::ScaleY,
+        TransformProperty::Opacity,
+        TransformProperty::Opacity,
+    ])
+    .find_map(|(key, property)| (key == Some(property_key)).then_some(property))
 }
 
 pub(crate) fn solid_color_value_property_key() -> Option<u16> {

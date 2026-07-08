@@ -24,15 +24,18 @@ the only memory the next session has. Update it every commit.
 - Noise rule: ratio movement below about 0.08 is below single-run resolution;
   claim it only with two pre/post runs. Debug builds, wall-clock process time,
   and serializer output are not M7 decision-grade.
-- Current standing: `make perf-hot-loop PERF_MAX_RATIO=999` reports aggregate
-  min Rust/C++=4.758 over 11 file/sample entries; `spotify_kids_demo@0` is the
-  largest outlier at 10.413. Current priority is image draw-retention first,
-  then tiny-file draw replay/fixed overhead. Scout item 17's transform-key
-  cold-frame reflection finding remains the next/fallback target. Do not repeat
-  the rejected shallow non-mesh image draw-state cache scout; it preserved
-  goldens but worsened the fence to aggregate min Rust/C++=4.804 with
-  `spotify_kids_demo@0`=10.607, so the next image attempt must port deeper C++
-  `Image::updateImageScale()`/transform retention or move to the fallback.
+- Current standing: after cached transform property keys, three
+  `make perf-hot-loop PERF_MAX_RATIO=999` runs report aggregate min
+  Rust/C++=4.499, 4.475, and 4.383 over 11 file/sample entries;
+  `spotify_kids_demo@0` remains the largest outlier at 9.480, 9.506, and
+  9.125. A post-commit rerun reports aggregate min Rust/C++=4.449 with
+  C++ min-sum=1.019, outside the sanity band, so treat that as directional
+  only. Do not repeat the rejected
+  shallow non-mesh image draw-state cache scout; it preserved goldens but
+  worsened the fence to aggregate min Rust/C++=4.804 with
+  `spotify_kids_demo@0`=10.607. Next priority is deeper C++
+  `Image::updateImageScale()`/transform retention for the image path, then
+  tiny-file draw replay/fixed overhead if that proves too broad.
 
 ## Milestones
 
@@ -3566,6 +3569,23 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Cached transform property keys for authored transforms and
+  keyframe transform-property classification. `RuntimeComponent` now snapshots
+  concrete generated transform property keys at instance build time, so
+  `ArtboardInstance` reads and writes transform values through generated keys
+  instead of `double_property_by_name` while still preserving concrete storage
+  such as `StraightVertex.x`. `transform_property_for_key` compares cached
+  generated keys instead of resolving schema names each call. Full
+  `make golden-compare` remains exact=263/exact-segments=584/diverges=0, and
+  `cargo test --workspace` passes. Fenced
+  `make perf-hot-loop PERF_MAX_RATIO=999` improves the current aggregate min
+  Rust/C++ from 4.758 to 4.499, 4.475, and 4.383 on rerun;
+  `spotify_kids_demo@0` improves from 10.413 to 9.480, 9.506, and 9.125.
+  A post-commit rerun reports aggregate min Rust/C++=4.449 but has C++
+  min-sum=1.019, outside the sanity band, so it is directional only. Strict
+  <=2.0 remains open. Next: profile/port deeper C++ image
+  `updateImageScale`/transform retention, or move to tiny-file draw
+  replay/fixed overhead if that slice proves too broad.
 - 2026-07-08: [M7] Clarified the adopted perf fence at the top of this status
   file so `/goal` sessions can choose M7 work without rereading buried scout
   notes. The fence is bare `make perf-hot-loop` with release/null-renderer

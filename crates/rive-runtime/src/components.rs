@@ -1,10 +1,13 @@
 use crate::objects::InstanceObjectArena;
-use crate::properties::{artboard_index_for_graph, property_key_for_name};
+use crate::properties::{
+    artboard_index_for_graph, cached_property_key_for_name, property_key_for_name,
+};
 use rive_binary::RuntimeFile;
 use rive_graph::{ArtboardGraph, ComponentNode};
 use rive_schema::definition_by_name;
 use std::collections::BTreeMap;
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
+use std::sync::OnceLock;
 
 /// Runtime component dirt and transform state.
 ///
@@ -124,6 +127,105 @@ impl TransformProperty {
             Self::ScaleX | Self::ScaleY | Self::Opacity => 1.0,
         }
     }
+
+    pub(crate) fn property_key_for_type(self, type_name: &str) -> Option<u16> {
+        match self {
+            Self::X if type_name == "RootBone" => root_bone_x_property_key(),
+            Self::Y if type_name == "RootBone" => root_bone_y_property_key(),
+            Self::X => node_x_property_key(),
+            Self::Y => node_y_property_key(),
+            Self::Rotation => transform_component_rotation_property_key(),
+            Self::ScaleX => transform_component_scale_x_property_key(),
+            Self::ScaleY => transform_component_scale_y_property_key(),
+            Self::Opacity if type_name == "Artboard" => artboard_opacity_property_key(),
+            Self::Opacity => transform_component_opacity_property_key(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct TransformPropertyKeys {
+    type_name: &'static str,
+    x: Option<u16>,
+    y: Option<u16>,
+    rotation: Option<u16>,
+    scale_x: Option<u16>,
+    scale_y: Option<u16>,
+    opacity: Option<u16>,
+}
+
+impl TransformPropertyKeys {
+    pub(crate) fn for_type(type_name: &'static str) -> Self {
+        Self {
+            type_name,
+            x: property_key_for_name(type_name, TransformProperty::X.property_name()),
+            y: property_key_for_name(type_name, TransformProperty::Y.property_name()),
+            rotation: property_key_for_name(type_name, TransformProperty::Rotation.property_name()),
+            scale_x: property_key_for_name(type_name, TransformProperty::ScaleX.property_name()),
+            scale_y: property_key_for_name(type_name, TransformProperty::ScaleY.property_name()),
+            opacity: property_key_for_name(type_name, TransformProperty::Opacity.property_name()),
+        }
+    }
+
+    fn is_for_type(self, type_name: &str) -> bool {
+        self.type_name == type_name
+    }
+
+    pub(crate) fn key(self, property: TransformProperty) -> Option<u16> {
+        match property {
+            TransformProperty::X => self.x,
+            TransformProperty::Y => self.y,
+            TransformProperty::Rotation => self.rotation,
+            TransformProperty::ScaleX => self.scale_x,
+            TransformProperty::ScaleY => self.scale_y,
+            TransformProperty::Opacity => self.opacity,
+        }
+    }
+}
+
+fn node_x_property_key() -> Option<u16> {
+    static KEY: OnceLock<Option<u16>> = OnceLock::new();
+    cached_property_key_for_name(&KEY, "Node", "x")
+}
+
+fn node_y_property_key() -> Option<u16> {
+    static KEY: OnceLock<Option<u16>> = OnceLock::new();
+    cached_property_key_for_name(&KEY, "Node", "y")
+}
+
+fn root_bone_x_property_key() -> Option<u16> {
+    static KEY: OnceLock<Option<u16>> = OnceLock::new();
+    cached_property_key_for_name(&KEY, "RootBone", "x")
+}
+
+fn root_bone_y_property_key() -> Option<u16> {
+    static KEY: OnceLock<Option<u16>> = OnceLock::new();
+    cached_property_key_for_name(&KEY, "RootBone", "y")
+}
+
+fn transform_component_rotation_property_key() -> Option<u16> {
+    static KEY: OnceLock<Option<u16>> = OnceLock::new();
+    cached_property_key_for_name(&KEY, "TransformComponent", "rotation")
+}
+
+fn transform_component_scale_x_property_key() -> Option<u16> {
+    static KEY: OnceLock<Option<u16>> = OnceLock::new();
+    cached_property_key_for_name(&KEY, "TransformComponent", "scaleX")
+}
+
+fn transform_component_scale_y_property_key() -> Option<u16> {
+    static KEY: OnceLock<Option<u16>> = OnceLock::new();
+    cached_property_key_for_name(&KEY, "TransformComponent", "scaleY")
+}
+
+fn transform_component_opacity_property_key() -> Option<u16> {
+    static KEY: OnceLock<Option<u16>> = OnceLock::new();
+    cached_property_key_for_name(&KEY, "TransformComponent", "opacity")
+}
+
+fn artboard_opacity_property_key() -> Option<u16> {
+    static KEY: OnceLock<Option<u16>> = OnceLock::new();
+    cached_property_key_for_name(&KEY, "Artboard", "opacity")
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -335,6 +437,7 @@ pub struct RuntimeComponent {
     pub local_id: usize,
     pub global_id: u32,
     pub type_name: &'static str,
+    pub(crate) transform_property_keys: TransformPropertyKeys,
     pub capabilities: RuntimeComponentCapabilities,
     pub parent_local: Option<usize>,
     pub constraint_locals: Vec<usize>,
@@ -352,6 +455,7 @@ impl RuntimeComponent {
             local_id: component.local_id,
             global_id: component.global_id,
             type_name: component.type_name,
+            transform_property_keys: TransformPropertyKeys::for_type(component.type_name),
             capabilities: RuntimeComponentCapabilities {
                 world_transform: component.capabilities.world_transform,
                 transform: component.capabilities.transform,
@@ -364,6 +468,14 @@ impl RuntimeComponent {
             graph_order: component.graph_order.unwrap_or(0),
             dirt: ComponentDirt::FILTHY,
             transform: TransformRuntimeState::default(),
+        }
+    }
+
+    pub(crate) fn transform_property_key(&self, property: TransformProperty) -> Option<u16> {
+        if self.transform_property_keys.is_for_type(self.type_name) {
+            self.transform_property_keys.key(property)
+        } else {
+            TransformPropertyKeys::for_type(self.type_name).key(property)
         }
     }
 

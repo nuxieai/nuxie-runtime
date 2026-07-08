@@ -389,11 +389,21 @@ impl ArtboardInstance {
         graph: &ArtboardGraph,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) -> Vec<RuntimeDrawCommand> {
+        let sorted = self.runtime_sorted_drawable_order(graph);
+        self.draw_commands_with_sorted_drawable_order(graph, layout_bounds, &sorted)
+    }
+
+    fn draw_commands_with_sorted_drawable_order(
+        &self,
+        graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+        sorted_drawable_order: &[SortedDrawableNode],
+    ) -> Vec<RuntimeDrawCommand> {
         let mut commands = Vec::new();
         let mut pending_clip_operations = Vec::<&SortedDrawableNode>::new();
         let mut empty_clips = 0i32;
 
-        for drawable in &self.runtime_sorted_drawable_order(graph) {
+        for drawable in sorted_drawable_order {
             let prev_clips = empty_clips;
             empty_clips += self.runtime_empty_clip_count(drawable, graph);
             if !self.runtime_will_draw(drawable) || empty_clips != prev_clips || empty_clips > 0 {
@@ -5196,6 +5206,7 @@ struct RuntimePaintPreparationFrame {
 #[derive(Default)]
 pub struct RuntimeRenderPathCache {
     prepared_artboard: Option<RuntimePreparedArtboardFrame>,
+    sorted_drawable_order: Option<RuntimeSortedDrawableOrderFrame>,
     layout_bounds: Option<RuntimeLayoutBoundsFrame>,
     artboard_clip: Option<Box<dyn RenderPath>>,
     background_paths: BTreeMap<usize, Box<dyn RenderPath>>,
@@ -5218,6 +5229,18 @@ struct RuntimePreparedArtboardFrame {
     key: RuntimePreparedArtboardCacheKey,
     layout_bounds: Arc<Option<BTreeMap<usize, RuntimeLayoutBounds>>>,
     commands: Arc<Vec<RuntimeDrawCommand>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RuntimeSortedDrawableOrderCacheKey {
+    graph_global_id: u32,
+    draw_order_epoch: u64,
+}
+
+#[derive(Clone)]
+struct RuntimeSortedDrawableOrderFrame {
+    key: RuntimeSortedDrawableOrderCacheKey,
+    order: Arc<Vec<SortedDrawableNode>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -5334,8 +5357,12 @@ impl RuntimeRenderPathCache {
             .is_none_or(|frame| frame.key != key)
         {
             let layout_bounds = self.layout_bounds_frame(instance, graph, runtime);
-            let commands =
-                instance.draw_commands_with_layout_bounds(graph, layout_bounds.as_ref().as_ref());
+            let sorted_drawable_order = self.sorted_drawable_order_frame(instance, graph);
+            let commands = instance.draw_commands_with_sorted_drawable_order(
+                graph,
+                layout_bounds.as_ref().as_ref(),
+                sorted_drawable_order.as_slice(),
+            );
             self.prepared_artboard = Some(RuntimePreparedArtboardFrame {
                 key,
                 layout_bounds,
@@ -5346,6 +5373,33 @@ impl RuntimeRenderPathCache {
         self.prepared_artboard
             .as_ref()
             .expect("prepared artboard frame was just populated")
+            .clone()
+    }
+
+    fn sorted_drawable_order_frame(
+        &mut self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+    ) -> Arc<Vec<SortedDrawableNode>> {
+        let key = RuntimeSortedDrawableOrderCacheKey {
+            graph_global_id: graph.global_id,
+            draw_order_epoch: instance.draw_order_epoch(),
+        };
+        if self
+            .sorted_drawable_order
+            .as_ref()
+            .is_none_or(|frame| frame.key != key)
+        {
+            self.sorted_drawable_order = Some(RuntimeSortedDrawableOrderFrame {
+                key,
+                order: Arc::new(instance.runtime_sorted_drawable_order(graph)),
+            });
+        }
+
+        self.sorted_drawable_order
+            .as_ref()
+            .expect("sorted drawable order frame was just populated")
+            .order
             .clone()
     }
 

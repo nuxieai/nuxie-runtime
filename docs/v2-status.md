@@ -549,6 +549,23 @@ the only memory the next session has. Update it every commit.
    remains open. Next: re-profile after this fixed-key cleanup and choose
    between the sampled hot BTree/draw-order path and remaining audited
    data-context retention work.
+   Sorted drawable order is now retained in `RuntimeRenderPathCache` by
+   `(graph_global_id, draw_order_epoch)`, and `draw_order_epoch` is bumped by
+   the C++ DrawOrder dirt raisers for `DrawRules.drawTargetId` and
+   `DrawTarget.placementValue` through `ComponentDirt::DRAW_ORDER`. This keeps
+   prepared command rebuilds from reconstructing draw-target BTree groupings
+   when only paint/data-bind/cache epoch changes. Full `make golden-compare`
+   remains exact=263 / exact-segments=584 / diverges=0; focused draw-order and
+   draw tests, `cargo test --workspace`, `cargo fmt --all -- --check`, and
+   `git diff --check` pass. Direct `ai_assitant --benchmark-repeat 100` JSON
+   at `/tmp/rive-ai-sorted-draw-order-perf.json` reports cpp median=0.522 ms,
+   rust median=1.592 ms, Rust/C++=3.051; focused hot-loop reports aggregate
+   Rust/C++=2.136 then 2.107, so strict <=2.0 remains open. Next: re-profile;
+   likely remaining targets are draw command/prepare retention below sorted
+   order and data-context BTree/range work. Keep the scout/perf fences in
+   force: no broad converter-property writes, no StringPad-style RangeMapper
+   retry, and no shallow command/path-wrapper caching without
+   release/null-renderer evidence.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -1050,6 +1067,21 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Retain sorted drawable order behind DrawOrder dirt. C++
+  retains an intrusive drawable list and only resorts it when
+  `ComponentDirt::DrawOrder` is raised by `DrawRules::drawTargetIdChanged()`
+  or `DrawTarget::placementValueChanged()`. Rust now tracks a
+  `draw_order_epoch` on `ArtboardInstance`, bumps it through the same
+  property-change dirt surface, and caches `runtime_sorted_drawable_order` in
+  `RuntimeRenderPathCache` by `(graph_global_id, draw_order_epoch)`.
+  Prepared draw commands can still rebuild on the broader cache epoch, but the
+  draw-target grouping BTree pass no longer reruns on clean draw-order frames.
+  This follows the scout-ranked C++ dirt gate and does not add a speculative
+  skip cache. `make golden-compare` remains exact=263 / exact-segments=584 /
+  diverges=0; focused draw tests, `cargo test --workspace`, `cargo fmt --all
+  -- --check`, and `git diff --check` pass. Repeat=100 JSON reports cpp
+  median=0.522 ms, rust median=1.592 ms, Rust/C++=3.051; focused hot-loop
+  reports aggregate Rust/C++=2.136 then 2.107. M7 remains open.
 - 2026-07-08: [M7] Cache fixed draw/image/nested property keys. A post
   draw-classifier sample still had generic schema/property lookup under
   draw/prepare through literal `property_key_for_name` calls. C++ uses
@@ -2693,6 +2725,14 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Retained sorted drawable order by `draw_order_epoch`,
+  raised from the C++ `DrawRules.drawTargetId` / `DrawTarget.placementValue`
+  dirt hooks, so prepared-frame rebuilds no longer redo draw-order BTree
+  grouping unless DrawOrder dirt changed. `make golden-compare` remains
+  exact=263/exact-segments=584/diverges=0; `cargo test --workspace` passes;
+  repeat=100 JSON reports Rust/C++=3.051 and focused hot-loop reports
+  Rust/C++=2.136 then 2.107. Strict <=2.0 remains open; next re-profile below
+  sorted order and data-context BTree/range work under the scout/perf fences.
 - 2026-07-08: [M7] Cached fixed draw/image/mesh/nested property keys in
   `runtime_draw_property_key_for_name`, replacing literal frame-loop
   `property_key_for_name` calls without changing dirty or skip semantics.

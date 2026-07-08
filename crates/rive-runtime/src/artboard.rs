@@ -99,6 +99,7 @@ pub struct ArtboardInstance {
     pub(crate) cache_epoch: u64,
     pub(crate) path_epoch: u64,
     pub(crate) layout_epoch: u64,
+    pub(crate) draw_order_epoch: u64,
     pub(crate) did_change: bool,
 }
 
@@ -335,6 +336,7 @@ impl ArtboardInstance {
             cache_epoch: 1,
             path_epoch: 1,
             layout_epoch: 1,
+            draw_order_epoch: 1,
             did_change: true,
         };
         instance.apply_initial_layout_component_display_collapses();
@@ -927,6 +929,10 @@ impl ArtboardInstance {
         self.layout_epoch
     }
 
+    pub(crate) fn draw_order_epoch(&self) -> u64 {
+        self.draw_order_epoch
+    }
+
     fn mark_changed(&mut self) {
         self.did_change = true;
         self.cache_epoch = self.cache_epoch.wrapping_add(1);
@@ -938,6 +944,10 @@ impl ArtboardInstance {
 
     fn mark_path_changed(&mut self) {
         self.path_epoch = self.path_epoch.wrapping_add(1);
+    }
+
+    fn mark_draw_order_changed(&mut self) {
+        self.draw_order_epoch = self.draw_order_epoch.wrapping_add(1);
     }
 
     fn mark_layout_changed_for_property(&mut self, local_id: usize, property_key: u16) {
@@ -1032,6 +1042,9 @@ impl ArtboardInstance {
         }
         if component_dirt_affects_path_epoch(dirt) {
             self.mark_path_changed();
+        }
+        if dirt.contains(ComponentDirt::DRAW_ORDER) {
+            self.mark_draw_order_changed();
         }
         self.on_component_dirty(local_id);
 
@@ -1353,6 +1366,16 @@ impl ArtboardInstance {
             && let Some(value) = self.uint_property(local_id, property_key)
         {
             changed |= self.set_nested_artboard_artboard_id(local_id, value);
+        }
+        if self.slot(local_id).and_then(|slot| slot.type_name) == Some("DrawRules")
+            && property_key_for_name("DrawRules", "drawTargetId") == Some(property_key)
+        {
+            changed |= self.add_dirt(local_id, ComponentDirt::DRAW_ORDER, false);
+        }
+        if self.slot(local_id).and_then(|slot| slot.type_name) == Some("DrawTarget")
+            && property_key_for_name("DrawTarget", "placementValue") == Some(property_key)
+        {
+            changed |= self.add_dirt(local_id, ComponentDirt::DRAW_ORDER, false);
         }
         if solo_active_component_id_property_key() == Some(property_key) {
             changed |= self.propagate_solo_collapse(local_id);
@@ -2546,6 +2569,7 @@ mod tests {
             cache_epoch: 1,
             path_epoch: 1,
             layout_epoch: 1,
+            draw_order_epoch: 1,
             did_change: true,
         }
     }
@@ -2780,6 +2804,27 @@ mod tests {
         let layout_epoch = instance.layout_epoch();
         assert!(!instance.add_dirt(0, ComponentDirt::LAYOUT_STYLE, false));
         assert_eq!(instance.layout_epoch(), layout_epoch);
+    }
+
+    #[test]
+    fn draw_order_epoch_tracks_draw_order_dirt() {
+        let component = synthetic_component(0, 0);
+        let mut instance = synthetic_instance(vec![component], vec![0]);
+
+        let initial_draw_order_epoch = instance.draw_order_epoch();
+        assert!(instance.add_dirt(0, ComponentDirt::PAINT, false));
+        assert_eq!(instance.draw_order_epoch(), initial_draw_order_epoch);
+
+        assert!(instance.add_dirt(0, ComponentDirt::DRAW_ORDER, false));
+        assert!(instance.draw_order_epoch() > initial_draw_order_epoch);
+
+        let draw_order_epoch = instance.draw_order_epoch();
+        assert!(!instance.add_dirt(0, ComponentDirt::DRAW_ORDER, false));
+        assert_eq!(instance.draw_order_epoch(), draw_order_epoch);
+
+        instance.clear_component_dirt(0);
+        assert!(instance.add_dirt(0, ComponentDirt::DRAW_ORDER, false));
+        assert!(instance.draw_order_epoch() > draw_order_epoch);
     }
 
     #[test]

@@ -5333,8 +5333,7 @@ pub struct RuntimeRenderPathCache {
     clip_paths: BTreeMap<usize, Box<dyn RenderPath>>,
     layout_clip_paths: BTreeMap<usize, Box<dyn RenderPath>>,
     draw_paths: RuntimeDrawPathSlots,
-    path_geometry_commands:
-        BTreeMap<RuntimePathGeometryCommandsCacheSlot, RuntimeCachedPathGeometryCommands>,
+    path_geometry_commands: RuntimePathGeometryCommandSlots,
     text_shape_paints: BTreeMap<RuntimeTextShapePaintCacheSlot, RuntimeCachedTextShapePaints>,
     gradient_preparation: Option<RuntimeGradientPreparationFrame>,
     gradient_shaders: BTreeMap<u32, RuntimeGradientShaderCacheEntry>,
@@ -5419,16 +5418,33 @@ impl RuntimePathComposerLookupFrame {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-struct RuntimePathGeometryCommandsCacheSlot {
-    graph_global_id: u32,
-    path_local: usize,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct RuntimePathGeometryCommandsCacheKey {
     path_epoch: u64,
     layout_epoch: u64,
+}
+
+#[derive(Default)]
+struct RuntimePathGeometryCommandSlots {
+    graph_global_id: Option<u32>,
+    by_local: Vec<Option<RuntimeCachedPathGeometryCommands>>,
+}
+
+impl RuntimePathGeometryCommandSlots {
+    fn slot_mut(
+        &mut self,
+        graph_global_id: u32,
+        path_local: usize,
+    ) -> &mut Option<RuntimeCachedPathGeometryCommands> {
+        if self.graph_global_id != Some(graph_global_id) {
+            self.graph_global_id = Some(graph_global_id);
+            self.by_local.clear();
+        }
+        if self.by_local.len() <= path_local {
+            self.by_local.resize_with(path_local + 1, || None);
+        }
+        &mut self.by_local[path_local]
+    }
 }
 
 #[derive(Clone)]
@@ -5782,20 +5798,15 @@ impl RuntimeRenderPathCache {
         path: &PathGeometryNode,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) -> RuntimeCachedPathGeometryCommands {
-        let slot = RuntimePathGeometryCommandsCacheSlot {
-            graph_global_id: graph.global_id,
-            path_local: path.local_id,
-        };
         let key = RuntimePathGeometryCommandsCacheKey {
             path_epoch: instance.path_epoch(),
             layout_epoch: instance.layout_epoch(),
         };
-
-        if self
+        let slot = self
             .path_geometry_commands
-            .get(&slot)
-            .is_none_or(|cached| cached.key != key)
-        {
+            .slot_mut(graph.global_id, path.local_id);
+
+        if slot.as_ref().is_none_or(|cached| cached.key != key) {
             let runtime_path =
                 instance.runtime_path_geometry_with_layout_control(path, layout_bounds);
             let weighted_context =
@@ -5806,19 +5817,15 @@ impl RuntimeRenderPathCache {
                 Mat2D::IDENTITY,
                 weighted_context.as_ref(),
             );
-            self.path_geometry_commands.insert(
-                slot,
-                RuntimeCachedPathGeometryCommands {
-                    key,
-                    path: Arc::new(runtime_path),
-                    commands: Arc::new(commands),
-                    has_weighted_context: weighted_context.is_some(),
-                },
-            );
+            *slot = Some(RuntimeCachedPathGeometryCommands {
+                key,
+                path: Arc::new(runtime_path),
+                commands: Arc::new(commands),
+                has_weighted_context: weighted_context.is_some(),
+            });
         }
 
-        self.path_geometry_commands
-            .get(&slot)
+        slot.as_ref()
             .expect("path geometry command cache was just populated")
             .clone()
     }

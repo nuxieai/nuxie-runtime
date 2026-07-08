@@ -1222,7 +1222,7 @@ impl ArtboardInstance {
         paint_by_global: &mut RuntimeRenderPaints,
         path_cache: &mut RuntimeRenderPathCache,
     ) -> Result<()> {
-        let mut mesh_buffers = BTreeMap::new();
+        let mut mesh_buffers = RuntimeMeshRenderBufferSlots::default();
         let images = RuntimeRenderImages::default();
         self.draw_prepared_static_artboard_internal_with_path_cache(
             runtime,
@@ -1275,7 +1275,7 @@ impl ArtboardInstance {
         renderer: &mut dyn Renderer,
         paint_by_global: &mut RuntimeRenderPaints,
         image_by_global: &RuntimeRenderImages,
-        mesh_by_local: &mut BTreeMap<usize, RuntimeMeshRenderBuffers>,
+        mesh_by_local: &mut RuntimeMeshRenderBufferSlots,
         path_cache: &mut RuntimeRenderPathCache,
         mut paint_configurations: Option<&mut BTreeMap<u32, RuntimeCachedRenderPaintConfiguration>>,
         mut nested_paint_caches: Option<&mut BTreeMap<u32, RuntimeRenderPaintCache>>,
@@ -5233,7 +5233,7 @@ pub struct RuntimeRenderPaintCache {
     paint_configurations: BTreeMap<u32, RuntimeCachedRenderPaintConfiguration>,
     preparation: Option<RuntimePaintPreparationFrame>,
     images: RuntimeRenderImages,
-    meshes: BTreeMap<usize, RuntimeMeshRenderBuffers>,
+    meshes: RuntimeMeshRenderBufferSlots,
     nested_artboards: BTreeMap<u32, RuntimeRenderPaintCache>,
 }
 
@@ -5339,6 +5339,24 @@ struct RuntimeMeshRenderBuffers {
     vertex_count: u32,
     index_count: u32,
     last_vertex_bytes: Option<Vec<u8>>,
+}
+
+#[derive(Default)]
+struct RuntimeMeshRenderBufferSlots {
+    buffers_by_local: Vec<Option<RuntimeMeshRenderBuffers>>,
+}
+
+impl RuntimeMeshRenderBufferSlots {
+    fn insert(&mut self, local_id: usize, buffers: RuntimeMeshRenderBuffers) {
+        if self.buffers_by_local.len() <= local_id {
+            self.buffers_by_local.resize_with(local_id + 1, || None);
+        }
+        self.buffers_by_local[local_id] = Some(buffers);
+    }
+
+    fn get_mut(&mut self, local_id: usize) -> Option<&mut RuntimeMeshRenderBuffers> {
+        self.buffers_by_local.get_mut(local_id)?.as_mut()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -6555,7 +6573,7 @@ fn preallocate_artboard_mesh_render_buffers(
     graph: &ArtboardGraph,
     factory: &mut dyn RenderFactory,
     source_meshes: &mut BTreeMap<(u32, usize), RuntimeSourceMeshRenderBuffers>,
-) -> BTreeMap<usize, RuntimeMeshRenderBuffers> {
+) -> RuntimeMeshRenderBufferSlots {
     let mut source_buffers = Vec::new();
     for mesh in &graph.meshes {
         if let Some(source) = source_meshes.remove(&(graph.global_id, mesh.local_id)) {
@@ -6563,7 +6581,7 @@ fn preallocate_artboard_mesh_render_buffers(
         }
     }
 
-    let mut buffers_by_local = BTreeMap::new();
+    let mut buffers_by_local = RuntimeMeshRenderBufferSlots::default();
     for (mesh_local, source) in source_buffers {
         let vertices = factory.make_render_buffer(
             RenderBufferType::Vertex,
@@ -7039,7 +7057,7 @@ fn runtime_draw_command(
     renderer: &mut dyn Renderer,
     paint_by_global: &mut RuntimeRenderPaints,
     image_by_global: &RuntimeRenderImages,
-    mesh_by_local: &mut BTreeMap<usize, RuntimeMeshRenderBuffers>,
+    mesh_by_local: &mut RuntimeMeshRenderBufferSlots,
     path_cache: &mut RuntimeRenderPathCache,
     mut paint_configurations: Option<&mut BTreeMap<u32, RuntimeCachedRenderPaintConfiguration>>,
     nested_paint_caches: Option<&mut BTreeMap<u32, RuntimeRenderPaintCache>>,
@@ -7357,7 +7375,7 @@ fn runtime_draw_image(
     command: &RuntimeDrawCommand,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     image_by_global: &RuntimeRenderImages,
-    mesh_by_local: &mut BTreeMap<usize, RuntimeMeshRenderBuffers>,
+    mesh_by_local: &mut RuntimeMeshRenderBufferSlots,
     path_cache: &mut RuntimeRenderPathCache,
     renderer: &mut dyn Renderer,
 ) -> Result<()> {
@@ -7381,7 +7399,7 @@ fn runtime_draw_image(
 
     if let Some(mesh) = runtime_image_mesh(runtime, graph, local_id) {
         let buffers = mesh_by_local
-            .get_mut(&mesh.local_id)
+            .get_mut(mesh.local_id)
             .with_context(|| format!("missing mesh render buffers for local {}", mesh.local_id))?;
         runtime_draw_mesh_image(
             runtime,
@@ -7711,7 +7729,7 @@ fn runtime_draw_nested_artboard(
     renderer: &mut dyn Renderer,
     paint_by_global: &mut RuntimeRenderPaints,
     image_by_global: &RuntimeRenderImages,
-    mesh_by_local: &mut BTreeMap<usize, RuntimeMeshRenderBuffers>,
+    mesh_by_local: &mut RuntimeMeshRenderBufferSlots,
     path_cache: &mut RuntimeRenderPathCache,
     mut paint_configurations: Option<&mut BTreeMap<u32, RuntimeCachedRenderPaintConfiguration>>,
     nested_paint_caches: Option<&mut BTreeMap<u32, RuntimeRenderPaintCache>>,

@@ -215,6 +215,7 @@ pub(crate) enum RuntimeDataBindGraphConverter {
         tokens: Vec<RuntimeDataBindGraphFormulaToken>,
     },
     Interpolator {
+        global_id: u32,
         duration: f32,
         interpolator: Option<RuntimeTransitionInterpolator>,
     },
@@ -414,6 +415,27 @@ impl RuntimeDataBindGraphConverter {
             _ => false,
         }
     }
+
+    pub(crate) fn set_interpolator_duration(&mut self, target_global_id: u32, value: f32) -> bool {
+        match self {
+            RuntimeDataBindGraphConverter::Interpolator {
+                global_id,
+                duration,
+                ..
+            } if *global_id == target_global_id && *duration != value => {
+                *duration = value;
+                true
+            }
+            RuntimeDataBindGraphConverter::Group(converters) => {
+                let mut changed = false;
+                for converter in converters {
+                    changed |= converter.set_interpolator_duration(target_global_id, value);
+                }
+                changed
+            }
+            _ => false,
+        }
+    }
 }
 
 pub(crate) fn runtime_data_bind_graph_converter_requires_persisting_custom_property_source(
@@ -430,6 +452,7 @@ pub(crate) fn runtime_data_bind_graph_converter_requires_persisting_custom_prope
         | RuntimeDataBindGraphConverter::StringTrim { .. }
         | RuntimeDataBindGraphConverter::StringPad { .. }
         | RuntimeDataBindGraphConverter::Rounder { .. }
+        | RuntimeDataBindGraphConverter::Interpolator { .. }
         | RuntimeDataBindGraphConverter::OperationValue { .. }
         | RuntimeDataBindGraphConverter::Formula { .. } => false,
         RuntimeDataBindGraphConverter::Group(converters) => converters
@@ -439,7 +462,6 @@ pub(crate) fn runtime_data_bind_graph_converter_requires_persisting_custom_prope
         | RuntimeDataBindGraphConverter::OperationViewModel { .. }
         | RuntimeDataBindGraphConverter::SystemOperationValue { .. }
         | RuntimeDataBindGraphConverter::RangeMapper { .. }
-        | RuntimeDataBindGraphConverter::Interpolator { .. }
         | RuntimeDataBindGraphConverter::Unsupported => true,
     }
 }
@@ -2187,6 +2209,7 @@ fn runtime_data_bind_graph_interpolator_converter(
     };
 
     RuntimeDataBindGraphConverter::Interpolator {
+        global_id: converter.id,
         duration: converter.double_property("duration").unwrap_or(1.0),
         interpolator,
     }
@@ -2302,6 +2325,7 @@ impl RuntimeDataBindGraphConverterState {
                 RuntimeDataBindGraphConverter::Interpolator {
                     duration,
                     interpolator,
+                    ..
                 },
                 Self::Interpolator(state),
             ) => state.convert(*duration, *interpolator, value),
@@ -2354,6 +2378,7 @@ impl RuntimeDataBindGraphConverterState {
                 RuntimeDataBindGraphConverter::Interpolator {
                     duration,
                     interpolator,
+                    ..
                 },
                 Self::Interpolator(state),
             ) => state.convert(*duration, *interpolator, value),
@@ -2384,6 +2409,7 @@ impl RuntimeDataBindGraphConverterState {
                 Some(RuntimeDataBindGraphConverter::Interpolator {
                     duration,
                     interpolator,
+                    ..
                 }),
                 Self::Interpolator(state),
             ) => state.advance(*duration, *interpolator, elapsed_seconds),

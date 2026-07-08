@@ -325,8 +325,24 @@ the only memory the next session has. Update it every commit.
    Treat RangeMapper as requiring deeper C++ DataBind/DataConverter ownership
    and ordering analysis before another fallback-removal attempt; do not retry
    the StringPad-style copied-converter updater for this family.
-   Next: inspect `DataConverterInterpolator.durationChanged()` family-by-family,
-   still avoiding broad converter-property writes.
+   `DataConverterInterpolator.durationChanged()` is now modeled through the
+   same family-specific converter-property dirty lane: C++ only marks dirty for
+   `durationChanged()`, while generated `interpolationTypeChanged()` and
+   `interpolatorIdChanged()` are empty. Imported Interpolator `duration` binds
+   are queued by source path, seeded for initial application, update dependent
+   copied converters by target converter id, and enqueue their property/custom
+   parents without broad DataBindContext converter-property writes; the existing
+   stateful-converter advance queue continues to cover the in-flight
+   `InterpolatorAdvancer::advance()` dirty edge. `Interpolator` now leaves the
+   converter-backed custom persisting lane. Remaining conservative families are
+   `NumberToList`, operation-view-model / system operation, `RangeMapper`, and
+   unsupported converters. Full `make golden-compare` remains exact=263 /
+   exact-segments=584 / diverges=0, `cargo test --workspace`,
+   `cargo fmt --all -- --check`, and `git diff --check` pass, and fenced
+   hot-loop reports aggregate Rust/C++=2.180 then 2.264. Strict <=2.0 remains
+   open. Next: inspect `DataConverterNumberToList.viewModelIdChanged()`,
+   including its cached-list-item clearing semantics, before removing that
+   family from the persisting lane.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -828,6 +844,21 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Remove `DataConverterInterpolator` custom sources from the
+  conservative polling lane for the audited `duration` property only. The C++
+  handwritten Interpolator class overrides `durationChanged()` to call
+  `DataConverter::markConverterDirty`, while generated `interpolationType` and
+  `interpolatorId` callbacks are empty. Rust now builds artboard Interpolator
+  `duration` converter-property bindings, queues them by source path, updates
+  copied dependent converters by global id, and enqueues the concrete
+  property/custom parents already covered by target/source queues. The separate
+  stateful advance path remains responsible for the C++
+  `InterpolatorAdvancer::advance()` dirty edge. `make golden-compare` remains
+  exact=263 / exact-segments=584 / diverges=0; `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check` pass. Fenced
+  release/null-renderer hot-loop reports aggregate Rust/C++=2.180 and 2.264
+  over the 5-entry / 10-segment focused corpus, still above strict <=2.0, so M7
+  remains open.
 - 2026-07-08: [M7] Do not land the family-specific RangeMapper converter-property
   updater as the fallback-removal path. The scout followed the C++ dirty surface
   more narrowly than the earlier broad converter-property write: it covered only
@@ -2244,6 +2275,12 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Removed `DataConverterInterpolator.duration` custom sources
+  from the conservative persisting lane with a family-specific updater.
+  `make golden-compare` remains exact=263/exact-segments=584/diverges=0;
+  `cargo test --workspace` passes; focused hot-loop is Rust/C++=2.180 then
+  2.264. Strict <=2.0 remains open; next inspect NumberToList view-model-id
+  dirty/cache semantics.
 - 2026-07-08: [M7] Landed path-indexed artboard source-to-target dirty queues
   for property/image data binds. `make golden-compare` remains
   exact=263/exact-segments=584/diverges=0; `cargo test --workspace` passes;

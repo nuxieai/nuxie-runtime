@@ -509,6 +509,7 @@ pub(super) enum RuntimeArtboardConverterPropertyBindingTarget {
     StringPadLength { global_id: u32 },
     StringPadText { global_id: u32 },
     StringPadPadType { global_id: u32 },
+    InterpolatorDuration { global_id: u32 },
 }
 
 enum RuntimeArtboardConverterPropertyBindingUpdate {
@@ -518,6 +519,7 @@ enum RuntimeArtboardConverterPropertyBindingUpdate {
     StringPadLength { global_id: u32, value: u64 },
     StringPadText { global_id: u32, value: Vec<u8> },
     StringPadPadType { global_id: u32, value: u64 },
+    InterpolatorDuration { global_id: u32, value: f32 },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1410,12 +1412,15 @@ pub(super) fn build_artboard_converter_property_bindings(
         runtime_data_bind_property_key_for_name("DataConverterStringPad", "text");
     let string_pad_pad_type_key =
         runtime_data_bind_property_key_for_name("DataConverterStringPad", "padType");
+    let interpolator_duration_key =
+        runtime_data_bind_property_key_for_name("DataConverterInterpolator", "duration");
     if decimals_key.is_none()
         && color_format_key.is_none()
         && string_trim_trim_type_key.is_none()
         && string_pad_length_key.is_none()
         && string_pad_text_key.is_none()
         && string_pad_pad_type_key.is_none()
+        && interpolator_duration_key.is_none()
     {
         return Vec::new();
     }
@@ -1469,6 +1474,11 @@ pub(super) fn build_artboard_converter_property_bindings(
                         global_id: target.id,
                     }
                 }
+                "DataConverterInterpolator" if Some(property_key) == interpolator_duration_key => {
+                    RuntimeArtboardConverterPropertyBindingTarget::InterpolatorDuration {
+                        global_id: target.id,
+                    }
+                }
                 _ => return None,
             };
             let path = file.data_bind_context_source_path_ids_for_object(data_bind)?;
@@ -1505,6 +1515,9 @@ pub(super) fn build_artboard_converter_property_bindings(
                     RuntimeArtboardConverterPropertyBindingTarget::StringPadPadType { .. } => {
                         RuntimeDataBindGraphValue::Number(0.0)
                     }
+                    RuntimeArtboardConverterPropertyBindingTarget::InterpolatorDuration {
+                        ..
+                    } => RuntimeDataBindGraphValue::Number(1.0),
                 });
             if !runtime_artboard_converter_property_binding_target_accepts_value(
                 target,
@@ -1545,6 +1558,9 @@ fn runtime_artboard_converter_property_binding_target_accepts_value(
                 value,
                 RuntimeDataBindGraphValue::Number(_) | RuntimeDataBindGraphValue::Enum(_)
             )
+        }
+        RuntimeArtboardConverterPropertyBindingTarget::InterpolatorDuration { .. } => {
+            matches!(value, RuntimeDataBindGraphValue::Number(_))
         }
         RuntimeArtboardConverterPropertyBindingTarget::ToStringColorFormat { .. }
         | RuntimeArtboardConverterPropertyBindingTarget::StringPadText { .. } => {
@@ -1629,6 +1645,15 @@ fn runtime_artboard_converter_property_binding_update(
             RuntimeDataBindGraphValue::Enum(value),
         ) => Some(
             RuntimeArtboardConverterPropertyBindingUpdate::StringPadPadType { global_id, value },
+        ),
+        (
+            RuntimeArtboardConverterPropertyBindingTarget::InterpolatorDuration { global_id },
+            RuntimeDataBindGraphValue::Number(value),
+        ) => Some(
+            RuntimeArtboardConverterPropertyBindingUpdate::InterpolatorDuration {
+                global_id,
+                value,
+            },
         ),
         _ => None,
     }
@@ -2511,6 +2536,10 @@ impl ArtboardInstance {
                         global_id,
                         value,
                     } => self.set_artboard_string_pad_converter_pad_type(global_id, value),
+                    RuntimeArtboardConverterPropertyBindingUpdate::InterpolatorDuration {
+                        global_id,
+                        value,
+                    } => self.set_artboard_interpolator_converter_duration(global_id, value),
                 };
             }
         }
@@ -2679,6 +2708,16 @@ impl ArtboardInstance {
     ) -> bool {
         self.refresh_artboard_converter_dependents(|converter| {
             converter.set_string_pad_pad_type(target_global_id, value)
+        })
+    }
+
+    fn set_artboard_interpolator_converter_duration(
+        &mut self,
+        target_global_id: u32,
+        value: f32,
+    ) -> bool {
+        self.refresh_artboard_converter_dependents(|converter| {
+            converter.set_interpolator_duration(target_global_id, value)
         })
     }
 
@@ -3547,6 +3586,16 @@ mod tests {
                     interpolator: None,
                 }),
             ),
+            custom_binding(
+                8,
+                27,
+                28,
+                Some(RuntimeDataBindGraphConverter::Interpolator {
+                    global_id: 904,
+                    duration: 1.0,
+                    interpolator: None,
+                }),
+            ),
         ];
         let layout_bindings = vec![RuntimeArtboardLayoutComputedBindingInstance {
             target_local_id: 9,
@@ -3571,7 +3620,7 @@ mod tests {
 
         assert_eq!(
             queues.drain_custom_property_update_indices(),
-            vec![0, 1, 2, 3, 4, 5, 6, 7]
+            vec![0, 1, 2, 3, 4, 5, 6, 7, 8]
         );
         assert_eq!(queues.drain_custom_property_update_indices(), vec![7]);
         assert_eq!(queues.drain_dirty_numeric_sources(), vec![0]);
@@ -3640,6 +3689,16 @@ mod tests {
 
         assert_eq!(queues.drain_custom_property_update_indices(), vec![7]);
         assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
+
+        queues.enqueue_target_property(27, 28, None);
+
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![8, 7]);
+        assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
+
+        queues.enqueue_target_property(27, 28, Some(8));
+
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![7]);
+        assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
     }
 
     #[test]
@@ -3661,6 +3720,12 @@ mod tests {
                 vec![3],
                 RuntimeArtboardConverterPropertyBindingTarget::StringPadText { global_id: 903 },
             ),
+            converter_property_binding(
+                vec![4],
+                RuntimeArtboardConverterPropertyBindingTarget::InterpolatorDuration {
+                    global_id: 904,
+                },
+            ),
         ];
         let mut queues = RuntimeArtboardDataBindTargetQueues::new(
             &property_bindings,
@@ -3668,7 +3733,7 @@ mod tests {
             &converter_property_bindings,
         );
 
-        assert_eq!(queues.drain_dirty_converter_properties(), vec![0, 1, 2]);
+        assert_eq!(queues.drain_dirty_converter_properties(), vec![0, 1, 2, 3]);
         assert_eq!(
             queues.drain_dirty_converter_properties(),
             Vec::<usize>::new()
@@ -3687,5 +3752,9 @@ mod tests {
         queues.enqueue_path(&[3]);
 
         assert_eq!(queues.drain_dirty_converter_properties(), vec![2]);
+
+        queues.enqueue_path(&[4]);
+
+        assert_eq!(queues.drain_dirty_converter_properties(), vec![3]);
     }
 }

@@ -131,6 +131,17 @@ the only memory the next session has. Update it every commit.
    Treat this as too shallow a layer: clip/layout/background path rebuild
    gating can wait until the lower-level `ShapePaintPath`/`PathComposer`
    retention has landed or a profile shows it on the hot path.
+   A second lower-level scout that converted `RuntimeShapePaintCommand`
+   path/effect/inner-feather payloads to shared `Arc<[RuntimePathCommand]>`
+   slices and cached shape paint path-command buffers by
+   `(graph, shape, path kind, path_epoch, layout_epoch)` was also backed out.
+   It preserved `make golden-compare` at exact=263 / exact-segments=584 /
+   diverges=0 and kept the focused path/probe tests green, but the fenced
+   release/null-renderer aggregate stayed worse than the current baseline:
+   Rust/C++=2.627 and 2.619. Direct `ai_assitant --benchmark-repeat 100`
+   improved only to Rust/C++=18.598. The next attempt should stop clean
+   frames from entering prepare at all via audited C++ dirt gates, or port
+   actual `PathComposer`/raw-path retention, not wrap prepared command vectors.
    Nested-artboard layout bounds are now retained on `ArtboardInstance` by
    `(graph_global_id, layout_epoch)`, matching the C++ `markLayoutNodeDirty`
    / `Artboard::markLayoutDirty` boundary for layout recomputation during
@@ -651,6 +662,23 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Do not land shared shape path-command buffers as the
+  `ShapePaintPath` retention slice. The experiment changed
+  `RuntimeShapePaintCommand` path/effect/inner-feather payloads from owned
+  `Vec<RuntimePathCommand>` to shared `Arc<[RuntimePathCommand]>` slices and
+  added a `RuntimeRenderPathCache` shape-path command cache keyed by graph,
+  shape, path kind, `path_epoch`, and `layout_epoch`. This is closer to C++'s
+  retained raw path than the earlier cloned-Vec scout, and it kept correctness
+  green: focused path/probe tests passed and `make golden-compare` reported
+  exact=263 / exact-segments=584 / diverges=0. It still failed the M7 perf
+  fence: two release/null-renderer focused hot-loop runs reported aggregate
+  Rust/C++=2.627 and 2.619 versus the logged 2.329 baseline. Direct
+  repeat-heavy `ai_assitant` improved to cpp median=0.604 ms, rust
+  median=11.242 ms, Rust/C++=18.598, but that is not enough to override the
+  focused corpus regression. Backed out the code. The next M7 slice should
+  either make clean frames skip prepare through the audited C++ dirt/update
+  gate, or port actual `PathComposer`/raw-path retention below prepared
+  command construction.
 - 2026-07-08: [M7] Do not land the retained clip/layout/background path cache
   scout as a standalone optimization. The experiment changed
   `RuntimeRenderPathCache` so artboard clips, clipping shapes, layout clips,

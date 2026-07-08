@@ -3529,6 +3529,12 @@ mod tests {
             ),
             custom_binding(
                 6,
+                25,
+                26,
+                Some(RuntimeDataBindGraphConverter::Rounder { decimals: 2 }),
+            ),
+            custom_binding(
+                7,
                 15,
                 16,
                 Some(RuntimeDataBindGraphConverter::RangeMapper {
@@ -3565,9 +3571,9 @@ mod tests {
 
         assert_eq!(
             queues.drain_custom_property_update_indices(),
-            vec![0, 1, 2, 3, 4, 5, 6]
+            vec![0, 1, 2, 3, 4, 5, 6, 7]
         );
-        assert_eq!(queues.drain_custom_property_update_indices(), vec![6]);
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![7]);
         assert_eq!(queues.drain_dirty_numeric_sources(), vec![0]);
         assert_eq!(queues.persisting_layout_computed(), &[0]);
         assert_eq!(queues.persisting_solo_sources(), &[0]);
@@ -3577,52 +3583,62 @@ mod tests {
         queues.enqueue_target_property(7, 11, None);
         queues.enqueue_target_property(99, 99, None);
 
-        assert_eq!(queues.drain_custom_property_update_indices(), vec![0, 6]);
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![0, 7]);
         assert_eq!(queues.drain_dirty_numeric_sources(), vec![0]);
 
         queues.enqueue_target_property(7, 11, Some(0));
 
-        assert_eq!(queues.drain_custom_property_update_indices(), vec![6]);
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![7]);
         assert_eq!(queues.drain_dirty_numeric_sources(), vec![0]);
 
         queues.enqueue_target_property(17, 18, None);
 
-        assert_eq!(queues.drain_custom_property_update_indices(), vec![2, 6]);
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![2, 7]);
         assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
 
         queues.enqueue_target_property(17, 18, Some(2));
 
-        assert_eq!(queues.drain_custom_property_update_indices(), vec![6]);
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![7]);
         assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
 
         queues.enqueue_target_property(19, 20, None);
 
-        assert_eq!(queues.drain_custom_property_update_indices(), vec![3, 6]);
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![3, 7]);
         assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
 
         queues.enqueue_target_property(19, 20, Some(3));
 
-        assert_eq!(queues.drain_custom_property_update_indices(), vec![6]);
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![7]);
         assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
 
         queues.enqueue_target_property(21, 22, None);
 
-        assert_eq!(queues.drain_custom_property_update_indices(), vec![4, 6]);
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![4, 7]);
         assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
 
         queues.enqueue_target_property(21, 22, Some(4));
 
-        assert_eq!(queues.drain_custom_property_update_indices(), vec![6]);
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![7]);
         assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
 
         queues.enqueue_target_property(23, 24, None);
 
-        assert_eq!(queues.drain_custom_property_update_indices(), vec![5, 6]);
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![5, 7]);
         assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
 
         queues.enqueue_target_property(23, 24, Some(5));
 
-        assert_eq!(queues.drain_custom_property_update_indices(), vec![6]);
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![7]);
+        assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
+
+        queues.enqueue_target_property(25, 26, None);
+
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![6, 7]);
+        assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
+
+        queues.enqueue_target_property(25, 26, Some(6));
+
+        assert_eq!(queues.drain_custom_property_update_indices(), vec![7]);
         assert_eq!(queues.drain_dirty_numeric_sources(), Vec::<usize>::new());
     }
 

@@ -429,6 +429,7 @@ pub(crate) fn runtime_data_bind_graph_converter_requires_persisting_custom_prope
         | RuntimeDataBindGraphConverter::ToString { .. }
         | RuntimeDataBindGraphConverter::StringTrim { .. }
         | RuntimeDataBindGraphConverter::StringPad { .. }
+        | RuntimeDataBindGraphConverter::Rounder { .. }
         | RuntimeDataBindGraphConverter::OperationValue { .. }
         | RuntimeDataBindGraphConverter::Formula { .. } => false,
         RuntimeDataBindGraphConverter::Group(converters) => converters
@@ -437,7 +438,6 @@ pub(crate) fn runtime_data_bind_graph_converter_requires_persisting_custom_prope
         RuntimeDataBindGraphConverter::NumberToList { .. }
         | RuntimeDataBindGraphConverter::OperationViewModel { .. }
         | RuntimeDataBindGraphConverter::SystemOperationValue { .. }
-        | RuntimeDataBindGraphConverter::Rounder { .. }
         | RuntimeDataBindGraphConverter::RangeMapper { .. }
         | RuntimeDataBindGraphConverter::Interpolator { .. }
         | RuntimeDataBindGraphConverter::Unsupported => true,

@@ -295,8 +295,23 @@ the only memory the next session has. Update it every commit.
    `cargo fmt --all -- --check`, and `git diff --check` pass, and fenced
    hot-loop is noisy but roughly neutral at aggregate Rust/C++=2.120 then
    2.186. Strict <=2.0 remains open.
-   Next: port `Rounder` converter-property dirty setters
-   family-by-family, still avoiding broad converter-property writes.
+   `DataConverterRounder.decimalsChanged()` is generated but empty in C++, and
+   the handwritten Rounder class does not override it. Rust therefore removes
+   Rounder custom sources from the conservative polling lane without adding a
+   converter-property updater: there is no C++ `DataConverter::markConverterDirty`
+   edge to model for this family. The status review keeps the scout and perf
+   methodology discoveries in force: broad converter-property writes remain
+   rejected after the `db_health_tracker` RangeMapper scout, shallow cached
+   command/path wrappers remain rejected by fenced perf, and M7 decisions still
+   use release/null-renderer hot-loop phase sums. Remaining conservative
+   families are `NumberToList`, operation-view-model / system operation,
+   `RangeMapper`, `Interpolator`, and unsupported converters. Full
+   `make golden-compare` remains exact=263 / exact-segments=584 / diverges=0,
+   `cargo test --workspace`, `cargo fmt --all -- --check`, and
+   `git diff --check` pass, and fenced hot-loop reports aggregate
+   Rust/C++=2.310 then 2.181. Strict <=2.0 remains open.
+   Next: inspect `RangeMapper` or `Interpolator` family-by-family, still
+   avoiding broad converter-property writes.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -798,6 +813,23 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Remove `DataConverterRounder` custom sources from the
+  conservative polling lane. The C++ generated `decimalsChanged()` hook is
+  empty, and the handwritten `DataConverterRounder` class does not override it;
+  its only authored behavior is `convert()` plus `outputType()`. Rust therefore
+  treats Rounder as push-safe without adding a converter-property updater,
+  matching the absence of a C++ `DataConverter::markConverterDirty` edge. The
+  status review keeps the scout/perf fence discoveries intact: the broad
+  RangeMapper/converter-property-write scout stays rejected after the
+  `db_health_tracker` clip-position failure, shallow cached command/path-wrapper
+  scouts stay rejected by release/null-renderer hot-loop data, and M7 perf
+  decisions stay fenced to release C++/Rust runners, null-renderer benchmark
+  mode, phase-sum metrics, and repeated focused corpus checks. `make
+  golden-compare` remains exact=263 / exact-segments=584 / diverges=0; `cargo
+  test --workspace`, `cargo fmt --all -- --check`, and `git diff --check` pass.
+  Fenced release/null-renderer hot-loop reports aggregate Rust/C++=2.310 and
+  2.181 over the 5-entry / 10-segment focused corpus, still above strict <=2.0,
+  so M7 remains open.
 - 2026-07-08: [M7] Remove `DataConverterStringPad` custom sources from the
   conservative polling lane. The C++ family has three bindable property
   callbacks, `lengthChanged()`, `textChanged()`, and `padTypeChanged()`, and all

@@ -88,6 +88,7 @@ pub struct ArtboardInstance {
     pub(crate) dirt: ComponentDirt,
     pub(crate) dirt_depth: usize,
     pub(crate) cache_epoch: u64,
+    pub(crate) path_epoch: u64,
     pub(crate) layout_epoch: u64,
     pub(crate) did_change: bool,
 }
@@ -288,6 +289,7 @@ impl ArtboardInstance {
             dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,
             cache_epoch: 1,
+            path_epoch: 1,
             layout_epoch: 1,
             did_change: true,
         };
@@ -421,6 +423,12 @@ impl ArtboardInstance {
         }
         self.mark_changed();
         self.mark_layout_changed_for_property(local_id, property_key);
+        if property_affects_effect_path_epoch(
+            self.slot(local_id).and_then(|slot| slot.type_name),
+            property_key,
+        ) {
+            self.mark_path_changed();
+        }
         self.apply_bool_property_changed(local_id, property_key, value);
         true
     }
@@ -471,6 +479,12 @@ impl ArtboardInstance {
         }
         self.mark_changed();
         self.mark_layout_changed_for_property(local_id, property_key);
+        if property_affects_effect_path_epoch(
+            self.slot(local_id).and_then(|slot| slot.type_name),
+            property_key,
+        ) {
+            self.mark_path_changed();
+        }
         self.apply_double_property_changed(local_id, property_key, value);
         true
     }
@@ -489,6 +503,12 @@ impl ArtboardInstance {
         }
         self.mark_changed();
         self.mark_layout_changed_for_property(local_id, property_key);
+        if property_affects_effect_path_epoch(
+            self.slot(local_id).and_then(|slot| slot.type_name),
+            property_key,
+        ) {
+            self.mark_path_changed();
+        }
         self.apply_uint_property_changed(local_id, property_key);
         true
     }
@@ -824,6 +844,10 @@ impl ArtboardInstance {
         self.cache_epoch
     }
 
+    pub(crate) fn path_epoch(&self) -> u64 {
+        self.path_epoch
+    }
+
     pub(crate) fn layout_epoch(&self) -> u64 {
         self.layout_epoch
     }
@@ -835,6 +859,10 @@ impl ArtboardInstance {
 
     fn mark_layout_changed(&mut self) {
         self.layout_epoch = self.layout_epoch.wrapping_add(1);
+    }
+
+    fn mark_path_changed(&mut self) {
+        self.path_epoch = self.path_epoch.wrapping_add(1);
     }
 
     fn mark_layout_changed_for_property(&mut self, local_id: usize, property_key: u16) {
@@ -927,6 +955,9 @@ impl ArtboardInstance {
         if dirt.contains(ComponentDirt::LAYOUT_STYLE) {
             self.mark_layout_changed();
         }
+        if component_dirt_affects_path_epoch(dirt) {
+            self.mark_path_changed();
+        }
         self.on_component_dirty(local_id);
 
         if recurse {
@@ -956,6 +987,7 @@ impl ArtboardInstance {
                 self.newly_uncollapsed_nested_artboards.insert(local_id);
             }
         }
+        self.mark_path_changed();
         self.mark_layout_changed();
         self.on_component_dirty(local_id);
         self.apply_component_collapse_changed(local_id);
@@ -2181,6 +2213,34 @@ fn runtime_nested_animation_instances(
     animations
 }
 
+fn component_dirt_affects_path_epoch(dirt: ComponentDirt) -> bool {
+    !(dirt
+        & (ComponentDirt::PATH
+            | ComponentDirt::VERTICES
+            | ComponentDirt::WORLD_TRANSFORM
+            | ComponentDirt::LAYOUT_STYLE
+            | ComponentDirt::N_SLICER))
+        .is_empty()
+}
+
+fn property_affects_effect_path_epoch(type_name: Option<&str>, property_key: u16) -> bool {
+    match type_name {
+        Some("TrimPath") => ["start", "end", "offset", "modeValue"]
+            .iter()
+            .any(|name| property_key_for_name("TrimPath", name) == Some(property_key)),
+        Some("DashPath") => ["offset", "offsetIsPercentage"]
+            .iter()
+            .any(|name| property_key_for_name("DashPath", name) == Some(property_key)),
+        Some("Dash") => ["length", "lengthIsPercentage"]
+            .iter()
+            .any(|name| property_key_for_name("Dash", name) == Some(property_key)),
+        Some("Feather") => ["spaceValue", "strength", "offsetX", "offsetY", "inner"]
+            .iter()
+            .any(|name| property_key_for_name("Feather", name) == Some(property_key)),
+        _ => false,
+    }
+}
+
 fn nested_simple_animation_instance(
     object: &rive_binary::RuntimeObject,
     child: &ArtboardInstance,
@@ -2368,6 +2428,7 @@ mod tests {
             dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,
             cache_epoch: 1,
+            path_epoch: 1,
             layout_epoch: 1,
             did_change: true,
         }
@@ -2495,6 +2556,93 @@ mod tests {
         assert!(instance.has_dirt(ComponentDirt::COMPONENTS));
 
         assert!(!instance.add_dirt(0, ComponentDirt::PATH, true));
+    }
+
+    #[test]
+    fn path_epoch_tracks_path_dirt_separately_from_draw_cache_epoch() {
+        let component = synthetic_component(0, 0);
+        let mut instance = synthetic_instance(vec![component], vec![0]);
+
+        let initial_path_epoch = instance.path_epoch();
+        let initial_cache_epoch = instance.cache_epoch();
+        assert!(instance.add_dirt(0, ComponentDirt::PAINT, false));
+        assert_eq!(instance.path_epoch(), initial_path_epoch);
+        assert!(instance.cache_epoch() > initial_cache_epoch);
+
+        let paint_cache_epoch = instance.cache_epoch();
+        assert!(instance.add_dirt(0, ComponentDirt::PATH, false));
+        assert!(instance.path_epoch() > initial_path_epoch);
+        assert!(instance.cache_epoch() > paint_cache_epoch);
+
+        let path_epoch = instance.path_epoch();
+        assert!(!instance.add_dirt(0, ComponentDirt::PATH, false));
+        assert_eq!(instance.path_epoch(), path_epoch);
+
+        assert!(instance.collapse_component(0, true));
+        assert!(instance.path_epoch() > path_epoch);
+    }
+
+    #[test]
+    fn path_epoch_tracks_effect_path_property_changes() {
+        let mut trim = synthetic_component(0, 0);
+        trim.type_name = "TrimPath";
+        let mut instance = synthetic_instance(vec![trim], vec![0]);
+        instance.objects = InstanceObjectArena::from_runtime_objects(vec![Some(
+            synthetic_runtime_object(0, "TrimPath", Vec::new()),
+        )]);
+        let trim_start = property_key_for_name("TrimPath", "start").expect("TrimPath.start");
+        let trim_mode = property_key_for_name("TrimPath", "modeValue").expect("TrimPath.modeValue");
+
+        let mut path_epoch = instance.path_epoch();
+        assert!(instance.set_double_property(0, trim_start, 0.25));
+        assert!(instance.path_epoch() > path_epoch);
+
+        path_epoch = instance.path_epoch();
+        assert!(instance.set_uint_property(0, trim_mode, 2));
+        assert!(instance.path_epoch() > path_epoch);
+
+        let mut dash_path = synthetic_component(0, 0);
+        dash_path.type_name = "DashPath";
+        let mut instance = synthetic_instance(vec![dash_path], vec![0]);
+        instance.objects = InstanceObjectArena::from_runtime_objects(vec![Some(
+            synthetic_runtime_object(0, "DashPath", Vec::new()),
+        )]);
+        let offset_is_percentage = property_key_for_name("DashPath", "offsetIsPercentage")
+            .expect("DashPath.offsetIsPercentage");
+
+        path_epoch = instance.path_epoch();
+        assert!(instance.set_bool_property(0, offset_is_percentage, true));
+        assert!(instance.path_epoch() > path_epoch);
+
+        let mut dash = synthetic_component(0, 0);
+        dash.type_name = "Dash";
+        let mut instance = synthetic_instance(vec![dash], vec![0]);
+        instance.objects = InstanceObjectArena::from_runtime_objects(vec![Some(
+            synthetic_runtime_object(0, "Dash", Vec::new()),
+        )]);
+        let length = property_key_for_name("Dash", "length").expect("Dash.length");
+
+        path_epoch = instance.path_epoch();
+        assert!(instance.set_double_property(0, length, 4.0));
+        assert!(instance.path_epoch() > path_epoch);
+
+        let mut feather = synthetic_component(0, 0);
+        feather.type_name = "Feather";
+        let mut instance = synthetic_instance(vec![feather], vec![0]);
+        instance.objects = InstanceObjectArena::from_runtime_objects(vec![Some(
+            synthetic_runtime_object(0, "Feather", Vec::new()),
+        )]);
+        let inner = property_key_for_name("Feather", "inner").expect("Feather.inner");
+        let space_value =
+            property_key_for_name("Feather", "spaceValue").expect("Feather.spaceValue");
+
+        path_epoch = instance.path_epoch();
+        assert!(instance.set_bool_property(0, inner, true));
+        assert!(instance.path_epoch() > path_epoch);
+
+        path_epoch = instance.path_epoch();
+        assert!(instance.set_uint_property(0, space_value, 1));
+        assert!(instance.path_epoch() > path_epoch);
     }
 
     #[test]

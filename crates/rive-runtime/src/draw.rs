@@ -5394,7 +5394,7 @@ impl RuntimeRenderPathCache {
     fn draw_path(
         &mut self,
         key: RuntimeDrawPathCacheKey,
-        instance_epoch: u64,
+        path_epoch: u64,
         factory: &mut dyn RenderFactory,
         commands: &[RuntimePathCommand],
         fill_rule: RenderFillRule,
@@ -5402,16 +5402,16 @@ impl RuntimeRenderPathCache {
         match self.draw_paths.entry(key) {
             Entry::Occupied(entry) => {
                 let cached = entry.into_mut();
-                if cached.epoch != instance_epoch {
+                if cached.epoch != path_epoch {
                     runtime_rebuild_path_preserving_fill_rule(cached.path.as_mut(), commands);
-                    cached.epoch = instance_epoch;
+                    cached.epoch = path_epoch;
                 }
                 &mut cached.path
             }
             Entry::Vacant(entry) => {
                 let cached = entry.insert(RuntimeCachedDrawPath {
                     path: runtime_make_path(factory, commands, fill_rule),
-                    epoch: instance_epoch,
+                    epoch: path_epoch,
                 });
                 &mut cached.path
             }
@@ -6383,7 +6383,7 @@ fn runtime_draw_command(
     }
     let mut text_temporary_paint_index = 0;
     let mut draw_path_slots = Vec::<&[RuntimePathCommand]>::new();
-    let draw_path_epoch = instance.cache_epoch();
+    let draw_path_epoch = instance.path_epoch();
     let foreground_layout_path_cache_local = if command.type_name == "ForegroundLayoutDrawable" {
         command
             .local_id
@@ -11969,7 +11969,7 @@ mod tests {
     }
 
     #[test]
-    fn draw_path_reuses_render_path_until_instance_epoch_changes() {
+    fn draw_path_reuses_render_path_until_path_epoch_changes() {
         let stats = Rc::new(CountingStats::default());
         let mut factory = CountingFactory {
             stats: Rc::clone(&stats),

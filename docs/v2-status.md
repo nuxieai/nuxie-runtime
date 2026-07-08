@@ -95,13 +95,29 @@ the only memory the next session has. Update it every commit.
    / 10 segments (`ai_assitant`=2.583, `align_target`=1.864,
    `animated_clipping`=2.422). Direct `ai_assitant --benchmark-repeat 100`
    reports cpp median=0.393 ms, rust median=7.341 ms, Rust/C++=18.668.
+   A path-specific retained draw-path epoch now separates `RenderPath` rebuild
+   invalidation from broad prepared-frame/paint invalidation:
+   `RuntimeRenderPathCache::draw_path` uses `ArtboardInstance::path_epoch`,
+   bumped by path/vertices/world-transform/layout/NSlicer dirt, collapse, and
+   C++ `StrokeEffect`-style TrimPath/DashPath/Dash/Feather path-affecting
+   property changes, including Feather `inner`/`spaceValue` because they change
+   the cached inner-feather command stream. Paint-only changes no longer rebuild
+   retained draw paths, while animated trim/dash/effect paths still invalidate
+   correctly. Focused 10-iteration verification reports aggregate
+   Rust/C++=2.405 over the same 5 exact entries / 10 segments
+   (`advance_blend_mode`=4.554, `ai_assitant`=2.533,
+   `align_target`=1.663, `animated_clipping`=2.266,
+   `animation_reset_cases`=3.966). Direct
+   `ai_assitant --benchmark-repeat 100` reports cpp median=0.363 ms, rust
+   median=7.695 ms, Rust/C++=21.222.
    The layout-split sample no longer showed
    `runtime_taffy_layout_bounds` in the hot stack; remaining heat is
    data-bind/nested advance allocation and retained path/paint dirt gates. The
-   next M7 target should follow the scout ordering: `ShapePaintPath`/raw-path
-   retention behind C++ dirt gates, plus any idempotent dirt raisers needed to
-   make clean frames skip prepare. After the perf target is real, expand the C
-   ABI to instance advance/draw.
+   next M7 target should continue the scout ordering: deeper
+   `ShapePaintPath`/raw-path retention and `PathComposer` dirt gating behind
+   C++ dirt gates, plus any idempotent dirt raisers needed to make clean frames
+   skip prepare. After the perf target is real, expand the C ABI to instance
+   advance/draw.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -603,6 +619,33 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Split retained draw-path invalidation onto
+  `ArtboardInstance::path_epoch`. The scout result says C++ draw() should replay
+  retained handles and geometry rebuilds belong behind dirt/update gates; this
+  slice narrows Rust's retained `RenderPath` rebuild trigger from the broad
+  draw-cache epoch to a path-specific epoch. `path_epoch` is bumped by
+  path/vertices/world-transform/layout/NSlicer dirt, collapse changes, and
+  C++ `StrokeEffect`-style TrimPath/DashPath/Dash/Feather path-affecting
+  property changes. Feather `inner` and `spaceValue` are included because they
+  switch or transform the cached inner-feather command stream, while paint-only
+  dirt keeps the retained draw path. An initial attempt caught `fill_trim_path`
+  and `stacked_path_effects` regressions in `make golden-compare`; the final
+  effect-property invalidation fixed them.
+  `cargo fmt --all -- --check`, focused runtime tests
+  `path_epoch_tracks_path_dirt_separately_from_draw_cache_epoch`,
+  `path_epoch_tracks_effect_path_property_changes`, and
+  `draw_path_reuses_render_path_until_path_epoch_changes`,
+  `cargo test --workspace`, and `make golden-compare` pass at exact=263 /
+  exact-segments=584 / diverges=0. Focused release/null-renderer
+  `make perf-hot-loop PERF_CORPUS_LIMIT=5 PERF_ITERATIONS=10 PERF_WARMUPS=1
+  PERF_MAX_RATIO=999` reports aggregate Rust/C++=2.405 over 5 exact entries /
+  10 segments (`advance_blend_mode`=4.554, `ai_assitant`=2.533,
+  `align_target`=1.663, `animated_clipping`=2.266,
+  `animation_reset_cases`=3.966). Direct
+  `ai_assitant --benchmark-repeat 100` reports cpp median=0.363 ms, rust
+  median=7.695 ms, Rust/C++=21.222; strict <=2.0 remains open. Next target is
+  deeper scout-ranked `ShapePaintPath` raw-path retention / `PathComposer` dirt
+  gating, not a new behavior family.
 - 2026-07-08: [M7] Retained render-paint draw configuration in
   `RuntimeRenderPaintCache`. Persistent draw paints now remember the last
   applied paint type, stroke thickness/cap/join, blend mode, solid color or

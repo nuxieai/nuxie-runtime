@@ -880,6 +880,28 @@ the only memory the next session has. Update it every commit.
    Next: profile the remaining lower `RuntimeRenderPathCache::draw_path`
    lookup and data-bind queue drains; keep source-queue vector swaps and
    borrowed retained-paint threading rejected.
+   A status-doc review of the scout/perf discoveries keeps the fences binding:
+   no broad converter-property writes, no RangeMapper retry without deeper C++
+   ownership/order analysis, no scratch-only context-path reuse, no shallow
+   command/path wrappers, no source-queue vector swaps, and no borrowed
+   retained-paint threading without release/null-renderer evidence.
+   `ai_assitant` profiling after state-machine pending-action retention still
+   showed `advance_nested_artboards_collect_events` beside data-bind,
+   state-machine, and draw replay. C++ `NestedArtboard::advanceComponent`
+   advances nested animations without a caller-owned per-child event vector, and
+   `StateMachineInstance` owns reported event queues. Rust nested artboard
+   advance now makes event collection optional: no-observer paths pass `None`
+   through nested animation advance and avoid allocating ignored event vectors or
+   cloning reported events. Full `make golden-compare` remains exact=263 /
+   exact-segments=584 / diverges=0; `cargo test --workspace`, `cargo fmt --all
+   -- --check`, and `git diff --check` pass. Fenced repeat-aware hot-loop is
+   noisy by ratio but Rust median sum improves from the pre-slice 3.488 ms to
+   2.476 ms and 2.488 ms on rerun; aggregate reports Rust/C++=3.041 and 3.073
+   because C++ median sum also dropped. Direct repeat=100 `ai_assitant` JSON at
+   `target/perf-ai-nested-event-option.json` reports cpp median=0.413 ms, rust
+   median=1.041 ms, Rust/C++=2.521. Strict <=2.0 remains open. Next: profile
+   remaining `runtime_draw_command` / `RuntimeRenderPathCache::draw_path`,
+   data-bind queue drains, and state-machine fixed overhead under these fences.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -1381,6 +1403,24 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Skip nested event collection when callers ignore reports.
+  A status-doc review kept the scout/perf discoveries in force: broad
+  converter-property writes, RangeMapper retries, scratch-only context-path
+  reuse, shallow command/path wrappers, source-queue vector swaps, and borrowed
+  retained-paint threading remain rejected without fenced evidence. A
+  release/null-renderer `ai_assitant` profile after state-machine scratch
+  retention still showed `advance_nested_artboards_collect_events` in the hot
+  split. C++ `NestedArtboard::advanceComponent` does not allocate a caller-owned
+  per-child event vector; nested state-machine reports live on
+  `StateMachineInstance`. Rust nested advance now passes optional event
+  collectors, so no-observer paths avoid ignored event vectors and reported-event
+  clones while state-machine propagation keeps the old event order. Full `make
+  golden-compare` remains exact=263 / exact-segments=584 / diverges=0; `cargo
+  test --workspace`, `cargo fmt --all -- --check`, and `git diff --check` pass.
+  Fenced hot-loop ratios are noisy at Rust/C++=3.041 and 3.073, but Rust median
+  sum improves from the pre-slice 3.488 ms to 2.476 ms and 2.488 ms; direct
+  repeat=100 `ai_assitant` JSON reports cpp median=0.413 ms, rust median=1.041
+  ms, Rust/C++=2.521. M7 remains open.
 - 2026-07-08: [M7] Retain state-machine pending view-model action storage.
   A release/null-renderer profile after render-paint slots showed
   `StateMachineLayerInstance::advance`, `try_change_state`, and
@@ -3300,6 +3340,16 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Made nested artboard reported-event collection optional,
+  matching C++ nested advance / state-machine-owned event queues and preserving
+  state-machine propagation order when reports are requested. `make
+  golden-compare` remains exact=263/exact-segments=584/diverges=0; `cargo test
+  --workspace`, `cargo fmt --all -- --check`, and `git diff --check` pass.
+  Fenced repeat-aware hot-loop reports Rust median sum 2.476 ms and 2.488 ms
+  versus the pre-slice 3.488 ms, while ratios remain noisy at Rust/C++=3.041 and
+  3.073; direct repeat=100 `ai_assitant` JSON is Rust/C++=2.521. Strict <=2.0
+  remains open; next profile draw-path lookup, data-bind queue drains, and
+  state-machine fixed overhead under the existing scout/perf fences.
 - 2026-07-08: [M7] Retained state-machine pending view-model action storage on
   `StateMachineInstance`, matching C++ instance-owned event/listener queues and
   removing a fresh per-layer scratch vector allocation from

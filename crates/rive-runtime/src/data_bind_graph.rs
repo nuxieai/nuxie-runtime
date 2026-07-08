@@ -770,7 +770,7 @@ fn runtime_data_bind_graph_converter_preserves_string_source_on_main_to_source_t
     }
 }
 
-fn runtime_data_bind_graph_refresh_operation_view_model_number_converter_for_path(
+pub(crate) fn runtime_data_bind_graph_refresh_operation_view_model_number_converter_for_path(
     converter: &mut RuntimeDataBindGraphConverter,
     path: &[u32],
     value: f32,

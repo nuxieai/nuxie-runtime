@@ -2,6 +2,7 @@ use crate::data_bind_graph::{
     DATA_BIND_FLAG_DIRECTION_TO_SOURCE, RuntimeDataBindGraphConverterState,
     runtime_data_bind_graph_convert_value, runtime_data_bind_graph_converter,
     runtime_data_bind_graph_converter_contains_source_change_random,
+    runtime_data_bind_graph_refresh_operation_view_model_number_converter_for_path,
 };
 use crate::draw::{RuntimePathMeasure, runtime_path_geometry_commands};
 use crate::objects::InstanceObjectArena;
@@ -2012,9 +2013,18 @@ impl ArtboardInstance {
         if self.artboard_data_bind_values.get(path) == Some(&value) {
             return false;
         }
+        let number_value = match &value {
+            RuntimeDataBindGraphValue::Number(value) => Some(*value),
+            _ => None,
+        };
         self.artboard_data_bind_values.insert(path.to_vec(), value);
         self.reset_artboard_property_formula_random_state_for_path(path);
         self.enqueue_artboard_data_bind_targets_for_path(path);
+        if let Some(value) = number_value {
+            self.refresh_artboard_operation_view_model_number_converter_dependents_for_path(
+                path, value,
+            );
+        }
         true
     }
 
@@ -2421,6 +2431,62 @@ impl ArtboardInstance {
                 binding.converter_state.reset_formula_randoms();
             }
         }
+    }
+
+    fn refresh_artboard_converter_dependents(
+        &mut self,
+        mut update: impl FnMut(&mut RuntimeDataBindGraphConverter) -> bool,
+    ) -> bool {
+        let mut changed = false;
+
+        for index in 0..self.artboard_property_bindings.len() {
+            let binding_changed = {
+                let binding = &mut self.artboard_property_bindings[index];
+                binding.converter.as_mut().is_some_and(&mut update)
+            };
+            if binding_changed {
+                self.enqueue_artboard_property_binding_target(index);
+                changed = true;
+            }
+        }
+
+        for index in 0..self.artboard_custom_property_bindings.len() {
+            let binding_changed = {
+                let binding = &mut self.artboard_custom_property_bindings[index];
+                binding.converter.as_mut().is_some_and(&mut update)
+            };
+            if binding_changed {
+                self.artboard_data_bind_source_queues
+                    .enqueue_custom_property(index);
+                changed = true;
+            }
+        }
+
+        for binding in &mut self.artboard_formula_token_bindings {
+            if binding.converter.as_mut().is_some_and(&mut update) {
+                changed = true;
+            }
+        }
+
+        for binding in &mut self.artboard_list_bindings {
+            if binding.converter.as_mut().is_some_and(&mut update) {
+                changed = true;
+            }
+        }
+
+        changed
+    }
+
+    fn refresh_artboard_operation_view_model_number_converter_dependents_for_path(
+        &mut self,
+        path: &[u32],
+        value: f32,
+    ) -> bool {
+        self.refresh_artboard_converter_dependents(|converter| {
+            runtime_data_bind_graph_refresh_operation_view_model_number_converter_for_path(
+                converter, path, value,
+            )
+        })
     }
 
     fn advance_artboard_property_binding_converters(&mut self, elapsed_seconds: f32) -> bool {

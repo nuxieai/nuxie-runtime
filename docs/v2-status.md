@@ -223,6 +223,17 @@ the only memory the next session has. Update it every commit.
    remains open. Next: profile remaining advance/data-bind time, then replace
    the converter-backed custom persisting fallback with explicit C++
    converter-parent dirty edges before widening this queue pattern further.
+   A narrower follow-up landed only the audited OperationViewModel-number
+   converter-parent dirty edge for artboard source path changes. Converter-backed
+   custom-property sources intentionally remain on the conservative persisting
+   lane: a broader RangeMapper/converter-property scout was backed out after it
+   drove wrong `db_health_tracker` clip positions, which confirms global
+   DataBindContext converter-property writes are not the safe fallback-removal
+   path. Full `make golden-compare` remains exact=263 / exact-segments=584 /
+   diverges=0, `cargo test --workspace` passes, and fenced hot-loop reports
+   aggregate Rust/C++=2.592. Next: enumerate and port concrete C++
+   converter-parent dirty edges one converter family at a time before removing
+   the persisting fallback.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -724,6 +735,21 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Land the OperationViewModel-number converter-parent dirty
+  edge only. Artboard source-path number changes now refresh dependent
+  OperationViewModel converters across property, custom-property, formula-token,
+  and list bindings, then enqueue the concrete property/custom parents that have
+  a push queue. This is the first explicit replacement edge for the conservative
+  converter-backed custom-property persisting lane, but it does not remove that
+  lane. A broader scout that tried global converter-property writes for
+  RangeMapper-style dependencies was backed out after `db_health_tracker`
+  showed wrong clip positions, so the next fallback-removal work must port
+  concrete C++ converter-parent dirty edges family-by-family instead of writing
+  converter properties generically. `make golden-compare` remains exact=263 /
+  exact-segments=584 / diverges=0; `cargo test --workspace`, `cargo fmt --all
+  -- --check`, and `git diff --check` pass. Fenced release/null-renderer
+  hot-loop reports aggregate Rust/C++=2.592 over the 5-entry / 10-segment
+  focused corpus, so M7 remains open.
 - 2026-07-08: [M7] Land artboard target-to-source dirty/persisting source
   queues. `ArtboardInstance` now owns a C++-shaped source queue for
   target-to-source artboard binds: push-capable custom-property and direct

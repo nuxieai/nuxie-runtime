@@ -525,44 +525,26 @@ impl ArtboardInstance {
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
         filter: RuntimeGradientPaintFilter,
     ) -> Result<()> {
-        let mut paints_by_mutator =
-            BTreeMap::<usize, Vec<(&ShapePaintContainerNode, &ShapePaintNode)>>::new();
-        for container in &graph.shape_paint_containers {
-            if !filter.includes_container(container) {
-                continue;
-            }
-            for paint in &container.paints {
-                if !matches!(
-                    paint.paint_state,
-                    Some(
-                        ShapePaintStateNode::LinearGradient { .. }
-                            | ShapePaintStateNode::RadialGradient { .. }
-                    )
-                ) {
-                    continue;
-                }
-                if let Some(mutator_local) = paint.mutator_local {
-                    paints_by_mutator
-                        .entry(mutator_local)
-                        .or_default()
-                        .push((container, paint));
-                }
-            }
-        }
+        let gradient_preparation = render_cache.gradient_preparation_frame(graph);
 
         let mut prepared = BTreeSet::new();
         // C++ Artboard::advance updates gradient mutators in dependency order before
         // drawing, and the recording factory observes shader creation there.
-        for local_id in graph
-            .dependency_order
-            .iter()
-            .copied()
-            .chain(graph.local_objects.iter().map(|object| object.local_id))
-        {
-            let Some(paints) = paints_by_mutator.get(&local_id) else {
+        for local_id in gradient_preparation.dependency_order.iter().copied() {
+            let Some(paints) = gradient_preparation.paints_by_mutator.get(&local_id) else {
                 continue;
             };
-            for (container, paint) in paints {
+            for paint_ref in paints {
+                let Some(container) = graph.shape_paint_containers.get(paint_ref.container_index)
+                else {
+                    continue;
+                };
+                let Some(paint) = container.paints.get(paint_ref.paint_index) else {
+                    continue;
+                };
+                if !filter.includes_container(container) {
+                    continue;
+                }
                 if self.runtime_gradient_paint_is_collapsed(container, paint) {
                     continue;
                 }
@@ -865,27 +847,7 @@ impl ArtboardInstance {
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
         commands: &[RuntimeDrawCommand],
     ) -> Result<()> {
-        let mut paints_by_mutator =
-            BTreeMap::<usize, Vec<(&ShapePaintContainerNode, &ShapePaintNode)>>::new();
-        for container in &graph.shape_paint_containers {
-            for paint in &container.paints {
-                if !matches!(
-                    paint.paint_state,
-                    Some(
-                        ShapePaintStateNode::LinearGradient { .. }
-                            | ShapePaintStateNode::RadialGradient { .. }
-                    )
-                ) {
-                    continue;
-                }
-                if let Some(mutator_local) = paint.mutator_local {
-                    paints_by_mutator
-                        .entry(mutator_local)
-                        .or_default()
-                        .push((container, paint));
-                }
-            }
-        }
+        let gradient_preparation = render_cache.gradient_preparation_frame(graph);
 
         let mut nested_command_by_local = commands
             .iter()
@@ -907,17 +869,11 @@ impl ArtboardInstance {
         let mut prepared_paints = BTreeSet::new();
         let mut prepared_nested_hosts = BTreeSet::new();
 
-        let gradient_dependency_order = if graph.dependency_insertion_order.is_empty() {
-            &graph.dependency_order
-        } else {
-            &graph.dependency_insertion_order
-        };
-        let dependency_order = gradient_dependency_order
+        for local_id in gradient_preparation
+            .dependency_insertion_order
             .iter()
             .copied()
-            .chain(graph.local_objects.iter().map(|object| object.local_id))
-            .collect::<Vec<_>>();
-        for local_id in dependency_order.iter().copied() {
+        {
             self.prepare_static_gradient_paints_for_dependency_local(
                 runtime,
                 graph,
@@ -925,7 +881,7 @@ impl ArtboardInstance {
                 paint_by_global,
                 render_cache,
                 layout_bounds,
-                &paints_by_mutator,
+                &gradient_preparation,
                 &mut prepared_paints,
                 RuntimeGradientPaintFilter::ExcludeRootArtboard,
                 local_id,
@@ -950,7 +906,11 @@ impl ArtboardInstance {
             )?;
         }
 
-        for local_id in dependency_order {
+        for local_id in gradient_preparation
+            .dependency_insertion_order
+            .iter()
+            .copied()
+        {
             self.prepare_static_gradient_paints_for_dependency_local(
                 runtime,
                 graph,
@@ -958,7 +918,7 @@ impl ArtboardInstance {
                 paint_by_global,
                 render_cache,
                 layout_bounds,
-                &paints_by_mutator,
+                &gradient_preparation,
                 &mut prepared_paints,
                 RuntimeGradientPaintFilter::OnlyRootArtboard,
                 local_id,
@@ -976,15 +936,22 @@ impl ArtboardInstance {
         paint_by_global: &mut BTreeMap<u32, Box<dyn RenderPaint>>,
         render_cache: &mut RuntimeRenderPathCache,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
-        paints_by_mutator: &BTreeMap<usize, Vec<(&ShapePaintContainerNode, &ShapePaintNode)>>,
+        gradient_preparation: &RuntimeGradientPreparationFrame,
         prepared: &mut BTreeSet<u32>,
         filter: RuntimeGradientPaintFilter,
         local_id: usize,
     ) -> Result<()> {
-        let Some(paints) = paints_by_mutator.get(&local_id) else {
+        let Some(paints) = gradient_preparation.paints_by_mutator.get(&local_id) else {
             return Ok(());
         };
-        for (container, paint) in paints {
+        for paint_ref in paints {
+            let Some(container) = graph.shape_paint_containers.get(paint_ref.container_index)
+            else {
+                continue;
+            };
+            let Some(paint) = container.paints.get(paint_ref.paint_index) else {
+                continue;
+            };
             if !filter.includes_container(container) {
                 continue;
             }
@@ -5106,6 +5073,7 @@ pub struct RuntimeRenderPathCache {
     clip_paths: BTreeMap<usize, Box<dyn RenderPath>>,
     layout_clip_paths: BTreeMap<usize, Box<dyn RenderPath>>,
     draw_paths: BTreeMap<RuntimeDrawPathCacheKey, RuntimeCachedDrawPath>,
+    gradient_preparation: Option<RuntimeGradientPreparationFrame>,
     gradient_shaders: BTreeMap<u32, RuntimeGradientShaderCacheEntry>,
     nested_artboards: BTreeMap<u32, RuntimeRenderPathCache>,
 }
@@ -5135,6 +5103,26 @@ struct RuntimeLayoutBoundsFrame {
     bounds: Arc<Option<BTreeMap<usize, RuntimeLayoutBounds>>>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RuntimeGradientPreparationCacheKey {
+    graph_global_id: u32,
+    graph_identity: usize,
+}
+
+#[derive(Clone)]
+struct RuntimeGradientPreparationFrame {
+    key: RuntimeGradientPreparationCacheKey,
+    paints_by_mutator: Arc<BTreeMap<usize, Vec<RuntimeGradientPaintRef>>>,
+    dependency_order: Arc<Vec<usize>>,
+    dependency_insertion_order: Arc<Vec<usize>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RuntimeGradientPaintRef {
+    container_index: usize,
+    paint_index: usize,
+}
+
 struct RuntimeGradientShaderCacheEntry {
     state: RuntimeShapePaintState,
     shader: Box<dyn RenderShader>,
@@ -5161,6 +5149,43 @@ struct RuntimeDrawPathCacheKey {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum RuntimeDrawPathCacheKind {
     Draw,
+}
+
+fn runtime_gradient_paints_by_mutator(
+    graph: &ArtboardGraph,
+) -> BTreeMap<usize, Vec<RuntimeGradientPaintRef>> {
+    let mut paints_by_mutator = BTreeMap::new();
+    for (container_index, container) in graph.shape_paint_containers.iter().enumerate() {
+        for (paint_index, paint) in container.paints.iter().enumerate() {
+            if !matches!(
+                paint.paint_state,
+                Some(
+                    ShapePaintStateNode::LinearGradient { .. }
+                        | ShapePaintStateNode::RadialGradient { .. }
+                )
+            ) {
+                continue;
+            }
+            if let Some(mutator_local) = paint.mutator_local {
+                paints_by_mutator
+                    .entry(mutator_local)
+                    .or_insert_with(Vec::new)
+                    .push(RuntimeGradientPaintRef {
+                        container_index,
+                        paint_index,
+                    });
+            }
+        }
+    }
+    paints_by_mutator
+}
+
+fn runtime_gradient_dependency_order(order: &[usize], graph: &ArtboardGraph) -> Vec<usize> {
+    order
+        .iter()
+        .copied()
+        .chain(graph.local_objects.iter().map(|object| object.local_id))
+        .collect()
 }
 
 impl RuntimeRenderPathCache {
@@ -5220,6 +5245,43 @@ impl RuntimeRenderPathCache {
             .as_ref()
             .expect("layout bounds frame was just populated")
             .bounds
+            .clone()
+    }
+
+    fn gradient_preparation_frame(
+        &mut self,
+        graph: &ArtboardGraph,
+    ) -> RuntimeGradientPreparationFrame {
+        let key = RuntimeGradientPreparationCacheKey {
+            graph_global_id: graph.global_id,
+            graph_identity: graph as *const ArtboardGraph as usize,
+        };
+        if self
+            .gradient_preparation
+            .as_ref()
+            .is_none_or(|frame| frame.key != key)
+        {
+            self.gradient_preparation = Some(RuntimeGradientPreparationFrame {
+                key,
+                paints_by_mutator: Arc::new(runtime_gradient_paints_by_mutator(graph)),
+                dependency_order: Arc::new(runtime_gradient_dependency_order(
+                    &graph.dependency_order,
+                    graph,
+                )),
+                dependency_insertion_order: Arc::new(runtime_gradient_dependency_order(
+                    if graph.dependency_insertion_order.is_empty() {
+                        &graph.dependency_order
+                    } else {
+                        &graph.dependency_insertion_order
+                    },
+                    graph,
+                )),
+            });
+        }
+
+        self.gradient_preparation
+            .as_ref()
+            .expect("gradient preparation frame was just populated")
             .clone()
     }
 

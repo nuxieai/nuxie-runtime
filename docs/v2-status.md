@@ -79,14 +79,21 @@ the only memory the next session has. Update it every commit.
    `animated_clipping`=2.406). Direct `ai_assitant --benchmark-repeat 100`
    now reports Rust/C++=13.850 (cpp median=0.591 ms, rust median=8.183 ms);
    C++ median variance makes the ratio noisy, but Rust steady-state time
-   improved. The layout-split sample no longer showed
+   improved. Retained gradient preparation in `RuntimeRenderPathCache` now
+   caches graph-static gradient mutator buckets and dependency-order vectors
+   instead of rebuilding them every paint-prep pass. Focused 10-iteration
+   verification reports aggregate Rust/C++=2.647 over the same 5 exact entries
+   / 10 segments (`ai_assitant`=2.906, `align_target`=1.832,
+   `animated_clipping`=2.400). Direct `ai_assitant --benchmark-repeat 100`
+   reports cpp median=0.398 ms, rust median=7.700 ms, Rust/C++=19.356; the
+   ratio remains C++-median-sensitive, but Rust steady-state time improved.
+   The layout-split sample no longer showed
    `runtime_taffy_layout_bounds` in the hot stack; remaining heat is
    data-bind/nested advance allocation and retained paint/path dirt gates. The
-   next M7 target is data-bind/nested
-   advance allocation or C++ `Paint|Stops|RenderOpacity` /
-   `ShapePaintPath` dirt retention before lower-priority clip rebuild
-   leftovers. After the perf target is real, expand the C ABI to instance
-   advance/draw.
+   next M7 target is actual C++ `Paint|Stops|RenderOpacity` dirt-gated
+   render-paint mutation or `ShapePaintPath` retention before lower-priority
+   clip rebuild leftovers. After the perf target is real, expand the C ABI to
+   instance advance/draw.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -588,6 +595,24 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Retained gradient paint preparation grouping/order in
+  `RuntimeRenderPathCache`. Rust paint prep now caches graph-static gradient
+  mutator buckets plus dependency/dependency-insertion order vectors by live
+  artboard graph identity, mirroring C++'s retained component graph/update
+  ordering instead of rebuilding `BTreeMap` groupings and dependency vectors on
+  every prepare/draw pass. Shader and paint mutation remain governed by the
+  existing gradient state cache; this adds no tolerance widening and no
+  invented dirt skip. `cargo fmt --all -- --check`, focused runtime test
+  `draw_path_reuses_render_path_until_instance_epoch_changes`,
+  `cargo test --workspace`, and `make golden-compare` pass at
+  exact=263/exact-segments=584. Focused release/null-renderer
+  `make perf-hot-loop PERF_CORPUS_LIMIT=5 PERF_ITERATIONS=10 PERF_WARMUPS=1
+  PERF_MAX_RATIO=999` reports aggregate Rust/C++=2.647 over 5 exact entries /
+  10 segments (`ai_assitant`=2.906, `align_target`=1.832,
+  `animated_clipping`=2.400). Direct `ai_assitant --benchmark-repeat 100`
+  reports cpp median=0.398 ms, rust median=7.700 ms, Rust/C++=19.356; strict
+  <=2.0 remains open. Next target is actual C++ `Paint|Stops|RenderOpacity`
+  dirt-gated render-paint mutation or `ShapePaintPath` retention.
 - 2026-07-07: [M7] Split retained Taffy layout bounds from the coarse draw
   cache epoch. `ArtboardInstance` now tracks a `layout_epoch` bumped by
   C++-aligned layout dirt/property changes (`LayoutStyle`, layout

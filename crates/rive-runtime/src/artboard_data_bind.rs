@@ -3706,39 +3706,46 @@ impl ArtboardInstance {
     }
 
     fn apply_artboard_solo_bindings(&mut self) -> bool {
+        enum RuntimeSoloBindingApply {
+            Index(f32),
+            Name(Vec<u8>),
+        }
+
         let mut changed = false;
-        for binding in self.artboard_solo_bindings.clone() {
-            let Some(value) = self.artboard_data_bind_values.get(&binding.path).cloned() else {
+        for index in 0..self.artboard_solo_bindings.len() {
+            let Some((target_local_id, apply)) =
+                self.artboard_solo_bindings.get(index).and_then(|binding| {
+                    let value = self.artboard_data_bind_values.get(&binding.path)?;
+                    let apply = match value {
+                        RuntimeDataBindGraphValue::Number(value) => {
+                            RuntimeSoloBindingApply::Index(*value)
+                        }
+                        RuntimeDataBindGraphValue::String(value) => {
+                            RuntimeSoloBindingApply::Name(value.clone())
+                        }
+                        RuntimeDataBindGraphValue::Enum(value) => {
+                            let value = usize::try_from(*value).ok()?;
+                            RuntimeSoloBindingApply::Name(
+                                binding.enum_value_names.get(value)?.clone(),
+                            )
+                        }
+                        _ => return None,
+                    };
+                    Some((binding.target_local_id, apply))
+                })
+            else {
                 continue;
             };
-            changed |= self.apply_artboard_solo_binding_value(&binding, &value);
+            changed |= match apply {
+                RuntimeSoloBindingApply::Index(value) => {
+                    self.set_solo_active_child_by_index(target_local_id, value)
+                }
+                RuntimeSoloBindingApply::Name(value) => {
+                    self.set_solo_active_child_by_name(target_local_id, &value)
+                }
+            }
         }
         changed
-    }
-
-    fn apply_artboard_solo_binding_value(
-        &mut self,
-        binding: &RuntimeArtboardSoloBindingInstance,
-        value: &RuntimeDataBindGraphValue,
-    ) -> bool {
-        match value {
-            RuntimeDataBindGraphValue::Number(value) => {
-                self.set_solo_active_child_by_index(binding.target_local_id, *value)
-            }
-            RuntimeDataBindGraphValue::String(value) => {
-                self.set_solo_active_child_by_name(binding.target_local_id, value)
-            }
-            RuntimeDataBindGraphValue::Enum(value) => {
-                let Ok(index) = usize::try_from(*value) else {
-                    return false;
-                };
-                let Some(name) = binding.enum_value_names.get(index) else {
-                    return false;
-                };
-                self.set_solo_active_child_by_name(binding.target_local_id, name)
-            }
-            _ => false,
-        }
     }
 
     fn apply_artboard_nested_host_bindings(&mut self) -> bool {

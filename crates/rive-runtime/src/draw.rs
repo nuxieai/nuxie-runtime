@@ -3155,11 +3155,8 @@ impl ArtboardInstance {
         let Some(path_kind) = paint.path_kind else {
             return Vec::new();
         };
-        let Some(composer) = graph
-            .path_composers
-            .iter()
-            .find(|composer| composer.shape_local == shape_local)
-        else {
+        let path_lookup = path_cache.path_composer_lookup_frame(graph);
+        let Some(composer) = path_lookup.composer(graph, shape_local) else {
             return Vec::new();
         };
 
@@ -3174,11 +3171,7 @@ impl ArtboardInstance {
             if !self.runtime_path_counts_for_clip(path_ref) {
                 continue;
             }
-            let Some(path) = graph
-                .paths
-                .iter()
-                .find(|path| path.local_id == path_ref.local_id)
-            else {
+            let Some(path) = path_lookup.path(graph, path_ref.local_id) else {
                 continue;
             };
             let path_world = self.runtime_component_world_transform_with_bounds(
@@ -3268,12 +3261,9 @@ impl ArtboardInstance {
         path_cache: &mut RuntimeRenderPathCache,
     ) -> Vec<RuntimePathCommand> {
         let mut commands = Vec::new();
+        let path_lookup = path_cache.path_composer_lookup_frame(graph);
         for shape_local in &clipping_shape.shape_locals {
-            let Some(composer) = graph
-                .path_composers
-                .iter()
-                .find(|composer| composer.shape_local == *shape_local)
-            else {
+            let Some(composer) = path_lookup.composer(graph, *shape_local) else {
                 continue;
             };
             let shape_world = self.runtime_component_world_transform_with_bounds(
@@ -3289,11 +3279,7 @@ impl ArtboardInstance {
                 if !self.runtime_path_counts_for_clip(path_ref) {
                     continue;
                 }
-                let Some(path) = graph
-                    .paths
-                    .iter()
-                    .find(|path| path.local_id == path_ref.local_id)
-                else {
+                let Some(path) = path_lookup.path(graph, path_ref.local_id) else {
                     continue;
                 };
                 let path_world = self.runtime_component_world_transform_with_bounds(
@@ -5341,6 +5327,7 @@ pub struct RuntimeRenderPathCache {
     prepared_artboard: Option<RuntimePreparedArtboardFrame>,
     sorted_drawable_order: Option<RuntimeSortedDrawableOrderFrame>,
     layout_bounds: Option<RuntimeLayoutBoundsFrame>,
+    path_composer_lookup: Option<RuntimePathComposerLookupFrame>,
     artboard_clip: Option<Box<dyn RenderPath>>,
     background_paths: BTreeMap<usize, Box<dyn RenderPath>>,
     clip_paths: BTreeMap<usize, Box<dyn RenderPath>>,
@@ -5389,6 +5376,47 @@ struct RuntimeLayoutBoundsCacheKey {
 struct RuntimeLayoutBoundsFrame {
     key: RuntimeLayoutBoundsCacheKey,
     bounds: Arc<Option<BTreeMap<usize, RuntimeLayoutBounds>>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RuntimePathComposerLookupCacheKey {
+    graph_global_id: u32,
+    graph_identity: usize,
+}
+
+#[derive(Clone)]
+struct RuntimePathComposerLookupFrame {
+    key: RuntimePathComposerLookupCacheKey,
+    composer_index_by_shape_local: Arc<Vec<Option<usize>>>,
+    path_index_by_local: Arc<Vec<Option<usize>>>,
+}
+
+impl RuntimePathComposerLookupFrame {
+    fn composer<'a>(
+        &self,
+        graph: &'a ArtboardGraph,
+        shape_local: usize,
+    ) -> Option<&'a PathComposerNode> {
+        graph.path_composers.get(
+            self.composer_index_by_shape_local
+                .get(shape_local)?
+                .as_ref()
+                .copied()?,
+        )
+    }
+
+    fn path<'a>(
+        &self,
+        graph: &'a ArtboardGraph,
+        path_local: usize,
+    ) -> Option<&'a PathGeometryNode> {
+        graph.paths.get(
+            self.path_index_by_local
+                .get(path_local)?
+                .as_ref()
+                .copied()?,
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -5661,6 +5689,44 @@ impl RuntimeRenderPathCache {
             .clone()
     }
 
+    fn path_composer_lookup_frame(
+        &mut self,
+        graph: &ArtboardGraph,
+    ) -> RuntimePathComposerLookupFrame {
+        let key = RuntimePathComposerLookupCacheKey {
+            graph_global_id: graph.global_id,
+            graph_identity: graph as *const ArtboardGraph as usize,
+        };
+        if self
+            .path_composer_lookup
+            .as_ref()
+            .is_none_or(|frame| frame.key != key)
+        {
+            self.path_composer_lookup = Some(RuntimePathComposerLookupFrame {
+                key,
+                composer_index_by_shape_local: Arc::new(runtime_local_index_lookup(
+                    graph
+                        .path_composers
+                        .iter()
+                        .enumerate()
+                        .map(|(index, composer)| (composer.shape_local, index)),
+                )),
+                path_index_by_local: Arc::new(runtime_local_index_lookup(
+                    graph
+                        .paths
+                        .iter()
+                        .enumerate()
+                        .map(|(index, path)| (path.local_id, index)),
+                )),
+            });
+        }
+
+        self.path_composer_lookup
+            .as_ref()
+            .expect("path composer lookup frame was just populated")
+            .clone()
+    }
+
     fn path_geometry_commands_frame(
         &mut self,
         instance: &ArtboardInstance,
@@ -5880,6 +5946,19 @@ impl RuntimeRenderPathCache {
             }
         }
     }
+}
+
+fn runtime_local_index_lookup(
+    entries: impl IntoIterator<Item = (usize, usize)>,
+) -> Vec<Option<usize>> {
+    let mut lookup = Vec::new();
+    for (local_id, index) in entries {
+        if lookup.len() <= local_id {
+            lookup.resize(local_id + 1, None);
+        }
+        lookup[local_id] = Some(index);
+    }
+    lookup
 }
 
 #[derive(Debug, Clone, PartialEq)]

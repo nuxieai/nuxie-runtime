@@ -1288,6 +1288,49 @@ the only memory the next session has. Update it every commit.
     distance to 2.0 is real, not noise. Optional tool follow-ups:
     --aggregate=min flag, --json in perf-hot-loop target.
 
+17. SCOUT REPORT — fresh flamegraph of TODAY'S tree (samply, release,
+    steady + cold regimes profiled separately; C++ steady profile captured
+    as fairness baseline; profiles in session scratchpad). Old top sites
+    CONFIRMED DEAD in steady: schema scans <1%, ai malloc ~1.5%,
+    TrimContour retention works, Taffy zero frames. What remains, ranked
+    by payoff:
+    (1) CHEAPEST BIG WIN — cold-frame name reflection is ~60% of the gate
+        metric's delta (repeat=100 blends heavily with the cold frame):
+        authored_transform does SIX name lookups per component on the
+        first world-transform pass (artboard.rs:885-890 ->
+        objects.rs:298 runtime_property_metadata_by_name linear scan +
+        ancestor walk); definition_by_name 19.4% self in the cold region.
+        MECHANICAL: per-component cached transform property keys or
+        direct storage fields. Also clears the keyframe-apply name
+        resolution survivor on animation_reset_cases (5.3% incl) and
+        align_target's raw uint_property reads (9.6% incl).
+    (2) STEADY #1 (~43% of steady delta) — data-bind cluster runs ~12
+        unconditional sub-passes per frame (artboard_data_bind.rs:2887):
+        Rust re-reads/compares every source value every frame; C++ only
+        ticks converter clocks, with target writes gated by
+        ComponentDirt::Bindings via the addDirtyDataBind queue
+        (data_bind_container.cpp:38, data_bind.cpp:487/546). STRUCTURAL:
+        port the dirty-databind architecture, not another value-compare
+        cache.
+    (3) STEADY #2 (~31%) — draw replay dispatch: BTreeMap gets inside
+        runtime_draw_command are 8.6% self (-> dense Vec-by-slot),
+        type_name string dispatch per command (-> precomputed command-
+        kind enum), world transforms recomputed in draw (2.4-3.1%
+        everywhere -> cache behind dirt like transform_component.cpp).
+        Per-file structural item: animated_clipping rebuilds clip-path
+        Vec + verbs every frame (50.7% inclusive + ~21% allocator) ->
+        port ClippingShape/PathComposer clip RenderPath retention.
+        Gradient re-prep per frame explains advance_blend_mode's 4.55
+        (prepare 36% inclusive) -> gate stops behind Paint dirt.
+    (4) SM FIXED OVERHEAD — REFUTED as a priority: C++ spends 25-30% of
+        its own frame there; Rust is ~2x per-unit, the BEST bucket. Do
+        not spend slices here.
+    HARNESS NOTE: mach_absolute_time reads are up to 23% of tiny-file
+    steady frames (4 timed sections/frame), compressing small-file
+    ratios — consider timing whole repeat blocks instead of per-frame
+    sections. Regime split for honest tracking: cold ai_assitant 2.41x,
+    steady ~3.4x — item 16's pinned-N decision applies.
+
 ## Known Divergences
 
 - There are no active `status = "not-yet"` entries.

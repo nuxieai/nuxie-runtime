@@ -516,6 +516,22 @@ the only memory the next session has. Update it every commit.
    `bind_owned_view_model_artboard_context_chain` / context-source BTree
    lookups or address remaining schema lookup in sampled draw/prepare without
    violating the scout fences.
+   Draw-time drawable classification now avoids schema reflection for the two
+   sampled hot checks: render-opacity filtering uses the fixed `Shape` /
+   `TextInputDrawable` class surface, and nested-artboard dispatch uses the
+   three concrete nested host classes, matching C++'s concrete `is<T>()` /
+   type-key shape instead of calling `definition_by_name(...).is_a(...)` in
+   the frame loop. This removes a sampled draw/prepare schema lookup without
+   adding a skip cache or changing dirty invalidation. Full
+   `make golden-compare` remains exact=263 / exact-segments=584 / diverges=0;
+   `cargo test --workspace`, `cargo fmt --all -- --check`, and
+   `git diff --check` pass. Single-file repeat=100 JSON at
+   `/tmp/rive-ai-draw-kind-perf.json` reports cpp median=0.465 ms,
+   rust median=1.675 ms, Rust/C++=3.603. Focused release/null-renderer
+   hot-loop reports aggregate Rust/C++=2.243 then 2.133, so strict <=2.0
+   remains open. Next: re-profile after this schema-classification cleanup and
+   pick the next C++-audited retained/dirt or hot BTree target from the new
+   sample.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -1017,6 +1033,23 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Remove draw-time schema lookup from fixed drawable
+  classification. A post root-local sample still showed schema
+  `definition_by_name` under draw/prepare even after generated switch tables
+  removed the broader runtime reflection hot path. The remaining calls came
+  from `sorted_drawable_uses_render_opacity` and
+  `sorted_drawable_is_nested_artboard`, which only need fixed class answers in
+  this runtime layer. C++ draw/update code uses concrete checks such as
+  `drawable->is<Shape>()` and nested-artboard type-key dispatch, so Rust now
+  classifies render-opacity drawables with `Shape | TextInputDrawable` and
+  nested hosts with `NestedArtboard | NestedArtboardLeaf |
+  NestedArtboardLayout` directly. This is a reflected-schema removal, not a
+  new cache or invalidation rule. `make golden-compare` remains exact=263 /
+  exact-segments=584 / diverges=0; focused draw tests, `cargo test
+  --workspace`, `cargo fmt --all -- --check`, and `git diff --check` pass.
+  Repeat=100 JSON reports cpp median=0.465 ms, rust median=1.675 ms,
+  Rust/C++=3.603; focused hot-loop reports aggregate Rust/C++=2.243 then
+  2.133. M7 remains open.
 - 2026-07-08: [M7] Retain nested-host root view-model locals for child
   data-context sync. The previous retained source-local table still paid one
   scan through parent artboard slots to find the root `ViewModelInstance` for
@@ -2629,6 +2662,13 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Removed draw-time schema lookup from render-opacity and
+  nested-artboard drawable classification by replacing
+  `definition_by_name(...).is_a(...)` with C++-shaped fixed type checks. `make
+  golden-compare` remains exact=263/exact-segments=584/diverges=0; `cargo test
+  --workspace` passes; repeat=100 JSON reports Rust/C++=3.603 and focused
+  hot-loop reports Rust/C++=2.243 then 2.133. Strict <=2.0 remains open; next
+  re-profile and choose the next retained/dirt or hot BTree target.
 - 2026-07-08: [M7] Retained nested-host root `ViewModelInstance` locals by
   `viewModelId` and lazily retained successful fallback child source-local
   resolutions. `make golden-compare` remains

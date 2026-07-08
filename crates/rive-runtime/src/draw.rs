@@ -13,7 +13,6 @@ use rive_render_api::{
     RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader,
     Renderer, StrokeCap as RenderStrokeCap, StrokeJoin as RenderStrokeJoin, Vec2D as RenderVec2D,
 };
-use rive_schema::definition_by_name;
 use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 use std::sync::{Arc, OnceLock};
 use taffy::prelude::{
@@ -11787,9 +11786,7 @@ fn path_needs_clockwise_reversal(path: &PathGeometryNode, transform: Mat2D) -> b
 }
 
 fn sorted_drawable_uses_render_opacity(type_name: &str) -> bool {
-    definition_by_name(type_name).is_some_and(|definition| {
-        definition.is_a("Shape") || matches!(definition.name, "TextInputDrawable")
-    })
+    matches!(type_name, "Shape" | "TextInputDrawable")
 }
 
 fn is_text_input_drawable_type(type_name: &str) -> bool {
@@ -11800,7 +11797,10 @@ fn is_text_input_drawable_type(type_name: &str) -> bool {
 }
 
 fn sorted_drawable_is_nested_artboard(type_name: &str) -> bool {
-    definition_by_name(type_name).is_some_and(|definition| definition.is_a("NestedArtboard"))
+    matches!(
+        type_name,
+        "NestedArtboard" | "NestedArtboardLeaf" | "NestedArtboardLayout"
+    )
 }
 
 fn runtime_draw_command_is_nested_artboard(command: &RuntimeDrawCommand) -> bool {

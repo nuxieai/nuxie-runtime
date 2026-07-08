@@ -588,7 +588,7 @@ impl ArtboardInstance {
     ) -> Result<()> {
         let gradient_preparation = render_cache.gradient_preparation_frame(graph);
 
-        let mut prepared = BTreeSet::new();
+        let mut prepared = Vec::new();
         // C++ Artboard::advance updates gradient mutators in dependency order before
         // drawing, and the recording factory observes shader creation there.
         for local_id in gradient_preparation.dependency_order.iter().copied() {
@@ -609,7 +609,7 @@ impl ArtboardInstance {
                 if self.runtime_gradient_paint_is_collapsed(container, paint) {
                     continue;
                 }
-                if !prepared.insert(paint.global_id) {
+                if !runtime_mark_seen_u32(&mut prepared, paint.global_id) {
                     continue;
                 }
                 let object = runtime
@@ -789,8 +789,8 @@ impl ArtboardInstance {
         graph: &ArtboardGraph,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
         path_cache: &mut RuntimeRenderPathCache,
-    ) -> BTreeMap<usize, RuntimeDrawCommand> {
-        let mut commands = BTreeMap::new();
+    ) -> Vec<(usize, RuntimeDrawCommand)> {
+        let mut commands = Vec::new();
         for drawable in &graph.sorted_drawable_order {
             if drawable.referenced_artboard_global.is_none() {
                 continue;
@@ -805,7 +805,7 @@ impl ArtboardInstance {
             let Some(local_id) = command.local_id else {
                 continue;
             };
-            commands.entry(local_id).or_insert(command);
+            runtime_insert_nested_preparation_command_if_absent(&mut commands, local_id, command);
         }
         commands
     }
@@ -964,29 +964,41 @@ impl ArtboardInstance {
     ) -> Result<()> {
         let gradient_preparation = render_cache.gradient_preparation_frame(graph);
 
-        let mut nested_command_by_local = commands
-            .iter()
-            .filter(|command| {
-                command.referenced_artboard_global.is_some()
-                    && runtime_draw_command_is_nested_artboard(command)
-            })
-            .filter_map(|command| command.local_id.map(|local_id| (local_id, command.clone())))
-            .collect::<BTreeMap<_, _>>();
+        let mut nested_command_by_local = Vec::new();
+        for command in commands {
+            if command.referenced_artboard_global.is_none()
+                || !runtime_draw_command_is_nested_artboard(command)
+            {
+                continue;
+            }
+            let Some(local_id) = command.local_id else {
+                continue;
+            };
+            runtime_upsert_nested_preparation_command(
+                &mut nested_command_by_local,
+                local_id,
+                command.clone(),
+            );
+        }
         if graph
             .components
             .iter()
             .any(|component| component.type_name == "LayoutComponent")
         {
-            nested_command_by_local.extend(
-                self.runtime_nested_artboard_preparation_commands_by_local(
-                    graph,
-                    layout_bounds,
-                    render_cache,
-                ),
-            );
+            for (local_id, command) in self.runtime_nested_artboard_preparation_commands_by_local(
+                graph,
+                layout_bounds,
+                render_cache,
+            ) {
+                runtime_upsert_nested_preparation_command(
+                    &mut nested_command_by_local,
+                    local_id,
+                    command,
+                );
+            }
         }
-        let mut prepared_paints = BTreeSet::new();
-        let mut prepared_nested_hosts = BTreeSet::new();
+        let mut prepared_paints = Vec::new();
+        let mut prepared_nested_hosts = Vec::new();
 
         for local_id in gradient_preparation
             .dependency_insertion_order
@@ -1007,10 +1019,12 @@ impl ArtboardInstance {
                 local_id,
             )?;
 
-            let Some(command) = nested_command_by_local.get(&local_id) else {
+            let Some(command) =
+                runtime_nested_preparation_command(&nested_command_by_local, local_id)
+            else {
                 continue;
             };
-            if !prepared_nested_hosts.insert(local_id) {
+            if !runtime_mark_seen_usize(&mut prepared_nested_hosts, local_id) {
                 continue;
             }
 
@@ -1060,7 +1074,7 @@ impl ArtboardInstance {
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
         mut paint_configurations: Option<&mut BTreeMap<u32, RuntimeRenderPaintConfiguration>>,
         gradient_preparation: &RuntimeGradientPreparationFrame,
-        prepared: &mut BTreeSet<u32>,
+        prepared: &mut Vec<u32>,
         filter: RuntimeGradientPaintFilter,
         local_id: usize,
     ) -> Result<()> {
@@ -1081,7 +1095,7 @@ impl ArtboardInstance {
             if self.runtime_gradient_paint_is_collapsed(container, paint) {
                 continue;
             }
-            if !prepared.insert(paint.global_id) {
+            if !runtime_mark_seen_u32(prepared, paint.global_id) {
                 continue;
             }
             let object = runtime
@@ -5417,6 +5431,60 @@ fn runtime_gradient_dependency_order(order: &[usize], graph: &ArtboardGraph) -> 
         .copied()
         .chain(graph.local_objects.iter().map(|object| object.local_id))
         .collect()
+}
+
+fn runtime_mark_seen_u32(seen: &mut Vec<u32>, value: u32) -> bool {
+    if seen.contains(&value) {
+        return false;
+    }
+    seen.push(value);
+    true
+}
+
+fn runtime_mark_seen_usize(seen: &mut Vec<usize>, value: usize) -> bool {
+    if seen.contains(&value) {
+        return false;
+    }
+    seen.push(value);
+    true
+}
+
+fn runtime_upsert_nested_preparation_command(
+    commands: &mut Vec<(usize, RuntimeDrawCommand)>,
+    local_id: usize,
+    command: RuntimeDrawCommand,
+) {
+    if let Some((_, existing)) = commands
+        .iter_mut()
+        .find(|(existing_local, _)| *existing_local == local_id)
+    {
+        *existing = command;
+    } else {
+        commands.push((local_id, command));
+    }
+}
+
+fn runtime_insert_nested_preparation_command_if_absent(
+    commands: &mut Vec<(usize, RuntimeDrawCommand)>,
+    local_id: usize,
+    command: RuntimeDrawCommand,
+) {
+    if commands
+        .iter()
+        .any(|(existing_local, _)| *existing_local == local_id)
+    {
+        return;
+    }
+    commands.push((local_id, command));
+}
+
+fn runtime_nested_preparation_command(
+    commands: &[(usize, RuntimeDrawCommand)],
+    local_id: usize,
+) -> Option<&RuntimeDrawCommand> {
+    commands
+        .iter()
+        .find_map(|(command_local, command)| (*command_local == local_id).then_some(command))
 }
 
 impl RuntimeRenderPathCache {

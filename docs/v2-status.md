@@ -756,6 +756,21 @@ the only memory the next session has. Update it every commit.
    reports aggregate Rust/C++=3.613 over the 5-entry / 10-segment corpus
    (`ai_assitant`=3.299), so strict <=2.0 remains open. Next: profile the
    remaining fixed overhead / advance-data-bind time under the same fences.
+   A follow-up `ai_assitant --benchmark-repeat 3000000` sample found current
+   Rust time split between advance/data-bind and draw/prepare, with
+   dependency-ordered gradient paint preparation spending visible time in
+   per-frame `BTreeMap`/`BTreeSet` insert/drop. Dependency-ordered paint prep
+   now uses small vectors for nested-host command lookup and gradient paint /
+   host de-dupe, preserving the old duplicate rules (`collect` last-wins for
+   prepared commands, `or_insert` first-wins for layout-discovered commands)
+   while matching C++'s retained object/vector traversal shape. Full
+   `make golden-compare` remains exact=263 / exact-segments=584 / diverges=0;
+   focused draw probes, `cargo test --workspace`, `cargo fmt --all -- --check`,
+   and `git diff --check` pass. Fenced repeat-aware hot-loop improves from
+   aggregate Rust/C++=3.632 to 3.447 and 3.327 on rerun, but strict <=2.0
+   remains open. Next: re-profile `ai_assitant` and the fixed-overhead files;
+   likely remaining targets are advance/data-bind context lookup and lower
+   draw/prepare retention, not shallow command/path-wrapper caches.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -1257,6 +1272,19 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Replace dependency-ordered paint-prep trees with vectors.
+  The current release sample showed `ai_assitant` time split between
+  advance/data-bind and draw/prepare, with gradient paint preparation still
+  allocating and dropping per-frame `BTreeMap`/`BTreeSet` nodes. C++ keeps this
+  work on retained object/vector lists, so Rust now uses small vectors for the
+  dependency-ordered nested-host command table and prepared paint/host de-dupe.
+  Duplicate behavior is preserved: prepared command collection remains
+  last-wins, while layout-discovered fallback command collection remains
+  first-wins before overwriting the prepared table. Full `make golden-compare`
+  remains exact=263 / exact-segments=584 / diverges=0; focused draw probes,
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and `git diff
+  --check` pass. Fenced repeat-aware hot-loop improves from aggregate
+  Rust/C++=3.632 to 3.447 and 3.327 on rerun, so M7 remains open.
 - 2026-07-08: [M7] Retain state-machine definitions during advance. A release
   `ai_assitant` sample still showed per-frame `RuntimeStateMachine` clone/drop
   traffic after the status-doc scout review had fenced off shallow
@@ -3072,6 +3100,14 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-08: [M7] Replaced dependency-ordered gradient paint-prep
+  `BTreeMap`/`BTreeSet` temporaries with small vectors while preserving the old
+  duplicate command rules. This follows the C++ retained object/vector traversal
+  shape and does not add a new skip/cache invalidation rule. `make
+  golden-compare` remains exact=263/exact-segments=584/diverges=0; focused draw
+  probes, `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check` pass. Fenced repeat-aware hot-loop improves from
+  Rust/C++=3.632 to 3.447 and 3.327 on rerun; strict <=2.0 remains open.
 - 2026-07-08: [M7] Retained runtime state-machine definitions behind
   `Arc<Vec<RuntimeStateMachine>>`, removing the per-advance definition
   clone/drop in `ArtboardInstance::advance_state_machine_instance` while

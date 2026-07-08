@@ -28,8 +28,11 @@ the only memory the next session has. Update it every commit.
   min Rust/C++=4.758 over 11 file/sample entries; `spotify_kids_demo@0` is the
   largest outlier at 10.413. Current priority is image draw-retention first,
   then tiny-file draw replay/fixed overhead. Scout item 17's transform-key
-  cold-frame reflection finding remains the next/fallback target if image
-  retention requires deeper analysis before a safe slice can land.
+  cold-frame reflection finding remains the next/fallback target. Do not repeat
+  the rejected shallow non-mesh image draw-state cache scout; it preserved
+  goldens but worsened the fence to aggregate min Rust/C++=4.804 with
+  `spotify_kids_demo@0`=10.607, so the next image attempt must port deeper C++
+  `Image::updateImageScale()`/transform retention or move to the fallback.
 
 ## Milestones
 
@@ -3572,6 +3575,17 @@ the only memory the next session has. Update it every commit.
   checks. The older 2.98/3.95 scout standings are now labeled historical,
   and the current priority is explicit: profile/port image draw retention
   before smaller draw-replay/fixed-overhead work.
+- 2026-07-08: [M7] Rejected a shallow non-mesh image draw-state cache scout.
+  The code retained image origin/fit/alignment/world/blend/opacity in
+  `RuntimeRenderPathCache` behind prepared/layout/cache epochs and image
+  dimensions, matching the existing Rust draw-time math on cache misses. It
+  preserved `make golden-compare` at exact=263/exact-segments=584/diverges=0
+  and `cargo check -p rive-runtime` passed, but the adopted fence rejected it:
+  `make perf-hot-loop PERF_MAX_RATIO=999` reported aggregate min Rust/C++=4.804
+  and `spotify_kids_demo@0`=10.607, worse than the standing 4.758/10.413. Code
+  backed out. Next image work must port the deeper C++ `Image::updateImageScale`
+  / transform-retention shape or switch to the transform-key cold-frame
+  fallback from scout item 17.
 - 2026-07-08: [M7] Made the focused perf-gate defaults match the scout fence.
   `make perf-hot-loop` now defaults to `PERF_ITERATIONS=10` and
   `PERF_BENCHMARK_REPEAT=100`, keeping the existing min aggregation and

@@ -3263,6 +3263,7 @@ impl ArtboardInstance {
         clipping_shape: &ClippingShapeNode,
         graph: &ArtboardGraph,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+        path_cache: &mut RuntimeRenderPathCache,
     ) -> Vec<RuntimePathCommand> {
         let mut commands = Vec::new();
         for shape_local in &clipping_shape.shape_locals {
@@ -3298,21 +3299,15 @@ impl ArtboardInstance {
                     graph,
                     layout_bounds,
                 );
-                let runtime_path =
-                    self.runtime_path_geometry_with_layout_control(path, layout_bounds);
-                let weighted_context =
-                    self.runtime_weighted_path_context(&runtime_path, graph, layout_bounds);
-                let path_transform = if weighted_context.is_some() {
+                let path_frame =
+                    path_cache.path_geometry_commands_frame(self, graph, path, layout_bounds);
+                let path_transform = if path_frame.has_weighted_context {
                     Mat2D::IDENTITY
                 } else {
                     path_world
                 };
-                let mut path_commands = path_commands(
-                    &runtime_path,
-                    ShapePaintPathKind::World,
-                    path_transform,
-                    weighted_context.as_ref(),
-                );
+                let mut path_commands = path_frame.commands.as_ref().clone();
+                transform_path_commands(&mut path_commands, path_transform);
                 if let Some(nsliced_context) = nsliced_context.as_ref() {
                     runtime_deform_path_commands_with_nsliced_node(
                         &mut path_commands,
@@ -7792,8 +7787,12 @@ fn runtime_draw_clip_start(
     if command.needs_save_operation {
         renderer.save();
     }
-    let path_commands =
-        instance.runtime_clipping_shape_path_commands(clipping_shape, graph, layout_bounds);
+    let path_commands = instance.runtime_clipping_shape_path_commands(
+        clipping_shape,
+        graph,
+        layout_bounds,
+        path_cache,
+    );
     if path_commands.is_empty() {
         return;
     }

@@ -24,18 +24,18 @@ the only memory the next session has. Update it every commit.
 - Noise rule: ratio movement below about 0.08 is below single-run resolution;
   claim it only with two pre/post runs. Debug builds, wall-clock process time,
   and serializer output are not M7 decision-grade.
-- Current standing: after cached transform property keys, three
-  `make perf-hot-loop PERF_MAX_RATIO=999` runs report aggregate min
-  Rust/C++=4.499, 4.475, and 4.383 over 11 file/sample entries;
-  `spotify_kids_demo@0` remains the largest outlier at 9.480, 9.506, and
-  9.125. A post-commit rerun reports aggregate min Rust/C++=4.449 with
-  C++ min-sum=1.019, outside the sanity band, so treat that as directional
-  only. Do not repeat the rejected
-  shallow non-mesh image draw-state cache scout; it preserved goldens but
-  worsened the fence to aggregate min Rust/C++=4.804 with
-  `spotify_kids_demo@0`=10.607. Next priority is deeper C++
-  `Image::updateImageScale()`/transform retention for the image path, then
-  tiny-file draw replay/fixed overhead if that proves too broad.
+- Current standing: after retained clipping-shape path geometry, direct
+  Rust-only `spotify_kids_demo --benchmark-repeat 1000000` improved from
+  elapsed/draw=18763/15899 ms to 14382/11420 ms and 14793/11743 ms on rerun.
+  Two `make perf-hot-loop PERF_MAX_RATIO=999` runs report aggregate min
+  Rust/C++=4.010 and 3.570, with `spotify_kids_demo@0`=7.920 and 6.283, but
+  C++ min-sums were 1.230 and 1.257 ms, outside the 0.70-0.95 sanity band, so
+  treat both as directional only. Strict <=2.0 remains open. Do not repeat the
+  rejected shallow non-mesh image draw-state cache scout or image mesh-index
+  precompute scout; both preserved correctness but worsened direct/fenced
+  release timings. Next priority is a fresh release sample and then the next
+  retained draw-replay/fixed-overhead slice, or a deeper instance-owned
+  `Image::updateImageScale()` sidecar if the image path returns to the top.
 
 ## Milestones
 
@@ -996,8 +996,12 @@ the only memory the next session has. Update it every commit.
    by the known tiny-file fixed overhead outliers. Full `make golden-compare`
    remains exact=263 / exact-segments=584 / diverges=0; `cargo test
    --workspace`, `cargo fmt --all -- --check`, and `git diff --check` pass.
-   Next runtime target should be the image draw-retention path first, then
-   tiny-file fixed overhead/draw replay, under the existing scout fences.
+   Follow-up image micro-slices showed the shallow cache and mesh-index
+   precompute layers are not the C++ optimization. Retained clipping-shape
+   path geometry now removes one sampled draw-replay rebuild path while
+   preserving the full ratchet. Next runtime target should be a fresh release
+   sample and then the next retained draw-replay/fixed-overhead slice, under
+   the existing scout fences.
 3. The former `nested-stateful-view-model-property`,
    `nested-layout-clip-data-bind`, `nested-node-transform-data-bind`,
    `nested-text-outline-contour-order`, `layout-component-paint`, and
@@ -3568,6 +3572,29 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-08: [M7] Reused retained path-geometry command frames for
+  clipping-shape draw replay. `runtime_clipping_shape_path_commands` now takes
+  the existing `RuntimeRenderPathCache` and calls
+  `path_geometry_commands_frame` instead of rebuilding
+  `runtime_path_geometry_with_layout_control` and weighted path context
+  directly on every clip-start draw. This ports one slice of the C++
+  `ClippingShape`/`PathComposer` retained-path shape without widening
+  invalidation: the cache is still keyed by `path_epoch` and `layout_epoch`.
+  Two same-session image-path scouts were rejected before commit: a deeper
+  `Image::updateImageScale` sidecar proved too broad for a safe quick slice,
+  and an `Image::m_Mesh`-style mesh-index precompute worsened direct
+  `spotify_kids_demo` long-repeat draw time. Direct Rust-only
+  `spotify_kids_demo --benchmark-repeat 1000000` improves from
+  elapsed/draw=18763/15899 ms to 14382/11420 ms and 14793/11743 ms on rerun.
+  Full `make golden-compare` remains exact=263/exact-segments=584/diverges=0;
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check` pass. Fenced `make perf-hot-loop PERF_MAX_RATIO=999`
+  reports aggregate min Rust/C++=4.010 and 3.570, with
+  `spotify_kids_demo@0`=7.920 and 6.283, but both runs had C++ min-sums
+  outside the sanity band, so treat them as directional. Strict <=2.0 remains
+  open. Next: fresh release sample, then continue retained draw-replay/fixed
+  overhead under the scout fences.
 
 - 2026-07-08: [M7] Cached transform property keys for authored transforms and
   keyframe transform-property classification. `RuntimeComponent` now snapshots

@@ -197,7 +197,25 @@ the only memory the next session has. Update it every commit.
   min-sum=2.391 ms, C++ min-sum=0.975 ms, and `spotify_kids_demo@0`=2.936;
   still tracking-only because the C++ min-sum is outside the 0.70-0.95 ms
   sanity band. Full `make golden-compare`, `cargo test --workspace`, and
-  `cargo fmt --all -- --check` pass. M7 remains open.
+  `cargo fmt --all -- --check` pass. A follow-up clipping command-retention
+  slice lands the next C++ `ClippingShape::m_path`-shaped layer:
+  `runtime_draw_clip_start` now reuses composed clipping command streams from
+  `RuntimeRenderPathCache` keyed by graph/clipping local and path/layout epoch
+  before feeding the existing retained clip render path. This follows the
+  current Rust retained path/layout invalidation boundary rather than adding a
+  new world-transform rule in this slice. Caller instrumentation
+  on `spotify_kids_demo@0` showed repeat-frame append work dominated by the
+  clipping site: 440 calls from `runtime_clipping_shape_path_commands` versus
+  148 from regular shape-paint composition in a repeat=4 probe. Focused
+  `spotify_kids_demo@0` 2M tracking moved total=13071.20/draw=7104.94 ms to
+  total=7536.70/draw=2357.05 ms, and `append_transformed_path_commands` /
+  `path_geometry_commands_frame` fell out of the sampled top stack. The
+  user-requested open-fence hot-loop run deliberately ignored the load fence
+  with `PERF_MAX_RATIO=999` and reports aggregate min Rust/C++=2.290, Rust
+  min-sum=2.238 ms, C++ min-sum=0.977 ms, and `spotify_kids_demo@0`=2.190;
+  still tracking-only because the C++ min-sum is just outside the 0.70-0.95 ms
+  sanity band. Full `make golden-compare`, `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check` pass. M7 remains open.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, shared shape path-command buffer scout, component-local shape-paint
@@ -206,10 +224,10 @@ the only memory the next session has. Update it every commit.
   release timings. Next priority is a clean low-load/sanity-band release
   sample when available; under the user's open-fence tracking request, the
   next measured implementation target is now the remaining
-  `spotify_kids_demo@0` append-transform path assembly, world-transform,
-  path-geometry command frame, and paint configuration stack after profiling
-  the exact hot site and reading the corresponding C++ retained-path or
-  generated-access dirt gate first.
+  `spotify_kids_demo@0` world-transform, draw-path/raw-path, paint
+  configuration, and still-sampled regular shape-paint composition stack after
+  profiling the exact hot site and reading the corresponding C++ retained-path
+  or generated-access dirt gate first.
 
 ## Milestones
 
@@ -1880,6 +1898,28 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-09: [M7] Retain clipping shape command streams before clip
+  render-path replay. C++ `ClippingShape::update` retains `m_path` and rebuilds
+  it only on path/world-transform/n-slicer dirt before draw asks that path for
+  a render path. Rust already retained the final clip `RenderPath`, but
+  `runtime_draw_clip_start` still rebuilt the composed clipping command stream
+  on every repeated clip start. `RuntimeRenderPathCache` now stores composed
+  clipping commands by graph id, clipping-shape local id, `path_epoch`, and
+  `layout_epoch`, then passes the retained command slice into the existing
+  retained clip path cache; this ports the retention layer without changing the
+  current Rust retained path/layout invalidation boundary. Focused
+  `spotify_kids_demo@0` repeat=4 caller
+  instrumentation showed 440 append calls from clipping versus 148 from
+  regular shape-paint composition; the 2M tracking run moved total
+  13071.20/draw 7104.94 ms to total 7536.70/draw 2357.05 ms, and
+  `append_transformed_path_commands` / `path_geometry_commands_frame` no
+  longer appear in the sampled top stack. Full `make golden-compare` remains
+  exact=263 / exact-segments=584 / diverges=0; `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check` pass. The
+  user-requested open-fence hot-loop run deliberately ignored the load fence
+  with `PERF_MAX_RATIO=999` and reports aggregate min Rust/C++=2.290, Rust
+  min-sum=2.238 ms, C++ min-sum=0.977 ms, and `spotify_kids_demo@0`=2.190, so
+  it is tracking-only rather than M7 acceptance evidence.
 - 2026-07-09: [M7] Avoid no-op path-prune compaction after appending shape path
   commands. C++ `RawPath::pruneEmptySegments` only copies and truncates after it
   finds an empty segment; Rust was eagerly scanning for multi-contour paths and

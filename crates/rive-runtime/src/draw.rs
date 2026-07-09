@@ -3567,7 +3567,7 @@ impl ArtboardInstance {
         commands
     }
 
-    fn runtime_clipping_shape_path_commands(
+    fn runtime_clipping_shape_path_commands_uncached(
         &self,
         clipping_shape: &ClippingShapeNode,
         graph: &ArtboardGraph,
@@ -5774,6 +5774,7 @@ pub struct RuntimeRenderPathCache {
     draw_paths: RuntimeDrawPathSlots,
     path_geometry_commands: RuntimePathGeometryCommandSlots,
     shape_paint_paths: RuntimeShapePaintPathCommandSlots,
+    clipping_shape_commands: RuntimeClippingShapeCommandSlots,
     world_transforms: RuntimeWorldTransformSlots,
     image_layout_transforms: RuntimeImageLayoutTransformSlots,
     text_shape_paints: BTreeMap<RuntimeTextShapePaintCacheSlot, RuntimeCachedTextShapePaints>,
@@ -5952,6 +5953,63 @@ impl RuntimeShapePaintPathCommandSlots {
 #[derive(Clone)]
 struct RuntimeCachedShapePaintPathCommands {
     key: RuntimeShapePaintPathCommandsCacheKey,
+    commands: Arc<Vec<RuntimePathCommand>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RuntimeClippingShapeCommandsCacheKey {
+    path_epoch: u64,
+    layout_epoch: u64,
+}
+
+#[derive(Default)]
+struct RuntimeClippingShapeCommandSlots {
+    graph_global_id: Option<u32>,
+    by_clipping_shape_local: Vec<Option<RuntimeCachedClippingShapeCommands>>,
+}
+
+impl RuntimeClippingShapeCommandSlots {
+    fn get(
+        &mut self,
+        graph_global_id: u32,
+        clipping_shape_local: usize,
+        key: RuntimeClippingShapeCommandsCacheKey,
+    ) -> Option<Arc<Vec<RuntimePathCommand>>> {
+        if self.graph_global_id != Some(graph_global_id) {
+            self.graph_global_id = Some(graph_global_id);
+            self.by_clipping_shape_local.clear();
+            return None;
+        }
+        self.by_clipping_shape_local
+            .get(clipping_shape_local)
+            .and_then(|cached| cached.as_ref())
+            .filter(|cached| cached.key == key)
+            .map(|cached| cached.commands.clone())
+    }
+
+    fn insert(
+        &mut self,
+        graph_global_id: u32,
+        clipping_shape_local: usize,
+        key: RuntimeClippingShapeCommandsCacheKey,
+        commands: Arc<Vec<RuntimePathCommand>>,
+    ) {
+        if self.graph_global_id != Some(graph_global_id) {
+            self.graph_global_id = Some(graph_global_id);
+            self.by_clipping_shape_local.clear();
+        }
+        if self.by_clipping_shape_local.len() <= clipping_shape_local {
+            self.by_clipping_shape_local
+                .resize_with(clipping_shape_local + 1, || None);
+        }
+        self.by_clipping_shape_local[clipping_shape_local] =
+            Some(RuntimeCachedClippingShapeCommands { key, commands });
+    }
+}
+
+#[derive(Clone)]
+struct RuntimeCachedClippingShapeCommands {
+    key: RuntimeClippingShapeCommandsCacheKey,
     commands: Arc<Vec<RuntimePathCommand>>,
 }
 
@@ -6767,6 +6825,39 @@ impl RuntimeRenderPathCache {
             layout_epoch: instance.layout_epoch(),
             fill_rule,
         }
+    }
+
+    fn clipping_shape_path_commands(
+        &mut self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        clipping_shape: &ClippingShapeNode,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    ) -> Arc<Vec<RuntimePathCommand>> {
+        let key = RuntimeClippingShapeCommandsCacheKey {
+            path_epoch: instance.path_epoch(),
+            layout_epoch: instance.layout_epoch(),
+        };
+        if let Some(commands) =
+            self.clipping_shape_commands
+                .get(graph.global_id, clipping_shape.local_id, key)
+        {
+            return commands;
+        }
+
+        let commands = Arc::new(instance.runtime_clipping_shape_path_commands_uncached(
+            clipping_shape,
+            graph,
+            layout_bounds,
+            self,
+        ));
+        self.clipping_shape_commands.insert(
+            graph.global_id,
+            clipping_shape.local_id,
+            key,
+            commands.clone(),
+        );
+        commands
     }
 
     fn artboard_clip_path(
@@ -8879,12 +8970,8 @@ fn runtime_draw_clip_start(
     if command.needs_save_operation {
         renderer.save();
     }
-    let path_commands = instance.runtime_clipping_shape_path_commands(
-        clipping_shape,
-        graph,
-        layout_bounds,
-        path_cache,
-    );
+    let path_commands =
+        path_cache.clipping_shape_path_commands(instance, graph, clipping_shape, layout_bounds);
     if path_commands.is_empty() {
         return;
     }
@@ -8892,8 +8979,12 @@ fn runtime_draw_clip_start(
     // cached clip path, so repeated clip-start proxies reuse the same RenderPath.
     let fill_rule = runtime_fill_rule_for_value(clipping_shape.fill_rule);
     let key = path_cache.retained_render_path_key(instance, graph, fill_rule);
-    let path =
-        path_cache.clipping_shape_path(key, clipping_shape.local_id, factory, &path_commands);
+    let path = path_cache.clipping_shape_path(
+        key,
+        clipping_shape.local_id,
+        factory,
+        path_commands.as_slice(),
+    );
     renderer.clip_path(path.as_ref());
 }
 

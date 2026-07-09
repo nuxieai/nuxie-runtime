@@ -7265,6 +7265,18 @@ fn synthetic_state_machine_default_viewmodel_number_interpolator_blend_state_wit
     file_id: u64,
     data_bind_flags: u64,
 ) -> Vec<u8> {
+    synthetic_state_machine_default_viewmodel_number_interpolator_blend_state_with_flags_and_duration(
+        file_id,
+        data_bind_flags,
+        1.0,
+    )
+}
+
+fn synthetic_state_machine_default_viewmodel_number_interpolator_blend_state_with_flags_and_duration(
+    file_id: u64,
+    data_bind_flags: u64,
+    duration: f32,
+) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "ViewModel", |bytes| {
             push_string_property(bytes, "ViewModel", "name", "Root");
@@ -7282,7 +7294,7 @@ fn synthetic_state_machine_default_viewmodel_number_interpolator_blend_state_wit
             push_f32_property(bytes, "ViewModelInstanceNumber", "propertyValue", 0.0);
         });
         push_object_with_properties(bytes, "DataConverterInterpolator", |bytes| {
-            push_f32_property(bytes, "DataConverterInterpolator", "duration", 1.0);
+            push_f32_property(bytes, "DataConverterInterpolator", "duration", duration);
         });
         push_object_with_properties(bytes, "Artboard", |_| {});
         push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
@@ -50951,6 +50963,123 @@ fn state_machine_default_viewmodel_number_interpolator_converter_matches_cpp_pro
         compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
     }
     compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+// Regression for the M8 audit finding (item 24): the SM phase machinery
+// skipped initialized stateful interpolator bindings in BOTH apply phases at
+// elapsed == 0, so 'set view-model value, advance(0), render' showed the
+// stale value. C++ runs updateDataBinds unconditionally
+// (state_machine_instance.cpp:2535) with duration-0 passthrough
+// (data_converter_interpolator.cpp:147-176); only the time-step is a no-op.
+#[test]
+fn interpolator_duration_zero_applies_set_value_at_advance_zero() {
+    let label = "synthetic/runtime_interpolator_duration_zero_advance_zero.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_number_interpolator_blend_state_with_flags_and_duration(
+            9621, 0, 0.0,
+        );
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    assert!(
+        state_machine.bind_default_view_model_context(),
+        "{label} failed to bind default view-model context"
+    );
+
+    rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    rust.advance_state_machine_instance(&mut state_machine, 0.1);
+    rust.advance_state_machine_instance(&mut state_machine, 0.1);
+    assert_close(
+        state_machine
+            .bindable_number_value_for_data_bind(0)
+            .unwrap_or_else(|| panic!("missing bindable number for {label}")),
+        0.0,
+        "duration-0 interpolator before set",
+    );
+
+    assert!(
+        state_machine.set_default_view_model_number_source_for_data_bind(0, 1.0),
+        "{label} failed to mutate default view-model number source"
+    );
+    rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    assert_close(
+        state_machine
+            .bindable_number_value_for_data_bind(0)
+            .unwrap_or_else(|| panic!("missing bindable number for {label}")),
+        1.0,
+        "duration-0 interpolator passthrough at advance(0)",
+    );
+}
+
+// Regression for the M8 audit finding (item 24): with a positive duration,
+// convert() at advance(0) must still register the freshly set value as the
+// interpolation target so later timed advances progress toward it. Before
+// the fix the registration was skipped, delaying interpolation by a frame
+// and stranding render-on-demand hosts on the stale value.
+#[test]
+fn interpolator_registers_set_value_at_advance_zero() {
+    let label = "synthetic/runtime_interpolator_target_registration_advance_zero.riv";
+    let bytes =
+        synthetic_state_machine_default_viewmodel_number_interpolator_blend_state_with_flags_and_duration(
+            9622, 0, 1.0,
+        );
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    assert!(
+        state_machine.bind_default_view_model_context(),
+        "{label} failed to bind default view-model context"
+    );
+
+    rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    rust.advance_state_machine_instance(&mut state_machine, 0.1);
+    rust.advance_state_machine_instance(&mut state_machine, 0.1);
+
+    assert!(
+        state_machine.set_default_view_model_number_source_for_data_bind(0, 1.0),
+        "{label} failed to mutate default view-model number source"
+    );
+    rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    // The time-step is a no-op at elapsed == 0: the target keeps the current
+    // interpolated value (C++ parity), but the new value must be registered.
+    assert_close(
+        state_machine
+            .bindable_number_value_for_data_bind(0)
+            .unwrap_or_else(|| panic!("missing bindable number for {label}")),
+        0.0,
+        "interpolator value directly after advance(0)",
+    );
+
+    // C++ cadence: the value applied each advance is the one stepped through
+    // the PREVIOUS advance (updateDataBinds runs before advanceDataBinds).
+    rust.advance_state_machine_instance(&mut state_machine, 0.5);
+    assert_close(
+        state_machine
+            .bindable_number_value_for_data_bind(0)
+            .unwrap_or_else(|| panic!("missing bindable number for {label}")),
+        0.0,
+        "interpolator value one timed advance after advance(0)",
+    );
+
+    rust.advance_state_machine_instance(&mut state_machine, 0.5);
+    let midway = state_machine
+        .bindable_number_value_for_data_bind(0)
+        .unwrap_or_else(|| panic!("missing bindable number for {label}"));
+    assert!(
+        midway > 0.0 && midway < 1.0,
+        "{label} interpolation did not progress from the advance(0) registration: {midway}"
+    );
+
+    rust.advance_state_machine_instance(&mut state_machine, 0.5);
+    assert_close(
+        state_machine
+            .bindable_number_value_for_data_bind(0)
+            .unwrap_or_else(|| panic!("missing bindable number for {label}")),
+        1.0,
+        "interpolator completion after a full duration of timed advances",
+    );
 }
 
 #[test]

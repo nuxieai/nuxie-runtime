@@ -2506,7 +2506,7 @@ pub(crate) struct RuntimeDataBindGraphStatefulAdvance {
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum RuntimeDataBindGraphApplyPhase {
     BeforeStatefulAdvance,
-    AfterStatefulAdvance { elapsed_positive: bool },
+    AfterStatefulAdvance,
     Immediate,
     PublicUpdate,
 }
@@ -8249,10 +8249,20 @@ impl RuntimeDataBindGraphSourceNode {
             return false;
         }
         match phase {
-            RuntimeDataBindGraphApplyPhase::BeforeStatefulAdvance => true,
-            RuntimeDataBindGraphApplyPhase::AfterStatefulAdvance { elapsed_positive } => {
-                !elapsed_positive
-            }
+            // C++ updateDataBinds (state_machine_instance.cpp:2535) applies
+            // the converted value BEFORE the stateful time-step and runs
+            // unconditionally — including at elapsed == 0, where convert()
+            // still performs the first-run snap, duration-0 passthrough, and
+            // "to" registration (data_converter_interpolator.cpp:147-176).
+            // Only the time-STEP is a no-op at 0. Skipping this phase left
+            // 'set value, advance(0), render' showing the stale value.
+            RuntimeDataBindGraphApplyPhase::BeforeStatefulAdvance => false,
+            // The post-step value becomes visible at the NEXT advance's
+            // update pass: the step's markConverterDirty feeds the following
+            // updateDataBinds in C++ (data_converter_interpolator.cpp:98),
+            // so the post-step pass here must not re-apply stateful bindings
+            // a frame early.
+            RuntimeDataBindGraphApplyPhase::AfterStatefulAdvance => true,
             RuntimeDataBindGraphApplyPhase::Immediate
             | RuntimeDataBindGraphApplyPhase::PublicUpdate => false,
         }

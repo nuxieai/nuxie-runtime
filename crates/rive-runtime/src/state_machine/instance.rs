@@ -3033,9 +3033,7 @@ impl StateMachineInstance {
             .advance_stateful_converters(elapsed_seconds);
         self.apply_default_view_model_bindings(
             true,
-            RuntimeDataBindGraphApplyPhase::AfterStatefulAdvance {
-                elapsed_positive: elapsed_seconds > 0.0,
-            },
+            RuntimeDataBindGraphApplyPhase::AfterStatefulAdvance,
         );
         let data_context_present = self.data_bind_graph.data_context_present();
         let data_context_view_model_bound = self.data_bind_graph.default_view_model_context_bound();

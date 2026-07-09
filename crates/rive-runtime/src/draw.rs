@@ -7912,7 +7912,7 @@ fn runtime_background_shape_paint_command(
         paint_global_id: paint.global_id,
         mutator_local: paint.mutator_local,
         paint_type: runtime_shape_paint_kind(paint.paint_type),
-        fill_rule: runtime_fill_rule_for_value(paint.fill_rule),
+        fill_rule: runtime_live_shape_paint_fill_rule(instance, paint),
         path_kind: RuntimeShapePaintPathKind::Local,
         path_slot_index: 0,
         clip_path_slot_index: 0,
@@ -7962,7 +7962,7 @@ fn runtime_prepare_gradient_paint_command(
         paint_global_id: paint.global_id,
         mutator_local: paint.mutator_local,
         paint_type: runtime_shape_paint_kind(paint.paint_type),
-        fill_rule: runtime_fill_rule_for_value(paint.fill_rule),
+        fill_rule: runtime_live_shape_paint_fill_rule(instance, paint),
         path_kind: paint
             .path_kind
             .and_then(runtime_shape_paint_path_kind)
@@ -9815,6 +9815,21 @@ fn runtime_fill_rule_for_value(value: u64) -> RenderFillRule {
     }
 }
 
+// C++ reads the live fillRule property on every draw
+// (shape_paint.cpp:176-180); the value baked into the import-time graph
+// snapshot goes stale after a runtime Fill.fillRule write, exactly like
+// stroke thickness/cap/join. Non-Fill paints have no fillRule property and
+// keep the imported value.
+fn runtime_live_shape_paint_fill_rule(
+    instance: &ArtboardInstance,
+    paint: &ShapePaintNode,
+) -> RenderFillRule {
+    let live_value = runtime_draw_property_key_for_name("Fill", "fillRule")
+        .and_then(|key| instance.uint_property(paint.local_id, key))
+        .unwrap_or(paint.fill_rule);
+    runtime_fill_rule_for_value(live_value)
+}
+
 fn runtime_make_path_from_raw_path(
     factory: &mut dyn RenderFactory,
     raw_path: &RawPath,
@@ -9892,6 +9907,11 @@ fn runtime_rebuild_path_from_raw_path(
     path.add_raw_path(raw_path);
 }
 
+// Contract with host renderers: RenderPath::rewind clears geometry but
+// preserves the previously applied fill rule (C++ ShapePaintPath::renderPath
+// likewise rewinds without re-applying it, shape_paint_path.cpp). The
+// draw-time fill-rule replay skips redundant fill_rule() calls on that
+// assumption.
 fn runtime_rebuild_path_from_raw_path_preserving_fill_rule(
     path: &mut dyn RenderPath,
     raw_path: &RawPath,
@@ -10259,7 +10279,7 @@ pub(crate) fn runtime_shape_paint_command(
         paint_global_id: paint.global_id,
         mutator_local: paint.mutator_local,
         paint_type: runtime_shape_paint_kind(paint.paint_type),
-        fill_rule: runtime_fill_rule_for_value(paint.fill_rule),
+        fill_rule: runtime_live_shape_paint_fill_rule(artboard, paint),
         path_kind: runtime_shape_paint_path_kind(paint.path_kind?)?,
         path_slot_index: 0,
         clip_path_slot_index: 0,
@@ -14753,6 +14773,185 @@ mod tests {
             push_f32(bytes, "Vertex", "y", 10.0);
         });
         bytes
+    }
+
+    struct FillRuleRecordingRenderer {
+        fill_rules: Rc<RefCell<Vec<RenderFillRule>>>,
+    }
+
+    impl Renderer for FillRuleRecordingRenderer {
+        fn save(&mut self) {}
+        fn restore(&mut self) {}
+        fn transform(&mut self, _transform: RenderMat2D) {}
+
+        fn draw_path(&mut self, path: &dyn RenderPath, _paint: &dyn RenderPaint) {
+            if let Some(path) = path.as_any().downcast_ref::<CountingRenderPath>() {
+                self.fill_rules.borrow_mut().push(path.fill_rule);
+            }
+        }
+
+        fn clip_path(&mut self, _path: &dyn RenderPath) {}
+
+        fn draw_image(
+            &mut self,
+            _image: Option<&dyn RenderImage>,
+            _sampler: RenderImageSampler,
+            _blend_mode: RenderBlendMode,
+            _opacity: f32,
+        ) {
+        }
+
+        #[allow(clippy::too_many_arguments)]
+        fn draw_image_mesh(
+            &mut self,
+            _image: Option<&dyn RenderImage>,
+            _sampler: RenderImageSampler,
+            _vertices: Option<&dyn RenderBuffer>,
+            _uv_coords: Option<&dyn RenderBuffer>,
+            _indices: Option<&dyn RenderBuffer>,
+            _vertex_count: u32,
+            _index_count: u32,
+            _blend_mode: RenderBlendMode,
+            _opacity: f32,
+        ) {
+        }
+
+        fn modulate_opacity(&mut self, _opacity: f32) {}
+    }
+
+    // A shape with a solid fill whose fillRule starts as NonZero (0).
+    fn synthetic_solid_fill_riv() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 9641);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |_| {});
+        push_object(&mut bytes, "Shape", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+        });
+        push_object(&mut bytes, "Fill", |bytes| {
+            push_uint(bytes, "Component", "parentId", 1);
+            push_uint(bytes, "Fill", "fillRule", 0);
+        });
+        push_object(&mut bytes, "SolidColor", |bytes| {
+            push_uint(bytes, "Component", "parentId", 2);
+            push_color(bytes, "SolidColor", "colorValue", 0xff33_66aa);
+        });
+        push_object(&mut bytes, "PointsPath", |bytes| {
+            push_uint(bytes, "Node", "parentId", 1);
+            push_bool(bytes, "PointsCommonPath", "isClosed", true);
+        });
+        push_object(&mut bytes, "StraightVertex", |bytes| {
+            push_uint(bytes, "Component", "parentId", 4);
+            push_f32(bytes, "Vertex", "x", 0.0);
+            push_f32(bytes, "Vertex", "y", 0.0);
+        });
+        push_object(&mut bytes, "StraightVertex", |bytes| {
+            push_uint(bytes, "Component", "parentId", 4);
+            push_f32(bytes, "Vertex", "x", 10.0);
+            push_f32(bytes, "Vertex", "y", 0.0);
+        });
+        push_object(&mut bytes, "StraightVertex", |bytes| {
+            push_uint(bytes, "Component", "parentId", 4);
+            push_f32(bytes, "Vertex", "x", 10.0);
+            push_f32(bytes, "Vertex", "y", 10.0);
+        });
+        bytes
+    }
+
+    // Regression for the M8 audit finding (fill rule snapshot, item 25): draw
+    // commands replayed the ShapePaintNode.fill_rule baked at import, so a
+    // runtime Fill.fillRule write bumped every epoch and still rendered the
+    // load-time rule. C++ reads the live property every draw
+    // (shape_paint.cpp:176-180).
+    #[test]
+    fn runtime_fill_rule_write_renders_live_value() {
+        let bytes = synthetic_solid_fill_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic riv imports");
+        let graph = GraphFile::from_runtime_file(&file).expect("synthetic riv graphs");
+        let artboard = graph.artboards.first().expect("synthetic riv has artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, artboard).expect("instance builds");
+
+        let stats = Rc::new(CountingStats::default());
+        let mut factory = CountingFactory {
+            stats: Rc::clone(&stats),
+            next_path_id: 0,
+        };
+        let mut paint_cache = preallocate_render_paint_cache_for_artboard_instance(
+            &file,
+            artboard,
+            &graph.artboards,
+            &mut factory,
+        );
+        let mut path_cache = RuntimeRenderPathCache::default();
+        let fill_rules = Rc::new(RefCell::new(Vec::new()));
+        let mut renderer = FillRuleRecordingRenderer {
+            fill_rules: Rc::clone(&fill_rules),
+        };
+
+        instance.update_components();
+        instance
+            .prepare_static_artboard_tree_paints(
+                &file,
+                artboard,
+                &graph.artboards,
+                &mut factory,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("first prepare succeeds");
+        instance
+            .draw_prepared_static_artboard_with_render_cache(
+                &file,
+                artboard,
+                &graph.artboards,
+                &mut factory,
+                &mut renderer,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("first draw succeeds");
+        assert_eq!(
+            fill_rules.borrow().last().copied(),
+            Some(RenderFillRule::NonZero),
+            "imported fill rule renders as NonZero"
+        );
+
+        // Runtime write: Fill.fillRule -> EvenOdd.
+        let fill_rule_key = crate::properties::property_key_for_name("Fill", "fillRule")
+            .expect("fillRule property key");
+        assert!(instance.set_uint_property(2, fill_rule_key, 1));
+
+        instance.update_components();
+        instance
+            .prepare_static_artboard_tree_paints(
+                &file,
+                artboard,
+                &graph.artboards,
+                &mut factory,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("second prepare succeeds");
+        instance
+            .draw_prepared_static_artboard_with_render_cache(
+                &file,
+                artboard,
+                &graph.artboards,
+                &mut factory,
+                &mut renderer,
+                &mut paint_cache,
+                &mut path_cache,
+            )
+            .expect("second draw succeeds");
+        assert_eq!(
+            fill_rules.borrow().last().copied(),
+            Some(RenderFillRule::EvenOdd),
+            "runtime fillRule write must render the live value"
+        );
     }
 
     // Regression for the M8 audit finding (world-space gradient staleness,

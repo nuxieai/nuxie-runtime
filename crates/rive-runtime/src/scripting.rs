@@ -2,7 +2,11 @@ use std::cell::{RefCell, RefMut};
 use std::rc::Rc;
 use std::{error::Error, fmt};
 
+use rive_binary::{RuntimeFile, RuntimeObject};
 use rive_render_api::{Factory as RenderFactory, Renderer};
+
+use crate::RuntimeOwnedViewModelInstance;
+use crate::properties::property_key_for_name;
 
 /// Runtime-owned scripting error type.
 ///
@@ -99,6 +103,51 @@ impl ScriptValue {
             ScriptValue::Number(value) => Some(*value),
             _ => None,
         }
+    }
+}
+
+/// Resolves the source-to-target `DataBindContext` value owned by a script input.
+///
+/// C++ keeps script-input data binds on the scripted object rather than in the
+/// artboard data-bind container, so callers must hydrate them separately from
+/// ordinary component bindings.
+pub fn bound_script_input_value(
+    file: &RuntimeFile,
+    context: &RuntimeOwnedViewModelInstance,
+    input: &RuntimeObject,
+) -> Option<ScriptValue> {
+    let property_key = property_key_for_name(input.type_name, "propertyValue")?;
+    let data_bind = (0..file.object_count()).find_map(|id| {
+        let data_bind = file.object(id)?;
+        (data_bind.type_name == "DataBindContext"
+            && data_bind.uint_property("propertyKey") == Some(u64::from(property_key))
+            && file
+                .data_bind_target_for_object(data_bind)
+                .is_some_and(|target| target.id == input.id)
+            && file
+                .data_bind_to_target_for_object(data_bind)
+                .unwrap_or(false))
+        .then_some(data_bind)
+    })?;
+    let source_path = file.data_bind_context_resolved_source_path_ids_for_object(data_bind)?;
+    let name_based = file
+        .data_bind_is_name_based_for_object(data_bind)
+        .unwrap_or(false);
+
+    match input.type_name {
+        "ScriptInputBoolean" => context
+            .boolean_value_by_context_source_path(file, &[], &source_path, name_based)
+            .map(ScriptValue::Bool),
+        "ScriptInputNumber" => context
+            .number_value_by_context_source_path(file, &[], &source_path, name_based)
+            .map(|value| ScriptValue::Number(f64::from(value))),
+        "ScriptInputColor" => context
+            .color_value_by_context_source_path(file, &[], &source_path, name_based)
+            .map(|value| ScriptValue::Number(value as f64)),
+        "ScriptInputString" => context
+            .string_value_by_context_source_path(file, &[], &source_path, name_based)
+            .map(|value| ScriptValue::String(String::from_utf8_lossy(value).into_owned())),
+        _ => None,
     }
 }
 

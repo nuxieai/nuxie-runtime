@@ -11,7 +11,7 @@ the only memory the next session has. Update it every commit.
   exact-segments=584, diverges=7, unsupported-feature=25, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
   M8=19 gated=6; the harness bucket is empty
-- Scripted compare: exact=1 / exact-segments=1 / diverges=6 /
+- Scripted compare: exact=2 / exact-segments=2 / diverges=5 /
   unsupported-feature=19 across the 26 M8 scripting entries
 - Current milestone: **M8 — Closeout Hardening (#V2-9): scripting, C ABI, audits, fuzzing, PORTING.md**
 
@@ -569,9 +569,12 @@ the only memory the next session has. Update it every commit.
         output before the golden header. `script_artboard_test.riv` is the
         first scripted-mode exact entry after porting instance-only paint
         allocation plus the C++ cold-init, view-model rebind, and first-update
-        lifecycle. Remaining: close `script_affects_has_changed.riv`, whose
-        first behavioral difference is script-side node/property mutation,
-        then work the other named scripting diagnostics.
+        lifecycle. `script_affects_has_changed.riv` is also exact after
+        selecting serialized view-model instance zero, resolving primitive
+        script inputs through `DataBindContext`, and replaying C++'s
+        state-machine scene hydration phases. Remaining: work the other named
+        scripting diagnostics, starting with the smaller artboard property
+        cases.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
     (c) Hardening: two audit scouts are running NOW (cross-language
@@ -3674,6 +3677,16 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Promoted `script_affects_has_changed.riv` to scripted-mode
+  exact. Scripted loading now selects serialized view-model instance zero like
+  the C++ oracle, runtime scripting resolves primitive `ScriptInput*` values
+  through their owned `DataBindContext`, and the runner mirrors the three
+  state-machine scene hydration passes C++ performs through its cloned
+  artboard, internal context, and Scene entry point. The focused difference is
+  reduced to tolerated signed zero. Verification: scripted compare reports
+  exact=2/exact-segments=2/diverges=5/unsupported=19. Next: the smallest
+  remaining artboard property divergence.
 
 - 2026-07-09: [M8] Promoted `script_artboard_test.riv` to scripted-mode exact.
   Ported C++ `Artboard::instance()` paint ownership so script-created artboards

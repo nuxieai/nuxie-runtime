@@ -204,10 +204,8 @@ fn run() -> Result<String> {
                 .with_context(|| format!("failed to instantiate state machine index {index}"))
         })
         .transpose()?;
-    let mut owned_view_model_context = selected_artboard_view_model_index(&runtime, artboard_index)
-        .and_then(|view_model_index| {
-            RuntimeOwnedViewModelInstance::new(&runtime, view_model_index)
-        });
+    let mut owned_view_model_context =
+        selected_artboard_owned_view_model_context(&runtime, artboard_index);
     instance.bind_default_view_model_artboard_list_context(&runtime);
     #[cfg(feature = "scripting")]
     if let Some(state) = script_artboard_render_state.as_ref() {
@@ -219,6 +217,7 @@ fn run() -> Result<String> {
             &mut instance,
             state,
             factory.as_factory(),
+            owned_view_model_context.as_ref(),
         )?;
     }
     if let Some(state_machine) = state_machine.as_mut() {
@@ -234,15 +233,26 @@ fn run() -> Result<String> {
     if owned_view_model_context.is_some()
         && let Some(state) = script_artboard_render_state.as_ref()
     {
-        // RIVLoader binds the same context through the selected Scene too.
-        rebind_scripted_drawables(
-            &runtime,
-            artboard,
-            &graph.artboards,
-            &mut instance,
-            state,
-            factory.as_factory(),
-        )?;
+        // StateMachineInstance binds through its cloned artboard, its own
+        // context, and the Scene entry point. StaticScene has only the latter.
+        let hydration_count = if state_machine.is_some()
+            && artboard_has_data_bound_script_input(&runtime, artboard, &graph.artboards)
+        {
+            3
+        } else {
+            1
+        };
+        for _ in 0..hydration_count {
+            rebind_scripted_drawables(
+                &runtime,
+                artboard,
+                &graph.artboards,
+                &mut instance,
+                state,
+                factory.as_factory(),
+                owned_view_model_context.as_ref(),
+            )?;
+        }
     }
     #[cfg(feature = "scripting")]
     if script_artboard_render_state.is_some() {
@@ -567,8 +577,8 @@ fn instantiate_scene_state(
                 .with_context(|| format!("failed to instantiate state machine index {index}"))
         })
         .transpose()?;
-    let owned_view_model_context = selected_artboard_view_model_index(runtime, artboard_index)
-        .and_then(|view_model_index| RuntimeOwnedViewModelInstance::new(runtime, view_model_index));
+    let owned_view_model_context =
+        selected_artboard_owned_view_model_context(runtime, artboard_index);
     instance.bind_default_view_model_artboard_list_context(runtime);
     if let Some(state_machine) = state_machine.as_mut() {
         if let Some(context) = owned_view_model_context.as_ref() {
@@ -783,6 +793,20 @@ fn selected_artboard_view_model_index(
 ) -> Option<usize> {
     let artboard = runtime.artboard(artboard_index)?;
     usize::try_from(artboard.uint_property("viewModelId")?).ok()
+}
+
+fn selected_artboard_owned_view_model_context(
+    runtime: &RuntimeFile,
+    artboard_index: usize,
+) -> Option<RuntimeOwnedViewModelInstance> {
+    let view_model_index = selected_artboard_view_model_index(runtime, artboard_index)?;
+    #[cfg(feature = "scripting")]
+    if let Some(context) =
+        RuntimeOwnedViewModelInstance::from_instance(runtime, view_model_index, 0)
+    {
+        return Some(context);
+    }
+    RuntimeOwnedViewModelInstance::new(runtime, view_model_index)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1681,6 +1705,7 @@ fn rebind_scripted_drawables(
     instance: &mut ArtboardInstance,
     render_state: &Rc<RefCell<RunnerScriptArtboardRenderState>>,
     factory: &mut dyn RenderFactory,
+    owned_view_model_context: Option<&RuntimeOwnedViewModelInstance>,
 ) -> Result<()> {
     for local_object in &artboard.local_objects {
         if local_object.type_name != Some("ScriptedDrawable") {
@@ -1694,6 +1719,7 @@ fn rebind_scripted_drawables(
             local_object.global_id,
             instance,
             Rc::clone(render_state),
+            owned_view_model_context,
         )?;
     }
     instance
@@ -1714,6 +1740,7 @@ fn rehydrate_script_inputs(
     scripted_global_id: u32,
     instance: &mut ArtboardInstance,
     render_state: Rc<RefCell<RunnerScriptArtboardRenderState>>,
+    owned_view_model_context: Option<&RuntimeOwnedViewModelInstance>,
 ) -> Result<()> {
     for global_id in artboard_object_range(runtime, artboard, artboards) {
         let Some(object) = runtime.object(global_id) else {
@@ -1743,19 +1770,23 @@ fn rehydrate_script_inputs(
                 .with_context(|| format!("failed to rebind artboard script input '{name}'"))?;
             continue;
         }
-        let value = match type_name {
-            "ScriptInputBoolean" => object.bool_property("propertyValue").map(ScriptValue::Bool),
-            "ScriptInputColor" => object
-                .color_property("propertyValue")
-                .map(|value| ScriptValue::Number(value as f64)),
-            "ScriptInputNumber" => object
-                .double_property("propertyValue")
-                .map(|value| ScriptValue::Number(f64::from(value))),
-            "ScriptInputString" => object
-                .string_property("propertyValue")
-                .map(|value| ScriptValue::String(value.to_owned())),
-            _ => None,
-        };
+        let value = owned_view_model_context
+            .and_then(|context| rive_runtime::bound_script_input_value(runtime, context, object))
+            .or_else(|| match type_name {
+                "ScriptInputBoolean" => {
+                    object.bool_property("propertyValue").map(ScriptValue::Bool)
+                }
+                "ScriptInputColor" => object
+                    .color_property("propertyValue")
+                    .map(|value| ScriptValue::Number(value as f64)),
+                "ScriptInputNumber" => object
+                    .double_property("propertyValue")
+                    .map(|value| ScriptValue::Number(f64::from(value))),
+                "ScriptInputString" => object
+                    .string_property("propertyValue")
+                    .map(|value| ScriptValue::String(value.to_owned())),
+                _ => None,
+            });
         if let Some(value) = value {
             instance
                 .set_script_input_for_global(scripted_global_id, name, value)
@@ -1789,6 +1820,27 @@ fn artboard_object_range(
         .min()
         .unwrap_or_else(|| runtime.object_count());
     start..end
+}
+
+#[cfg(feature = "scripting")]
+fn artboard_has_data_bound_script_input(
+    runtime: &RuntimeFile,
+    artboard: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+) -> bool {
+    let object_range = artboard_object_range(runtime, artboard, artboards);
+    (0..runtime.object_count()).any(|global_id| {
+        let Some(data_bind) = runtime.object(global_id) else {
+            return false;
+        };
+        data_bind.type_name == "DataBindContext"
+            && runtime
+                .data_bind_target_for_object(data_bind)
+                .is_some_and(|target| {
+                    target.type_name.starts_with("ScriptInput")
+                        && object_range.contains(&(target.id as usize))
+                })
+    })
 }
 
 fn ensure_static_draw_supported(

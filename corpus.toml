@@ -1364,7 +1364,7 @@ path = "tests/unit_tests/assets/script_affects_has_changed.riv"
 samples = [0.0]
 status = "diverges"
 milestone = "M8"
-features = ["type-key:106:FileAssetContents", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:420:LayoutComponentStyle", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:447:DataBindContext", "type-key:448:ViewModelPropertyBoolean", "type-key:449:ViewModelInstanceBoolean", "type-key:529:ScriptAsset", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:603:ScriptedDrawable", "type-key:61:AnimationState", "type-key:621:ScriptInputArtboard", "type-key:62:AnyState", "type-key:631:ScriptInputBoolean", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition"]
+features = ["scripted-status:exact", "type-key:106:FileAssetContents", "type-key:18:SolidColor", "type-key:1:Artboard", "type-key:20:Fill", "type-key:23:Backboard", "type-key:31:LinearAnimation", "type-key:420:LayoutComponentStyle", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:447:DataBindContext", "type-key:448:ViewModelPropertyBoolean", "type-key:449:ViewModelInstanceBoolean", "type-key:529:ScriptAsset", "type-key:53:StateMachine", "type-key:57:StateMachineLayer", "type-key:603:ScriptedDrawable", "type-key:61:AnimationState", "type-key:621:ScriptInputArtboard", "type-key:62:AnyState", "type-key:631:ScriptInputBoolean", "type-key:63:EntryState", "type-key:64:ExitState", "type-key:65:StateTransition"]
 
 [[file]]
 id = "script_artboard_opacity_test"

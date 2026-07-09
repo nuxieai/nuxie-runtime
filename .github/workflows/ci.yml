@@ -117,3 +117,31 @@ jobs:
           name: perf-compare-json
           path: rive-rust/target/perf-compare.json
           if-no-files-found: ignore
+
+  # Negative-input fuzz smoke gate. This is additive and self-contained: it
+  # needs neither the reference C++ runtime nor any golden fixtures beyond the
+  # committed seed corpus under fuzz/corpus/. cargo-fuzz requires the nightly
+  # toolchain (libFuzzer + `-Z sanitizer`), pinned here via `rustup default
+  # nightly`. The time budget is deliberately short -- this proves the harness
+  # builds and runs, it is not a fuzzing campaign. If the nightly install ever
+  # becomes disproportionate, drop the `make fuzz-smoke` step to `make
+  # fuzz-build` for a build-only gate.
+  fuzz-smoke:
+    name: Fuzz smoke gate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout rive-rust
+        uses: actions/checkout@v4
+
+      - name: Install Rust nightly + cargo-fuzz
+        run: |
+          rustup toolchain install nightly --profile minimal --no-self-update
+          rustup default nightly
+          cargo install cargo-fuzz --locked
+
+      - name: Build and smoke-run fuzz targets
+        run: make fuzz-smoke FUZZ_CARGO=cargo FUZZ_SMOKE_SECONDS=20

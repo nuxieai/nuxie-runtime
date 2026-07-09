@@ -102,3 +102,47 @@ cpp-runtime-compare: cpp-probe
 	RIVE_CPP_PROBE="$(CPP_PROBE)" cargo test -p rive-runtime --test cpp_probe -- --nocapture
 
 cpp-compare: cpp-binary-compare cpp-graph-compare cpp-runtime-compare
+
+.PHONY: fuzz-build fuzz-smoke fuzz
+
+# --- Negative-input fuzzing (cargo-fuzz, requires the nightly toolchain) -----
+# cargo-fuzz spawns its own `cargo`/`rustc`, so pointing it at nightly via a
+# `+toolchain` proxy is not enough when the default `cargo` is a non-rustup
+# build. FUZZ_CARGO wraps the invocation so the whole tree builds with nightly.
+# In CI, where nightly is the default toolchain, override with FUZZ_CARGO=cargo.
+FUZZ_DIR ?= fuzz
+FUZZ_CARGO ?= rustup run nightly cargo
+FUZZ_TARGETS ?= fuzz_import fuzz_runtime fuzz_pointer
+FUZZ_SMOKE_SECONDS ?= 30
+FUZZ_TARGET ?= fuzz_runtime
+FUZZ_SECONDS ?= 300
+FUZZ_RSS_LIMIT_MB ?= 4096
+
+# Build every libfuzzer target (also the CI "build-only" gate).
+fuzz-build:
+	cd $(FUZZ_DIR) && $(FUZZ_CARGO) fuzz build
+
+# The committed seed corpus lives in fuzz/seeds/<target>/; libFuzzer's writable
+# working corpus (fuzz/corpus/<target>/) and any crash artifacts are gitignored.
+# Both the seeds and any committed regressions are fed in as read corpora.
+
+# Smoke gate: build all targets, then run each one briefly. This is a gate that
+# proves the harness runs and finds nothing on the seed corpus + a short
+# mutation budget -- it is NOT a full fuzzing campaign.
+fuzz-smoke: fuzz-build
+	@set -e; for target in $(FUZZ_TARGETS); do \
+		echo "== fuzz-smoke: $$target ($(FUZZ_SMOKE_SECONDS)s) =="; \
+		( cd $(FUZZ_DIR) && mkdir -p corpus/$$target && $(FUZZ_CARGO) fuzz run \
+			$$target corpus/$$target seeds/$$target regressions -- \
+			-max_total_time=$(FUZZ_SMOKE_SECONDS) -rss_limit_mb=$(FUZZ_RSS_LIMIT_MB) ); \
+	done
+
+# Longer local campaign for a single target. Example:
+#   make fuzz FUZZ_TARGET=fuzz_runtime FUZZ_SECONDS=1800
+# Crash reproducers land in fuzz/artifacts/<target>/. To commit one as a
+# regression, copy it into fuzz/regressions/ and re-run it with:
+#   cd fuzz && rustup run nightly cargo fuzz run <target> regressions/<crash-file>
+fuzz:
+	cd $(FUZZ_DIR) && mkdir -p corpus/$(FUZZ_TARGET) && $(FUZZ_CARGO) fuzz run \
+		$(FUZZ_TARGET) corpus/$(FUZZ_TARGET) seeds/$(FUZZ_TARGET) regressions -- \
+		-max_total_time=$(FUZZ_SECONDS) -rss_limit_mb=$(FUZZ_RSS_LIMIT_MB)

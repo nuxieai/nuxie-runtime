@@ -1,0 +1,49 @@
+# Standalone cargo-fuzz crate. It carries its own `[workspace]` table so it is
+# detached from the root workspace: the root's stable toolchain never tries to
+# build it (cargo-fuzz requires nightly), and `cargo test --workspace` ignores
+# it. Path dependencies still point at the in-repo crates.
+[package]
+name = "rive-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+rive-binary = { path = "../crates/rive-binary" }
+rive-graph = { path = "../crates/rive-graph" }
+rive-render-api = { path = "../crates/rive-render-api" }
+rive-runtime = { path = "../crates/rive-runtime" }
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "fuzz_import"
+path = "fuzz_targets/fuzz_import.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_runtime"
+path = "fuzz_targets/fuzz_runtime.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_pointer"
+path = "fuzz_targets/fuzz_pointer.rs"
+test = false
+doc = false
+bench = false
+
+# Keep some debug info in the fuzz binaries so crash backtraces are readable.
+[profile.release]
+debug = 1
+
+[workspace]

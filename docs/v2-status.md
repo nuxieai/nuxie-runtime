@@ -33,7 +33,8 @@ the only memory the next session has. Update it every commit.
   retained draw raw paths, dense retained clip/background path slots, plus
   dense render-paint configuration slots, no-nested clean paint-preparation
   skip, whole-repeat hot-loop total timing, and retained shape-paint path
-  command slots, plus solid-color render-paint dirt gating, full
+  command slots, plus solid-color render-paint dirt gating, and direct
+  append/prune shape path assembly for common non-n-sliced draw paths, full
   `make golden-compare` and `cargo test --workspace` remain green. The latest
   release/null-renderer sample before the `total_ms` harness change is still
   directional only:
@@ -52,10 +53,16 @@ the only memory the next session has. Update it every commit.
   still invalidating topology on alpha visibility crossings. A follow-up
   open-fence hot-loop reports aggregate min Rust/C++=3.043, but C++ min-sum
   was 1.090 ms and load was still above the fence, so it is directional only.
-  The latest visible outliers are `advance_blend_mode` samples at 5.336/4.792,
-  `spotify_kids_demo@0`=4.626, `animation_reset_cases` samples around
-  2.94-3.38, `ai_assitant@0`=2.331, `animated_clipping@0`=2.075, and
-  `align_target@0`=1.770. Strict <=2.0 remains open.
+  The append/prune slice is also directional-only: it lowers sampled allocator
+  churn in `spotify_kids_demo@0` and the best focused JSON draw min moved from
+  Rust 0.752 ms / 6.708x draw to Rust 0.638 ms / 5.815x draw, but same-session
+  full hot-loop samples ran at load 21-24 with C++ min-sums above the sanity
+  band. Latest open-fence hot-loop snapshot reports aggregate min Rust/C++=3.298
+  with load 24.43 and C++ min-sum=1.178 ms; visible outliers are
+  `advance_blend_mode` samples at 4.886/4.382, `spotify_kids_demo@0`=4.745,
+  `animation_reset_cases` samples around 2.90-3.93, `ai_assitant@0`=2.902,
+  `animated_clipping@0`=2.258, and `align_target@0`=1.811. Strict <=2.0
+  remains open.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, or shared shape path-command buffer scout; they preserved correctness
@@ -1735,6 +1742,27 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Append common shape/clipping path commands directly into the
+  destination buffer. C++ `RawPath::addPath` maps source points into the
+  retained raw path and then prunes only the newly added segment range.
+  Profiling `spotify_kids_demo@0` showed Rust spending draw time in
+  intermediate `Vec<RuntimePathCommand>` clone/grow/prune work under
+  `draw_prepared_static_artboard_internal_with_path_cache`. Rust now routes the
+  common non-n-sliced, non-reversed path assembly through direct transformed
+  append plus slice-local prune; reversed local-clockwise and n-sliced paths
+  keep the existing fallback. The path transform helper now branches once per
+  path for scale/translate vs affine, mirroring C++ `Mat2D::mapPoints`.
+  Focused spotify JSON is noisy under load, but the best same-turn draw phase
+  moved from Rust min 0.752 ms / draw=6.708x to Rust min 0.638 ms /
+  draw=5.815x, and sampling shows allocator top-stack entries much lower while
+  the remaining draw hotspot is actual transformed append/prune work. Final
+  open-fence `make perf-hot-loop PERF_MAX_RATIO=999 PERF_ITERATIONS=10
+  PERF_BENCHMARK_REPEAT=100 PERF_AGGREGATE=min` reports aggregate
+  Rust/C++=3.298 with load 24.43 and C++ min-sum=1.178 ms, so it is not
+  acceptance-grade. Full `make golden-compare` remains exact=263 /
+  exact-segments=584 / diverges=0. M7 remains open; next profile target is
+  the remaining `advance_blend_mode` fixed overhead or spotify draw
+  transform/prune/world-transform time under a clean low-load sample.
 - 2026-07-08: [M7] Kept solid-color paint changes out of prepared topology
   when C++ would only update the retained `RenderPaint`. C++
   `src/shapes/paint/solid_color.cpp` handles `colorValueChanged()` by

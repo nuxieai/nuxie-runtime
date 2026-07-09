@@ -3272,6 +3272,28 @@ impl ArtboardInstance {
                 }
             };
 
+            if nsliced_context.is_none() {
+                if path_kind == ShapePaintPathKind::LocalClockwise
+                    && path_needs_clockwise_reversal(runtime_path, transform)
+                {
+                    let mut path_commands = path_frame.commands.as_ref().clone();
+                    transform_path_commands(&mut path_commands, transform);
+                    path_commands = path_commands_backwards(&path_commands);
+                    let start = commands.len();
+                    commands.extend(path_commands);
+                    prune_empty_path_segments_from(&mut commands, start);
+                } else {
+                    let start = commands.len();
+                    append_transformed_path_commands(
+                        &mut commands,
+                        path_frame.commands.as_ref(),
+                        transform,
+                    );
+                    prune_empty_path_segments_from(&mut commands, start);
+                }
+                continue;
+            }
+
             let mut path_commands = if let Some(nsliced_context) = nsliced_context.as_ref()
                 && !path_frame.has_weighted_context
             {
@@ -3360,6 +3382,17 @@ impl ArtboardInstance {
                 } else {
                     path_world
                 };
+                if nsliced_context.is_none() {
+                    let start = commands.len();
+                    append_transformed_path_commands(
+                        &mut commands,
+                        path_frame.commands.as_ref(),
+                        path_transform,
+                    );
+                    prune_empty_path_segments_from(&mut commands, start);
+                    continue;
+                }
+
                 let mut path_commands = path_frame.commands.as_ref().clone();
                 transform_path_commands(&mut path_commands, path_transform);
                 if let Some(nsliced_context) = nsliced_context.as_ref() {
@@ -9142,10 +9175,29 @@ fn runtime_append_commands_to_raw_path(raw_path: &mut RawPath, commands: &[Runti
 }
 
 fn transform_path_commands(commands: &mut [RuntimePathCommand], transform: Mat2D) {
+    if transform == Mat2D::IDENTITY {
+        return;
+    }
+    let [a, b, c, d, e, f] = transform.0;
+    if b == 0.0 && c == 0.0 {
+        transform_path_commands_scale_translate(commands, a, d, e, f);
+    } else {
+        transform_path_commands_affine(commands, a, b, c, d, e, f);
+    }
+}
+
+fn transform_path_commands_scale_translate(
+    commands: &mut [RuntimePathCommand],
+    a: f32,
+    d: f32,
+    e: f32,
+    f: f32,
+) {
     for command in commands {
         match command {
             RuntimePathCommand::Move { x, y } | RuntimePathCommand::Line { x, y } => {
-                (*x, *y) = transform.map_point(*x, *y);
+                *x = a.mul_add(*x, e);
+                *y = d.mul_add(*y, f);
             }
             RuntimePathCommand::Cubic {
                 x1,
@@ -9155,13 +9207,154 @@ fn transform_path_commands(commands: &mut [RuntimePathCommand], transform: Mat2D
                 x3,
                 y3,
             } => {
-                (*x1, *y1) = transform.map_point(*x1, *y1);
-                (*x2, *y2) = transform.map_point(*x2, *y2);
-                (*x3, *y3) = transform.map_point(*x3, *y3);
+                *x1 = a.mul_add(*x1, e);
+                *y1 = d.mul_add(*y1, f);
+                *x2 = a.mul_add(*x2, e);
+                *y2 = d.mul_add(*y2, f);
+                *x3 = a.mul_add(*x3, e);
+                *y3 = d.mul_add(*y3, f);
             }
             RuntimePathCommand::Close => {}
         }
     }
+}
+
+fn transform_path_commands_affine(
+    commands: &mut [RuntimePathCommand],
+    a: f32,
+    b: f32,
+    c: f32,
+    d: f32,
+    e: f32,
+    f: f32,
+) {
+    for command in commands {
+        match command {
+            RuntimePathCommand::Move { x, y } | RuntimePathCommand::Line { x, y } => {
+                let (next_x, next_y) = map_point_affine(*x, *y, a, b, c, d, e, f);
+                *x = next_x;
+                *y = next_y;
+            }
+            RuntimePathCommand::Cubic {
+                x1,
+                y1,
+                x2,
+                y2,
+                x3,
+                y3,
+            } => {
+                (*x1, *y1) = map_point_affine(*x1, *y1, a, b, c, d, e, f);
+                (*x2, *y2) = map_point_affine(*x2, *y2, a, b, c, d, e, f);
+                (*x3, *y3) = map_point_affine(*x3, *y3, a, b, c, d, e, f);
+            }
+            RuntimePathCommand::Close => {}
+        }
+    }
+}
+
+fn append_transformed_path_commands(
+    destination: &mut Vec<RuntimePathCommand>,
+    source: &[RuntimePathCommand],
+    transform: Mat2D,
+) {
+    destination.reserve(source.len());
+    if transform == Mat2D::IDENTITY {
+        destination.extend_from_slice(source);
+        return;
+    }
+    let [a, b, c, d, e, f] = transform.0;
+    if b == 0.0 && c == 0.0 {
+        append_scale_translate_path_commands(destination, source, a, d, e, f);
+    } else {
+        append_affine_path_commands(destination, source, a, b, c, d, e, f);
+    }
+}
+
+fn append_scale_translate_path_commands(
+    destination: &mut Vec<RuntimePathCommand>,
+    source: &[RuntimePathCommand],
+    a: f32,
+    d: f32,
+    e: f32,
+    f: f32,
+) {
+    for command in source {
+        destination.push(match *command {
+            RuntimePathCommand::Move { x, y } => RuntimePathCommand::Move {
+                x: a.mul_add(x, e),
+                y: d.mul_add(y, f),
+            },
+            RuntimePathCommand::Line { x, y } => RuntimePathCommand::Line {
+                x: a.mul_add(x, e),
+                y: d.mul_add(y, f),
+            },
+            RuntimePathCommand::Cubic {
+                x1,
+                y1,
+                x2,
+                y2,
+                x3,
+                y3,
+            } => RuntimePathCommand::Cubic {
+                x1: a.mul_add(x1, e),
+                y1: d.mul_add(y1, f),
+                x2: a.mul_add(x2, e),
+                y2: d.mul_add(y2, f),
+                x3: a.mul_add(x3, e),
+                y3: d.mul_add(y3, f),
+            },
+            RuntimePathCommand::Close => RuntimePathCommand::Close,
+        });
+    }
+}
+
+fn append_affine_path_commands(
+    destination: &mut Vec<RuntimePathCommand>,
+    source: &[RuntimePathCommand],
+    a: f32,
+    b: f32,
+    c: f32,
+    d: f32,
+    e: f32,
+    f: f32,
+) {
+    for command in source {
+        destination.push(match *command {
+            RuntimePathCommand::Move { x, y } => {
+                let (x, y) = map_point_affine(x, y, a, b, c, d, e, f);
+                RuntimePathCommand::Move { x, y }
+            }
+            RuntimePathCommand::Line { x, y } => {
+                let (x, y) = map_point_affine(x, y, a, b, c, d, e, f);
+                RuntimePathCommand::Line { x, y }
+            }
+            RuntimePathCommand::Cubic {
+                x1,
+                y1,
+                x2,
+                y2,
+                x3,
+                y3,
+            } => {
+                let (x1, y1) = map_point_affine(x1, y1, a, b, c, d, e, f);
+                let (x2, y2) = map_point_affine(x2, y2, a, b, c, d, e, f);
+                let (x3, y3) = map_point_affine(x3, y3, a, b, c, d, e, f);
+                RuntimePathCommand::Cubic {
+                    x1,
+                    y1,
+                    x2,
+                    y2,
+                    x3,
+                    y3,
+                }
+            }
+            RuntimePathCommand::Close => RuntimePathCommand::Close,
+        });
+    }
+}
+
+fn map_point_affine(x: f32, y: f32, a: f32, b: f32, c: f32, d: f32, e: f32, f: f32) -> (f32, f32) {
+    (a.mul_add(x, c.mul_add(y, e)), d.mul_add(y, b.mul_add(x, f)))
 }
 
 fn runtime_rect_commands(left: f32, top: f32, right: f32, bottom: f32) -> Vec<RuntimePathCommand> {
@@ -9827,14 +10020,20 @@ fn path_commands_backwards(commands: &[RuntimePathCommand]) -> Vec<RuntimePathCo
 // Coarsely translated from:
 // /Users/levi/dev/oss/rive-runtime/src/math/raw_path.cpp RawPath::pruneEmptySegments
 fn prune_empty_path_segments(commands: &mut Vec<RuntimePathCommand>) {
+    prune_empty_path_segments_from(commands, 0);
+}
+
+fn prune_empty_path_segments_from(commands: &mut Vec<RuntimePathCommand>, start: usize) {
     let multi_contour = commands
+        .get(start..)
+        .unwrap_or_default()
         .iter()
         .filter(|command| matches!(command, RuntimePathCommand::Move { .. }))
         .count()
         >= 2;
     let mut current = None::<(f32, f32)>;
-    let mut write = 0usize;
-    for read in 0..commands.len() {
+    let mut write = start;
+    for read in start..commands.len() {
         let command = commands[read];
         let keep = match command {
             RuntimePathCommand::Move { x, y } => {

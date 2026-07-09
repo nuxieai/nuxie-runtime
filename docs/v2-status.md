@@ -626,6 +626,56 @@ the only memory the next session has. Update it every commit.
     deeper sub-audit (item 22) found the mutation_generation gaps and
     STANDS; treat item 22 as authoritative for that gate.
 
+24. ADVERSARIAL AUDIT (key-read/elapsed gates sub-report).
+    *** LIKELY-BUG #4 — stateful interpolator bindings never apply at
+    advance(0): *** state_machine/instance.rs:3027-3039 +
+    data_bind_graph.rs:8247-8258 skip initialized stateful bindings in
+    BOTH apply phases when elapsed==0, so the C++-supported pattern
+    'set view-model value, advance_and_apply(0.0), render' shows the
+    stale value (forever, for render-on-demand hosts). C++ runs
+    updateDataBinds unconditionally (state_machine_instance.cpp:2535)
+    with first-run snap + duration-0 passthrough
+    (data_converter_interpolator.cpp:147-176); only the TIME-STEP is a
+    no-op at 0. The artboard-level pipeline (artboard_data_bind.rs:2936)
+    got this right — fix the SM phase machinery to match it (apply
+    convert(), skip only the advancer step). Regression test: interp
+    converter + set + advance(0) via cpp_probe.
+    SOUND with latent hazards to note in PORTING.md: bitmask fast-path
+    (add a codegen assertion that bitmask/hierarchy tables agree);
+    explicit-by-key reads drop schema-default awareness (call-site
+    defaults verified against C++ headers today, no test enforcing
+    parity) and exact-key matching ignores Node.x/y alternate keys
+    (currently unreachable). Zero-delta/quantize/interpolator internals:
+    exact C++ mirrors.
+25. ADVERSARIAL AUDIT (paint-prep gates sub-report; completes the
+    12-gate review).
+    *** LIKELY-BUG #5 — fill rule replays an import-time snapshot: ***
+    draw commands carry ShapePaintNode.fill_rule baked at graph build
+    (rive-graph lib.rs:2453/2673); a runtime Fill.fillRule write (data
+    bind/setter) bumps every epoch correctly and STILL renders the
+    load-time rule — no epoch bookkeeping can save a stale data source.
+    C++ reads the live property every draw (shape_paint.cpp:176-180).
+    Predates 5d7367d/32bea6e but now entrenched. FIX: read
+    instance.uint_property(fillRule) at prepared-frame rebuild, exactly
+    as stroke thickness/cap/join already do (draw.rs:10106-10139) —
+    same asymmetry, same fix shape; check path_kind selection
+    (clockwise) for the same snapshot staleness. ALSO: the replay skip
+    silently requires 'rewind() preserves fill rule' from HOST renderers
+    (arbitrary via capi vtable) — document the trait contract or
+    re-apply fill rule after path rebuilds like C++
+    (shape_paint_path.cpp:65).
+    SUSPICIOUS (fragile-not-broken, add defense-in-depth): 4aa0494
+    depth-1 nested_epoch hash is correct today only because all writes
+    route level-by-level and hidden hosts aren't drawn — a future
+    direct-write-to-nested-child API breaks it silently; hash full-depth
+    or assert the routing invariant. Whitelist gap:
+    property_may_affect_prepared_frame's NestedArtboard arm passes only
+    artboardId (artboard.rs:2672-2674) — masked today, document.
+    SOUND with proofs: can_skip_prepared_frame (note undocumented
+    cache-instance pairing contract + epoch-counter aliasing across
+    instances — add instance identity to the key cheaply), paint-config
+    replay, no-gradient scan.
+
 ## Known Divergences
 
 - There are no active `status = "not-yet"` entries.

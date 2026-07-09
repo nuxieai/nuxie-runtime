@@ -1838,6 +1838,17 @@ impl ArtboardInstance {
     }
 
     fn propagate_layout_component_display_collapse(&mut self, layout_local: usize) -> bool {
+        self.propagate_layout_component_display_collapse_with_ancestor(layout_local, false)
+    }
+
+    // Mirrors C++ src/layout_component.cpp LayoutComponent::propagateCollapse:
+    // the propagated value folds in the local display:none state, and each
+    // child receives a full-subtree collapse (ContainerComponent::collapse).
+    fn propagate_layout_component_display_collapse_with_ancestor(
+        &mut self,
+        layout_local: usize,
+        ancestor_changed: bool,
+    ) -> bool {
         let display_hidden =
             self.layout_component_style_local(layout_local)
                 .and_then(|style_local| {
@@ -1858,18 +1869,11 @@ impl ArtboardInstance {
 
         let mut changed = false;
         for child_local in children {
-            changed |= self.collapse_layout_component_child(child_local, collapsed);
-        }
-        changed
-    }
-
-    fn collapse_layout_component_child(&mut self, child_local: usize, collapsed: bool) -> bool {
-        let mut changed = self.collapse_component(child_local, collapsed);
-        if matches!(
-            self.slot(child_local).and_then(|slot| slot.type_name),
-            Some("Artboard" | "LayoutComponent")
-        ) {
-            changed |= self.propagate_layout_component_display_collapse(child_local);
+            changed |= self.collapse_component_tree_with_ancestor(
+                child_local,
+                collapsed,
+                ancestor_changed,
+            );
         }
         changed
     }
@@ -2300,20 +2304,40 @@ impl ArtboardInstance {
         if ancestor_changed && !collapsed {
             changed |= self.add_dirt(local_id, ComponentDirt::FILTHY, false);
         }
-        let children = self
-            .components
-            .iter()
-            .filter(|component| component.parent_local == Some(local_id))
-            .map(|component| component.local_id)
-            .collect::<Vec<_>>();
-        for child in children {
-            changed |= self.collapse_component_tree_with_ancestor(
-                child,
-                collapsed,
-                ancestor_changed || changed_here,
-            );
+        match self.slot(local_id).and_then(|slot| slot.type_name) {
+            // C++ Solo::collapse (src/solo.cpp) intentionally skips the blind
+            // ContainerComponent child walk: Solo::propagateCollapse (already
+            // triggered on change via collapse_component ->
+            // apply_component_collapse_changed) re-collapses inactive children
+            // even while the solo itself becomes visible.
+            Some("Solo") => changed,
+            // C++ LayoutComponent::collapse routes through
+            // LayoutComponent::propagateCollapse, folding the local
+            // display:none state into the value pushed onto children.
+            Some("Artboard" | "LayoutComponent") => {
+                changed
+                    | self.propagate_layout_component_display_collapse_with_ancestor(
+                        local_id,
+                        ancestor_changed || changed_here,
+                    )
+            }
+            _ => {
+                let children = self
+                    .components
+                    .iter()
+                    .filter(|component| component.parent_local == Some(local_id))
+                    .map(|component| component.local_id)
+                    .collect::<Vec<_>>();
+                for child in children {
+                    changed |= self.collapse_component_tree_with_ancestor(
+                        child,
+                        collapsed,
+                        ancestor_changed || changed_here,
+                    );
+                }
+                changed
+            }
         }
-        changed
     }
 }
 
@@ -3971,5 +3995,166 @@ mod tests {
                 .iter()
                 .all(|component| component.dirt == ComponentDirt::FILTHY)
         );
+    }
+
+    fn push_var_uint(bytes: &mut Vec<u8>, mut value: u64) {
+        loop {
+            let mut byte = (value & 0x7f) as u8;
+            value >>= 7;
+            if value != 0 {
+                byte |= 0x80;
+            }
+            bytes.push(byte);
+            if value == 0 {
+                break;
+            }
+        }
+    }
+
+    fn schema_type_key(type_name: &str) -> u16 {
+        definition_by_name(type_name)
+            .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
+            .type_key
+            .int
+    }
+
+    fn schema_property_key(type_name: &str, property_name: &str) -> u16 {
+        property_key_for_name(type_name, property_name)
+            .unwrap_or_else(|| panic!("missing property {type_name}.{property_name}"))
+    }
+
+    fn push_synthetic_object(bytes: &mut Vec<u8>, type_name: &str, properties: &[(&str, u64)]) {
+        push_var_uint(bytes, u64::from(schema_type_key(type_name)));
+        for (property_name, value) in properties {
+            push_var_uint(
+                bytes,
+                u64::from(schema_property_key(type_name, property_name)),
+            );
+            push_var_uint(bytes, *value);
+        }
+        push_var_uint(bytes, 0);
+    }
+
+    fn synthetic_riv(file_id: u64, object_stream: impl FnOnce(&mut Vec<u8>)) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, file_id);
+        push_var_uint(&mut bytes, 0);
+        object_stream(&mut bytes);
+        bytes
+    }
+
+    fn instance_from_riv(bytes: &[u8]) -> ArtboardInstance {
+        let file = read_runtime_file(bytes).expect("synthetic riv should import");
+        let graph = GraphFile::from_runtime_file(&file).expect("synthetic riv should graph");
+        let artboard = graph.artboards.first().expect("synthetic riv has artboard");
+        ArtboardInstance::from_graph(&file, artboard).expect("instance builds")
+    }
+
+    fn assert_collapsed(instance: &ArtboardInstance, local_id: usize, collapsed: bool) {
+        assert_eq!(
+            instance
+                .component(local_id)
+                .unwrap_or_else(|| panic!("missing component {local_id}"))
+                .is_collapsed(),
+            collapsed,
+            "component {local_id} collapse mismatch"
+        );
+    }
+
+    // Regression for the M8 audit finding: apply_initial_solo_collapses only
+    // flagged DIRECT solo children, so Solo -> Group -> Shape left the Shape
+    // un-collapsed (and drawing) on a fresh instance without a state machine.
+    // C++ Solo::onAddedClean recurses the full subtree (src/solo.cpp).
+    #[test]
+    fn initial_solo_collapse_propagates_to_deep_descendants() {
+        let bytes = synthetic_riv(9601, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            // Local 1: solo with the first group active.
+            push_synthetic_object(bytes, "Solo", &[("parentId", 0), ("activeComponentId", 2)]);
+            // Local 2/3: active branch.
+            push_synthetic_object(bytes, "Node", &[("parentId", 1)]);
+            push_synthetic_object(bytes, "Shape", &[("parentId", 2)]);
+            // Local 4/5: statically-inactive branch.
+            push_synthetic_object(bytes, "Node", &[("parentId", 1)]);
+            push_synthetic_object(bytes, "Shape", &[("parentId", 4)]);
+        });
+        let instance = instance_from_riv(&bytes);
+
+        assert_collapsed(&instance, 2, false);
+        assert_collapsed(&instance, 3, false);
+        assert_collapsed(&instance, 4, true);
+        // The deep descendant was left un-collapsed before the fix.
+        assert_collapsed(&instance, 5, true);
+    }
+
+    // Regression for the M8 audit finding: collapse propagation from a
+    // display:none layout recursed only into Artboard|LayoutComponent
+    // children, so display:none -> Node -> Shape still drew. C++
+    // LayoutComponent::propagateCollapse recurses through
+    // ContainerComponent::collapse (src/layout_component.cpp).
+    #[test]
+    fn initial_display_none_collapse_propagates_to_deep_descendants() {
+        let bytes = synthetic_riv(9602, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            // Local 1: hidden layout; local 2: its style with display:none.
+            push_synthetic_object(bytes, "LayoutComponent", &[("parentId", 0), ("styleId", 2)]);
+            push_synthetic_object(bytes, "LayoutComponentStyle", &[("displayValue", 1)]);
+            // Local 3/4: plain-node chain under the hidden layout.
+            push_synthetic_object(bytes, "Node", &[("parentId", 1)]);
+            push_synthetic_object(bytes, "Shape", &[("parentId", 3)]);
+        });
+        let instance = instance_from_riv(&bytes);
+
+        assert_collapsed(&instance, 3, true);
+        // The deep descendant was left un-collapsed before the fix.
+        assert_collapsed(&instance, 4, true);
+    }
+
+    // Regression for the M8 audit finding: collapse_component_tree_with_ancestor
+    // blindly un-collapsed descendants, clobbering a nested solo's
+    // re-collapsed inactive children. C++ Solo::collapse skips the blind
+    // container child walk (src/solo.cpp).
+    #[test]
+    fn solo_switch_preserves_nested_solo_inactive_collapse() {
+        let bytes = synthetic_riv(9603, |bytes| {
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "Artboard", &[]);
+            // Local 1: outer solo, group A (local 2) active.
+            push_synthetic_object(bytes, "Solo", &[("parentId", 0), ("activeComponentId", 2)]);
+            push_synthetic_object(bytes, "Node", &[("parentId", 1)]);
+            // Local 3: inactive group B holding a nested solo.
+            push_synthetic_object(bytes, "Node", &[("parentId", 1)]);
+            // Local 4: inner solo, group C (local 5) active.
+            push_synthetic_object(bytes, "Solo", &[("parentId", 3), ("activeComponentId", 5)]);
+            push_synthetic_object(bytes, "Node", &[("parentId", 4)]);
+            push_synthetic_object(bytes, "Shape", &[("parentId", 5)]);
+            // Local 7/8: inner solo's inactive branch.
+            push_synthetic_object(bytes, "Node", &[("parentId", 4)]);
+            push_synthetic_object(bytes, "Shape", &[("parentId", 7)]);
+        });
+        let mut instance = instance_from_riv(&bytes);
+
+        // Fresh instance: the whole inactive outer branch is collapsed.
+        for local_id in 3..=8 {
+            assert_collapsed(&instance, local_id, true);
+        }
+
+        // Switch the outer solo to group B (child index 1).
+        assert!(instance.set_solo_active_child_by_index(1, 1.0));
+
+        assert_collapsed(&instance, 2, true);
+        assert_collapsed(&instance, 3, false);
+        assert_collapsed(&instance, 4, false);
+        assert_collapsed(&instance, 5, false);
+        assert_collapsed(&instance, 6, false);
+        // The nested solo's inactive branch must stay collapsed; the blind
+        // descendant walk un-collapsed it before the fix.
+        assert_collapsed(&instance, 7, true);
+        assert_collapsed(&instance, 8, true);
     }
 }

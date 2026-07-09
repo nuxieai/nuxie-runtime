@@ -635,10 +635,44 @@ pub(crate) fn apply_initial_solo_collapses(
             } else {
                 solo_collapsed
             };
-            if let Some(index) = component_by_local.get(&child_local.local_id).copied() {
-                set_runtime_component_collapsed(&mut components[index], collapsed);
-            }
+            set_runtime_component_subtree_collapsed(
+                components,
+                component_by_local,
+                child_local.local_id,
+                collapsed,
+            );
         }
+    }
+}
+
+// Mirrors src/container_component.cpp ContainerComponent::collapse: a collapse
+// change propagates through the entire subtree, and Component::collapse
+// short-circuits (skipping child propagation) when the flag is unchanged.
+fn set_runtime_component_subtree_collapsed(
+    components: &mut [RuntimeComponent],
+    component_by_local: &BTreeMap<usize, usize>,
+    local_id: usize,
+    collapsed: bool,
+) {
+    let Some(index) = component_by_local.get(&local_id).copied() else {
+        return;
+    };
+    if components[index].is_collapsed() == collapsed {
+        return;
+    }
+    set_runtime_component_collapsed(&mut components[index], collapsed);
+    let children = components
+        .iter()
+        .filter(|component| component.parent_local == Some(local_id))
+        .map(|component| component.local_id)
+        .collect::<Vec<_>>();
+    for child_local in children {
+        set_runtime_component_subtree_collapsed(
+            components,
+            component_by_local,
+            child_local,
+            collapsed,
+        );
     }
 }
 

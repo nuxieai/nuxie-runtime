@@ -136,7 +136,15 @@ the only memory the next session has. Update it every commit.
   locals. It was fully backed out: the focused `spotify_kids_demo@0` 5M run
   stayed flat-to-worse (total 55600 -> 55182 ms, draw 36056 -> 41454 ms), and
   the same open-fence command worsened to aggregate Rust/C++=3.288 with C++
-  min-sum=1.255 ms under very high load. M7 remains open.
+  min-sum=1.255 ms under very high load. A follow-up user-requested
+  open-fence measurement on the backed-out source deliberately ignored the
+  load fence with `PERF_MAX_RATIO=999` and reports aggregate min Rust/C++=2.858,
+  Rust min-sum=3.099 ms, C++ min-sum=1.084 ms, and load rising from
+  18.57/13.80/15.53 before the run to 30.08/20.93/18.22 after it. This is the
+  current tracking-only snapshot, not M7 acceptance evidence; visible ratios
+  are `spotify_kids_demo@0`=4.186, `advance_blend_mode`=3.854/4.012,
+  `animation_reset_cases`=2.908-3.307, `ai_assitant@0`=2.160,
+  `animated_clipping@0`=1.997, and `align_target@0`=1.944. M7 remains open.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, shared shape path-command buffer scout, or component-local

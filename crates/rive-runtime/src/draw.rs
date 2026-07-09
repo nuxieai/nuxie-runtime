@@ -1484,29 +1484,12 @@ impl ArtboardInstance {
 
         let prepared = path_cache.prepared_artboard_frame(self, graph, Some(runtime));
         let layout_bounds = prepared.layout_bounds.as_ref().as_ref();
-        if let Some(background) = graph
-            .shape_paint_containers
-            .iter()
-            .find(|container| container.local_id == 0)
-        {
-            let background_bounds = layout_bounds
-                .and_then(|bounds| bounds.get(&0).copied())
-                .or_else(|| self.runtime_root_artboard_layout_bounds(graph))
-                .unwrap_or(RuntimeLayoutBounds {
-                    x: 0.0,
-                    y: 0.0,
-                    width: self.width,
-                    height: self.height,
-                });
+        if let Some(background) = prepared.background.as_ref() {
             runtime_draw_background(
                 runtime,
                 self,
                 graph,
                 background,
-                background_bounds.width,
-                background_bounds.height,
-                self.origin_x,
-                self.origin_y,
                 factory,
                 renderer,
                 paint_by_global,
@@ -5796,7 +5779,15 @@ struct RuntimePreparedArtboardCacheKey {
 struct RuntimePreparedArtboardFrame {
     key: RuntimePreparedArtboardCacheKey,
     layout_bounds: Arc<Option<BTreeMap<usize, RuntimeLayoutBounds>>>,
+    background: Option<RuntimePreparedBackgroundFrame>,
     commands: Arc<Vec<RuntimeDrawCommand>>,
+}
+
+#[derive(Clone)]
+struct RuntimePreparedBackgroundFrame {
+    container_local: usize,
+    path_commands: Arc<Vec<RuntimePathCommand>>,
+    paints: Arc<Vec<RuntimeShapePaintCommand>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -6580,9 +6571,12 @@ impl RuntimeRenderPathCache {
                 sorted_drawable_order.as_slice(),
                 self,
             );
+            let background =
+                runtime_prepared_background_frame(instance, graph, layout_bounds.as_ref().as_ref());
             self.prepared_artboard = Some(RuntimePreparedArtboardFrame {
                 key,
                 layout_bounds,
+                background,
                 commands: Arc::new(commands),
             });
         }
@@ -7578,59 +7572,50 @@ fn runtime_draw_background(
     runtime: &RuntimeFile,
     instance: &ArtboardInstance,
     graph: &ArtboardGraph,
-    container: &ShapePaintContainerNode,
-    width: f32,
-    height: f32,
-    origin_x: f32,
-    origin_y: f32,
+    background: &RuntimePreparedBackgroundFrame,
     factory: &mut dyn RenderFactory,
     renderer: &mut dyn Renderer,
     paint_by_global: &mut RuntimeRenderPaints,
     path_cache: &mut RuntimeRenderPathCache,
     mut paint_configurations: Option<&mut RuntimeRenderPaintConfigurationSlots>,
 ) -> Result<()> {
-    let left = -origin_x * width;
-    let top = -origin_y * height;
-    let commands = runtime_rect_commands(left, top, left + width, top + height);
-    for paint in &container.paints {
+    for runtime_paint in background.paints.iter() {
+        let global_id = runtime_paint.paint_global_id;
         let object = runtime
-            .object(paint.global_id as usize)
-            .with_context(|| format!("missing paint global {}", paint.global_id))?;
-        let Some(runtime_paint) = runtime_background_shape_paint_command(
-            instance,
-            paint,
-            container.blend_mode_value,
-            commands.clone(),
-        ) else {
-            continue;
-        };
+            .object(global_id as usize)
+            .with_context(|| format!("missing paint global {global_id}"))?;
         let render_paint = paint_by_global
-            .paint_mut(paint.global_id)
-            .with_context(|| format!("missing render paint for global {}", paint.global_id))?
+            .paint_mut(global_id)
+            .with_context(|| format!("missing render paint for global {global_id}"))?
             .as_mut();
         if let Some(configurations) = paint_configurations.as_mut() {
             runtime_configure_paint_with_cache(
                 render_paint,
                 configurations,
-                paint.global_id,
+                global_id,
                 instance,
                 object,
-                &runtime_paint,
+                runtime_paint,
             )?;
         } else {
-            runtime_configure_paint(render_paint, instance, object, &runtime_paint, None)?;
+            runtime_configure_paint(render_paint, instance, object, runtime_paint, None)?;
         }
         renderer.save();
         renderer.transform(RenderMat2D::IDENTITY);
         let fill_rule = runtime_fill_rule_for_object(object);
         let key = path_cache.retained_render_path_key(instance, graph, fill_rule);
-        let path = path_cache.background_path(key, container.local_id, factory, &commands);
+        let path = path_cache.background_path(
+            key,
+            background.container_local,
+            factory,
+            background.path_commands.as_slice(),
+        );
         runtime_configure_fill_rule(path.as_mut(), object);
         renderer.draw_path(
             path.as_ref(),
             paint_by_global
-                .paint(paint.global_id)
-                .with_context(|| format!("missing render paint for global {}", paint.global_id))?
+                .paint(global_id)
+                .with_context(|| format!("missing render paint for global {global_id}"))?
                 .as_ref(),
         );
         renderer.restore();
@@ -7638,11 +7623,53 @@ fn runtime_draw_background(
     Ok(())
 }
 
+fn runtime_prepared_background_frame(
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+) -> Option<RuntimePreparedBackgroundFrame> {
+    let container = graph
+        .shape_paint_containers
+        .iter()
+        .find(|container| container.local_id == 0)?;
+    let background_bounds = layout_bounds
+        .and_then(|bounds| bounds.get(&0).copied())
+        .or_else(|| instance.runtime_root_artboard_layout_bounds(graph))
+        .unwrap_or(RuntimeLayoutBounds {
+            x: 0.0,
+            y: 0.0,
+            width: instance.width,
+            height: instance.height,
+        });
+    let left = -instance.origin_x * background_bounds.width;
+    let top = -instance.origin_y * background_bounds.height;
+    let path_commands = Arc::new(runtime_rect_commands(
+        left,
+        top,
+        left + background_bounds.width,
+        top + background_bounds.height,
+    ));
+    let paints = container
+        .paints
+        .iter()
+        .filter_map(|paint| {
+            runtime_background_shape_paint_command(instance, paint, container.blend_mode_value)
+        })
+        .collect::<Vec<_>>();
+    if paints.is_empty() {
+        return None;
+    }
+    Some(RuntimePreparedBackgroundFrame {
+        container_local: container.local_id,
+        path_commands,
+        paints: Arc::new(paints),
+    })
+}
+
 fn runtime_background_shape_paint_command(
     instance: &ArtboardInstance,
     paint: &ShapePaintNode,
     container_blend_mode_value: u32,
-    path_commands: Vec<RuntimePathCommand>,
 ) -> Option<RuntimeShapePaintCommand> {
     if !runtime_shape_paint_is_visible(instance, paint) {
         return None;
@@ -7672,7 +7699,7 @@ fn runtime_background_shape_paint_command(
         paint_state,
         feather_state: None,
         paint_space_transform: None,
-        path_commands,
+        path_commands: Vec::new(),
         effect_path_commands: Vec::new(),
         has_effect_path: false,
         needs_save_operation: true,

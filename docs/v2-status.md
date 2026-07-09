@@ -283,6 +283,20 @@ the only memory the next session has. Update it every commit.
   range and strict <=2.0 still did not hold. Full `make golden-compare`,
   `cargo test --workspace`, `cargo fmt --all -- --check`, and
   `git diff --check` pass. M7 remains open.
+  A retained background-command shell slice then moves root artboard
+  background paint command wrappers and rect command generation into
+  `RuntimePreparedArtboardFrame`, matching C++ retained artboard
+  `ShapePaint`/`ShapePaintPath` ownership while leaving dynamic render-paint
+  configuration on the existing `cache_epoch` path. Focused Rust-only 20M
+  tracking moved `advance_blend_mode` total/draw from 8918.12/3406.64 ms to
+  6928.33/2016.96 ms and `animation_reset_cases` total/draw from
+  4227.68/2672.99 ms to 3414.72/1923.43 ms. The user-requested open-fence
+  hot-loop run deliberately ignored the load fence and reports aggregate min
+  Rust/C++=2.041, Rust min-sum=2.005 ms, C++ min-sum=0.982 ms, and load
+  3.83/4.59/4.66; this is tracking-only because strict <=2.0 did not hold
+  and C++ min-sum is just outside the sanity band. Full `make golden-compare`
+  remains exact=263 / exact-segments=584 / diverges=0, and
+  `cargo test --workspace` passes. M7 remains open.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, shared shape path-command buffer scout, component-local shape-paint
@@ -291,12 +305,11 @@ the only memory the next session has. Update it every commit.
   release timings. Next priority is a clean low-load/sanity-band release
   sample when available; under the user's open-fence tracking request, the
   next measured implementation target remains the tiny-file fixed-overhead
-  outliers: re-profile `advance_blend_mode` after the retained-vector cleanup
-  and `animation_reset_cases` after lazy artboard clipping, then read the
-  matching C++ animation/state-machine/data-bind or draw path before adding
-  another runtime fast path; do not chase the smaller `ai_assitant@0` or
-  `spotify_kids_demo@0` tails again until a fresh profile puts them back above
-  fixed overhead.
+  outliers: re-profile `advance_blend_mode` and `animation_reset_cases` after
+  retained background commands, then read the matching C++ state-machine,
+  data-bind, or draw hot path before adding another runtime fast path; do not
+  chase the smaller `ai_assitant@0` or `spotify_kids_demo@0` tails again until
+  a fresh profile puts them back above fixed overhead.
 
 ## Milestones
 
@@ -1967,6 +1980,26 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-09: [M7] Retained root artboard background command shells in the
+  prepared draw frame. Fresh profiles after the retained-vector/lazy-clip
+  slice put both `advance_blend_mode` and `animation_reset_cases` back in
+  `draw_prepared_static_artboard_internal_with_path_cache`, with allocator
+  samples around root/background draw work. C++ keeps artboard background
+  `ShapePaint`s and their `ShapePaintPath` render path retained; Rust now
+  builds the root background rect commands and `RuntimeShapePaintCommand`
+  wrappers once inside `RuntimePreparedArtboardFrame`, then reuses them while
+  preserving per-frame render-paint configuration through the existing
+  `cache_epoch` cache. Focused Rust-only 20M tracking moved
+  `advance_blend_mode` total/draw from 8918.12/3406.64 ms to
+  6928.33/2016.96 ms and `animation_reset_cases` total/draw from
+  4227.68/2672.99 ms to 3414.72/1923.43 ms. The user-requested open-fence
+  `make perf-hot-loop PERF_MAX_RATIO=999` run reports aggregate min
+  Rust/C++=2.041 with load 3.83/4.59/4.66 and C++ min-sum=0.982 ms, so it is
+  tracking-only rather than M7 acceptance evidence. Full `make golden-compare`
+  reports exact=263 / exact-segments=584 / diverges=0, and
+  `cargo test --workspace` passes. Next: re-profile the same fixed-overhead
+  pair after this slice before choosing state-machine/data-bind vs remaining
+  draw allocation work.
 - 2026-07-09: [M7] Removed retained-vector clones and lazy-built the artboard
   clip rectangle. The user-requested fixed-overhead profiles showed
   `Vec::clone` under `ArtboardInstance::update_pass` plus draw-side allocation

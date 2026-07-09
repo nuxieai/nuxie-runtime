@@ -11892,9 +11892,9 @@ fn runtime_object_is_cpp_artboard_local(object: &RuntimeObject) -> bool {
 }
 
 fn definition_is_cpp_artboard_local(definition: &'static Definition) -> bool {
-    (definition.is_a("Component")
-        && !definition.name.starts_with("ScriptInput")
-        && !definition.is_a("ScrollPhysics"))
+    // Component-owned ScriptInputs call Component::import in C++ and occupy
+    // artboard slots; inputs owned by non-components fail parent validation.
+    (definition.is_a("Component") && !definition.is_a("ScrollPhysics"))
         || definition.is_a("KeyFrameInterpolator")
         || definition.is_a("UserInput")
 }

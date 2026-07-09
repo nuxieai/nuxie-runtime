@@ -1209,12 +1209,10 @@ impl RunnerScriptArtboard {
         let graph = artboards
             .get(artboard_index)
             .with_context(|| format!("missing scripted artboard index {artboard_index}"))?;
-        let mut instance = ArtboardInstance::from_graph_with_artboards(runtime, graph, artboards)
+        let instance = ArtboardInstance::from_graph_with_artboards(runtime, graph, artboards)
             .with_context(|| {
-            format!("failed to instantiate scripted artboard index {artboard_index}")
-        })?;
-        instance.advance_artboard_data_binds_with_elapsed(0.0);
-        instance.update_pass();
+                format!("failed to instantiate scripted artboard index {artboard_index}")
+            })?;
         let object = runtime.object(graph.global_id as usize);
         Ok(Self {
             runtime: runtime.clone(),

@@ -513,13 +513,11 @@ the only memory the next session has. Update it every commit.
         load, native-vector `Vector` is bound, malformed/truncated
         bytecode is preflighted before the unsafe luaur loader, and VM init
         now applies luaur's `luaL_sandbox`/`luaL_sandboxthread` equivalent
-        after installing Rive globals and `require`. The C++
-        golden runner can now be built WITH scripting via
-        `make scripted-golden-runner`, but its focused
-        `script_artboard_test.riv` run still reports `Failed to import object
-        of type 106` and emits only the static fallback rectangle. It is not
-        yet a valid scripted oracle. The first renderer binding slice is
-        landed: luaur now installs `Color`,
+        after installing Rive globals and `require`. The C++ golden runner now
+        builds and relinks WITH scripting via `make scripted-golden-runner`;
+        focused `script_artboard_test.riv` and `script_inputs_test_1.riv` runs
+        import type-106 asset contents and execute real scripts. The first
+        renderer binding slice is landed: luaur now installs `Color`,
         `Mat2D`, `Path`, `Paint`, and draw-call `Renderer` userdata for
         draw-path calls, and `ScriptInstance::call_draw` can carry a
         render-api factory/renderer into Luau. `ArtboardInstance` can now own
@@ -531,14 +529,19 @@ the only memory the next session has. Update it every commit.
         primitive inputs plus `ScriptInputArtboard`, and exposes script-artboard
         width/height/frameOrigin/instance/draw userdata. Its focused
         `script_artboard_test.riv` run executes Luau and emits the authored 3x3
-        star grid. The same asset mapping advances
+        artboard draw envelope. The first real C++/Rust comparison restored
+        component `ScriptInput*` slots in the binary/graph local-ID projection,
+        which makes the root background topology match, and removed Rust's
+        premature child update pass to follow C++ instance lifecycle. The same
+        asset mapping advances
         `image_scripting_property_value.riv` and
         `scripted_property_image.riv` from missing ScriptAsset to the sharper
         missing `viewModel`/`image` userdata bindings.
-        Remaining: repair the scripted C++ runner's type-106 asset-content
-        import path, regenerate scripted corpus statuses against real
-        reference streams, then port the next binding family exposed by those
-        diffs.
+        Remaining: give golden-compare simultaneous default/scripted runner
+        paths, regenerate the 26 harness statuses against real reference
+        streams, then close the first focused difference: C++ allocates child
+        artboard paints during script-driven instance construction while Rust
+        allocates them lazily during draw.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
     (c) Hardening: two audit scouts are running NOW (cross-language
@@ -3642,21 +3645,39 @@ the only memory the next session has. Update it every commit.
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
 
+- 2026-07-09: [M8] Repaired the scripted C++ oracle mode switch. Default and
+  scripted builds share an output path but use different object/library trees;
+  the build script now removes only the generated executable before linking,
+  preventing a newer unscripted binary from surviving
+  `make scripted-golden-runner`. The relinked runner contains
+  `TextAssetImporter`/`registerScripts`, imports type-106 contents, and runs
+  focused scripts. Its first real `script_artboard_test.riv` comparison found
+  and fixed two Rust assumptions: component `ScriptInput*` objects now retain
+  their C++ artboard local slots so the root background resolves, and script
+  artboard construction no longer performs a premature update pass. Draw
+  topology now matches through the child-artboard envelopes; the first
+  remaining difference is eager C++ versus lazy Rust child paint allocation.
+  Verification: focused scripted C++/Rust streams, `cargo test -p
+  rive-binary`, `cargo test -p rive-graph`, and `make golden-compare` pass;
+  golden compare remains exact=263 / exact-segments=584 / diverges=0, parked
+  gated=6 / harness=26. Next: add simultaneous default/scripted runner routing
+  to golden-compare and regenerate those 26 harness statuses.
+
 - 2026-07-09: [M8] Hydrated scripted drawables in the feature-gated Rust
   golden runner. Script assets now resolve by C++ file-asset index, Luau
   instances attach to `ScriptedDrawable`, primitive and artboard script inputs
   hydrate from the imported object range, and `ScriptedArtboard` userdata
   exposes width/height/frameOrigin/instance/draw. The focused
-  `script_artboard_test.riv` Rust run now executes the authored script and
-  emits nine star `drawPath` calls. The scripted C++ runner still reports
-  `Failed to import object of type 106` for the same file and emits only its
-  static fallback rectangle, correcting the earlier status claim that it was
-  already a valid oracle. Verification: feature-enabled focused smoke,
+  `script_artboard_test.riv` Rust run executes the authored script and creates
+  its 3x3 child-artboard draw envelope; the then-stale C++ executable still
+  reported type 106, which the following harness commit traced to a missing
+  mode-switch relink rather than an importer defect. Verification:
+  feature-enabled focused smoke,
   `cargo fmt --all -- --check`, `cargo test --workspace`, and
   `make golden-compare` pass; golden compare remains exact=263 /
   exact-segments=584 / diverges=0, parked gated=6 / harness=26. Next scripting
-  step: repair type-106 asset-content import in the scripted C++ runner, then
-  regenerate scripting statuses and follow the first real stream diff.
+  step: force the scripted C++ relink, then regenerate scripting statuses and
+  follow the first real stream diff.
 
 - 2026-07-09: [M8] Landed the runtime scripted-draw envelope. `ArtboardInstance`
   now stores VM-owned script instances by scripted-object global id,

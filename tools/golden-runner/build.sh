@@ -51,4 +51,15 @@ fi
 
 cd "$script_dir/build"
 premake5 gmake2
+
+# Scripted and default builds intentionally publish to the same runner path so
+# the Makefile can invoke either one. Their object directories differ, but make
+# cannot see that the linked librive search path changed between invocations.
+# Remove only the generated executable so switching modes always relinks it.
+case "$(uname -s)" in
+    Darwin) runner_system="macosx" ;;
+    Linux) runner_system="linux" ;;
+    *) runner_system="windows" ;;
+esac
+rm -f "$script_dir/build/$runner_system/bin/$config/rive_golden_runner"
 make "config=$config" -j"$jobs"

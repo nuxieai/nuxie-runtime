@@ -5608,9 +5608,9 @@ fn is_artboard_object(object: Option<&RuntimeObject>) -> bool {
         // BindableProperty in dependency_test.riv is the first known example.
         None => true,
         Some(object) => definition_by_type_key(object.type_key).is_some_and(|definition| {
-            (definition.is_a("Component")
-                && !definition.name.starts_with("ScriptInput")
-                && !definition.is_a("ScrollPhysics"))
+            // Component-owned ScriptInputs occupy C++ artboard slots; inputs
+            // owned by non-components are removed by parent validation.
+            (definition.is_a("Component") && !definition.is_a("ScrollPhysics"))
                 || definition.is_a("KeyFrameInterpolator")
                 || definition.is_a("UserInput")
         }),

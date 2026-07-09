@@ -466,6 +466,15 @@ the only memory the next session has. Update it every commit.
   `advance_blend_mode`=3.615/3.346, `animation_reset_cases`=2.455-3.111,
   `spotify_kids_demo@0`=2.317, `ai_assitant@0`=1.903,
   `animated_clipping@0`=1.830, and `align_target@0`=1.744.
+  A current user-requested M8 open-fence tracking run deliberately ignored the
+  load fence with `make perf-hot-loop PERF_MAX_RATIO=999` on the scripting
+  hydration worktree so optimization work stays measured. It reports aggregate
+  min Rust/C++=2.261, Rust min-sum=2.696 ms, C++ min-sum=1.193 ms, and
+  post-run load 23.69/16.87/14.80. Treat this as tracking-only because load
+  and C++ min-sum are both outside the formal sanity fence; visible ratios are
+  `advance_blend_mode`=3.547/3.619, `animation_reset_cases`=2.702-2.997,
+  `spotify_kids_demo@0`=2.608, `ai_assitant@0`=1.919,
+  `animated_clipping@0`=1.802, and `align_target@0`=1.719.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, shared shape path-command buffer scout, component-local shape-paint
@@ -3636,6 +3645,17 @@ the only memory the next session has. Update it every commit.
   Next scripting step: instantiate scripts from `ScriptAsset` payloads in the
   Rust golden runner and hydrate `script_artboard_test.riv` inputs into the
   attached instances.
+
+- 2026-07-09: [M8] Re-ran the hot-loop benchmark at the user's request while
+  deliberately ignoring the load fence so current optimization work stays
+  measurement-backed. `make perf-hot-loop PERF_MAX_RATIO=999` reports
+  aggregate min Rust/C++=2.261, Rust min-sum=2.696 ms, C++ min-sum=1.193 ms,
+  and post-run load 23.69/16.87/14.80. This is tracking-only evidence because
+  the load and C++ min-sum are both outside the formal M7 sanity fence. The
+  remaining visible hot-loop gaps are `advance_blend_mode` at 3.547/3.619,
+  `animation_reset_cases` at 2.702-2.997, `spotify_kids_demo@0` at 2.608,
+  `ai_assitant@0` at 1.919, `animated_clipping@0` at 1.802, and
+  `align_target@0` at 1.719.
 
 - 2026-07-09: [M8] Re-ran the hot-loop benchmark at the user's request while
   deliberately ignoring the load fence, because the current optimization work

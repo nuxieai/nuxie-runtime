@@ -315,19 +315,37 @@ the only memory the next session has. Update it every commit.
   outside the sanity band. Full `make golden-compare` remains exact=263 /
   exact-segments=584 / diverges=0, and `cargo test --workspace`,
   `cargo fmt --all -- --check`, and `git diff --check` pass. M7 remains open.
+  A C++-shaped state-machine transition loop slice then replaced the
+  closure-based `RuntimeStateTransition::allow` condition scan with a straight
+  early-return loop matching C++ `StateTransition::allowed`. A persisting
+  data-bind source-list take/recycle scout was measured and backed out before
+  this slice because focused `advance_blend_mode` did not improve. Focused
+  tracking for the landed state-machine loop moved `animation_reset_cases`
+  total/advance/draw from 17339.49/8729.10/9609.51 ms to
+  16854.30/8687.94/9781.92 ms, and `advance_blend_mode` total/advance/draw
+  from 34860.85/20559.33/10313.64 ms to 34420.92/20771.89/10378.70 ms.
+  The user-requested open-fence hot-loop deliberately ignored acceptance
+  proof requirements and reports aggregate min Rust/C++=2.000, Rust
+  min-sum=1.929 ms, C++ min-sum=0.964 ms, and load 2.69/3.66/4.37; this is
+  tracking-only because the C++ min-sum is still outside the 0.70-0.95 ms
+  sanity band, even though the printed ratio is now on the strict threshold.
+  Full `make golden-compare` remains exact=263 / exact-segments=584 /
+  diverges=0, and `cargo test --workspace`, `cargo fmt --all -- --check`,
+  and `git diff --check` pass. M7 remains open.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, shared shape path-command buffer scout, component-local shape-paint
-  path dependency epoch scout, or path-command capacity pre-reserve scout;
-  they preserved correctness but worsened or failed to move direct/fenced
-  release timings. Next priority is a clean low-load/sanity-band release
-  sample when available; under the user's open-fence tracking request, the
-  next measured implementation target remains the tiny-file fixed-overhead
-  outliers: re-profile if needed, then read the matching C++ draw property-key,
-  paint-configuration, world-transform, state-machine, or data-bind hot path
-  before adding another runtime fast path; do not chase the smaller
-  `ai_assitant@0` or `spotify_kids_demo@0` tails again until a fresh profile
-  puts them back above fixed overhead.
+  path dependency epoch scout, path-command capacity pre-reserve scout, or
+  persisting data-bind source-list take/recycle scout; they preserved
+  correctness but worsened or failed to move direct/fenced release timings.
+  Next priority is three clean low-load/sanity-band `make perf-hot-loop`
+  invocations because the latest tracking run printed aggregate Rust/C++=2.000.
+  If any acceptance attempt fails, re-profile the tiny-file fixed-overhead
+  outliers and read the matching C++ draw property-key, paint-configuration,
+  world-transform, state-machine, or data-bind hot path before adding another
+  runtime fast path; do not chase the smaller `ai_assitant@0` or
+  `spotify_kids_demo@0` tails again until a fresh profile puts them back above
+  fixed overhead.
 
 ## Milestones
 
@@ -1998,6 +2016,25 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-09: [M7] Replaced the Rust transition-condition iterator closure
+  with a straight early-return loop matching C++ `StateTransition::allowed`.
+  Focused profiles after the generated uint-read slice still showed
+  `try_change_state` / `RuntimeStateTransition::allow` in the tiny-file
+  fixed-overhead tail. A first persisting data-bind source-list take/recycle
+  scout was backed out because `advance_blend_mode` worsened to
+  total/advance=34948.20/21195.57 ms. The landed state-machine loop moved
+  `animation_reset_cases` total/advance/draw from
+  17339.49/8729.10/9609.51 ms to 16854.30/8687.94/9781.92 ms and
+  `advance_blend_mode` total/advance/draw from 34860.85/20559.33/10313.64 ms
+  to 34420.92/20771.89/10378.70 ms. The user-requested open-fence
+  `make perf-hot-loop PERF_MAX_RATIO=999` run reports aggregate min
+  Rust/C++=2.000 with Rust min-sum=1.929 ms, C++ min-sum=0.964 ms, and load
+  2.69/3.66/4.37, so it is tracking-only rather than M7 acceptance evidence
+  because C++ remains just outside the 0.70-0.95 ms sanity band. Full
+  `make golden-compare` reports exact=263 / exact-segments=584 / diverges=0;
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check` pass. Next: try the formal three-run low-load
+  `make perf-hot-loop` acceptance fence before adding another fast path.
 - 2026-07-09: [M7] Generated a sparse bitmask-passthrough lookup table and
   routed ordinary uint property reads directly to object storage. The focused
   post-background profiles showed `InstanceObjectArena::uint_property` still

@@ -912,8 +912,8 @@ impl RuntimeStateTransition {
         layer_index: usize,
         animation_from: Option<RuntimeTransitionAnimationRef<'_>>,
     ) -> TransitionAllowance {
-        if !self.conditions.iter().all(|condition| {
-            condition.evaluate(
+        for condition in &self.conditions {
+            if !condition.evaluate(
                 artboard,
                 inputs,
                 bindable_numbers,
@@ -930,9 +930,9 @@ impl RuntimeStateTransition {
                 data_context_present,
                 data_context_view_model_bound,
                 layer_index,
-            )
-        }) {
-            return TransitionAllowance::No;
+            ) {
+                return TransitionAllowance::No;
+            }
         }
 
         if self.flags & Self::ENABLE_EXIT_TIME == Self::ENABLE_EXIT_TIME

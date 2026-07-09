@@ -25,6 +25,8 @@ use taffy::style::Direction as TaffyDirection;
 
 use crate::properties::{
     RuntimeLayoutComputedProperty, cached_property_key_for_name, property_key_for_name,
+    runtime_object_explicit_bool_property_by_key, runtime_object_explicit_double_property_by_key,
+    runtime_object_explicit_uint_property_by_key, runtime_object_uint_property_by_key,
     shape_paint_is_visible_property_key, solid_color_value_property_key,
 };
 use crate::text::{
@@ -7017,7 +7019,13 @@ fn preallocate_source_mesh_render_buffers(
     image_by_global: &RuntimeRenderImages,
 ) -> Option<RuntimeSourceMeshRenderBuffers> {
     let mesh_object = runtime.object(mesh.global_id as usize)?;
-    let image_local = usize::try_from(mesh_object.uint_property("parentId")?).ok()?;
+    let parent_id_key = runtime_draw_property_key_for_name("Component", "parentId")
+        .or_else(|| runtime_draw_property_key_for_name("WorldTransformComponent", "parentId"))?;
+    let image_local = usize::try_from(runtime_object_uint_property_by_key(
+        mesh_object,
+        parent_id_key,
+    )?)
+    .ok()?;
     let image_global = graph
         .local_objects
         .iter()
@@ -7041,12 +7049,14 @@ fn preallocate_source_mesh_render_buffers(
         mesh.vertices.len() * 8,
     );
     let uv_transform = image.uv_transform();
+    let u_key = runtime_draw_property_key_for_name("MeshVertex", "u")?;
+    let v_key = runtime_draw_property_key_for_name("MeshVertex", "v")?;
     let mut uv_bytes = Vec::with_capacity(mesh.vertices.len() * 8);
     for vertex in &mesh.vertices {
         let vertex_object = runtime.object(vertex.global_id as usize)?;
         let uv = uv_transform.transform_point(RenderVec2D::new(
-            vertex_object.double_property("u").unwrap_or(0.0),
-            vertex_object.double_property("v").unwrap_or(0.0),
+            runtime_object_explicit_double_property_by_key(vertex_object, u_key).unwrap_or(0.0),
+            runtime_object_explicit_double_property_by_key(vertex_object, v_key).unwrap_or(0.0),
         ));
         push_f32_pair_bytes(&mut uv_bytes, uv.x, uv.y);
     }
@@ -7828,11 +7838,19 @@ fn runtime_draw_image(
         runtime_draw_property_key_for_name("Image", "originY").context("missing Image.originY")?;
     let origin_x = instance
         .double_property(local_id, origin_x_key)
-        .or_else(|| image_object.and_then(|object| object.double_property("originX")))
+        .or_else(|| {
+            image_object.and_then(|object| {
+                runtime_object_explicit_double_property_by_key(object, origin_x_key)
+            })
+        })
         .unwrap_or(0.5);
     let origin_y = instance
         .double_property(local_id, origin_y_key)
-        .or_else(|| image_object.and_then(|object| object.double_property("originY")))
+        .or_else(|| {
+            image_object.and_then(|object| {
+                runtime_object_explicit_double_property_by_key(object, origin_y_key)
+            })
+        })
         .unwrap_or(0.5);
     let world = path_cache
         .image_world_transform_with_bounds(
@@ -7867,7 +7885,11 @@ fn runtime_draw_image(
         .context("missing Drawable.blendModeValue")?;
     let blend_mode_value = instance
         .uint_property(local_id, blend_mode_key)
-        .or_else(|| image_object.and_then(|object| object.uint_property("blendModeValue")))
+        .or_else(|| {
+            image_object.and_then(|object| {
+                runtime_object_explicit_uint_property_by_key(object, blend_mode_key)
+            })
+        })
         .unwrap_or(3);
     let opacity = instance
         .component(local_id)
@@ -7891,10 +7913,12 @@ fn runtime_image_mesh<'a>(
     graph: &'a ArtboardGraph,
     image_local: usize,
 ) -> Option<&'a MeshGeometryNode> {
+    let parent_id_key = runtime_draw_property_key_for_name("Component", "parentId")
+        .or_else(|| runtime_draw_property_key_for_name("WorldTransformComponent", "parentId"))?;
     graph.meshes.iter().find(|mesh| {
         runtime
             .object(mesh.global_id as usize)
-            .and_then(|object| object.uint_property("parentId"))
+            .and_then(|object| runtime_object_uint_property_by_key(object, parent_id_key))
             == Some(image_local as u64)
     })
 }
@@ -7941,7 +7965,11 @@ fn runtime_draw_mesh_image(
         .context("missing Drawable.blendModeValue")?;
     let blend_mode_value = instance
         .uint_property(image_local, blend_mode_key)
-        .or_else(|| image_object.and_then(|object| object.uint_property("blendModeValue")))
+        .or_else(|| {
+            image_object.and_then(|object| {
+                runtime_object_explicit_uint_property_by_key(object, blend_mode_key)
+            })
+        })
         .unwrap_or(3);
     let opacity = instance
         .component(image_local)
@@ -8005,11 +8033,11 @@ fn runtime_mesh_vertex_render_translation(
     let y_key = runtime_draw_property_key_for_name("Vertex", "y").context("missing Vertex.y")?;
     let x = instance
         .double_property(vertex.local_id, x_key)
-        .or_else(|| vertex_object.double_property("x"))
+        .or_else(|| runtime_object_explicit_double_property_by_key(vertex_object, x_key))
         .unwrap_or(0.0);
     let y = instance
         .double_property(vertex.local_id, y_key)
-        .or_else(|| vertex_object.double_property("y"))
+        .or_else(|| runtime_object_explicit_double_property_by_key(vertex_object, y_key))
         .unwrap_or(0.0);
     if let Some(weighted_context) = weighted_context
         && let Some(weight_global) = vertex.weight_global
@@ -8017,11 +8045,21 @@ fn runtime_mesh_vertex_render_translation(
         let weight = runtime
             .object(weight_global as usize)
             .with_context(|| format!("missing mesh weight global {weight_global}"))?;
+        let indices_key = runtime_draw_property_key_for_name("Weight", "indices")
+            .context("missing Weight.indices")?;
+        let values_key = runtime_draw_property_key_for_name("Weight", "values")
+            .context("missing Weight.values")?;
         return weighted_context
             .deform_point(
                 (x, y),
-                u32::try_from(weight.uint_property("indices").unwrap_or(1)).unwrap_or(1),
-                u32::try_from(weight.uint_property("values").unwrap_or(255)).unwrap_or(255),
+                u32::try_from(
+                    runtime_object_explicit_uint_property_by_key(weight, indices_key).unwrap_or(1),
+                )
+                .unwrap_or(1),
+                u32::try_from(
+                    runtime_object_explicit_uint_property_by_key(weight, values_key).unwrap_or(255),
+                )
+                .unwrap_or(255),
             )
             .context("mesh bone deformation referenced a missing bone transform");
     }
@@ -8052,23 +8090,42 @@ fn runtime_image_layout_local_transform(
         .context("missing Image.alignmentY")?;
     let fit = instance
         .uint_property(local_id, fit_key)
-        .or_else(|| image_object.and_then(|object| object.uint_property("fit")))
+        .or_else(|| {
+            image_object
+                .and_then(|object| runtime_object_explicit_uint_property_by_key(object, fit_key))
+        })
         .unwrap_or(0);
     let origin_x = instance
         .double_property(local_id, origin_x_key)
-        .or_else(|| image_object.and_then(|object| object.double_property("originX")))
+        .or_else(|| {
+            image_object.and_then(|object| {
+                runtime_object_explicit_double_property_by_key(object, origin_x_key)
+            })
+        })
         .unwrap_or(0.5);
     let origin_y = instance
         .double_property(local_id, origin_y_key)
-        .or_else(|| image_object.and_then(|object| object.double_property("originY")))
+        .or_else(|| {
+            image_object.and_then(|object| {
+                runtime_object_explicit_double_property_by_key(object, origin_y_key)
+            })
+        })
         .unwrap_or(0.5);
     let alignment_x = instance
         .double_property(local_id, alignment_x_key)
-        .or_else(|| image_object.and_then(|object| object.double_property("alignmentX")))
+        .or_else(|| {
+            image_object.and_then(|object| {
+                runtime_object_explicit_double_property_by_key(object, alignment_x_key)
+            })
+        })
         .unwrap_or(0.0);
     let alignment_y = instance
         .double_property(local_id, alignment_y_key)
-        .or_else(|| image_object.and_then(|object| object.double_property("alignmentY")))
+        .or_else(|| {
+            image_object.and_then(|object| {
+                runtime_object_explicit_double_property_by_key(object, alignment_y_key)
+            })
+        })
         .unwrap_or(0.0);
 
     let width_scale = layout_width / image_width;
@@ -9094,7 +9151,12 @@ fn runtime_configure_fill_rule(path: &mut dyn RenderPath, object: &RuntimeObject
 }
 
 fn runtime_fill_rule_for_object(object: &RuntimeObject) -> RenderFillRule {
-    runtime_fill_rule_for_value(object.uint_property("fillRule").unwrap_or(0))
+    let fill_rule_key = runtime_draw_property_key_for_name("Fill", "fillRule");
+    runtime_fill_rule_for_value(
+        fill_rule_key
+            .and_then(|key| runtime_object_explicit_uint_property_by_key(object, key))
+            .unwrap_or(0),
+    )
 }
 
 fn runtime_fill_rule_for_value(value: u64) -> RenderFillRule {
@@ -9561,8 +9623,12 @@ fn runtime_stroke_thickness(
     object: &RuntimeObject,
     local_id: usize,
 ) -> f32 {
+    let thickness_key = runtime_draw_property_key_for_name("Stroke", "thickness");
     runtime_stroke_thickness_for_local(instance, local_id)
-        .or_else(|| object.double_property("thickness"))
+        .or_else(|| {
+            thickness_key
+                .and_then(|key| runtime_object_explicit_double_property_by_key(object, key))
+        })
         .unwrap_or(1.0)
 }
 
@@ -9578,9 +9644,12 @@ fn runtime_stroke_uint_property(
     property_name: &str,
     fallback: u64,
 ) -> u64 {
-    runtime_draw_property_key_for_name("Stroke", property_name)
+    let property_key = runtime_draw_property_key_for_name("Stroke", property_name);
+    property_key
         .and_then(|key| instance.uint_property(local_id, key))
-        .or_else(|| object.uint_property(property_name))
+        .or_else(|| {
+            property_key.and_then(|key| runtime_object_explicit_uint_property_by_key(object, key))
+        })
         .unwrap_or(fallback)
 }
 
@@ -12999,12 +13068,14 @@ fn runtime_component_double_property(
     property_name: &str,
     default: f32,
 ) -> f32 {
-    property_key_for_name(type_name, property_name)
+    let property_key = property_key_for_name(type_name, property_name);
+    property_key
         .and_then(|key| instance.double_property(local_id, key))
         .or_else(|| {
-            runtime
-                .object(global_id as usize)
-                .and_then(|object| object.double_property(property_name))
+            runtime.object(global_id as usize).and_then(|object| {
+                property_key
+                    .and_then(|key| runtime_object_explicit_double_property_by_key(object, key))
+            })
         })
         .unwrap_or(default)
 }
@@ -13018,12 +13089,14 @@ fn runtime_component_bool_property(
     property_name: &str,
     default: bool,
 ) -> bool {
-    property_key_for_name(type_name, property_name)
+    let property_key = property_key_for_name(type_name, property_name);
+    property_key
         .and_then(|key| instance.bool_property(local_id, key))
         .or_else(|| {
-            runtime
-                .object(global_id as usize)
-                .and_then(|object| object.bool_property(property_name))
+            runtime.object(global_id as usize).and_then(|object| {
+                property_key
+                    .and_then(|key| runtime_object_explicit_bool_property_by_key(object, key))
+            })
         })
         .unwrap_or(default)
 }

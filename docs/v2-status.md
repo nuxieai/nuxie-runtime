@@ -92,7 +92,20 @@ the only memory the next session has. Update it every commit.
   baseline; visible remaining ratios are `advance_blend_mode`=4.119/4.284,
   `spotify_kids_demo@0`=3.949, `animation_reset_cases`=3.423-3.783,
   `animated_clipping@0`=2.348, `ai_assitant@0`=2.231, and
-  `align_target@0`=1.969.
+  `align_target@0`=1.969. A draw/property key-lookup slice then removes the
+  remaining direct `RuntimeObject::*_property("name")` calls from the
+  draw/image/mesh hot path, replacing them with numeric key reads and explicit
+  call-site defaults, matching C++ generated field access rather than runtime
+  name discovery. Focused `advance_blend_mode` profiling no longer samples
+  `property_by_name_in_hierarchy` or `stored_field_initializer`; Rust-only
+  50M tracking moved total from 37491 ms to 34859 ms and draw from 15269 ms
+  to 13161 ms under high load. The same-turn open-fence hot-loop snapshot
+  reports aggregate min Rust/C++=2.883 with load 11.59/17.24/21.02 and C++
+  min-sum=1.077 ms, so it is tracking-only and not M7 acceptance evidence;
+  visible ratios are `spotify_kids_demo@0`=4.387,
+  `advance_blend_mode`=4.138/3.928, `animation_reset_cases`=2.831-3.123,
+  `ai_assitant@0`=2.265, `animated_clipping@0`=1.897, and
+  `align_target@0`=1.667.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, or shared shape path-command buffer scout; they preserved correctness
@@ -1774,6 +1787,22 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-09: [M7] Read runtime object draw fallbacks by numeric property key
+  instead of by name. The focused `advance_blend_mode` sample showed
+  `property_by_name_in_hierarchy` on the draw path even though C++
+  `Artboard::drawInternal`, `Shape::draw`, and `ShapePaint::draw` read typed
+  generated fields. Rust now keeps the default-aware key helper for required
+  relationship fields, but draw/image/mesh/stroke fallback reads use explicit
+  property-key scans and the same call-site default literals already used by
+  the C++-ported draw code. Focused samples no longer show
+  `property_by_name_in_hierarchy` or `stored_field_initializer`; a high-load
+  Rust-only 50M `advance_blend_mode` tracking run moved total 37491 -> 34859
+  ms and draw 15269 -> 13161 ms. Full `make golden-compare` remains exact=263
+  / exact-segments=584 / diverges=0, `cargo test --workspace` passes, and
+  open-fence `make perf-hot-loop PERF_MAX_RATIO=999 PERF_ITERATIONS=10
+  PERF_BENCHMARK_REPEAT=100 PERF_AGGREGATE=min` reports aggregate
+  Rust/C++=2.883 with load 11.59/17.24/21.02 and C++ min-sum=1.077 ms, so M7
+  remains open.
 - 2026-07-09: [M7] Record open-fence hot-loop tracking runs even when they are
   not acceptance-grade. User explicitly requested ignoring the load fence to
   keep optimization work measurement-backed. The current tracking command is

@@ -1,6 +1,8 @@
-use rive_binary::{RuntimeFile, RuntimeObject};
+use rive_binary::{FieldValue, RuntimeFile, RuntimeObject};
 use rive_graph::ArtboardGraph;
-use rive_schema::{FieldKind, definition_by_name, property_by_key_in_hierarchy};
+use rive_schema::{
+    FieldKind, StoredFieldInitializer, definition_by_name, property_by_key_in_hierarchy,
+};
 use std::sync::OnceLock;
 
 use crate::components::TransformProperty;
@@ -47,10 +49,6 @@ pub(crate) fn artboard_index_for_graph(file: &RuntimeFile, graph: &ArtboardGraph
         .position(|artboard| artboard.id == graph.global_id)
 }
 
-fn runtime_property_name_by_key(object: &RuntimeObject, property_key: u16) -> Option<&'static str> {
-    property_by_key_in_hierarchy(object.type_key, property_key).map(|(_, property)| property.name)
-}
-
 pub(crate) fn runtime_object_field_kind_by_key(
     object: &RuntimeObject,
     property_key: u16,
@@ -59,32 +57,104 @@ pub(crate) fn runtime_object_field_kind_by_key(
         .map(|(_, property)| property.runtime_type)
 }
 
+fn runtime_object_property_value_by_key(
+    object: &RuntimeObject,
+    property_key: u16,
+) -> Option<&FieldValue> {
+    object
+        .properties
+        .iter()
+        .rev()
+        .find(|property| property.key == property_key)
+        .map(|property| &property.value)
+}
+
+pub(crate) fn runtime_object_explicit_double_property_by_key(
+    object: &RuntimeObject,
+    property_key: u16,
+) -> Option<f32> {
+    runtime_object_property_value_by_key(object, property_key).and_then(FieldValue::as_double)
+}
+
+pub(crate) fn runtime_object_explicit_uint_property_by_key(
+    object: &RuntimeObject,
+    property_key: u16,
+) -> Option<u64> {
+    runtime_object_property_value_by_key(object, property_key).and_then(FieldValue::as_uint)
+}
+
+pub(crate) fn runtime_object_explicit_bool_property_by_key(
+    object: &RuntimeObject,
+    property_key: u16,
+) -> Option<bool> {
+    runtime_object_property_value_by_key(object, property_key).and_then(FieldValue::as_bool)
+}
+
+fn runtime_object_stored_field_initializer_by_key(
+    object: &RuntimeObject,
+    property_key: u16,
+) -> Option<StoredFieldInitializer> {
+    let (_, property) = property_by_key_in_hierarchy(object.type_key, property_key)?;
+    if object.type_name == "Artboard" && property.name == "clip" {
+        return Some(StoredFieldInitializer::Bool(true));
+    }
+    (*property).stored_field_initializer()
+}
+
 pub(crate) fn runtime_object_double_property_by_key(
     object: &RuntimeObject,
     property_key: u16,
 ) -> Option<f32> {
-    object.double_property(runtime_property_name_by_key(object, property_key)?)
+    if let Some(value) = runtime_object_property_value_by_key(object, property_key) {
+        return value.as_double();
+    }
+
+    match runtime_object_stored_field_initializer_by_key(object, property_key)? {
+        StoredFieldInitializer::Double(value) => Some(value),
+        _ => None,
+    }
 }
 
 pub(crate) fn runtime_object_uint_property_by_key(
     object: &RuntimeObject,
     property_key: u16,
 ) -> Option<u64> {
-    object.uint_property(runtime_property_name_by_key(object, property_key)?)
+    if let Some(value) = runtime_object_property_value_by_key(object, property_key) {
+        return value.as_uint();
+    }
+
+    match runtime_object_stored_field_initializer_by_key(object, property_key)? {
+        StoredFieldInitializer::Uint(value) => Some(u64::from(value)),
+        _ => None,
+    }
 }
 
 pub(crate) fn runtime_object_bool_property_by_key(
     object: &RuntimeObject,
     property_key: u16,
 ) -> Option<bool> {
-    object.bool_property(runtime_property_name_by_key(object, property_key)?)
+    if let Some(value) = runtime_object_property_value_by_key(object, property_key) {
+        return value.as_bool();
+    }
+
+    match runtime_object_stored_field_initializer_by_key(object, property_key)? {
+        StoredFieldInitializer::Bool(value) => Some(value),
+        _ => None,
+    }
 }
 
 pub(crate) fn runtime_object_color_property_by_key(
     object: &RuntimeObject,
     property_key: u16,
 ) -> Option<u32> {
-    object.color_property(runtime_property_name_by_key(object, property_key)?)
+    if let Some(value) = runtime_object_property_value_by_key(object, property_key) {
+        return value.as_color();
+    }
+
+    match runtime_object_stored_field_initializer_by_key(object, property_key)? {
+        StoredFieldInitializer::Color(value) => Some(value),
+        _ => None,
+    }
 }
 
 pub(crate) fn runtime_object_string_property_by_key(
@@ -98,10 +168,19 @@ fn runtime_object_string_property_bytes_by_key(
     object: &RuntimeObject,
     property_key: u16,
 ) -> Option<&[u8]> {
+    if let Some(value) = runtime_object_property_value_by_key(object, property_key) {
+        return match value {
+            FieldValue::String(value) => Some(value.as_bytes()),
+            FieldValue::Bytes(value) => Some(value.as_bytes()),
+            _ => None,
+        };
+    }
+
     let (_, property) = property_by_key_in_hierarchy(object.type_key, property_key)?;
-    match property.runtime_type {
-        FieldKind::String => object.string_property_bytes(property.name),
-        FieldKind::Bytes => object.bytes_property(property.name),
+    match (*property).stored_field_initializer()? {
+        StoredFieldInitializer::String(value) if property.runtime_type == FieldKind::String => {
+            Some(value.as_bytes())
+        }
         _ => None,
     }
 }

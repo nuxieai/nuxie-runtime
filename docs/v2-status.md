@@ -33,9 +33,10 @@ the only memory the next session has. Update it every commit.
   retained draw raw paths, dense retained clip/background path slots, plus
   dense render-paint configuration slots, no-nested clean paint-preparation
   skip, whole-repeat hot-loop total timing, and retained shape-paint path
-  command slots, full `make golden-compare` and `cargo test --workspace`
-  remain green. The latest release/null-renderer
-  sample before the `total_ms` harness change is still directional only:
+  command slots, plus solid-color render-paint dirt gating, full
+  `make golden-compare` and `cargo test --workspace` remain green. The latest
+  release/null-renderer sample before the `total_ms` harness change is still
+  directional only:
   `make perf-hot-loop PERF_MAX_RATIO=999` reports aggregate min Rust/C++=3.219,
   but the C++ min-sum was 1.037 ms, outside the 0.70-0.95 ms sanity band.
   Movement from the previous 3.225 directional sample is below the 0.08 noise
@@ -45,18 +46,25 @@ the only memory the next session has. Update it every commit.
   Three post-slice user-requested high-load tracking runs report aggregate min
   Rust/C++=3.474, 3.173, then 3.030, but C++ min-sums were
   1.203/1.232/1.104 ms, outside the sanity band; treat them as directional.
-  The latest visible outliers are `advance_blend_mode` samples at 6.810/5.333,
-  `spotify_kids_demo@0`=4.483, `animation_reset_cases` samples around
-  3.0-3.25, `ai_assitant@0`=2.211, `animated_clipping@0`=2.072, and
-  `align_target@0`=1.821. Strict <=2.0 remains open.
+  Solid-color render-paint dirt gating moves focused `advance_blend_mode@0`
+  JSON from total Rust/C++=5.417 to 5.019 by keeping visible-to-visible
+  `SolidColor.colorValue` changes out of the prepared topology epoch while
+  still invalidating topology on alpha visibility crossings. A follow-up
+  open-fence hot-loop reports aggregate min Rust/C++=3.043, but C++ min-sum
+  was 1.090 ms and load was still above the fence, so it is directional only.
+  The latest visible outliers are `advance_blend_mode` samples at 5.336/4.792,
+  `spotify_kids_demo@0`=4.626, `animation_reset_cases` samples around
+  2.94-3.38, `ai_assitant@0`=2.331, `animated_clipping@0`=2.075, and
+  `align_target@0`=1.770. Strict <=2.0 remains open.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, or shared shape path-command buffer scout; they preserved correctness
   but worsened or failed to move direct/fenced release timings. Next priority is
   a clean low-load/sanity-band release sample when available; under the user's
   open-fence tracking request, the next measured implementation target is
-  `advance_blend_mode` prepared-frame/fixed-overhead after reading the C++ dirt
-  gate at the same hot site.
+  remaining `advance_blend_mode` / `spotify_kids_demo` prepared-frame,
+  draw-replay, or data-bind fixed overhead after profiling the hot site and
+  reading the C++ dirt gate first.
 
 ## Milestones
 
@@ -1727,6 +1735,21 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Kept solid-color paint changes out of prepared topology
+  when C++ would only update the retained `RenderPaint`. C++
+  `src/shapes/paint/solid_color.cpp` handles `colorValueChanged()` by
+  recomputing the retained render paint color/visibility flags and calling
+  `artboard()->changed()`, not by rebuilding shape/path topology. Rust now
+  stores a prepared command's render opacity, re-reads current solid color
+  while configuring retained render paints, and leaves `prepared_epoch` stable
+  for visible-to-visible `SolidColor.colorValue` changes. Alpha visibility
+  crossings still bump `prepared_epoch` so retained command membership stays
+  exact. Focused `advance_blend_mode@0` JSON moves from total Rust/C++=5.417 to
+  5.019; the open-fence hot-loop reports aggregate min Rust/C++=3.043 with C++
+  min-sum=1.090 ms and high load, so it remains directional only. Full
+  `make golden-compare` remains exact=263 / exact-segments=584 / diverges=0;
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check` pass. M7 remains open.
 - 2026-07-08: [M7] Retained shape-paint path commands behind path/layout dirt.
   C++ `PathComposer` owns retained local/world/localClockwise
   `ShapePaintPath`s, and `ShapePaintPath::renderPath` only rewinds/rebuilds

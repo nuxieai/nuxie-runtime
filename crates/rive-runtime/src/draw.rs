@@ -5237,6 +5237,7 @@ pub struct RuntimeShapePaintCommand {
     pub clip_path_slot_index: usize,
     pub blend_mode_value: u32,
     pub render_blend_mode_value: u32,
+    pub render_opacity: f32,
     pub paint_state: Option<RuntimeShapePaintState>,
     pub feather_state: Option<RuntimeFeatherState>,
     pub paint_space_transform: Option<Mat2D>,
@@ -7268,6 +7269,7 @@ fn runtime_background_shape_paint_command(
             paint.blend_mode_value,
             container_blend_mode_value,
         ),
+        render_opacity,
         paint_state,
         feather_state: None,
         paint_space_transform: None,
@@ -7319,6 +7321,7 @@ fn runtime_prepare_gradient_paint_command(
             paint.blend_mode_value,
             container.blend_mode_value,
         ),
+        render_opacity,
         paint_state,
         feather_state: None,
         paint_space_transform: runtime_shape_paint_space_transform(paint, shape_world),
@@ -8638,15 +8641,19 @@ fn runtime_render_paint_configuration(
         ),
         RuntimeShapePaintKind::Unknown => anyhow::bail!("unsupported: unknown shape paint"),
     };
-    let shader = match paint.paint_state.as_ref() {
-        Some(RuntimeShapePaintState::SolidColor { render_color, .. }) => {
-            RuntimeRenderPaintShaderConfiguration::SolidColor(*render_color)
+    let shader = if let Some(render_color) = runtime_current_solid_render_color(instance, paint) {
+        RuntimeRenderPaintShaderConfiguration::SolidColor(render_color)
+    } else {
+        match paint.paint_state.as_ref() {
+            Some(RuntimeShapePaintState::SolidColor { render_color, .. }) => {
+                RuntimeRenderPaintShaderConfiguration::SolidColor(*render_color)
+            }
+            Some(
+                RuntimeShapePaintState::LinearGradient { .. }
+                | RuntimeShapePaintState::RadialGradient { .. },
+            ) => RuntimeRenderPaintShaderConfiguration::PreserveGradientShader,
+            None => RuntimeRenderPaintShaderConfiguration::None,
         }
-        Some(
-            RuntimeShapePaintState::LinearGradient { .. }
-            | RuntimeShapePaintState::RadialGradient { .. },
-        ) => RuntimeRenderPaintShaderConfiguration::PreserveGradientShader,
-        None => RuntimeRenderPaintShaderConfiguration::None,
     };
 
     Ok(RuntimeRenderPaintConfiguration {
@@ -8735,89 +8742,94 @@ fn runtime_configure_paint(
         RuntimeShapePaintKind::Unknown => anyhow::bail!("unsupported: unknown shape paint"),
     }
     render_paint.blend_mode(runtime_blend_mode(paint.render_blend_mode_value)?);
-    match paint.paint_state.as_ref() {
-        Some(RuntimeShapePaintState::SolidColor { render_color, .. }) => {
-            render_paint.shader(None);
-            render_paint.color(*render_color);
-        }
-        Some(
-            state @ RuntimeShapePaintState::LinearGradient {
-                start_x,
-                start_y,
-                end_x,
-                end_y,
-                stops,
-                ..
-            },
-        ) => {
-            if let Some(resources) = gradient_resources {
-                let (start_x, start_y, end_x, end_y) = runtime_gradient_space_endpoints(
-                    paint.paint_space_transform,
-                    *start_x,
-                    *start_y,
-                    *end_x,
-                    *end_y,
-                );
-                let state = runtime_shape_paint_state_with_endpoints(
-                    state.clone(),
-                    start_x,
-                    start_y,
-                    end_x,
-                    end_y,
-                );
-                runtime_configure_linear_gradient(
-                    render_paint,
-                    resources,
-                    object.id,
-                    state,
+    if let Some(render_color) = runtime_current_solid_render_color(instance, paint) {
+        render_paint.shader(None);
+        render_paint.color(render_color);
+    } else {
+        match paint.paint_state.as_ref() {
+            Some(RuntimeShapePaintState::SolidColor { render_color, .. }) => {
+                render_paint.shader(None);
+                render_paint.color(*render_color);
+            }
+            Some(
+                state @ RuntimeShapePaintState::LinearGradient {
                     start_x,
                     start_y,
                     end_x,
                     end_y,
                     stops,
-                );
+                    ..
+                },
+            ) => {
+                if let Some(resources) = gradient_resources {
+                    let (start_x, start_y, end_x, end_y) = runtime_gradient_space_endpoints(
+                        paint.paint_space_transform,
+                        *start_x,
+                        *start_y,
+                        *end_x,
+                        *end_y,
+                    );
+                    let state = runtime_shape_paint_state_with_endpoints(
+                        state.clone(),
+                        start_x,
+                        start_y,
+                        end_x,
+                        end_y,
+                    );
+                    runtime_configure_linear_gradient(
+                        render_paint,
+                        resources,
+                        object.id,
+                        state,
+                        start_x,
+                        start_y,
+                        end_x,
+                        end_y,
+                        stops,
+                    );
+                }
             }
-        }
-        Some(
-            state @ RuntimeShapePaintState::RadialGradient {
-                start_x,
-                start_y,
-                end_x,
-                end_y,
-                stops,
-                ..
-            },
-        ) => {
-            if let Some(resources) = gradient_resources {
-                let (start_x, start_y, end_x, end_y) = runtime_gradient_space_endpoints(
-                    paint.paint_space_transform,
-                    *start_x,
-                    *start_y,
-                    *end_x,
-                    *end_y,
-                );
-                let state = runtime_shape_paint_state_with_endpoints(
-                    state.clone(),
-                    start_x,
-                    start_y,
-                    end_x,
-                    end_y,
-                );
-                runtime_configure_radial_gradient(
-                    render_paint,
-                    resources,
-                    object.id,
-                    state,
+            Some(
+                state @ RuntimeShapePaintState::RadialGradient {
                     start_x,
                     start_y,
                     end_x,
                     end_y,
                     stops,
-                );
+                    ..
+                },
+            ) => {
+                if let Some(resources) = gradient_resources {
+                    let (start_x, start_y, end_x, end_y) = runtime_gradient_space_endpoints(
+                        paint.paint_space_transform,
+                        *start_x,
+                        *start_y,
+                        *end_x,
+                        *end_y,
+                    );
+                    let state = runtime_shape_paint_state_with_endpoints(
+                        state.clone(),
+                        start_x,
+                        start_y,
+                        end_x,
+                        end_y,
+                    );
+                    runtime_configure_radial_gradient(
+                        render_paint,
+                        resources,
+                        object.id,
+                        state,
+                        start_x,
+                        start_y,
+                        end_x,
+                        end_y,
+                        stops,
+                    );
+                }
             }
-        }
-        None => {
-            render_paint.shader(None);
+            None => {
+                render_paint.shader(None);
+            }
         }
     }
     render_paint.feather(
@@ -8828,6 +8840,26 @@ fn runtime_configure_paint(
             .unwrap_or(0.0),
     );
     Ok(())
+}
+
+fn runtime_current_solid_render_color(
+    instance: &ArtboardInstance,
+    paint: &RuntimeShapePaintCommand,
+) -> Option<u32> {
+    match paint.paint_state.as_ref()? {
+        RuntimeShapePaintState::SolidColor { color, .. } => {
+            let color = paint
+                .mutator_local
+                .zip(solid_color_value_property_key())
+                .and_then(|(local_id, property_key)| {
+                    instance.color_property(local_id, property_key)
+                })
+                .unwrap_or(*color);
+            Some(color_modulate_opacity(color, paint.render_opacity))
+        }
+        RuntimeShapePaintState::LinearGradient { .. }
+        | RuntimeShapePaintState::RadialGradient { .. } => None,
+    }
 }
 
 // Ported from src/shapes/paint/linear_gradient.cpp and radial_gradient.cpp.
@@ -9272,6 +9304,7 @@ pub(crate) fn runtime_shape_paint_command(
             paint.blend_mode_value,
             container_blend_mode_value,
         ),
+        render_opacity,
         paint_state,
         feather_state,
         paint_space_transform: runtime_shape_paint_space_transform(paint, shape_world),

@@ -449,6 +449,7 @@ impl ArtboardInstance {
         property_key: u16,
         value: u32,
     ) -> bool {
+        let previous = self.color_property(local_id, property_key);
         if !self
             .objects
             .set_color_property(local_id, property_key, value)
@@ -458,6 +459,12 @@ impl ArtboardInstance {
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         self.mark_changed();
         self.mark_prepared_changed_for_property(local_id, property_key);
+        self.mark_prepared_changed_for_solid_color_visibility(
+            local_id,
+            property_key,
+            previous,
+            value,
+        );
         self.apply_color_property_changed(local_id, property_key);
         true
     }
@@ -1002,6 +1009,24 @@ impl ArtboardInstance {
     fn mark_prepared_changed_for_property(&mut self, local_id: usize, property_key: u16) {
         let type_name = self.slot(local_id).and_then(|slot| slot.type_name);
         if property_may_affect_prepared_frame(type_name, property_key) {
+            self.mark_prepared_changed();
+        }
+    }
+
+    fn mark_prepared_changed_for_solid_color_visibility(
+        &mut self,
+        local_id: usize,
+        property_key: u16,
+        previous: Option<u32>,
+        next: u32,
+    ) {
+        if self.slot(local_id).and_then(|slot| slot.type_name) != Some("SolidColor")
+            || property_key_for_name("SolidColor", "colorValue") != Some(property_key)
+        {
+            return;
+        }
+        let next_visible = (next >> 24) != 0;
+        if previous.is_none_or(|previous| ((previous >> 24) != 0) != next_visible) {
             self.mark_prepared_changed();
         }
     }
@@ -2534,6 +2559,11 @@ fn property_may_affect_prepared_frame(type_name: Option<&str>, property_key: u16
         return property_key_for_name("NestedArtboard", "artboardId") == Some(property_key);
     }
 
+    // C++ src/shapes/paint/solid_color.cpp updates the retained RenderPaint.
+    if type_name == "SolidColor" {
+        return property_key_for_name("SolidColor", "colorValue") != Some(property_key);
+    }
+
     true
 }
 
@@ -2996,12 +3026,23 @@ mod tests {
     }
 
     #[test]
-    fn prepared_epoch_tracks_draw_affecting_properties_separately_from_cache_epoch() {
+    fn solid_color_changes_keep_prepared_topology_epoch_stable() {
         let mut solid = synthetic_component(0, 0);
         solid.type_name = "SolidColor";
         let mut instance = synthetic_instance(vec![solid], vec![0]);
         let color_key =
             property_key_for_name("SolidColor", "colorValue").expect("SolidColor.colorValue");
+        instance.objects =
+            InstanceObjectArena::from_runtime_objects(vec![Some(synthetic_runtime_object(
+                0,
+                "SolidColor",
+                vec![RuntimeProperty {
+                    key: color_key,
+                    name: "colorValue",
+                    owner: "SolidColor",
+                    value: FieldValue::Color(0xffff_ffff),
+                }],
+            ))]);
 
         let initial_cache_epoch = instance.cache_epoch();
         let initial_prepared_epoch = instance.prepared_epoch();
@@ -3012,10 +3053,36 @@ mod tests {
         assert!(instance.set_color_property(0, color_key, 0xff00_ff00));
 
         assert!(instance.cache_epoch() > initial_cache_epoch);
-        assert!(instance.prepared_epoch() > initial_prepared_epoch);
+        assert_eq!(instance.prepared_epoch(), initial_prepared_epoch);
         assert_eq!(instance.path_epoch(), initial_path_epoch);
         assert_eq!(instance.layout_epoch(), initial_layout_epoch);
         assert_eq!(instance.draw_order_epoch(), initial_draw_order_epoch);
+    }
+
+    #[test]
+    fn solid_color_visibility_changes_invalidate_prepared_topology() {
+        let mut solid = synthetic_component(0, 0);
+        solid.type_name = "SolidColor";
+        let mut instance = synthetic_instance(vec![solid], vec![0]);
+        let color_key =
+            property_key_for_name("SolidColor", "colorValue").expect("SolidColor.colorValue");
+        instance.objects =
+            InstanceObjectArena::from_runtime_objects(vec![Some(synthetic_runtime_object(
+                0,
+                "SolidColor",
+                vec![RuntimeProperty {
+                    key: color_key,
+                    name: "colorValue",
+                    owner: "SolidColor",
+                    value: FieldValue::Color(0xffff_ffff),
+                }],
+            ))]);
+
+        let initial_prepared_epoch = instance.prepared_epoch();
+
+        assert!(instance.set_color_property(0, color_key, 0x00ff_ffff));
+
+        assert!(instance.prepared_epoch() > initial_prepared_epoch);
     }
 
     #[test]

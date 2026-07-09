@@ -414,6 +414,22 @@ impl ArtboardInstance {
         Ok(did_update)
     }
 
+    /// Re-runs user `init` after C++ clears a scripted object's data context.
+    pub fn reinitialize_script_instances(&mut self) -> Result<bool, ScriptError> {
+        let mut did_initialize = false;
+        let mut host = NoopScriptHost;
+        for (global_id, handle) in &self.script_instances_by_global {
+            let mut instance = handle.borrow_mut();
+            if !instance.has_method(ScriptMethod::Init)? {
+                continue;
+            }
+            instance.call_method(ScriptMethod::Init, &[], &mut host)?;
+            self.script_updates_pending.insert(*global_id);
+            did_initialize = true;
+        }
+        Ok(did_initialize)
+    }
+
     pub fn set_script_input_for_global(
         &mut self,
         global_id: u32,
@@ -2885,12 +2901,13 @@ mod tests {
     use std::rc::Rc;
 
     struct UpdateScriptInstance {
+        inits: Rc<Cell<usize>>,
         updates: Rc<Cell<usize>>,
     }
 
     impl ScriptInstance for UpdateScriptInstance {
         fn has_method(&self, method: ScriptMethod) -> Result<bool, ScriptError> {
-            Ok(method == ScriptMethod::Update)
+            Ok(matches!(method, ScriptMethod::Init | ScriptMethod::Update))
         }
 
         fn call_method(
@@ -2899,8 +2916,10 @@ mod tests {
             _args: &[ScriptValue],
             _host: &mut dyn crate::ScriptHost,
         ) -> Result<ScriptValue, ScriptError> {
-            if method == ScriptMethod::Update {
-                self.updates.set(self.updates.get() + 1);
+            match method {
+                ScriptMethod::Init => self.inits.set(self.inits.get() + 1),
+                ScriptMethod::Update => self.updates.set(self.updates.get() + 1),
+                _ => {}
             }
             Ok(ScriptValue::Nil)
         }
@@ -3011,10 +3030,12 @@ mod tests {
     #[test]
     fn scripted_updates_run_once_per_attach_or_input_change() {
         let mut instance = synthetic_instance(Vec::new(), Vec::new());
+        let inits = Rc::new(Cell::new(0));
         let updates = Rc::new(Cell::new(0));
         instance.set_script_instance_for_global(
             7,
             Box::new(UpdateScriptInstance {
+                inits: Rc::clone(&inits),
                 updates: Rc::clone(&updates),
             }),
         );
@@ -3028,6 +3049,19 @@ mod tests {
             .expect("input update");
         assert!(instance.update_script_instances().expect("dirty update"));
         assert_eq!(updates.get(), 2);
+
+        assert!(
+            instance
+                .reinitialize_script_instances()
+                .expect("reinitialize")
+        );
+        assert_eq!(inits.get(), 1);
+        assert!(
+            instance
+                .update_script_instances()
+                .expect("post-init update")
+        );
+        assert_eq!(updates.get(), 3);
     }
 
     fn synthetic_component(local_id: usize, graph_order: usize) -> RuntimeComponent {

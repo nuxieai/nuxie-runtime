@@ -233,26 +233,15 @@ fn run() -> Result<String> {
     if owned_view_model_context.is_some()
         && let Some(state) = script_artboard_render_state.as_ref()
     {
-        // StateMachineInstance binds through its cloned artboard, its own
-        // context, and the Scene entry point. StaticScene has only the latter.
-        let hydration_count = if state_machine.is_some()
-            && artboard_has_data_bound_script_input(&runtime, artboard, &graph.artboards)
-        {
-            3
-        } else {
-            1
-        };
-        for _ in 0..hydration_count {
-            rebind_scripted_drawables(
-                &runtime,
-                artboard,
-                &graph.artboards,
-                &mut instance,
-                state,
-                factory.as_factory(),
-                owned_view_model_context.as_ref(),
-            )?;
-        }
+        rebind_scripted_drawables(
+            &runtime,
+            artboard,
+            &graph.artboards,
+            &mut instance,
+            state,
+            factory.as_factory(),
+            owned_view_model_context.as_ref(),
+        )?;
     }
     #[cfg(feature = "scripting")]
     if script_artboard_render_state.is_some() {
@@ -801,11 +790,10 @@ fn selected_artboard_owned_view_model_context(
 ) -> Option<RuntimeOwnedViewModelInstance> {
     let view_model_index = selected_artboard_view_model_index(runtime, artboard_index)?;
     #[cfg(feature = "scripting")]
-    if let Some(context) =
-        RuntimeOwnedViewModelInstance::from_instance(runtime, view_model_index, 0)
     {
-        return Some(context);
+        return RuntimeOwnedViewModelInstance::from_instance(runtime, view_model_index, 0);
     }
+    #[cfg(not(feature = "scripting"))]
     RuntimeOwnedViewModelInstance::new(runtime, view_model_index)
 }
 
@@ -1722,9 +1710,15 @@ fn rebind_scripted_drawables(
             owned_view_model_context,
         )?;
     }
-    instance
-        .update_script_instances()
-        .context("scripted drawable rebind update failed")?;
+    if owned_view_model_context.is_some() {
+        instance
+            .reinitialize_script_instances()
+            .context("scripted drawable rebind init failed")?;
+    } else {
+        instance
+            .update_script_instances()
+            .context("scripted drawable rebind update failed")?;
+    }
     render_state
         .borrow_mut()
         .realize_pending(runtime, artboards, factory)
@@ -1820,27 +1814,6 @@ fn artboard_object_range(
         .min()
         .unwrap_or_else(|| runtime.object_count());
     start..end
-}
-
-#[cfg(feature = "scripting")]
-fn artboard_has_data_bound_script_input(
-    runtime: &RuntimeFile,
-    artboard: &ArtboardGraph,
-    artboards: &[ArtboardGraph],
-) -> bool {
-    let object_range = artboard_object_range(runtime, artboard, artboards);
-    (0..runtime.object_count()).any(|global_id| {
-        let Some(data_bind) = runtime.object(global_id) else {
-            return false;
-        };
-        data_bind.type_name == "DataBindContext"
-            && runtime
-                .data_bind_target_for_object(data_bind)
-                .is_some_and(|target| {
-                    target.type_name.starts_with("ScriptInput")
-                        && object_range.contains(&(target.id as usize))
-                })
-    })
 }
 
 fn ensure_static_draw_supported(

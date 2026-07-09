@@ -223,6 +223,7 @@ impl Schema {
         }
 
         out.push_str(&self.render_hierarchy_property_lookup_table(&defs)?);
+        out.push_str(&self.render_bitmask_passthrough_lookup_table(&defs)?);
 
         out.push_str("pub static DEFINITIONS: &[Definition] = &[\n");
         for (index, def) in defs.iter().enumerate() {
@@ -423,6 +424,67 @@ impl Schema {
                 rust_string(&defs[owner_index].name),
                 owner_index,
                 property_index
+            ));
+        }
+        out.push_str("        _ => None,\n");
+        out.push_str("    }\n");
+        out.push_str("}\n\n");
+
+        Ok(out)
+    }
+
+    fn render_bitmask_passthrough_lookup_table(
+        &self,
+        defs: &[RuntimeDefinition<'_>],
+    ) -> Result<String> {
+        let mut index_by_name = BTreeMap::new();
+        for (index, def) in defs.iter().enumerate() {
+            index_by_name.insert(def.name.as_str(), index);
+        }
+
+        let properties_by_definition = defs
+            .iter()
+            .map(sorted_runtime_properties)
+            .collect::<Vec<_>>();
+        let mut entries = BTreeMap::<(u16, u16), RenderedBitmask<'_>>::new();
+
+        for def in defs {
+            let mut owner_indices = vec![
+                *index_by_name
+                    .get(def.name.as_str())
+                    .expect("definition index was inserted"),
+            ];
+            for ancestor in self.ancestor_names(&def.file)? {
+                let ancestor_index = *index_by_name
+                    .get(ancestor.as_str())
+                    .with_context(|| format!("ancestor {ancestor} missing from runtime defs"))?;
+                owner_indices.push(ancestor_index);
+            }
+
+            for owner_index in owner_indices {
+                for property in properties_by_definition[owner_index].iter().copied() {
+                    let Some(bitmask) = property.raw.bitmask_passthrough() else {
+                        continue;
+                    };
+                    for property_key in generated_property_keys(property) {
+                        entries.entry((def.key, property_key)).or_insert(bitmask);
+                    }
+                }
+            }
+        }
+
+        let mut out = String::new();
+        out.push_str("pub fn bitmask_passthrough_by_key_in_hierarchy(\n");
+        out.push_str("    type_key: u16,\n");
+        out.push_str("    property_key: u16,\n");
+        out.push_str(") -> Option<BitmaskPassthrough> {\n");
+        out.push_str("    match (type_key, property_key) {\n");
+        for ((type_key, property_key), bitmask) in entries {
+            out.push_str(&format!(
+                "        ({type_key}, {property_key}) => Some(BitmaskPassthrough {{ target: {}, bit: {}, width: {} }}),\n",
+                rust_string(bitmask.target),
+                bitmask.bit,
+                bitmask.width,
             ));
         }
         out.push_str("        _ => None,\n");

@@ -297,6 +297,24 @@ the only memory the next session has. Update it every commit.
   and C++ min-sum is just outside the sanity band. Full `make golden-compare`
   remains exact=263 / exact-segments=584 / diverges=0, and
   `cargo test --workspace` passes. M7 remains open.
+  A generated bitmask-passthrough lookup slice then removed the full schema
+  hierarchy lookup from ordinary `InstanceObjectArena::uint_property` reads.
+  C++ generated accessors already know which fields are packed bitmask
+  passthroughs; Rust now generates sparse
+  `bitmask_passthrough_by_key_in_hierarchy` arms only for those properties and
+  sends all other uint reads directly to object storage. Focused
+  `advance_blend_mode` tracking moved total/advance/draw from
+  35182.80/21040.16/10359.94 ms to 34666.43/20696.84/10223.26 ms, and the
+  sample no longer shows `property_by_key_in_hierarchy` under
+  `InstanceObjectArena::uint_property`. `animation_reset_cases` was
+  neutral/noisy, moving total/advance/draw from 17582.93/8712.89/9648.34 ms
+  to 17607.17/8717.91/9681.20 ms. The user-requested open-fence hot-loop
+  deliberately ignored the load fence and reports aggregate min Rust/C++=2.015,
+  Rust min-sum=1.934 ms, C++ min-sum=0.960 ms, and load 4.89/4.72/4.72; this
+  is tracking-only because strict <=2.0 did not hold and C++ min-sum is just
+  outside the sanity band. Full `make golden-compare` remains exact=263 /
+  exact-segments=584 / diverges=0, and `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check` pass. M7 remains open.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, shared shape path-command buffer scout, component-local shape-paint
@@ -305,11 +323,11 @@ the only memory the next session has. Update it every commit.
   release timings. Next priority is a clean low-load/sanity-band release
   sample when available; under the user's open-fence tracking request, the
   next measured implementation target remains the tiny-file fixed-overhead
-  outliers: re-profile `advance_blend_mode` and `animation_reset_cases` after
-  retained background commands, then read the matching C++ state-machine,
-  data-bind, or draw hot path before adding another runtime fast path; do not
-  chase the smaller `ai_assitant@0` or `spotify_kids_demo@0` tails again until
-  a fresh profile puts them back above fixed overhead.
+  outliers: re-profile if needed, then read the matching C++ draw property-key,
+  paint-configuration, world-transform, state-machine, or data-bind hot path
+  before adding another runtime fast path; do not chase the smaller
+  `ai_assitant@0` or `spotify_kids_demo@0` tails again until a fresh profile
+  puts them back above fixed overhead.
 
 ## Milestones
 
@@ -1980,6 +1998,27 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-09: [M7] Generated a sparse bitmask-passthrough lookup table and
+  routed ordinary uint property reads directly to object storage. The focused
+  post-background profiles showed `InstanceObjectArena::uint_property` still
+  paying `property_by_key_in_hierarchy` in draw hot paths just to discover the
+  rare packed bitmask passthrough fields. C++ generated accessors encode those
+  field shapes at compile time, so `rive-codegen` now emits
+  `bitmask_passthrough_by_key_in_hierarchy` for only the bitmask-passthrough
+  properties, and runtime uint reads skip full schema metadata unless that
+  sparse helper returns a bitmask. Focused `advance_blend_mode` tracking moved
+  total/advance/draw from 35182.80/21040.16/10359.94 ms to
+  34666.43/20696.84/10223.26 ms; `animation_reset_cases` was neutral/noisy at
+  17582.93/8712.89/9648.34 ms to 17607.17/8717.91/9681.20 ms. The
+  user-requested open-fence `make perf-hot-loop PERF_MAX_RATIO=999` run
+  reports aggregate min Rust/C++=2.015 with Rust min-sum=1.934 ms, C++
+  min-sum=0.960 ms, and load 4.89/4.72/4.72, so it is tracking-only rather
+  than M7 acceptance evidence. Full `make golden-compare` reports exact=263 /
+  exact-segments=584 / diverges=0; `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check` pass. Next: keep
+  profiling the tiny-file fixed-overhead tail, with the likely C++ reads in
+  draw property-key lookup, paint configuration, world transforms,
+  state-machine, or data-bind paths before adding another fast path.
 - 2026-07-09: [M7] Retained root artboard background command shells in the
   prepared draw frame. Fresh profiles after the retained-vector/lazy-clip
   slice put both `advance_blend_mode` and `animation_reset_cases` back in

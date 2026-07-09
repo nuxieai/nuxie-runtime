@@ -249,6 +249,13 @@ pub fn property_by_key_in_hierarchy(
     generated::property_by_key_in_hierarchy(type_key, property_key)
 }
 
+pub fn bitmask_passthrough_by_key_in_hierarchy(
+    type_key: u16,
+    property_key: u16,
+) -> Option<BitmaskPassthrough> {
+    generated::bitmask_passthrough_by_key_in_hierarchy(type_key, property_key)
+}
+
 pub fn core_registry_field_kind_by_property_key(key: u16) -> Option<CoreRegistryFieldKind> {
     generated::core_registry_field_kind_by_property_key(key)
 }

@@ -27517,6 +27517,130 @@ pub fn property_by_key_in_hierarchy(
     }
 }
 
+pub fn bitmask_passthrough_by_key_in_hierarchy(
+    type_key: u16,
+    property_key: u16,
+) -> Option<BitmaskPassthrough> {
+    match (type_key, property_key) {
+        (134, 1027) => Some(BitmaskPassthrough {
+            target: "verticalTrimValue",
+            bit: 0,
+            width: 8,
+        }),
+        (134, 1028) => Some(BitmaskPassthrough {
+            target: "verticalTrimValue",
+            bit: 8,
+            width: 8,
+        }),
+        (668, 989) => Some(BitmaskPassthrough {
+            target: "traitFlags",
+            bit: 0,
+            width: 1,
+        }),
+        (668, 990) => Some(BitmaskPassthrough {
+            target: "traitFlags",
+            bit: 1,
+            width: 1,
+        }),
+        (668, 991) => Some(BitmaskPassthrough {
+            target: "traitFlags",
+            bit: 2,
+            width: 1,
+        }),
+        (668, 992) => Some(BitmaskPassthrough {
+            target: "traitFlags",
+            bit: 3,
+            width: 1,
+        }),
+        (668, 993) => Some(BitmaskPassthrough {
+            target: "traitFlags",
+            bit: 4,
+            width: 1,
+        }),
+        (668, 994) => Some(BitmaskPassthrough {
+            target: "traitFlags",
+            bit: 5,
+            width: 1,
+        }),
+        (668, 995) => Some(BitmaskPassthrough {
+            target: "traitFlags",
+            bit: 6,
+            width: 1,
+        }),
+        (668, 996) => Some(BitmaskPassthrough {
+            target: "stateFlags",
+            bit: 0,
+            width: 1,
+        }),
+        (668, 997) => Some(BitmaskPassthrough {
+            target: "stateFlags",
+            bit: 1,
+            width: 1,
+        }),
+        (668, 998) => Some(BitmaskPassthrough {
+            target: "stateFlags",
+            bit: 2,
+            width: 1,
+        }),
+        (668, 999) => Some(BitmaskPassthrough {
+            target: "stateFlags",
+            bit: 3,
+            width: 1,
+        }),
+        (668, 1000) => Some(BitmaskPassthrough {
+            target: "stateFlags",
+            bit: 4,
+            width: 1,
+        }),
+        (668, 1001) => Some(BitmaskPassthrough {
+            target: "stateFlags",
+            bit: 5,
+            width: 1,
+        }),
+        (668, 1002) => Some(BitmaskPassthrough {
+            target: "stateFlags",
+            bit: 6,
+            width: 1,
+        }),
+        (668, 1003) => Some(BitmaskPassthrough {
+            target: "stateFlags",
+            bit: 7,
+            width: 1,
+        }),
+        (668, 1004) => Some(BitmaskPassthrough {
+            target: "stateFlags",
+            bit: 8,
+            width: 1,
+        }),
+        (668, 1005) => Some(BitmaskPassthrough {
+            target: "stateFlags",
+            bit: 9,
+            width: 1,
+        }),
+        (668, 1006) => Some(BitmaskPassthrough {
+            target: "stateFlags",
+            bit: 10,
+            width: 1,
+        }),
+        (668, 1007) => Some(BitmaskPassthrough {
+            target: "stateFlags",
+            bit: 11,
+            width: 1,
+        }),
+        (668, 1008) => Some(BitmaskPassthrough {
+            target: "stateFlags",
+            bit: 12,
+            width: 1,
+        }),
+        (668, 1009) => Some(BitmaskPassthrough {
+            target: "stateFlags",
+            bit: 13,
+            width: 1,
+        }),
+        _ => None,
+    }
+}
+
 pub static DEFINITIONS: &[Definition] = &[
     Definition {
         name: "Artboard",

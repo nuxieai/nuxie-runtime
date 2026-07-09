@@ -2,8 +2,9 @@
 use rive_binary::RuntimeObject;
 use rive_binary::{FieldValue, RuntimeFile, StringValue};
 use rive_schema::{
-    FieldKind, core_registry_setter_field_kind_by_property_key, definition_by_name,
-    definition_by_type_key, property_by_key_in_hierarchy,
+    FieldKind, bitmask_passthrough_by_key_in_hierarchy,
+    core_registry_setter_field_kind_by_property_key, definition_by_name, definition_by_type_key,
+    property_by_key_in_hierarchy,
 };
 
 mod generated_objects {
@@ -142,8 +143,9 @@ impl InstanceObjectArena {
 
     pub(crate) fn uint_property(&self, local_id: usize, property_key: u16) -> Option<u64> {
         let object = self.object(local_id)?;
-        let (_owner, property) = runtime_property_metadata_by_key(object.type_key(), property_key)?;
-        if let Some(bitmask) = property.bitmask_passthrough {
+        if let Some(bitmask) =
+            bitmask_passthrough_by_key_in_hierarchy(object.type_key(), property_key)
+        {
             let (_owner, target) =
                 runtime_property_metadata_by_name(object.type_key(), bitmask.target)?;
             let packed = object.uint_property(target.key.int).unwrap_or(0);

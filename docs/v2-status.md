@@ -11,7 +11,7 @@ the only memory the next session has. Update it every commit.
   exact-segments=584, diverges=7, unsupported-feature=25, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
   M8=19 gated=6; the harness bucket is empty
-- Scripted compare: exact=3 / exact-segments=3 / diverges=4 /
+- Scripted compare: exact=4 / exact-segments=4 / diverges=3 /
   unsupported-feature=19 across the 26 M8 scripting entries
 - Current milestone: **M8 — Closeout Hardening (#V2-9): scripting, C ABI, audits, fuzzing, PORTING.md**
 
@@ -575,8 +575,9 @@ the only memory the next session has. Update it every commit.
         cold/artboard-bind/scene-bind hydration lifecycle.
         `script_artboard_origin_test.riv`
         is exact after resetting and rerunning user `init` on bound-context
-        hydration. Remaining: work the other named scripting diagnostics,
-        starting with `script_artboard_opacity_test.riv`.
+        hydration, and `script_artboard_opacity_test.riv` is exact after
+        retaining zero-opacity scripted draw envelopes. Remaining: work the
+        other named scripting diagnostics and three stream divergences.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
     (c) Hardening: two audit scouts are running NOW (cross-language
@@ -3679,6 +3680,14 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Promoted `script_artboard_opacity_test.riv` to
+  scripted-mode exact. Rust no longer culls zero-opacity `ScriptedDrawable`
+  commands before invocation; like C++, it executes them inside the existing
+  save/modulate/transform/script/restore envelope. Verification: scripted
+  compare reports exact=4/exact-segments=4/diverges=3/unsupported=19, with the
+  first difference reduced to tolerated signed zero. Next: triage the three
+  remaining scripted stream divergences.
 
 - 2026-07-09: [M8] Promoted `script_artboard_origin_test.riv` to
   scripted-mode exact. `ArtboardInstance` can now rerun script user `init`

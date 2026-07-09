@@ -13914,10 +13914,7 @@ fn path_needs_clockwise_reversal(path: &PathGeometryNode, transform: Mat2D) -> b
 }
 
 fn sorted_drawable_uses_render_opacity(type_name: &str) -> bool {
-    matches!(
-        type_name,
-        "Shape" | "ScriptedDrawable" | "TextInputDrawable"
-    )
+    matches!(type_name, "Shape" | "TextInputDrawable")
 }
 
 fn is_text_input_drawable_type(type_name: &str) -> bool {

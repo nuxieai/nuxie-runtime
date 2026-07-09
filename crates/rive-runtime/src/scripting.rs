@@ -60,6 +60,7 @@ pub struct ScriptModuleFailure {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ScriptMethod {
     Init,
+    Resize,
     Advance,
     Update,
     Draw,
@@ -74,6 +75,7 @@ impl ScriptMethod {
     pub fn as_str(self) -> &'static str {
         match self {
             ScriptMethod::Init => "init",
+            ScriptMethod::Resize => "resize",
             ScriptMethod::Advance => "advance",
             ScriptMethod::Update => "update",
             ScriptMethod::Draw => "draw",

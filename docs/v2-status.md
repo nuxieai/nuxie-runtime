@@ -11,7 +11,7 @@ the only memory the next session has. Update it every commit.
   exact-segments=584, diverges=7, unsupported-feature=25, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
   M8=19 gated=6; the harness bucket is empty
-- Scripted compare: exact=4 / exact-segments=4 / diverges=3 /
+- Scripted compare: exact=5 / exact-segments=5 / diverges=2 /
   unsupported-feature=19 across the 26 M8 scripting entries
 - Current milestone: **M8 — Closeout Hardening (#V2-9): scripting, C ABI, audits, fuzzing, PORTING.md**
 
@@ -496,6 +496,15 @@ the only memory the next session has. Update it every commit.
   ratios are concentrated in `advance_blend_mode`=3.215/3.548 and
   `animation_reset_cases`=2.288-2.545; `spotify_kids_demo@0` is now 1.937
   and every other sample is 1.445-1.911.
+  A current ScriptedLayout-worktree run deliberately bypassed the load fence
+  with `make perf-hot-loop PERF_MAX_RATIO=999` and reports aggregate min
+  Rust/C++=2.013, Rust min-sum=2.464 ms, and C++ min-sum=1.224 ms, with
+  post-run load 17.00/17.62/17.79. The 0.041 movement from 1.972 is below the
+  documented 0.08 single-run noise floor, so this is tracking-only evidence
+  that the tree remains near the M7 boundary. Remaining ratios are
+  concentrated in `advance_blend_mode`=3.333-3.720 and
+  `animation_reset_cases`=2.388-3.162; `spotify_kids_demo@0` is 1.900 and
+  every other sample is 1.602-1.868.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, shared shape path-command buffer scout, component-local shape-paint
@@ -576,8 +585,11 @@ the only memory the next session has. Update it every commit.
         `script_artboard_origin_test.riv`
         is exact after resetting and rerunning user `init` on bound-context
         hydration, and `script_artboard_opacity_test.riv` is exact after
-        retaining zero-opacity scripted draw envelopes. Remaining: work the
-        other named scripting diagnostics and three stream divergences.
+        retaining zero-opacity scripted draw envelopes. `script_layout_test.riv`
+        is exact after admitting the `ScriptedLayout` subclass, exposing the
+        factory during script construction, calling `resize`, and preserving
+        C++ source/script/instance paint allocation order. Remaining: work the
+        other named scripting diagnostics and two stream divergences.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
     (c) Hardening: two audit scouts are running NOW (cross-language
@@ -3680,6 +3692,15 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Promoted `script_layout_test.riv` to scripted-mode exact.
+  `ScriptedLayout` now follows `ScriptedDrawable` inheritance in the runner
+  and draw mapper, script generators can allocate paints through a scoped
+  initialization factory, the layout `resize` protocol receives its controlled
+  size, and scripted preallocation preserves C++ source/script/instance paint
+  ordering. Verification: scripted compare reports
+  exact=5/exact-segments=5/diverges=2/unsupported=19. Next: triage
+  `scripted_memory_leak.riv` against the `script-view-model` diagnostic queue.
 
 - 2026-07-09: [M8] Promoted `script_artboard_opacity_test.riv` to
   scripted-mode exact. Rust no longer culls zero-opacity `ScriptedDrawable`

@@ -81,6 +81,19 @@ impl Default for ScriptVm {
 }
 
 impl ScriptVm {
+    pub fn instantiate_script_with_factory(
+        &mut self,
+        name: &str,
+        payload: &[u8],
+        host: &mut dyn ScriptHost,
+        factory: &mut dyn RenderFactory,
+    ) -> std::result::Result<Box<dyn ScriptInstance>, ScriptError> {
+        let bindings = self.renderer_bindings.clone();
+        bindings.with_factory_context(factory, || {
+            <Self as RuntimeScriptingVm>::instantiate_script(self, name, payload, host)
+        })
+    }
+
     /// Boot a VM with the Luau standard libraries open.
     pub fn new() -> Self {
         Self {

@@ -16,7 +16,8 @@ use rive_runtime::{
 use rive_runtime::{
     NoopScriptHost, ScriptArtboard, ScriptError, ScriptMethod, ScriptValue,
     ScriptingVm as RuntimeScriptingVm, preallocate_render_paint_cache_for_artboard_instance,
-    preallocate_render_paint_cache_for_scripted_artboard_tree,
+    preallocate_render_paint_cache_for_scripted_artboard_tree_after_source_paints,
+    preallocate_source_render_paints,
 };
 #[cfg(feature = "scripting")]
 use rive_scripting::vm::ScriptVm;
@@ -164,12 +165,43 @@ fn run() -> Result<String> {
         Box::new(RecordingFactory::new())
     };
     #[cfg(feature = "scripting")]
-    let mut paint_cache = preallocate_render_paint_cache_for_scripted_artboard_tree(
-        &runtime,
-        artboard,
-        &graph.artboards,
-        factory.as_factory(),
-    );
+    let has_scripted_layout = artboard
+        .local_objects
+        .iter()
+        .any(|object| object.type_name == Some("ScriptedLayout"));
+    #[cfg(feature = "scripting")]
+    let (script_artboard_render_state, mut paint_cache) = if has_scripted_layout {
+        let _source_paints = preallocate_source_render_paints(&runtime, factory.as_factory());
+        let state = initialize_scripted_drawables_and_realize(
+            &runtime,
+            artboard,
+            &graph.artboards,
+            &mut instance,
+            factory.as_factory(),
+        )?;
+        let cache = preallocate_render_paint_cache_for_scripted_artboard_tree_after_source_paints(
+            &runtime,
+            artboard,
+            &graph.artboards,
+            factory.as_factory(),
+        );
+        (state, cache)
+    } else {
+        let cache = rive_runtime::preallocate_render_paint_cache_for_scripted_artboard_tree(
+            &runtime,
+            artboard,
+            &graph.artboards,
+            factory.as_factory(),
+        );
+        let state = initialize_scripted_drawables_and_realize(
+            &runtime,
+            artboard,
+            &graph.artboards,
+            &mut instance,
+            factory.as_factory(),
+        )?;
+        (state, cache)
+    };
     #[cfg(not(feature = "scripting"))]
     let mut paint_cache = preallocate_render_paint_cache_for_artboard_tree(
         &runtime,
@@ -177,19 +209,6 @@ fn run() -> Result<String> {
         &graph.artboards,
         factory.as_factory(),
     );
-    #[cfg(feature = "scripting")]
-    let script_artboard_render_state = {
-        let state =
-            initialize_scripted_drawables(&runtime, artboard, &graph.artboards, &mut instance)
-                .context("failed to initialize scripted drawables")?;
-        if let Some(state) = state.as_ref() {
-            state
-                .borrow_mut()
-                .realize_pending(&runtime, &graph.artboards, factory.as_factory())
-                .context("failed to allocate initialized script artboard paints")?;
-        }
-        state
-    };
     let scene = select_scene(
         &runtime,
         artboard_index,
@@ -1495,11 +1514,31 @@ impl ScriptArtboard for RunnerScriptArtboard {
 }
 
 #[cfg(feature = "scripting")]
+fn initialize_scripted_drawables_and_realize(
+    runtime: &RuntimeFile,
+    artboard: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+    instance: &mut ArtboardInstance,
+    factory: &mut dyn RenderFactory,
+) -> Result<Option<Rc<RefCell<RunnerScriptArtboardRenderState>>>> {
+    let state = initialize_scripted_drawables(runtime, artboard, artboards, instance, factory)
+        .context("failed to initialize scripted drawables")?;
+    if let Some(state) = state.as_ref() {
+        state
+            .borrow_mut()
+            .realize_pending(runtime, artboards, factory)
+            .context("failed to allocate initialized script artboard paints")?;
+    }
+    Ok(state)
+}
+
+#[cfg(feature = "scripting")]
 fn initialize_scripted_drawables(
     runtime: &RuntimeFile,
     artboard: &ArtboardGraph,
     artboards: &[ArtboardGraph],
     instance: &mut ArtboardInstance,
+    factory: &mut dyn RenderFactory,
 ) -> Result<Option<Rc<RefCell<RunnerScriptArtboardRenderState>>>> {
     let script_assets = extract_script_assets(runtime);
     if script_assets.is_empty() {
@@ -1510,7 +1549,10 @@ fn initialize_scripted_drawables(
     let mut vm = ScriptVm::new();
     let mut host = NoopScriptHost;
     for local_object in &artboard.local_objects {
-        if local_object.type_name != Some("ScriptedDrawable") {
+        if !local_object
+            .type_name
+            .is_some_and(is_scripted_drawable_type)
+        {
             continue;
         }
         let object = runtime
@@ -1525,12 +1567,16 @@ fn initialize_scripted_drawables(
                 local_object.global_id, script_asset_id
             )
         })?;
-        let mut script_instance = RuntimeScriptingVm::instantiate_script(
-            &mut vm,
-            &script.name,
-            &script.payload,
-            &mut host,
-        )
+        let mut script_instance = if local_object.type_name == Some("ScriptedLayout") {
+            vm.instantiate_script_with_factory(&script.name, &script.payload, &mut host, factory)
+        } else {
+            RuntimeScriptingVm::instantiate_script(
+                &mut vm,
+                &script.name,
+                &script.payload,
+                &mut host,
+            )
+        }
         .with_context(|| {
             format!(
                 "failed to instantiate ScriptAsset '{}' for ScriptedDrawable global {}",
@@ -1554,6 +1600,34 @@ fn initialize_scripted_drawables(
                 .with_context(|| {
                     format!(
                         "script init failed for ScriptedDrawable global {}",
+                        local_object.global_id
+                    )
+                })?;
+        }
+        if local_object.type_name == Some("ScriptedLayout")
+            && script_instance
+                .has_method(ScriptMethod::Resize)
+                .context("failed to inspect script resize method")?
+        {
+            let artboard_object = runtime.object(artboard.global_id as usize);
+            let width = artboard_object
+                .and_then(|object| object.double_property("width"))
+                .unwrap_or(0.0);
+            let height = artboard_object
+                .and_then(|object| object.double_property("height"))
+                .unwrap_or(0.0);
+            script_instance
+                .call_method(
+                    ScriptMethod::Resize,
+                    &[ScriptValue::Vec2 {
+                        x: width,
+                        y: height,
+                    }],
+                    &mut host,
+                )
+                .with_context(|| {
+                    format!(
+                        "script resize failed for ScriptedLayout global {}",
                         local_object.global_id
                     )
                 })?;
@@ -1696,7 +1770,10 @@ fn rebind_scripted_drawables(
     owned_view_model_context: Option<&RuntimeOwnedViewModelInstance>,
 ) -> Result<()> {
     for local_object in &artboard.local_objects {
-        if local_object.type_name != Some("ScriptedDrawable") {
+        if !local_object
+            .type_name
+            .is_some_and(is_scripted_drawable_type)
+        {
             continue;
         }
         rehydrate_script_inputs(
@@ -1793,10 +1870,18 @@ fn rehydrate_script_inputs(
 #[cfg(feature = "scripting")]
 fn mark_scripted_drawables_for_update(artboard: &ArtboardGraph, instance: &mut ArtboardInstance) {
     for local_object in &artboard.local_objects {
-        if local_object.type_name == Some("ScriptedDrawable") {
+        if local_object
+            .type_name
+            .is_some_and(is_scripted_drawable_type)
+        {
             instance.mark_script_update_for_global(local_object.global_id);
         }
     }
+}
+
+#[cfg(feature = "scripting")]
+fn is_scripted_drawable_type(type_name: &str) -> bool {
+    matches!(type_name, "ScriptedDrawable" | "ScriptedLayout")
 }
 
 #[cfg(feature = "scripting")]

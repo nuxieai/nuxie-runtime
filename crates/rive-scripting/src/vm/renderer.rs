@@ -24,6 +24,19 @@ pub(crate) struct RendererBindings {
 }
 
 impl RendererBindings {
+    pub(crate) fn with_factory_context<R>(
+        &self,
+        factory: &mut dyn RenderFactory,
+        f: impl FnOnce() -> R,
+    ) -> R {
+        let previous = self.factory.replace(Some(erase_factory_lifetime(factory)));
+        let _guard = FactoryContextGuard {
+            factory: Rc::clone(&self.factory),
+            previous,
+        };
+        f()
+    }
+
     pub(crate) fn install(&self, lua: &Lua) -> Result<()> {
         install_color_global(lua)?;
         install_mat2d_global(lua)?;
@@ -44,34 +57,30 @@ impl RendererBindings {
         };
 
         let lua = table.lua();
-        let previous = self.factory.replace(Some(erase_factory_lifetime(factory)));
-        let _guard = DrawFactoryGuard {
-            factory: Rc::clone(&self.factory),
-            previous,
-        };
+        self.with_factory_context(factory, || {
+            let save_count = Rc::new(Cell::new(0usize));
+            let valid = Rc::new(Cell::new(true));
+            let renderer_ref = Rc::new(RefCell::new(erase_renderer_lifetime(renderer)));
 
-        let save_count = Rc::new(Cell::new(0usize));
-        let valid = Rc::new(Cell::new(true));
-        let renderer_ref = Rc::new(RefCell::new(erase_renderer_lifetime(renderer)));
+            let scripted_renderer = lua.create_userdata(ScriptedRenderer {
+                renderer: Rc::clone(&renderer_ref),
+                bindings: self.clone(),
+                save_count: Rc::clone(&save_count),
+                valid: Rc::clone(&valid),
+            })?;
+            let result = function.call::<()>((table.clone(), scripted_renderer));
 
-        let scripted_renderer = lua.create_userdata(ScriptedRenderer {
-            renderer: Rc::clone(&renderer_ref),
-            bindings: self.clone(),
-            save_count: Rc::clone(&save_count),
-            valid: Rc::clone(&valid),
-        })?;
-        let result = function.call::<()>((table.clone(), scripted_renderer));
-
-        while save_count.get() > 0 {
-            let mut renderer = renderer_ref.borrow_mut();
-            // The renderer userdata is still valid while this cleanup runs;
-            // the pointer is invalidated immediately after the save stack is
-            // balanced.
-            unsafe { renderer.as_mut().restore() };
-            save_count.set(save_count.get() - 1);
-        }
-        valid.set(false);
-        result
+            while save_count.get() > 0 {
+                let mut renderer = renderer_ref.borrow_mut();
+                // The renderer userdata is still valid while this cleanup runs;
+                // the pointer is invalidated immediately after the save stack is
+                // balanced.
+                unsafe { renderer.as_mut().restore() };
+                save_count.set(save_count.get() - 1);
+            }
+            valid.set(false);
+            result
+        })
     }
 
     fn install_paint_global(&self, lua: &Lua) -> Result<()> {
@@ -129,8 +138,8 @@ impl RendererBindings {
 
 fn erase_factory_lifetime(factory: &mut dyn RenderFactory) -> NonNull<dyn RenderFactory> {
     let ptr: NonNull<dyn RenderFactory + '_> = NonNull::from(factory);
-    // The pointer is restored by DrawFactoryGuard before call_draw returns.
-    // Paint.new/with closures may run only while this draw context is active.
+    // The pointer is restored by FactoryContextGuard before the scoped factory
+    // context returns. Paint.new/with closures may run only within that scope.
     unsafe { mem::transmute::<NonNull<dyn RenderFactory + '_>, NonNull<dyn RenderFactory>>(ptr) }
 }
 
@@ -141,12 +150,12 @@ fn erase_renderer_lifetime(renderer: &mut dyn Renderer) -> NonNull<dyn Renderer>
     unsafe { mem::transmute::<NonNull<dyn Renderer + '_>, NonNull<dyn Renderer>>(ptr) }
 }
 
-struct DrawFactoryGuard {
+struct FactoryContextGuard {
     factory: Rc<Cell<Option<NonNull<dyn RenderFactory>>>>,
     previous: Option<NonNull<dyn RenderFactory>>,
 }
 
-impl Drop for DrawFactoryGuard {
+impl Drop for FactoryContextGuard {
     fn drop(&mut self) {
         self.factory.set(self.previous);
     }

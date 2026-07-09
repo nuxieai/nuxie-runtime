@@ -34,8 +34,10 @@ pub use draw::{
     RuntimeShapePaintKind, RuntimeShapePaintPathKind, RuntimeShapePaintState,
     preallocate_render_paint_cache_for_artboard_instance,
     preallocate_render_paint_cache_for_artboard_tree,
-    preallocate_render_paint_cache_for_scripted_artboard_tree, preallocate_render_paints,
-    preallocate_render_paints_for_artboard_tree,
+    preallocate_render_paint_cache_for_scripted_artboard_tree,
+    preallocate_render_paint_cache_for_scripted_artboard_tree_after_source_paints,
+    preallocate_render_paints, preallocate_render_paints_for_artboard_tree,
+    preallocate_source_render_paints,
 };
 pub use objects::InstanceSlot;
 pub use scripting::{

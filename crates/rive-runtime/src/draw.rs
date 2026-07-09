@@ -3967,7 +3967,7 @@ impl RuntimeDrawCommandObjectKind {
             "NestedArtboard" => Self::NestedArtboard,
             "NestedArtboardLeaf" => Self::NestedArtboardLeaf,
             "NestedArtboardLayout" => Self::NestedArtboardLayout,
-            "ScriptedDrawable" => Self::ScriptedDrawable,
+            "ScriptedDrawable" | "ScriptedLayout" => Self::ScriptedDrawable,
             "Text" => Self::Text,
             _ => Self::Other,
         }
@@ -7077,6 +7077,13 @@ pub fn preallocate_render_paints(
     preallocate_artboard_render_paint_batch(runtime, graph, factory)
 }
 
+pub fn preallocate_source_render_paints(
+    runtime: &RuntimeFile,
+    factory: &mut dyn RenderFactory,
+) -> RuntimeRenderPaints {
+    preallocate_render_paint_batch(runtime, factory)
+}
+
 pub fn preallocate_render_paints_for_artboard_tree(
     runtime: &RuntimeFile,
     graph: &ArtboardGraph,
@@ -7093,7 +7100,7 @@ pub fn preallocate_render_paint_cache_for_artboard_tree(
     factory: &mut dyn RenderFactory,
 ) -> RuntimeRenderPaintCache {
     preallocate_render_paint_cache_for_artboard_tree_internal(
-        runtime, graph, artboards, factory, true,
+        runtime, graph, artboards, factory, true, true,
     )
 }
 
@@ -7104,7 +7111,18 @@ pub fn preallocate_render_paint_cache_for_scripted_artboard_tree(
     factory: &mut dyn RenderFactory,
 ) -> RuntimeRenderPaintCache {
     preallocate_render_paint_cache_for_artboard_tree_internal(
-        runtime, graph, artboards, factory, false,
+        runtime, graph, artboards, factory, false, true,
+    )
+}
+
+pub fn preallocate_render_paint_cache_for_scripted_artboard_tree_after_source_paints(
+    runtime: &RuntimeFile,
+    graph: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+    factory: &mut dyn RenderFactory,
+) -> RuntimeRenderPaintCache {
+    preallocate_render_paint_cache_for_artboard_tree_internal(
+        runtime, graph, artboards, factory, false, false,
     )
 }
 
@@ -7114,6 +7132,7 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
     artboards: &[ArtboardGraph],
     factory: &mut dyn RenderFactory,
     include_script_input_artboards: bool,
+    allocate_source_paints: bool,
 ) -> RuntimeRenderPaintCache {
     let image_asset_globals = runtime
         .file_assets()
@@ -7131,7 +7150,8 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
     {
         predecode_render_image(runtime, asset_global, factory, &mut images);
     }
-    let _source_artboard_paints = preallocate_render_paint_batch(runtime, factory);
+    let _source_artboard_paints =
+        allocate_source_paints.then(|| preallocate_render_paint_batch(runtime, factory));
     for asset_global in image_asset_globals
         .iter()
         .copied()

@@ -158,9 +158,19 @@ the only memory the next session has. Update it every commit.
   capacity walking and ran worse. The user-requested open-fence hot-loop run
   deliberately ignored the load fence with `PERF_MAX_RATIO=999` and reports
   aggregate min Rust/C++=2.660, Rust min-sum=2.628 ms, C++ min-sum=0.988 ms,
-  and post-run load 3.35/4.39/6.37; this is the current tracking snapshot,
-  but still not M7 acceptance evidence because the C++ min-sum is just outside
-  the 0.70-0.95 ms sanity band. M7 remains open.
+  and post-run load 3.35/4.39/6.37; this is tracking-only because the C++
+  min-sum is just outside the 0.70-0.95 ms sanity band. A follow-up
+  layout-style generated-key slice removes the sampled
+  `runtime_layout_style_property_key_for_name` string dispatch by routing
+  fixed `LayoutComponentStyle` reads through enum-backed cached numeric keys,
+  matching C++ generated field access. Focused `spotify_kids_demo@0` 2M
+  tracking moves total=17142.6/draw=11105.3 ms to
+  total=16057.6/draw=10408.0 ms, and the sample no longer shows the
+  layout-style helper. The same-session open-fence hot-loop reports aggregate
+  min Rust/C++=2.718, Rust min-sum=2.635 ms, C++ min-sum=0.969 ms, and load
+  4.33/3.78/4.66; this is still tracking-only, with aggregate movement
+  against 2.660 below the 0.08 noise floor and `spotify_kids_demo@0`
+  directionally better at 3.894. M7 remains open.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, shared shape path-command buffer scout, component-local shape-paint
@@ -169,9 +179,9 @@ the only memory the next session has. Update it every commit.
   release timings. Next priority is a clean low-load/sanity-band release
   sample when available; under the user's open-fence tracking request, the
   next measured implementation target is now the remaining
-  `spotify_kids_demo@0` path assembly/world-transform/path-geometry/
-  layout-style dispatch stack after profiling the exact hot site and reading
-  the corresponding C++ retained-path or generated-access dirt gate first.
+  `spotify_kids_demo@0` path assembly/world-transform/path-geometry/paint
+  configuration stack after profiling the exact hot site and reading the
+  corresponding C++ retained-path or generated-access dirt gate first.
 
 ## Milestones
 
@@ -1842,6 +1852,22 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-09: [M7] Route fixed layout-style hot reads through generated-key
+  enum dispatch. The `spotify_kids_demo@0` sample still showed Rust spending
+  time in `runtime_layout_style_property_key_for_name` even after the
+  draw/image/mesh name lookups were removed. C++ reads these fields through
+  generated `LayoutComponentStyle` accessors, so Rust now passes fixed
+  `RuntimeLayoutStyleProperty` enum values into the layout/Taffy helpers and
+  resolves cached numeric keys directly instead of string-matching the field
+  name on every read. Focused `spotify_kids_demo@0` 2M tracking improves
+  total=17142.6/draw=11105.3 ms to total=16057.6/draw=10408.0 ms, and the
+  sample no longer shows the layout-style key helper. Full
+  `make golden-compare` remains exact=263 / exact-segments=584 / diverges=0;
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check` pass. `make perf-hot-loop PERF_MAX_RATIO=999` reports
+  aggregate min Rust/C++=2.718, Rust min-sum=2.635 ms, C++ min-sum=0.969 ms,
+  and load 4.33/3.78/4.66, so the broad result is tracking-only rather than
+  M7 acceptance evidence.
 - 2026-07-09: [M7] Cached remaining draw hot-path generated property keys and
   recorded the user-requested open-fence measurement. Rust now handles
   `Component.parentId`, `WorldTransformComponent.parentId`, `Fill.fillRule`,

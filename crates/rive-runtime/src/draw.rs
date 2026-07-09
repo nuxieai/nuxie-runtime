@@ -237,136 +237,253 @@ fn runtime_layout_component_property_key_for_name(property_name: &str) -> Option
     }
 }
 
-fn runtime_layout_style_property_key_for_name(property_name: &str) -> Option<u16> {
-    match property_name {
-        "displayValue" => cached_runtime_property_key!("LayoutComponentStyle", "displayValue"),
-        "positionTypeValue" => {
-            cached_runtime_property_key!("LayoutComponentStyle", "positionTypeValue")
+#[derive(Clone, Copy)]
+enum RuntimeLayoutStyleProperty {
+    DisplayValue,
+    PositionTypeValue,
+    DirectionValue,
+    FlexDirectionValue,
+    FlexWrapValue,
+    LayoutAlignmentType,
+    LayoutWidthScaleType,
+    LayoutHeightScaleType,
+    WidthUnitsValue,
+    HeightUnitsValue,
+    FlexBasis,
+    FlexBasisUnitsValue,
+    GapHorizontal,
+    GapHorizontalUnitsValue,
+    GapVertical,
+    GapVerticalUnitsValue,
+    PaddingLeft,
+    PaddingLeftUnitsValue,
+    PaddingRight,
+    PaddingRightUnitsValue,
+    PaddingTop,
+    PaddingTopUnitsValue,
+    PaddingBottom,
+    PaddingBottomUnitsValue,
+    BorderLeft,
+    BorderLeftUnitsValue,
+    BorderRight,
+    BorderRightUnitsValue,
+    BorderTop,
+    BorderTopUnitsValue,
+    BorderBottom,
+    BorderBottomUnitsValue,
+    MarginLeft,
+    MarginLeftUnitsValue,
+    MarginRight,
+    MarginRightUnitsValue,
+    MarginTop,
+    MarginTopUnitsValue,
+    MarginBottom,
+    MarginBottomUnitsValue,
+    PositionLeft,
+    PositionLeftUnitsValue,
+    PositionRight,
+    PositionRightUnitsValue,
+    PositionTop,
+    PositionTopUnitsValue,
+    PositionBottom,
+    PositionBottomUnitsValue,
+    MinWidth,
+    MinWidthUnitsValue,
+    MinHeight,
+    MinHeightUnitsValue,
+    MaxWidth,
+    MaxWidthUnitsValue,
+    MaxHeight,
+    MaxHeightUnitsValue,
+    AspectRatio,
+    IntrinsicallySizedValue,
+    LinkCornerRadius,
+    CornerRadiusTL,
+    CornerRadiusTR,
+    CornerRadiusBR,
+    CornerRadiusBL,
+}
+
+impl RuntimeLayoutStyleProperty {
+    #[inline]
+    fn key(self) -> Option<u16> {
+        match self {
+            Self::DisplayValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "displayValue")
+            }
+            Self::PositionTypeValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "positionTypeValue")
+            }
+            Self::DirectionValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "directionValue")
+            }
+            Self::FlexDirectionValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "flexDirectionValue")
+            }
+            Self::FlexWrapValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "flexWrapValue")
+            }
+            Self::LayoutAlignmentType => {
+                cached_runtime_property_key!("LayoutComponentStyle", "layoutAlignmentType")
+            }
+            Self::LayoutWidthScaleType => {
+                cached_runtime_property_key!("LayoutComponentStyle", "layoutWidthScaleType")
+            }
+            Self::LayoutHeightScaleType => {
+                cached_runtime_property_key!("LayoutComponentStyle", "layoutHeightScaleType")
+            }
+            Self::WidthUnitsValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "widthUnitsValue")
+            }
+            Self::HeightUnitsValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "heightUnitsValue")
+            }
+            Self::FlexBasis => cached_runtime_property_key!("LayoutComponentStyle", "flexBasis"),
+            Self::FlexBasisUnitsValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "flexBasisUnitsValue")
+            }
+            Self::GapHorizontal => {
+                cached_runtime_property_key!("LayoutComponentStyle", "gapHorizontal")
+            }
+            Self::GapHorizontalUnitsValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "gapHorizontalUnitsValue")
+            }
+            Self::GapVertical => {
+                cached_runtime_property_key!("LayoutComponentStyle", "gapVertical")
+            }
+            Self::GapVerticalUnitsValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "gapVerticalUnitsValue")
+            }
+            Self::PaddingLeft => {
+                cached_runtime_property_key!("LayoutComponentStyle", "paddingLeft")
+            }
+            Self::PaddingLeftUnitsValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "paddingLeftUnitsValue")
+            }
+            Self::PaddingRight => {
+                cached_runtime_property_key!("LayoutComponentStyle", "paddingRight")
+            }
+            Self::PaddingRightUnitsValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "paddingRightUnitsValue")
+            }
+            Self::PaddingTop => {
+                cached_runtime_property_key!("LayoutComponentStyle", "paddingTop")
+            }
+            Self::PaddingTopUnitsValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "paddingTopUnitsValue")
+            }
+            Self::PaddingBottom => {
+                cached_runtime_property_key!("LayoutComponentStyle", "paddingBottom")
+            }
+            Self::PaddingBottomUnitsValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "paddingBottomUnitsValue")
+            }
+            Self::BorderLeft => {
+                cached_runtime_property_key!("LayoutComponentStyle", "borderLeft")
+            }
+            Self::BorderLeftUnitsValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "borderLeftUnitsValue")
+            }
+            Self::BorderRight => {
+                cached_runtime_property_key!("LayoutComponentStyle", "borderRight")
+            }
+            Self::BorderRightUnitsValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "borderRightUnitsValue")
+            }
+            Self::BorderTop => cached_runtime_property_key!("LayoutComponentStyle", "borderTop"),
+            Self::BorderTopUnitsValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "borderTopUnitsValue")
+            }
+            Self::BorderBottom => {
+                cached_runtime_property_key!("LayoutComponentStyle", "borderBottom")
+            }
+            Self::BorderBottomUnitsValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "borderBottomUnitsValue")
+            }
+            Self::MarginLeft => {
+                cached_runtime_property_key!("LayoutComponentStyle", "marginLeft")
+            }
+            Self::MarginLeftUnitsValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "marginLeftUnitsValue")
+            }
+            Self::MarginRight => {
+                cached_runtime_property_key!("LayoutComponentStyle", "marginRight")
+            }
+            Self::MarginRightUnitsValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "marginRightUnitsValue")
+            }
+            Self::MarginTop => cached_runtime_property_key!("LayoutComponentStyle", "marginTop"),
+            Self::MarginTopUnitsValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "marginTopUnitsValue")
+            }
+            Self::MarginBottom => {
+                cached_runtime_property_key!("LayoutComponentStyle", "marginBottom")
+            }
+            Self::MarginBottomUnitsValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "marginBottomUnitsValue")
+            }
+            Self::PositionLeft => {
+                cached_runtime_property_key!("LayoutComponentStyle", "positionLeft")
+            }
+            Self::PositionLeftUnitsValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "positionLeftUnitsValue")
+            }
+            Self::PositionRight => {
+                cached_runtime_property_key!("LayoutComponentStyle", "positionRight")
+            }
+            Self::PositionRightUnitsValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "positionRightUnitsValue")
+            }
+            Self::PositionTop => {
+                cached_runtime_property_key!("LayoutComponentStyle", "positionTop")
+            }
+            Self::PositionTopUnitsValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "positionTopUnitsValue")
+            }
+            Self::PositionBottom => {
+                cached_runtime_property_key!("LayoutComponentStyle", "positionBottom")
+            }
+            Self::PositionBottomUnitsValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "positionBottomUnitsValue")
+            }
+            Self::MinWidth => cached_runtime_property_key!("LayoutComponentStyle", "minWidth"),
+            Self::MinWidthUnitsValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "minWidthUnitsValue")
+            }
+            Self::MinHeight => cached_runtime_property_key!("LayoutComponentStyle", "minHeight"),
+            Self::MinHeightUnitsValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "minHeightUnitsValue")
+            }
+            Self::MaxWidth => cached_runtime_property_key!("LayoutComponentStyle", "maxWidth"),
+            Self::MaxWidthUnitsValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "maxWidthUnitsValue")
+            }
+            Self::MaxHeight => cached_runtime_property_key!("LayoutComponentStyle", "maxHeight"),
+            Self::MaxHeightUnitsValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "maxHeightUnitsValue")
+            }
+            Self::AspectRatio => {
+                cached_runtime_property_key!("LayoutComponentStyle", "aspectRatio")
+            }
+            Self::IntrinsicallySizedValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "intrinsicallySizedValue")
+            }
+            Self::LinkCornerRadius => {
+                cached_runtime_property_key!("LayoutComponentStyle", "linkCornerRadius")
+            }
+            Self::CornerRadiusTL => {
+                cached_runtime_property_key!("LayoutComponentStyle", "cornerRadiusTL")
+            }
+            Self::CornerRadiusTR => {
+                cached_runtime_property_key!("LayoutComponentStyle", "cornerRadiusTR")
+            }
+            Self::CornerRadiusBR => {
+                cached_runtime_property_key!("LayoutComponentStyle", "cornerRadiusBR")
+            }
+            Self::CornerRadiusBL => {
+                cached_runtime_property_key!("LayoutComponentStyle", "cornerRadiusBL")
+            }
         }
-        "directionValue" => cached_runtime_property_key!("LayoutComponentStyle", "directionValue"),
-        "flexDirectionValue" => {
-            cached_runtime_property_key!("LayoutComponentStyle", "flexDirectionValue")
-        }
-        "flexWrapValue" => cached_runtime_property_key!("LayoutComponentStyle", "flexWrapValue"),
-        "layoutAlignmentType" => {
-            cached_runtime_property_key!("LayoutComponentStyle", "layoutAlignmentType")
-        }
-        "layoutWidthScaleType" => {
-            cached_runtime_property_key!("LayoutComponentStyle", "layoutWidthScaleType")
-        }
-        "layoutHeightScaleType" => {
-            cached_runtime_property_key!("LayoutComponentStyle", "layoutHeightScaleType")
-        }
-        "widthUnitsValue" => {
-            cached_runtime_property_key!("LayoutComponentStyle", "widthUnitsValue")
-        }
-        "heightUnitsValue" => {
-            cached_runtime_property_key!("LayoutComponentStyle", "heightUnitsValue")
-        }
-        "flexBasis" => cached_runtime_property_key!("LayoutComponentStyle", "flexBasis"),
-        "flexBasisUnitsValue" => {
-            cached_runtime_property_key!("LayoutComponentStyle", "flexBasisUnitsValue")
-        }
-        "gapHorizontal" => cached_runtime_property_key!("LayoutComponentStyle", "gapHorizontal"),
-        "gapHorizontalUnitsValue" => {
-            cached_runtime_property_key!("LayoutComponentStyle", "gapHorizontalUnitsValue")
-        }
-        "gapVertical" => cached_runtime_property_key!("LayoutComponentStyle", "gapVertical"),
-        "gapVerticalUnitsValue" => {
-            cached_runtime_property_key!("LayoutComponentStyle", "gapVerticalUnitsValue")
-        }
-        "paddingLeft" => cached_runtime_property_key!("LayoutComponentStyle", "paddingLeft"),
-        "paddingLeftUnitsValue" => {
-            cached_runtime_property_key!("LayoutComponentStyle", "paddingLeftUnitsValue")
-        }
-        "paddingRight" => cached_runtime_property_key!("LayoutComponentStyle", "paddingRight"),
-        "paddingRightUnitsValue" => {
-            cached_runtime_property_key!("LayoutComponentStyle", "paddingRightUnitsValue")
-        }
-        "paddingTop" => cached_runtime_property_key!("LayoutComponentStyle", "paddingTop"),
-        "paddingTopUnitsValue" => {
-            cached_runtime_property_key!("LayoutComponentStyle", "paddingTopUnitsValue")
-        }
-        "paddingBottom" => cached_runtime_property_key!("LayoutComponentStyle", "paddingBottom"),
-        "paddingBottomUnitsValue" => {
-            cached_runtime_property_key!("LayoutComponentStyle", "paddingBottomUnitsValue")
-        }
-        "borderLeft" => cached_runtime_property_key!("LayoutComponentStyle", "borderLeft"),
-        "borderLeftUnitsValue" => {
-            cached_runtime_property_key!("LayoutComponentStyle", "borderLeftUnitsValue")
-        }
-        "borderRight" => cached_runtime_property_key!("LayoutComponentStyle", "borderRight"),
-        "borderRightUnitsValue" => {
-            cached_runtime_property_key!("LayoutComponentStyle", "borderRightUnitsValue")
-        }
-        "borderTop" => cached_runtime_property_key!("LayoutComponentStyle", "borderTop"),
-        "borderTopUnitsValue" => {
-            cached_runtime_property_key!("LayoutComponentStyle", "borderTopUnitsValue")
-        }
-        "borderBottom" => cached_runtime_property_key!("LayoutComponentStyle", "borderBottom"),
-        "borderBottomUnitsValue" => {
-            cached_runtime_property_key!("LayoutComponentStyle", "borderBottomUnitsValue")
-        }
-        "marginLeft" => cached_runtime_property_key!("LayoutComponentStyle", "marginLeft"),
-        "marginLeftUnitsValue" => {
-            cached_runtime_property_key!("LayoutComponentStyle", "marginLeftUnitsValue")
-        }
-        "marginRight" => cached_runtime_property_key!("LayoutComponentStyle", "marginRight"),
-        "marginRightUnitsValue" => {
-            cached_runtime_property_key!("LayoutComponentStyle", "marginRightUnitsValue")
-        }
-        "marginTop" => cached_runtime_property_key!("LayoutComponentStyle", "marginTop"),
-        "marginTopUnitsValue" => {
-            cached_runtime_property_key!("LayoutComponentStyle", "marginTopUnitsValue")
-        }
-        "marginBottom" => cached_runtime_property_key!("LayoutComponentStyle", "marginBottom"),
-        "marginBottomUnitsValue" => {
-            cached_runtime_property_key!("LayoutComponentStyle", "marginBottomUnitsValue")
-        }
-        "positionLeft" => cached_runtime_property_key!("LayoutComponentStyle", "positionLeft"),
-        "positionLeftUnitsValue" => {
-            cached_runtime_property_key!("LayoutComponentStyle", "positionLeftUnitsValue")
-        }
-        "positionRight" => cached_runtime_property_key!("LayoutComponentStyle", "positionRight"),
-        "positionRightUnitsValue" => {
-            cached_runtime_property_key!("LayoutComponentStyle", "positionRightUnitsValue")
-        }
-        "positionTop" => cached_runtime_property_key!("LayoutComponentStyle", "positionTop"),
-        "positionTopUnitsValue" => {
-            cached_runtime_property_key!("LayoutComponentStyle", "positionTopUnitsValue")
-        }
-        "positionBottom" => cached_runtime_property_key!("LayoutComponentStyle", "positionBottom"),
-        "positionBottomUnitsValue" => {
-            cached_runtime_property_key!("LayoutComponentStyle", "positionBottomUnitsValue")
-        }
-        "minWidth" => cached_runtime_property_key!("LayoutComponentStyle", "minWidth"),
-        "minWidthUnitsValue" => {
-            cached_runtime_property_key!("LayoutComponentStyle", "minWidthUnitsValue")
-        }
-        "minHeight" => cached_runtime_property_key!("LayoutComponentStyle", "minHeight"),
-        "minHeightUnitsValue" => {
-            cached_runtime_property_key!("LayoutComponentStyle", "minHeightUnitsValue")
-        }
-        "maxWidth" => cached_runtime_property_key!("LayoutComponentStyle", "maxWidth"),
-        "maxWidthUnitsValue" => {
-            cached_runtime_property_key!("LayoutComponentStyle", "maxWidthUnitsValue")
-        }
-        "maxHeight" => cached_runtime_property_key!("LayoutComponentStyle", "maxHeight"),
-        "maxHeightUnitsValue" => {
-            cached_runtime_property_key!("LayoutComponentStyle", "maxHeightUnitsValue")
-        }
-        "aspectRatio" => cached_runtime_property_key!("LayoutComponentStyle", "aspectRatio"),
-        "intrinsicallySizedValue" => {
-            cached_runtime_property_key!("LayoutComponentStyle", "intrinsicallySizedValue")
-        }
-        "linkCornerRadius" => {
-            cached_runtime_property_key!("LayoutComponentStyle", "linkCornerRadius")
-        }
-        "cornerRadiusTL" => cached_runtime_property_key!("LayoutComponentStyle", "cornerRadiusTL"),
-        "cornerRadiusTR" => cached_runtime_property_key!("LayoutComponentStyle", "cornerRadiusTR"),
-        "cornerRadiusBR" => cached_runtime_property_key!("LayoutComponentStyle", "cornerRadiusBR"),
-        "cornerRadiusBL" => cached_runtime_property_key!("LayoutComponentStyle", "cornerRadiusBL"),
-        _ => property_key_for_name("LayoutComponentStyle", property_name),
     }
 }
 
@@ -2253,7 +2370,11 @@ impl ArtboardInstance {
         let parent_style = self.runtime_layout_component_style_local(parent_local);
         let parent_direction = parent_style
             .map(|style_local| {
-                self.runtime_layout_style_uint_default(style_local, "flexDirectionValue", 2)
+                self.runtime_layout_style_uint_default(
+                    style_local,
+                    RuntimeLayoutStyleProperty::FlexDirectionValue,
+                    2,
+                )
             })
             .unwrap_or(2);
         let parent_is_row = match parent_direction {
@@ -2288,40 +2409,40 @@ impl ArtboardInstance {
                 (
                     self.runtime_layout_style_length(
                         style_local,
-                        "paddingLeft",
-                        "paddingLeftUnitsValue",
+                        RuntimeLayoutStyleProperty::PaddingLeft,
+                        RuntimeLayoutStyleProperty::PaddingLeftUnitsValue,
                         parent_bounds.width,
                     )?,
                     self.runtime_layout_style_length(
                         style_local,
-                        "paddingRight",
-                        "paddingRightUnitsValue",
+                        RuntimeLayoutStyleProperty::PaddingRight,
+                        RuntimeLayoutStyleProperty::PaddingRightUnitsValue,
                         parent_bounds.width,
                     )?,
                     self.runtime_layout_style_length(
                         style_local,
-                        "paddingTop",
-                        "paddingTopUnitsValue",
+                        RuntimeLayoutStyleProperty::PaddingTop,
+                        RuntimeLayoutStyleProperty::PaddingTopUnitsValue,
                         parent_bounds.height,
                     )?,
                     self.runtime_layout_style_length(
                         style_local,
-                        "paddingBottom",
-                        "paddingBottomUnitsValue",
+                        RuntimeLayoutStyleProperty::PaddingBottom,
+                        RuntimeLayoutStyleProperty::PaddingBottomUnitsValue,
                         parent_bounds.height,
                     )?,
                     if parent_is_row {
                         self.runtime_layout_style_length(
                             style_local,
-                            "gapHorizontal",
-                            "gapHorizontalUnitsValue",
+                            RuntimeLayoutStyleProperty::GapHorizontal,
+                            RuntimeLayoutStyleProperty::GapHorizontalUnitsValue,
                             parent_bounds.width,
                         )?
                     } else {
                         self.runtime_layout_style_length(
                             style_local,
-                            "gapVertical",
-                            "gapVerticalUnitsValue",
+                            RuntimeLayoutStyleProperty::GapVertical,
+                            RuntimeLayoutStyleProperty::GapVerticalUnitsValue,
                             parent_bounds.height,
                         )?
                     },
@@ -2542,14 +2663,14 @@ impl ArtboardInstance {
         )?;
         let left = self.runtime_layout_style_length(
             style_local,
-            "positionLeft",
-            "positionLeftUnitsValue",
+            RuntimeLayoutStyleProperty::PositionLeft,
+            RuntimeLayoutStyleProperty::PositionLeftUnitsValue,
             parent_bounds.width,
         )?;
         let top = self.runtime_layout_style_length(
             style_local,
-            "positionTop",
-            "positionTopUnitsValue",
+            RuntimeLayoutStyleProperty::PositionTop,
+            RuntimeLayoutStyleProperty::PositionTopUnitsValue,
             parent_bounds.height,
         )?;
 
@@ -2587,8 +2708,14 @@ impl ArtboardInstance {
 
         const LAYOUT_SCALE_TYPE_FILL: u64 = 1;
         const LAYOUT_SCALE_TYPE_HUG: u64 = 2;
-        let width_scale = self.runtime_layout_style_uint(style_local, "layoutWidthScaleType")?;
-        let height_scale = self.runtime_layout_style_uint(style_local, "layoutHeightScaleType")?;
+        let width_scale = self.runtime_layout_style_uint(
+            style_local,
+            RuntimeLayoutStyleProperty::LayoutWidthScaleType,
+        )?;
+        let height_scale = self.runtime_layout_style_uint(
+            style_local,
+            RuntimeLayoutStyleProperty::LayoutHeightScaleType,
+        )?;
         if !matches!(width_scale, LAYOUT_SCALE_TYPE_FILL | LAYOUT_SCALE_TYPE_HUG)
             || !matches!(height_scale, LAYOUT_SCALE_TYPE_FILL | LAYOUT_SCALE_TYPE_HUG)
         {
@@ -2641,9 +2768,9 @@ impl ArtboardInstance {
         let style_local = self.runtime_layout_component_style_local(layout_local)?;
         let is_row = self.runtime_layout_style_is_row(style_local);
         let gap = if is_row {
-            self.runtime_layout_style_double(style_local, "gapHorizontal")
+            self.runtime_layout_style_double(style_local, RuntimeLayoutStyleProperty::GapHorizontal)
         } else {
-            self.runtime_layout_style_double(style_local, "gapVertical")
+            self.runtime_layout_style_double(style_local, RuntimeLayoutStyleProperty::GapVertical)
         }
         .unwrap_or(0.0);
         let component = graph
@@ -2719,27 +2846,37 @@ impl ArtboardInstance {
         ))
     }
 
-    fn runtime_layout_style_double(&self, style_local: usize, name: &str) -> Option<f32> {
-        runtime_layout_style_property_key_for_name(name)
+    fn runtime_layout_style_double(
+        &self,
+        style_local: usize,
+        property: RuntimeLayoutStyleProperty,
+    ) -> Option<f32> {
+        property
+            .key()
             .and_then(|key| self.double_property(style_local, key))
     }
 
     fn runtime_layout_style_length(
         &self,
         style_local: usize,
-        value_name: &str,
-        unit_name: &str,
+        value_property: RuntimeLayoutStyleProperty,
+        unit_property: RuntimeLayoutStyleProperty,
         reference: f32,
     ) -> Option<f32> {
         let value = self
-            .runtime_layout_style_double(style_local, value_name)
+            .runtime_layout_style_double(style_local, value_property)
             .unwrap_or(0.0);
-        let unit = self.runtime_layout_style_uint_default(style_local, unit_name, 0);
+        let unit = self.runtime_layout_style_uint_default(style_local, unit_property, 0);
         self.runtime_layout_length_for_unit(value, unit, reference)
     }
 
-    fn runtime_layout_style_bool(&self, style_local: usize, name: &str) -> Option<bool> {
-        runtime_layout_style_property_key_for_name(name)
+    fn runtime_layout_style_bool(
+        &self,
+        style_local: usize,
+        property: RuntimeLayoutStyleProperty,
+    ) -> Option<bool> {
+        property
+            .key()
             .and_then(|key| self.bool_property(style_local, key))
     }
 
@@ -2748,10 +2885,10 @@ impl ArtboardInstance {
             return RuntimeLayoutCorners::default();
         };
         let linked_value = self
-            .runtime_layout_style_double(style_local, "cornerRadiusTL")
+            .runtime_layout_style_double(style_local, RuntimeLayoutStyleProperty::CornerRadiusTL)
             .unwrap_or(0.0);
         let linked = self
-            .runtime_layout_style_bool(style_local, "linkCornerRadius")
+            .runtime_layout_style_bool(style_local, RuntimeLayoutStyleProperty::LinkCornerRadius)
             .unwrap_or(true);
         if linked {
             return RuntimeLayoutCorners {
@@ -2764,13 +2901,22 @@ impl ArtboardInstance {
         RuntimeLayoutCorners {
             top_left: linked_value,
             top_right: self
-                .runtime_layout_style_double(style_local, "cornerRadiusTR")
+                .runtime_layout_style_double(
+                    style_local,
+                    RuntimeLayoutStyleProperty::CornerRadiusTR,
+                )
                 .unwrap_or(0.0),
             bottom_right: self
-                .runtime_layout_style_double(style_local, "cornerRadiusBR")
+                .runtime_layout_style_double(
+                    style_local,
+                    RuntimeLayoutStyleProperty::CornerRadiusBR,
+                )
                 .unwrap_or(0.0),
             bottom_left: self
-                .runtime_layout_style_double(style_local, "cornerRadiusBL")
+                .runtime_layout_style_double(
+                    style_local,
+                    RuntimeLayoutStyleProperty::CornerRadiusBL,
+                )
                 .unwrap_or(0.0),
         }
     }
@@ -2808,16 +2954,31 @@ impl ArtboardInstance {
             .runtime_layout_component_style_local(0)
             .map(|style_local| {
                 (
-                    self.runtime_layout_style_double(style_local, "paddingLeft")
-                        .unwrap_or(0.0),
-                    self.runtime_layout_style_double(style_local, "paddingRight")
-                        .unwrap_or(0.0),
-                    self.runtime_layout_style_double(style_local, "paddingTop")
-                        .unwrap_or(0.0),
-                    self.runtime_layout_style_double(style_local, "paddingBottom")
-                        .unwrap_or(0.0),
-                    self.runtime_layout_style_double(style_local, "gapHorizontal")
-                        .unwrap_or(0.0),
+                    self.runtime_layout_style_double(
+                        style_local,
+                        RuntimeLayoutStyleProperty::PaddingLeft,
+                    )
+                    .unwrap_or(0.0),
+                    self.runtime_layout_style_double(
+                        style_local,
+                        RuntimeLayoutStyleProperty::PaddingRight,
+                    )
+                    .unwrap_or(0.0),
+                    self.runtime_layout_style_double(
+                        style_local,
+                        RuntimeLayoutStyleProperty::PaddingTop,
+                    )
+                    .unwrap_or(0.0),
+                    self.runtime_layout_style_double(
+                        style_local,
+                        RuntimeLayoutStyleProperty::PaddingBottom,
+                    )
+                    .unwrap_or(0.0),
+                    self.runtime_layout_style_double(
+                        style_local,
+                        RuntimeLayoutStyleProperty::GapHorizontal,
+                    )
+                    .unwrap_or(0.0),
                 )
             })
             .unwrap_or((0.0, 0.0, 0.0, 0.0, 0.0));
@@ -2851,10 +3012,14 @@ impl ArtboardInstance {
         };
 
         const LAYOUT_SCALE_TYPE_FILL: u64 = 1;
-        self.runtime_layout_style_uint(style_local, "layoutWidthScaleType")
-            == Some(LAYOUT_SCALE_TYPE_FILL)
-            && self.runtime_layout_style_uint(style_local, "layoutHeightScaleType")
-                == Some(LAYOUT_SCALE_TYPE_FILL)
+        self.runtime_layout_style_uint(
+            style_local,
+            RuntimeLayoutStyleProperty::LayoutWidthScaleType,
+        ) == Some(LAYOUT_SCALE_TYPE_FILL)
+            && self.runtime_layout_style_uint(
+                style_local,
+                RuntimeLayoutStyleProperty::LayoutHeightScaleType,
+            ) == Some(LAYOUT_SCALE_TYPE_FILL)
     }
 
     fn runtime_root_layout_style_is_row(&self) -> bool {
@@ -2865,14 +3030,21 @@ impl ArtboardInstance {
     fn runtime_layout_style_is_row(&self, style_local: usize) -> bool {
         // Ported from C++ `src/layout_component.cpp` `mainAxisIsRow`.
         matches!(
-            self.runtime_layout_style_uint(style_local, "flexDirectionValue")
-                .unwrap_or(2),
+            self.runtime_layout_style_uint(
+                style_local,
+                RuntimeLayoutStyleProperty::FlexDirectionValue
+            )
+            .unwrap_or(2),
             2 | 3
         )
     }
 
     fn runtime_layout_alignment_type(&self, style_local: usize) -> u64 {
-        self.runtime_layout_style_uint_default(style_local, "layoutAlignmentType", 0)
+        self.runtime_layout_style_uint_default(
+            style_local,
+            RuntimeLayoutStyleProperty::LayoutAlignmentType,
+            0,
+        )
     }
 
     fn runtime_layout_component_style_local(&self, layout_local: usize) -> Option<usize> {
@@ -2881,18 +3053,23 @@ impl ArtboardInstance {
             .and_then(|style| usize::try_from(style).ok())
     }
 
-    fn runtime_layout_style_uint(&self, style_local: usize, name: &str) -> Option<u64> {
-        runtime_layout_style_property_key_for_name(name)
+    fn runtime_layout_style_uint(
+        &self,
+        style_local: usize,
+        property: RuntimeLayoutStyleProperty,
+    ) -> Option<u64> {
+        property
+            .key()
             .and_then(|key| self.uint_property(style_local, key))
     }
 
     fn runtime_layout_style_uint_default(
         &self,
         style_local: usize,
-        name: &str,
+        property: RuntimeLayoutStyleProperty,
         default: u64,
     ) -> u64 {
-        self.runtime_layout_style_uint(style_local, name)
+        self.runtime_layout_style_uint(style_local, property)
             .unwrap_or(default)
     }
 
@@ -2906,9 +3083,9 @@ impl ArtboardInstance {
         self.runtime_layout_style_uint_default(
             style_local,
             if width_axis {
-                "layoutWidthScaleType"
+                RuntimeLayoutStyleProperty::LayoutWidthScaleType
             } else {
-                "layoutHeightScaleType"
+                RuntimeLayoutStyleProperty::LayoutHeightScaleType
             },
             0,
         )
@@ -2918,9 +3095,9 @@ impl ArtboardInstance {
         self.runtime_layout_style_uint_default(
             style_local,
             if width_axis {
-                "widthUnitsValue"
+                RuntimeLayoutStyleProperty::WidthUnitsValue
             } else {
-                "heightUnitsValue"
+                RuntimeLayoutStyleProperty::HeightUnitsValue
             },
             1,
         )
@@ -2931,8 +3108,11 @@ impl ArtboardInstance {
             return false;
         };
         const YG_POSITION_TYPE_ABSOLUTE: u64 = 2;
-        self.runtime_layout_style_uint_default(style_local, "positionTypeValue", 1)
-            == YG_POSITION_TYPE_ABSOLUTE
+        self.runtime_layout_style_uint_default(
+            style_local,
+            RuntimeLayoutStyleProperty::PositionTypeValue,
+            1,
+        ) == YG_POSITION_TYPE_ABSOLUTE
     }
 
     fn runtime_layout_component_is_display_none(&self, layout_local: usize) -> bool {
@@ -2948,7 +3128,11 @@ impl ArtboardInstance {
         const YG_DISPLAY_NONE: u64 = 1;
         // Ported from C++ `src/layout_component.cpp`
         // `LayoutComponent::styleDisplayHidden` / `displayChanged`.
-        self.runtime_layout_style_uint_default(style_local, "displayValue", 0) == YG_DISPLAY_NONE
+        self.runtime_layout_style_uint_default(
+            style_local,
+            RuntimeLayoutStyleProperty::DisplayValue,
+            0,
+        ) == YG_DISPLAY_NONE
     }
 
     fn runtime_layout_axis_fraction(&self, layout_local: usize, width_axis: bool) -> f32 {
@@ -2990,9 +3174,13 @@ impl ArtboardInstance {
         graph: &ArtboardGraph,
     ) -> Option<f32> {
         let basis = self
-            .runtime_layout_style_double(style_local, "flexBasis")
+            .runtime_layout_style_double(style_local, RuntimeLayoutStyleProperty::FlexBasis)
             .unwrap_or(0.0);
-        let units = self.runtime_layout_style_uint_default(style_local, "flexBasisUnitsValue", 3);
+        let units = self.runtime_layout_style_uint_default(
+            style_local,
+            RuntimeLayoutStyleProperty::FlexBasisUnitsValue,
+            3,
+        );
         if units == 3 {
             let mut intrinsic_visiting = BTreeSet::new();
             return self
@@ -3072,9 +3260,9 @@ impl ArtboardInstance {
         let style_local = self.runtime_layout_component_style_local(layout_local)?;
         let is_row = self.runtime_layout_style_is_row(style_local);
         let gap = if is_row {
-            self.runtime_layout_style_double(style_local, "gapHorizontal")
+            self.runtime_layout_style_double(style_local, RuntimeLayoutStyleProperty::GapHorizontal)
         } else {
-            self.runtime_layout_style_double(style_local, "gapVertical")
+            self.runtime_layout_style_double(style_local, RuntimeLayoutStyleProperty::GapVertical)
         }
         .unwrap_or(0.0);
         let component = graph
@@ -4048,7 +4236,11 @@ impl TaffyRuntimeLayoutEngine {
 
         let mut style = Style {
             display: if style_local.is_some_and(|style_local| {
-                instance.runtime_layout_style_uint_default(style_local, "displayValue", 0) == 1
+                instance.runtime_layout_style_uint_default(
+                    style_local,
+                    RuntimeLayoutStyleProperty::DisplayValue,
+                    0,
+                ) == 1
             }) {
                 TaffyDisplay::None
             } else {
@@ -4077,21 +4269,27 @@ impl TaffyRuntimeLayoutEngine {
             return Some(style);
         };
 
-        style.position =
-            if instance.runtime_layout_style_uint_default(style_local, "positionTypeValue", 1) == 2
-            {
-                Position::Absolute
-            } else {
-                Position::Relative
-            };
-        style.direction =
-            match instance.runtime_layout_style_uint_default(style_local, "directionValue", 0) {
-                2 => TaffyDirection::Rtl,
-                _ => TaffyDirection::Ltr,
-            };
+        style.position = if instance.runtime_layout_style_uint_default(
+            style_local,
+            RuntimeLayoutStyleProperty::PositionTypeValue,
+            1,
+        ) == 2
+        {
+            Position::Absolute
+        } else {
+            Position::Relative
+        };
+        style.direction = match instance.runtime_layout_style_uint_default(
+            style_local,
+            RuntimeLayoutStyleProperty::DirectionValue,
+            0,
+        ) {
+            2 => TaffyDirection::Rtl,
+            _ => TaffyDirection::Ltr,
+        };
         style.flex_direction = match instance.runtime_layout_style_uint_default(
             style_local,
-            "flexDirectionValue",
+            RuntimeLayoutStyleProperty::FlexDirectionValue,
             2,
         ) {
             0 => FlexDirection::Column,
@@ -4099,144 +4297,147 @@ impl TaffyRuntimeLayoutEngine {
             3 => FlexDirection::RowReverse,
             _ => FlexDirection::Row,
         };
-        style.flex_wrap =
-            match instance.runtime_layout_style_uint_default(style_local, "flexWrapValue", 0) {
-                1 => FlexWrap::Wrap,
-                2 => FlexWrap::WrapReverse,
-                _ => FlexWrap::NoWrap,
-            };
+        style.flex_wrap = match instance.runtime_layout_style_uint_default(
+            style_local,
+            RuntimeLayoutStyleProperty::FlexWrapValue,
+            0,
+        ) {
+            1 => FlexWrap::Wrap,
+            2 => FlexWrap::WrapReverse,
+            _ => FlexWrap::NoWrap,
+        };
         style.gap = Size {
             width: self.length_percentage_style(
                 instance,
                 style_local,
-                "gapHorizontal",
-                "gapHorizontalUnitsValue",
+                RuntimeLayoutStyleProperty::GapHorizontal,
+                RuntimeLayoutStyleProperty::GapHorizontalUnitsValue,
             )?,
             height: self.length_percentage_style(
                 instance,
                 style_local,
-                "gapVertical",
-                "gapVerticalUnitsValue",
+                RuntimeLayoutStyleProperty::GapVertical,
+                RuntimeLayoutStyleProperty::GapVerticalUnitsValue,
             )?,
         };
         style.padding = Rect {
             left: self.length_percentage_style(
                 instance,
                 style_local,
-                "paddingLeft",
-                "paddingLeftUnitsValue",
+                RuntimeLayoutStyleProperty::PaddingLeft,
+                RuntimeLayoutStyleProperty::PaddingLeftUnitsValue,
             )?,
             right: self.length_percentage_style(
                 instance,
                 style_local,
-                "paddingRight",
-                "paddingRightUnitsValue",
+                RuntimeLayoutStyleProperty::PaddingRight,
+                RuntimeLayoutStyleProperty::PaddingRightUnitsValue,
             )?,
             top: self.length_percentage_style(
                 instance,
                 style_local,
-                "paddingTop",
-                "paddingTopUnitsValue",
+                RuntimeLayoutStyleProperty::PaddingTop,
+                RuntimeLayoutStyleProperty::PaddingTopUnitsValue,
             )?,
             bottom: self.length_percentage_style(
                 instance,
                 style_local,
-                "paddingBottom",
-                "paddingBottomUnitsValue",
+                RuntimeLayoutStyleProperty::PaddingBottom,
+                RuntimeLayoutStyleProperty::PaddingBottomUnitsValue,
             )?,
         };
         style.border = Rect {
             left: self.length_percentage_style(
                 instance,
                 style_local,
-                "borderLeft",
-                "borderLeftUnitsValue",
+                RuntimeLayoutStyleProperty::BorderLeft,
+                RuntimeLayoutStyleProperty::BorderLeftUnitsValue,
             )?,
             right: self.length_percentage_style(
                 instance,
                 style_local,
-                "borderRight",
-                "borderRightUnitsValue",
+                RuntimeLayoutStyleProperty::BorderRight,
+                RuntimeLayoutStyleProperty::BorderRightUnitsValue,
             )?,
             top: self.length_percentage_style(
                 instance,
                 style_local,
-                "borderTop",
-                "borderTopUnitsValue",
+                RuntimeLayoutStyleProperty::BorderTop,
+                RuntimeLayoutStyleProperty::BorderTopUnitsValue,
             )?,
             bottom: self.length_percentage_style(
                 instance,
                 style_local,
-                "borderBottom",
-                "borderBottomUnitsValue",
+                RuntimeLayoutStyleProperty::BorderBottom,
+                RuntimeLayoutStyleProperty::BorderBottomUnitsValue,
             )?,
         };
         style.margin = Rect {
             left: self.length_percentage_auto_style(
                 instance,
                 style_local,
-                "marginLeft",
-                "marginLeftUnitsValue",
+                RuntimeLayoutStyleProperty::MarginLeft,
+                RuntimeLayoutStyleProperty::MarginLeftUnitsValue,
             )?,
             right: self.length_percentage_auto_style(
                 instance,
                 style_local,
-                "marginRight",
-                "marginRightUnitsValue",
+                RuntimeLayoutStyleProperty::MarginRight,
+                RuntimeLayoutStyleProperty::MarginRightUnitsValue,
             )?,
             top: self.length_percentage_auto_style(
                 instance,
                 style_local,
-                "marginTop",
-                "marginTopUnitsValue",
+                RuntimeLayoutStyleProperty::MarginTop,
+                RuntimeLayoutStyleProperty::MarginTopUnitsValue,
             )?,
             bottom: self.length_percentage_auto_style(
                 instance,
                 style_local,
-                "marginBottom",
-                "marginBottomUnitsValue",
+                RuntimeLayoutStyleProperty::MarginBottom,
+                RuntimeLayoutStyleProperty::MarginBottomUnitsValue,
             )?,
         };
         style.inset = Rect {
             left: self.position_inset_style(
                 instance,
                 style_local,
-                "positionLeft",
-                "positionLeftUnitsValue",
+                RuntimeLayoutStyleProperty::PositionLeft,
+                RuntimeLayoutStyleProperty::PositionLeftUnitsValue,
             )?,
             right: self.position_inset_style(
                 instance,
                 style_local,
-                "positionRight",
-                "positionRightUnitsValue",
+                RuntimeLayoutStyleProperty::PositionRight,
+                RuntimeLayoutStyleProperty::PositionRightUnitsValue,
             )?,
             top: self.position_inset_style(
                 instance,
                 style_local,
-                "positionTop",
-                "positionTopUnitsValue",
+                RuntimeLayoutStyleProperty::PositionTop,
+                RuntimeLayoutStyleProperty::PositionTopUnitsValue,
             )?,
             bottom: self.position_inset_style(
                 instance,
                 style_local,
-                "positionBottom",
-                "positionBottomUnitsValue",
+                RuntimeLayoutStyleProperty::PositionBottom,
+                RuntimeLayoutStyleProperty::PositionBottomUnitsValue,
             )?,
         };
         style.min_size = Size {
             width: self.dimension_style(
                 instance,
                 style_local,
-                "minWidth",
-                "minWidthUnitsValue",
+                RuntimeLayoutStyleProperty::MinWidth,
+                RuntimeLayoutStyleProperty::MinWidthUnitsValue,
                 false,
                 self.intrinsic_static_hug_min_is_auto(instance, graph, local, style_local, true)?,
             )?,
             height: self.dimension_style(
                 instance,
                 style_local,
-                "minHeight",
-                "minHeightUnitsValue",
+                RuntimeLayoutStyleProperty::MinHeight,
+                RuntimeLayoutStyleProperty::MinHeightUnitsValue,
                 false,
                 self.intrinsic_static_hug_min_is_auto(instance, graph, local, style_local, false)?,
             )?,
@@ -4245,22 +4446,22 @@ impl TaffyRuntimeLayoutEngine {
             width: self.dimension_style(
                 instance,
                 style_local,
-                "maxWidth",
-                "maxWidthUnitsValue",
+                RuntimeLayoutStyleProperty::MaxWidth,
+                RuntimeLayoutStyleProperty::MaxWidthUnitsValue,
                 true,
                 false,
             )?,
             height: self.dimension_style(
                 instance,
                 style_local,
-                "maxHeight",
-                "maxHeightUnitsValue",
+                RuntimeLayoutStyleProperty::MaxHeight,
+                RuntimeLayoutStyleProperty::MaxHeightUnitsValue,
                 true,
                 false,
             )?,
         };
         let aspect_ratio = instance
-            .runtime_layout_style_double(style_local, "aspectRatio")
+            .runtime_layout_style_double(style_local, RuntimeLayoutStyleProperty::AspectRatio)
             .unwrap_or(0.0);
         if aspect_ratio > 0.0 {
             style.aspect_ratio = Some(aspect_ratio);
@@ -4547,7 +4748,10 @@ impl TaffyRuntimeLayoutEngine {
         let width_fixed = instance.runtime_layout_axis_scale(style_local, true) == 0;
         let height_fixed = instance.runtime_layout_axis_scale(style_local, false) == 0;
         let intrinsic = instance
-            .runtime_layout_style_bool(style_local, "intrinsicallySizedValue")
+            .runtime_layout_style_bool(
+                style_local,
+                RuntimeLayoutStyleProperty::IntrinsicallySizedValue,
+            )
             .unwrap_or(false);
         Some(
             width_fixed
@@ -4591,11 +4795,11 @@ impl TaffyRuntimeLayoutEngine {
                     instance.runtime_layout_axis_fraction(layout_local, parent_is_row);
                 style.flex_shrink = style.flex_grow;
                 let basis = instance
-                    .runtime_layout_style_double(style_local, "flexBasis")
+                    .runtime_layout_style_double(style_local, RuntimeLayoutStyleProperty::FlexBasis)
                     .unwrap_or(0.0);
                 let units = instance.runtime_layout_style_uint_default(
                     style_local,
-                    "flexBasisUnitsValue",
+                    RuntimeLayoutStyleProperty::FlexBasisUnitsValue,
                     3,
                 );
                 style.flex_basis = self.dimension_from_unit(basis, units)?;
@@ -4703,7 +4907,10 @@ impl TaffyRuntimeLayoutEngine {
             return Some(false);
         }
         let intrinsic = instance
-            .runtime_layout_style_bool(style_local, "intrinsicallySizedValue")
+            .runtime_layout_style_bool(
+                style_local,
+                RuntimeLayoutStyleProperty::IntrinsicallySizedValue,
+            )
             .unwrap_or(false);
         let hugs_content = instance.runtime_layout_axis_scale(style_local, true) == 2
             || instance.runtime_layout_axis_scale(style_local, false) == 2;
@@ -4758,7 +4965,10 @@ impl TaffyRuntimeLayoutEngine {
     ) -> Option<bool> {
         let style_local = instance.runtime_layout_component_style_local(layout_local)?;
         if !instance
-            .runtime_layout_style_bool(style_local, "intrinsicallySizedValue")
+            .runtime_layout_style_bool(
+                style_local,
+                RuntimeLayoutStyleProperty::IntrinsicallySizedValue,
+            )
             .unwrap_or(false)
         {
             return Some(false);
@@ -4992,19 +5202,22 @@ impl TaffyRuntimeLayoutEngine {
         &self,
         instance: &ArtboardInstance,
         style_local: usize,
-        value_name: &str,
-        unit_name: &str,
+        value_property: RuntimeLayoutStyleProperty,
+        unit_property: RuntimeLayoutStyleProperty,
         zero_undefined_is_auto: bool,
         nonzero_undefined_is_auto: bool,
     ) -> Option<Dimension> {
         let value = instance
-            .runtime_layout_style_double(style_local, value_name)
+            .runtime_layout_style_double(style_local, value_property)
             .unwrap_or(0.0);
-        let units = instance.runtime_layout_style_uint_default(style_local, unit_name, 0);
+        let units = instance.runtime_layout_style_uint_default(style_local, unit_property, 0);
         if nonzero_undefined_is_auto
             && units == 0
             && value.abs() > f32::EPSILON
-            && matches!(value_name, "minWidth" | "minHeight")
+            && matches!(
+                value_property,
+                RuntimeLayoutStyleProperty::MinWidth | RuntimeLayoutStyleProperty::MinHeight
+            )
         {
             return Some(Dimension::auto());
         }
@@ -5018,13 +5231,13 @@ impl TaffyRuntimeLayoutEngine {
         &self,
         instance: &ArtboardInstance,
         style_local: usize,
-        value_name: &str,
-        unit_name: &str,
+        value_property: RuntimeLayoutStyleProperty,
+        unit_property: RuntimeLayoutStyleProperty,
     ) -> Option<LengthPercentage> {
         let value = instance
-            .runtime_layout_style_double(style_local, value_name)
+            .runtime_layout_style_double(style_local, value_property)
             .unwrap_or(0.0);
-        let units = instance.runtime_layout_style_uint_default(style_local, unit_name, 0);
+        let units = instance.runtime_layout_style_uint_default(style_local, unit_property, 0);
         self.length_percentage_from_unit(value, units)
     }
 
@@ -5032,13 +5245,13 @@ impl TaffyRuntimeLayoutEngine {
         &self,
         instance: &ArtboardInstance,
         style_local: usize,
-        value_name: &str,
-        unit_name: &str,
+        value_property: RuntimeLayoutStyleProperty,
+        unit_property: RuntimeLayoutStyleProperty,
     ) -> Option<LengthPercentageAuto> {
         let value = instance
-            .runtime_layout_style_double(style_local, value_name)
+            .runtime_layout_style_double(style_local, value_property)
             .unwrap_or(0.0);
-        let units = instance.runtime_layout_style_uint_default(style_local, unit_name, 0);
+        let units = instance.runtime_layout_style_uint_default(style_local, unit_property, 0);
         self.length_percentage_auto_from_unit(value, units)
     }
 
@@ -5046,13 +5259,13 @@ impl TaffyRuntimeLayoutEngine {
         &self,
         instance: &ArtboardInstance,
         style_local: usize,
-        value_name: &str,
-        unit_name: &str,
+        value_property: RuntimeLayoutStyleProperty,
+        unit_property: RuntimeLayoutStyleProperty,
     ) -> Option<LengthPercentageAuto> {
         let value = instance
-            .runtime_layout_style_double(style_local, value_name)
+            .runtime_layout_style_double(style_local, value_property)
             .unwrap_or(0.0);
-        let units = instance.runtime_layout_style_uint_default(style_local, unit_name, 0);
+        let units = instance.runtime_layout_style_uint_default(style_local, unit_property, 0);
         self.position_inset_from_unit(value, units)
     }
 

@@ -6392,6 +6392,26 @@ impl RuntimeRenderPathCache {
         let Some(layout_bounds) = layout_bounds else {
             return instance.runtime_component_world_transform_with_bounds(local_id, graph, None);
         };
+        let Some(component) = instance.component(local_id) else {
+            return Mat2D::IDENTITY;
+        };
+        if component.type_name == "Artboard" {
+            return component.transform.world_transform;
+        }
+        if component.type_name != "LayoutComponent"
+            && !(component.type_name == "NestedArtboardLayout"
+                && layout_bounds.contains_key(&local_id))
+        {
+            let Some(parent_local) = component.parent_local else {
+                return component.transform.world_transform;
+            };
+            if !instance
+                .component(parent_local)
+                .is_some_and(|parent| parent.layout_chain_has_layout_component)
+            {
+                return component.transform.world_transform;
+            }
+        }
         let key = RuntimeWorldTransformCacheKey {
             cache_epoch: instance.cache_epoch(),
             layout_epoch: instance.layout_epoch(),

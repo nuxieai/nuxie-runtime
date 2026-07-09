@@ -398,19 +398,41 @@ the only memory the next session has. Update it every commit.
   `cargo test --workspace` passes, and the targeted
   `draw_path_skips_redundant_fill_rule_replay` regression test pins the cache
   behavior. M7 remains open.
+  A fresh `make golden-compare` before the next loop remained exact=263 /
+  exact-segments=584 / diverges=0. Per user request, nine bare
+  `make perf-hot-loop` attempts were run regardless of whether they would count
+  as M7 acceptance evidence. Only the second run counts so far:
+  Rust/C++=1.985 with C++ min-sum=0.948 ms and load under the fence. The other
+  raw pass runs are tracking-only because their C++ min-sums were above
+  0.95 ms, while the ninth run was a low-load sanity-band ratio failure at
+  Rust/C++=2.057 with C++ min-sum=0.942 ms. Profiling that failure put
+  `advance_blend_mode@0` mostly in draw/data-bind/linear-animation work
+  (100M repeat `total=32264 ms`, `advance=18660 ms`, `draw=9858 ms`) and
+  `animation_reset_cases@0` in draw-path/cache/world-transform/state-machine
+  work (100M repeat `total=16362 ms`, `advance=8668 ms`, `draw=8876 ms`);
+  `NullRenderPath::fill_rule` was no longer a top cost. C++ `Shape::draw`
+  passes ordinary shape world transforms directly through `ShapePaint::draw`,
+  so Rust now returns stored world transforms before entering the layout-bound
+  world-transform cache for ordinary non-layout components, while preserving
+  `LayoutComponent` and `NestedArtboardLayout` layout-bound cases. Focused
+  `animation_reset_cases@0` tracking was neutral/slightly total-better at
+  `total=16239 ms`; two post-slice bare hot-loop runs reported Rust/C++=1.951
+  and 1.983 but are tracking-only because C++ min-sums were 0.976/0.951 ms.
+  Full `make golden-compare` remains exact=263 / exact-segments=584 /
+  diverges=0, and `cargo test --workspace` passes. M7 remains open with one of
+  three required acceptance runs collected.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, shared shape path-command buffer scout, component-local shape-paint
   path dependency epoch scout, path-command capacity pre-reserve scout, or
   persisting data-bind source-list take/recycle scout; they preserved
   correctness but worsened or failed to move direct/fenced release timings.
-  Next priority is three clean low-load/sanity-band `make perf-hot-loop`
-  invocations because the latest tracking runs hover around the ratio fence
-  but remain outside the C++ sanity band. If C++ remains above the sanity band,
-  wait and retry rather than adding another optimization. If a sanity-band run
-  fails the ratio, re-profile remaining `advance_blend_mode` /
-  `animation_reset_cases` data-bind/color-animation hot sites and read the
-  matching C++ code before adding another runtime fast path.
+  Next priority is two more clean low-load/sanity-band `make perf-hot-loop`
+  acceptance invocations. If C++ remains above the sanity band, wait and retry
+  rather than adding another optimization. If another sanity-band run fails the
+  ratio, re-profile the remaining `advance_blend_mode` /
+  `animation_reset_cases` advance/data-bind/state-machine hot sites and read
+  the matching C++ code before adding another runtime fast path.
 
 ## Milestones
 
@@ -2081,6 +2103,26 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-09: [M7] Skip layout-bound world-transform cache for ordinary
+  components. A fresh pre-loop golden compare was unchanged at exact=263 /
+  exact-segments=584 / diverges=0. User-requested bare `make perf-hot-loop`
+  attempts were run regardless of whether they counted for M7 acceptance: one
+  valid acceptance run landed at Rust/C++=1.985 with C++ min-sum=0.948 ms, and
+  a later low-load sanity-band failure landed at Rust/C++=2.057 with C++
+  min-sum=0.942 ms. Profiles of that failure showed fill-rule replay was no
+  longer a top cost; `advance_blend_mode@0` sampled draw/data-bind/linear
+  animation work and `animation_reset_cases@0` sampled
+  draw-path/world-transform/state-machine work. C++ `Shape::draw` /
+  `ShapePaint::draw` uses the stored `worldTransform()` for ordinary shapes,
+  so Rust now returns the stored world transform before constructing a
+  layout-bound cache key for ordinary non-layout components, preserving
+  `LayoutComponent` and `NestedArtboardLayout` layout-bound behavior. Focused
+  `animation_reset_cases@0` tracking was neutral/slightly total-better
+  (`total=16239 ms`), and post-slice bare runs reported Rust/C++=1.951 and
+  1.983 but remain tracking-only because their C++ min-sums were
+  0.976/0.951 ms. Full `make golden-compare` reports exact=263 /
+  exact-segments=584 / diverges=0, and `cargo test --workspace` passes. M7
+  remains open with one of three required acceptance runs collected.
 - 2026-07-09: [M7] Skip redundant cached draw-path Fill fill-rule replay.
   Low-load follow-up perf attempts after the retained fill-rule/paint-cache
   slice reported Rust/C++=1.973, 1.982, 1.997, then 2.029; the 2.029 run had

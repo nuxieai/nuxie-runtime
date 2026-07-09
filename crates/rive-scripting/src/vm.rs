@@ -13,6 +13,7 @@
 
 mod bytecode;
 
+use std::cell::Cell;
 use std::ffi::CString;
 
 use bytecode::validate_luau_bytecode;
@@ -40,6 +41,7 @@ const MODULE_CACHE_KEY: &str = "rive_scripting_registered_modules";
 /// [`ScriptVm::lua`] exposes the full mlua-style API for binding work.
 pub struct ScriptVm {
     lua: Lua,
+    rive_globals_installed: Cell<bool>,
 }
 
 /// A luaur-backed scripted object instance table.
@@ -66,7 +68,10 @@ impl Default for ScriptVm {
 impl ScriptVm {
     /// Boot a VM with the Luau standard libraries open.
     pub fn new() -> Self {
-        Self { lua: Lua::new() }
+        Self {
+            lua: Lua::new(),
+            rive_globals_installed: Cell::new(false),
+        }
     }
 
     /// The underlying mlua-style handle (globals, create_function, userdata).
@@ -77,10 +82,13 @@ impl ScriptVm {
     /// Install the Rive globals that Luau bytecode resolves with GETIMPORT.
     ///
     /// This mirrors the relevant early part of C++ `ScriptingVM::init`:
-    /// globals are installed before any script/module bytecode is loaded.
-    /// Full sandboxing is still a follow-up because luaur does not yet expose
-    /// `luaL_sandbox`; the seam keeps that work localized here.
+    /// globals are installed before any script/module bytecode is loaded, then
+    /// the VM applies `luaL_sandbox` and `luaL_sandboxthread` via luaur.
     pub fn install_rive_globals(&self) -> Result<()> {
+        if self.rive_globals_installed.get() {
+            return Ok(());
+        }
+
         let vector =
             self.lua
                 .create_function(|_, (x, y, z): (Option<f32>, Option<f32>, Option<f32>)| {
@@ -96,6 +104,12 @@ impl ScriptVm {
             .lua
             .create_function(|_, _: MultiValue| Ok(Value::Nil))?;
         self.lua.globals().set("late", late)?;
+
+        let cache = self.ensure_module_cache()?;
+        self.install_require_global(cache)?;
+
+        self.lua.sandbox(true)?;
+        self.rive_globals_installed.set(true);
         Ok(())
     }
 
@@ -165,18 +179,20 @@ impl ScriptVm {
     }
 
     /// The registered-module cache table (stored in the Lua named registry,
-    /// mirroring C++ `registeredCacheTableKey`). First use installs a
-    /// `require` global that resolves plain module names against it — the
-    /// contract Rive scripts rely on (`require("Transform2")`), implemented
-    /// in C++ by `ScriptingVM::executeModule`'s cache plus Rive's custom
-    /// `require`.
-    fn module_cache(&self) -> Result<Table> {
+    /// mirroring C++ `registeredCacheTableKey`).
+    fn ensure_module_cache(&self) -> Result<Table> {
         if let Ok(cache) = self.lua.named_registry_value::<Table>(MODULE_CACHE_KEY) {
             return Ok(cache);
         }
         let cache = self.lua.create_table();
         self.lua
             .set_named_registry_value(MODULE_CACHE_KEY, &cache)?;
+        Ok(cache)
+    }
+
+    /// Install Rive's custom `require`, which resolves plain module names
+    /// against the registered-module cache (`require("Transform2")`).
+    fn install_require_global(&self, cache: Table) -> Result<()> {
         let lookup = cache.clone();
         let require = self.lua.create_function(move |_, name: String| {
             match lookup.get::<Value>(name.as_str())? {
@@ -185,7 +201,11 @@ impl ScriptVm {
             }
         })?;
         self.lua.globals().set("require", require)?;
-        Ok(cache)
+        Ok(())
+    }
+
+    fn module_cache(&self) -> Result<Table> {
+        self.ensure_module_cache()
     }
 
     /// The module previously registered under `name`, if any.
@@ -197,6 +217,11 @@ impl ScriptVm {
     /// its result under `name` so scripts can `require` it — the twin of
     /// C++ `ScriptingVM::registerModule`. Idempotent per name.
     pub fn register_module(&self, name: &str, payload: &[u8]) -> Result<Value> {
+        self.install_rive_globals()?;
+        self.register_module_after_init(name, payload)
+    }
+
+    fn register_module_after_init(&self, name: &str, payload: &[u8]) -> Result<Value> {
         let cache = self.module_cache()?;
         if let value @ (Value::Table(_) | Value::Function(_)) = cache.get::<Value>(name)? {
             return Ok(value);

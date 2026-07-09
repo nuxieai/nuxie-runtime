@@ -487,17 +487,17 @@ the only memory the next session has. Update it every commit.
     (a) Scripting seam: runtime-owned ScriptingVm/ScriptInstance/
         ScriptHost traits are landed, luaur implements them behind the
         `rive` `scripting` feature, Rive globals install before bytecode
-        load, native-vector `Vector` is bound, and malformed/truncated
-        bytecode is preflighted before the unsafe luaur loader. The C++
+        load, native-vector `Vector` is bound, malformed/truncated
+        bytecode is preflighted before the unsafe luaur loader, and VM init
+        now applies luaur's `luaL_sandbox`/`luaL_sandboxthread` equivalent
+        after installing Rive globals and `require`. The C++
         golden runner can now be built WITH scripting via
         `make scripted-golden-runner`; scripted smokes for
         `script_artboard_test.riv` and `script_inputs_test_1.riv` produce
         real streams without the FileAssetContents-stripping harness path.
-        Remaining:
-        close full sandbox parity (`luaL_sandbox` equivalent or recorded
-        luaur gap), then port bindings corpus-file-by-corpus-file in the
-        census order and regenerate scripted corpus statuses against the
-        scripted C++ reference streams.
+        Remaining: port bindings corpus-file-by-corpus-file in the census
+        order and regenerate scripted corpus statuses against the scripted
+        C++ reference streams.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
     (c) Hardening: two audit scouts are running NOW (cross-language
@@ -3600,6 +3600,19 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Closed the luaur VM-init sandbox gap for the scripting
+  seam. `ScriptVm::install_rive_globals` is now idempotent, installs
+  `Vector`, `late`, the registered-module cache, and Rive `require` before
+  applying luaur's `luaL_sandbox`/`luaL_sandboxthread` equivalent, and direct
+  `register_module` goes through that initialized path. VM boot tests now pin
+  Rive globals after sandboxing, read-only library tables, custom `require`,
+  and repeat installation. Verification: `cargo test -p rive-scripting
+  --features luau --quiet`, `cargo test --workspace`, `make golden-compare`,
+  `cargo fmt --all -- --check`, and `git diff --check` pass; golden compare
+  remains exact=263 / exact-segments=584 / diverges=0, parked gated=6 /
+  harness=26. Next scripting step: port bindings corpus-file-by-corpus-file
+  in census order against the scripted C++ reference streams.
 
 - 2026-07-09: [M8] Landed the runtime-owned scripting seam. `rive-runtime`
   now owns `ScriptingVm`/`ScriptInstance`/`ScriptHost` plus VM-neutral

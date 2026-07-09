@@ -72,6 +72,58 @@ fn luau_runtime_errors_surface_as_rust_errors() {
 }
 
 #[test]
+fn rive_globals_are_installed_before_sandboxing() {
+    let vm = ScriptVm::new();
+    vm.install_rive_globals().unwrap();
+
+    let vector: Value = vm.eval("return Vector(1, 2)").unwrap();
+    assert!(matches!(vector, Value::Vector(_)), "got: {vector:?}");
+
+    let late: Value = vm.eval("return late('deferred')").unwrap();
+    assert!(matches!(late, Value::Nil), "got: {late:?}");
+
+    let err = vm
+        .eval::<Value>("return require('MissingModule')")
+        .unwrap_err();
+    assert!(
+        format!("{err}").contains("module 'MissingModule' not found"),
+        "got: {err}"
+    );
+}
+
+#[test]
+fn rive_sandbox_marks_libraries_readonly() {
+    let vm = ScriptVm::new();
+    vm.install_rive_globals().unwrap();
+
+    let math: Table = vm.lua().globals().get("math").unwrap();
+    assert!(math.is_readonly());
+
+    let err = vm
+        .eval::<()>("math.abs = function(value) return value end")
+        .unwrap_err();
+    assert!(format!("{err}").contains("readonly"), "got: {err}");
+}
+
+#[test]
+fn installing_rive_globals_is_idempotent_after_sandboxing() {
+    let vm = ScriptVm::new();
+    vm.install_rive_globals().unwrap();
+    vm.install_rive_globals().unwrap();
+
+    let vector: Value = vm.eval("return Vector(3, 4)").unwrap();
+    assert!(matches!(vector, Value::Vector(_)), "got: {vector:?}");
+
+    let err = vm
+        .eval::<Value>("return require('StillMissing')")
+        .unwrap_err();
+    assert!(
+        format!("{err}").contains("module 'StillMissing' not found"),
+        "got: {err}"
+    );
+}
+
+#[test]
 fn rejects_garbage_bytecode_with_an_error_not_a_crash() {
     let vm = ScriptVm::new();
     let err = vm

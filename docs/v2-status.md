@@ -475,6 +475,16 @@ the only memory the next session has. Update it every commit.
   `advance_blend_mode`=3.547/3.619, `animation_reset_cases`=2.702-2.997,
   `spotify_kids_demo@0`=2.608, `ai_assitant@0`=1.919,
   `animated_clipping@0`=1.802, and `align_target@0`=1.719.
+  A follow-up user-requested M8 open-fence tracking run deliberately ignored
+  the load fence with `make perf-hot-loop PERF_MAX_RATIO=999`. It reports
+  aggregate min Rust/C++=2.050, Rust min-sum=2.106 ms, C++ min-sum=1.027 ms,
+  with load 9.93/11.95/11.55 before and 7.48/10.96/11.22 after. This is
+  tracking-only because load and C++ min-sum remain outside the formal sanity
+  fence, but it confirms the current tree is near the established M7 boundary
+  rather than drifting back toward the earlier 2.8-3.2 band. Visible ratios
+  are `advance_blend_mode`=3.035/3.334, `animation_reset_cases`=2.262-2.732,
+  `spotify_kids_demo@0`=2.032, `ai_assitant@0`=1.983,
+  `animated_clipping@0`=1.600, and `align_target@0`=1.553.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, shared shape path-command buffer scout, component-local shape-paint
@@ -537,11 +547,17 @@ the only memory the next session has. Update it every commit.
         `image_scripting_property_value.riv` and
         `scripted_property_image.riv` from missing ScriptAsset to the sharper
         missing `viewModel`/`image` userdata bindings.
-        Remaining: give golden-compare simultaneous default/scripted runner
-        paths, regenerate the 26 harness statuses against real reference
-        streams, then close the first focused difference: C++ allocates child
-        artboard paints during script-driven instance construction while Rust
-        allocates them lazily during draw.
+        `make scripted-golden-compare` now builds mode-specific C++/Rust
+        binaries, filters the corpus by milestone, and verifies C++ streams
+        even for unsupported entries. Its first 26-file pass moves 23 entries
+        past the old crash label; three true harness failures remain:
+        `data_binding_artboards_test.riv` (SIGSEGV), `data_viz_demo.riv` (AABB
+        inset assertion), and `scripted_memory_leak.riv` (no stream).
+        Remaining: reclassify the 23 runnable entries with named Rust
+        diagnostics, repair the three true C++ harness failures, then close the
+        first focused difference: C++ allocates child artboard paints during
+        script-driven instance construction while Rust allocates them lazily
+        during draw.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
     (c) Hardening: two audit scouts are running NOW (cross-language
@@ -3644,6 +3660,20 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Added a dedicated scripted corpus lane. The C++ runner now
+  supports a mode-specific target name, the Rust feature build is copied to a
+  stable scripted path, and golden-compare can filter by milestone while
+  requiring C++ streams for unsupported entries. `make
+  scripted-golden-compare` therefore exercises the 26-file harness queue
+  without changing the default unscripted ratchet. First run: 23 files emit
+  valid scripted C++ streams; only `data_binding_artboards_test.riv`
+  (SIGSEGV), `data_viz_demo.riv` (AABB inset assertion), and
+  `scripted_memory_leak.riv` (no stream) remain harness failures. Verification:
+  `cargo test -p golden-compare`, shell syntax/dry-run checks, and the full
+  scripted target run; the target fails only on those three now-named files.
+  Next: reclassify the 23 runnable files with their first Rust diagnostic,
+  leaving `milestone = "harness"` only on the three actual C++ failures.
 
 - 2026-07-09: [M8] Repaired the scripted C++ oracle mode switch. Default and
   scripted builds share an output path but use different object/library trees;

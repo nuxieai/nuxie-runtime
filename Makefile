@@ -1,4 +1,4 @@
-.PHONY: schema check test inspect graph cpp-probe golden-runner scripted-golden-runner rust-golden-runner golden-compare perf-compare perf-corpus perf-hot-loop perf-json capi-smoke cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare
+.PHONY: schema check test inspect graph cpp-probe golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare perf-compare perf-corpus perf-hot-loop perf-json capi-smoke cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 DEFS_DIR ?= $(RIVE_RUNTIME_DIR)/dev/defs
@@ -7,7 +7,9 @@ RUST_PROFILE ?= debug
 RUST_GOLDEN_RUNNER_FLAGS = $(if $(filter release,$(RUST_PROFILE)),--release,)
 CPP_PROBE ?= $(CURDIR)/tools/cpp-probe/build/$(shell uname -s | tr A-Z a-z | sed 's/darwin/macosx/')/bin/$(CPP_CONFIG)/rive_cpp_probe
 GOLDEN_RUNNER ?= $(CURDIR)/tools/golden-runner/build/$(shell uname -s | tr A-Z a-z | sed 's/darwin/macosx/')/bin/$(CPP_CONFIG)/rive_golden_runner
+SCRIPTED_GOLDEN_RUNNER ?= $(CURDIR)/tools/golden-runner/build/$(shell uname -s | tr A-Z a-z | sed 's/darwin/macosx/')/bin/$(CPP_CONFIG)/rive_golden_runner_scripted
 RUST_GOLDEN_RUNNER ?= $(CURDIR)/target/$(RUST_PROFILE)/rust-golden-runner
+SCRIPTED_RUST_GOLDEN_RUNNER ?= $(CURDIR)/target/$(RUST_PROFILE)/rust-golden-runner-scripted
 PERF_FILE ?= $(RIVE_RUNTIME_DIR)/tests/unit_tests/assets/shapetest.riv
 PERF_SAMPLES ?= 0
 PERF_ITERATIONS ?= 10
@@ -47,13 +49,20 @@ golden-runner:
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" tools/golden-runner/build.sh "$(CPP_CONFIG)"
 
 scripted-golden-runner:
-	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" RIVE_GOLDEN_WITH_SCRIPTING=1 tools/golden-runner/build.sh "$(CPP_CONFIG)"
+	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" RIVE_GOLDEN_WITH_SCRIPTING=1 RIVE_GOLDEN_RUNNER_NAME=rive_golden_runner_scripted tools/golden-runner/build.sh "$(CPP_CONFIG)"
 
 rust-golden-runner:
 	cargo build --quiet $(RUST_GOLDEN_RUNNER_FLAGS) -p rust-golden-runner
 
+scripted-rust-golden-runner:
+	cargo build --quiet $(RUST_GOLDEN_RUNNER_FLAGS) -p rust-golden-runner --features scripting
+	cp "$(RUST_GOLDEN_RUNNER)" "$(SCRIPTED_RUST_GOLDEN_RUNNER)"
+
 golden-compare: golden-runner rust-golden-runner
 	GOLDEN_RUNNER="$(GOLDEN_RUNNER)" RUST_GOLDEN_RUNNER="$(RUST_GOLDEN_RUNNER)" RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo run --quiet -p golden-compare --bin golden-compare -- --corpus corpus.toml --cpp-runner "$(GOLDEN_RUNNER)" --rust-runner "$(RUST_GOLDEN_RUNNER)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)"
+
+scripted-golden-compare: scripted-golden-runner scripted-rust-golden-runner
+	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo run --quiet -p golden-compare --bin golden-compare -- --corpus corpus.toml --milestone harness --verify-unsupported-cpp --cpp-runner "$(SCRIPTED_GOLDEN_RUNNER)" --rust-runner "$(SCRIPTED_RUST_GOLDEN_RUNNER)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)"
 
 perf-compare: CPP_CONFIG=release
 perf-compare: RUST_PROFILE=release

@@ -7,6 +7,7 @@ local with_scripting = os.getenv('RIVE_GOLDEN_WITH_SCRIPTING') == '1'
 local scripting_libdir = os.getenv('RIVE_GOLDEN_SCRIPTING_LIBDIR')
 local decoders_libdir = os.getenv('RIVE_GOLDEN_DECODERS_LIBDIR')
 local obj_suffix = with_scripting and '/scripting' or ''
+local runner_name = os.getenv('RIVE_GOLDEN_RUNNER_NAME') or 'rive_golden_runner'
 
 local function first_dir(pattern)
     local matches = os.matchdirs(pattern)
@@ -129,6 +130,7 @@ project('rive_golden_runner')
 kind('ConsoleApp')
 language('C++')
 cppdialect('C++17')
+targetname(runner_name)
 targetdir('%{cfg.system}/bin/%{cfg.buildcfg}')
 objdir('%{cfg.system}/obj/%{cfg.buildcfg}' .. obj_suffix)
 includedirs(include_dirs)

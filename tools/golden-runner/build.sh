@@ -3,6 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 rive_runtime="${RIVE_RUNTIME_DIR:-/Users/levi/dev/oss/rive-runtime}"
+runner_name="${RIVE_GOLDEN_RUNNER_NAME:-rive_golden_runner}"
 
 config="${1:-debug}"
 if [[ "$config" == "clean" ]]; then
@@ -61,5 +62,5 @@ case "$(uname -s)" in
     Linux) runner_system="linux" ;;
     *) runner_system="windows" ;;
 esac
-rm -f "$script_dir/build/$runner_system/bin/$config/rive_golden_runner"
+rm -f "$script_dir/build/$runner_system/bin/$config/$runner_name"
 make "config=$config" -j"$jobs"

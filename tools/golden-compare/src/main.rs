@@ -16,7 +16,10 @@ fn main() {
 
 fn run() -> Result<(), String> {
     let options = Options::parse(env::args().skip(1).collect())?;
-    let corpus = parse_corpus(&options.corpus)?;
+    let mut corpus = parse_corpus(&options.corpus)?;
+    if let Some(milestone) = options.milestone.as_deref() {
+        corpus.retain(|entry| entry.milestone.as_deref() == Some(milestone));
+    }
     if corpus.is_empty() {
         return Err(format!(
             "corpus {} contains no [[file]] entries",
@@ -49,6 +52,17 @@ fn run() -> Result<(), String> {
         }
         match entry.status {
             Status::UnsupportedFeature => {
+                if options.verify_unsupported_cpp {
+                    let file = resolve_asset_path(&entry.path, &options.rive_runtime_dir);
+                    match run_stream(&options.cpp_runner, entry, &file, &corpus_dir) {
+                        Ok(cpp_stream) => println!(
+                            "[unsupported-feature] {}: c++ stream ok ({} bytes)",
+                            entry.id,
+                            cpp_stream.len()
+                        ),
+                        Err(error) => failures.push(format!("{}: {error}", entry.id)),
+                    }
+                }
                 println!(
                     "[unsupported-feature] {}: skipped ({})",
                     entry.id,
@@ -155,6 +169,8 @@ struct Options {
     cpp_runner: PathBuf,
     rust_runner: Option<PathBuf>,
     rive_runtime_dir: PathBuf,
+    milestone: Option<String>,
+    verify_unsupported_cpp: bool,
 }
 
 impl Options {
@@ -164,6 +180,8 @@ impl Options {
             .map(PathBuf::from)
             .unwrap_or_else(default_cpp_runner);
         let mut rust_runner = None;
+        let mut milestone = None;
+        let mut verify_unsupported_cpp = false;
         let mut rive_runtime_dir = env::var_os("RIVE_RUNTIME_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("/Users/levi/dev/oss/rive-runtime"));
@@ -183,9 +201,11 @@ impl Options {
                 "--cpp-runner" => cpp_runner = PathBuf::from(value(arg)?),
                 "--rust-runner" => rust_runner = Some(PathBuf::from(value(arg)?)),
                 "--rive-runtime-dir" => rive_runtime_dir = PathBuf::from(value(arg)?),
+                "--milestone" => milestone = Some(value(arg)?),
+                "--verify-unsupported-cpp" => verify_unsupported_cpp = true,
                 "--help" | "-h" => {
                     println!(
-                        "usage: golden-compare [--corpus corpus.toml] --cpp-runner <path> [--rust-runner <path>]"
+                        "usage: golden-compare [--corpus corpus.toml] [--milestone name] [--verify-unsupported-cpp] --cpp-runner <path> [--rust-runner <path>]"
                     );
                     std::process::exit(0);
                 }
@@ -199,6 +219,8 @@ impl Options {
             cpp_runner,
             rust_runner,
             rive_runtime_dir,
+            milestone,
+            verify_unsupported_cpp,
         })
     }
 }

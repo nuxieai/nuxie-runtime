@@ -867,6 +867,33 @@ the only memory the next session has. Update it every commit.
     (collapse) committed as 2fecd6e; bugs #2-#5 in progress in the main
     checkout under commit-per-bug discipline.
 
+28. AUDIT FIXES LANDED (lane-audit-fixes, commits 2fecd6e / 1bb391f /
+    d682341 / f0cda72 / 34e30d8): ALL FIVE bugs from items 21-25 are
+    FIXED with red-verified in-crate regression tests; golden-compare
+    byte-identical at every commit (bugs were corpus-invisible as
+    predicted); cargo test --workspace 1100/0.
+    CORRECTIONS TO THE AUDIT RECORD: item 23's premise was partially
+    wrong — set_transform_property_with_key DOES bump cache_epoch
+    indirectly (add_dirt -> on_component_dirty -> mark_changed); the
+    landed fix is the explicit prepared_epoch/world_epoch keying, which
+    is the durable invariant. NOTE for a future M9 perf pass:
+    on_component_dirty's blanket cache_epoch bump currently defeats M7
+    cross-frame paint retention for ANY animated content — removing it
+    is a real optimization now made safe for world gradients by the
+    explicit keying. Item 24's fix was course-corrected BY the C++
+    probe: BeforeStatefulAdvance applies unconditionally, After skips
+    stateful (stepped value lands next pre-step pass, C++ cadence).
+    MAIN-LOOP FOLLOW-UPS: (a) add corpus fixtures for the six audit
+    scenarios (deep solo no-SM; display:none->Node->Shape; owned-context
+    instance swap; gradient stroke + transform anim via persistent
+    cache; interpolator set+advance(0); runtime fillRule write) and
+    remove the capi-vm lane's three item-22 caveat docs; (b) residual:
+    path_kind/clockwise selection + Stroke.transformAffectsStroke are
+    still import-time snapshots (runtime fillRule 0<->1 renders live;
+    to/from 2 doesn't flip winding selection) — decide fix or document;
+    (c) nested paint prep folds child prepared_epoch unconditionally —
+    narrow per-child only if profiling shows churn.
+
 ## Known Divergences
 
 - There are no active `status = "not-yet"` entries.

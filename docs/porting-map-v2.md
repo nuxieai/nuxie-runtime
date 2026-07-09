@@ -324,6 +324,57 @@ Target: ongoing from week 4
 Public API and C ABI published in-repo; advance/draw performance within target
 of C++ on the corpus.
 
+## #V2-9: Closeout Hardening (M8)
+
+Blocked by: M7 (complete)
+Added 2026-07-09 by user decision: close out the runtime port fully before
+Phase R — scripting supported, the C ABI complete, and confidence in the port
+raised from "corpus-verified" to "hardened."
+
+### Scope
+
+1. **Scripting integration.** Land the seam from the scripting lane report
+   (traits `ScriptingVm`/`ScriptInstance`/`ScriptHost` defined in
+   `rive-runtime`, implemented by `rive-scripting`, wired in `crates/rive`
+   behind a feature). Sandbox parity per the lane findings (globals before
+   `luau_load`, `lua_l_sandbox` order), native-vector `Vector` binding, then
+   port bindings corpus-file-by-corpus-file (~half the 18.2k C++ glue per the
+   census, in the lane report's order). HARNESS PREREQUISITE: the C++ golden
+   runner must be built WITH scripting (reference build supports it) so
+   scripted files get real reference streams instead of the current
+   FileAssetContents-stripped ones; re-generate those corpus entries' status
+   once both sides run scripts. Acceptance: the gated/harness scripting files
+   become exact (or carry a sharper named diagnostic).
+2. **C ABI completion** (from the capi lane follow-ups): pointer events
+   (`pointer_down/move/up`), view-model/data-bind context access, an additive
+   cache-holding draw that reuses render handles across frames now that draw
+   retention landed, and one recorded decision aligning default-state-machine
+   selection between capi and the golden runner.
+3. **Hardening (the Bun-migration lessons, 2026-07-09):**
+   - Semantic-trap audit: fix the findings from the cross-language sweep
+     (panic-reachable `unwrap`/`expect`/indexing on weird-but-accepted
+     inputs, float `partial_cmp().unwrap()`, `as`-cast truncation, overflow
+     semantics) — release is `panic=abort`, so every reachable panic is a
+     process kill in an embedder.
+   - Adversarial-review findings on the perf-era retention/epoch code and
+     the `unsafe` inventory: fix or explicitly accept each with rationale.
+   - Fuzzing wired into CI: extend beyond import to advance/draw/pointer
+     paths (mutated-but-importable files, long random input scripts).
+   - `PORTING.md`: distill the C++→Rust idiom codex (rcp→arena, virtuals→
+     enum dispatch, pointer graphs→dense slots, dirt bits, callback
+     canonicalization) from the status archives into one document — prep
+     artifact for Phase R and any new contributor.
+4. **Residuals:** drain or explicitly re-gate the remaining `harness` bucket;
+   the two view-model-convention residuals stay gated on component-list
+   instancing per the recorded decision.
+
+### Milestone M8 (exit)
+
+Scripting corpus files verified against a scripting-enabled C++ runner; C ABI
+covers the embed loop including pointer events and retained-draw; both audits
+resolved; fuzzers in CI with zero known reachable panics from accepted files;
+`PORTING.md` committed. Then Phase R is a clean start.
+
 ## Phase R: Renderer Port (separate map)
 
 The eventual Rust renderer — a faithful port of the C++ Rive Renderer's

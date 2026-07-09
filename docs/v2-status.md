@@ -11,7 +11,7 @@ the only memory the next session has. Update it every commit.
   exact-segments=584, diverges=0, unsupported-feature=32, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
   gated=6 harness=26
-- Current milestone: **V2 complete — Phase R requires explicit user activation**
+- Current milestone: **M8 — Closeout Hardening (#V2-9): scripting, C ABI, audits, fuzzing, PORTING.md**
 
 ## M7 Perf Fence
 
@@ -436,12 +436,32 @@ the only memory the next session has. Update it every commit.
 - [x] M5: Data binding exact incl. external view-model mutation
 - [x] M6: Layout + text verified per declared corpus modes; audio/scripting gated with diagnostics
 - [x] M7: Public `rive` API + C ABI; perf within target of C++
+- [ ] M8: Closeout hardening — scripting integrated, C ABI complete, audits/fuzzing clean, PORTING.md (#V2-9, added 2026-07-09)
 
 ## Next
 
 1. V2 is complete: M0-M7 are checked below, `make golden-compare` passes at exact=263 / exact-segments=584 / diverges=0, and `cargo test --workspace` passes.
 2. Do not start Phase R from the V2 goal loop. Phase R is tracked in `docs/renderer-port-map.md` and requires explicit user activation before any renderer-port work begins.
 3. Parked `unsupported-feature`, `gated`, and `harness` entries remain documented diagnostics/backlog, not active V2 milestone work.
+
+19. M8 OPENED (user decision 2026-07-09; scope in porting-map-v2 #V2-9).
+    Queue, in order:
+    (a) Scripting seam: land ScriptingVm/ScriptInstance/ScriptHost traits
+        in rive-runtime per the lane report (item 14), sandbox parity,
+        native-vector binding; build the C++ golden runner WITH scripting
+        so scripted corpus files get real reference streams; then port
+        bindings corpus-file-by-corpus-file in the census order.
+    (b) C ABI: pointer events, view-model contexts, cache-holding draw
+        reusing render handles, default-SM selection alignment decision.
+    (c) Hardening: two audit scouts are running NOW (cross-language
+        semantic traps; adversarial review of retention/epoch + unsafe
+        code) — fix or explicitly accept each finding when their reports
+        land here. Extend cargo-fuzz to advance/draw/pointer paths in CI.
+    (d) PORTING.md: distill the C++->Rust idiom codex from the status
+        archives (prep artifact for Phase R).
+    Phase R remains gated on explicit user activation; its map now also
+    records a Bun-style big-bang execution option to choose at
+    activation.
 
 ## Known Divergences
 

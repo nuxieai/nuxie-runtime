@@ -91,6 +91,33 @@ the other side of it.
   new `corpus-r.toml` (GM streams + riv files × modes × backends), tracked in
   the status file exactly like the V2 exact count.
 
+## Execution Strategy: Incremental vs Big-Bang (decide at activation)
+
+Added 2026-07-09, informed by Bun's Zig→Rust migration
+(https://bun.com/blog/bun-in-rust): 1,448 files mechanically translated in 11
+days by ~64 parallel agents — translate everything (tree deliberately
+broken), burn the compiler-error list as a work queue with per-task
+implementer → 2 adversarial split-context reviewers → fixer pipelines, then
+converge on a language-independent test oracle.
+
+Phase R qualifies for that strategy: a bounded file set (~26k lines of
+algorithm layer + shaders), mechanical-translation viability, and a strong
+independent oracle (#R-0 pixel goldens + the FFI renderer as control group).
+The V2 single-writer rule is a property of the always-green ratchet — during
+a big-bang translation phase there is no green to protect, so it is replaced
+by Bun-style worktree discipline (per-file commits only; no `git stash`/
+`reset`; no slow commands in workers) until convergence, when the ratchet
+resumes as the gate.
+
+Big-bang variant of the tickets: #R-0 unchanged (the oracle comes first
+either way) → translate ALL algorithm-layer files in parallel (PORTING.md
+idiom codex as the shared brief) → compiler-error work queue with
+implementer/reviewer/fixer pipelines across worktrees → first-triangle smoke
+→ GM-stream pixel convergence (#R-3) → perf (#R-4). Expected wall-clock:
+days rather than weeks, at materially higher token cost. Choose at
+activation based on budget and appetite; the incremental R0–R5 path below
+remains the default.
+
 ## #R-0: Pixel Golden Harness
 
 Blocked by: V2 M7 + user activation

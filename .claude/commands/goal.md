@@ -10,10 +10,12 @@ both before doing anything else. This command may be invoked hundreds of
 times across sessions; each invocation should move the project measurably
 toward completion and leave a clean handoff.
 
-**Complete means:** every exit criterion of milestones M0–M7 in
+**Complete means:** every exit criterion of milestones M0–M8 in
 `docs/porting-map-v2.md` is checked off in `docs/v2-status.md`, and
-`make golden-compare` plus `cargo test --workspace` pass. When that is true,
-say so and stop — do not invent new scope. A follow-on renderer port is
+`make golden-compare` plus `cargo test --workspace` pass. (M8 — closeout
+hardening: scripting integration, C-ABI completion, audits/fuzzing,
+PORTING.md — was added 2026-07-09 by user decision; see #V2-9.) When that is
+true, say so and stop — do not invent new scope. A follow-on renderer port is
 planned in `docs/renderer-port-map.md` (Phase R, tickets #R-0–#R-5), but it
 requires explicit user activation: when the user says to begin Phase R, adopt
 that map's tickets and verification model under these same ground rules,

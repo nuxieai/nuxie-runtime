@@ -8,9 +8,9 @@ the only memory the next session has. Update it every commit.
 - Exact-status segments (file × sample): 584 across 263 files (strict
   exact=573/252; tolerant=11/11; structural=0/0)
 - Current compare: `make golden-compare` reports exact=263,
-  exact-segments=584, diverges=0, unsupported-feature=32, not-yet=0
+  exact-segments=584, diverges=5, unsupported-feature=27, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
-  gated=6 harness=26
+  M8=18 gated=6 harness=3
 - Current milestone: **M8 — Closeout Hardening (#V2-9): scripting, C ABI, audits, fuzzing, PORTING.md**
 
 ## M7 Perf Fence
@@ -548,14 +548,15 @@ the only memory the next session has. Update it every commit.
         `scripted_property_image.riv` from missing ScriptAsset to the sharper
         missing `viewModel`/`image` userdata bindings.
         `make scripted-golden-compare` now builds mode-specific C++/Rust
-        binaries, filters the corpus by milestone, and verifies C++ streams
-        even for unsupported entries. Its first 26-file pass moves 23 entries
-        past the old crash label; three true harness failures remain:
+        binaries and ratchets the 23 runnable M8 entries: five valid divergent
+        streams and eighteen verified feature diagnostics. The C++ `Vector`
+        static table is ported, advancing `script_affects_has_changed.riv` to
+        a stream divergence. `make scripted-harness-compare` separately probes
+        the three true harness failures that remain:
         `data_binding_artboards_test.riv` (SIGSEGV), `data_viz_demo.riv` (AABB
         inset assertion), and `scripted_memory_leak.riv` (no stream).
-        Remaining: reclassify the 23 runnable entries with named Rust
-        diagnostics, repair the three true C++ harness failures, then close the
-        first focused difference: C++ allocates child artboard paints during
+        Remaining: repair those three C++ harness failures, then close the first
+        focused difference: C++ allocates child artboard paints during
         script-driven instance construction while Rust allocates them lazily
         during draw.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
@@ -3674,6 +3675,21 @@ the only memory the next session has. Update it every commit.
   scripted target run; the target fails only on those three now-named files.
   Next: reclassify the 23 runnable files with their first Rust diagnostic,
   leaving `milestone = "harness"` only on the three actual C++ failures.
+
+- 2026-07-09: [M8] Drained the stale 26-file scripted harness bucket into
+  queryable work. Ported the complete C++ `Vector` static-method table while
+  retaining Rust's callable constructor compatibility; this advances
+  `script_affects_has_changed.riv` from a raw Luau error to a valid stream.
+  The 23 C++-runnable files are now `milestone = "M8"`: five `diverges` and
+  eighteen `unsupported-feature` entries with runner-mode-aware verified
+  diagnostics. Only `data_binding_artboards_test.riv`, `data_viz_demo.riv`,
+  and `scripted_memory_leak.riv` remain `harness`. A green
+  `make scripted-golden-compare` ratchets the runnable lane; the separate
+  `make scripted-harness-compare` probes the known C++ failures. Verification:
+  scripted summary diverges=5/unsupported=18; default `make golden-compare`
+  exact=263/exact-segments=584/diverges=5/unsupported=27; full
+  `cargo test --workspace` passes. Next: repair the three C++ harness failures,
+  then resolve the first scripted stream divergence.
 
 - 2026-07-09: [M8] Repaired the scripted C++ oracle mode switch. Default and
   scripted builds share an output path but use different object/library trees;

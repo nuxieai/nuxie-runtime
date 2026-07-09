@@ -105,16 +105,7 @@ impl ScriptVm {
             return Ok(());
         }
 
-        let vector =
-            self.lua
-                .create_function(|_, (x, y, z): (Option<f32>, Option<f32>, Option<f32>)| {
-                    Ok(LuaVector::new(
-                        x.unwrap_or(0.0),
-                        y.unwrap_or(0.0),
-                        z.unwrap_or(0.0),
-                    ))
-                })?;
-        self.lua.globals().set("Vector", vector)?;
+        install_vector_global(&self.lua)?;
 
         let late = self
             .lua
@@ -304,6 +295,120 @@ impl ScriptVm {
     pub fn script_instance_from_table(&self, table: Table) -> LuaScriptInstance {
         LuaScriptInstance::with_renderer_bindings(table, self.renderer_bindings.clone())
     }
+}
+
+// Coarsely translated from rive-runtime/src/lua/math/lua_vec2d.cpp. The C++
+// API is a static-method table; __call retains the constructor shape exposed
+// by the initial Rust scripting seam.
+fn install_vector_global(lua: &Lua) -> Result<()> {
+    let vector = lua.create_table();
+    vector.set(
+        "distance",
+        lua.create_function(|_, (lhs, rhs): (LuaVector, LuaVector)| {
+            let x = lhs.x() - rhs.x();
+            let y = lhs.y() - rhs.y();
+            Ok((x * x + y * y).sqrt())
+        })?,
+    )?;
+    vector.set(
+        "distanceSquared",
+        lua.create_function(|_, (lhs, rhs): (LuaVector, LuaVector)| {
+            let x = lhs.x() - rhs.x();
+            let y = lhs.y() - rhs.y();
+            Ok(x * x + y * y)
+        })?,
+    )?;
+    vector.set(
+        "dot",
+        lua.create_function(|_, (lhs, rhs): (LuaVector, LuaVector)| {
+            Ok(lhs.x() * rhs.x() + lhs.y() * rhs.y())
+        })?,
+    )?;
+    vector.set(
+        "cross",
+        lua.create_function(|_, (lhs, rhs): (LuaVector, LuaVector)| {
+            Ok(lhs.x() * rhs.y() - lhs.y() * rhs.x())
+        })?,
+    )?;
+    vector.set(
+        "scaleAndAdd",
+        lua.create_function(|_, (a, b, scale): (LuaVector, LuaVector, f32)| {
+            Ok(LuaVector::new(
+                a.x() + b.x() * scale,
+                a.y() + b.y() * scale,
+                0.0,
+            ))
+        })?,
+    )?;
+    vector.set(
+        "scaleAndSub",
+        lua.create_function(|_, (a, b, scale): (LuaVector, LuaVector, f32)| {
+            Ok(LuaVector::new(
+                a.x() - b.x() * scale,
+                a.y() - b.y() * scale,
+                0.0,
+            ))
+        })?,
+    )?;
+    vector.set(
+        "lerp",
+        lua.create_function(|_, (lhs, rhs, factor): (LuaVector, LuaVector, f32)| {
+            Ok(LuaVector::new(
+                lhs.x() + (rhs.x() - lhs.x()) * factor,
+                lhs.y() + (rhs.y() - lhs.y()) * factor,
+                0.0,
+            ))
+        })?,
+    )?;
+    vector.set(
+        "xy",
+        lua.create_function(|_, (x, y): (f32, f32)| Ok(LuaVector::new(x, y, 0.0)))?,
+    )?;
+    vector.set(
+        "origin",
+        lua.create_function(|_, ()| Ok(LuaVector::zero()))?,
+    )?;
+    vector.set(
+        "length",
+        lua.create_function(|_, value: LuaVector| {
+            Ok((value.x() * value.x() + value.y() * value.y()).sqrt())
+        })?,
+    )?;
+    vector.set(
+        "lengthSquared",
+        lua.create_function(|_, value: LuaVector| {
+            Ok(value.x() * value.x() + value.y() * value.y())
+        })?,
+    )?;
+    vector.set(
+        "normalized",
+        lua.create_function(|_, value: LuaVector| {
+            let length_squared = value.x() * value.x() + value.y() * value.y();
+            let scale = if length_squared > 0.0 {
+                1.0 / length_squared.sqrt()
+            } else {
+                1.0
+            };
+            Ok(LuaVector::new(value.x() * scale, value.y() * scale, 0.0))
+        })?,
+    )?;
+
+    let metatable = lua.create_table();
+    metatable.set(
+        "__call",
+        lua.create_function(
+            |_, (_table, x, y, z): (Table, Option<f32>, Option<f32>, Option<f32>)| {
+                Ok(LuaVector::new(
+                    x.unwrap_or(0.0),
+                    y.unwrap_or(0.0),
+                    z.unwrap_or(0.0),
+                ))
+            },
+        )?,
+    )?;
+    vector.set_metatable(Some(metatable))?;
+    vector.set_readonly(true);
+    lua.globals().set("Vector", vector)
 }
 
 impl RuntimeScriptingVm for ScriptVm {

@@ -104,9 +104,35 @@ fn main() {
     match run() {
         Ok(stream) => print!("{stream}"),
         Err(error) => {
+            #[cfg(feature = "scripting")]
+            if let Some(feature) = scripting_unsupported_feature(&error) {
+                eprintln!(
+                    "rust-golden-runner error: unsupported: {feature} in Rust golden runner ({error:#})"
+                );
+                std::process::exit(1);
+            }
             eprintln!("rust-golden-runner error: {error:#}");
             std::process::exit(1);
         }
+    }
+}
+
+#[cfg(feature = "scripting")]
+fn scripting_unsupported_feature(error: &anyhow::Error) -> Option<&'static str> {
+    let message = format!("{error:#}");
+    if message.contains("attempt to call missing method 'advance' of userdata") {
+        Some("script-artboard-advance")
+    } else if message.contains("attempt to call missing method 'animation' of userdata") {
+        Some("script-artboard-animation")
+    } else if message.contains("Paint allocation requires an active scripted draw context") {
+        Some("script-init-paint")
+    } else if message.contains("attempt to index nil with 'viewModel'")
+        || message.contains("attempt to index nil with 'lis'")
+        || message.contains("attempt to index nil with 'Child'")
+    {
+        Some("script-view-model")
+    } else {
+        None
     }
 }
 

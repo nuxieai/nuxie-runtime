@@ -68,7 +68,13 @@ fn run() -> Result<(), String> {
                     entry.id,
                     entry.features.join(", ")
                 );
-                if let Some(feature) = entry.rust_runner_unsupported_feature() {
+                let unsupported_feature = entry.rust_runner_unsupported_feature().or_else(|| {
+                    options
+                        .verify_scripted_diagnostics
+                        .then(|| entry.scripted_rust_runner_unsupported_feature())
+                        .flatten()
+                });
+                if let Some(feature) = unsupported_feature {
                     match &options.rust_runner {
                         Some(rust_runner) => {
                             let file = resolve_asset_path(&entry.path, &options.rive_runtime_dir);
@@ -103,12 +109,20 @@ fn run() -> Result<(), String> {
                             entry.id,
                             cpp_stream.len()
                         );
-                        if entry.status == Status::Exact {
+                        if entry.status == Status::Exact
+                            || (entry.status == Status::Diverges && options.verify_divergent_rust)
+                        {
                             match &options.rust_runner {
                                 Some(rust_runner) => {
                                     let rust_stream =
                                         run_stream(rust_runner, entry, &file, &corpus_dir)?;
-                                    if let Some(difference) = entry
+                                    if entry.status == Status::Diverges {
+                                        println!(
+                                            "[diverges] {}: rust stream ok ({} bytes)",
+                                            entry.id,
+                                            rust_stream.len()
+                                        );
+                                    } else if let Some(difference) = entry
                                         .verification
                                         .stream_difference(&rust_stream, &cpp_stream)
                                     {
@@ -171,6 +185,8 @@ struct Options {
     rive_runtime_dir: PathBuf,
     milestone: Option<String>,
     verify_unsupported_cpp: bool,
+    verify_divergent_rust: bool,
+    verify_scripted_diagnostics: bool,
 }
 
 impl Options {
@@ -182,6 +198,8 @@ impl Options {
         let mut rust_runner = None;
         let mut milestone = None;
         let mut verify_unsupported_cpp = false;
+        let mut verify_divergent_rust = false;
+        let mut verify_scripted_diagnostics = false;
         let mut rive_runtime_dir = env::var_os("RIVE_RUNTIME_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("/Users/levi/dev/oss/rive-runtime"));
@@ -203,9 +221,11 @@ impl Options {
                 "--rive-runtime-dir" => rive_runtime_dir = PathBuf::from(value(arg)?),
                 "--milestone" => milestone = Some(value(arg)?),
                 "--verify-unsupported-cpp" => verify_unsupported_cpp = true,
+                "--verify-divergent-rust" => verify_divergent_rust = true,
+                "--verify-scripted-diagnostics" => verify_scripted_diagnostics = true,
                 "--help" | "-h" => {
                     println!(
-                        "usage: golden-compare [--corpus corpus.toml] [--milestone name] [--verify-unsupported-cpp] --cpp-runner <path> [--rust-runner <path>]"
+                        "usage: golden-compare [--corpus corpus.toml] [--milestone name] [--verify-unsupported-cpp] [--verify-divergent-rust] [--verify-scripted-diagnostics] --cpp-runner <path> [--rust-runner <path>]"
                     );
                     std::process::exit(0);
                 }
@@ -221,6 +241,8 @@ impl Options {
             rive_runtime_dir,
             milestone,
             verify_unsupported_cpp,
+            verify_divergent_rust,
+            verify_scripted_diagnostics,
         })
     }
 }
@@ -291,6 +313,12 @@ impl CorpusEntry {
         self.features
             .iter()
             .find_map(|feature| feature.strip_prefix("rust-runner-unsupported:"))
+    }
+
+    fn scripted_rust_runner_unsupported_feature(&self) -> Option<&str> {
+        self.features
+            .iter()
+            .find_map(|feature| feature.strip_prefix("scripted-rust-runner-unsupported:"))
     }
 }
 

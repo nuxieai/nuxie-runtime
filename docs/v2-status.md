@@ -457,6 +457,15 @@ the only memory the next session has. Update it every commit.
   `animation_reset_cases`=2.744-2.877, `spotify_kids_demo@0`=2.087,
   `ai_assitant@0`=1.991, `animated_clipping@0`=1.821, and
   `align_target@0`=1.727.
+  A fresh user-requested M8 open-fence tracking run deliberately ignored the
+  load fence with `make perf-hot-loop PERF_MAX_RATIO=999` so optimization work
+  stays measurement-backed. It reports aggregate min Rust/C++=2.156, Rust
+  min-sum=2.800 ms, C++ min-sum=1.298 ms, and post-run load
+  21.01/11.41/9.60. Treat this as tracking-only because load and C++ min-sum
+  are both outside the formal sanity fence; visible ratios are
+  `advance_blend_mode`=3.615/3.346, `animation_reset_cases`=2.455-3.111,
+  `spotify_kids_demo@0`=2.317, `ai_assitant@0`=1.903,
+  `animated_clipping@0`=1.830, and `align_target@0`=1.744.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, shared shape path-command buffer scout, component-local shape-paint
@@ -3605,6 +3614,18 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Re-ran the hot-loop benchmark at the user's request while
+  deliberately ignoring the load fence, because the current optimization work
+  needed a live measurement checkpoint. `make perf-hot-loop
+  PERF_MAX_RATIO=999` reports aggregate min Rust/C++=2.156, Rust
+  min-sum=2.800 ms, C++ min-sum=1.298 ms, and post-run load
+  21.01/11.41/9.60. This is tracking-only evidence because the load and C++
+  min-sum are both outside the formal M7 sanity fence. The remaining visible
+  hot-loop gaps are `advance_blend_mode` at 3.615/3.346,
+  `animation_reset_cases` at 2.455-3.111, `spotify_kids_demo@0` at 2.317,
+  `ai_assitant@0` at 1.903, `animated_clipping@0` at 1.830, and
+  `align_target@0` at 1.744.
 
 - 2026-07-09: [M8] Landed the first scripted renderer binding slice. The
   runtime scripting seam now exposes `ScriptInstance::call_draw`, and

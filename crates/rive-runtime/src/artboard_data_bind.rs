@@ -329,6 +329,11 @@ pub(crate) enum RuntimeNestedChildContextUpdate {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RuntimeArtboardOwnedContextKey {
     view_model_index: usize,
+    // C++ Artboard::bindViewModelInstance rebinds unconditionally; this key
+    // is an invented change detector, so it must carry the instance identity
+    // in addition to the mutation generation — two distinct instances of the
+    // same view model both start at generation zero.
+    instance_identity: u64,
     mutation_generation: u64,
     context_chain: Vec<Vec<usize>>,
 }
@@ -340,6 +345,7 @@ impl RuntimeArtboardOwnedContextKey {
     ) -> Self {
         Self {
             view_model_index: context.view_model_index,
+            instance_identity: context.instance_identity(),
             mutation_generation: context.mutation_generation(),
             context_chain: context_chain
                 .iter()
@@ -354,6 +360,7 @@ impl RuntimeArtboardOwnedContextKey {
         context_chain: &[&[usize]],
     ) -> bool {
         self.view_model_index == context.view_model_index
+            && self.instance_identity == context.instance_identity()
             && self.mutation_generation == context.mutation_generation()
             && self.context_chain.len() == context_chain.len()
             && self
@@ -2781,6 +2788,10 @@ impl ArtboardInstance {
         file: &RuntimeFile,
         view_model_instance: &RuntimeObject,
     ) -> bool {
+        // This overwrites the same value paths the owned-context bind wrote;
+        // drop the retained owned-context key so a later owned rebind is not
+        // skipped against stale defaults.
+        self.artboard_owned_context_key = None;
         let mut changed = false;
         let paths = self
             .artboard_property_bindings

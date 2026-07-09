@@ -18667,6 +18667,125 @@ fn owned_view_model_from_instance_uses_serialized_number_values() {
     assert!(RuntimeOwnedViewModelInstance::from_instance(&runtime, 1, 0).is_none());
 }
 
+fn synthetic_artboard_owned_viewmodel_number_binding(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyNumber", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyNumber", "name", "amount");
+        });
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "red");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceNumber", "viewModelPropertyId", 0);
+            push_f32_property(bytes, "ViewModelInstanceNumber", "propertyValue", 20.0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "blue");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceNumber", "viewModelPropertyId", 0);
+            push_f32_property(bytes, "ViewModelInstanceNumber", "propertyValue", 15.5);
+        });
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            push_uint_property(bytes, "Artboard", "viewModelId", 0);
+        });
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        // Artboard-level data bind: Node.x (artboard-local 1) <- root number.
+        let mut source_path_ids = Vec::new();
+        push_var_uint(&mut source_path_ids, 0);
+        push_var_uint(&mut source_path_ids, 0);
+        push_object_with_properties(bytes, "DataBindContext", |bytes| {
+            push_uint_property(
+                bytes,
+                "DataBindContext",
+                "propertyKey",
+                u64::from(property_key_for_name("Node", "x")),
+            );
+            push_bytes_property(bytes, "DataBindContext", "sourcePathIds", &source_path_ids);
+        });
+    })
+}
+
+// Regression for the M8 audit finding (owned-context rebind key, item 22a):
+// set_number_by_property_index skipped mark_mutated, so a root number write
+// never invalidated the owned-context key and the rebind was skipped.
+#[test]
+fn artboard_owned_context_rebinds_after_root_number_set() {
+    let label = "synthetic/runtime_artboard_owned_context_number_set.riv";
+    let bytes = synthetic_artboard_owned_viewmodel_number_binding(9611);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut context = RuntimeOwnedViewModelInstance::new(&runtime, 0)
+        .unwrap_or_else(|| panic!("missing Rust owned view-model context for {label}"));
+
+    rust.bind_owned_view_model_artboard_context(&runtime, &context);
+    rust.advance_artboard_data_binds();
+    assert_close(transform_x(&rust, 1), 0.0, "generated default number bind");
+
+    assert!(
+        context.set_number_by_property_index(0, 42.0),
+        "{label} failed to mutate owned view-model number"
+    );
+    rust.bind_owned_view_model_artboard_context(&runtime, &context);
+    rust.advance_artboard_data_binds();
+    assert_close(transform_x(&rust, 1), 42.0, "rebind after root number set");
+}
+
+// Regression for the M8 audit finding (owned-context rebind key, item 22b):
+// the key carried no instance identity, so binding a second serialized
+// instance after the first (both at mutation generation zero) was skipped.
+#[test]
+fn artboard_owned_context_rebinds_across_distinct_instances() {
+    let label = "synthetic/runtime_artboard_owned_context_instance_identity.riv";
+    let bytes = synthetic_artboard_owned_viewmodel_number_binding(9612);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let red = RuntimeOwnedViewModelInstance::from_instance(&runtime, 0, 0)
+        .unwrap_or_else(|| panic!("missing Rust owned serialized instance 0 for {label}"));
+    let blue = RuntimeOwnedViewModelInstance::from_instance(&runtime, 0, 1)
+        .unwrap_or_else(|| panic!("missing Rust owned serialized instance 1 for {label}"));
+
+    rust.bind_owned_view_model_artboard_context(&runtime, &red);
+    rust.advance_artboard_data_binds();
+    assert_close(transform_x(&rust, 1), 20.0, "serialized instance 0 bind");
+
+    rust.bind_owned_view_model_artboard_context(&runtime, &blue);
+    rust.advance_artboard_data_binds();
+    assert_close(transform_x(&rust, 1), 15.5, "serialized instance 1 rebind");
+}
+
+// Regression for the M8 audit finding (owned-context rebind key, item 22c):
+// bind_artboard_data_context overwrote the same value paths without clearing
+// the owned-context key, so an owned -> default -> owned rebind sequence left
+// the stale default values in place.
+#[test]
+fn artboard_owned_context_rebinds_after_default_context_bind() {
+    let label = "synthetic/runtime_artboard_owned_context_default_interleave.riv";
+    let bytes = synthetic_artboard_owned_viewmodel_number_binding(9613);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let red = RuntimeOwnedViewModelInstance::from_instance(&runtime, 0, 0)
+        .unwrap_or_else(|| panic!("missing Rust owned serialized instance 0 for {label}"));
+
+    rust.bind_owned_view_model_artboard_context(&runtime, &red);
+    rust.advance_artboard_data_binds();
+    assert_close(transform_x(&rust, 1), 20.0, "owned bind before default");
+
+    assert!(
+        rust.bind_default_view_model_artboard_list_context(&runtime),
+        "{label} failed to bind default artboard context"
+    );
+    rust.advance_artboard_data_binds();
+    assert_close(transform_x(&rust, 1), 0.0, "default context bind");
+
+    rust.bind_owned_view_model_artboard_context(&runtime, &red);
+    rust.advance_artboard_data_binds();
+    assert_close(transform_x(&rust, 1), 20.0, "owned rebind after default");
+}
+
 #[test]
 fn state_machine_name_based_number_bind_source_is_unresolved_like_cpp_probe() {
     let Some(probe) = probe_path() else {

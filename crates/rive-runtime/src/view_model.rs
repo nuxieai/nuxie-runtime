@@ -1507,6 +1507,7 @@ impl RuntimeImportedViewModelInstanceContext {
 #[derive(Debug, Clone)]
 pub struct RuntimeOwnedViewModelInstance {
     pub(crate) view_model_index: usize,
+    instance_identity: u64,
     mutation_generation: u64,
     property_names: Vec<(String, usize)>,
     numbers: Vec<RuntimeOwnedViewModelNumber>,
@@ -4016,6 +4017,22 @@ fn runtime_owned_view_model_property_children(
 }
 
 impl RuntimeOwnedViewModelInstance {
+    pub(crate) fn instance_identity(&self) -> u64 {
+        self.instance_identity
+    }
+
+    // Distinguishes separately-created owned instances whose
+    // mutation_generation counters would otherwise collide (e.g. binding
+    // from_instance(vm, 1) after from_instance(vm, 0), both at generation 0).
+    // C++ Artboard::bindViewModelInstance rebinds unconditionally, so the
+    // invented change-detection key must never treat two different instances
+    // as equal.
+    fn next_instance_identity() -> u64 {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    }
+
     pub(crate) fn mutation_generation(&self) -> u64 {
         self.mutation_generation
     }
@@ -4119,6 +4136,7 @@ impl RuntimeOwnedViewModelInstance {
         );
         Some(Self {
             view_model_index,
+            instance_identity: Self::next_instance_identity(),
             mutation_generation: 0,
             property_names: runtime_owned_view_model_property_names(file, view_model_index),
             numbers,
@@ -4151,6 +4169,7 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         }
         number.value = value;
+        self.mark_mutated();
         true
     }
 
@@ -4714,6 +4733,7 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         }
         enum_value.value = value;
+        self.mark_mutated();
         true
     }
 
@@ -5309,6 +5329,7 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         }
         artboard.value = value;
+        self.mark_mutated();
         true
     }
 

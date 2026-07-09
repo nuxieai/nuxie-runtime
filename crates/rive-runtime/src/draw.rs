@@ -1684,18 +1684,24 @@ impl ArtboardInstance {
             DrawableOrderKind::LayoutProxy => drawable.layout_local,
             _ => drawable.local_id,
         };
+        let kind = match drawable.kind {
+            DrawableOrderKind::ClipStartProxy => RuntimeDrawCommandKind::ClipStart,
+            DrawableOrderKind::ClipEndProxy => RuntimeDrawCommandKind::ClipEnd,
+            DrawableOrderKind::Drawable | DrawableOrderKind::LayoutProxy => {
+                RuntimeDrawCommandKind::Draw
+            }
+        };
         RuntimeDrawCommand {
-            kind: match drawable.kind {
-                DrawableOrderKind::ClipStartProxy => RuntimeDrawCommandKind::ClipStart,
-                DrawableOrderKind::ClipEndProxy => RuntimeDrawCommandKind::ClipEnd,
-                DrawableOrderKind::Drawable | DrawableOrderKind::LayoutProxy => {
-                    RuntimeDrawCommandKind::Draw
-                }
-            },
+            kind,
             object_kind: RuntimeDrawCommandObjectKind::from_type_name(drawable.type_name),
             local_id,
             global_id: drawable.global_id,
             type_name: drawable.type_name,
+            world_transform: local_id
+                .filter(|_| kind == RuntimeDrawCommandKind::Draw)
+                .and_then(|local_id| {
+                    self.runtime_retained_draw_world_transform(local_id, layout_bounds)
+                }),
             referenced_artboard_global: drawable.referenced_artboard_global,
             resolved_image_asset_global: self
                 .resolved_image_asset_global(local_id, drawable.resolved_image_asset_global),
@@ -1708,6 +1714,33 @@ impl ArtboardInstance {
                 path_cache,
             ),
         }
+    }
+
+    fn runtime_retained_draw_world_transform(
+        &self,
+        local_id: usize,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    ) -> Option<Mat2D> {
+        let component = self.component(local_id)?;
+        if component.type_name == "LayoutComponent" {
+            return None;
+        }
+        if component.type_name == "NestedArtboardLayout"
+            && layout_bounds.is_some_and(|bounds| bounds.contains_key(&local_id))
+        {
+            return None;
+        }
+        let Some(parent_local) = component.parent_local else {
+            return Some(component.transform.world_transform);
+        };
+        if layout_bounds.is_none()
+            || !self
+                .component(parent_local)
+                .is_some_and(|parent| parent.layout_chain_has_layout_component)
+        {
+            return Some(component.transform.world_transform);
+        }
+        None
     }
 
     fn runtime_shape_paint_commands(
@@ -3949,6 +3982,7 @@ pub struct RuntimeDrawCommand {
     pub local_id: Option<usize>,
     pub global_id: Option<u32>,
     pub type_name: &'static str,
+    pub world_transform: Option<Mat2D>,
     pub referenced_artboard_global: Option<u32>,
     pub resolved_image_asset_global: Option<u32>,
     pub clipping_shape_local: Option<usize>,
@@ -7971,17 +8005,19 @@ fn runtime_draw_command(
         );
     }
 
-    let shape_world = command
-        .local_id
-        .map(|local_id| {
-            path_cache.component_world_transform_with_bounds(
-                instance,
-                graph,
-                local_id,
-                layout_bounds,
-            )
-        })
-        .unwrap_or(Mat2D::IDENTITY);
+    let shape_world = command.world_transform.unwrap_or_else(|| {
+        command
+            .local_id
+            .map(|local_id| {
+                path_cache.component_world_transform_with_bounds(
+                    instance,
+                    graph,
+                    local_id,
+                    layout_bounds,
+                )
+            })
+            .unwrap_or(Mat2D::IDENTITY)
+    });
 
     let draws_text = command.object_kind == RuntimeDrawCommandObjectKind::Text;
     let text_shape_paints = if draws_text {

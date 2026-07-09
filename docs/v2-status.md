@@ -122,7 +122,15 @@ the only memory the next session has. Update it every commit.
   reports aggregate min Rust/C++=2.804 with load 21.53/15.32/15.20 and C++
   min-sum=1.074 ms, so it is tracking-only and below the noise floor versus
   the prior 2.792 snapshot;
-  `spotify_kids_demo@0` is directionally better at 4.066, but M7 remains open.
+  `spotify_kids_demo@0` is directionally better at 4.066. A follow-up
+  user-requested open-fence rerun deliberately ignored the load fence and
+  reports aggregate min Rust/C++=2.903, Rust min-sum=3.464 ms, C++
+  min-sum=1.193 ms, and load 29.71/19.24/16.76. This is the current
+  tracking-only snapshot, not M7 acceptance evidence; visible ratios are
+  `advance_blend_mode@0.25`=4.229, `spotify_kids_demo@0`=4.229,
+  `advance_blend_mode@0`=3.793, `animation_reset_cases`=2.812-3.053,
+  `ai_assitant@0`=2.325, `animated_clipping@0`=2.262, and
+  `align_target@0`=1.775. M7 remains open.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, or shared shape path-command buffer scout; they preserved correctness
@@ -1803,6 +1811,15 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-09: [M7] Re-ran the open-fence hot-loop at the user's request even
+  though the machine was above the M7 load fence. `make perf-hot-loop
+  PERF_MAX_RATIO=999 PERF_ITERATIONS=10 PERF_BENCHMARK_REPEAT=100
+  PERF_AGGREGATE=min` reports aggregate Rust/C++=2.903, Rust min-sum=3.464 ms,
+  C++ min-sum=1.193 ms, and load 29.71/19.24/16.76. This is tracking-only
+  evidence because both the load and C++ sanity-band checks are out of fence.
+  It keeps the next M7 slice measurement-backed: profile the tied
+  `advance_blend_mode@0.25` / `spotify_kids_demo@0` hot paths before adding
+  another optimization.
 - 2026-07-09: [M7] Narrowed retained path-command invalidation for transform
   dirt to match C++ path composer behavior. The focused `spotify_kids_demo@0`
   sample showed `append_transformed_path_commands` and allocator growth

@@ -253,7 +253,19 @@ the only memory the next session has. Update it every commit.
   `ai_assitant@0`=2.059, and `spotify_kids_demo@0`=1.970; this is
   tracking-only because the aggregate is above 2.0, C++ min-sum is outside the
   0.70-0.95 ms sanity band, and aggregate movement versus 2.152 is below the
-  0.08 noise floor. Full `make golden-compare`, `cargo test --workspace`,
+  0.08 noise floor. A nested-child context source-local slice then removes the
+  remaining steady-state `stateful_nested_host_value_local_for_slots` scan from
+  `sync_nested_child_artboard_data_contexts`: nested child data-bind propagation
+  now trusts the build-time source-local slots, reuses an
+  `ArtboardInstance` update scratch buffer, and drops the no-longer-read nested
+  source maps, matching C++'s pointer-bound `DataContext` shape. The
+  user-requested open-fence hot-loop reports aggregate min Rust/C++=2.054,
+  Rust min-sum=2.013 ms, C++ min-sum=0.980 ms, `ai_assitant@0`=1.867,
+  `spotify_kids_demo@0`=1.892, `animated_clipping@0`=1.881,
+  `align_target@0`=1.541, `advance_blend_mode`=3.925/3.703, and
+  `animation_reset_cases`=2.562-3.185; this is tracking-only because the
+  aggregate remains above 2.0 and the C++ min-sum is outside the 0.70-0.95 ms
+  sanity band. Full `make golden-compare`, `cargo test --workspace`,
   `cargo fmt --all -- --check`, and `git diff --check` pass. M7 remains open.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
@@ -263,13 +275,11 @@ the only memory the next session has. Update it every commit.
   release timings. Next priority is a clean low-load/sanity-band release
   sample when available; under the user's open-fence tracking request, the
   next measured implementation target is now the tiny-file fixed-overhead
-  outliers (`advance_blend_mode`, `animation_reset_cases`) plus the shared
-  animation/state-machine/data-bind advance stack that still leaves
-  `advance_blend_mode`, `animation_reset_cases`, and `ai_assitant@0` above
-  target. Profile the exact hot site first and read the matching C++
-  animation/state-machine/data-bind path before adding another runtime fast
-  path; do not chase the smaller `spotify_kids_demo@0` draw tail again until a
-  fresh profile puts it back above advance/fixed overhead.
+  outliers: `advance_blend_mode` and `animation_reset_cases`. Profile the exact
+  hot site first and read the matching C++ animation/state-machine/data-bind
+  path before adding another runtime fast path; do not chase the smaller
+  `ai_assitant@0` or `spotify_kids_demo@0` tails again until a fresh profile
+  puts them back above fixed overhead.
 
 ## Milestones
 
@@ -1940,6 +1950,25 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-09: [M7] Removed steady-state nested child source-local fallback
+  scans. The user-requested open-fence profile showed
+  `stateful_nested_host_binding_value_for` /
+  `stateful_nested_host_value_local_for_slots` in the `ai_assitant@0`
+  data-bind advance stack. C++ binds nested artboard data contexts to retained
+  `ViewModelInstance` / `DataContext` pointers; Rust already computed the
+  equivalent child-binding source locals when each nested instance was built,
+  but still retried the static slot walk every frame for missing cached
+  locals. Rust now trusts the build-time source-local slots in
+  `sync_nested_child_artboard_data_contexts`, reuses a retained update scratch
+  buffer on `ArtboardInstance`, and drops the now-dead stored nested source
+  maps. Full `make golden-compare` remains exact=263 / exact-segments=584 /
+  diverges=0; `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check` pass. The open-fence hot-loop improves the tracking
+  aggregate from Rust/C++=2.148 to 2.054, with `ai_assitant@0` moving from
+  2.059 to 1.867; it remains tracking-only because aggregate is still above
+  2.0 and C++ min-sum=0.980 ms is outside the 0.70-0.95 ms sanity band. Next
+  profile target is the tiny fixed-overhead pair: `advance_blend_mode` and
+  `animation_reset_cases`.
 - 2026-07-09: [M7] Thread keyed animation property keys into generated double
   setters. C++ `KeyedProperty::apply` stores `propertyKey()` once and
   `KeyFrameDouble::apply` calls `CoreRegistry::getDouble/setDouble` with that

@@ -377,6 +377,27 @@ the only memory the next session has. Update it every commit.
   before and 3.18/3.61/3.63 after; this is tracking-only because the C++
   min-sum is just outside the 0.70-0.95 ms sanity band, although the raw
   threshold passes. M7 remains open.
+  Follow-up bare `make perf-hot-loop` attempts reported aggregate Rust/C++=
+  1.973, 1.982, 1.997, then 2.029; the 1.982 run had C++ min-sum=0.949 ms
+  inside the sanity band, while the 2.029 run had C++ min-sum=0.940 ms and
+  was a low-load sanity-band ratio failure. Profiling that failure sampled
+  `advance_blend_mode` in nested/data-bind/color animation work and
+  `animation_reset_cases` in draw-path/fill-rule replay; C++ source review of
+  `ShapePaint::draw` and `ShapePaintPath::renderPath` confirmed that
+  `ShapePaintPath` retains its own fill rule and ordinary Fill paint replay
+  only needs to reset the render path when the desired replay rule changes.
+  Rust now tracks the current fill rule on cached draw paths and skips
+  redundant non-text Fill `RenderPath::fill_rule` replay, while leaving
+  non-fill/text draw replay untouched. A naive broader cache was rejected after
+  it failed golden compare by leaking fill-rule state into shared non-fill
+  paths. The user-requested no-fence tracking run after the refined slice
+  reports aggregate Rust/C++=1.930, Rust min-sum=1.862 ms, C++ min-sum=
+  0.965 ms, and load 4.09/3.70/3.54 before the run; this is tracking-only
+  because the C++ min-sum is outside the sanity band. Full
+  `make golden-compare` remains exact=263 / exact-segments=584 / diverges=0,
+  `cargo test --workspace` passes, and the targeted
+  `draw_path_skips_redundant_fill_rule_replay` regression test pins the cache
+  behavior. M7 remains open.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, shared shape path-command buffer scout, component-local shape-paint
@@ -2060,6 +2081,28 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-09: [M7] Skip redundant cached draw-path Fill fill-rule replay.
+  Low-load follow-up perf attempts after the retained fill-rule/paint-cache
+  slice reported Rust/C++=1.973, 1.982, 1.997, then 2.029; the 2.029 run had
+  C++ min-sum=0.940 ms inside the sanity band, so it was treated as a real
+  ratio failure and profiled before another fast path. Samples put
+  `advance_blend_mode` in nested/data-bind/color animation and
+  `animation_reset_cases` in draw-path/fill-rule replay. C++ `ShapePaint` /
+  `ShapePaintPath` review showed that retained shape-paint paths own their
+  fill rule and ordinary Fill replay only needs to update the render path when
+  the requested replay rule changes. Rust now tracks cached draw-path fill
+  rule state and skips redundant non-text Fill `RenderPath::fill_rule` calls;
+  a broader cache attempt was rejected after golden failures showed shared
+  non-fill paths must not inherit Fill state. The user-requested no-fence
+  tracking run reports aggregate Rust/C++=1.930 with Rust min-sum=1.862 ms,
+  C++ min-sum=0.965 ms, and pre-run load 4.09/3.70/3.54, so it is tracking
+  data rather than M7 acceptance evidence. Full `make golden-compare` reports
+  exact=263 / exact-segments=584 / diverges=0, `cargo test --workspace`
+  passes, `cargo fmt --all -- --check` passes, and the new
+  `draw_path_skips_redundant_fill_rule_replay` unit test covers the cache
+  behavior. Next: collect three clean low-load/sanity-band bare
+  `make perf-hot-loop` runs before adding more optimization unless a
+  sanity-band run fails the ratio again.
 - 2026-07-09: [M7] Retained `Fill.fillRule` on graph shape-paint nodes and
   prepared runtime paint commands, then used the existing render-paint
   configuration epoch to skip cached draw-time runtime-object/configuration

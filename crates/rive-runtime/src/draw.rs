@@ -6184,6 +6184,7 @@ struct RuntimeCachedDrawPath {
     path: Box<dyn RenderPath>,
     raw_path: RawPath,
     epoch: u64,
+    fill_rule: RenderFillRule,
 }
 
 struct RuntimeRetainedRenderPath {
@@ -6922,12 +6923,25 @@ impl RuntimeRenderPathCache {
         commands: &[RuntimePathCommand],
         fill_rule: RenderFillRule,
     ) -> &mut Box<dyn RenderPath> {
+        self.draw_path_with_optional_fill_rule(key, path_epoch, factory, commands, fill_rule, None)
+    }
+
+    fn draw_path_with_optional_fill_rule(
+        &mut self,
+        key: RuntimeDrawPathCacheKey,
+        path_epoch: u64,
+        factory: &mut dyn RenderFactory,
+        commands: &[RuntimePathCommand],
+        fill_rule: RenderFillRule,
+        replay_fill_rule: Option<RenderFillRule>,
+    ) -> &mut Box<dyn RenderPath> {
         let cached = self.draw_paths.slot_mut(key).get_or_insert_with(|| {
             let raw_path = runtime_raw_path_from_commands(commands);
             RuntimeCachedDrawPath {
                 path: runtime_make_path_from_raw_path(factory, &raw_path, fill_rule),
                 raw_path,
                 epoch: path_epoch,
+                fill_rule,
             }
         });
         if cached.epoch != path_epoch {
@@ -6937,6 +6951,12 @@ impl RuntimeRenderPathCache {
                 &cached.raw_path,
             );
             cached.epoch = path_epoch;
+        }
+        if let Some(replay_fill_rule) = replay_fill_rule
+            && cached.fill_rule != replay_fill_rule
+        {
+            cached.path.fill_rule(replay_fill_rule);
+            cached.fill_rule = replay_fill_rule;
         }
         &mut cached.path
     }
@@ -8116,7 +8136,12 @@ fn runtime_draw_command(
                 renderer.transform(runtime_translation(feather.offset_x, feather.offset_y));
             }
         }
-        let path = path_cache.draw_path(
+        let replay_fill_rule = if !draws_text && paint.paint_type == RuntimeShapePaintKind::Fill {
+            Some(paint.fill_rule)
+        } else {
+            None
+        };
+        let path = path_cache.draw_path_with_optional_fill_rule(
             RuntimeDrawPathCacheKey {
                 kind: RuntimeDrawPathCacheKind::Draw,
                 path_kind: runtime_draw_path_cache_path_kind(paint),
@@ -8127,10 +8152,8 @@ fn runtime_draw_command(
             factory,
             draw_path_commands,
             RenderFillRule::Clockwise,
+            replay_fill_rule,
         );
-        if !draws_text && paint.paint_type == RuntimeShapePaintKind::Fill {
-            path.fill_rule(paint.fill_rule);
-        }
         let render_paint = if let Some(index) = temporary_paint_index {
             text_temporary_paints[index].as_ref()
         } else {
@@ -13760,6 +13783,7 @@ mod tests {
         make_empty_paths: Cell<usize>,
         rewinds: Cell<usize>,
         add_raw_paths: Cell<usize>,
+        fill_rules: Cell<usize>,
         lines: Cell<usize>,
         closes: Cell<usize>,
     }
@@ -13787,6 +13811,7 @@ mod tests {
         }
 
         fn fill_rule(&mut self, value: RenderFillRule) {
+            self.stats.fill_rules.set(self.stats.fill_rules.get() + 1);
             self.fill_rule = value;
         }
 
@@ -14038,6 +14063,81 @@ mod tests {
         assert_eq!(stats.closes.get(), 0);
         assert_eq!(third_verbs, 3);
         assert_eq!(third_points, 2);
+    }
+
+    #[test]
+    fn draw_path_skips_redundant_fill_rule_replay() {
+        let stats = Rc::new(CountingStats::default());
+        let mut factory = CountingFactory {
+            stats: Rc::clone(&stats),
+            next_path_id: 0,
+        };
+        let mut cache = RuntimeRenderPathCache::default();
+        let key = RuntimeDrawPathCacheKey {
+            kind: RuntimeDrawPathCacheKind::Draw,
+            path_kind: RuntimeShapePaintPathKind::Local,
+            local_id: Some(7),
+            path_index: 0,
+        };
+        let commands = vec![
+            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
+            RuntimePathCommand::Line { x: 1.0, y: 1.0 },
+        ];
+
+        let first_id = {
+            let path = cache.draw_path_with_optional_fill_rule(
+                key,
+                10,
+                &mut factory,
+                &commands,
+                RenderFillRule::Clockwise,
+                Some(RenderFillRule::Clockwise),
+            );
+            path.as_any()
+                .downcast_ref::<CountingRenderPath>()
+                .expect("counting path")
+                .id
+        };
+
+        assert_eq!(stats.fill_rules.get(), 1);
+
+        let second_id = {
+            let path = cache.draw_path_with_optional_fill_rule(
+                key,
+                10,
+                &mut factory,
+                &commands,
+                RenderFillRule::Clockwise,
+                Some(RenderFillRule::Clockwise),
+            );
+            path.as_any()
+                .downcast_ref::<CountingRenderPath>()
+                .expect("counting path")
+                .id
+        };
+
+        assert_eq!(second_id, first_id);
+        assert_eq!(stats.fill_rules.get(), 1);
+
+        cache.draw_path_with_optional_fill_rule(
+            key,
+            10,
+            &mut factory,
+            &commands,
+            RenderFillRule::Clockwise,
+            Some(RenderFillRule::EvenOdd),
+        );
+        assert_eq!(stats.fill_rules.get(), 2);
+
+        cache.draw_path_with_optional_fill_rule(
+            key,
+            10,
+            &mut factory,
+            &commands,
+            RenderFillRule::Clockwise,
+            Some(RenderFillRule::EvenOdd),
+        );
+        assert_eq!(stats.fill_rules.get(), 2);
     }
 
     #[test]

@@ -8,9 +8,9 @@ the only memory the next session has. Update it every commit.
 - Exact-status segments (file × sample): 584 across 263 files (strict
   exact=573/252; tolerant=11/11; structural=0/0)
 - Current compare: `make golden-compare` reports exact=263,
-  exact-segments=584, diverges=5, unsupported-feature=27, not-yet=0
+  exact-segments=584, diverges=7, unsupported-feature=25, not-yet=0
 - Parked breakdown: M5=0 by manifest query; `make golden-compare` reports
-  M8=18 gated=6 harness=3
+  M8=19 gated=6; the harness bucket is empty
 - Current milestone: **M8 — Closeout Hardening (#V2-9): scripting, C ABI, audits, fuzzing, PORTING.md**
 
 ## M7 Perf Fence
@@ -485,6 +485,15 @@ the only memory the next session has. Update it every commit.
   are `advance_blend_mode`=3.035/3.334, `animation_reset_cases`=2.262-2.732,
   `spotify_kids_demo@0`=2.032, `ai_assitant@0`=1.983,
   `animated_clipping@0`=1.600, and `align_target@0`=1.553.
+  The next user-requested open-fence run reports aggregate min
+  Rust/C++=1.972, Rust min-sum=2.012 ms, and C++ min-sum=1.021 ms, with
+  post-run load 8.35/7.17/9.35. This is the first current-tree tracking run
+  below 2.0, but the 0.078 movement from 2.050 is at the documented
+  single-run noise floor and the C++ sum remains outside the formal sanity
+  band, so it is directional rather than acceptance evidence. Remaining
+  ratios are concentrated in `advance_blend_mode`=3.215/3.548 and
+  `animation_reset_cases`=2.288-2.545; `spotify_kids_demo@0` is now 1.937
+  and every other sample is 1.445-1.911.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, shared shape path-command buffer scout, component-local shape-paint
@@ -507,8 +516,8 @@ the only memory the next session has. Update it every commit.
 ## Next
 
 1. M0-M7 remain complete; M8 is active. The baseline ratchet passes at
-   exact=263 / exact-segments=584 / diverges=0, and `cargo test --workspace`
-   passes.
+   exact=263 / exact-segments=584 / diverges=7 / unsupported-feature=25;
+   `cargo test --workspace` passes.
 2. Work the M8 queue below in order. Do not start Phase R from the V2 goal
    loop; it requires explicit user activation.
 3. Parked `unsupported-feature`, `gated`, and `harness` entries are M8 work
@@ -548,17 +557,17 @@ the only memory the next session has. Update it every commit.
         `scripted_property_image.riv` from missing ScriptAsset to the sharper
         missing `viewModel`/`image` userdata bindings.
         `make scripted-golden-compare` now builds mode-specific C++/Rust
-        binaries and ratchets the 23 runnable M8 entries: five valid divergent
-        streams and eighteen verified feature diagnostics. The C++ `Vector`
-        static table is ported, advancing `script_affects_has_changed.riv` to
-        a stream divergence. `make scripted-harness-compare` separately probes
-        the three true harness failures that remain:
-        `data_binding_artboards_test.riv` (SIGSEGV), `data_viz_demo.riv` (AABB
-        inset assertion), and `scripted_memory_leak.riv` (no stream).
-        Remaining: repair those three C++ harness failures, then close the first
-        focused difference: C++ allocates child artboard paints during
+        binaries and ratchets all 26 M8 entries: seven valid divergent streams
+        and nineteen verified feature diagnostics. The C++ `Vector` static
+        table is ported, advancing `script_affects_has_changed.riv` to a stream
+        divergence. The harness bucket is empty: scripted loading selects the
+        serialized view-model instance where C++ fixtures require it, the
+        scripted oracle uses its release configuration to avoid a debug-only
+        Feather AABB assertion, and stream extraction tolerates script `print`
+        output before the golden header. Remaining: close the first focused
+        difference, where C++ allocates child artboard paints during
         script-driven instance construction while Rust allocates them lazily
-        during draw.
+        during draw, then work the named scripting diagnostics.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
     (c) Hardening: two audit scouts are running NOW (cross-language
@@ -3661,6 +3670,25 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Drained the final three scripted C++ harness failures.
+  Scripted fixture loading now selects serialized view-model instance zero
+  when the artboard declares a model, matching the C++ fixture convention and
+  preventing `data_binding_artboards_test.riv`'s stale-layout crash; default
+  unscripted loading retains fresh-instance behavior. The scripted oracle now
+  uses its release configuration, avoiding `data_viz_demo.riv`'s debug-only
+  Feather AABB assertion, and stream extraction ignores script `print` output
+  before the golden header so `scripted_memory_leak.riv` is accepted. All 26
+  M8 scripting entries now run: seven valid divergent streams and nineteen
+  verified diagnostics, with no harness bucket. `generate-corpus` preserves
+  the new scripted-only routing marker across regeneration. Verification:
+  `make scripted-golden-compare`, `make golden-compare`, and `cargo test
+  --workspace` pass; the default summary is
+  exact=263/exact-segments=584/diverges=7/unsupported=25 with parked M8=19,
+  gated=6. An open-fence perf checkpoint reports Rust/C++=1.972, directional
+  only because C++ min-sum=1.021 ms remains outside the sanity band. Next:
+  resolve the eager-C++/lazy-Rust child-paint allocation difference in
+  `script_artboard_test.riv`.
 
 - 2026-07-09: [M8] Added a dedicated scripted corpus lane. The C++ runner now
   supports a mode-specific target name, the Rust feature build is copied to a

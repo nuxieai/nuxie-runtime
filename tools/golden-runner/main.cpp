@@ -619,7 +619,15 @@ public:
             throw std::runtime_error("can't load artboard");
         }
 
+#ifdef WITH_RIVE_SCRIPTING
+        const int viewModelId = m_artboard->viewModelId();
+        m_viewModelInstance =
+            viewModelId == -1
+                ? m_file->createViewModelInstance(m_artboard.get())
+                : m_file->createViewModelInstance(viewModelId, 0);
+#else
         m_viewModelInstance = m_file->createViewModelInstance(m_artboard.get());
+#endif
         m_artboard->bindViewModelInstance(m_viewModelInstance);
 
         if (!stateMachineName.empty())

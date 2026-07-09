@@ -1,4 +1,4 @@
-.PHONY: schema check test inspect graph cpp-probe golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare scripted-harness-compare perf-compare perf-corpus perf-hot-loop perf-json capi-smoke cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare
+.PHONY: schema check test inspect graph cpp-probe golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare perf-compare perf-corpus perf-hot-loop perf-json capi-smoke cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 DEFS_DIR ?= $(RIVE_RUNTIME_DIR)/dev/defs
@@ -61,11 +61,9 @@ scripted-rust-golden-runner:
 golden-compare: golden-runner rust-golden-runner
 	GOLDEN_RUNNER="$(GOLDEN_RUNNER)" RUST_GOLDEN_RUNNER="$(RUST_GOLDEN_RUNNER)" RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo run --quiet -p golden-compare --bin golden-compare -- --corpus corpus.toml --cpp-runner "$(GOLDEN_RUNNER)" --rust-runner "$(RUST_GOLDEN_RUNNER)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)"
 
+scripted-golden-compare: CPP_CONFIG=release
 scripted-golden-compare: scripted-golden-runner scripted-rust-golden-runner
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo run --quiet -p golden-compare --bin golden-compare -- --corpus corpus.toml --milestone M8 --verify-unsupported-cpp --verify-divergent-rust --verify-scripted-diagnostics --cpp-runner "$(SCRIPTED_GOLDEN_RUNNER)" --rust-runner "$(SCRIPTED_RUST_GOLDEN_RUNNER)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)"
-
-scripted-harness-compare: scripted-golden-runner scripted-rust-golden-runner
-	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo run --quiet -p golden-compare --bin golden-compare -- --corpus corpus.toml --milestone harness --verify-unsupported-cpp --cpp-runner "$(SCRIPTED_GOLDEN_RUNNER)" --rust-runner "$(SCRIPTED_RUST_GOLDEN_RUNNER)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)"
 
 perf-compare: CPP_CONFIG=release
 perf-compare: RUST_PROFILE=release

@@ -50,6 +50,13 @@ fn run() -> Result<(), String> {
                 .unwrap_or_else(|| "untagged".to_owned());
             *parked_by_milestone.entry(bucket).or_default() += 1;
         }
+        if entry.requires_scripted_runner() && !options.verify_scripted_diagnostics {
+            println!(
+                "[{}] {}: skipped (requires scripted runners)",
+                entry.status, entry.id
+            );
+            continue;
+        }
         match entry.status {
             Status::UnsupportedFeature => {
                 if options.verify_unsupported_cpp {
@@ -319,6 +326,12 @@ impl CorpusEntry {
         self.features
             .iter()
             .find_map(|feature| feature.strip_prefix("scripted-rust-runner-unsupported:"))
+    }
+
+    fn requires_scripted_runner(&self) -> bool {
+        self.features
+            .iter()
+            .any(|feature| feature == "scripted-runner-only")
     }
 }
 
@@ -949,13 +962,13 @@ fn run_stream(
 
     let stdout = String::from_utf8(output.stdout)
         .map_err(|error| format!("{} emitted non-utf8 stream: {error}", runner.display()))?;
-    if !stdout.starts_with("rive-golden-stream-v1\n") {
+    let Some(stream_start) = stdout.find("rive-golden-stream-v1\n") else {
         return Err(format!(
             "{} did not emit a rive-golden stream",
             runner.display()
         ));
-    }
-    Ok(stdout)
+    };
+    Ok(stdout[stream_start..].to_owned())
 }
 
 fn run_unsupported_diagnostic(

@@ -60,18 +60,17 @@ fn run() -> Result<()> {
                 )],
             ),
         };
-        if previous.is_some_and(|entry| entry.status == "unsupported-feature") {
-            for feature in previous
-                .into_iter()
-                .flat_map(|entry| entry.features.iter())
-                .filter(|feature| !feature.starts_with("type-key:"))
-            {
+        if let Some(previous) = previous {
+            for feature in previous.features.iter().filter(|feature| {
+                (previous.status == "unsupported-feature" && !feature.starts_with("type-key:"))
+                    || feature.as_str() == "scripted-runner-only"
+            }) {
                 if !features.contains(feature) {
                     features.push(feature.clone());
                 }
             }
-            features.sort();
         }
+        features.sort();
         let relative_path = options.relative_path(file_name);
 
         output.push_str("[[file]]\n");

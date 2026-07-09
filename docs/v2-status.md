@@ -30,9 +30,10 @@ the only memory the next session has. Update it every commit.
   draw-path slots, graph-scoped dense path-geometry command slots, dense
   decoded-image slots, cached layout-adjusted draw world transforms, and dense
   mesh render-buffer slots, retained image layout local transforms, and
-  retained draw raw paths, plus no-nested clean paint-preparation skip and
-  whole-repeat hot-loop total timing, full `make golden-compare` and
-  `cargo test --workspace` remain green. The latest release/null-renderer
+  retained draw raw paths, dense retained clip/background path slots, plus
+  no-nested clean paint-preparation skip and whole-repeat hot-loop total
+  timing, full `make golden-compare` and `cargo test --workspace` remain
+  green. The latest release/null-renderer
   sample before the `total_ms` harness change is still directional only:
   `make perf-hot-loop PERF_MAX_RATIO=999` reports aggregate min Rust/C++=3.219,
   but the C++ min-sum was 1.037 ms, outside the 0.70-0.95 ms sanity band.
@@ -1711,6 +1712,20 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Retain clip/background render paths in dense local slots.
+  The status scout keeps draw-replay dispatch, not state-machine fixed
+  overhead, as the current runtime priority when the low-load perf gate is not
+  available. `RuntimeRenderPathCache` now stores artboard clip,
+  clipping-shape, layout-clip, and background `RenderPath`s as retained
+  `RawPath`/`RenderPath` entries behind graph-local dense slots and the
+  existing path/layout epochs plus fill rule. This removes the remaining
+  draw-time `BTreeMap` lookup/rebuild shape for these paths without adding a
+  new image draw-state cache or a shared path-command buffer. Full
+  `make golden-compare` remains exact=263 / exact-segments=584 / diverges=0;
+  `cargo test --workspace`, `cargo check -p rive-runtime`, the focused
+  retained-path unit test, `cargo fmt --all -- --check`, and `git diff --check`
+  pass. M7 perf was not rerun because load stayed outside the acceptance
+  fence. Strict <=2.0 remains open.
 - 2026-07-08: [M7] Measure hot-loop totals with whole-repeat runner timing.
   Scout item 17 found `mach_absolute_time` reads could be a material fraction
   of tiny-file steady frames when the harness timed every phase of every
@@ -3823,6 +3838,18 @@ the only memory the next session has. Update it every commit.
   `git diff --check` pass. A debug `shapetest` benchmark smoke confirms both
   runners emit `total_ms` and `perf-compare` consumes it. Perf was not rerun
   because load stayed outside the M7 acceptance fence.
+
+- 2026-07-08: [M7] Retained clip/background paths in dense slots. When the
+  low-load perf gate stayed unavailable, the session followed the documented
+  draw-replay fixed-overhead fallback: artboard clips, clipping-shape clips,
+  layout clips, and backgrounds now reuse retained `RawPath`/`RenderPath`
+  entries keyed by graph-local dense slots, path/layout epochs, and fill rule
+  instead of draw-time `BTreeMap` path lookups and unconditional path rebuilds.
+  Full `make golden-compare` remains exact=263/exact-segments=584/diverges=0;
+  `cargo test --workspace`, `cargo check -p rive-runtime`, the focused
+  retained-path unit test, `cargo fmt --all -- --check`, and `git diff --check`
+  pass. Perf was not rerun because load remained outside the M7 acceptance
+  fence.
 
 - 2026-07-08: [M7] Skipped clean no-nested paint preparation before prepared
   command lookup. The scout review identified the binding fences for this

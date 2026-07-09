@@ -12,6 +12,7 @@
 //! runtime does not embed — useful for tests and future editor-style flows.
 
 mod bytecode;
+mod renderer;
 
 use std::cell::Cell;
 use std::ffi::CString;
@@ -22,6 +23,8 @@ use luaur_rt::{
     FromLuaMulti, Function, IntoLuaMulti, Lua, MultiValue, Table, Value, Vector as LuaVector,
 };
 use luaur_vm::functions::luau_load::luau_load;
+use renderer::RendererBindings;
+use rive_render_api::{Factory as RenderFactory, Renderer};
 use rive_runtime::{
     ScriptError, ScriptHost, ScriptInstance, ScriptMethod, ScriptValue,
     ScriptingVm as RuntimeScriptingVm,
@@ -42,16 +45,28 @@ const MODULE_CACHE_KEY: &str = "rive_scripting_registered_modules";
 pub struct ScriptVm {
     lua: Lua,
     rive_globals_installed: Cell<bool>,
+    renderer_bindings: RendererBindings,
 }
 
 /// A luaur-backed scripted object instance table.
 pub struct LuaScriptInstance {
     table: Table,
+    renderer_bindings: RendererBindings,
 }
 
 impl LuaScriptInstance {
     pub fn new(table: Table) -> Self {
-        Self { table }
+        Self {
+            table,
+            renderer_bindings: RendererBindings::default(),
+        }
+    }
+
+    fn with_renderer_bindings(table: Table, renderer_bindings: RendererBindings) -> Self {
+        Self {
+            table,
+            renderer_bindings,
+        }
     }
 
     pub fn table(&self) -> &Table {
@@ -71,6 +86,7 @@ impl ScriptVm {
         Self {
             lua: Lua::new(),
             rive_globals_installed: Cell::new(false),
+            renderer_bindings: RendererBindings::default(),
         }
     }
 
@@ -107,6 +123,7 @@ impl ScriptVm {
 
         let cache = self.ensure_module_cache()?;
         self.install_require_global(cache)?;
+        self.renderer_bindings.install(&self.lua)?;
 
         self.lua.sandbox(true)?;
         self.rive_globals_installed.set(true);
@@ -283,6 +300,10 @@ impl ScriptVm {
     pub fn global(&self, name: &str) -> Result<Value> {
         self.lua.globals().get(name)
     }
+
+    pub fn script_instance_from_table(&self, table: Table) -> LuaScriptInstance {
+        LuaScriptInstance::with_renderer_bindings(table, self.renderer_bindings.clone())
+    }
 }
 
 impl RuntimeScriptingVm for ScriptVm {
@@ -315,7 +336,10 @@ impl RuntimeScriptingVm for ScriptVm {
             .map_err(script_error)?;
         let context = self.lua.create_table();
         let instance: Table = generator.call(context).map_err(script_error)?;
-        Ok(Box::new(LuaScriptInstance::new(instance)))
+        Ok(Box::new(LuaScriptInstance::with_renderer_bindings(
+            instance,
+            self.renderer_bindings.clone(),
+        )))
     }
 }
 
@@ -351,6 +375,17 @@ impl ScriptInstance for LuaScriptInstance {
         }
         let value: Value = function.call(call_args).map_err(script_error)?;
         Ok(script_value_from_lua(value).map_err(script_error)?)
+    }
+
+    fn call_draw(
+        &mut self,
+        factory: &mut dyn RenderFactory,
+        renderer: &mut dyn Renderer,
+        _host: &mut dyn ScriptHost,
+    ) -> std::result::Result<(), ScriptError> {
+        self.renderer_bindings
+            .call_draw(&self.table, factory, renderer)
+            .map_err(script_error)
     }
 
     fn get_input(&self, name: &str) -> std::result::Result<ScriptValue, ScriptError> {

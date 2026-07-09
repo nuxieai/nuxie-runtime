@@ -494,10 +494,15 @@ the only memory the next session has. Update it every commit.
         golden runner can now be built WITH scripting via
         `make scripted-golden-runner`; scripted smokes for
         `script_artboard_test.riv` and `script_inputs_test_1.riv` produce
-        real streams without the FileAssetContents-stripping harness path.
-        Remaining: port bindings corpus-file-by-corpus-file in the census
-        order and regenerate scripted corpus statuses against the scripted
-        C++ reference streams.
+        real streams without the FileAssetContents-stripping harness path. The
+        first renderer binding slice is landed: luaur now installs `Color`,
+        `Mat2D`, `Path`, `Paint`, and scoped `Renderer` userdata for
+        draw-path calls, and `ScriptInstance::call_draw` can carry a
+        render-api factory/renderer into Luau. Remaining: wire scripted
+        instances into `ArtboardInstance`/the Rust golden runner, hydrate
+        script inputs for `script_artboard_test.riv`, then continue binding
+        ports corpus-file-by-corpus-file in census order and regenerate
+        scripted corpus statuses against the scripted C++ reference streams.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
     (c) Hardening: two audit scouts are running NOW (cross-language
@@ -3600,6 +3605,25 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Landed the first scripted renderer binding slice. The
+  runtime scripting seam now exposes `ScriptInstance::call_draw`, and
+  `rive-scripting` installs the initial C++ `src/lua/renderer/` binding family
+  behind the `luau` feature: `Color.rgb/rgba`, `Mat2D` constructors, `Path`
+  move/line/quad/cubic/close/add/reset, `Paint.new/with/copy` plus draw
+  paint fields, and scoped `Renderer` userdata for save/restore/transform/
+  clipPath/drawPath with C++-style end-of-call save-stack restoration. A
+  focused Luau test proves colon-call bytecode reaches the userdata methods
+  and records save/transform/makeRenderPaint/makeEmptyRenderPath/drawPath/
+  restore. Verification: `cargo test -p rive-scripting --features luau
+  --quiet`, `cargo check -p rive-scripting --no-default-features --quiet`,
+  `cargo check -p rive --features scripting --quiet`, `cargo test
+  --workspace`, `make golden-compare`, `cargo fmt --all`, and `git diff
+  --check` pass; golden compare remains exact=263 / exact-segments=584 /
+  diverges=0, parked gated=6 / harness=26. Next scripting step: wire
+  scripted instances into `ArtboardInstance`/the Rust golden runner and
+  hydrate `script_artboard_test.riv` inputs against the scripted C++
+  reference stream.
 
 - 2026-07-09: [M8] Closed the luaur VM-init sandbox gap for the scripting
   seam. `ScriptVm::install_rive_globals` is now idempotent, installs

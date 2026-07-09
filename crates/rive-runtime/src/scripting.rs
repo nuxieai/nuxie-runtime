@@ -1,5 +1,7 @@
 use std::{error::Error, fmt};
 
+use rive_render_api::{Factory as RenderFactory, Renderer};
+
 /// Runtime-owned scripting error type.
 ///
 /// The concrete VM crate maps its native error into this type so
@@ -122,6 +124,18 @@ pub trait ScriptInstance {
         args: &[ScriptValue],
         host: &mut dyn ScriptHost,
     ) -> Result<ScriptValue, ScriptError>;
+
+    fn call_draw(
+        &mut self,
+        factory: &mut dyn RenderFactory,
+        renderer: &mut dyn Renderer,
+        host: &mut dyn ScriptHost,
+    ) -> Result<(), ScriptError> {
+        let _ = (factory, renderer, host);
+        Err(ScriptError::new(
+            "script draw requires a backend renderer binding",
+        ))
+    }
 
     fn get_input(&self, name: &str) -> Result<ScriptValue, ScriptError>;
 

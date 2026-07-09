@@ -305,6 +305,7 @@ dependencies = [
  "luaur-rt",
  "luaur-vm",
  "rive-binary",
+ "rive-render-api",
  "rive-runtime",
 ]
 

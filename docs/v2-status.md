@@ -428,6 +428,17 @@ the only memory the next session has. Update it every commit.
   averages and C++ min-sum are outside the formal sanity fence; it still
   confirms current perf is near the M7 boundary instead of regressing back to
   the earlier 2.8-3.2 open-fence band.
+  A fresh user-requested open-fence tracking run deliberately ignored the load
+  fence with `make perf-hot-loop PERF_MAX_RATIO=999` after a clean
+  `make golden-compare` at exact=263 / exact-segments=584 / diverges=0. It
+  reports aggregate min Rust/C++=1.967, Rust min-sum=2.075 ms, C++
+  min-sum=1.055 ms, with load 10.98/25.64/24.57 before and 14.62/25.23/24.45
+  after. This is tracking-only because load and C++ min-sum are outside the
+  formal sanity fence, but it still supports the near-boundary standing. The
+  visible ratios are `advance_blend_mode@0`=3.904,
+  `advance_blend_mode@0.25`=3.551, `animation_reset_cases` samples
+  2.507-2.710, `ai_assitant@0`=1.878, `spotify_kids_demo@0`=1.790,
+  `animated_clipping@0`=1.646, and `align_target@0`=1.520.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, shared shape path-command buffer scout, component-local shape-paint

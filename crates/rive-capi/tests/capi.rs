@@ -6,8 +6,9 @@ use rive_capi::{
     rive_file_artboard_state_machine_name, rive_file_free, rive_file_import,
     rive_state_machine_instance_advance, rive_state_machine_instance_fire_trigger,
     rive_state_machine_instance_free, rive_state_machine_instance_new,
-    rive_state_machine_instance_new_default, rive_state_machine_instance_set_bool,
-    rive_state_machine_instance_set_number,
+    rive_state_machine_instance_new_default, rive_state_machine_instance_pointer_down,
+    rive_state_machine_instance_pointer_move, rive_state_machine_instance_pointer_up,
+    rive_state_machine_instance_set_bool, rive_state_machine_instance_set_number,
 };
 use std::ffi::{CString, c_void};
 use std::path::PathBuf;
@@ -363,4 +364,145 @@ fn c_api_instance_functions_reject_null_arguments() {
     unsafe {
         rive_file_free(file);
     }
+}
+
+#[test]
+fn c_api_pointer_events_dispatch_through_state_machine() {
+    let file = import_repo_fixture(SMI_FIXTURE);
+    let mut instance: *mut RiveArtboardInstance = std::ptr::null_mut();
+    let status = unsafe { rive_artboard_instance_new(file, SMI_INPUT_ARTBOARD, &mut instance) };
+    assert_eq!(status, RiveStatus::Ok);
+
+    let mut state_machine: *mut RiveStateMachineInstance = std::ptr::null_mut();
+    let status = unsafe { rive_state_machine_instance_new_default(instance, &mut state_machine) };
+    assert_eq!(status, RiveStatus::Ok);
+
+    // Settle the state machine before delivering input, mirroring an embed
+    // loop's first frame.
+    let status = unsafe {
+        rive_state_machine_instance_advance(instance, state_machine, 0.016, std::ptr::null_mut())
+    };
+    assert_eq!(status, RiveStatus::Ok);
+
+    // out_hit is optional and must always be (re)initialized when provided.
+    let mut hit = true;
+    let status = unsafe {
+        rive_state_machine_instance_pointer_down(instance, state_machine, 10.0, 10.0, &mut hit)
+    };
+    assert_eq!(status, RiveStatus::Ok);
+    // This artboard has no listeners, so nothing is hit.
+    assert!(!hit);
+
+    let status = unsafe {
+        rive_state_machine_instance_pointer_move(
+            instance,
+            state_machine,
+            12.0,
+            12.0,
+            std::ptr::null_mut(),
+        )
+    };
+    assert_eq!(status, RiveStatus::Ok);
+
+    let mut hit = true;
+    let status = unsafe {
+        rive_state_machine_instance_pointer_up(instance, state_machine, 12.0, 12.0, &mut hit)
+    };
+    assert_eq!(status, RiveStatus::Ok);
+    assert!(!hit);
+
+    // The state machine still advances cleanly after pointer traffic.
+    let status = unsafe {
+        rive_state_machine_instance_advance(instance, state_machine, 0.016, std::ptr::null_mut())
+    };
+    assert_eq!(status, RiveStatus::Ok);
+
+    unsafe {
+        rive_state_machine_instance_free(state_machine);
+        rive_artboard_instance_free(instance);
+        rive_file_free(file);
+    }
+}
+
+#[test]
+fn c_api_pointer_events_reject_null_arguments() {
+    let file = import_repo_fixture(SMI_FIXTURE);
+    let mut instance: *mut RiveArtboardInstance = std::ptr::null_mut();
+    let status = unsafe { rive_artboard_instance_new(file, SMI_INPUT_ARTBOARD, &mut instance) };
+    assert_eq!(status, RiveStatus::Ok);
+    let mut state_machine: *mut RiveStateMachineInstance = std::ptr::null_mut();
+    let status = unsafe { rive_state_machine_instance_new_default(instance, &mut state_machine) };
+    assert_eq!(status, RiveStatus::Ok);
+
+    let mut hit = true;
+    let status = unsafe {
+        rive_state_machine_instance_pointer_down(
+            std::ptr::null(),
+            state_machine,
+            0.0,
+            0.0,
+            &mut hit,
+        )
+    };
+    assert_eq!(status, RiveStatus::NullArgument);
+    assert!(!hit, "out_hit must be reset even on error");
+
+    let status = unsafe {
+        rive_state_machine_instance_pointer_move(
+            instance,
+            std::ptr::null_mut(),
+            0.0,
+            0.0,
+            std::ptr::null_mut(),
+        )
+    };
+    assert_eq!(status, RiveStatus::NullArgument);
+
+    let status = unsafe {
+        rive_state_machine_instance_pointer_up(
+            std::ptr::null(),
+            std::ptr::null_mut(),
+            0.0,
+            0.0,
+            std::ptr::null_mut(),
+        )
+    };
+    assert_eq!(status, RiveStatus::NullArgument);
+
+    unsafe {
+        rive_state_machine_instance_free(state_machine);
+        rive_artboard_instance_free(instance);
+        rive_file_free(file);
+    }
+}
+
+/// Panic firewall coverage: every `extern "C"` entry point in the crate must
+/// route its body through `ffi_guard` so a panic can never unwind into C.
+/// This scans the source so a newly added export cannot silently skip the
+/// firewall. (The behavioral half — a deliberately panicking path returning
+/// the error status in debug — lives in the crate's `firewall_tests` module.)
+#[test]
+fn every_extern_c_export_is_panic_firewalled() {
+    let source = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/lib.rs"),
+    )
+    .expect("read rive-capi src/lib.rs");
+
+    let mut checked = 0usize;
+    for (index, _) in source.match_indices("pub unsafe extern \"C\" fn ") {
+        let rest = &source[index..];
+        let body_start = rest.find('{').expect("extern fn has a body");
+        let body = rest[body_start + 1..].trim_start();
+        let name_end = rest.find('(').expect("extern fn has parameters");
+        let name = &rest["pub unsafe extern \"C\" fn ".len()..name_end];
+        assert!(
+            body.starts_with("ffi_guard("),
+            "extern \"C\" fn `{name}` does not open with the ffi_guard panic firewall"
+        );
+        checked += 1;
+    }
+    assert!(
+        checked >= 18,
+        "expected to scan all extern C exports, found only {checked}"
+    );
 }

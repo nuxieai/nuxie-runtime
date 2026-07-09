@@ -9,6 +9,37 @@
 extern "C" {
 #endif
 
+/* ==========================================================================
+ * LIFETIME AND OWNERSHIP CONTRACT (applies to every function below)
+ *
+ * Handles form a strict parent/child hierarchy and must be freed strictly
+ * child-first:
+ *
+ *   RiveFile
+ *     |- RiveArtboardInstance      (borrows the RiveFile)
+ *          |- RiveStateMachineInstance
+ *
+ * 1. A RiveFile must stay alive (not passed to rive_file_free) for as long
+ *    as ANY RiveArtboardInstance created from it exists. Freeing the file
+ *    first leaves every instance dangling; any later use of an instance --
+ *    including rive_artboard_instance_free -- is undefined behavior. Debug
+ *    builds of the library detect this misuse inside rive_file_free and
+ *    abort with a diagnostic instead of corrupting memory; release builds
+ *    do not check.
+ * 2. A RiveStateMachineInstance must be freed before the
+ *    RiveArtboardInstance it was created from, and must only ever be
+ *    advanced or handed pointer events through that same artboard instance.
+ * 3. RiveStringView results borrow the RiveFile and are valid until the
+ *    file is freed. Copy the bytes out if you need them longer.
+ * 4. Handles are not thread-safe: never use a handle (or its parent
+ *    hierarchy) from two threads at once.
+ *
+ * PANIC SAFETY: no function ever unwinds across this ABI. When an internal
+ * error is caught, functions returning RiveStatus report
+ * RIVE_STATUS_RUNTIME_ERROR, rive_file_artboard_count returns 0, and void
+ * functions return normally.
+ * ========================================================================== */
+
 typedef enum RiveStatus
 {
     RIVE_STATUS_OK = 0,
@@ -253,6 +284,9 @@ typedef struct RiveRenderCallbacks
 /* File import and metadata. */
 
 RiveStatus rive_file_import(const uint8_t* bytes, size_t len, RiveFile** out_file);
+
+/* Free an imported file. Every RiveArtboardInstance created from this file
+ * must already have been freed (see the ownership contract above). */
 void rive_file_free(RiveFile* file);
 
 size_t rive_file_artboard_count(const RiveFile* file);
@@ -274,7 +308,8 @@ RiveStatus rive_file_artboard_state_machine_name(
     size_t state_machine_index,
     RiveStringView* out_name);
 
-/* Artboard instances. The file must outlive its instances. */
+/* Artboard instances. The file must outlive its instances: free every
+ * instance with rive_artboard_instance_free BEFORE calling rive_file_free. */
 
 RiveStatus rive_artboard_instance_new(
     const RiveFile* file,
@@ -333,6 +368,29 @@ RiveStatus rive_state_machine_instance_advance(
     RiveStateMachineInstance* state_machine,
     float elapsed_seconds,
     bool* out_changed);
+
+/* Pointer events. Coordinates are in artboard space. The state machine must
+ * have been created from `instance`. `out_hit` is optional and reports
+ * whether the event landed on a listener. Effects are applied on the next
+ * rive_state_machine_instance_advance. */
+RiveStatus rive_state_machine_instance_pointer_down(
+    const RiveArtboardInstance* instance,
+    RiveStateMachineInstance* state_machine,
+    float x,
+    float y,
+    bool* out_hit);
+RiveStatus rive_state_machine_instance_pointer_move(
+    const RiveArtboardInstance* instance,
+    RiveStateMachineInstance* state_machine,
+    float x,
+    float y,
+    bool* out_hit);
+RiveStatus rive_state_machine_instance_pointer_up(
+    const RiveArtboardInstance* instance,
+    RiveStateMachineInstance* state_machine,
+    float x,
+    float y,
+    bool* out_hit);
 
 #ifdef __cplusplus
 }

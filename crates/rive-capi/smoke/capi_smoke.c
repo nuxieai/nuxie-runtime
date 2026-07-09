@@ -163,6 +163,21 @@ int main(int argc, char** argv)
     CHECK(rive_state_machine_instance_advance(
               instance, state_machine, 0.016f, NULL) == RIVE_STATUS_OK);
 
+    /* Pointer events: down/move/up must succeed (with and without out_hit)
+     * and the state machine must still advance cleanly afterwards. */
+    bool hit = true;
+    CHECK(rive_state_machine_instance_pointer_down(
+              instance, state_machine, 10.0f, 10.0f, &hit) == RIVE_STATUS_OK);
+    CHECK(rive_state_machine_instance_pointer_move(
+              instance, state_machine, 12.0f, 12.0f, NULL) == RIVE_STATUS_OK);
+    CHECK(rive_state_machine_instance_pointer_up(
+              instance, state_machine, 12.0f, 12.0f, &hit) == RIVE_STATUS_OK);
+    CHECK(rive_state_machine_instance_pointer_down(
+              NULL, state_machine, 0.0f, 0.0f, NULL) ==
+          RIVE_STATUS_NULL_ARGUMENT);
+    CHECK(rive_state_machine_instance_advance(
+              instance, state_machine, 0.016f, NULL) == RIVE_STATUS_OK);
+
     SmokeCounters counters;
     memset(&counters, 0, sizeof(counters));
 

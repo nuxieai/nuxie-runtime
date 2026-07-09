@@ -130,17 +130,24 @@ the only memory the next session has. Update it every commit.
   `advance_blend_mode@0.25`=4.229, `spotify_kids_demo@0`=4.229,
   `advance_blend_mode@0`=3.793, `animation_reset_cases`=2.812-3.053,
   `ai_assitant@0`=2.325, `animated_clipping@0`=2.262, and
-  `align_target@0`=1.775. M7 remains open.
+  `align_target@0`=1.775. A follow-up scout tried narrowing the
+  shape-paint path-command cache from the artboard-global `path_epoch` to a
+  mixed component-local dependency epoch over the shape and composed path
+  locals. It was fully backed out: the focused `spotify_kids_demo@0` 5M run
+  stayed flat-to-worse (total 55600 -> 55182 ms, draw 36056 -> 41454 ms), and
+  the same open-fence command worsened to aggregate Rust/C++=3.288 with C++
+  min-sum=1.255 ms under very high load. M7 remains open.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
-  caches, or shared shape path-command buffer scout; they preserved correctness
-  but worsened or failed to move direct/fenced release timings. Next priority is
-  a clean low-load/sanity-band release sample when available; under the user's
+  caches, shared shape path-command buffer scout, or component-local
+  shape-paint path dependency epoch scout; they preserved correctness but
+  worsened or failed to move direct/fenced release timings. Next priority is a
+  clean low-load/sanity-band release sample when available; under the user's
   open-fence tracking request, the next measured implementation target is now
   the remaining `spotify_kids_demo@0` draw-path append/realloc stack in nested
-  draw/prepare paths, plus the still-visible state-machine/property lookup
-  overhead, after profiling the exact hot site and reading the corresponding
-  C++ retained-path or generated-access dirt gate first.
+  draw/prepare paths, plus the still-visible draw-side schema/property key
+  lookup overhead, after profiling the exact hot site and reading the
+  corresponding C++ retained-path or generated-access dirt gate first.
 
 ## Milestones
 
@@ -1811,6 +1818,19 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-09: [M7] Rejected a component-local shape-paint path dependency
+  epoch scout. The idea was to mirror C++ `PathComposer`/`ShapePaintPath`
+  locality by keying cached shape-paint path commands from the shape local and
+  composed path locals rather than the artboard-global `path_epoch`. The code
+  compiled and a focused sample showed fewer normalized
+  `append_transformed_path_commands` samples, but the decision-grade tracking
+  moved the wrong way: `spotify_kids_demo@0` 5M focused draw moved from
+  36056 ms to 41454 ms, and `make perf-hot-loop PERF_MAX_RATIO=999
+  PERF_ITERATIONS=10 PERF_BENCHMARK_REPEAT=100 PERF_AGGREGATE=min` worsened to
+  aggregate Rust/C++=3.288 with C++ min-sum=1.255 ms under very high load.
+  The scout was fully backed out; next path work should port a more concrete
+  C++ retained raw-path/render-path mechanism or switch to the still-sampled
+  draw-side generated property access overhead.
 - 2026-07-09: [M7] Re-ran the open-fence hot-loop at the user's request even
   though the machine was above the M7 load fence. `make perf-hot-loop
   PERF_MAX_RATIO=999 PERF_ITERATIONS=10 PERF_BENCHMARK_REPEAT=100

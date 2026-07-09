@@ -144,18 +144,34 @@ the only memory the next session has. Update it every commit.
   current tracking-only snapshot, not M7 acceptance evidence; visible ratios
   are `spotify_kids_demo@0`=4.186, `advance_blend_mode`=3.854/4.012,
   `animation_reset_cases`=2.908-3.307, `ai_assitant@0`=2.160,
-  `animated_clipping@0`=1.997, and `align_target@0`=1.944. M7 remains open.
+  `animated_clipping@0`=1.997, and `align_target@0`=1.944. After profiling
+  that exact hot site, Rust now caches the remaining generated draw-property
+  keys for `Fill.fillRule`, draw parent ids, mesh UVs, and weight buffers,
+  matching C++ generated field access instead of runtime name discovery.
+  Focused `spotify_kids_demo@0` tracking moved from a 5M baseline
+  total=43254.6/draw=29210.5 ms to a 2M post-slice sample
+  total=17142.6/draw=11105.3 ms, and the sample no longer shows
+  `property_key_for_name` or `definition_by_name`; the remaining stack is
+  path assembly, world-transform-with-bounds, path-geometry command frames,
+  layout-style key dispatch, and paint configuration. A pre-reserve path
+  command-capacity scout was fully backed out because it shifted cost into
+  capacity walking and ran worse. The user-requested open-fence hot-loop run
+  deliberately ignored the load fence with `PERF_MAX_RATIO=999` and reports
+  aggregate min Rust/C++=2.660, Rust min-sum=2.628 ms, C++ min-sum=0.988 ms,
+  and post-run load 3.35/4.39/6.37; this is the current tracking snapshot,
+  but still not M7 acceptance evidence because the C++ min-sum is just outside
+  the 0.70-0.95 ms sanity band. M7 remains open.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
-  caches, shared shape path-command buffer scout, or component-local
-  shape-paint path dependency epoch scout; they preserved correctness but
-  worsened or failed to move direct/fenced release timings. Next priority is a
-  clean low-load/sanity-band release sample when available; under the user's
-  open-fence tracking request, the next measured implementation target is now
-  the remaining `spotify_kids_demo@0` draw-path append/realloc stack in nested
-  draw/prepare paths, plus the still-visible draw-side schema/property key
-  lookup overhead, after profiling the exact hot site and reading the
-  corresponding C++ retained-path or generated-access dirt gate first.
+  caches, shared shape path-command buffer scout, component-local shape-paint
+  path dependency epoch scout, or path-command capacity pre-reserve scout;
+  they preserved correctness but worsened or failed to move direct/fenced
+  release timings. Next priority is a clean low-load/sanity-band release
+  sample when available; under the user's open-fence tracking request, the
+  next measured implementation target is now the remaining
+  `spotify_kids_demo@0` path assembly/world-transform/path-geometry/
+  layout-style dispatch stack after profiling the exact hot site and reading
+  the corresponding C++ retained-path or generated-access dirt gate first.
 
 ## Milestones
 
@@ -1826,6 +1842,22 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-09: [M7] Cached remaining draw hot-path generated property keys and
+  recorded the user-requested open-fence measurement. Rust now handles
+  `Component.parentId`, `WorldTransformComponent.parentId`, `Fill.fillRule`,
+  `MeshVertex.u/v`, and `Weight.indices/values` through cached numeric keys
+  in the draw helper instead of runtime schema/name lookup, matching the C++
+  generated field-access shape. Focused `spotify_kids_demo@0` sampling no
+  longer shows `property_key_for_name` or `definition_by_name`; remaining
+  samples are dominated by `append_transformed_path_commands`,
+  `component_world_transform_with_bounds`, `path_geometry_commands_frame`,
+  layout-style key dispatch, and paint configuration. Full
+  `make golden-compare` remains exact=263 / exact-segments=584 / diverges=0;
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check` pass. `make perf-hot-loop PERF_MAX_RATIO=999` reports
+  aggregate min Rust/C++=2.660, Rust min-sum=2.628 ms, C++ min-sum=0.988 ms,
+  and post-run load 3.35/4.39/6.37, so the slice is tracking-only rather than
+  M7 acceptance evidence.
 - 2026-07-09: [M7] Rejected a component-local shape-paint path dependency
   epoch scout. The idea was to mirror C++ `PathComposer`/`ShapePaintPath`
   locality by keying cached shape-paint path commands from the shape local and

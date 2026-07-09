@@ -80,6 +80,11 @@ fn runtime_draw_property_key_for_name(type_name: &str, property_name: &str) -> O
         ("Drawable", "blendModeValue") => {
             cached_runtime_property_key!("Drawable", "blendModeValue")
         }
+        ("Component", "parentId") => cached_runtime_property_key!("Component", "parentId"),
+        ("WorldTransformComponent", "parentId") => {
+            cached_runtime_property_key!("WorldTransformComponent", "parentId")
+        }
+        ("Fill", "fillRule") => cached_runtime_property_key!("Fill", "fillRule"),
         ("Stroke", "thickness") => {
             static KEY: OnceLock<Option<u16>> = OnceLock::new();
             cached_property_key_for_name(&KEY, "Stroke", "thickness")
@@ -198,8 +203,12 @@ fn runtime_draw_property_key_for_name(type_name: &str, property_name: &str) -> O
         ("Image", "fit") => cached_runtime_property_key!("Image", "fit"),
         ("Image", "alignmentX") => cached_runtime_property_key!("Image", "alignmentX"),
         ("Image", "alignmentY") => cached_runtime_property_key!("Image", "alignmentY"),
+        ("MeshVertex", "u") => cached_runtime_property_key!("MeshVertex", "u"),
+        ("MeshVertex", "v") => cached_runtime_property_key!("MeshVertex", "v"),
         ("Vertex", "x") => cached_runtime_property_key!("Vertex", "x"),
         ("Vertex", "y") => cached_runtime_property_key!("Vertex", "y"),
+        ("Weight", "indices") => cached_runtime_property_key!("Weight", "indices"),
+        ("Weight", "values") => cached_runtime_property_key!("Weight", "values"),
         ("NestedArtboard", "artboardId") => {
             cached_runtime_property_key!("NestedArtboard", "artboardId")
         }

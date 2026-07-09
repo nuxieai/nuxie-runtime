@@ -5504,6 +5504,7 @@ pub struct RuntimeShapePaintCommand {
     pub paint_global_id: u32,
     pub mutator_local: Option<usize>,
     pub paint_type: RuntimeShapePaintKind,
+    pub fill_rule: RenderFillRule,
     pub path_kind: RuntimeShapePaintPathKind,
     pub path_slot_index: usize,
     pub clip_path_slot_index: usize,
@@ -5644,6 +5645,11 @@ impl RuntimeRenderPaintConfigurationSlots {
         self.by_global
             .get(paint_global_id as usize)
             .and_then(|configuration| configuration.as_ref())
+    }
+
+    fn is_current(&self, paint_global_id: u32, instance_epoch: u64) -> bool {
+        self.get(paint_global_id)
+            .is_some_and(|configuration| configuration.instance_epoch == instance_epoch)
     }
 
     fn get_mut(
@@ -7581,28 +7587,36 @@ fn runtime_draw_background(
 ) -> Result<()> {
     for runtime_paint in background.paints.iter() {
         let global_id = runtime_paint.paint_global_id;
-        let object = runtime
-            .object(global_id as usize)
-            .with_context(|| format!("missing paint global {global_id}"))?;
-        let render_paint = paint_by_global
-            .paint_mut(global_id)
-            .with_context(|| format!("missing render paint for global {global_id}"))?
-            .as_mut();
-        if let Some(configurations) = paint_configurations.as_mut() {
-            runtime_configure_paint_with_cache(
-                render_paint,
-                configurations,
-                global_id,
-                instance,
-                object,
-                runtime_paint,
-            )?;
-        } else {
-            runtime_configure_paint(render_paint, instance, object, runtime_paint, None)?;
+        let paint_configuration_is_current =
+            paint_configurations
+                .as_deref()
+                .is_some_and(|configurations| {
+                    configurations.is_current(global_id, instance.cache_epoch())
+                });
+        if !paint_configuration_is_current {
+            let object = runtime
+                .object(global_id as usize)
+                .with_context(|| format!("missing paint global {global_id}"))?;
+            let render_paint = paint_by_global
+                .paint_mut(global_id)
+                .with_context(|| format!("missing render paint for global {global_id}"))?
+                .as_mut();
+            if let Some(configurations) = paint_configurations.as_mut() {
+                runtime_configure_paint_with_cache(
+                    render_paint,
+                    configurations,
+                    global_id,
+                    instance,
+                    object,
+                    runtime_paint,
+                )?;
+            } else {
+                runtime_configure_paint(render_paint, instance, object, runtime_paint, None)?;
+            }
         }
         renderer.save();
         renderer.transform(RenderMat2D::IDENTITY);
-        let fill_rule = runtime_fill_rule_for_object(object);
+        let fill_rule = runtime_paint.fill_rule;
         let key = path_cache.retained_render_path_key(instance, graph, fill_rule);
         let path = path_cache.background_path(
             key,
@@ -7610,7 +7624,9 @@ fn runtime_draw_background(
             factory,
             background.path_commands.as_slice(),
         );
-        runtime_configure_fill_rule(path.as_mut(), object);
+        if runtime_paint.paint_type == RuntimeShapePaintKind::Fill {
+            path.fill_rule(fill_rule);
+        }
         renderer.draw_path(
             path.as_ref(),
             paint_by_global
@@ -7687,6 +7703,7 @@ fn runtime_background_shape_paint_command(
         paint_global_id: paint.global_id,
         mutator_local: paint.mutator_local,
         paint_type: runtime_shape_paint_kind(paint.paint_type),
+        fill_rule: runtime_fill_rule_for_value(paint.fill_rule),
         path_kind: RuntimeShapePaintPathKind::Local,
         path_slot_index: 0,
         clip_path_slot_index: 0,
@@ -7736,6 +7753,7 @@ fn runtime_prepare_gradient_paint_command(
         paint_global_id: paint.global_id,
         mutator_local: paint.mutator_local,
         paint_type: runtime_shape_paint_kind(paint.paint_type),
+        fill_rule: runtime_fill_rule_for_value(paint.fill_rule),
         path_kind: paint
             .path_kind
             .and_then(runtime_shape_paint_path_kind)
@@ -7976,9 +7994,6 @@ fn runtime_draw_command(
         };
     for paint in shape_paints {
         let global_id = paint.paint_global_id;
-        let object = runtime
-            .object(global_id as usize)
-            .with_context(|| format!("missing paint global {global_id}"))?;
         let effect_or_shape_path_commands = if paint.has_effect_path {
             &paint.effect_path_commands
         } else {
@@ -7991,6 +8006,9 @@ fn runtime_draw_command(
             .map(|feather| feather.inner_path_commands.as_slice())
             .unwrap_or(effect_or_shape_path_commands);
         let temporary_paint_index = if draws_text && paint.uses_temporary_paint {
+            let object = runtime
+                .object(global_id as usize)
+                .with_context(|| format!("missing paint global {global_id}"))?;
             let render_paint = text_temporary_paints
                 .get_mut(text_temporary_paint_index)
                 .context("missing temporary text render paint")?;
@@ -7999,21 +8017,32 @@ fn runtime_draw_command(
             runtime_configure_paint(render_paint.as_mut(), instance, object, paint, None)?;
             Some(index)
         } else {
-            let render_paint = paint_by_global
-                .paint_mut(global_id)
-                .with_context(|| format!("missing render paint for global {global_id}"))?
-                .as_mut();
-            if let Some(configurations) = paint_configurations.as_mut() {
-                runtime_configure_paint_with_cache(
-                    render_paint,
-                    configurations,
-                    global_id,
-                    instance,
-                    object,
-                    paint,
-                )?;
-            } else {
-                runtime_configure_paint(render_paint, instance, object, paint, None)?;
+            let paint_configuration_is_current =
+                paint_configurations
+                    .as_deref()
+                    .is_some_and(|configurations| {
+                        configurations.is_current(global_id, instance.cache_epoch())
+                    });
+            if !paint_configuration_is_current {
+                let object = runtime
+                    .object(global_id as usize)
+                    .with_context(|| format!("missing paint global {global_id}"))?;
+                let render_paint = paint_by_global
+                    .paint_mut(global_id)
+                    .with_context(|| format!("missing render paint for global {global_id}"))?
+                    .as_mut();
+                if let Some(configurations) = paint_configurations.as_mut() {
+                    runtime_configure_paint_with_cache(
+                        render_paint,
+                        configurations,
+                        global_id,
+                        instance,
+                        object,
+                        paint,
+                    )?;
+                } else {
+                    runtime_configure_paint(render_paint, instance, object, paint, None)?;
+                }
             }
             None
         };
@@ -8099,8 +8128,8 @@ fn runtime_draw_command(
             draw_path_commands,
             RenderFillRule::Clockwise,
         );
-        if !draws_text {
-            runtime_configure_fill_rule(path.as_mut(), object);
+        if !draws_text && paint.paint_type == RuntimeShapePaintKind::Fill {
+            path.fill_rule(paint.fill_rule);
         }
         let render_paint = if let Some(index) = temporary_paint_index {
             text_temporary_paints[index].as_ref()
@@ -9501,21 +9530,6 @@ fn runtime_cached_gradient_shader<'a>(
         .as_ref()
 }
 
-fn runtime_configure_fill_rule(path: &mut dyn RenderPath, object: &RuntimeObject) {
-    if object.type_name == "Fill" {
-        path.fill_rule(runtime_fill_rule_for_object(object));
-    }
-}
-
-fn runtime_fill_rule_for_object(object: &RuntimeObject) -> RenderFillRule {
-    let fill_rule_key = runtime_draw_property_key_for_name("Fill", "fillRule");
-    runtime_fill_rule_for_value(
-        fill_rule_key
-            .and_then(|key| runtime_object_explicit_uint_property_by_key(object, key))
-            .unwrap_or(0),
-    )
-}
-
 fn runtime_fill_rule_for_value(value: u64) -> RenderFillRule {
     match value {
         1 => RenderFillRule::EvenOdd,
@@ -9968,6 +9982,7 @@ pub(crate) fn runtime_shape_paint_command(
         paint_global_id: paint.global_id,
         mutator_local: paint.mutator_local,
         paint_type: runtime_shape_paint_kind(paint.paint_type),
+        fill_rule: runtime_fill_rule_for_value(paint.fill_rule),
         path_kind: runtime_shape_paint_path_kind(paint.path_kind?)?,
         path_slot_index: 0,
         clip_path_slot_index: 0,

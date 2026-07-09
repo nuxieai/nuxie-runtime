@@ -362,7 +362,21 @@ the only memory the next session has. Update it every commit.
   is outside the sanity band. Full
   `make golden-compare` remains exact=263 /
   exact-segments=584 / diverges=0, and `cargo test --workspace`,
-  `cargo fmt --all -- --check`, and `git diff --check` pass. M7 remains open.
+  `cargo fmt --all -- --check`, and `git diff --check` pass. A follow-up
+  retained fill-rule/paint-cache fast path then ports another C++
+  `ShapePaint` retained-field shape: graph shape-paint nodes and prepared
+  paint commands now carry `Fill.fillRule`, cached paint replay skips the
+  runtime object/configuration path when the existing render-paint
+  configuration epoch is current, and background/shape draw set path fill
+  rule from the retained command instead of re-reading the `Fill` property by
+  name. Full `make golden-compare` remains exact=263 / exact-segments=584 /
+  diverges=0, `cargo test --workspace` passes, and
+  `cargo fmt --all -- --check` plus `git diff --check` pass. The
+  same-session bare `make perf-hot-loop` reports aggregate min Rust/C++=1.985,
+  Rust min-sum=1.916 ms, C++ min-sum=0.965 ms, with load 3.76/3.70/3.66
+  before and 3.18/3.61/3.63 after; this is tracking-only because the C++
+  min-sum is just outside the 0.70-0.95 ms sanity band, although the raw
+  threshold passes. M7 remains open.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, shared shape path-command buffer scout, component-local shape-paint
@@ -2046,6 +2060,23 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-09: [M7] Retained `Fill.fillRule` on graph shape-paint nodes and
+  prepared runtime paint commands, then used the existing render-paint
+  configuration epoch to skip cached draw-time runtime-object/configuration
+  work. This removes the object-backed `Fill.fillRule` property read from
+  cached background/shape draw replay while keeping the existing cache/dirt
+  boundary. The user-requested no-fence tracking run before this slice
+  reported aggregate Rust/C++=1.921 with Rust min-sum=1.855 ms and C++
+  min-sum=0.966 ms. The post-slice bare `make perf-hot-loop` reports
+  aggregate Rust/C++=1.985 with Rust min-sum=1.916 ms, C++ min-sum=0.965 ms,
+  and load 3.76/3.70/3.66 before, 3.18/3.61/3.63 after; treat it as
+  tracking-only because the C++ min-sum is just outside the sanity band even
+  though the raw threshold passes. Full `make golden-compare` reports
+  exact=263 / exact-segments=584 / diverges=0, `cargo test --workspace` passes,
+  `cargo fmt --all -- --check` passes, and `git diff --check` passes. Next:
+  get clean low-load/sanity-band `make perf-hot-loop` acceptance attempts; if
+  a sanity-band run fails, profile the remaining `advance_blend_mode` /
+  `animation_reset_cases` hot sites again before adding another fast path.
 - 2026-07-09: [M7] Perf tracking reruns after the nested context-source slice
   keep the current action on the measurement fence, not on a new optimization.
   Fresh `make golden-compare` reports exact=263 / exact-segments=584 /

@@ -689,6 +689,7 @@ pub struct ShapePaintNode {
     pub paint_type: ShapePaintKind,
     pub is_visible: bool,
     pub blend_mode_value: u32,
+    pub fill_rule: u64,
     pub path_kind: Option<ShapePaintPathKind>,
     pub paint_state: Option<ShapePaintStateNode>,
     pub mutator_local: Option<usize>,
@@ -2449,6 +2450,7 @@ fn shape_paint_containers(
                             paint_type,
                             is_visible: shape_paint_is_visible(&paint.object, paint_type),
                             blend_mode_value: shape_paint_blend_mode_value(&paint.object),
+                            fill_rule: shape_paint_fill_rule(&paint.object, paint_type),
                             path_kind: shape_paint_path_kind(&paint.object, paint_type),
                             paint_state: shape_paint_state(paint.mutator, &gradient_stops),
                             mutator_local: paint.mutator_local_id,
@@ -2665,6 +2667,13 @@ fn shape_paint_is_visible(object: &RuntimeObject, paint_type: ShapePaintKind) ->
             base_visible && object.double_property("thickness").unwrap_or(1.0) > 0.0
         }
         ShapePaintKind::Fill | ShapePaintKind::Unknown => base_visible,
+    }
+}
+
+fn shape_paint_fill_rule(object: &RuntimeObject, paint_type: ShapePaintKind) -> u64 {
+    match paint_type {
+        ShapePaintKind::Fill => object.uint_property("fillRule").unwrap_or(0),
+        ShapePaintKind::Stroke | ShapePaintKind::Unknown => 0,
     }
 }
 

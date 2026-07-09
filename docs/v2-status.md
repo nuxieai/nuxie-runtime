@@ -533,6 +533,46 @@ the only memory the next session has. Update it every commit.
     equivalent short-circuit), 7d5c963 no-op prune compaction (identity-
     write proof incl. the lazy multi-contour subtlety).
 
+22. ADVERSARIAL AUDIT (data-bind gates sub-report) — one LIKELY-BUG, one
+    low-severity divergence, one sound-with-caveat (proofs in scout
+    transcript).
+    *** PRIORITY M8 FIX — e87e766 'Gate owned context rebinds' key is an
+    incomplete change-detector (C++ Artboard::bindViewModelInstance /
+    internalDataContext rebinds UNCONDITIONALLY — this gate is invented
+    and load-bearing): ***
+    (a) view_model.rs: set_number_by_property_index (:4142),
+        set_enum_by_property_index (:4705), and
+        set_artboard_by_property_index (:5300) mutate WITHOUT
+        mark_mutated() — every sibling setter (bool/string/color/list/
+        asset/trigger/vm) bumps; clearly accidental omission. Result:
+        root Number/Enum/Artboard writes never invalidate the owned-
+        context key -> bind_owned_view_model_artboard_values skipped ->
+        the write NEVER reaches artboard_data_bind_values (identical
+        boolean flow works). Also silently drops VM-Artboard-driven
+        nested-artboard swaps.
+    (b) Key carries no instance identity: from_instance(vm, 0) vs
+        from_instance(vm, 1) both start generation 0 with equal
+        view_model_index -> binding instance 'blue' after 'red' is
+        skipped, artboard keeps red values. Cross-object generation
+        collisions likewise.
+    (c) bind_artboard_data_context overwrites the same value paths
+        without clearing artboard_owned_context_key -> owned-default-
+        owned rebind sequence leaves stale default values.
+    FIX: add mark_mutated() to the three setters; add instance identity
+    (vm_index, instance_index, or object id) to
+    RuntimeArtboardOwnedContextKey; clear the key in
+    bind_artboard_data_context. Regression tests for all three
+    scenarios.
+    ALSO: f87b989 static context-source skip is SUSPICIOUS-low: it drops
+    C++'s unconditional per-updatePass child data-bind pump for
+    QUANTIZED children with pending non-source binds (C++ NestedArtboard
+    ::updateDataBinds gates only on isPaused, not quantize) — delayed
+    grandchild swaps up to one quantum. Decide: match C++ or accept and
+    document. 576fc18 trusted source-local slots: SOUND (immutable
+    arena, all swap paths rebuild) but add an invalidation hook/debug
+    assert if runtime viewModelId rebinding (artboard.cpp:2506-2519) is
+    ever ported — and note its correctness is partly hostage to fix (a).
+
 ## Known Divergences
 
 - There are no active `status = "not-yet"` entries.

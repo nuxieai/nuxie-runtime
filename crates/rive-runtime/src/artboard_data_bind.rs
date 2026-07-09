@@ -2910,10 +2910,16 @@ impl ArtboardInstance {
         changed |= self.update_artboard_converter_property_bindings();
         changed |= self.apply_artboard_property_bindings();
         changed |= self.apply_artboard_image_asset_bindings();
-        changed |= self.advance_artboard_property_binding_converters(elapsed_seconds);
-        changed |= self.advance_artboard_custom_property_binding_converters(elapsed_seconds);
-        changed |= self.apply_artboard_property_bindings();
-        changed |= self.apply_artboard_image_asset_bindings();
+        if elapsed_seconds != 0.0 {
+            let property_converters_changed =
+                self.advance_artboard_property_binding_converters(elapsed_seconds);
+            changed |= property_converters_changed;
+            changed |= self.advance_artboard_custom_property_binding_converters(elapsed_seconds);
+            if property_converters_changed {
+                changed |= self.apply_artboard_property_bindings();
+                changed |= self.apply_artboard_image_asset_bindings();
+            }
+        }
         for binding in &mut self.artboard_list_bindings {
             let target_value = match binding.converter.as_ref() {
                 Some(converter) => {

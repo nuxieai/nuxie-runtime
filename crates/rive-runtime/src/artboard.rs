@@ -44,7 +44,8 @@ use crate::properties::{
     JOYSTICK_FLAG_INVERT_X, JOYSTICK_FLAG_INVERT_Y, RuntimeArtboardDimensions,
     joystick_flags_property_key, joystick_x_property_key, joystick_y_property_key,
     layout_component_style_display_value_property_key, property_key_for_name,
-    solo_active_component_id_property_key, transform_property_for_key,
+    solid_color_value_property_key, solo_active_component_id_property_key,
+    transform_property_for_key,
 };
 use crate::state_machine::{
     RuntimeStateMachine, StateMachineInputKind, StateMachineInstance, StateMachineReportedEvent,
@@ -1021,7 +1022,7 @@ impl ArtboardInstance {
         next: u32,
     ) {
         if self.slot(local_id).and_then(|slot| slot.type_name) != Some("SolidColor")
-            || property_key_for_name("SolidColor", "colorValue") != Some(property_key)
+            || solid_color_value_property_key() != Some(property_key)
         {
             return;
         }
@@ -1308,12 +1309,13 @@ impl ArtboardInstance {
 
         report.did_update = true;
         let max_steps = 100;
-        let update_order = self.update_order.clone();
+        let update_order_len = self.update_order.len();
 
         while self.has_dirt(ComponentDirt::COMPONENTS) && report.steps < max_steps {
             self.dirt &= !ComponentDirt::COMPONENTS;
 
-            for (order_index, local_id) in update_order.iter().copied().enumerate() {
+            for order_index in 0..update_order_len {
+                let local_id = self.update_order[order_index];
                 self.dirt_depth = order_index;
                 let Some(component_index) = self.component_by_local.get(&local_id).copied() else {
                     continue;
@@ -2561,7 +2563,7 @@ fn property_may_affect_prepared_frame(type_name: Option<&str>, property_key: u16
 
     // C++ src/shapes/paint/solid_color.cpp updates the retained RenderPaint.
     if type_name == "SolidColor" {
-        return property_key_for_name("SolidColor", "colorValue") != Some(property_key);
+        return solid_color_value_property_key() != Some(property_key);
     }
 
     true

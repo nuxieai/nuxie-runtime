@@ -68,16 +68,26 @@ the only memory the next session has. Update it every commit.
   `advance_blend_mode` at 4.305/4.663, `spotify_kids_demo@0`=4.132,
   `animation_reset_cases` samples around 3.04-3.32, `ai_assitant@0`=2.367,
   `animated_clipping@0`=1.972, and `align_target@0`=1.757. Strict <=2.0
-  remains open.
+  remains open. The update-pass fixed-overhead slice removes the Rust-only
+  per-pass `update_order` clone, uses the cached `SolidColor.colorValue`
+  property key in the remaining dirt checks, and skips converter advancement
+  on zero-elapsed data-bind updates. Same-session focused tracking moves
+  `advance_blend_mode` advance from about 0.030 ms to a best 0.026 ms, with a
+  Rust-only 20M repeat moving advance from 8011 ms to 6669 ms. The requested
+  open-fence hot-loop snapshot reports aggregate min Rust/C++=3.105 with load
+  33.66/24.38/22.16 and C++ min-sum=1.208 ms, so it is tracking-only rather
+  than M7 acceptance evidence.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, or shared shape path-command buffer scout; they preserved correctness
   but worsened or failed to move direct/fenced release timings. Next priority is
   a clean low-load/sanity-band release sample when available; under the user's
   open-fence tracking request, the next measured implementation target is
-  remaining `advance_blend_mode` / `spotify_kids_demo` update-pass/data-bind
-  fixed overhead after profiling the hot site and reading the C++ dirt gate
-  first.
+  remaining nested data-bind propagation and state-machine/property-binding
+  overhead (`collect_nested_artboard_context_source_values`,
+  `update_nested_artboard_data_binds_from_hosts`,
+  `apply_artboard_property_bindings`, and remaining color mutation dirt work)
+  after profiling the hot site and reading the C++ dirt gate first.
 
 ## Milestones
 
@@ -1748,6 +1758,24 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-09: [M7] Trimmed update-pass/data-bind fixed overhead in the focused
+  hot loop. C++ `Artboard::updateComponents` captures dependency-order count
+  and indexes the retained order; Rust now does the same instead of cloning
+  `update_order` every update pass. C++ separates zero-elapsed data-bind
+  updates from converter advancement; Rust now skips converter advancement on
+  zero-elapsed nested/data-bind update calls while preserving the property
+  converter target-queue drain when nonzero advancement dirties property
+  bindings. The remaining `SolidColor.colorValue` topology-dirt checks now use
+  the generated cached property key instead of a schema-name lookup. Focused
+  `advance_blend_mode` tracking moves same-session Rust advance best from
+  about 0.030 ms to 0.026 ms, and Rust-only 20M repeat advance from 8011 ms to
+  6669 ms. User-requested open-fence `make perf-hot-loop PERF_MAX_RATIO=999
+  PERF_ITERATIONS=10 PERF_BENCHMARK_REPEAT=100 PERF_AGGREGATE=min` reports
+  aggregate Rust/C++=3.105 with load 33.66/24.38/22.16 and C++ min-sum=1.208
+  ms, so it is directional only. Full `make golden-compare` remains exact=263
+  / exact-segments=584 / diverges=0, and `cargo test --workspace` passes. M7
+  remains open; next profile target is the remaining nested data-bind
+  propagation and state-machine/property-binding overhead.
 - 2026-07-09: [M7] Skipped gradient paint-prep scans when a graph has no
   gradient paints. C++ `LinearGradient::update` only rebuilds gradient shader
   state under actual paint/stops/render-opacity/transform dirt; graphs without

@@ -839,7 +839,7 @@ enum RuntimeArtboardNumericSourceProperty {
 }
 
 #[derive(Debug, Clone)]
-struct RuntimeArtboardContextSourceValue {
+pub(super) struct RuntimeArtboardContextSourceValue {
     path: Arc<[u32]>,
     value: RuntimeDataBindGraphValue,
 }
@@ -2435,11 +2435,12 @@ impl ArtboardInstance {
 
     pub(crate) fn update_nested_artboard_data_binds_from_hosts(&mut self) -> bool {
         let mut changed = false;
-        let mut values = Vec::new();
+        let mut values = std::mem::take(&mut self.artboard_context_source_values_scratch);
         self.collect_nested_artboard_context_source_values(Mat2D::IDENTITY, &mut values);
-        for source in values {
+        for source in values.drain(..) {
             changed |= self.set_artboard_data_bind_value_for_path(&source.path, source.value);
         }
+        self.artboard_context_source_values_scratch = values;
         changed
     }
 

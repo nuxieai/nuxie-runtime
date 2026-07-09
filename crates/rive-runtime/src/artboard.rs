@@ -11,21 +11,22 @@ use crate::animation::{
     build_linear_animations, build_runtime_joysticks,
 };
 use crate::artboard_data_bind::{
-    RuntimeArtboardConverterPropertyBindingInstance, RuntimeArtboardCustomPropertyBindingInstance,
-    RuntimeArtboardDataBindSourceQueues, RuntimeArtboardDataBindTargetQueues,
-    RuntimeArtboardFormulaTokenBindingInstance, RuntimeArtboardImageAssetBindingInstance,
-    RuntimeArtboardLayoutComputedBindingInstance, RuntimeArtboardListBindingInstance,
-    RuntimeArtboardNestedHostBindingInstance, RuntimeArtboardNumericSourceBindingInstance,
-    RuntimeArtboardOwnedContextKey, RuntimeArtboardPropertyBindingInstance,
-    RuntimeArtboardSoloBindingInstance, RuntimeArtboardSoloSourceBindingInstance,
-    apply_artboard_name_based_color_data_bind_defaults, build_artboard_converter_property_bindings,
-    build_artboard_custom_property_bindings, build_artboard_default_view_model_values,
-    build_artboard_formula_token_bindings, build_artboard_image_asset_bindings,
-    build_artboard_layout_computed_bindings, build_artboard_list_bindings,
-    build_artboard_nested_host_bindings, build_artboard_numeric_source_bindings,
-    build_artboard_property_bindings, build_artboard_solo_bindings,
-    build_artboard_solo_source_bindings, build_nested_host_data_bind_source_local_slots,
-    build_nested_host_data_bind_source_locals, build_nested_host_view_model_instance_locals,
+    RuntimeArtboardContextSourceValue, RuntimeArtboardConverterPropertyBindingInstance,
+    RuntimeArtboardCustomPropertyBindingInstance, RuntimeArtboardDataBindSourceQueues,
+    RuntimeArtboardDataBindTargetQueues, RuntimeArtboardFormulaTokenBindingInstance,
+    RuntimeArtboardImageAssetBindingInstance, RuntimeArtboardLayoutComputedBindingInstance,
+    RuntimeArtboardListBindingInstance, RuntimeArtboardNestedHostBindingInstance,
+    RuntimeArtboardNumericSourceBindingInstance, RuntimeArtboardOwnedContextKey,
+    RuntimeArtboardPropertyBindingInstance, RuntimeArtboardSoloBindingInstance,
+    RuntimeArtboardSoloSourceBindingInstance, apply_artboard_name_based_color_data_bind_defaults,
+    build_artboard_converter_property_bindings, build_artboard_custom_property_bindings,
+    build_artboard_default_view_model_values, build_artboard_formula_token_bindings,
+    build_artboard_image_asset_bindings, build_artboard_layout_computed_bindings,
+    build_artboard_list_bindings, build_artboard_nested_host_bindings,
+    build_artboard_numeric_source_bindings, build_artboard_property_bindings,
+    build_artboard_solo_bindings, build_artboard_solo_source_bindings,
+    build_nested_host_data_bind_source_local_slots, build_nested_host_data_bind_source_locals,
+    build_nested_host_view_model_instance_locals,
 };
 use crate::components::{
     AuthoredTransform, ComponentDirt, Mat2D, RuntimeComponent, RuntimeSolo, TransformProperty,
@@ -98,6 +99,7 @@ pub struct ArtboardInstance {
     pub(crate) artboard_solo_source_bindings: Vec<RuntimeArtboardSoloSourceBindingInstance>,
     pub(crate) artboard_nested_host_bindings: Vec<RuntimeArtboardNestedHostBindingInstance>,
     pub(crate) artboard_list_bindings: Vec<RuntimeArtboardListBindingInstance>,
+    pub(crate) artboard_context_source_values_scratch: Vec<RuntimeArtboardContextSourceValue>,
     pub(crate) image_asset_overrides: BTreeMap<usize, Option<u32>>,
     pub(crate) dirt: ComponentDirt,
     pub(crate) dirt_depth: usize,
@@ -342,6 +344,7 @@ impl ArtboardInstance {
             artboard_solo_source_bindings,
             artboard_nested_host_bindings,
             artboard_list_bindings,
+            artboard_context_source_values_scratch: Vec::new(),
             image_asset_overrides: BTreeMap::new(),
             dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,
@@ -1182,7 +1185,7 @@ impl ArtboardInstance {
         }
         let mut nested_did_update = false;
         if self
-            .update_components_with_hook(|instance, local_id, dirt| {
+            .update_components_with_hook_recording(false, |instance, local_id, dirt| {
                 nested_did_update |= instance.update_nested_artboard_from_host_dirt(local_id, dirt);
             })
             .did_update
@@ -1196,7 +1199,7 @@ impl ArtboardInstance {
                 let mut nested_did_update = false;
                 if !joystick.can_apply_before_update
                     && self
-                        .update_components_with_hook(|instance, local_id, dirt| {
+                        .update_components_with_hook_recording(false, |instance, local_id, dirt| {
                             nested_did_update |=
                                 instance.update_nested_artboard_from_host_dirt(local_id, dirt);
                         })
@@ -1209,7 +1212,7 @@ impl ArtboardInstance {
             }
             let mut nested_did_update = false;
             if self
-                .update_components_with_hook(|instance, local_id, dirt| {
+                .update_components_with_hook_recording(false, |instance, local_id, dirt| {
                     nested_did_update |=
                         instance.update_nested_artboard_from_host_dirt(local_id, dirt);
                 })
@@ -1302,6 +1305,19 @@ impl ArtboardInstance {
     where
         F: FnMut(&mut Self, usize, ComponentDirt),
     {
+        self.update_components_with_hook_recording(true, |instance, local_id, dirt| {
+            hook(instance, local_id, dirt);
+        })
+    }
+
+    fn update_components_with_hook_recording<F>(
+        &mut self,
+        record_updated_locals: bool,
+        mut hook: F,
+    ) -> UpdateComponentsReport
+    where
+        F: FnMut(&mut Self, usize, ComponentDirt),
+    {
         let mut report = UpdateComponentsReport::default();
         if !self.has_dirt(ComponentDirt::COMPONENTS) {
             return report;
@@ -1327,7 +1343,9 @@ impl ArtboardInstance {
 
                 self.components[component_index].dirt = ComponentDirt::NONE;
                 self.update_component(component_index, dirt);
-                report.updated_locals.push(local_id);
+                if record_updated_locals {
+                    report.updated_locals.push(local_id);
+                }
                 hook(self, local_id, dirt);
 
                 if self.dirt_depth < order_index {
@@ -2759,6 +2777,7 @@ mod tests {
             artboard_solo_source_bindings: Vec::new(),
             artboard_nested_host_bindings: Vec::new(),
             artboard_list_bindings: Vec::new(),
+            artboard_context_source_values_scratch: Vec::new(),
             image_asset_overrides: BTreeMap::new(),
             dirt: ComponentDirt::COMPONENTS,
             dirt_depth: 0,

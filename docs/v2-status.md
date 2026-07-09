@@ -76,7 +76,16 @@ the only memory the next session has. Update it every commit.
   Rust-only 20M repeat moving advance from 8011 ms to 6669 ms. The requested
   open-fence hot-loop snapshot reports aggregate min Rust/C++=3.105 with load
   33.66/24.38/22.16 and C++ min-sum=1.208 ms, so it is tracking-only rather
-  than M7 acceptance evidence.
+  than M7 acceptance evidence. A follow-up no-recording/scratch-buffer slice
+  removes the remaining Rust-only `updated_locals` vector growth from runtime
+  `update_pass` callers while preserving public/test reporting, and retains
+  the nested context-source collection buffer on `ArtboardInstance` instead of
+  allocating it fresh every nested data-bind propagation pass. A same-file
+  `advance_blend_mode` Rust-only 50M repeat moved advance from 12676 ms to
+  11605 ms and total from 27905 ms to 26480 ms. The same-turn open-fence
+  hot-loop snapshot reports aggregate min Rust/C++=3.198 with load
+  36.41/24.07/20.27 and C++ min-sum=1.589 ms, so it is tracking-only and not
+  M7 acceptance evidence.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, or shared shape path-command buffer scout; they preserved correctness
@@ -1758,6 +1767,27 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-09: [M7] Stop recording debug update locals in the runtime update
+  pass and retain nested context-source scratch storage. The focused
+  `advance_blend_mode` profile showed C++-unshaped overhead in Rust
+  `update_pass`: the hot runtime callers were growing
+  `UpdateComponentsReport.updated_locals`, while C++
+  `Artboard::updateComponents` only indexes the
+  retained dependency order and does not build a report vector. Rust now keeps
+  the public `update_components` / test reporting path intact, but uses a
+  no-recording internal path from `update_pass`. The same slice also keeps the
+  nested artboard context-source collection buffer on `ArtboardInstance`,
+  matching C++'s container-owned dirty-list shape more closely than a fresh
+  per-frame `Vec`. Focused Rust-only 50M `advance_blend_mode` tracking moved
+  advance from 12676 ms to 11605 ms and total from 27905 ms to 26480 ms under
+  high/noisy load. User-requested open-fence `make perf-hot-loop
+  PERF_MAX_RATIO=999 PERF_ITERATIONS=10 PERF_BENCHMARK_REPEAT=100
+  PERF_AGGREGATE=min` reports aggregate Rust/C++=3.198 with load
+  36.41/24.07/20.27 and C++ min-sum=1.589 ms, so it is directional only.
+  Full `make golden-compare` remains exact=263 / exact-segments=584 /
+  diverges=0, and `cargo test --workspace` passes. M7 remains open; next
+  profile target is actual nested context collection/binding conversion and
+  remaining state-machine color/property mutation overhead.
 - 2026-07-09: [M7] Trimmed update-pass/data-bind fixed overhead in the focused
   hot loop. C++ `Artboard::updateComponents` captures dependency-order count
   and indexes the retained order; Rust now does the same instead of cloning

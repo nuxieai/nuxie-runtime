@@ -178,6 +178,21 @@ int main(int argc, char** argv)
     CHECK(rive_state_machine_instance_advance(
               instance, state_machine, 0.016f, NULL) == RIVE_STATUS_OK);
 
+    /* View-model surface. This repo-local fixture's artboard declares no view
+     * model, so the default constructor must report NOT_FOUND; this still
+     * exercises the C linkage of the view-model ABI and its NULL handling.
+     * (A functional set/bind is covered by the Rust tests against a databind
+     * fixture, since no repo-local fixture ships a settable view model.) */
+    RiveViewModelInstance* view_model = NULL;
+    CHECK(rive_view_model_instance_new_default(instance, &view_model) ==
+          RIVE_STATUS_NOT_FOUND);
+    CHECK(view_model == NULL);
+    CHECK(rive_view_model_instance_set_number(NULL, "num", 1.0f) ==
+          RIVE_STATUS_NULL_ARGUMENT);
+    CHECK(rive_artboard_instance_bind_view_model(instance, NULL) ==
+          RIVE_STATUS_NULL_ARGUMENT);
+    rive_view_model_instance_free(view_model); /* NULL-safe */
+
     SmokeCounters counters;
     memset(&counters, 0, sizeof(counters));
 

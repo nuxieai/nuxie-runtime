@@ -8,6 +8,43 @@ fn repo_fixture(relative: &str) -> Vec<u8> {
     std::fs::read(&path).expect("read repo fixture")
 }
 
+fn external_fixture(name: &str) -> Vec<u8> {
+    let path = PathBuf::from(
+        std::env::var_os("RIVE_RUNTIME_DIR")
+            .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
+    )
+    .join("tests/unit_tests/assets")
+    .join(name);
+    std::fs::read(&path).expect("read external fixture")
+}
+
+/// Instantiate artboard 0, optionally set a view-model property before binding,
+/// then advance and draw, returning the recorded stream.
+fn render_with_view_model(
+    bytes: &[u8],
+    set: impl FnOnce(&mut rive::ViewModelInstance) -> bool,
+) -> String {
+    let file = File::import(bytes).expect("import file");
+    let mut instance = file
+        .default_artboard()
+        .expect("default artboard")
+        .instantiate()
+        .expect("instantiate artboard");
+    let mut view_model = instance
+        .instantiate_view_model()
+        .expect("artboard has a view model");
+    let _ = set(&mut view_model);
+    instance.bind_view_model(&view_model);
+    instance.advance(0.0);
+
+    let mut factory = RecordingFactory::new();
+    let mut renderer = factory.make_renderer();
+    instance
+        .draw(&mut factory, &mut renderer)
+        .expect("draw artboard");
+    factory.stream()
+}
+
 #[test]
 fn public_api_imports_lists_instantiates_and_draws() {
     let fixture = PathBuf::from(
@@ -76,4 +113,87 @@ fn public_api_drives_default_state_machine_and_inputs() {
 
     instance.advance_with_state_machine(&mut state_machine, 0.016);
     instance.advance_with_state_machine(&mut state_machine, 0.016);
+}
+
+#[test]
+fn public_api_view_model_number_set_changes_stream() {
+    // `data_binding_test_2.riv` artboard 0 binds a shape to the view model's
+    // `num` number property, so setting it visibly changes the draw stream.
+    let bytes = external_fixture("data_binding_test_2.riv");
+
+    let baseline = render_with_view_model(&bytes, |_| false);
+    let mutated = render_with_view_model(&bytes, |view_model| {
+        assert!(
+            view_model.set_number("num", 137.0),
+            "num is a settable number property"
+        );
+        true
+    });
+
+    assert!(baseline.contains("rive-golden-stream-v1"));
+    assert_ne!(
+        baseline, mutated,
+        "setting a bound number property must change the draw stream"
+    );
+    // Setting a property that does not exist reports no change.
+    let mut probe = File::import(&bytes)
+        .unwrap()
+        .default_artboard()
+        .unwrap()
+        .instantiate()
+        .unwrap()
+        .instantiate_view_model()
+        .unwrap();
+    assert!(!probe.set_number("does-not-exist", 1.0));
+    assert!(!probe.set_bool("num", true), "wrong-kind write is rejected");
+}
+
+#[test]
+fn public_api_view_model_string_set_changes_stream() {
+    // `relative_data_binding.riv` artboard 0 binds text to the view model's
+    // `str` string property.
+    let bytes = external_fixture("relative_data_binding.riv");
+
+    let baseline = render_with_view_model(&bytes, |_| false);
+    let mutated = render_with_view_model(&bytes, |view_model| {
+        assert!(
+            view_model.set_string("str", "nuxie view model string"),
+            "str is a settable string property"
+        );
+        true
+    });
+
+    assert_ne!(
+        baseline, mutated,
+        "setting a bound string property must change the draw stream"
+    );
+}
+
+#[test]
+fn public_api_view_model_instance_selection_and_missing() {
+    // Artboards without a view model yield no context.
+    let bytes = repo_fixture("fixtures/animation/smi_test.riv");
+    let file = File::import(&bytes).expect("import file");
+    let instance = file
+        .default_artboard()
+        .unwrap()
+        .instantiate()
+        .expect("instantiate artboard");
+    assert!(instance.view_model_index().is_none());
+    assert!(instance.instantiate_view_model().is_none());
+    assert!(instance.instantiate_view_model_instance(0).is_none());
+
+    // A databind fixture exposes a view model and a source instance at index 0;
+    // an out-of-range instance index yields nothing.
+    let bytes = external_fixture("data_binding_test_2.riv");
+    let file = File::import(&bytes).expect("import file");
+    let instance = file
+        .default_artboard()
+        .unwrap()
+        .instantiate()
+        .expect("instantiate artboard");
+    assert!(instance.view_model_index().is_some());
+    assert!(instance.instantiate_view_model().is_some());
+    assert!(instance.instantiate_view_model_instance(0).is_some());
+    assert!(instance.instantiate_view_model_instance(9_999).is_none());
 }

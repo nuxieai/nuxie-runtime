@@ -42,19 +42,21 @@ the only memory the next session has. Update it every commit.
   floor. Retaining shape-paint path commands moved the focused
   `spotify_kids_demo@0` JSON run from total=6.315 / draw=8.222 to total=4.038
   / draw=6.729, with Rust min total dropping from 1.884 ms to 1.301 ms.
-  Two post-slice user-requested high-load tracking runs report aggregate min
-  Rust/C++=3.474 then 3.173, but C++ min-sums were 1.203/1.232 ms, outside
-  the sanity band; treat them as directional. The latest visible outliers are
-  `advance_blend_mode` samples at 5.575/6.535, `spotify_kids_demo@0`=3.904,
-  `animation_reset_cases` samples around 3.4-3.8, `ai_assitant@0`=2.519,
-  `animated_clipping@0`=2.424, and `align_target@0`=2.170. Strict <=2.0
-  remains open.
+  Three post-slice user-requested high-load tracking runs report aggregate min
+  Rust/C++=3.474, 3.173, then 3.030, but C++ min-sums were
+  1.203/1.232/1.104 ms, outside the sanity band; treat them as directional.
+  The latest visible outliers are `advance_blend_mode` samples at 6.810/5.333,
+  `spotify_kids_demo@0`=4.483, `animation_reset_cases` samples around
+  3.0-3.25, `ai_assitant@0`=2.211, `animated_clipping@0`=2.072, and
+  `align_target@0`=1.821. Strict <=2.0 remains open.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, or shared shape path-command buffer scout; they preserved correctness
   but worsened or failed to move direct/fenced release timings. Next priority is
-  a clean low-load/sanity-band release sample, then deeper draw-replay
-  fixed-overhead work under the same scout fences.
+  a clean low-load/sanity-band release sample when available; under the user's
+  open-fence tracking request, the next measured implementation target is
+  `advance_blend_mode` prepared-frame/fixed-overhead after reading the C++ dirt
+  gate at the same hot site.
 
 ## Milestones
 
@@ -1742,6 +1744,25 @@ the only memory the next session has. Update it every commit.
   were 1.203/1.232 ms, outside the M7 sanity band. `cargo check -p
   rive-runtime`, `cargo test --workspace`, and `make golden-compare` pass with
   exact=263 / exact-segments=584 / diverges=0. M7 remains open.
+- 2026-07-08: [M7] Ignored the load fence for a user-requested directional
+  hot-loop tracking run. `make perf-hot-loop PERF_MAX_RATIO=999
+  PERF_ITERATIONS=10 PERF_BENCHMARK_REPEAT=100 PERF_AGGREGATE=min` reports
+  aggregate min Rust/C++=3.030 over 11 file/sample entries. This is not
+  acceptance-grade: `uptime` reported load averages 14.48/27.81/31.10, and the
+  C++ min-sum was 1.104 ms, outside the 0.70-0.95 ms sanity band. The useful
+  ordering changed from spotify-first to tiny-file fixed overhead first:
+  `advance_blend_mode` reports 6.810/5.333, `spotify_kids_demo@0`=4.483,
+  `animation_reset_cases` spans 2.980-3.247, `ai_assitant@0`=2.211,
+  `animated_clipping@0`=2.072, and `align_target@0`=1.821. A focused
+  `advance_blend_mode@0` JSON run reports total Rust/C++=5.417, advance=2.462,
+  prepare C++=0 vs Rust min=0.036 ms, and draw=7.751. A long Rust-only sample
+  points at `prepare_static_artboard_tree_paints_internal` rebuilding prepared
+  frames for the nested artboard path, plus allocation churn around
+  `runtime_draw_command_for_node`, `runtime_shape_paint_command`, path-slot
+  assignment, and data-bind/context advance. Next measured slice should read
+  the C++ hot site first, then target the prepared-frame/dirt gate or
+  data-bind/context fixed overhead; do not return to the rejected shallow
+  command-vector cache shape.
 - 2026-07-08: [M7] Ran a user-requested high-load directional hot-loop sample.
   `make perf-hot-loop PERF_MAX_RATIO=999` used the current release/null-renderer
   whole-repeat `total_ms` gate settings and reported aggregate min Rust/C++=

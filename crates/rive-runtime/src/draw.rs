@@ -1465,14 +1465,17 @@ impl ArtboardInstance {
                 (-self.origin_x * self.width, -self.origin_y * self.height)
             };
             let fill_rule = RenderFillRule::Clockwise;
-            let clip_commands = runtime_rect_commands(
-                clip_left,
-                clip_top,
-                clip_left + self.width,
-                clip_top + self.height,
-            );
             let key = path_cache.retained_render_path_key(self, graph, fill_rule);
-            let clip = path_cache.artboard_clip_path(key, factory, &clip_commands);
+            // Mirrors C++ Artboard::drawInternal: m_worldPath.renderPath(this)
+            // retains the clip path, so build rect commands only on cache miss.
+            let clip = path_cache.artboard_clip_path(key, factory, || {
+                runtime_rect_commands(
+                    clip_left,
+                    clip_top,
+                    clip_left + self.width,
+                    clip_top + self.height,
+                )
+            });
             renderer.clip_path(clip.as_ref());
         }
         if apply_origin_transform {
@@ -6864,9 +6867,14 @@ impl RuntimeRenderPathCache {
         &mut self,
         key: RuntimeRetainedRenderPathCacheKey,
         factory: &mut dyn RenderFactory,
-        commands: &[RuntimePathCommand],
+        commands: impl FnOnce() -> Vec<RuntimePathCommand>,
     ) -> &mut Box<dyn RenderPath> {
-        runtime_cached_retained_render_path(&mut self.artboard_clip, key, factory, commands)
+        runtime_cached_retained_render_path_with_commands(
+            &mut self.artboard_clip,
+            key,
+            factory,
+            commands,
+        )
     }
 
     fn clipping_shape_path(
@@ -9519,6 +9527,40 @@ fn runtime_cached_retained_render_path<'a>(
         cached.key = key;
     }
     &mut cached.path
+}
+
+fn runtime_cached_retained_render_path_with_commands<'a>(
+    slot: &'a mut Option<RuntimeRetainedRenderPath>,
+    key: RuntimeRetainedRenderPathCacheKey,
+    factory: &mut dyn RenderFactory,
+    commands: impl FnOnce() -> Vec<RuntimePathCommand>,
+) -> &'a mut Box<dyn RenderPath> {
+    if slot.as_ref().is_none_or(|cached| cached.key != key) {
+        let commands = commands();
+        match slot {
+            Some(cached) => {
+                runtime_rebuild_raw_path_from_commands(&mut cached.raw_path, &commands);
+                runtime_rebuild_path_from_raw_path(
+                    cached.path.as_mut(),
+                    &cached.raw_path,
+                    key.fill_rule,
+                );
+                cached.key = key;
+            }
+            None => {
+                let raw_path = runtime_raw_path_from_commands(&commands);
+                *slot = Some(RuntimeRetainedRenderPath {
+                    path: runtime_make_path_from_raw_path(factory, &raw_path, key.fill_rule),
+                    raw_path,
+                    key,
+                });
+            }
+        }
+    }
+    &mut slot
+        .as_mut()
+        .expect("retained render path was just populated")
+        .path
 }
 
 fn runtime_rebuild_path_from_raw_path(

@@ -1218,8 +1218,11 @@ impl ArtboardInstance {
         self.on_component_dirty(local_id);
 
         if recurse {
-            let dependents = self.components[index].dependent_locals.clone();
-            for dependent in dependents {
+            // Mirrors C++ DependencyHelper::addDirtToDependents: dependency
+            // edges are stable after import, so cascade without cloning.
+            let dependent_count = self.components[index].dependent_locals.len();
+            for dependent_index in 0..dependent_count {
+                let dependent = self.components[index].dependent_locals[dependent_index];
                 self.add_dirt(dependent, dirt, true);
             }
         }
@@ -1275,10 +1278,10 @@ impl ArtboardInstance {
         }
         did_update |= nested_did_update;
         if !self.joysticks_apply_before_update {
-            let joysticks = self.joysticks.clone();
-            for joystick in joysticks {
+            let joystick_count = self.joysticks.len();
+            for joystick_index in 0..joystick_count {
                 let mut nested_did_update = false;
-                if !joystick.can_apply_before_update
+                if !self.joysticks[joystick_index].can_apply_before_update
                     && self
                         .update_components_with_hook_recording(false, |instance, local_id, dirt| {
                             nested_did_update |=
@@ -1289,7 +1292,7 @@ impl ArtboardInstance {
                     did_update = true;
                 }
                 did_update |= nested_did_update;
-                did_update |= self.apply_joystick(&joystick);
+                did_update |= self.apply_joystick_at(joystick_index);
             }
             let mut nested_did_update = false;
             if self
@@ -1482,33 +1485,42 @@ impl ArtboardInstance {
     }
 
     pub(crate) fn apply_joysticks(&mut self, can_apply_before_update: bool) -> bool {
-        let joysticks = self.joysticks.clone();
-        joysticks
-            .iter()
-            .filter(|joystick| joystick.can_apply_before_update == can_apply_before_update)
-            .fold(false, |changed, joystick| {
-                changed | self.apply_joystick(joystick)
-            })
+        let mut changed = false;
+        let joystick_count = self.joysticks.len();
+        for joystick_index in 0..joystick_count {
+            if self.joysticks[joystick_index].can_apply_before_update == can_apply_before_update {
+                changed |= self.apply_joystick_at(joystick_index);
+            }
+        }
+        changed
     }
 
-    pub(crate) fn apply_joystick(&mut self, joystick: &RuntimeJoystick) -> bool {
+    fn apply_joystick_at(&mut self, joystick_index: usize) -> bool {
+        // Mirrors C++ Artboard::updatePass / Joystick::apply: iterate retained
+        // joystick entries instead of cloning the joystick list per pass.
+        let Some(joystick) = self.joysticks.get(joystick_index) else {
+            return false;
+        };
+        let local_id = joystick.local_id;
+        let x_animation_index = joystick.x_animation_index;
+        let y_animation_index = joystick.y_animation_index;
+        let nested_remap_dependents_len = joystick.nested_remap_dependents.len();
+
         let mut changed = false;
-        if let Some(animation_index) = joystick.x_animation_index {
-            if let Some(seconds) =
-                self.joystick_axis_seconds(joystick.local_id, animation_index, true)
-            {
+        if let Some(animation_index) = x_animation_index {
+            if let Some(seconds) = self.joystick_axis_seconds(local_id, animation_index, true) {
                 changed |= self.apply_linear_animation(animation_index, seconds, 1.0);
             }
         }
-        if let Some(animation_index) = joystick.y_animation_index {
-            if let Some(seconds) =
-                self.joystick_axis_seconds(joystick.local_id, animation_index, false)
-            {
+        if let Some(animation_index) = y_animation_index {
+            if let Some(seconds) = self.joystick_axis_seconds(local_id, animation_index, false) {
                 changed |= self.apply_linear_animation(animation_index, seconds, 1.0);
             }
         }
-        for remap_local_id in &joystick.nested_remap_dependents {
-            changed |= self.advance_nested_remap_animation(*remap_local_id);
+        for dependent_index in 0..nested_remap_dependents_len {
+            let remap_local_id =
+                self.joysticks[joystick_index].nested_remap_dependents[dependent_index];
+            changed |= self.advance_nested_remap_animation(remap_local_id);
         }
         changed
     }

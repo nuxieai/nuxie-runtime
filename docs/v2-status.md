@@ -266,7 +266,23 @@ the only memory the next session has. Update it every commit.
   `animation_reset_cases`=2.562-3.185; this is tracking-only because the
   aggregate remains above 2.0 and the C++ min-sum is outside the 0.70-0.95 ms
   sanity band. Full `make golden-compare`, `cargo test --workspace`,
-  `cargo fmt --all -- --check`, and `git diff --check` pass. M7 remains open.
+  `cargo fmt --all -- --check`, and `git diff --check` pass. A
+  retained-vector/lazy-artboard-clip slice then removes the sampled Rust-only
+  `Vec::clone` sites from recursive dirt propagation and joystick application,
+  matching C++'s retained dependency/joystick iteration, and makes the retained
+  artboard clip path build its rectangle commands only on cache miss, matching
+  C++ `m_worldPath.renderPath(this)`. Focused 100M tracking for
+  `animation_reset_cases@0` moved from total=22883.37 / advance=8887.97 /
+  draw=13379.22 ms before the slice to total=20603.59 / advance=8720.33 /
+  draw=12335.55 ms after lazy artboard clipping. `advance_blend_mode@0`
+  remains noisy: advance stayed below the pre-slice 21275.92 ms sample, but
+  total/draw varied upward in same-session runs. Open-fence hot-loop tracking
+  reports aggregate Rust/C++=2.032 then 2.106, with Rust min-sum=2.020 then
+  1.988 ms and C++ min-sum=0.994 then 0.944 ms; this is tracking-only, not M7
+  acceptance, because confirmation bounced above the prior 2.054/2.066-2.083
+  range and strict <=2.0 still did not hold. Full `make golden-compare`,
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check` pass. M7 remains open.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, shared shape path-command buffer scout, component-local shape-paint
@@ -274,12 +290,13 @@ the only memory the next session has. Update it every commit.
   they preserved correctness but worsened or failed to move direct/fenced
   release timings. Next priority is a clean low-load/sanity-band release
   sample when available; under the user's open-fence tracking request, the
-  next measured implementation target is now the tiny-file fixed-overhead
-  outliers: `advance_blend_mode` and `animation_reset_cases`. Profile the exact
-  hot site first and read the matching C++ animation/state-machine/data-bind
-  path before adding another runtime fast path; do not chase the smaller
-  `ai_assitant@0` or `spotify_kids_demo@0` tails again until a fresh profile
-  puts them back above fixed overhead.
+  next measured implementation target remains the tiny-file fixed-overhead
+  outliers: re-profile `advance_blend_mode` after the retained-vector cleanup
+  and `animation_reset_cases` after lazy artboard clipping, then read the
+  matching C++ animation/state-machine/data-bind or draw path before adding
+  another runtime fast path; do not chase the smaller `ai_assitant@0` or
+  `spotify_kids_demo@0` tails again until a fresh profile puts them back above
+  fixed overhead.
 
 ## Milestones
 
@@ -1950,6 +1967,27 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-09: [M7] Removed retained-vector clones and lazy-built the artboard
+  clip rectangle. The user-requested fixed-overhead profiles showed
+  `Vec::clone` under `ArtboardInstance::update_pass` plus draw-side allocation
+  in `draw_prepared_static_artboard_internal_with_path_cache` for
+  `animation_reset_cases`; C++ walks dependency/joystick vectors in place via
+  `DependencyHelper::addDirtToDependents`, `Artboard::updatePass`, and
+  `Joystick::apply`, and clips the artboard through retained
+  `m_worldPath.renderPath(this)`. Rust now cascades recursive dirt by retained
+  dependent index, applies joysticks by retained index instead of cloning the
+  joystick list, and only builds artboard clip rectangle commands when the
+  retained clip path cache misses. Focused 100M tracking moved
+  `animation_reset_cases@0` from total=22883.37 / advance=8887.97 /
+  draw=13379.22 ms to total=20603.59 / advance=8720.33 / draw=12335.55 ms;
+  `advance_blend_mode@0` kept a lower advance time than the pre-slice sample
+  but total/draw remained noisy. Open-fence hot-loop tracking reports
+  aggregate Rust/C++=2.032 then 2.106, so this is not M7 acceptance evidence.
+  Full `make golden-compare` remains exact=263 / exact-segments=584 /
+  diverges=0; `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check` pass. Next target remains fixed-overhead profiling after
+  this cleanup, especially `advance_blend_mode`'s remaining animation/update
+  stack and `animation_reset_cases` draw allocation.
 - 2026-07-09: [M7] Removed steady-state nested child source-local fallback
   scans. The user-requested open-fence profile showed
   `stateful_nested_host_binding_value_for` /

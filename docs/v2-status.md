@@ -31,9 +31,9 @@ the only memory the next session has. Update it every commit.
   decoded-image slots, cached layout-adjusted draw world transforms, and dense
   mesh render-buffer slots, retained image layout local transforms, and
   retained draw raw paths, dense retained clip/background path slots, plus
-  no-nested clean paint-preparation skip and whole-repeat hot-loop total
-  timing, full `make golden-compare` and `cargo test --workspace` remain
-  green. The latest release/null-renderer
+  dense render-paint configuration slots, no-nested clean paint-preparation
+  skip, and whole-repeat hot-loop total timing, full `make golden-compare` and
+  `cargo test --workspace` remain green. The latest release/null-renderer
   sample before the `total_ms` harness change is still directional only:
   `make perf-hot-loop PERF_MAX_RATIO=999` reports aggregate min Rust/C++=3.219,
   but the C++ min-sum was 1.037 ms, outside the 0.70-0.95 ms sanity band.
@@ -1712,6 +1712,19 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Store render-paint configuration cache in dense global
+  slots. The M7 scout keeps draw-replay dispatch as the implementation target
+  when the low-load perf gate is unavailable. `RuntimeRenderPaintCache` already
+  stores `RenderPaint`s in dense global-id slots; its configuration cache now
+  uses the same shape instead of a `BTreeMap<u32, ...>`, while preserving the
+  existing instance-epoch/configuration comparison and gradient invalidation.
+  This is a backing-store change for the C++ retained-paint shape, not a new
+  dirty rule. Full `make golden-compare` remains exact=263 /
+  exact-segments=584 / diverges=0; `cargo test --workspace`,
+  `cargo test -p rive-runtime --quiet`, `cargo check -p rive-runtime`,
+  `cargo fmt --all -- --check`, and `git diff --check` pass. M7 perf was not
+  rerun because load stayed outside the acceptance fence. Strict <=2.0 remains
+  open.
 - 2026-07-08: [M7] Retain clip/background render paths in dense local slots.
   The status scout keeps draw-replay dispatch, not state-machine fixed
   overhead, as the current runtime priority when the low-load perf gate is not
@@ -3824,6 +3837,18 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-08: [M7] Stored render-paint configurations in dense global slots.
+  The low-load perf gate stayed unavailable, so the session continued the
+  documented draw-replay fixed-overhead lane. `RuntimeRenderPaintCache` now
+  keeps cached paint configurations in a dense global-id slot table matching
+  `RuntimeRenderPaints`, replacing draw-time `BTreeMap` lookups while keeping
+  the same instance-epoch/configuration invalidation. Full
+  `make golden-compare` remains exact=263/exact-segments=584/diverges=0;
+  `cargo test --workspace`, `cargo test -p rive-runtime --quiet`,
+  `cargo check -p rive-runtime`, `cargo fmt --all -- --check`, and
+  `git diff --check` pass. Perf was not rerun because load remained outside
+  the M7 acceptance fence.
 
 - 2026-07-08: [M7] Switched hot-loop aggregate timing to whole-repeat
   `total_ms`. `perf-compare` now scores runner benchmarks from `total_ms` when

@@ -588,6 +588,9 @@ impl ArtboardInstance {
         filter: RuntimeGradientPaintFilter,
     ) -> Result<()> {
         let gradient_preparation = render_cache.gradient_preparation_frame(graph);
+        if !gradient_preparation.has_paints() {
+            return Ok(());
+        }
 
         let mut prepared = Vec::new();
         // C++ Artboard::advance updates gradient mutators in dependency order before
@@ -1051,6 +1054,23 @@ impl ArtboardInstance {
                 );
             }
         }
+        if !gradient_preparation.has_paints() {
+            for (_, command) in nested_command_by_local {
+                self.prepare_static_nested_artboard_tree_paints(
+                    runtime,
+                    artboards,
+                    factory,
+                    paint_by_global,
+                    paint_configurations.as_deref_mut(),
+                    nested_paint_caches.as_deref_mut(),
+                    render_cache,
+                    layout_bounds,
+                    &command,
+                )?;
+            }
+            return Ok(());
+        }
+
         let mut prepared_paints = Vec::new();
         let mut prepared_nested_hosts = Vec::new();
 
@@ -5850,6 +5870,12 @@ struct RuntimeGradientPreparationFrame {
     paints_by_mutator: Arc<BTreeMap<usize, Vec<RuntimeGradientPaintRef>>>,
     dependency_order: Arc<Vec<usize>>,
     dependency_insertion_order: Arc<Vec<usize>>,
+}
+
+impl RuntimeGradientPreparationFrame {
+    fn has_paints(&self) -> bool {
+        !self.paints_by_mutator.is_empty()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

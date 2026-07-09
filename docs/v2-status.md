@@ -33,8 +33,9 @@ the only memory the next session has. Update it every commit.
   retained draw raw paths, dense retained clip/background path slots, plus
   dense render-paint configuration slots, no-nested clean paint-preparation
   skip, whole-repeat hot-loop total timing, and retained shape-paint path
-  command slots, plus solid-color render-paint dirt gating, and direct
-  append/prune shape path assembly for common non-n-sliced draw paths, full
+  command slots, plus solid-color render-paint dirt gating, direct
+  append/prune shape path assembly for common non-n-sliced draw paths, and
+  no-gradient paint-prep fast paths, full
   `make golden-compare` and `cargo test --workspace` remain green. The latest
   release/null-renderer sample before the `total_ms` harness change is still
   directional only:
@@ -57,11 +58,16 @@ the only memory the next session has. Update it every commit.
   churn in `spotify_kids_demo@0` and the best focused JSON draw min moved from
   Rust 0.752 ms / 6.708x draw to Rust 0.638 ms / 5.815x draw, but same-session
   full hot-loop samples ran at load 21-24 with C++ min-sums above the sanity
-  band. Latest open-fence hot-loop snapshot reports aggregate min Rust/C++=3.298
-  with load 24.43 and C++ min-sum=1.178 ms; visible outliers are
-  `advance_blend_mode` samples at 4.886/4.382, `spotify_kids_demo@0`=4.745,
-  `animation_reset_cases` samples around 2.90-3.93, `ai_assitant@0`=2.902,
-  `animated_clipping@0`=2.258, and `align_target@0`=1.811. Strict <=2.0
+  band. The no-gradient paint-prep fast path is a focused win for
+  `advance_blend_mode`: a Rust-only 20M repeat sample moved from
+  elapsed=13053 ms / prepare=2610 ms to elapsed=11568 ms / prepare=1305 ms,
+  and the best same-session focused JSON prepare min moved from 0.0201 ms to
+  0.0137 ms. The latest user-requested open-fence hot-loop snapshot reports
+  aggregate min Rust/C++=2.943 with load 5.58/7.58/12.68 and C++ min-sum
+  0.984 ms, still outside the 0.70-0.95 ms sanity band; visible outliers are
+  `advance_blend_mode` at 4.305/4.663, `spotify_kids_demo@0`=4.132,
+  `animation_reset_cases` samples around 3.04-3.32, `ai_assitant@0`=2.367,
+  `animated_clipping@0`=1.972, and `align_target@0`=1.757. Strict <=2.0
   remains open.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
@@ -69,9 +75,9 @@ the only memory the next session has. Update it every commit.
   but worsened or failed to move direct/fenced release timings. Next priority is
   a clean low-load/sanity-band release sample when available; under the user's
   open-fence tracking request, the next measured implementation target is
-  remaining `advance_blend_mode` / `spotify_kids_demo` prepared-frame,
-  draw-replay, or data-bind fixed overhead after profiling the hot site and
-  reading the C++ dirt gate first.
+  remaining `advance_blend_mode` / `spotify_kids_demo` update-pass/data-bind
+  fixed overhead after profiling the hot site and reading the C++ dirt gate
+  first.
 
 ## Milestones
 
@@ -1742,6 +1748,26 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-09: [M7] Skipped gradient paint-prep scans when a graph has no
+  gradient paints. C++ `LinearGradient::update` only rebuilds gradient shader
+  state under actual paint/stops/render-opacity/transform dirt; graphs without
+  linear/radial gradient paints have no gradient mutators to visit. Rust now
+  exposes `RuntimeGradientPreparationFrame::has_paints()`, returns immediately
+  from root static paint prep when empty, and in dependency-ordered nested
+  paint prep prepares nested hosts directly instead of walking the root
+  gradient dependency order. Focused `advance_blend_mode@0` tracking improves
+  the Rust-only 20M repeat sample from elapsed=13053 ms / prepare=2610 ms to
+  elapsed=11568 ms / prepare=1305 ms; focused JSON best prepare min moved from
+  0.0201 ms to 0.0137 ms, while total remains noisy/flat because advance and
+  draw fixed overhead now dominate. User-requested open-fence `make
+  perf-hot-loop PERF_MAX_RATIO=999 PERF_ITERATIONS=10
+  PERF_BENCHMARK_REPEAT=100 PERF_AGGREGATE=min` reports aggregate Rust/C++=
+  2.943 with load 5.58/7.58/12.68 and C++ min-sum=0.984 ms, so it is not
+  acceptance-grade. Full `make golden-compare` remains exact=263 /
+  exact-segments=584 / diverges=0, and `cargo test --workspace` passes. M7
+  remains open; next profile target is update-pass/data-bind fixed overhead
+  (`advance_artboard_data_binds_with_root_transform`,
+  `update_nested_artboard_from_host_dirt`, and related property-binding work).
 - 2026-07-08: [M7] Append common shape/clipping path commands directly into the
   destination buffer. C++ `RawPath::addPath` maps source points into the
   retained raw path and then prunes only the newly added segment range.

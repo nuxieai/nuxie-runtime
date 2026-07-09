@@ -368,12 +368,37 @@ raised from "corpus-verified" to "hardened."
    the two view-model-convention residuals stay gated on component-list
    instancing per the recorded decision.
 
+5. **Release prep — Nuxie runtime (added 2026-07-09).** The port ships as
+   open source under the product name Nuxie (nuxie.io — the user's own
+   product; the runtime powers Nuxie paywalls/flows embedded in customers'
+   apps, with `.riv` compatibility as a verified feature and a future `.nux`
+   superset format):
+   - Rename sweep BEFORE first publish: workspace crates `rive-*` →
+     `nuxie-*`/`nux-*`, the C ABI prefix `rive_*` → `nux_*` (unshipped, so
+     free now; breaking later), feature names, header, smoke test. Internal
+     doc/history references to Rive stay as factual references.
+   - README positioning: "An independent, pure-Rust runtime for Nuxie flows,
+     compatible with the Rive (.riv) file format. Not affiliated with or
+     endorsed by Rive Inc." Factual compat claims only; no Rive logo/brand.
+   - License hygiene: preserve upstream MIT copyright notices (derivative
+     work), same for luaur/Lua/Roblox notices. Corpus fixtures are Rive's
+     test assets — do NOT vendor in the public repo; fetch from
+     rive-app/rive-runtime at CI time (the C++ reference runtime remains a
+     dev-time test dependency only, never shipped).
+   - SDK footprint: record a binary-size budget for the `nux-capi` cdylib
+     (mobile SDK context), measure current size, and apply the cheap wins
+     (identical-code-folding/linker flags, `opt-level` check, symbol
+     stripping in the release artifact). Size becomes a tracked number like
+     the perf ratio, and a Phase R renderer-selection criterion.
+
 ### Milestone M8 (exit)
 
 Scripting corpus files verified against a scripting-enabled C++ runner; C ABI
 covers the embed loop including pointer events and retained-draw; both audits
 resolved; fuzzers in CI with zero known reachable panics from accepted files;
-`PORTING.md` committed. Then Phase R is a clean start.
+`PORTING.md` committed; the rename/licensing/size release-prep items done so
+the repo is publishable as Nuxie runtime as-is. Then Phase R is a clean
+start.
 
 ## Phase R: Renderer Port (separate map)
 

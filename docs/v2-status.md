@@ -723,6 +723,29 @@ the only memory the next session has. Update it every commit.
     instances — add instance identity to the key cheaply), paint-config
     replay, no-gradient scan.
 
+26. M8 SCOPE ADDITION (user decision 2026-07-09; details in
+    porting-map-v2 #V2-9 item 5): RELEASE PREP for open-sourcing as
+    **Nuxie runtime** (nuxie.io is the user's product; this runtime
+    powers Nuxie paywalls/flows embedded in customers' apps — SDK
+    context). Queue items:
+    (a) Rename sweep before publish: crates rive-* -> nuxie-*/nux-*,
+        C ABI prefix rive_* -> nux_* (unshipped = free now), features,
+        header, capi smoke. Schedule LAST among M8 code work to avoid
+        churning in-flight slices; one mechanical session.
+    (b) README positioning: independent pure-Rust runtime, .riv
+        compatibility as a factual feature claim, 'not affiliated with
+        or endorsed by Rive Inc.', no Rive branding.
+    (c) Licensing: preserve upstream MIT notices (and luaur/Lua/Roblox
+        notices); corpus fixtures are Rive's assets — fetch from
+        rive-app/rive-runtime at CI time, never vendor in the public
+        repo; C++ reference runtime stays dev-time-only.
+    (d) SDK binary-size budget: measure the capi cdylib release size,
+        apply ICF/strip/linker cheap wins, record size as a tracked
+        metric alongside the perf ratio. SDK context also RAISES the
+        priority of the capi catch_unwind firewall and the panic-
+        freedom fuzzing within the existing M8 queue: a panic inside a
+        customer's app is existential for an embedded SDK.
+
 ## Known Divergences
 
 - There are no active `status = "not-yet"` entries.

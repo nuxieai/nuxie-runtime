@@ -425,6 +425,7 @@ std::vector<uint8_t> readFile(const std::string& path)
     return std::vector<uint8_t>(std::istreambuf_iterator<char>(stream), {});
 }
 
+#ifndef WITH_RIVE_SCRIPTING
 // Byte-exact mirror of the static readRuntimeObject in
 // $RIVE_RUNTIME_DIR/src/file.cpp, used to walk the object stream without
 // importing it. Consumes exactly the bytes File::read would consume for one
@@ -477,6 +478,7 @@ rive::Core* walkRuntimeObject(rive::BinaryReader& reader,
     }
     return object;
 }
+#endif
 
 // The reference librive we link is built without WITH_RIVE_SCRIPTING. In that
 // configuration File::read pushes no FileAssetImporter for ScriptAsset /
@@ -493,6 +495,9 @@ rive::Core* walkRuntimeObject(rive::BinaryReader& reader,
 // the process, so a currently-passing file can never contain one.
 std::vector<uint8_t> stripAbortingAssetContents(std::vector<uint8_t> bytes)
 {
+#ifdef WITH_RIVE_SCRIPTING
+    return bytes;
+#else
     rive::BinaryReader reader(
         rive::Span<const uint8_t>(bytes.data(), bytes.size()));
     rive::RuntimeHeader header;
@@ -580,6 +585,7 @@ std::vector<uint8_t> stripAbortingAssetContents(std::vector<uint8_t> bytes)
     }
     stripped.insert(stripped.end(), bytes.begin() + copyFrom, bytes.end());
     return stripped;
+#endif
 }
 
 class RIVLoader
@@ -810,7 +816,10 @@ int runFile(const Options& options)
 
         std::cout.flush();
         std::fflush(nullptr);
+#ifndef WITH_RIVE_SCRIPTING
         std::_Exit(0);
+#endif
+        return 0;
     }
 
     rive_rust::golden::RecordingFactory recordingFactory;
@@ -914,14 +923,15 @@ int runFile(const Options& options)
         std::cout << recordingFactory.stream();
     }
 
-    // The stream is complete; exit without running destructors. The
-    // reference librive we link is built without WITH_RIVE_SCRIPTING, and
-    // tearing down a File containing script objects (ScriptInput*, scripted
-    // drawables, ...) can segfault in their destructors after the stream has
-    // already been fully emitted. The OS reclaims everything anyway.
+    // In the default unscripted reference build, skip destructors after the
+    // stream is complete. Files with script objects can otherwise segfault
+    // during teardown after emitting the stream.
     std::cout.flush();
     std::fflush(nullptr);
+#ifndef WITH_RIVE_SCRIPTING
     std::_Exit(0);
+#endif
+    return 0;
 }
 } // namespace
 

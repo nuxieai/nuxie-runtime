@@ -1,4 +1,4 @@
-.PHONY: schema check test inspect graph cpp-probe golden-runner rust-golden-runner golden-compare perf-compare perf-corpus perf-hot-loop perf-json capi-smoke cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare
+.PHONY: schema check test inspect graph cpp-probe golden-runner scripted-golden-runner rust-golden-runner golden-compare perf-compare perf-corpus perf-hot-loop perf-json capi-smoke cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 DEFS_DIR ?= $(RIVE_RUNTIME_DIR)/dev/defs
@@ -45,6 +45,9 @@ cpp-probe:
 
 golden-runner:
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" tools/golden-runner/build.sh "$(CPP_CONFIG)"
+
+scripted-golden-runner:
+	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" RIVE_GOLDEN_WITH_SCRIPTING=1 tools/golden-runner/build.sh "$(CPP_CONFIG)"
 
 rust-golden-runner:
 	cargo build --quiet $(RUST_GOLDEN_RUNNER_FLAGS) -p rust-golden-runner

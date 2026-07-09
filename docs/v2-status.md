@@ -479,11 +479,16 @@ the only memory the next session has. Update it every commit.
         ScriptHost traits are landed, luaur implements them behind the
         `rive` `scripting` feature, Rive globals install before bytecode
         load, native-vector `Vector` is bound, and malformed/truncated
-        bytecode is preflighted before the unsafe luaur loader. Remaining:
+        bytecode is preflighted before the unsafe luaur loader. The C++
+        golden runner can now be built WITH scripting via
+        `make scripted-golden-runner`; scripted smokes for
+        `script_artboard_test.riv` and `script_inputs_test_1.riv` produce
+        real streams without the FileAssetContents-stripping harness path.
+        Remaining:
         close full sandbox parity (`luaL_sandbox` equivalent or recorded
-        luaur gap), build the C++ golden runner WITH scripting so scripted
-        corpus files get real reference streams, then port bindings
-        corpus-file-by-corpus-file in the census order.
+        luaur gap), then port bindings corpus-file-by-corpus-file in the
+        census order and regenerate scripted corpus statuses against the
+        scripted C++ reference streams.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
     (c) Hardening: two audit scouts are running NOW (cross-language
@@ -3579,6 +3584,23 @@ the only memory the next session has. Update it every commit.
   parked gated=6 / harness=26. Next scripting step: C++ golden runner WITH
   scripting, full sandbox parity, then binding ports against real scripted
   reference streams.
+
+- 2026-07-09: [M8] Added an opt-in scripting-enabled C++ golden-runner build.
+  `make scripted-golden-runner` now builds a dedicated upstream
+  `librive`/`luau_vm` with `--with_rive_scripting`, builds the matching
+  decoder archives, links the runner with `WITH_RIVE_SCRIPTING`, and keeps
+  scripted and default runner object directories separate. In scripted mode
+  the runner leaves ScriptAsset/FileAssetContents bytes intact and returns
+  normally after emitting streams; the old FileAssetContents stripping and
+  destructor `_Exit` remain only on the default unscripted reference build.
+  Debug scripted smokes for `script_artboard_test.riv` and
+  `script_inputs_test_1.riv` produce real C++ streams; the release scripted
+  runner also builds and smokes `script_artboard_test.riv`. Default
+  `make golden-compare` remains exact=263 / exact-segments=584 / diverges=0
+  with parked gated=6 / harness=26, and `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check` pass. Next scripting
+  step: close or explicitly record the luaur sandbox gap, then port bindings
+  and regenerate scripted corpus statuses against the scripted C++ reference.
 
 - 2026-07-09: [M8] Re-ran the hot-loop benchmark at the user's request while
   deliberately ignoring the load fence, so ongoing optimization work stays

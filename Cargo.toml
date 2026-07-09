@@ -25,3 +25,14 @@ repository = "https://github.com/rive-app/rive-rust"
 lto = "fat"
 codegen-units = 1
 panic = "abort"
+
+# Dedicated size-optimized profile for the SDK cdylib. Does NOT affect the
+# `release` profile the perf gate depends on. Build with `--profile
+# release-size` (see `make size-report` / docs/SIZE.md). Levers here are the
+# cheap wins from docs/v2-status.md item 26(d): size-first codegen (opt-level
+# "z"), aggressive symbol stripping, and fat LTO carried over from release.
+# Override opt-level ad hoc with CARGO_PROFILE_RELEASE_SIZE_OPT_LEVEL=s|3.
+[profile.release-size]
+inherits = "release"
+opt-level = "z"
+strip = "symbols"

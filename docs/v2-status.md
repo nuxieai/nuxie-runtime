@@ -111,18 +111,28 @@ the only memory the next session has. Update it every commit.
   ratios are `spotify_kids_demo@0`=4.147, `advance_blend_mode`=3.975/4.061,
   `animation_reset_cases`=2.726-3.109, `ai_assitant@0`=2.224,
   `animated_clipping@0`=1.952, and `align_target@0`=1.554. This is the current
-  open-fence tracking baseline, not M7 acceptance evidence.
+  open-fence tracking baseline, not M7 acceptance evidence. A C++ path dirt
+  gate slice then stopped treating ordinary `WORLD_TRANSFORM` dirt as retained
+  path-command epoch churn while still invalidating the prepared draw frame.
+  Focused `spotify_kids_demo@0` profiling showed the expected draw-side
+  movement (`draw_ms` 33483 -> 32698 over a 5M repeat; sampled
+  `append_transformed_path_commands` remains dominant). Full
+  `make golden-compare`, `cargo test --workspace`, and
+  `cargo fmt --all -- --check` pass. The same-session open-fence hot-loop
+  reports aggregate min Rust/C++=2.804 with load 21.53/15.32/15.20 and C++
+  min-sum=1.074 ms, so it is tracking-only and below the noise floor versus
+  the prior 2.792 snapshot;
+  `spotify_kids_demo@0` is directionally better at 4.066, but M7 remains open.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, or shared shape path-command buffer scout; they preserved correctness
   but worsened or failed to move direct/fenced release timings. Next priority is
   a clean low-load/sanity-band release sample when available; under the user's
-  open-fence tracking request, the next measured implementation target is
-  remaining nested data-bind propagation and state-machine/property-binding
-  overhead (`collect_nested_artboard_context_source_values`,
-  `update_nested_artboard_data_binds_from_hosts`,
-  `apply_artboard_property_bindings`, and remaining color mutation dirt work)
-  after profiling the hot site and reading the C++ dirt gate first.
+  open-fence tracking request, the next measured implementation target is now
+  the remaining `spotify_kids_demo@0` draw-path append/realloc stack in nested
+  draw/prepare paths, plus the still-visible state-machine/property lookup
+  overhead, after profiling the exact hot site and reading the corresponding
+  C++ retained-path or generated-access dirt gate first.
 
 ## Milestones
 
@@ -1793,6 +1803,21 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-09: [M7] Narrowed retained path-command invalidation for transform
+  dirt to match C++ path composer behavior. The focused `spotify_kids_demo@0`
+  sample showed `append_transformed_path_commands` and allocator growth
+  dominating draw time. C++ `src/shapes/path.cpp::Path::update` rebuilds raw
+  path geometry for `Path`/`NSlicer` dirt, with world-transform rebuilds only
+  for deformed paths; the old world-transform path-changed branch is
+  commented out, while `ShapePaint::draw` applies local path transforms at draw
+  time. Rust now keeps `WORLD_TRANSFORM` invalidating the prepared frame, but
+  no longer bumps `path_epoch` for ordinary transform dirt. A unit test covers
+  that split. Focused `spotify_kids_demo@0` 5M tracking moves draw from
+  33483 ms to 32698 ms, but the full open-fence hot-loop aggregate is flat at
+  Rust/C++=2.804 under high load and an out-of-band C++ min-sum, so this is
+  not M7 acceptance evidence. Full `make golden-compare` remains exact=263 /
+  exact-segments=584 / diverges=0, `cargo test --workspace` passes, and M7
+  remains open.
 - 2026-07-09: [M7] Re-ran the open-fence hot-loop before another optimization
   slice. User explicitly asked to ignore the load fence so the port work stays
   measurement-backed. `make perf-hot-loop PERF_MAX_RATIO=999

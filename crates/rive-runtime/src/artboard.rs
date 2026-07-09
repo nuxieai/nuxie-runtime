@@ -1127,6 +1127,8 @@ impl ArtboardInstance {
         }
         if component_dirt_affects_path_epoch(dirt) {
             self.mark_path_changed();
+        } else if dirt.contains(ComponentDirt::WORLD_TRANSFORM) {
+            self.mark_prepared_changed();
         }
         if dirt.contains(ComponentDirt::DRAW_ORDER) {
             self.mark_draw_order_changed();
@@ -2480,10 +2482,13 @@ fn runtime_nested_animation_instances(
 }
 
 fn component_dirt_affects_path_epoch(dirt: ComponentDirt) -> bool {
+    // C++ `src/shapes/path.cpp::Path::update` rebuilds raw path geometry for
+    // path/nslicer dirt, and only for world-transform dirt when a deformer is
+    // present. Plain transform animation is applied at draw time through the
+    // shape/world transform and must not churn retained path-command storage.
     !(dirt
         & (ComponentDirt::PATH
             | ComponentDirt::VERTICES
-            | ComponentDirt::WORLD_TRANSFORM
             | ComponentDirt::LAYOUT_STYLE
             | ComponentDirt::N_SLICER))
         .is_empty()
@@ -2939,6 +2944,20 @@ mod tests {
 
         assert!(instance.collapse_component(0, true));
         assert!(instance.path_epoch() > path_epoch);
+    }
+
+    #[test]
+    fn world_transform_dirt_invalidates_prepared_frame_without_rebuilding_paths() {
+        let component = synthetic_component(0, 0);
+        let mut instance = synthetic_instance(vec![component], vec![0]);
+
+        let initial_path_epoch = instance.path_epoch();
+        let initial_prepared_epoch = instance.prepared_epoch();
+
+        assert!(instance.add_dirt(0, ComponentDirt::WORLD_TRANSFORM, false));
+
+        assert_eq!(instance.path_epoch(), initial_path_epoch);
+        assert!(instance.prepared_epoch() > initial_prepared_epoch);
     }
 
     #[test]

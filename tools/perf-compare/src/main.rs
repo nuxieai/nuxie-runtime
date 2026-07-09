@@ -869,7 +869,7 @@ fn run_once(
         ));
     }
     if options.runner_benchmark {
-        let phases = parse_benchmark_phases(&output.stdout).map_err(|error| {
+        let benchmark = parse_benchmark_output(&output.stdout).map_err(|error| {
             let kind = if warmup { "warmup" } else { "iteration" };
             format!(
                 "{label} runner {} did not emit a benchmark for {} on {kind} {iteration}: {error}",
@@ -877,7 +877,10 @@ fn run_once(
                 target.id
             )
         })?;
-        let total = phases.iter().map(|(_, duration)| *duration).sum();
+        let total = benchmark
+            .total
+            .unwrap_or_else(|| benchmark.phases.iter().map(|(_, duration)| *duration).sum());
+        let phases = benchmark.phases;
         return Ok(RunSample { total, phases });
     }
     if !output.stdout.starts_with(b"rive-golden-stream-v1\n") {
@@ -942,18 +945,29 @@ const BENCHMARK_PHASES: [(&str, &str); 4] = [
     ("draw", "draw_ms"),
 ];
 
-fn parse_benchmark_phases(stdout: &[u8]) -> Result<Vec<(&'static str, Duration)>, String> {
+#[derive(Debug)]
+struct BenchmarkOutput {
+    total: Option<Duration>,
+    phases: Vec<(&'static str, Duration)>,
+}
+
+fn parse_benchmark_output(stdout: &[u8]) -> Result<BenchmarkOutput, String> {
     let text = std::str::from_utf8(stdout).map_err(|error| format!("invalid utf8: {error}"))?;
     let mut lines = text.lines();
     if lines.next() != Some("rive-golden-benchmark-v1") {
         return Err("missing rive-golden-benchmark-v1 header".to_owned());
     }
 
+    let mut total = None;
     let mut durations: [Option<Duration>; BENCHMARK_PHASES.len()] = [None; BENCHMARK_PHASES.len()];
     for line in lines {
         let Some((key, value)) = line.split_once('=') else {
             continue;
         };
+        if key == "total_ms" {
+            total = Some(parse_millis(value, key)?);
+            continue;
+        }
         let Some(index) = BENCHMARK_PHASES
             .iter()
             .position(|(_, phase_key)| *phase_key == key)
@@ -963,7 +977,7 @@ fn parse_benchmark_phases(stdout: &[u8]) -> Result<Vec<(&'static str, Duration)>
         durations[index] = Some(parse_millis(value, key)?);
     }
 
-    BENCHMARK_PHASES
+    let phases = BENCHMARK_PHASES
         .iter()
         .zip(durations)
         .map(|((name, key), duration)| {
@@ -971,7 +985,9 @@ fn parse_benchmark_phases(stdout: &[u8]) -> Result<Vec<(&'static str, Duration)>
                 .map(|duration| (*name, duration))
                 .ok_or_else(|| format!("missing {key}"))
         })
-        .collect()
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(BenchmarkOutput { total, phases })
 }
 
 fn parse_millis(value: &str, key: &str) -> Result<Duration, String> {
@@ -1612,12 +1628,13 @@ status = "exact"
 
     #[test]
     fn parses_runner_benchmark_hot_loop_phases() {
-        let phases = parse_benchmark_phases(
-            b"rive-golden-benchmark-v1\nelapsed_ms=99\nadvance_ms=1.5\ninput_ms=0.25\nprepare_ms=2.0\ndraw_ms=4.25\nbookkeeping_ms=91\nsegments=2\n",
+        let benchmark = parse_benchmark_output(
+            b"rive-golden-benchmark-v1\nelapsed_ms=99\ntotal_ms=7.75\nadvance_ms=1.5\ninput_ms=0.25\nprepare_ms=2.0\ndraw_ms=4.25\nbookkeeping_ms=91\nsegments=2\n",
         )
         .expect("parse benchmark phases");
+        assert_eq!(benchmark.total, Some(Duration::from_micros(7_750)));
         assert_eq!(
-            phases,
+            benchmark.phases,
             vec![
                 ("advance", Duration::from_micros(1_500)),
                 ("input", Duration::from_micros(250)),
@@ -1625,13 +1642,11 @@ status = "exact"
                 ("draw", Duration::from_micros(4_250)),
             ]
         );
-        let total: Duration = phases.iter().map(|(_, duration)| *duration).sum();
-        assert_eq!(total, Duration::from_micros(8_000));
     }
 
     #[test]
     fn rejects_runner_benchmark_without_phase_duration() {
-        let error = parse_benchmark_phases(
+        let error = parse_benchmark_output(
             b"rive-golden-benchmark-v1\nelapsed_ms=12.5\nadvance_ms=1\ninput_ms=0\nprepare_ms=0\nsegments=2\n",
         )
         .unwrap_err();

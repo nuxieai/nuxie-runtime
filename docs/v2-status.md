@@ -16,8 +16,10 @@ the only memory the next session has. Update it every commit.
 ## M7 Perf Fence
 
 - Gate command: bare `make perf-hot-loop`, which now uses release/null-renderer
-  phase sums, min aggregation, the deliberate image-bearing focused corpus,
-  `PERF_ITERATIONS=10`, and `PERF_BENCHMARK_REPEAT=100`.
+  whole-repeat `total_ms` runner timings, min aggregation, the deliberate
+  image-bearing focused corpus, `PERF_ITERATIONS=10`, and
+  `PERF_BENCHMARK_REPEAT=100`. Phase timings remain JSON/console diagnostics
+  but no longer define the aggregate score.
 - Acceptance: three independent invocations must all report aggregate min
   Rust/C++ <= 2.0, with 1-minute load below about 8 and the C++ min-sum inside
   its 0.70-0.95 ms sanity band.
@@ -28,19 +30,20 @@ the only memory the next session has. Update it every commit.
   draw-path slots, graph-scoped dense path-geometry command slots, dense
   decoded-image slots, cached layout-adjusted draw world transforms, and dense
   mesh render-buffer slots, retained image layout local transforms, and
-  retained draw raw paths, plus no-nested clean paint-preparation skip, full
-  `make golden-compare` and
+  retained draw raw paths, plus no-nested clean paint-preparation skip and
+  whole-repeat hot-loop total timing, full `make golden-compare` and
   `cargo test --workspace` remain green. The latest release/null-renderer
-  sample is still directional only: `make perf-hot-loop PERF_MAX_RATIO=999`
-  reports aggregate min Rust/C++=3.219, but the C++ min-sum was 1.037 ms,
-  outside the 0.70-0.95 ms sanity band. Movement from the previous 3.225
-  directional sample is below the 0.08 noise floor. Strict <=2.0 remains open.
+  sample before the `total_ms` harness change is still directional only:
+  `make perf-hot-loop PERF_MAX_RATIO=999` reports aggregate min Rust/C++=3.219,
+  but the C++ min-sum was 1.037 ms, outside the 0.70-0.95 ms sanity band.
+  Movement from the previous 3.225 directional sample is below the 0.08 noise
+  floor. Strict <=2.0 remains open.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, or shared shape path-command buffer scout; they preserved correctness
   but worsened or failed to move direct/fenced release timings. Next priority is
   a clean low-load/sanity-band release sample, then deeper draw-replay
-  fixed-overhead or timing-harness work under the same scout fences.
+  fixed-overhead work under the same scout fences.
 
 ## Milestones
 
@@ -1708,6 +1711,23 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Measure hot-loop totals with whole-repeat runner timing.
+  Scout item 17 found `mach_absolute_time` reads could be a material fraction
+  of tiny-file steady frames when the harness timed every phase of every
+  repeat. `perf-compare` now prefers runner-emitted `total_ms` for the
+  aggregate and falls back to the old phase sum for older runners. Both golden
+  runners emit `total_ms` from a separate whole-repeat benchmark pass when
+  `--benchmark-repeat` is active, then run the existing phase-timed pass for
+  diagnostic `advance`/`prepare`/`draw` output. This keeps bare
+  `make perf-hot-loop` as the gate while removing per-frame timing calls from
+  the score; phase timings remain advisory. Full `make golden-compare` remains
+  exact=263 / exact-segments=584 / diverges=0; `cargo test --workspace`,
+  `cargo test -p perf-compare --quiet`, `cargo check -p rust-golden-runner`,
+  `tools/golden-runner/build.sh debug`, `cargo fmt --all -- --check`, and
+  `git diff --check` pass. A debug `shapetest` benchmark smoke confirmed both
+  runners emit `total_ms` and `perf-compare` consumes it. M7 perf was not rerun
+  because load averages were 10.60/13.69/17.46 after verification, outside the
+  acceptance fence. Strict <=2.0 remains open.
 - 2026-07-08: [M7] Skip clean no-nested paint preparation before prepared
   command lookup. A status-doc scout review keeps the current M7 findings in
   force: min-based release/null-renderer repeat=100 is the only
@@ -3789,6 +3809,20 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-08: [M7] Switched hot-loop aggregate timing to whole-repeat
+  `total_ms`. `perf-compare` now scores runner benchmarks from `total_ms` when
+  present, with a phase-sum fallback for older runners. The C++ and Rust golden
+  runners emit `total_ms` from a separate whole-repeat pass for
+  `--benchmark-repeat`, then keep the existing per-phase pass as diagnostics.
+  This implements the scout methodology fence that tiny-file phase timing was
+  paying for repeated clock reads. Full `make golden-compare` remains
+  exact=263/exact-segments=584/diverges=0; `cargo test --workspace`,
+  `cargo test -p perf-compare --quiet`, `cargo check -p rust-golden-runner`,
+  `tools/golden-runner/build.sh debug`, `cargo fmt --all -- --check`, and
+  `git diff --check` pass. A debug `shapetest` benchmark smoke confirms both
+  runners emit `total_ms` and `perf-compare` consumes it. Perf was not rerun
+  because load stayed outside the M7 acceptance fence.
 
 - 2026-07-08: [M7] Skipped clean no-nested paint preparation before prepared
   command lookup. The scout review identified the binding fences for this

@@ -692,6 +692,52 @@ double durationMillis(std::chrono::steady_clock::duration duration)
     return std::chrono::duration<double, std::milli>(duration).count();
 }
 
+struct BenchmarkTimings
+{
+    std::chrono::steady_clock::duration elapsed{};
+    std::chrono::steady_clock::duration advance{};
+    std::chrono::steady_clock::duration input{};
+    std::chrono::steady_clock::duration draw{};
+};
+
+BenchmarkTimings runBenchmarkPass(const Options& options, bool collectPhases)
+{
+    rive_rust::golden::NullFactory nullFactory;
+    RIVLoader loader(stripAbortingAssetContents(readFile(options.file)),
+                     options.artboard,
+                     options.stateMachine,
+                     &nullFactory);
+    rive::Scene* scene = loader.scene();
+    auto renderer = nullFactory.makeRenderer();
+
+    BenchmarkTimings timings;
+    auto timedStage = [&](auto& elapsed, auto&& action) {
+        if (!collectPhases)
+        {
+            action();
+            return;
+        }
+        const auto stageStart = std::chrono::steady_clock::now();
+        action();
+        elapsed += std::chrono::steady_clock::now() - stageStart;
+    };
+
+    float currentSeconds = 0.0f;
+    const auto benchmarkStart = std::chrono::steady_clock::now();
+    for (size_t repeat = 0; repeat < options.benchmarkRepeat; repeat++)
+    {
+        for (float sampleSeconds : options.samples)
+        {
+            timedStage(timings.advance, [&] {
+                advanceTo(scene, sampleSeconds, currentSeconds);
+            });
+            timedStage(timings.draw, [&] { scene->draw(renderer.get()); });
+        }
+    }
+    timings.elapsed = std::chrono::steady_clock::now() - benchmarkStart;
+    return timings;
+}
+
 int runSmoke()
 {
     rive_rust::golden::RecordingFactory factory;
@@ -737,6 +783,35 @@ int runFile(const Options& options)
     }
 
     rive::File::deterministicMode = true;
+
+    if (options.benchmark && options.benchmarkRepeat > 1)
+    {
+        const auto totalTimings = runBenchmarkPass(options, false);
+        const auto phaseTimings = runBenchmarkPass(options, true);
+        const auto phaseBookkeepingElapsed = phaseTimings.elapsed -
+                                             phaseTimings.advance -
+                                             phaseTimings.input -
+                                             phaseTimings.draw;
+        std::cout << "rive-golden-benchmark-v1\n"
+                  << "elapsed_ms=" << durationMillis(totalTimings.elapsed)
+                  << "\n"
+                  << "total_ms=" << durationMillis(totalTimings.elapsed)
+                  << "\n"
+                  << "advance_ms=" << durationMillis(phaseTimings.advance)
+                  << "\n"
+                  << "input_ms=" << durationMillis(phaseTimings.input)
+                  << "\n"
+                  << "prepare_ms=0\n"
+                  << "draw_ms=" << durationMillis(phaseTimings.draw) << "\n"
+                  << "bookkeeping_ms="
+                  << durationMillis(phaseBookkeepingElapsed) << "\n"
+                  << "segments="
+                  << options.samples.size() * options.benchmarkRepeat << "\n";
+
+        std::cout.flush();
+        std::fflush(nullptr);
+        std::_Exit(0);
+    }
 
     rive_rust::golden::RecordingFactory recordingFactory;
     rive_rust::golden::NullFactory nullFactory;

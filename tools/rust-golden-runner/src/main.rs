@@ -164,6 +164,17 @@ fn run() -> Result<String> {
         );
     }
 
+    if options.benchmark && options.benchmark_repeat > 1 {
+        return write_benchmark_repeat_report(
+            &options,
+            &runtime,
+            &graph,
+            artboard_index,
+            artboard,
+            &scene,
+        );
+    }
+
     let mut factory: Box<dyn RunnerBackend> = if options.benchmark {
         Box::new(NullFactory::new())
     } else {
@@ -282,6 +293,195 @@ fn run() -> Result<String> {
     } else {
         Ok(factory.stream())
     }
+}
+
+struct BenchmarkTimings {
+    elapsed: Duration,
+    advance: Duration,
+    input: Duration,
+    prepare: Duration,
+    draw: Duration,
+}
+
+fn write_benchmark_repeat_report(
+    options: &Options,
+    runtime: &RuntimeFile,
+    graph: &GraphFile,
+    artboard_index: usize,
+    artboard: &ArtboardGraph,
+    scene: &SelectedScene,
+) -> Result<String> {
+    let total = run_benchmark_repeat_pass(
+        options,
+        runtime,
+        graph,
+        artboard_index,
+        artboard,
+        scene,
+        false,
+    )?;
+    let phases = run_benchmark_repeat_pass(
+        options,
+        runtime,
+        graph,
+        artboard_index,
+        artboard,
+        scene,
+        true,
+    )?;
+    let accounted_elapsed = phases.advance + phases.input + phases.prepare + phases.draw;
+    let bookkeeping_elapsed = phases.elapsed.saturating_sub(accounted_elapsed);
+    Ok(format!(
+        "rive-golden-benchmark-v1\nelapsed_ms={}\ntotal_ms={}\nadvance_ms={}\ninput_ms={}\nprepare_ms={}\ndraw_ms={}\nbookkeeping_ms={}\nsegments={}\n",
+        total.elapsed.as_secs_f64() * 1000.0,
+        total.elapsed.as_secs_f64() * 1000.0,
+        phases.advance.as_secs_f64() * 1000.0,
+        phases.input.as_secs_f64() * 1000.0,
+        phases.prepare.as_secs_f64() * 1000.0,
+        phases.draw.as_secs_f64() * 1000.0,
+        bookkeeping_elapsed.as_secs_f64() * 1000.0,
+        options.samples.len() * options.benchmark_repeat
+    ))
+}
+
+fn run_benchmark_repeat_pass(
+    options: &Options,
+    runtime: &RuntimeFile,
+    graph: &GraphFile,
+    artboard_index: usize,
+    artboard: &ArtboardGraph,
+    scene: &SelectedScene,
+    collect_phases: bool,
+) -> Result<BenchmarkTimings> {
+    let (mut instance, mut state_machine, owned_view_model_context) =
+        instantiate_scene_state(runtime, artboard_index, artboard, &graph.artboards, scene)?;
+    let mut factory = NullFactory::new();
+    let mut paint_cache = preallocate_render_paint_cache_for_artboard_tree(
+        runtime,
+        artboard,
+        &graph.artboards,
+        &mut factory,
+    );
+    let mut path_cache = RuntimeRenderPathCache::default();
+    let mut renderer = factory.make_renderer();
+
+    let mut advance_elapsed = Duration::ZERO;
+    let input_elapsed = Duration::ZERO;
+    let mut prepare_elapsed = Duration::ZERO;
+    let mut draw_elapsed = Duration::ZERO;
+    let mut current_seconds = 0.0;
+    let benchmark_start = Instant::now();
+    for _ in 0..options.benchmark_repeat {
+        for sample in &options.samples {
+            if collect_phases {
+                timed_result(true, &mut advance_elapsed, || {
+                    advance_scene_to(
+                        &mut instance,
+                        runtime,
+                        state_machine.as_mut(),
+                        owned_view_model_context.as_ref(),
+                        *sample,
+                        &mut current_seconds,
+                    )
+                })?;
+                timed_result(true, &mut prepare_elapsed, || {
+                    instance.prepare_static_artboard_tree_paints(
+                        runtime,
+                        artboard,
+                        &graph.artboards,
+                        &mut factory,
+                        &mut paint_cache,
+                        &mut path_cache,
+                    )
+                })?;
+                timed_result(true, &mut draw_elapsed, || {
+                    instance
+                        .draw_prepared_static_artboard_with_render_cache(
+                            runtime,
+                            artboard,
+                            &graph.artboards,
+                            &mut factory,
+                            &mut renderer,
+                            &mut paint_cache,
+                            &mut path_cache,
+                        )
+                        .map_err(unsupported_static_text_draw_error)
+                })?;
+            } else {
+                advance_scene_to(
+                    &mut instance,
+                    runtime,
+                    state_machine.as_mut(),
+                    owned_view_model_context.as_ref(),
+                    *sample,
+                    &mut current_seconds,
+                )?;
+                instance.prepare_static_artboard_tree_paints(
+                    runtime,
+                    artboard,
+                    &graph.artboards,
+                    &mut factory,
+                    &mut paint_cache,
+                    &mut path_cache,
+                )?;
+                instance
+                    .draw_prepared_static_artboard_with_render_cache(
+                        runtime,
+                        artboard,
+                        &graph.artboards,
+                        &mut factory,
+                        &mut renderer,
+                        &mut paint_cache,
+                        &mut path_cache,
+                    )
+                    .map_err(unsupported_static_text_draw_error)?;
+            }
+        }
+    }
+
+    Ok(BenchmarkTimings {
+        elapsed: benchmark_start.elapsed(),
+        advance: advance_elapsed,
+        input: input_elapsed,
+        prepare: prepare_elapsed,
+        draw: draw_elapsed,
+    })
+}
+
+fn instantiate_scene_state(
+    runtime: &RuntimeFile,
+    artboard_index: usize,
+    artboard: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+    scene: &SelectedScene,
+) -> Result<(
+    ArtboardInstance,
+    Option<StateMachineInstance>,
+    Option<RuntimeOwnedViewModelInstance>,
+)> {
+    let mut instance = ArtboardInstance::from_graph_with_artboards(runtime, artboard, artboards)
+        .context("failed to instantiate artboard")?;
+    let mut state_machine = scene
+        .state_machine_index
+        .map(|index| {
+            instance
+                .state_machine_instance(index)
+                .with_context(|| format!("failed to instantiate state machine index {index}"))
+        })
+        .transpose()?;
+    let owned_view_model_context = selected_artboard_view_model_index(runtime, artboard_index)
+        .and_then(|view_model_index| RuntimeOwnedViewModelInstance::new(runtime, view_model_index));
+    instance.bind_default_view_model_artboard_list_context(runtime);
+    if let Some(state_machine) = state_machine.as_mut() {
+        if let Some(context) = owned_view_model_context.as_ref() {
+            state_machine.bind_owned_view_model_context(context);
+        }
+        state_machine.advance_data_context();
+    }
+    if let Some(context) = owned_view_model_context.as_ref() {
+        instance.bind_owned_view_model_nested_artboard_contexts(runtime, context);
+    }
+    Ok((instance, state_machine, owned_view_model_context))
 }
 
 fn timed_result<T>(

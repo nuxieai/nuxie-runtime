@@ -7092,6 +7092,29 @@ pub fn preallocate_render_paint_cache_for_artboard_tree(
     artboards: &[ArtboardGraph],
     factory: &mut dyn RenderFactory,
 ) -> RuntimeRenderPaintCache {
+    preallocate_render_paint_cache_for_artboard_tree_internal(
+        runtime, graph, artboards, factory, true,
+    )
+}
+
+pub fn preallocate_render_paint_cache_for_scripted_artboard_tree(
+    runtime: &RuntimeFile,
+    graph: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+    factory: &mut dyn RenderFactory,
+) -> RuntimeRenderPaintCache {
+    preallocate_render_paint_cache_for_artboard_tree_internal(
+        runtime, graph, artboards, factory, false,
+    )
+}
+
+fn preallocate_render_paint_cache_for_artboard_tree_internal(
+    runtime: &RuntimeFile,
+    graph: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+    factory: &mut dyn RenderFactory,
+    include_script_input_artboards: bool,
+) -> RuntimeRenderPaintCache {
     let image_asset_globals = runtime
         .file_assets()
         .into_iter()
@@ -7127,6 +7150,7 @@ pub fn preallocate_render_paint_cache_for_artboard_tree(
         &mut source_meshes,
         &mut cache,
         &mut BTreeSet::new(),
+        include_script_input_artboards,
     );
     preallocate_artboard_render_paint_tree_batch_into(
         runtime,
@@ -7135,8 +7159,33 @@ pub fn preallocate_render_paint_cache_for_artboard_tree(
         factory,
         &mut cache,
         &mut BTreeSet::new(),
+        include_script_input_artboards,
     );
     cache.images = images;
+    cache
+}
+
+/// Allocates the render paints owned by a newly cloned artboard instance.
+///
+/// C++ `Artboard::instance()` clones each `ShapePaint` and initializes its
+/// render paint from the file's existing factory. File-level source paints and
+/// decoded assets are not recreated for every clone.
+pub fn preallocate_render_paint_cache_for_artboard_instance(
+    runtime: &RuntimeFile,
+    graph: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+    factory: &mut dyn RenderFactory,
+) -> RuntimeRenderPaintCache {
+    let mut cache = RuntimeRenderPaintCache::default();
+    preallocate_artboard_render_paint_tree_batch_into(
+        runtime,
+        graph,
+        artboards,
+        factory,
+        &mut cache,
+        &mut BTreeSet::new(),
+        true,
+    );
     cache
 }
 
@@ -7329,6 +7378,7 @@ fn preallocate_artboard_mesh_render_buffer_tree_batch_into(
     source_meshes: &mut BTreeMap<(u32, usize), RuntimeSourceMeshRenderBuffers>,
     cache: &mut RuntimeRenderPaintCache,
     visiting: &mut BTreeSet<u32>,
+    include_script_input_artboards: bool,
 ) {
     if !visiting.insert(graph.global_id) {
         return;
@@ -7337,6 +7387,10 @@ fn preallocate_artboard_mesh_render_buffer_tree_batch_into(
     cache.meshes = preallocate_artboard_mesh_render_buffers(graph, factory, source_meshes);
 
     for local_object in &graph.local_objects {
+        if !include_script_input_artboards && local_object.type_name == Some("ScriptInputArtboard")
+        {
+            continue;
+        }
         if let Some(child_graph) =
             referenced_artboard_graph_for_local_object(runtime, artboards, local_object.global_id)
         {
@@ -7354,6 +7408,7 @@ fn preallocate_artboard_mesh_render_buffer_tree_batch_into(
                 source_meshes,
                 child_cache,
                 visiting,
+                include_script_input_artboards,
             );
         }
     }
@@ -7544,6 +7599,7 @@ fn preallocate_artboard_render_paint_tree_batch_into(
     factory: &mut dyn RenderFactory,
     cache: &mut RuntimeRenderPaintCache,
     visiting: &mut BTreeSet<u32>,
+    include_script_input_artboards: bool,
 ) {
     if !visiting.insert(graph.global_id) {
         return;
@@ -7558,6 +7614,10 @@ fn preallocate_artboard_render_paint_tree_batch_into(
         .collect::<BTreeMap<_, _>>();
 
     for local_object in &graph.local_objects {
+        if !include_script_input_artboards && local_object.type_name == Some("ScriptInputArtboard")
+        {
+            continue;
+        }
         if let Some(child_graph) =
             referenced_artboard_graph_for_local_object(runtime, artboards, local_object.global_id)
         {
@@ -7574,6 +7634,7 @@ fn preallocate_artboard_render_paint_tree_batch_into(
                 factory,
                 child_cache,
                 visiting,
+                include_script_input_artboards,
             );
         }
     }

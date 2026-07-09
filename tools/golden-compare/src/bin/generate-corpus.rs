@@ -64,6 +64,7 @@ fn run() -> Result<()> {
             for feature in previous.features.iter().filter(|feature| {
                 (previous.status == "unsupported-feature" && !feature.starts_with("type-key:"))
                     || feature.as_str() == "scripted-runner-only"
+                    || feature.starts_with("scripted-status:")
             }) {
                 if !features.contains(feature) {
                     features.push(feature.clone());

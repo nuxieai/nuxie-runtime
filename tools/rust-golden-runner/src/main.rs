@@ -15,7 +15,8 @@ use rive_runtime::{
 #[cfg(feature = "scripting")]
 use rive_runtime::{
     NoopScriptHost, ScriptArtboard, ScriptError, ScriptMethod, ScriptValue,
-    ScriptingVm as RuntimeScriptingVm,
+    ScriptingVm as RuntimeScriptingVm, preallocate_render_paint_cache_for_artboard_instance,
+    preallocate_render_paint_cache_for_scripted_artboard_tree,
 };
 #[cfg(feature = "scripting")]
 use rive_scripting::vm::ScriptVm;
@@ -26,6 +27,8 @@ use std::env;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
+#[cfg(feature = "scripting")]
+use std::{cell::RefCell, rc::Rc};
 
 const TIME_EPSILON: f32 = 0.000001;
 const DATA_BIND_FLAG_DIRECTION_TO_SOURCE: u64 = 1 << 0;
@@ -155,9 +158,38 @@ fn run() -> Result<String> {
     let mut instance =
         ArtboardInstance::from_graph_with_artboards(&runtime, artboard, &graph.artboards)
             .context("failed to instantiate artboard")?;
+    let mut factory: Box<dyn RunnerBackend> = if options.benchmark {
+        Box::new(NullFactory::new())
+    } else {
+        Box::new(RecordingFactory::new())
+    };
     #[cfg(feature = "scripting")]
-    initialize_scripted_drawables(&runtime, artboard, &graph.artboards, &mut instance)
-        .context("failed to initialize scripted drawables")?;
+    let mut paint_cache = preallocate_render_paint_cache_for_scripted_artboard_tree(
+        &runtime,
+        artboard,
+        &graph.artboards,
+        factory.as_factory(),
+    );
+    #[cfg(not(feature = "scripting"))]
+    let mut paint_cache = preallocate_render_paint_cache_for_artboard_tree(
+        &runtime,
+        artboard,
+        &graph.artboards,
+        factory.as_factory(),
+    );
+    #[cfg(feature = "scripting")]
+    let script_artboard_render_state = {
+        let state =
+            initialize_scripted_drawables(&runtime, artboard, &graph.artboards, &mut instance)
+                .context("failed to initialize scripted drawables")?;
+        if let Some(state) = state.as_ref() {
+            state
+                .borrow_mut()
+                .realize_pending(&runtime, &graph.artboards, factory.as_factory())
+                .context("failed to allocate initialized script artboard paints")?;
+        }
+        state
+    };
     let scene = select_scene(
         &runtime,
         artboard_index,
@@ -177,6 +209,18 @@ fn run() -> Result<String> {
             RuntimeOwnedViewModelInstance::new(&runtime, view_model_index)
         });
     instance.bind_default_view_model_artboard_list_context(&runtime);
+    #[cfg(feature = "scripting")]
+    if let Some(state) = script_artboard_render_state.as_ref() {
+        // Mirrors RIVLoader's Artboard::bindViewModelInstance rehydration.
+        rebind_scripted_drawables(
+            &runtime,
+            artboard,
+            &graph.artboards,
+            &mut instance,
+            state,
+            factory.as_factory(),
+        )?;
+    }
     if let Some(state_machine) = state_machine.as_mut() {
         if let Some(context) = owned_view_model_context.as_ref() {
             state_machine.bind_owned_view_model_context(context);
@@ -185,6 +229,25 @@ fn run() -> Result<String> {
     }
     if let Some(context) = owned_view_model_context.as_ref() {
         instance.bind_owned_view_model_nested_artboard_contexts(&runtime, context);
+    }
+    #[cfg(feature = "scripting")]
+    if owned_view_model_context.is_some()
+        && let Some(state) = script_artboard_render_state.as_ref()
+    {
+        // RIVLoader binds the same context through the selected Scene too.
+        rebind_scripted_drawables(
+            &runtime,
+            artboard,
+            &graph.artboards,
+            &mut instance,
+            state,
+            factory.as_factory(),
+        )?;
+    }
+    #[cfg(feature = "scripting")]
+    if script_artboard_render_state.is_some() {
+        // C++ leaves ScriptUpdate dirty for the first update pass after binds.
+        mark_scripted_drawables_for_update(artboard, &mut instance);
     }
 
     let artboard_name = artboard.name.clone().unwrap_or_default();
@@ -213,17 +276,6 @@ fn run() -> Result<String> {
         );
     }
 
-    let mut factory: Box<dyn RunnerBackend> = if options.benchmark {
-        Box::new(NullFactory::new())
-    } else {
-        Box::new(RecordingFactory::new())
-    };
-    let mut paint_cache = preallocate_render_paint_cache_for_artboard_tree(
-        &runtime,
-        artboard,
-        &graph.artboards,
-        factory.as_factory(),
-    );
     let mut path_cache = RuntimeRenderPathCache::default();
     let mut renderer = factory.make_renderer();
 
@@ -286,6 +338,14 @@ fn run() -> Result<String> {
                     &mut current_seconds,
                 )
             })?;
+            #[cfg(feature = "scripting")]
+            if let Some(state) = script_artboard_render_state.as_ref() {
+                state.borrow_mut().realize_pending(
+                    &runtime,
+                    &graph.artboards,
+                    factory.as_factory(),
+                )?;
+            }
             timed_result(options.benchmark, &mut prepare_elapsed, || {
                 instance.prepare_static_artboard_tree_paints(
                     &runtime,
@@ -1061,6 +1121,9 @@ fn advance_scene_to(
         instance.bind_owned_view_model_nested_artboard_contexts(runtime, context);
     }
     instance.advance_artboard_data_binds_with_elapsed(elapsed_seconds);
+    instance
+        .update_script_instances()
+        .context("scripted drawable update failed")?;
     instance.update_pass();
     *current_seconds = target_seconds;
     Ok(())
@@ -1221,8 +1284,45 @@ struct RunnerScriptArtboard {
     width: f32,
     height: f32,
     frame_origin: bool,
-    paint_cache: Option<rive_runtime::RuntimeRenderPaintCache>,
+    render_instance_id: u64,
+    render_state: Rc<RefCell<RunnerScriptArtboardRenderState>>,
     path_cache: RuntimeRenderPathCache,
+}
+
+#[cfg(feature = "scripting")]
+#[derive(Default)]
+struct RunnerScriptArtboardRenderState {
+    next_instance_id: u64,
+    pending: Vec<(u64, usize)>,
+    caches: BTreeMap<u64, rive_runtime::RuntimeRenderPaintCache>,
+}
+
+#[cfg(feature = "scripting")]
+impl RunnerScriptArtboardRenderState {
+    fn register(&mut self, artboard_index: usize) -> u64 {
+        let instance_id = self.next_instance_id;
+        self.next_instance_id += 1;
+        self.pending.push((instance_id, artboard_index));
+        instance_id
+    }
+
+    fn realize_pending(
+        &mut self,
+        runtime: &RuntimeFile,
+        artboards: &[ArtboardGraph],
+        factory: &mut dyn RenderFactory,
+    ) -> Result<()> {
+        for (instance_id, artboard_index) in std::mem::take(&mut self.pending) {
+            let graph = artboards
+                .get(artboard_index)
+                .with_context(|| format!("missing scripted artboard index {artboard_index}"))?;
+            let cache = preallocate_render_paint_cache_for_artboard_instance(
+                runtime, graph, artboards, factory,
+            );
+            self.caches.insert(instance_id, cache);
+        }
+        Ok(())
+    }
 }
 
 #[cfg(feature = "scripting")]
@@ -1231,6 +1331,7 @@ impl RunnerScriptArtboard {
         runtime: &RuntimeFile,
         artboards: &[ArtboardGraph],
         artboard_index: usize,
+        render_state: Rc<RefCell<RunnerScriptArtboardRenderState>>,
     ) -> Result<Self> {
         let graph = artboards
             .get(artboard_index)
@@ -1240,6 +1341,7 @@ impl RunnerScriptArtboard {
                 format!("failed to instantiate scripted artboard index {artboard_index}")
             })?;
         let object = runtime.object(graph.global_id as usize);
+        let render_instance_id = render_state.borrow_mut().register(artboard_index);
         Ok(Self {
             runtime: runtime.clone(),
             artboards: artboards.to_vec(),
@@ -1252,7 +1354,8 @@ impl RunnerScriptArtboard {
                 .and_then(|object| object.double_property("height"))
                 .unwrap_or(0.0),
             frame_origin: false,
-            paint_cache: None,
+            render_instance_id,
+            render_state,
             path_cache: RuntimeRenderPathCache::default(),
         })
     }
@@ -1290,8 +1393,13 @@ impl ScriptArtboard for RunnerScriptArtboard {
 
     fn instance(&self) -> std::result::Result<Box<dyn ScriptArtboard>, ScriptError> {
         Ok(Box::new(
-            RunnerScriptArtboard::new(&self.runtime, &self.artboards, self.artboard_index)
-                .map_err(|error| ScriptError::new(error.to_string()))?,
+            RunnerScriptArtboard::new(
+                &self.runtime,
+                &self.artboards,
+                self.artboard_index,
+                Rc::clone(&self.render_state),
+            )
+            .map_err(|error| ScriptError::new(error.to_string()))?,
         ))
     }
 
@@ -1313,54 +1421,63 @@ impl ScriptArtboard for RunnerScriptArtboard {
         let origin_y = object
             .and_then(|object| object.double_property("originY"))
             .unwrap_or(0.5);
-        if self.paint_cache.is_none() {
-            self.paint_cache = Some(preallocate_render_paint_cache_for_artboard_tree(
-                &self.runtime,
-                graph,
-                &self.artboards,
-                factory,
-            ));
-        }
-        let paint_cache = self
-            .paint_cache
-            .as_mut()
-            .expect("script artboard paint cache initialized");
-        self.instance
+        let mut paint_cache = self
+            .render_state
+            .borrow_mut()
+            .caches
+            .remove(&self.render_instance_id)
+            .unwrap_or_else(|| {
+                preallocate_render_paint_cache_for_artboard_instance(
+                    &self.runtime,
+                    graph,
+                    &self.artboards,
+                    factory,
+                )
+            });
+        let result = self
+            .instance
             .prepare_static_artboard_tree_paints(
                 &self.runtime,
                 graph,
                 &self.artboards,
                 factory,
-                paint_cache,
+                &mut paint_cache,
                 &mut self.path_cache,
             )
-            .map_err(|error| ScriptError::new(error.to_string()))?;
-        if self.frame_origin {
-            renderer.save();
-            renderer.transform(rive_render_api::Mat2D([
-                1.0,
-                0.0,
-                0.0,
-                1.0,
-                self.width * origin_x,
-                self.height * origin_y,
-            ]));
-        }
-        let result = self
-            .instance
-            .draw_prepared_static_artboard_with_render_cache(
-                &self.runtime,
-                graph,
-                &self.artboards,
-                factory,
-                renderer,
-                paint_cache,
-                &mut self.path_cache,
-            )
-            .map_err(|error| ScriptError::new(error.to_string()));
-        if self.frame_origin {
-            renderer.restore();
-        }
+            .map_err(|error| ScriptError::new(error.to_string()))
+            .and_then(|()| {
+                if self.frame_origin {
+                    renderer.save();
+                    renderer.transform(rive_render_api::Mat2D([
+                        1.0,
+                        0.0,
+                        0.0,
+                        1.0,
+                        self.width * origin_x,
+                        self.height * origin_y,
+                    ]));
+                }
+                let result = self
+                    .instance
+                    .draw_prepared_static_artboard_with_render_cache(
+                        &self.runtime,
+                        graph,
+                        &self.artboards,
+                        factory,
+                        renderer,
+                        &mut paint_cache,
+                        &mut self.path_cache,
+                    )
+                    .map_err(|error| ScriptError::new(error.to_string()));
+                if self.frame_origin {
+                    renderer.restore();
+                }
+                result
+            });
+        self.render_state
+            .borrow_mut()
+            .caches
+            .insert(self.render_instance_id, paint_cache);
         result
     }
 }
@@ -1371,12 +1488,13 @@ fn initialize_scripted_drawables(
     artboard: &ArtboardGraph,
     artboards: &[ArtboardGraph],
     instance: &mut ArtboardInstance,
-) -> Result<()> {
+) -> Result<Option<Rc<RefCell<RunnerScriptArtboardRenderState>>>> {
     let script_assets = extract_script_assets(runtime);
     if script_assets.is_empty() {
-        return Ok(());
+        return Ok(None);
     }
 
+    let render_state = Rc::new(RefCell::new(RunnerScriptArtboardRenderState::default()));
     let mut vm = ScriptVm::new();
     let mut host = NoopScriptHost;
     for local_object in &artboard.local_objects {
@@ -1413,6 +1531,7 @@ fn initialize_scripted_drawables(
             artboards,
             local_object.local_id,
             script_instance.as_mut(),
+            Rc::clone(&render_state),
         )?;
         if script_instance
             .has_method(ScriptMethod::Init)
@@ -1430,7 +1549,7 @@ fn initialize_scripted_drawables(
         instance.set_script_instance_for_global(local_object.global_id, script_instance);
     }
 
-    Ok(())
+    Ok(Some(render_state))
 }
 
 #[cfg(feature = "scripting")]
@@ -1499,6 +1618,7 @@ fn hydrate_script_inputs(
     artboards: &[ArtboardGraph],
     scripted_local_id: usize,
     script_instance: &mut dyn rive_runtime::ScriptInstance,
+    render_state: Rc<RefCell<RunnerScriptArtboardRenderState>>,
 ) -> Result<()> {
     let object_range = artboard_object_range(runtime, artboard, artboards);
     for global_id in object_range {
@@ -1519,7 +1639,12 @@ fn hydrate_script_inputs(
             let Some(artboard_index) = object.uint_property("artboardId") else {
                 continue;
             };
-            let artboard = RunnerScriptArtboard::new(runtime, artboards, artboard_index as usize)?;
+            let artboard = RunnerScriptArtboard::new(
+                runtime,
+                artboards,
+                artboard_index as usize,
+                Rc::clone(&render_state),
+            )?;
             script_instance
                 .set_artboard_input(name, Box::new(artboard))
                 .with_context(|| format!("failed to hydrate artboard script input '{name}'"))?;
@@ -1546,6 +1671,107 @@ fn hydrate_script_inputs(
     }
 
     Ok(())
+}
+
+#[cfg(feature = "scripting")]
+fn rebind_scripted_drawables(
+    runtime: &RuntimeFile,
+    artboard: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+    instance: &mut ArtboardInstance,
+    render_state: &Rc<RefCell<RunnerScriptArtboardRenderState>>,
+    factory: &mut dyn RenderFactory,
+) -> Result<()> {
+    for local_object in &artboard.local_objects {
+        if local_object.type_name != Some("ScriptedDrawable") {
+            continue;
+        }
+        rehydrate_script_inputs(
+            runtime,
+            artboard,
+            artboards,
+            local_object.local_id,
+            local_object.global_id,
+            instance,
+            Rc::clone(render_state),
+        )?;
+    }
+    instance
+        .update_script_instances()
+        .context("scripted drawable rebind update failed")?;
+    render_state
+        .borrow_mut()
+        .realize_pending(runtime, artboards, factory)
+        .context("failed to allocate rebound script artboard paints")
+}
+
+#[cfg(feature = "scripting")]
+fn rehydrate_script_inputs(
+    runtime: &RuntimeFile,
+    artboard: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+    scripted_local_id: usize,
+    scripted_global_id: u32,
+    instance: &mut ArtboardInstance,
+    render_state: Rc<RefCell<RunnerScriptArtboardRenderState>>,
+) -> Result<()> {
+    for global_id in artboard_object_range(runtime, artboard, artboards) {
+        let Some(object) = runtime.object(global_id) else {
+            continue;
+        };
+        let type_name = object.type_name;
+        if !type_name.starts_with("ScriptInput")
+            || object.uint_property("parentId") != Some(scripted_local_id as u64)
+        {
+            continue;
+        }
+        let Some(name) = object.string_property("name") else {
+            continue;
+        };
+        if type_name == "ScriptInputArtboard" {
+            let Some(artboard_index) = object.uint_property("artboardId") else {
+                continue;
+            };
+            let artboard = RunnerScriptArtboard::new(
+                runtime,
+                artboards,
+                artboard_index as usize,
+                Rc::clone(&render_state),
+            )?;
+            instance
+                .set_script_artboard_input_for_global(scripted_global_id, name, Box::new(artboard))
+                .with_context(|| format!("failed to rebind artboard script input '{name}'"))?;
+            continue;
+        }
+        let value = match type_name {
+            "ScriptInputBoolean" => object.bool_property("propertyValue").map(ScriptValue::Bool),
+            "ScriptInputColor" => object
+                .color_property("propertyValue")
+                .map(|value| ScriptValue::Number(value as f64)),
+            "ScriptInputNumber" => object
+                .double_property("propertyValue")
+                .map(|value| ScriptValue::Number(f64::from(value))),
+            "ScriptInputString" => object
+                .string_property("propertyValue")
+                .map(|value| ScriptValue::String(value.to_owned())),
+            _ => None,
+        };
+        if let Some(value) = value {
+            instance
+                .set_script_input_for_global(scripted_global_id, name, value)
+                .with_context(|| format!("failed to rebind script input '{name}'"))?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(feature = "scripting")]
+fn mark_scripted_drawables_for_update(artboard: &ArtboardGraph, instance: &mut ArtboardInstance) {
+    for local_object in &artboard.local_objects {
+        if local_object.type_name == Some("ScriptedDrawable") {
+            instance.mark_script_update_for_global(local_object.global_id);
+        }
+    }
 }
 
 #[cfg(feature = "scripting")]

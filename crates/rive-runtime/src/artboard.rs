@@ -48,7 +48,10 @@ use crate::properties::{
     solid_color_value_property_key, solo_active_component_id_property_key,
     transform_property_for_key,
 };
-use crate::scripting::{RuntimeScriptInstanceHandle, ScriptInstance};
+use crate::scripting::{
+    NoopScriptHost, RuntimeScriptInstanceHandle, ScriptArtboard, ScriptError, ScriptInstance,
+    ScriptMethod, ScriptValue,
+};
 use crate::state_machine::{
     RuntimeStateMachine, StateMachineInputKind, StateMachineInstance, StateMachineReportedEvent,
     build_state_machines,
@@ -77,6 +80,7 @@ pub struct ArtboardInstance {
     pub(crate) linear_animations: Vec<RuntimeLinearAnimation>,
     pub(crate) state_machines: Arc<Vec<RuntimeStateMachine>>,
     pub(crate) script_instances_by_global: BTreeMap<u32, RuntimeScriptInstanceHandle>,
+    script_updates_pending: BTreeSet<u32>,
     pub(crate) nested_artboards: BTreeMap<usize, RuntimeNestedArtboardInstance>,
     pub(crate) nested_artboard_locals: Vec<usize>,
     newly_uncollapsed_nested_artboards: BTreeSet<usize>,
@@ -323,6 +327,7 @@ impl ArtboardInstance {
             linear_animations,
             state_machines: Arc::new(state_machines),
             script_instances_by_global: BTreeMap::new(),
+            script_updates_pending: BTreeSet::new(),
             nested_artboards,
             nested_artboard_locals,
             newly_uncollapsed_nested_artboards: BTreeSet::new(),
@@ -386,6 +391,66 @@ impl ArtboardInstance {
     ) {
         self.script_instances_by_global
             .insert(global_id, RuntimeScriptInstanceHandle::new(instance));
+        self.script_updates_pending.insert(global_id);
+    }
+
+    /// Runs the C++ `ScriptedDrawable::update` phase for scripts dirtied by
+    /// initialization or input hydration.
+    pub fn update_script_instances(&mut self) -> Result<bool, ScriptError> {
+        let pending = std::mem::take(&mut self.script_updates_pending);
+        let mut did_update = false;
+        let mut host = NoopScriptHost;
+        for global_id in pending {
+            let Some(handle) = self.script_instances_by_global.get(&global_id).cloned() else {
+                continue;
+            };
+            let mut instance = handle.borrow_mut();
+            if !instance.has_method(ScriptMethod::Update)? {
+                continue;
+            }
+            instance.call_method(ScriptMethod::Update, &[], &mut host)?;
+            did_update = true;
+        }
+        Ok(did_update)
+    }
+
+    pub fn set_script_input_for_global(
+        &mut self,
+        global_id: u32,
+        name: &str,
+        value: ScriptValue,
+    ) -> Result<(), ScriptError> {
+        let handle = self
+            .script_instances_by_global
+            .get(&global_id)
+            .cloned()
+            .ok_or_else(|| ScriptError::new(format!("missing script instance {global_id}")))?;
+        handle.borrow_mut().set_input(name, value)?;
+        self.script_updates_pending.insert(global_id);
+        Ok(())
+    }
+
+    pub fn set_script_artboard_input_for_global(
+        &mut self,
+        global_id: u32,
+        name: &str,
+        artboard: Box<dyn ScriptArtboard>,
+    ) -> Result<(), ScriptError> {
+        let handle = self
+            .script_instances_by_global
+            .get(&global_id)
+            .cloned()
+            .ok_or_else(|| ScriptError::new(format!("missing script instance {global_id}")))?;
+        handle.borrow_mut().set_artboard_input(name, artboard)?;
+        self.script_updates_pending.insert(global_id);
+        Ok(())
+    }
+
+    pub fn mark_script_update_for_global(&mut self, global_id: u32) -> bool {
+        if !self.script_instances_by_global.contains_key(&global_id) {
+            return false;
+        }
+        self.script_updates_pending.insert(global_id)
     }
 
     pub(crate) fn script_instance_for_global(
@@ -2816,6 +2881,38 @@ mod tests {
     use rive_binary::{BytesValue, FieldValue, RuntimeObject, RuntimeProperty, read_runtime_file};
     use rive_graph::GraphFile;
     use rive_schema::definition_by_name;
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    struct UpdateScriptInstance {
+        updates: Rc<Cell<usize>>,
+    }
+
+    impl ScriptInstance for UpdateScriptInstance {
+        fn has_method(&self, method: ScriptMethod) -> Result<bool, ScriptError> {
+            Ok(method == ScriptMethod::Update)
+        }
+
+        fn call_method(
+            &mut self,
+            method: ScriptMethod,
+            _args: &[ScriptValue],
+            _host: &mut dyn crate::ScriptHost,
+        ) -> Result<ScriptValue, ScriptError> {
+            if method == ScriptMethod::Update {
+                self.updates.set(self.updates.get() + 1);
+            }
+            Ok(ScriptValue::Nil)
+        }
+
+        fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
+            Ok(ScriptValue::Nil)
+        }
+
+        fn set_input(&mut self, _name: &str, _value: ScriptValue) -> Result<(), ScriptError> {
+            Ok(())
+        }
+    }
 
     fn synthetic_instance(
         components: Vec<RuntimeComponent>,
@@ -2873,6 +2970,7 @@ mod tests {
             linear_animations: Vec::new(),
             state_machines: Arc::new(Vec::new()),
             script_instances_by_global: BTreeMap::new(),
+            script_updates_pending: BTreeSet::new(),
             nested_artboards: BTreeMap::new(),
             nested_artboard_locals: Vec::new(),
             newly_uncollapsed_nested_artboards: BTreeSet::new(),
@@ -2908,6 +3006,28 @@ mod tests {
             draw_order_epoch: 1,
             did_change: true,
         }
+    }
+
+    #[test]
+    fn scripted_updates_run_once_per_attach_or_input_change() {
+        let mut instance = synthetic_instance(Vec::new(), Vec::new());
+        let updates = Rc::new(Cell::new(0));
+        instance.set_script_instance_for_global(
+            7,
+            Box::new(UpdateScriptInstance {
+                updates: Rc::clone(&updates),
+            }),
+        );
+
+        assert!(instance.update_script_instances().expect("initial update"));
+        assert_eq!(updates.get(), 1);
+        assert!(!instance.update_script_instances().expect("clean update"));
+
+        instance
+            .set_script_input_for_global(7, "value", ScriptValue::Number(2.0))
+            .expect("input update");
+        assert!(instance.update_script_instances().expect("dirty update"));
+        assert_eq!(updates.get(), 2);
     }
 
     fn synthetic_component(local_id: usize, graph_order: usize) -> RuntimeComponent {

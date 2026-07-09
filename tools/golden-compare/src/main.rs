@@ -39,11 +39,12 @@ fn run() -> Result<(), String> {
     let mut failures = Vec::new();
 
     for entry in &corpus {
-        *counts.entry(entry.status).or_default() += 1;
-        if entry.status == Status::Exact {
+        let status = entry.effective_status(options.verify_scripted_diagnostics);
+        *counts.entry(status).or_default() += 1;
+        if status == Status::Exact {
             exact_segments += entry.samples.len();
         }
-        if entry.status == Status::UnsupportedFeature {
+        if status == Status::UnsupportedFeature {
             let bucket = entry
                 .milestone
                 .clone()
@@ -53,11 +54,11 @@ fn run() -> Result<(), String> {
         if entry.requires_scripted_runner() && !options.verify_scripted_diagnostics {
             println!(
                 "[{}] {}: skipped (requires scripted runners)",
-                entry.status, entry.id
+                status, entry.id
             );
             continue;
         }
-        match entry.status {
+        match status {
             Status::UnsupportedFeature => {
                 if options.verify_unsupported_cpp {
                     let file = resolve_asset_path(&entry.path, &options.rive_runtime_dir);
@@ -112,18 +113,18 @@ fn run() -> Result<(), String> {
                     Ok(cpp_stream) => {
                         println!(
                             "[{}] {}: c++ stream ok ({} bytes)",
-                            entry.status,
+                            status,
                             entry.id,
                             cpp_stream.len()
                         );
-                        if entry.status == Status::Exact
-                            || (entry.status == Status::Diverges && options.verify_divergent_rust)
+                        if status == Status::Exact
+                            || (status == Status::Diverges && options.verify_divergent_rust)
                         {
                             match &options.rust_runner {
                                 Some(rust_runner) => {
                                     let rust_stream =
                                         run_stream(rust_runner, entry, &file, &corpus_dir)?;
-                                    if entry.status == Status::Diverges {
+                                    if status == Status::Diverges {
                                         println!(
                                             "[diverges] {}: rust stream ok ({} bytes)",
                                             entry.id,
@@ -332,6 +333,19 @@ impl CorpusEntry {
         self.features
             .iter()
             .any(|feature| feature == "scripted-runner-only")
+    }
+
+    fn effective_status(&self, scripted: bool) -> Status {
+        if scripted
+            && self
+                .features
+                .iter()
+                .any(|feature| feature == "scripted-status:exact")
+        {
+            Status::Exact
+        } else {
+            self.status
+        }
     }
 }
 
@@ -794,6 +808,16 @@ fn unsupported_diagnostic_matches(stderr: &str, expected_feature: &str) -> bool 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scripted_status_override_only_applies_in_scripted_mode() {
+        let mut entry = CorpusEntry::new();
+        entry.status = Status::Diverges;
+        entry.features.push("scripted-status:exact".to_owned());
+
+        assert_eq!(entry.effective_status(false), Status::Diverges);
+        assert_eq!(entry.effective_status(true), Status::Exact);
+    }
 
     #[test]
     fn stream_comparison_allows_float_epsilon() {

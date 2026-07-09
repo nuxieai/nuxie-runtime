@@ -548,6 +548,30 @@ impl ArtboardInstance {
         {
             return false;
         }
+        self.after_double_property_set(local_id, property_key, value)
+    }
+
+    pub(crate) fn set_keyed_double_property(
+        &mut self,
+        local_id: usize,
+        property_key: u16,
+        value: f32,
+    ) -> bool {
+        if !self
+            .objects
+            .set_generated_double_property(local_id, property_key, value)
+        {
+            return false;
+        }
+        self.after_double_property_set(local_id, property_key, value)
+    }
+
+    fn after_double_property_set(
+        &mut self,
+        local_id: usize,
+        property_key: u16,
+        value: f32,
+    ) -> bool {
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         self.mark_changed();
         self.mark_prepared_changed_for_property(local_id, property_key);
@@ -860,23 +884,37 @@ impl ArtboardInstance {
         let Some(index) = self.component_by_local.get(&local_id).copied() else {
             return false;
         };
+        let property_key = self.components[index].transform_property_key(property);
+        let Some(property_key) = property_key else {
+            return false;
+        };
+        self.set_transform_property_with_key(local_id, property, property_key, value)
+    }
+
+    pub(crate) fn set_transform_property_with_key(
+        &mut self,
+        local_id: usize,
+        property: TransformProperty,
+        property_key: u16,
+        value: f32,
+    ) -> bool {
+        let Some(index) = self.component_by_local.get(&local_id).copied() else {
+            return false;
+        };
         if !self.components[index].capabilities.transform {
             return false;
         }
 
-        let Some(current) = self.transform_property(local_id, property) else {
+        let Some(current) = self.transform_property_with_key(local_id, property, property_key)
+        else {
             return false;
         };
         if current == value {
             return false;
         }
-        let property_key = self.components[index].transform_property_key(property);
-        let Some(property_key) = property_key else {
-            return false;
-        };
         if !self
             .objects
-            .set_double_property(local_id, property_key, value)
+            .set_generated_double_property(local_id, property_key, value)
         {
             return false;
         }
@@ -901,11 +939,23 @@ impl ArtboardInstance {
         let component = self
             .component(local_id)
             .filter(|component| component.capabilities.transform)?;
-        let value = component
-            .transform_property_key(property)
-            .and_then(|property_key| self.objects.double_property(local_id, property_key))
-            .unwrap_or_else(|| property.default_value());
-        Some(value)
+        let property_key = component.transform_property_key(property)?;
+        self.transform_property_with_key(local_id, property, property_key)
+    }
+
+    pub(crate) fn transform_property_with_key(
+        &self,
+        local_id: usize,
+        property: TransformProperty,
+        property_key: u16,
+    ) -> Option<f32> {
+        self.component(local_id)
+            .filter(|component| component.capabilities.transform)?;
+        Some(
+            self.objects
+                .double_property(local_id, property_key)
+                .unwrap_or_else(|| property.default_value()),
+        )
     }
 
     pub(crate) fn authored_transform(&self, local_id: usize) -> AuthoredTransform {

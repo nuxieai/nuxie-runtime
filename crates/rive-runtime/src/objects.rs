@@ -182,6 +182,16 @@ impl InstanceObjectArena {
         self.set_property_value(local_id, property_key, FieldValue::Double(value))
     }
 
+    pub(crate) fn set_generated_double_property(
+        &mut self,
+        local_id: usize,
+        property_key: u16,
+        value: f32,
+    ) -> bool {
+        self.object_mut(local_id)
+            .is_some_and(|object| object.set_double_property(property_key, value))
+    }
+
     pub(crate) fn set_uint_property(
         &mut self,
         local_id: usize,

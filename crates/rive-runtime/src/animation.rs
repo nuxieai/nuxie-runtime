@@ -662,9 +662,11 @@ impl RuntimeLinearAnimation {
         for keyed_object in self.keyed_objects.iter() {
             for keyed_property in &keyed_object.keyed_properties {
                 if let Some(property) = keyed_property.transform_property {
-                    let Some(current) =
-                        instance.transform_property(keyed_object.target_local_id, property)
-                    else {
+                    let Some(current) = instance.transform_property_with_key(
+                        keyed_object.target_local_id,
+                        property,
+                        keyed_property.property_key,
+                    ) else {
                         continue;
                     };
                     let Some(value) =
@@ -672,9 +674,10 @@ impl RuntimeLinearAnimation {
                     else {
                         continue;
                     };
-                    changed |= instance.set_transform_property(
+                    changed |= instance.set_transform_property_with_key(
                         keyed_object.target_local_id,
                         property,
+                        keyed_property.property_key,
                         value,
                     );
                 }
@@ -687,7 +690,7 @@ impl RuntimeLinearAnimation {
                     else {
                         continue;
                     };
-                    changed |= instance.set_double_property(
+                    changed |= instance.set_keyed_double_property(
                         keyed_object.target_local_id,
                         keyed_property.property_key,
                         value,

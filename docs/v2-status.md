@@ -215,6 +215,25 @@ the only memory the next session has. Update it every commit.
   min-sum=2.238 ms, C++ min-sum=0.977 ms, and `spotify_kids_demo@0`=2.190;
   still tracking-only because the C++ min-sum is just outside the 0.70-0.95 ms
   sanity band. Full `make golden-compare`, `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check` pass. A follow-up
+  keyed-animation setter slice ports the C++ `KeyedProperty::apply` /
+  `KeyFrameDouble::apply` property-key shape: transform keyframes now use the
+  already-imported `propertyKey` for transform reads/writes, and keyed double
+  animations call the generated double setter directly while preserving the
+  existing Artboard data-bind, cache, layout, path, and dirt side effects.
+  Focused `spotify_kids_demo@0` 2M tracking moved total=7404.35 /
+  advance=5187.65 ms to total=5964.58 / advance=3778.97 ms, with an
+  intermediate transform-key-only sample at total=6602.11 / advance=4406.16
+  ms. The midpoint sample no longer showed `transform_property_key` and exposed
+  generic setter work, which the second half of the slice removes from keyed
+  double writes. The latest profile frontier is now `apply_linear_animation`,
+  generated `double_property`, cubic interpolation, and the smaller draw-side
+  world-transform/draw-path/paint-config stack. The
+  user-requested open-fence hot-loop reports aggregate min Rust/C++=2.152,
+  Rust min-sum=2.046 ms, C++ min-sum=0.951 ms, and
+  `spotify_kids_demo@0`=2.046; still tracking-only because the aggregate is
+  above 2.0 and the C++ min-sum is just outside the 0.70-0.95 ms sanity band.
+  Full `make golden-compare`, `cargo test --workspace`,
   `cargo fmt --all -- --check`, and `git diff --check` pass. M7 remains open.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
@@ -223,11 +242,13 @@ the only memory the next session has. Update it every commit.
   they preserved correctness but worsened or failed to move direct/fenced
   release timings. Next priority is a clean low-load/sanity-band release
   sample when available; under the user's open-fence tracking request, the
-  next measured implementation target is now the remaining
-  `spotify_kids_demo@0` world-transform, draw-path/raw-path, paint
-  configuration, and still-sampled regular shape-paint composition stack after
-  profiling the exact hot site and reading the corresponding C++ retained-path
-  or generated-access dirt gate first.
+  next measured implementation target is now the tiny-file fixed-overhead
+  outliers (`advance_blend_mode`, `animation_reset_cases`) plus the shared
+  animation/state-machine advance stack that still leaves `ai_assitant@0` and
+  `spotify_kids_demo@0` just above 2.0. Profile the exact hot site first and
+  read the matching C++ animation/state-machine path before adding another
+  runtime fast path; do not chase the smaller `spotify_kids_demo@0` draw tail
+  again until a fresh profile puts it back above advance/fixed overhead.
 
 ## Milestones
 
@@ -1898,6 +1919,27 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-09: [M7] Thread keyed animation property keys into generated double
+  setters. C++ `KeyedProperty::apply` stores `propertyKey()` once and
+  `KeyFrameDouble::apply` calls `CoreRegistry::getDouble/setDouble` with that
+  key; Rust was re-resolving transform keys through the component type on
+  every transform keyframe and routing keyed double writes through
+  `InstanceObjectArena::set_property_value` metadata validation even though
+  import had already validated `object_supports_property` and the core
+  registry field kind. Rust now uses the imported keyed-property key for
+  transform reads/writes and adds a generated-double setter path for keyed
+  animation writes while keeping the same Artboard data-bind/cache/layout/path
+  side effects. Focused `spotify_kids_demo@0` 2M tracking moved total
+  7404.35/advance 5187.65 ms to total 5964.58/advance 3778.97 ms; the
+  transform-key-only midpoint was total 6602.11/advance 4406.16 ms, and that
+  midpoint sample no longer showed `transform_property_key` while exposing the
+  generic setter work removed by the generated-double half of this slice. Full
+  `make golden-compare` remains exact=263 / exact-segments=584 / diverges=0;
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check` pass. The user-requested open-fence hot-loop reports
+  aggregate min Rust/C++=2.152, Rust min-sum=2.046 ms, C++ min-sum=0.951 ms,
+  `ai_assitant@0`=2.008, and `spotify_kids_demo@0`=2.046, so it is close but
+  still tracking-only rather than M7 acceptance evidence.
 - 2026-07-09: [M7] Retain clipping shape command streams before clip
   render-path replay. C++ `ClippingShape::update` retains `m_path` and rebuilds
   it only on path/world-transform/n-slicer dirt before draw asks that path for

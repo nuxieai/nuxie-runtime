@@ -186,6 +186,17 @@ the only memory the next session has. Update it every commit.
   `spotify_kids_demo@0`=3.063; this is still tracking-only because the C++
   min-sum is outside the 0.70-0.95 ms sanity band. Full
   `make golden-compare`, `cargo test --workspace`, and
+  `cargo fmt --all -- --check` pass. A follow-up RawPath prune-shape slice
+  ports C++ `RawPath::pruneEmptySegments` compaction behavior more closely by
+  avoiding the eager multi-contour scan and write-back/truncate work until an
+  empty segment is actually found, while preserving the Rust multi-contour
+  near-empty guard. Focused `spotify_kids_demo@0` 2M tracking moved
+  total=12763.56/draw=6993.76 ms to total=12446.43/draw=6906.15 ms, and
+  `prune_empty_path_segments_from` fell out of the sampled top stack. The
+  same-session open-fence hot-loop reports aggregate min Rust/C++=2.451, Rust
+  min-sum=2.391 ms, C++ min-sum=0.975 ms, and `spotify_kids_demo@0`=2.936;
+  still tracking-only because the C++ min-sum is outside the 0.70-0.95 ms
+  sanity band. Full `make golden-compare`, `cargo test --workspace`, and
   `cargo fmt --all -- --check` pass. M7 remains open.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
@@ -195,7 +206,7 @@ the only memory the next session has. Update it every commit.
   release timings. Next priority is a clean low-load/sanity-band release
   sample when available; under the user's open-fence tracking request, the
   next measured implementation target is now the remaining
-  `spotify_kids_demo@0` append/prune path assembly, world-transform,
+  `spotify_kids_demo@0` append-transform path assembly, world-transform,
   path-geometry command frame, and paint configuration stack after profiling
   the exact hot site and reading the corresponding C++ retained-path or
   generated-access dirt gate first.
@@ -1869,6 +1880,21 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-09: [M7] Avoid no-op path-prune compaction after appending shape path
+  commands. C++ `RawPath::pruneEmptySegments` only copies and truncates after it
+  finds an empty segment; Rust was eagerly scanning for multi-contour paths and
+  writing every retained command back to itself on the common no-prune path.
+  Rust now lazily checks the multi-contour near-empty guard only when a cubic is
+  not exactly empty, and only compacts/truncates after a command is actually
+  pruned. Focused `spotify_kids_demo@0` 2M tracking moves total
+  12763.56/draw 6993.76 ms to total 12446.43/draw 6906.15 ms, and
+  `prune_empty_path_segments_from` drops out of the sampled top stack. Full
+  `make golden-compare` remains exact=263 / exact-segments=584 / diverges=0;
+  `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check` pass. `make perf-hot-loop PERF_MAX_RATIO=999` reports
+  aggregate min Rust/C++=2.451, Rust min-sum=2.391 ms, C++ min-sum=0.975 ms,
+  and `spotify_kids_demo@0`=2.936, so the broad result is tracking-only rather
+  than M7 acceptance evidence.
 - 2026-07-09: [M7] Route fixed layout-style hot reads through generated-key
   enum dispatch. The `spotify_kids_demo@0` sample still showed Rust spending
   time in `runtime_layout_style_property_key_for_name` even after the

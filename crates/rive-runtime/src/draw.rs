@@ -10350,15 +10350,10 @@ fn prune_empty_path_segments(commands: &mut Vec<RuntimePathCommand>) {
 }
 
 fn prune_empty_path_segments_from(commands: &mut Vec<RuntimePathCommand>, start: usize) {
-    let multi_contour = commands
-        .get(start..)
-        .unwrap_or_default()
-        .iter()
-        .filter(|command| matches!(command, RuntimePathCommand::Move { .. }))
-        .count()
-        >= 2;
     let mut current = None::<(f32, f32)>;
     let mut write = start;
+    let mut pruned = false;
+    let mut multi_contour = None::<bool>;
     for read in start..commands.len() {
         let command = commands[read];
         let keep = match command {
@@ -10383,11 +10378,14 @@ fn prune_empty_path_segments_from(commands: &mut Vec<RuntimePathCommand>, start:
                     current == Some((x1, y1)) && (x1, y1) == (x2, y2) && (x2, y2) == (x3, y3);
                 // Rust-side reverse/transform assembly can leave sub-ulp cancellation
                 // noise in multi-contour paths that C++ has already collapsed.
-                let near_empty = multi_contour
+                let near_empty = !exact_empty
                     && current.is_some_and(|current| {
                         path_points_match(current, (x1, y1))
                             && path_points_match(current, (x2, y2))
                             && path_points_match(current, (x3, y3))
+                    })
+                    && *multi_contour.get_or_insert_with(|| {
+                        path_commands_have_multiple_contours(commands, start)
                     });
                 if !exact_empty && !near_empty {
                     current = Some((x3, y3));
@@ -10400,11 +10398,28 @@ fn prune_empty_path_segments_from(commands: &mut Vec<RuntimePathCommand>, start:
             RuntimePathCommand::Close => true,
         };
         if keep {
-            commands[write] = command;
+            if pruned {
+                commands[write] = command;
+            }
             write += 1;
+        } else {
+            pruned = true;
         }
     }
-    commands.truncate(write);
+    if pruned {
+        commands.truncate(write);
+    }
+}
+
+fn path_commands_have_multiple_contours(commands: &[RuntimePathCommand], start: usize) -> bool {
+    commands
+        .get(start..)
+        .unwrap_or_default()
+        .iter()
+        .filter(|command| matches!(command, RuntimePathCommand::Move { .. }))
+        .take(2)
+        .count()
+        >= 2
 }
 
 fn path_points_match(left: (f32, f32), right: (f32, f32)) -> bool {

@@ -2289,14 +2289,14 @@ impl AnimationReset {
                     property_key,
                     value,
                 } => {
-                    changed |= artboard.set_double_property(*local_id, *property_key, *value);
+                    changed |= artboard.set_keyed_double_property(*local_id, *property_key, *value);
                 }
                 AnimationResetEntry::Color {
                     local_id,
                     property_key,
                     value,
                 } => {
-                    changed |= artboard.set_color_property(*local_id, *property_key, *value);
+                    changed |= artboard.set_keyed_color_property(*local_id, *property_key, *value);
                 }
             }
         }

@@ -116,6 +116,16 @@ impl InstanceObjectArena {
         self.set_property_value(local_id, property_key, FieldValue::Color(value))
     }
 
+    pub(crate) fn set_generated_color_property(
+        &mut self,
+        local_id: usize,
+        property_key: u16,
+        value: u32,
+    ) -> bool {
+        self.object_mut(local_id)
+            .is_some_and(|object| object.set_color_property(property_key, value))
+    }
+
     pub(crate) fn bool_property(&self, local_id: usize, property_key: u16) -> Option<bool> {
         self.object(local_id)
             .and_then(|object| object.bool_property(property_key))

@@ -705,7 +705,7 @@ impl RuntimeLinearAnimation {
                     else {
                         continue;
                     };
-                    changed |= instance.set_color_property(
+                    changed |= instance.set_keyed_color_property(
                         keyed_object.target_local_id,
                         keyed_property.property_key,
                         value,

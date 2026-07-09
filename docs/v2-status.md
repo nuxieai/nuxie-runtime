@@ -234,6 +234,26 @@ the only memory the next session has. Update it every commit.
   `spotify_kids_demo@0`=2.046; still tracking-only because the aggregate is
   above 2.0 and the C++ min-sum is just outside the 0.70-0.95 ms sanity band.
   Full `make golden-compare`, `cargo test --workspace`,
+  `cargo fmt --all -- --check`, and `git diff --check` pass. A follow-up
+  keyed-color setter slice ports the matching C++ `KeyFrameColor::apply`
+  shape: keyed color animations and animation-reset color/double entries now
+  write through generated property-key setters, preserving the existing
+  Artboard data-bind/cache/layout/path/dirt side effects. SolidColor
+  `colorValue` changes also route directly to the existing alpha visibility
+  topology rule instead of entering the broad prepared-frame type-name
+  predicate first. The profiled `advance_blend_mode@0` 100M Rust-only tracking
+  run moved from total=43040.31 / advance=21624.27 ms to total=40950.57 /
+  advance=20305.17 ms; a post-slice sample no longer shows generic
+  `set_property_value` under color animation, and instead samples the generated
+  `InstanceObjectStorage::set_color_property` path. `animation_reset_cases@0`
+  is roughly neutral at total=21297.77 / advance=8636.76 ms for a 100M
+  Rust-only run. The user-requested open-fence hot-loop reports aggregate min
+  Rust/C++=2.148, Rust min-sum=2.065 ms, C++ min-sum=0.962 ms,
+  `advance_blend_mode`=4.167/3.672, `animation_reset_cases`=2.768-3.005,
+  `ai_assitant@0`=2.059, and `spotify_kids_demo@0`=1.970; this is
+  tracking-only because the aggregate is above 2.0, C++ min-sum is outside the
+  0.70-0.95 ms sanity band, and aggregate movement versus 2.152 is below the
+  0.08 noise floor. Full `make golden-compare`, `cargo test --workspace`,
   `cargo fmt --all -- --check`, and `git diff --check` pass. M7 remains open.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
@@ -244,11 +264,12 @@ the only memory the next session has. Update it every commit.
   sample when available; under the user's open-fence tracking request, the
   next measured implementation target is now the tiny-file fixed-overhead
   outliers (`advance_blend_mode`, `animation_reset_cases`) plus the shared
-  animation/state-machine advance stack that still leaves `ai_assitant@0` and
-  `spotify_kids_demo@0` just above 2.0. Profile the exact hot site first and
-  read the matching C++ animation/state-machine path before adding another
-  runtime fast path; do not chase the smaller `spotify_kids_demo@0` draw tail
-  again until a fresh profile puts it back above advance/fixed overhead.
+  animation/state-machine/data-bind advance stack that still leaves
+  `advance_blend_mode`, `animation_reset_cases`, and `ai_assitant@0` above
+  target. Profile the exact hot site first and read the matching C++
+  animation/state-machine/data-bind path before adding another runtime fast
+  path; do not chase the smaller `spotify_kids_demo@0` draw tail again until a
+  fresh profile puts it back above advance/fixed overhead.
 
 ## Milestones
 

@@ -460,15 +460,35 @@ impl ArtboardInstance {
         {
             return false;
         }
+        self.after_color_property_set(local_id, property_key, previous, value)
+    }
+
+    pub(crate) fn set_keyed_color_property(
+        &mut self,
+        local_id: usize,
+        property_key: u16,
+        value: u32,
+    ) -> bool {
+        let previous = self.color_property(local_id, property_key);
+        if !self
+            .objects
+            .set_generated_color_property(local_id, property_key, value)
+        {
+            return false;
+        }
+        self.after_color_property_set(local_id, property_key, previous, value)
+    }
+
+    fn after_color_property_set(
+        &mut self,
+        local_id: usize,
+        property_key: u16,
+        previous: Option<u32>,
+        value: u32,
+    ) -> bool {
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         self.mark_changed();
-        self.mark_prepared_changed_for_property(local_id, property_key);
-        self.mark_prepared_changed_for_solid_color_visibility(
-            local_id,
-            property_key,
-            previous,
-            value,
-        );
+        self.mark_prepared_changed_for_color_property(local_id, property_key, previous, value);
         self.apply_color_property_changed(local_id, property_key);
         true
     }
@@ -1067,18 +1087,27 @@ impl ArtboardInstance {
         }
     }
 
-    fn mark_prepared_changed_for_solid_color_visibility(
+    fn mark_prepared_changed_for_color_property(
         &mut self,
         local_id: usize,
         property_key: u16,
         previous: Option<u32>,
         next: u32,
     ) {
-        if self.slot(local_id).and_then(|slot| slot.type_name) != Some("SolidColor")
-            || solid_color_value_property_key() != Some(property_key)
+        if self.slot(local_id).and_then(|slot| slot.type_name) == Some("SolidColor")
+            && solid_color_value_property_key() == Some(property_key)
         {
-            return;
+            self.mark_prepared_changed_for_solid_color_visibility(previous, next);
+        } else {
+            self.mark_prepared_changed_for_property(local_id, property_key);
         }
+    }
+
+    fn mark_prepared_changed_for_solid_color_visibility(
+        &mut self,
+        previous: Option<u32>,
+        next: u32,
+    ) {
         let next_visible = (next >> 24) != 0;
         if previous.is_none_or(|previous| ((previous >> 24) != 0) != next_visible) {
             self.mark_prepared_changed();

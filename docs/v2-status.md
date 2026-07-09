@@ -573,6 +573,59 @@ the only memory the next session has. Update it every commit.
     assert if runtime viewModelId rebinding (artboard.cpp:2506-2519) is
     ever ported — and note its correctness is partly hostage to fix (a).
 
+23. ADVERSARIAL AUDIT — parent synthesis (epoch matrix + unsafe
+    inventory; full evidence in scout transcript). Completes the M8
+    hardening queue.
+    *** CONFIRMED BUG #3 — world-space gradients go stale under keyed
+    transform animation: *** set_transform_property_with_key
+    (artboard.rs:914-956) never calls mark_changed — the ONE gap in
+    otherwise-complete cache_epoch coverage (every sibling keyed setter
+    bumps; third instance of the same drift pattern). World-space paints
+    bake shape_world into shader endpoints; both the prep skip
+    (draw.rs:5783-5787) and draw-time reconfigure (draw.rs:8096-8101)
+    gate on cache_epoch only, so the gradient shader keeps pre-move
+    endpoints. C++ rebuilds on PathFlags::world && WorldTransform dirt
+    (linear_gradient.cpp:98-106). Repro: gradient STROKE (strokes are
+    world-space by default) on a transform-only-animated shape via the
+    persistent-cache API at >=2 transform positions — add as regression
+    fixture. FIX: key world-space paint config + gradient shader on
+    prepared_epoch (or a world-transform epoch), NOT a blanket
+    cache_epoch bump (would reintroduce M7 churn). Note nested_epoch
+    folding inherits the same blind spot (draw.rs:965) — same root
+    cause, same fix.
+    *** META-FINDING (M8 decision required): public rive::
+    ArtboardInstance::draw() builds FRESH caches every call
+    (crates/rive/src/lib.rs:215-221) — real integrations currently get
+    NO cross-frame retention benefit from the entire M7 campaign; only
+    the raw persistent-cache API (and the benchmark) does. Either
+    expose a persistent-cache handle on the public type (aligns with
+    the queued capi cache-holding draw) or document retention as
+    opt-in. This also means cross-frame stale-cache bugs are
+    unreachable from today's public draw() — fix #3 lands before the
+    persistent public API does.
+    UNSAFE INVENTORY: (a) UNSOUND — rive-scripting load_bytecode:
+    pinned luaur-vm deserializer does unbounded ptr::read_unaligned +
+    unchecked string-table indexing; corrupt/truncated bytecode (riv-
+    suppliable) = OOB heap reads, not the documented Error. Fix:
+    bounds-validate before luau_load; file upstream on
+    pjankiewicz/luaur. Mitigation: spike crate, nothing reaches it yet
+    — MUST be fixed before M8 scripting integration. (b) rive-capi:
+    every extern C fn lacks a catch_unwind firewall (panic=abort is
+    release-only; debug cdylib panics unwind into C = UB, hostile-
+    reachable via rive_file_import). Add profile-independent firewall.
+    (c) capi 'static transmute on ArtboardInstance is a documented
+    use-after-free footgun (file freed before instance) — document
+    hard or add a generation check. Everything else in the unsafe
+    surface: ACCEPTABLE with reasons recorded.
+    CLEAN BILLS (evidence in transcript): cache_epoch coverage complete
+    except finding #3; data-bind writes all epoch-bumping; retained
+    draw world transforms sound (layout-chain membership immutable);
+    9 further gates verified sound incl. solid-color visibility gating,
+    fill-rule replay, zero-elapsed converters, no-gradient scan.
+    NOTE: parent rated e87e766 sound on structural triggers only — the
+    deeper sub-audit (item 22) found the mutation_generation gaps and
+    STANDS; treat item 22 as authoritative for that gate.
+
 ## Known Divergences
 
 - There are no active `status = "not-yet"` entries.

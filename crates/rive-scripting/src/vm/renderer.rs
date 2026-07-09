@@ -16,6 +16,7 @@ use rive_render_api::{
     BlendMode, ColorInt, Factory as RenderFactory, FillRule, Mat2D, RawPath,
     RenderPaint as RenderPaintTrait, RenderPaintStyle, RenderPath, Renderer, StrokeCap, StrokeJoin,
 };
+use rive_runtime::ScriptArtboard;
 
 #[derive(Clone, Default)]
 pub(crate) struct RendererBindings {
@@ -51,21 +52,22 @@ impl RendererBindings {
 
         let save_count = Rc::new(Cell::new(0usize));
         let valid = Rc::new(Cell::new(true));
-        let renderer_ref = Rc::new(RefCell::new(renderer));
+        let renderer_ref = Rc::new(RefCell::new(erase_renderer_lifetime(renderer)));
 
-        let result = lua.scope(|scope| {
-            let scripted_renderer = scope.create_userdata(ScriptedRenderer {
-                renderer: Rc::clone(&renderer_ref),
-                bindings: self.clone(),
-                save_count: Rc::clone(&save_count),
-                valid: Rc::clone(&valid),
-            })?;
-            function.call::<()>((table.clone(), scripted_renderer))?;
-            Ok(())
-        });
+        let scripted_renderer = lua.create_userdata(ScriptedRenderer {
+            renderer: Rc::clone(&renderer_ref),
+            bindings: self.clone(),
+            save_count: Rc::clone(&save_count),
+            valid: Rc::clone(&valid),
+        })?;
+        let result = function.call::<()>((table.clone(), scripted_renderer));
 
         while save_count.get() > 0 {
-            renderer_ref.borrow_mut().restore();
+            let mut renderer = renderer_ref.borrow_mut();
+            // The renderer userdata is still valid while this cleanup runs;
+            // the pointer is invalidated immediately after the save stack is
+            // balanced.
+            unsafe { renderer.as_mut().restore() };
             save_count.set(save_count.get() - 1);
         }
         valid.set(false);
@@ -113,6 +115,16 @@ impl RendererBindings {
         // guard restores it before any borrowed factory can be dropped.
         unsafe { f(factory.as_mut()) }
     }
+
+    pub(crate) fn create_scripted_artboard(
+        &self,
+        lua: &Lua,
+        artboard: Box<dyn ScriptArtboard>,
+    ) -> Result<AnyUserData> {
+        lua.create_userdata(ScriptedArtboard {
+            artboard: Rc::new(RefCell::new(artboard)),
+        })
+    }
 }
 
 fn erase_factory_lifetime(factory: &mut dyn RenderFactory) -> NonNull<dyn RenderFactory> {
@@ -120,6 +132,13 @@ fn erase_factory_lifetime(factory: &mut dyn RenderFactory) -> NonNull<dyn Render
     // The pointer is restored by DrawFactoryGuard before call_draw returns.
     // Paint.new/with closures may run only while this draw context is active.
     unsafe { mem::transmute::<NonNull<dyn RenderFactory + '_>, NonNull<dyn RenderFactory>>(ptr) }
+}
+
+fn erase_renderer_lifetime(renderer: &mut dyn Renderer) -> NonNull<dyn Renderer> {
+    let ptr: NonNull<dyn Renderer + '_> = NonNull::from(renderer);
+    // The pointer is held only by userdata created for one draw call; `valid`
+    // is cleared before `call_draw` returns.
+    unsafe { mem::transmute::<NonNull<dyn Renderer + '_>, NonNull<dyn Renderer>>(ptr) }
 }
 
 struct DrawFactoryGuard {
@@ -133,14 +152,96 @@ impl Drop for DrawFactoryGuard {
     }
 }
 
-struct ScriptedRenderer<'a> {
-    renderer: Rc<RefCell<&'a mut dyn Renderer>>,
+struct ScriptedArtboard {
+    artboard: Rc<RefCell<Box<dyn ScriptArtboard>>>,
+}
+
+impl ScriptedArtboard {
+    fn new(artboard: Box<dyn ScriptArtboard>) -> Self {
+        Self {
+            artboard: Rc::new(RefCell::new(artboard)),
+        }
+    }
+}
+
+impl UserData for ScriptedArtboard {
+    fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        fields.add_field_method_get("width", |_, this| Ok(this.artboard.borrow().width()));
+        fields.add_field_method_set("width", |_, this, value: f32| {
+            this.artboard.borrow_mut().set_width(value);
+            Ok(())
+        });
+        fields.add_field_method_get("height", |_, this| Ok(this.artboard.borrow().height()));
+        fields.add_field_method_set("height", |_, this, value: f32| {
+            this.artboard.borrow_mut().set_height(value);
+            Ok(())
+        });
+        fields.add_field_method_get("frameOrigin", |_, this| {
+            Ok(this.artboard.borrow().frame_origin())
+        });
+        fields.add_field_method_set("frameOrigin", |_, this, value: bool| {
+            this.artboard.borrow_mut().set_frame_origin(value);
+            Ok(())
+        });
+    }
+
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("instance", |lua, this, ()| {
+            let instance = this
+                .artboard
+                .borrow()
+                .instance()
+                .map_err(|error| Error::runtime(error.to_string()))?;
+            lua.create_userdata(ScriptedArtboard::new(instance))
+        });
+        methods.add_method_mut("draw", |_, this, args: MultiValue| {
+            let arg_types = args
+                .iter()
+                .map(|value| match value {
+                    Value::UserData(userdata) if userdata.borrow::<ScriptedRenderer>().is_ok() => {
+                        "Renderer"
+                    }
+                    Value::UserData(userdata) if userdata.borrow::<ScriptedArtboard>().is_ok() => {
+                        "ScriptedArtboard"
+                    }
+                    other => other.type_name(),
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            let renderer = args
+                .into_iter()
+                .filter_map(|value| match value {
+                    Value::UserData(userdata) if userdata.borrow::<ScriptedRenderer>().is_ok() => {
+                        Some(userdata)
+                    }
+                    _ => None,
+                })
+                .next()
+                .ok_or_else(|| {
+                    Error::runtime(format!(
+                        "ScriptedArtboard.draw expected Renderer userdata, got [{arg_types}]"
+                    ))
+                })?;
+            let scripted_renderer = renderer.borrow::<ScriptedRenderer>()?;
+            scripted_renderer.bindings.with_factory(|factory| {
+                let mut renderer_ref = scripted_renderer.renderer_mut()?;
+                this.artboard
+                    .borrow_mut()
+                    .draw(factory, unsafe { renderer_ref.as_mut() })
+                    .map_err(|error| Error::runtime(error.to_string()))
+            })
+        });
+    }
+}
+
+struct ScriptedRenderer {
+    renderer: Rc<RefCell<NonNull<dyn Renderer>>>,
     bindings: RendererBindings,
     save_count: Rc<Cell<usize>>,
     valid: Rc<Cell<bool>>,
 }
 
-impl ScriptedRenderer<'_> {
+impl ScriptedRenderer {
     fn validate(&self) -> Result<()> {
         if self.valid.get() {
             Ok(())
@@ -149,32 +250,38 @@ impl ScriptedRenderer<'_> {
         }
     }
 
-    fn save(&self) -> Result<()> {
+    fn renderer_mut(&self) -> Result<std::cell::RefMut<'_, NonNull<dyn Renderer>>> {
         self.validate()?;
-        self.renderer.borrow_mut().save();
+        Ok(self.renderer.borrow_mut())
+    }
+
+    fn save(&self) -> Result<()> {
+        let mut renderer = self.renderer_mut()?;
+        unsafe { renderer.as_mut().save() };
         self.save_count.set(self.save_count.get() + 1);
         Ok(())
     }
 
     fn restore(&self) -> Result<()> {
-        self.validate()?;
         if self.save_count.get() == 0 {
             return Err(Error::runtime("Renderer save/restore stack was unbalanced"));
         }
-        self.renderer.borrow_mut().restore();
+        let mut renderer = self.renderer_mut()?;
+        unsafe { renderer.as_mut().restore() };
         self.save_count.set(self.save_count.get() - 1);
         Ok(())
     }
 }
 
-impl UserData for ScriptedRenderer<'_> {
+impl UserData for ScriptedRenderer {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("save", |_, this, ()| this.save());
         methods.add_method("restore", |_, this, ()| this.restore());
         methods.add_method("transform", |_, this, matrix: AnyUserData| {
             this.validate()?;
             let matrix = matrix.borrow::<ScriptedMat2D>()?;
-            this.renderer.borrow_mut().transform(matrix.0);
+            let mut renderer = this.renderer_mut()?;
+            unsafe { renderer.as_mut().transform(matrix.0) };
             Ok(())
         });
         methods.add_method("clipPath", |_, this, path: AnyUserData| {
@@ -182,7 +289,8 @@ impl UserData for ScriptedRenderer<'_> {
             let mut path = path.borrow_mut::<ScriptedPath>()?;
             this.bindings.with_factory(|factory| {
                 let render_path = path.render_path(factory);
-                this.renderer.borrow_mut().clip_path(render_path);
+                let mut renderer = this.renderer_mut()?;
+                unsafe { renderer.as_mut().clip_path(render_path) };
                 Ok(())
             })
         });
@@ -194,9 +302,12 @@ impl UserData for ScriptedRenderer<'_> {
                 let paint = paint.borrow::<ScriptedPaint>()?;
                 this.bindings.with_factory(|factory| {
                     let render_path = path.render_path(factory);
-                    this.renderer
-                        .borrow_mut()
-                        .draw_path(render_path, paint.render_paint.as_ref());
+                    let mut renderer = this.renderer_mut()?;
+                    unsafe {
+                        renderer
+                            .as_mut()
+                            .draw_path(render_path, paint.render_paint.as_ref())
+                    };
                     Ok(())
                 })
             },

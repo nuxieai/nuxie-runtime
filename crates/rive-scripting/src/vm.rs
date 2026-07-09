@@ -26,7 +26,7 @@ use luaur_vm::functions::luau_load::luau_load;
 use renderer::RendererBindings;
 use rive_render_api::{Factory as RenderFactory, Renderer};
 use rive_runtime::{
-    ScriptError, ScriptHost, ScriptInstance, ScriptMethod, ScriptValue,
+    ScriptArtboard, ScriptError, ScriptHost, ScriptInstance, ScriptMethod, ScriptValue,
     ScriptingVm as RuntimeScriptingVm,
 };
 
@@ -402,6 +402,19 @@ impl ScriptInstance for LuaScriptInstance {
         self.table
             .set(name, script_value_to_lua(&lua, &value))
             .map_err(script_error)
+    }
+
+    fn set_artboard_input(
+        &mut self,
+        name: &str,
+        artboard: Box<dyn ScriptArtboard>,
+    ) -> std::result::Result<(), ScriptError> {
+        let lua = self.table.lua();
+        let artboard = self
+            .renderer_bindings
+            .create_scripted_artboard(&lua, artboard)
+            .map_err(script_error)?;
+        self.table.set(name, artboard).map_err(script_error)
     }
 }
 

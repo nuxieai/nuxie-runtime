@@ -5,6 +5,10 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+default = []
+scripting = ["dep:rive-scripting"]
+
 [dependencies]
 anyhow = "1"
 rive-binary = { path = "../../crates/rive-binary" }
@@ -12,3 +16,4 @@ rive-graph = { path = "../../crates/rive-graph" }
 rive-render-api = { path = "../../crates/rive-render-api" }
 rive-runtime = { path = "../../crates/rive-runtime" }
 rive-schema = { path = "../../crates/rive-schema" }
+rive-scripting = { path = "../../crates/rive-scripting", optional = true }

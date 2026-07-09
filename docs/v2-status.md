@@ -496,9 +496,14 @@ the only memory the next session has. Update it every commit.
 
 ## Next
 
-1. V2 is complete: M0-M7 are checked below, `make golden-compare` passes at exact=263 / exact-segments=584 / diverges=0, and `cargo test --workspace` passes.
-2. Do not start Phase R from the V2 goal loop. Phase R is tracked in `docs/renderer-port-map.md` and requires explicit user activation before any renderer-port work begins.
-3. Parked `unsupported-feature`, `gated`, and `harness` entries remain documented diagnostics/backlog, not active V2 milestone work.
+1. M0-M7 remain complete; M8 is active. The baseline ratchet passes at
+   exact=263 / exact-segments=584 / diverges=0, and `cargo test --workspace`
+   passes.
+2. Work the M8 queue below in order. Do not start Phase R from the V2 goal
+   loop; it requires explicit user activation.
+3. Parked `unsupported-feature`, `gated`, and `harness` entries are M8 work
+   only where #V2-9 explicitly names them (notably scripting and residual
+   harness drainage).
 
 19. M8 OPENED (user decision 2026-07-09; scope in porting-map-v2 #V2-9).
     Queue, in order:
@@ -510,21 +515,30 @@ the only memory the next session has. Update it every commit.
         now applies luaur's `luaL_sandbox`/`luaL_sandboxthread` equivalent
         after installing Rive globals and `require`. The C++
         golden runner can now be built WITH scripting via
-        `make scripted-golden-runner`; scripted smokes for
-        `script_artboard_test.riv` and `script_inputs_test_1.riv` produce
-        real streams without the FileAssetContents-stripping harness path. The
-        first renderer binding slice is landed: luaur now installs `Color`,
-        `Mat2D`, `Path`, `Paint`, and scoped `Renderer` userdata for
+        `make scripted-golden-runner`, but its focused
+        `script_artboard_test.riv` run still reports `Failed to import object
+        of type 106` and emits only the static fallback rectangle. It is not
+        yet a valid scripted oracle. The first renderer binding slice is
+        landed: luaur now installs `Color`,
+        `Mat2D`, `Path`, `Paint`, and draw-call `Renderer` userdata for
         draw-path calls, and `ScriptInstance::call_draw` can carry a
         render-api factory/renderer into Luau. `ArtboardInstance` can now own
         script instances by global id, `ScriptedDrawable` is a real draw
         command kind, and the draw path executes the C++ save/opacity/
         transform/script/restore envelope when a script instance is attached.
-        Remaining: instantiate those script instances from `ScriptAsset`
-        payloads in the Rust golden runner, hydrate script inputs for
-        `script_artboard_test.riv`, then continue binding ports
-        corpus-file-by-corpus-file in census order and regenerate scripted
-        corpus statuses against the scripted C++ reference streams.
+        The feature-gated Rust golden runner now maps `ScriptAsset` payloads
+        by C++ file-asset index, instantiates and attaches them, hydrates
+        primitive inputs plus `ScriptInputArtboard`, and exposes script-artboard
+        width/height/frameOrigin/instance/draw userdata. Its focused
+        `script_artboard_test.riv` run executes Luau and emits the authored 3x3
+        star grid. The same asset mapping advances
+        `image_scripting_property_value.riv` and
+        `scripted_property_image.riv` from missing ScriptAsset to the sharper
+        missing `viewModel`/`image` userdata bindings.
+        Remaining: repair the scripted C++ runner's type-106 asset-content
+        import path, regenerate scripted corpus statuses against real
+        reference streams, then port the next binding family exposed by those
+        diffs.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
     (c) Hardening: two audit scouts are running NOW (cross-language
@@ -3627,6 +3641,22 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Hydrated scripted drawables in the feature-gated Rust
+  golden runner. Script assets now resolve by C++ file-asset index, Luau
+  instances attach to `ScriptedDrawable`, primitive and artboard script inputs
+  hydrate from the imported object range, and `ScriptedArtboard` userdata
+  exposes width/height/frameOrigin/instance/draw. The focused
+  `script_artboard_test.riv` Rust run now executes the authored script and
+  emits nine star `drawPath` calls. The scripted C++ runner still reports
+  `Failed to import object of type 106` for the same file and emits only its
+  static fallback rectangle, correcting the earlier status claim that it was
+  already a valid oracle. Verification: feature-enabled focused smoke,
+  `cargo fmt --all -- --check`, `cargo test --workspace`, and
+  `make golden-compare` pass; golden compare remains exact=263 /
+  exact-segments=584 / diverges=0, parked gated=6 / harness=26. Next scripting
+  step: repair type-106 asset-content import in the scripted C++ runner, then
+  regenerate scripting statuses and follow the first real stream diff.
 
 - 2026-07-09: [M8] Landed the runtime scripted-draw envelope. `ArtboardInstance`
   now stores VM-owned script instances by scripted-object global id,

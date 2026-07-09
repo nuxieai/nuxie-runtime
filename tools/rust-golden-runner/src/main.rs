@@ -12,6 +12,15 @@ use rive_runtime::{
     RuntimeRenderPathCache, StateMachineInstance, preallocate_render_paint_cache_for_artboard_tree,
     static_text_support_error,
 };
+#[cfg(feature = "scripting")]
+use rive_runtime::{
+    NoopScriptHost, ScriptArtboard, ScriptError, ScriptMethod, ScriptValue,
+    ScriptingVm as RuntimeScriptingVm,
+};
+#[cfg(feature = "scripting")]
+use rive_scripting::vm::ScriptVm;
+#[cfg(feature = "scripting")]
+use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::env;
 use std::fmt::Write as _;
@@ -120,6 +129,9 @@ fn run() -> Result<String> {
     let mut instance =
         ArtboardInstance::from_graph_with_artboards(&runtime, artboard, &graph.artboards)
             .context("failed to instantiate artboard")?;
+    #[cfg(feature = "scripting")]
+    initialize_scripted_drawables(&runtime, artboard, &graph.artboards, &mut instance)
+        .context("failed to initialize scripted drawables")?;
     let scene = select_scene(
         &runtime,
         artboard_index,
@@ -1165,6 +1177,368 @@ fn select_artboard<'a>(
             .map(|artboard| (0, artboard))
             .context("missing default artboard")
     }
+}
+
+#[cfg(feature = "scripting")]
+#[derive(Clone)]
+struct ExtractedScriptAsset {
+    name: String,
+    payload: Vec<u8>,
+}
+
+#[cfg(feature = "scripting")]
+struct RunnerScriptArtboard {
+    runtime: RuntimeFile,
+    artboards: Vec<ArtboardGraph>,
+    artboard_index: usize,
+    instance: ArtboardInstance,
+    width: f32,
+    height: f32,
+    frame_origin: bool,
+    paint_cache: Option<rive_runtime::RuntimeRenderPaintCache>,
+    path_cache: RuntimeRenderPathCache,
+}
+
+#[cfg(feature = "scripting")]
+impl RunnerScriptArtboard {
+    fn new(
+        runtime: &RuntimeFile,
+        artboards: &[ArtboardGraph],
+        artboard_index: usize,
+    ) -> Result<Self> {
+        let graph = artboards
+            .get(artboard_index)
+            .with_context(|| format!("missing scripted artboard index {artboard_index}"))?;
+        let mut instance = ArtboardInstance::from_graph_with_artboards(runtime, graph, artboards)
+            .with_context(|| {
+            format!("failed to instantiate scripted artboard index {artboard_index}")
+        })?;
+        instance.advance_artboard_data_binds_with_elapsed(0.0);
+        instance.update_pass();
+        let object = runtime.object(graph.global_id as usize);
+        Ok(Self {
+            runtime: runtime.clone(),
+            artboards: artboards.to_vec(),
+            artboard_index,
+            instance,
+            width: object
+                .and_then(|object| object.double_property("width"))
+                .unwrap_or(0.0),
+            height: object
+                .and_then(|object| object.double_property("height"))
+                .unwrap_or(0.0),
+            frame_origin: false,
+            paint_cache: None,
+            path_cache: RuntimeRenderPathCache::default(),
+        })
+    }
+}
+
+#[cfg(feature = "scripting")]
+impl ScriptArtboard for RunnerScriptArtboard {
+    fn width(&self) -> f32 {
+        self.width
+    }
+
+    fn height(&self) -> f32 {
+        self.height
+    }
+
+    fn frame_origin(&self) -> bool {
+        self.frame_origin
+    }
+
+    fn set_width(&mut self, width: f32) {
+        self.width = width;
+        self.instance
+            .set_artboard_dimensions(self.width, self.height);
+    }
+
+    fn set_height(&mut self, height: f32) {
+        self.height = height;
+        self.instance
+            .set_artboard_dimensions(self.width, self.height);
+    }
+
+    fn set_frame_origin(&mut self, frame_origin: bool) {
+        self.frame_origin = frame_origin;
+    }
+
+    fn instance(&self) -> std::result::Result<Box<dyn ScriptArtboard>, ScriptError> {
+        Ok(Box::new(
+            RunnerScriptArtboard::new(&self.runtime, &self.artboards, self.artboard_index)
+                .map_err(|error| ScriptError::new(error.to_string()))?,
+        ))
+    }
+
+    fn draw(
+        &mut self,
+        factory: &mut dyn RenderFactory,
+        renderer: &mut dyn RenderRenderer,
+    ) -> std::result::Result<(), ScriptError> {
+        let graph = self.artboards.get(self.artboard_index).ok_or_else(|| {
+            ScriptError::new(format!(
+                "missing scripted artboard index {}",
+                self.artboard_index
+            ))
+        })?;
+        let object = self.runtime.object(graph.global_id as usize);
+        let origin_x = object
+            .and_then(|object| object.double_property("originX"))
+            .unwrap_or(0.5);
+        let origin_y = object
+            .and_then(|object| object.double_property("originY"))
+            .unwrap_or(0.5);
+        if self.paint_cache.is_none() {
+            self.paint_cache = Some(preallocate_render_paint_cache_for_artboard_tree(
+                &self.runtime,
+                graph,
+                &self.artboards,
+                factory,
+            ));
+        }
+        let paint_cache = self
+            .paint_cache
+            .as_mut()
+            .expect("script artboard paint cache initialized");
+        self.instance
+            .prepare_static_artboard_tree_paints(
+                &self.runtime,
+                graph,
+                &self.artboards,
+                factory,
+                paint_cache,
+                &mut self.path_cache,
+            )
+            .map_err(|error| ScriptError::new(error.to_string()))?;
+        if self.frame_origin {
+            renderer.save();
+            renderer.transform(rive_render_api::Mat2D([
+                1.0,
+                0.0,
+                0.0,
+                1.0,
+                self.width * origin_x,
+                self.height * origin_y,
+            ]));
+        }
+        let result = self
+            .instance
+            .draw_prepared_static_artboard_with_render_cache(
+                &self.runtime,
+                graph,
+                &self.artboards,
+                factory,
+                renderer,
+                paint_cache,
+                &mut self.path_cache,
+            )
+            .map_err(|error| ScriptError::new(error.to_string()));
+        if self.frame_origin {
+            renderer.restore();
+        }
+        result
+    }
+}
+
+#[cfg(feature = "scripting")]
+fn initialize_scripted_drawables(
+    runtime: &RuntimeFile,
+    artboard: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+    instance: &mut ArtboardInstance,
+) -> Result<()> {
+    let script_assets = extract_script_assets(runtime);
+    if script_assets.is_empty() {
+        return Ok(());
+    }
+
+    let mut vm = ScriptVm::new();
+    let mut host = NoopScriptHost;
+    for local_object in &artboard.local_objects {
+        if local_object.type_name != Some("ScriptedDrawable") {
+            continue;
+        }
+        let object = runtime
+            .object(local_object.global_id as usize)
+            .with_context(|| {
+                format!("missing ScriptedDrawable global {}", local_object.global_id)
+            })?;
+        let script_asset_id = object.uint_property("scriptAssetId").unwrap_or(0);
+        let script = script_assets.get(&script_asset_id).with_context(|| {
+            format!(
+                "ScriptedDrawable global {} references missing ScriptAsset id {}",
+                local_object.global_id, script_asset_id
+            )
+        })?;
+        let mut script_instance = RuntimeScriptingVm::instantiate_script(
+            &mut vm,
+            &script.name,
+            &script.payload,
+            &mut host,
+        )
+        .with_context(|| {
+            format!(
+                "failed to instantiate ScriptAsset '{}' for ScriptedDrawable global {}",
+                script.name, local_object.global_id
+            )
+        })?;
+        hydrate_script_inputs(
+            runtime,
+            artboard,
+            artboards,
+            local_object.local_id,
+            script_instance.as_mut(),
+        )?;
+        if script_instance
+            .has_method(ScriptMethod::Init)
+            .context("failed to inspect script init method")?
+        {
+            script_instance
+                .call_method(ScriptMethod::Init, &[], &mut host)
+                .with_context(|| {
+                    format!(
+                        "script init failed for ScriptedDrawable global {}",
+                        local_object.global_id
+                    )
+                })?;
+        }
+        instance.set_script_instance_for_global(local_object.global_id, script_instance);
+    }
+
+    Ok(())
+}
+
+#[cfg(feature = "scripting")]
+fn extract_script_assets(runtime: &RuntimeFile) -> BTreeMap<u64, ExtractedScriptAsset> {
+    let mut scripts = BTreeMap::new();
+    let script_asset_indices_by_global = runtime
+        .file_assets()
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, object)| {
+            (object.type_name == "ScriptAsset").then_some((object.id, index as u64))
+        })
+        .collect::<BTreeMap<_, _>>();
+    let file_asset_globals = runtime
+        .file_assets()
+        .into_iter()
+        .map(|object| object.id)
+        .collect::<BTreeSet<_>>();
+    let mut latest_script: Option<(u64, String)> = None;
+
+    for id in 0..runtime.object_count() {
+        let Some(object) = runtime.object(id) else {
+            continue;
+        };
+        match object.type_name {
+            "ScriptAsset" => {
+                latest_script = Some((
+                    script_asset_indices_by_global
+                        .get(&object.id)
+                        .copied()
+                        .or_else(|| object.uint_property("assetId"))
+                        .unwrap_or(0),
+                    object
+                        .string_property("name")
+                        .unwrap_or("unnamed")
+                        .to_owned(),
+                ));
+            }
+            "FileAssetContents" => {
+                if let Some((asset_id, name)) = latest_script.take()
+                    && let Some(payload) = object.bytes_property("bytes")
+                {
+                    scripts.insert(
+                        asset_id,
+                        ExtractedScriptAsset {
+                            name,
+                            payload: payload.to_vec(),
+                        },
+                    );
+                }
+            }
+            _ if file_asset_globals.contains(&object.id) => {
+                latest_script = None;
+            }
+            _ => {}
+        }
+    }
+
+    scripts
+}
+
+#[cfg(feature = "scripting")]
+fn hydrate_script_inputs(
+    runtime: &RuntimeFile,
+    artboard: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+    scripted_local_id: usize,
+    script_instance: &mut dyn rive_runtime::ScriptInstance,
+) -> Result<()> {
+    let object_range = artboard_object_range(runtime, artboard, artboards);
+    for global_id in object_range {
+        let Some(object) = runtime.object(global_id) else {
+            continue;
+        };
+        let type_name = object.type_name;
+        if !type_name.starts_with("ScriptInput") {
+            continue;
+        }
+        if object.uint_property("parentId") != Some(scripted_local_id as u64) {
+            continue;
+        }
+        let Some(name) = object.string_property("name") else {
+            continue;
+        };
+        if type_name == "ScriptInputArtboard" {
+            let Some(artboard_index) = object.uint_property("artboardId") else {
+                continue;
+            };
+            let artboard = RunnerScriptArtboard::new(runtime, artboards, artboard_index as usize)?;
+            script_instance
+                .set_artboard_input(name, Box::new(artboard))
+                .with_context(|| format!("failed to hydrate artboard script input '{name}'"))?;
+            continue;
+        }
+        let value = match type_name {
+            "ScriptInputBoolean" => object.bool_property("propertyValue").map(ScriptValue::Bool),
+            "ScriptInputColor" => object
+                .color_property("propertyValue")
+                .map(|value| ScriptValue::Number(value as f64)),
+            "ScriptInputNumber" => object
+                .double_property("propertyValue")
+                .map(|value| ScriptValue::Number(f64::from(value))),
+            "ScriptInputString" => object
+                .string_property("propertyValue")
+                .map(|value| ScriptValue::String(value.to_owned())),
+            _ => None,
+        };
+        if let Some(value) = value {
+            script_instance
+                .set_input(name, value)
+                .with_context(|| format!("failed to hydrate script input '{name}'"))?;
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(feature = "scripting")]
+fn artboard_object_range(
+    runtime: &RuntimeFile,
+    artboard: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
+) -> std::ops::Range<usize> {
+    let start = artboard.global_id as usize;
+    let end = artboards
+        .iter()
+        .filter_map(|candidate| {
+            (candidate.global_id > artboard.global_id).then_some(candidate.global_id as usize)
+        })
+        .min()
+        .unwrap_or_else(|| runtime.object_count());
+    start..end
 }
 
 fn ensure_static_draw_supported(

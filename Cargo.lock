@@ -319,6 +319,7 @@ dependencies = [
  "rive-render-api",
  "rive-runtime",
  "rive-schema",
+ "rive-scripting",
 ]
 
 [[package]]

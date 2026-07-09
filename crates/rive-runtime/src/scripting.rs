@@ -116,6 +116,24 @@ pub struct NoopScriptHost;
 
 impl ScriptHost for NoopScriptHost {}
 
+/// Runtime-owned artboard userdata exposed to scripts.
+pub trait ScriptArtboard {
+    fn width(&self) -> f32;
+    fn height(&self) -> f32;
+    fn frame_origin(&self) -> bool;
+    fn set_width(&mut self, width: f32);
+    fn set_height(&mut self, height: f32);
+    fn set_frame_origin(&mut self, frame_origin: bool);
+
+    fn instance(&self) -> Result<Box<dyn ScriptArtboard>, ScriptError>;
+
+    fn draw(
+        &mut self,
+        factory: &mut dyn RenderFactory,
+        renderer: &mut dyn Renderer,
+    ) -> Result<(), ScriptError>;
+}
+
 /// Runtime-owned handle for one scripted object instance.
 pub trait ScriptInstance {
     fn has_method(&self, method: ScriptMethod) -> Result<bool, ScriptError>;
@@ -142,6 +160,17 @@ pub trait ScriptInstance {
     fn get_input(&self, name: &str) -> Result<ScriptValue, ScriptError>;
 
     fn set_input(&mut self, name: &str, value: ScriptValue) -> Result<(), ScriptError>;
+
+    fn set_artboard_input(
+        &mut self,
+        name: &str,
+        artboard: Box<dyn ScriptArtboard>,
+    ) -> Result<(), ScriptError> {
+        let _ = (name, artboard);
+        Err(ScriptError::new(
+            "script artboard inputs require backend userdata support",
+        ))
+    }
 }
 
 #[derive(Clone)]

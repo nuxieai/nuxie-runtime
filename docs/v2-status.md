@@ -85,7 +85,14 @@ the only memory the next session has. Update it every commit.
   11605 ms and total from 27905 ms to 26480 ms. The same-turn open-fence
   hot-loop snapshot reports aggregate min Rust/C++=3.198 with load
   36.41/24.07/20.27 and C++ min-sum=1.589 ms, so it is tracking-only and not
-  M7 acceptance evidence.
+  M7 acceptance evidence. A follow-up user-requested tracking run deliberately
+  ignored the load fence with `PERF_MAX_RATIO=999` and reports aggregate min
+  Rust/C++=2.879 with load 18.92/21.62/19.94 and C++ min-sum=1.378 ms. This
+  is still outside the sanity band, but it is the current open-fence tracking
+  baseline; visible remaining ratios are `advance_blend_mode`=4.119/4.284,
+  `spotify_kids_demo@0`=3.949, `animation_reset_cases`=3.423-3.783,
+  `animated_clipping@0`=2.348, `ai_assitant@0`=2.231, and
+  `align_target@0`=1.969.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, or shared shape path-command buffer scout; they preserved correctness
@@ -1767,6 +1774,15 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-09: [M7] Record open-fence hot-loop tracking runs even when they are
+  not acceptance-grade. User explicitly requested ignoring the load fence to
+  keep optimization work measurement-backed. The current tracking command is
+  `make perf-hot-loop PERF_MAX_RATIO=999 PERF_ITERATIONS=10
+  PERF_BENCHMARK_REPEAT=100 PERF_AGGREGATE=min`; when load is high or the C++
+  min-sum falls outside 0.70-0.95 ms, record the aggregate and top ratios as
+  directional only. A high-load run at 18.92/21.62/19.94 reports aggregate
+  Rust/C++=2.879 and C++ min-sum=1.378 ms, improving on the prior open-fence
+  3.198 snapshot but still not satisfying M7.
 - 2026-07-09: [M7] Stop recording debug update locals in the runtime update
   pass and retain nested context-source scratch storage. The focused
   `advance_blend_mode` profile showed C++-unshaped overhead in Rust

@@ -39,12 +39,13 @@ the only memory the next session has. Update it every commit.
   but the C++ min-sum was 1.037 ms, outside the 0.70-0.95 ms sanity band.
   Movement from the previous 3.225 directional sample is below the 0.08 noise
   floor. A user-requested high-load tracking run after the `total_ms` change
-  reports aggregate min Rust/C++=3.529 with C++ min-sum=1.194 ms, also outside
+  reports aggregate min Rust/C++=3.394 with C++ min-sum=1.205 ms, also outside
   the sanity band; treat it as directional, but it shows the current visible
-  outliers are `spotify_kids_demo@0`=6.168, `advance_blend_mode` samples around
-  5.3, `animation_reset_cases` samples around 3.1-3.4,
-  `animated_clipping@0`=2.397, and `ai_assitant@0`=2.257. Strict <=2.0 remains
-  open.
+  outliers are `advance_blend_mode` samples around 5.4-5.7,
+  `spotify_kids_demo@0`=5.451, `animation_reset_cases` samples around 3.0-3.7,
+  `ai_assitant@0`=2.546, and `animated_clipping@0`=2.271. A focused
+  `spotify_kids_demo@0` JSON run reports total=6.315, advance=2.746, and
+  draw=8.222, so the spotify signal is draw-heavy. Strict <=2.0 remains open.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, or shared shape path-command buffer scout; they preserved correctness
@@ -1731,6 +1732,18 @@ the only memory the next session has. Update it every commit.
   tiny-file fixed overhead in `advance_blend_mode` and `animation_reset_cases`;
   `ai_assitant@0` is 2.257. Next runtime slice should continue from those
   measured buckets, not from unmeasured cache guesses.
+- 2026-07-08: [M7] Re-ran the user-requested high-load directional hot-loop
+  despite the load fence to keep optimization work measured. `make
+  perf-hot-loop PERF_MAX_RATIO=999 PERF_ITERATIONS=10 PERF_BENCHMARK_REPEAT=100
+  PERF_AGGREGATE=min` reports aggregate min Rust/C++=3.394 across 11
+  file/sample entries, with C++ min-sum=1.205 ms outside the 0.70-0.95 ms
+  sanity band. The run is not acceptance-grade, but it preserves the ordering:
+  `advance_blend_mode` remains tiny-file fixed overhead at 5.665/5.385,
+  `spotify_kids_demo@0` is 5.451, `animation_reset_cases` spans 2.968-3.725,
+  `ai_assitant@0` is 2.546, and `animated_clipping@0` is 2.271. A focused
+  `spotify_kids_demo@0` JSON run on the same measurement path reports total=
+  6.315, advance=2.746, and draw=8.222, making spotify draw replay the highest
+  priority measured slice.
 - 2026-07-08: [M7] Corrected stale perf-fence wording after the whole-repeat
   `total_ms` harness change. The live M7 gate already scores
   release/null-renderer runner-emitted `total_ms`; lingering references to

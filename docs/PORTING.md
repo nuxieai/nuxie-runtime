@@ -1,0 +1,651 @@
+# PORTING.md — The C++→Rust Idiom Codex
+
+This is the translation manual for porting the Rive C++ runtime (reference at
+`/Users/levi/dev/oss/rive-runtime`) into this Rust workspace. It is the
+authoritative distillation of the patterns worked out across M0–M8 and recorded
+in `docs/v2-status.md`, `docs/v2-log-archive.md`, and `docs/porting-map-v2.md`.
+
+**Who this is for.** (a) Phase R agents about to mechanically translate the
+~26k-line C++ renderer algorithm layer, and (b) new contributors. It teaches the
+*idioms* — how a C++ construct becomes a Rust one here — so you translate the
+same way the existing code did, and so your invalidation, float math, and error
+handling stay byte-compatible with the C++ oracle.
+
+**The prime directive.** Correctness is judged by `make golden-compare`: a Rust
+run must produce a render-call stream identical to the C++ runtime's. Every rule
+below exists to keep that stream exact. When in doubt, do what the C++ source
+does at the same site — *including its evaluation order and its guards* — not
+what is idiomatic Rust.
+
+**Ground rules that shape every idiom (from `docs/porting-map-v2.md`):**
+
+- Port *code, not behaviors*: one C++ class/file, translated coarsely in one
+  sitting, with a comment naming its C++ source. Goldens judge correctness, not
+  you; mark uncertain lines `// TODO(golden):` rather than researching each one.
+- `rive-schema` and `rive-binary` are frozen — do not touch them.
+- Never add skip/cache logic, widen a tolerance, or restructure float math for
+  performance unless it mirrors an audited C++ gate. The golden harness only
+  samples corpus timelines; invented invalidation breaks the timelines it does
+  not sample.
+
+---
+
+## 1. Ownership & Type Mappings
+
+### 1.1 `rcp<T>` / reference counting → arena ownership + dense slots
+
+C++ heap objects are `rcp<Core>` with per-object reference counting. In Rust the
+`ArtboardInstance` is the **sole owner** of a flat arena; objects are plain `Vec`
+entries addressed by a dense `local_id` index. No `Rc`/`Arc` per object.
+
+```rust
+// crates/rive-runtime/src/objects.rs:61
+pub(crate) struct InstanceObjectArena {
+    objects: Vec<Option<InstanceObjectStorage>>,   // indexed by dense local_id
+}
+```
+
+`ArtboardInstance` (`crates/rive-runtime/src/artboard.rs:61`) holds `slots`,
+`objects`, and `components` side by side, each a `Vec` indexed by `local_id`.
+Lifetime is the arena's lifetime; there is no shared ownership to reason about.
+
+**Rule:** when C++ hands out an `rcp<T>` or stores a `T*`, store the object in
+the arena and pass its `local_id` (see 1.2). Cloning an artboard clones the
+arena, not a graph of refcounts.
+
+### 1.2 Raw pointer graphs → typed indices (`local_id` / `global_id`)
+
+C++ `Component* parent()`, `std::vector<Component*> children`, and `m_Dependents`
+back-references become index fields. There are two id spaces:
+
+- **`local_id: usize`** — dense index within one artboard's arena.
+- **`global_id: u32`** — index into the whole file's object table.
+
+```rust
+// crates/rive-graph/src/lib.rs:325
+pub struct ComponentNode {
+    pub local_id: usize,
+    pub global_id: u32,
+    pub parent_local: Option<usize>,     // was: Component* parent()
+    pub children: Vec<usize>,            // was: std::vector<Component*>
+    pub constraint_locals: Vec<usize>,
+    pub dependent_locals: Vec<usize>,    // was: m_Dependents
+    ...
+}
+```
+
+These are plain `usize`/`u32`, **not** distinct newtypes — the `local_`/`global_`
+prefix and field position encode which table each index addresses. A null pointer
+becomes `Option<usize>`; an empty child list becomes an empty `Vec`. When you
+port a C++ traversal, translate `->` chases into arena lookups by the stored
+index, and translate `nullptr` checks into `Option` matches (see 3.1).
+
+### 1.3 Virtual dispatch → enum+match *or* trait
+
+Two distinct C++ patterns map to two distinct Rust ones. **Choose by whether the
+set of implementations is closed and file-defined, or open and pluggable.**
+
+**Closed set of file-defined variants → `enum` + `match`.** Keyframe
+interpolators, converters, constraints, and object-type storage are all closed
+sets known at build time.
+
+```rust
+// crates/rive-runtime/src/animation.rs:16
+pub(crate) enum RuntimeInterpolator {
+    CubicEase { x1: f32, y1: f32, x2: f32, y2: f32 },
+    CubicValue { .. },
+    Elastic { amplitude: f32, period: f32, easing_value: u64 },
+}
+// dispatch at animation.rs:109 — replaces KeyFrameInterpolator::transform() vtable
+```
+
+**Open / externally-implemented interface → `trait`.** The renderer backend, the
+factory, and the scripting VM are pluggable (FFI backend, host VM), so they stay
+traits mirroring the C++ abstract base classes.
+
+```rust
+// crates/rive-render-api/src/lib.rs:310 — mirrors abstract rive::Renderer
+pub trait Renderer {
+    fn save(&mut self);
+    fn restore(&mut self);
+    fn draw_path(&mut self, path: &dyn RenderPath, paint: &dyn RenderPaint);
+    ...
+}
+```
+
+Also `Factory` (`rive-render-api/src/lib.rs:338`) and
+`ScriptingVm`/`ScriptInstance`/`ScriptHost` (`rive-runtime/src/scripting.rs`).
+
+### 1.4 `std::vector` clear-and-refill → retained `Vec` by dense slot
+
+C++ draw loops keep a `std::vector` across frames, `clear()`ing to reuse
+capacity. The Rust port does the same, and additionally indexes retained caches
+by dense `local_id`, invalidating by graph identity rather than reallocating:
+
+```rust
+// crates/rive-runtime/src/draw.rs:5912
+struct RuntimePathGeometryCommandSlots {
+    graph_global_id: Option<u32>,
+    by_local: Vec<Option<RuntimeCachedPathGeometryCommands>>,
+}
+// slot_mut: clear() when graph changes, else resize_with to grow; never per-frame realloc
+```
+
+There are ~11 `clear()`-reuse sites in `draw.rs`. Retained render paths follow
+the same shape (`runtime_cached_retained_render_path`, `draw.rs:9759`): rebuild
+in place when the cache key changes, reuse otherwise. **Do not** allocate a fresh
+`Vec`/`RenderPath` per frame — that is the M7 churn the retention campaign
+removed.
+
+### 1.5 C++ inheritance → generated `InstanceObjectStorage` + schema-key model
+
+Rive's C++ object model is a deep generated class hierarchy
+(`NodeBase : ContainerComponent : ...`) with `virtual coreType()`, per-property
+`xChanged()` hooks, and a `CoreRegistry` key→field deserialization switch. The
+Rust port **flattens** this. `crates/rive-runtime/build.rs` generates (included
+at `objects.rs:9`):
+
+- An `enum InstanceObjectStorage` with one variant per object type, replacing the
+  vtable/typeKey RTTI. `type_key` dispatch is a generated `match`.
+- Per-type `*Object` structs whose properties are `Option<T>` fields keyed by the
+  numeric schema property key. Getters/setters are generated `match property_key`
+  arms.
+
+The change-notification hook (`xChanged()`) becomes a shared generic helper that
+early-returns when the value is unchanged — this is load-bearing (see 3.6):
+
+```rust
+// crates/rive-runtime/src/objects.rs:51
+pub(crate) fn set_optional_field<T: PartialEq>(field: &mut Option<T>, value: T) -> bool {
+    if field.as_ref().is_some_and(|current| current == &value) {
+        return false;                 // unchanged: no write, no change hook
+    }
+    *field = Some(value);
+    true                              // caller fires the change hook on `true`
+}
+```
+
+`InstanceObjectArena::set_property_value` (`objects.rs:245`) validates the field
+kind against the schema, handles bitmask-passthrough packing, then routes to the
+generated per-type setter. Schema metadata (`Property { key, runtime_type,
+stores_field, bitmask_passthrough, ... }`) lives in `crates/rive-schema`.
+
+---
+
+## 2. The Dirt / Epoch Architecture
+
+This is the subsystem most easily broken by well-meaning Rust idioms, and the one
+where a wrong change passes golden tests today and corrupts an unsampled frame
+tomorrow. Read this section before touching any invalidation.
+
+### 2.1 `ComponentDirt` bits
+
+A bit-exact port of C++ `include/rive/component_dirt.hpp` — a hand-rolled `u16`
+newtype (not `bitflags`), with the *same bit positions and the same aliases*:
+
+```rust
+// crates/rive-runtime/src/components.rs:18
+pub struct ComponentDirt(pub u16);
+impl ComponentDirt {
+    pub const PATH: Self = Self(1 << 4);
+    pub const TEXT_SHAPE: Self = Self(1 << 4);   // aliased on purpose (C++ does this)
+    pub const SKIN: Self = Self(1 << 4);         // aliased
+    pub const VERTICES: Self = Self(1 << 5);
+    pub const WORLD_TRANSFORM: Self = Self(1 << 7);
+    pub const PAINT: Self = Self(1 << 9);
+    ...
+    pub const FILTHY: Self = Self(0xFFFE);
+}
+```
+
+Preserve the aliases and the `0xFFFE` value exactly — they are part of the
+protocol. Dirt is stored per-component (`components.rs:448`, initialized
+`FILTHY`) and once at artboard level.
+
+### 2.2 The epoch counters
+
+Dirt drives *intra-frame update ordering*. Epochs are the *cross-frame retained-
+cache invalidation keys* — `u64` fields on `ArtboardInstance`
+(`artboard.rs:117`), all initialized to `1`, all bumped with `wrapping_add(1)`
+(`artboard.rs:1162`).
+
+| Epoch | Bumped by | Read by (what it lets you skip) |
+|---|---|---|
+| `cache_epoch` | `mark_changed()` — nearly every property write | Paint-prep skip (`draw.rs:829`), `can_skip_prepared_frame` (`draw.rs:5790`), paint-config currency `is_current` (`draw.rs:5691`) |
+| `prepared_epoch` | `mark_prepared_changed()`; **cascaded** from layout/path/draw_order/render_opacity bumps | Rebuild of the whole prepared draw-command list (`prepared_artboard_frame`, `draw.rs:6619`) |
+| `path_epoch` | `mark_path_changed()` (also bumps prepared) | Shape-paint / path-geometry command caches (`draw.rs:3430`, `7004`) |
+| `layout_epoch` | `mark_layout_changed()` (also bumps prepared) | Retained Taffy layout bounds (`draw.rs:6691`, `artboard.rs:927`) |
+| `draw_order_epoch` | `mark_draw_order_changed()` (also bumps prepared) | Drawable re-sort (`sorted_drawable_order_frame`, `draw.rs:6658`) |
+
+A sixth, **derived** epoch — `nested_epoch` — is *not* stored: it is an FNV-1a
+hash over nested-artboard draw commands and their children's `cache_epoch`,
+computed on demand (`runtime_nested_paint_preparation_epoch`, `draw.rs:946`).
+
+`prepared_epoch` is the roll-up "topology changed" counter; `cache_epoch` is the
+coarse "anything changed" counter. Every retained sub-cache is a
+`if cached.key != key { rebuild }` gate keyed on the matching epoch.
+
+### 2.3 Dirt vs. epoch — when to use which
+
+- Use **dirt** to schedule work *inside* `advance`/`update`: `add_dirt`
+  (`artboard.rs:1295`) sets bits and cascades to `dependent_locals`;
+  `update_components` clears `COMPONENTS` and walks dependents.
+- Use an **epoch** to let `prepare`/`draw` *skip rebuilding a cross-frame cache*.
+- The bridge is `add_dirt`: it translates newly-set dirt bits into the correct
+  epoch bumps. **This translation is the fence.**
+
+### 2.4 THE FENCE RULES
+
+**A dirt bit does not blindly bump every epoch.** The crux is
+`component_dirt_affects_path_epoch` (`artboard.rs:2678`), anchored to a named C++
+function:
+
+```rust
+// C++ src/shapes/path.cpp::Path::update rebuilds geometry for path/nslicer dirt,
+// and only for world-transform dirt when a deformer is present. Plain transform
+// animation is applied at draw time and must NOT churn retained path storage.
+!(dirt & (PATH | VERTICES | LAYOUT_STYLE | N_SLICER)).is_empty()
+```
+
+So `WORLD_TRANSFORM`/`TRANSFORM` dirt bumps only `prepared_epoch`, never
+`path_epoch` — animated transforms move the shape without invalidating cached
+geometry. A dedicated test enforces it
+(`world_transform_dirt_invalidates_prepared_frame_without_rebuilding_paths`,
+`artboard.rs:3219`).
+
+The write-side gates are deliberately *narrow whitelists / deny-lists*, each
+citing the C++ gate it mirrors:
+
+- `property_affects_effect_path_epoch` (`artboard.rs:2691`) — only
+  TrimPath/DashPath/Feather named keys bump `path_epoch`.
+- `property_may_affect_prepared_frame` (`artboard.rs:2709`) — a deny-list of
+  ~50 animation/state-machine/data-bind/keyframe types that return `false`; plus
+  special cases (`NestedArtboard` only on `artboardId`; `SolidColor` bumps unless
+  it is the color value). Unknown types default `true`.
+- `property_affects_layout` (`artboard.rs:1228`) — per-type layout whitelist.
+
+The invariant, stated as a rule:
+
+> **Never bump an epoch that the audited C++ gate for that property would not
+> touch. If a sibling setter bumps and yours does not — or vice versa — one of
+> them is wrong.**
+
+Generated property setters all route through this fence
+(`set_bool_property`/`after_double_property_set`/`set_uint_property`,
+`artboard.rs:605–738`): `mark_changed()` for `cache_epoch`, then the *gated*
+`mark_prepared_changed_for_property`, `mark_layout_changed_for_property`, and a
+whitelisted `mark_path_changed`. `view_model.rs` setters never bump epochs
+directly — they resolve a data-bind path and delegate into these artboard
+setters, so all invalidation flows through the single fence.
+
+### 2.5 Cautionary case studies — the five drift bugs
+
+The M8 adversarial audit (`docs/v2-status.md` items 21–25) found five bugs. **All
+five are the same mistake:** an epoch/invalidation that diverges from the audited
+C++ gate — the exact failure this section exists to prevent. Study them; do not
+reintroduce their shape. (Check the status log for current fix state before
+assuming any is resolved.)
+
+1. **Shallow collapse propagation** (item 21). A commit trusted each component's
+   *local* collapsed flag but Rust collapse propagation was not full-subtree on
+   two paths, unlike C++ `ContainerComponent::collapse`. Statically-inactive solo
+   branches drew on a fresh instance. Goldens missed it because corpus solos are
+   SM-driven (full-tree path) or shallow. *Lesson: a fast local check is only
+   valid if the propagation feeding it is as deep as C++'s.*
+2. **Missing `mark_mutated()` on three view-model setters** (item 22).
+   `set_number_by_property_index`, `set_enum_…`, `set_artboard_…` mutated without
+   the invalidation every sibling setter fires — the write never reached the
+   bound artboard. *Lesson: if every sibling bumps and one does not, it is an
+   accidental omission, not an optimization.*
+3. **World-space gradients go stale under keyed transform animation** (item 23).
+   `set_transform_property_with_key` never called `mark_changed` — the one gap in
+   otherwise-complete `cache_epoch` coverage. World-space paints bake
+   `shape_world` into shader endpoints; the shader kept pre-move endpoints.
+4. **Stateful interpolator bindings never apply at `advance(0)`** (item 24). The
+   SM apply phases skipped initialized stateful bindings when `elapsed == 0`, but
+   C++ runs `updateDataBinds` unconditionally (only the *time step* is a no-op at
+   0). *Lesson: `elapsed == 0` skips the advancer step, not the apply.*
+5. **Fill rule replays an import-time snapshot** (item 25). Draw commands baked
+   `fill_rule` at graph-build time; a runtime `Fill.fillRule` write bumped every
+   epoch correctly and still rendered the load-time rule. C++ reads the live
+   property every draw. *Lesson: no epoch bookkeeping can save a value you
+   snapshotted at import instead of reading live at draw.*
+
+The recurring pattern — "every sibling bumps this epoch, this one forgot" —
+appears three times (bugs 2, 3, and the item-21 asymmetry). When you add a
+setter, grep its siblings and match them exactly.
+
+---
+
+## 3. Cross-Language Semantic Traps
+
+Release is `panic = "abort"` (`Cargo.toml:27`), so **every reachable panic is a
+process kill inside an embedder**. The importer accepts many degenerate-but-valid
+files; the runtime must not assume more than the importer guaranteed.
+
+### 3.1 Null-tolerant pointer flow → guarded `Option`, never `unwrap`
+
+C++ threads `nullptr` through pointer flows and checks late. Port those to
+`Option` and *keep the guard where C++ has it* — never `unwrap()`/`expect()` on
+anything reachable from an imported file or a hostile C-ABI value. The M8
+semantic sweep (`docs/v2-status.md` item 20) confirmed the codebase is unusually
+defensive here: the binary reader is fully `.get()`-based, and every suspect
+`len()-N` / modulo site sits behind a faithful C++ guard port. Preserve that when
+you add code.
+
+### 3.2 Float comparison → `total_cmp`, never `partial_cmp().unwrap()`
+
+There is **zero** `partial_cmp().unwrap()` in the tree, and sorts use
+`f32::total_cmp` for a total, deterministic order across all bit patterns:
+
+```rust
+// crates/rive-runtime/src/draw.rs:13554
+stops.sort_by(f32::total_cmp);          // gradient / nslicer stop sort
+```
+
+C++ sorts gradient stops with `operator<` (a partial order; NaN/±0 unspecified).
+`total_cmp` trades exact-C++-order-on-degenerate-input for reproducibility. This
+is deliberate.
+
+### 3.3 Saturating casts vs C++ UB
+
+`static_cast<int>` of an out-of-range/NaN/inf float is UB in C++; Rust's `as i32`
+**saturates** (clamps, NaN→0). The project treats this as a *safer deliberate
+divergence*. The only constructible true divergence found:
+
+```rust
+// crates/rive-runtime/src/animation.rs:801 — PingPong direction
+let direction = (seconds / duration) as i32 % 2;   // duration==0 → inf as i32 saturates
+```
+
+Recorded policy (`docs/v2-status.md` item 20 #10): document the float→int
+saturating-cast policy and add NaN/inf fixtures so the divergence surfaces
+deliberately. When you port a float→int cast, know that Rust will not reproduce
+C++ UB — usually a feature, occasionally a divergence to guard (e.g. add a
+`duration == 0.0` guard). Byte-clamp sites round-then-saturate on purpose:
+`(255.0 * opacity.clamp(0.0, 1.0)).round() as u8` (`draw.rs:11938`).
+
+### 3.4 Integer overflow policy
+
+Two profiles, one landed and one planned:
+
+- **Production (landed):** `[profile.release] panic = "abort"` with
+  `overflow-checks` at its default (off) → wrapping in release
+  (`Cargo.toml:24`). Intentional wrap for hashing/epochs uses explicit
+  `wrapping_add` (`artboard.rs:1162`).
+- **Tests/fuzz (planned, not yet a committed profile):** a hardened profile with
+  `overflow-checks = true` (`docs/v2-status.md` item 20 #7). **TODO:** confirm
+  whether this profile has landed before relying on it.
+
+At the parser/hostile-input boundary, use explicit `checked_*` and reject on
+overflow (e.g. `bytecode.rs`, `rive-binary/src/lib.rs:12689`,
+`draw.rs:13136` `point_count.checked_mul(2)`). Do not let a mutated file's length
+field wrap into a small allocation.
+
+### 3.5 `debug_assert` must not carry side effects
+
+`debug_assert*` operands are pure reads only — the assert is a documentation /
+early-signal guard, never load-bearing logic (it vanishes in release):
+
+```rust
+// crates/rive-runtime/src/draw.rs:7383
+debug_assert_eq!(target.len(), bytes.len());   // pure .len() reads
+target.copy_from_slice(bytes);                 // would panic anyway on mismatch
+```
+
+*(The rule is expressed structurally, not as a prose sentence; every
+`debug_assert*` in the runtime reads pure values only. Keep it that way.)*
+
+### 3.6 The equality early-out generated-setter pattern (why steady frames matter)
+
+Every generated/bindable setter returns `bool` (changed?) and early-returns when
+the value is unchanged:
+
+```rust
+// crates/rive-runtime/src/state_machine/bindables.rs:237
+pub(crate) fn set_value(&mut self, value: f32) -> bool {
+    if self.value == value { return false; }
+    self.value = value;
+    true
+}
+```
+
+This mirrors C++'s generated `if (m_Field == value) return; ...; fieldChanged();`.
+The `== value` guard is **load-bearing**: a data bind that re-writes the same
+number every frame must produce *no* dirt and *no* recompute, or a static/steady
+frame churns caches and (worse) can bump an epoch it shouldn't. When you add a
+setter, thread the `-> bool` "did it actually change" signal to the caller
+instead of dirtying unconditionally.
+
+---
+
+## 4. Float-Exactness Lore
+
+The golden comparator uses a tight numeric epsilon (`1.3e-4`), so geometry math
+must match C++ *rounding*, not just C++ *value*. Two runtimes that compute the
+"same" transform two different ways diverge by ulps that fail the diff.
+
+### 4.1 No reassociation, no fast-math
+
+Never reorder a float expression, distribute a multiply, or enable fast-math for
+performance. Translate the C++ arithmetic *in the C++ grouping*. The grouping is
+part of the contract:
+
+```rust
+// crates/rive-runtime/src/components.rs:390 — Mat2D::mapPoints
+// The grouping matters for cancellation-heavy local path composition.
+if b == 0.0 && c == 0.0 { (a.mul_add(x, e), d.mul_add(y, f)) }
+else { (a.mul_add(x, c.mul_add(y, e)), d.mul_add(y, b.mul_add(x, f))) }
+```
+
+### 4.2 Fused `scaleAndAdd` and the FMA asymmetry
+
+C++ writes `a + b*scale` as separate multiply-then-add, but **clang's default
+`-ffp-contract=on` fuses it into a single FMA in the geometry pipeline** (Rust
+never contracts automatically). To match C++'s rounding you must reach for
+`f32::mul_add` *at exactly the sites clang would fuse* — and *not* elsewhere:
+
+```rust
+// crates/rive-runtime/src/draw.rs:13840 — geometry path: FUSE (matches contracted C++)
+// Mirrors C++ Vec2D::scaleAndAdd after compiler contraction; rounded midpoint
+// pruning can depend on the one-ulp split this preserves.
+(vector.0.mul_add(scale, point.0), vector.1.mul_add(scale, point.1))
+```
+
+```rust
+// crates/rive-scripting/src/vm.rs:347 — script VM: do NOT fuse
+Ok(LuaVector::new(a.x() + b.x() * scale, ...))   // C++ Lua binding runs through
+                                                 // the interpreter, uncontracted
+```
+
+**The asymmetry:** fuse in the geometry pipeline, do not fuse in the script VM.
+The C++ Lua binding (`src/lua/math/lua_vec2d.cpp`) evaluates through the
+interpreter with no geometry-path contraction, so the Rust Luau binding must use
+plain `+`/`*`.
+
+The `Mat2D` multiply family encodes the same lore, **selected by transform shape**
+at `draw.rs:3505`:
+
+- `multiply` (`components.rs:279`) — fused rotation columns, unfused translation.
+- `multiply_path_local_fused` (`components.rs:292`) — translation *also* fused.
+- `multiply_path_local_contracted` (`components.rs:305`) — translation unfused.
+
+These three exist because `juice.riv` (axis-aligned) and `rocket.riv`
+(rotated/skewed) needed different contraction to match C++. The
+`mat2d_has_visible_skew_or_rotation` epsilon gate (`draw.rs:10090`) picks the
+variant. `transform_point` (`components.rs:383`) uses plain `*`/`+` while
+`map_point` fuses — intentional and shape-driven.
+
+**Perf caveat (`docs/v2-log-archive.md` item 18):** closing the FMA gap globally
+(bulk `mul_add`) changes float results and can flip exact files. Treat any new
+`mul_add` as a per-site change requiring golden re-verification — never a bulk
+pass.
+
+### 4.3 Contour canonicalization vs HarfBuzz conventions
+
+C++ `src/text/font_hb.cpp` records static `glyf` contours at the font's authored
+start points. Skrifa's HarfBuzz-style path conversion *rotates* those start
+points. To preserve C++ ordering, the port picks the conversion style by whether
+the font is variable:
+
+```rust
+// crates/rive-runtime/src/text.rs:1098
+let path_style = if style_font.axes().is_empty() {
+    PathStyle::FreeType     // non-variable: preserve authored contour starts (C++ order)
+} else {
+    PathStyle::HarfBuzz     // variable: HarfBuzz path required
+};
+```
+
+Residual outline float drift is covered by `tolerant` verification, but **glyph
+contour *ordering* stays strict even under tolerant mode**
+(`docs/v2-status.md:3535`) — ordering is ported behavior, not delegated-engine
+drift. Zero-size glyph contours collapse to move/close pairs to match C++
+`RawPath` (`text.rs:3851`).
+
+---
+
+## 5. Library Substitution Table
+
+C++ delegates several subsystems to vendored C/C++ libraries; the Rust port uses
+Rust-native equivalents. **The engine-swap decision rule:** *spec-defined
+behavior may swap engines; implementation-defined behavior may not* — where a
+faithful, upstream-conformance-verified port (HarfRust, luaur) counts as the
+*same* engine. Each swappable subsystem sits behind a trait so the engine can be
+changed without touching runtime code.
+
+Only **3 of 6** planned substitutions are wired as dependencies today. Bidi,
+image decoders, and audio remain paper decisions.
+
+| Subsystem | Crate | Present? | Version | Trait seam |
+|---|---|---|---|---|
+| Layout | `taffy` | **Yes** | 0.12.1 | `RuntimeLayoutEngine` (`draw.rs:4024`) |
+| Text shaping | `harfrust` + `skrifa`/`read-fonts` | **Yes** | harfrust 0.12, skrifa 0.44 | none (concrete in `text.rs`) |
+| Bidi | `unicode-bidi` | No | — | — |
+| Image decode | `image`/`png`/`zune-jpeg`/`image-webp` | No (headers only) | — | `Factory::decode_image` (render-api:365) |
+| Audio | `cpal`/`rodio`/`kira` | No (schema enums only) | — | — |
+| Scripting | `luaur-rt` (+ common/vm) | **Yes** (feat `luau`, default) | =0.1.8 | `ScriptingVm`/`ScriptInstance`/`ScriptHost` in `rive-runtime/src/scripting.rs` |
+
+**Per-library gotchas actually discovered:**
+
+- **Taffy (layout).** No `yoga` dep exists; Yoga-via-FFI is only the *untriggered
+  fallback*. Files author against Yoga's React-Native-era quirks, so edge-case
+  layouts may diverge — those verify in `tolerant` mode. Real convention
+  mismatches captured in `draw.rs`: Yoga stores left/top parent-local and
+  composes through parent world transforms, so the artboard origin is applied
+  *exactly once* (`draw.rs:2082`); fill maps to stored units, not Yoga auto
+  (`draw.rs:2677`); non-explicit position edges are Yoga-undefined → Taffy `auto`,
+  not zero (`draw.rs:5327`); `TaffyTree::disable_rounding()` mirrors Yoga
+  point-scale. **Fence:** do not pin Taffy against Yoga behavior-by-behavior —
+  that is V1's mistake and a tripwire. Extend the hand-rolled flex fallback no
+  further; the next unsupported layout feature triggers full Taffy integration.
+- **Skrifa (font outlines).** Its HarfBuzz conversion rotates contour start
+  points — see 4.3. Missing Arabic fallback shaper for malformed fonts is a
+  documented backlog gap (act only if a corpus file hits it). Legacy-kern is
+  disabled for advances (`text.rs:916`) and custom line metrics reproduce
+  HarfBuzz ascent/descent (`text.rs:927`).
+- **Image decoding.** Only *encoded-header dimension parsing* is implemented in
+  Rust (`rive-render-api/src/lib.rs:1327`); real pixel decode is delegated to C++
+  over FFI. Golden streams carry `decodeImage id=… width=… height=…` with **no
+  payload hashes** — cross-runtime image comparison uses decoded dimensions +
+  tolerant pixel sampling (PNG is lossless → exact; JPEG is not bit-identical
+  across decoders → tolerant).
+- **luaur (scripting).** Pinned exactly `=0.1.8` (validated against upstream Luau
+  commit 8f33df9); it is a faithful port, so scripted files target `exact`, not
+  tolerant, and the C++ golden runner (built *with* scripting) is a third oracle
+  for any drift. **Bytecode validation requirement (landed):**
+  `ScriptVm::load_bytecode` (`vm.rs:154`) runs `validate_luau_bytecode` — a full
+  structural bounds-check — *before* the unsafe `luau_load`, because the pinned
+  luaur deserializer does unbounded pointer reads; a hostile `.riv` bytecode
+  payload must be preflighted (this closes audit item 23's UNSOUND finding).
+  **Sandbox order (landed):** install all Rive globals first, *then*
+  `sandbox(true)` — Luau's `GETIMPORT` resolves globals at load time, so globals
+  must exist before any bytecode loads (`vm.rs:112`). The seam traits are owned by
+  `rive-runtime` and implemented by the optional `rive-scripting` crate (inverted
+  so the runtime never depends on the VM). `mlua`+`luau` remains the untriggered
+  fallback behind the same seam. **TODO:** the "iOS no-JIT" property is implicit
+  in the pure-Rust interpreter choice; there is no explicit in-code note for it.
+
+---
+
+## 6. Verification Method
+
+### 6.1 Golden-stream discipline
+
+Correctness is one number: **`exact-segments`** from `make golden-compare` — the
+sum of verified (file × sample) segments across `exact` corpus entries. The C++
+runtime is the oracle; a Rust run must emit an identical render-call stream
+(`save`/`restore`/`transform`/`clipPath`/`drawPath`/`drawImage`/… with full
+verbs, points, and paint state). A slice is "done" when the file it targets is
+byte/epsilon-identical, not when a behavior is "pinned."
+
+`corpus.toml` carries a per-entry `verification` mode, as strict as the file's
+content allows:
+
+- **`exact`** (default) — byte/epsilon-identical. All fully-ported subsystems,
+  plus scripting (same VM).
+- **`tolerant(ε)`** — positions/pixels within ε. Only files exercising a swapped
+  engine: Taffy layout, HarfRust-shaped text numeric drift, or lossy image
+  decode. A file with no layout/text/images may not hide behind `tolerant`.
+- **`structural`** — same call sequence/counts, values within tolerance; last
+  resort, requires a Decision-log entry.
+
+Rive-owned behavior (text layout, wrapping, draw suppression, call order, glyph
+contour ordering) is *ported*, so it stays `exact` — it is not delegated-engine
+drift.
+
+There is a separate scripted lane: the C++ golden runner is built *with*
+scripting (`make scripted-golden-runner` / `make scripted-golden-compare`) so
+scripted files get real reference streams, and luaur-shaped drift surfaces as an
+attributable stream diff against real Luau.
+
+### 6.2 The escalation ladder (divergence protocol)
+
+When a golden diff fails, localize before you theorize — **budget half a day per
+divergence:**
+
+1. First divergent render call (the harness reports it with context).
+2. Binary-search the timeline.
+3. Disable subtrees/objects to isolate the component.
+4. Read the two implementations side by side at that site.
+5. Only if still stuck after ~half a day: write **one** targeted `cpp-probe` pin
+   for that behavior — then fix it or file it in the backlog with findings and
+   take the next task. Never let one divergence consume a session.
+
+The long tail is *discovered*, not enumerated: an unconsidered behavior either
+shows up as a diff on a real file (fix it) or never manifests (ignore it).
+Differential fuzzing (corpus files at randomized times/inputs/mutations through
+both runtimes) finds the weird interleavings automatically.
+
+### 6.3 The tripwire / fence culture
+
+The failure mode is *you* — V1 spent 94% of its map pinning data-binding edge
+cases while nothing rendered. Stop and return to the milestone queue if any fire
+(`.claude/commands/goal.md`): three commits on one C++ behavior family with no
+corpus file changing status; writing a doc that enumerates C++ cases or a test
+for behavior no corpus file exercises; a commit message that cannot name a
+milestone tag; extending the frozen contract suite; or `exact-segments`
+unmoved in ~10 commits. Perfectionism about one behavior is scope failure, not
+rigor — shipped-and-diffed beats proven-in-isolation.
+
+The full command reference (session loop, porting method, perf rules, thread
+protocol) is `.claude/commands/goal.md` — this section summarizes it, it does not
+replace it.
+
+---
+
+## Appendix: Quick Reference for a Phase R Translator
+
+- Owning a new object → arena `Vec` + `local_id`, never `Rc`. (§1.1–1.2)
+- Pointer field → `Option<usize>`/`Vec<usize>` index; `nullptr` → `Option`. (§1.2, §3.1)
+- Closed variant set → `enum`+`match`; pluggable interface → `trait`. (§1.3)
+- Per-frame vector → retained `Vec`, `clear()`+reuse, never realloc. (§1.4)
+- New property → generated setter through the fence; grep siblings, match their
+  epoch bumps exactly. (§1.5, §2.4, §2.5)
+- Invalidation → mirror the named C++ gate; bump only what that gate touches. (§2.4)
+- Float math → C++ grouping, no reassociation; `mul_add` only where clang fuses,
+  and not in the script VM. (§4)
+- Sort floats with `total_cmp`; never `partial_cmp().unwrap()`; never `unwrap`
+  on file/ABI-reachable values (release aborts). (§3.1–3.2)
+- Verify by golden stream, `exact` unless a swapped engine forces `tolerant`;
+  localize divergences in half a day. (§6)

@@ -838,6 +838,35 @@ the only memory the next session has. Update it every commit.
         freedom fuzzing within the existing M8 queue: a panic inside a
         customer's app is existential for an embedded SDK.
 
+27. OPUS DISPATCH ROUND (coordinator-merged while Codex was out of
+    credits; merges b842e5d/d5e3fd8/88fe434-era..latest): PORTING.md
+    (651-line idiom codex), capi panic firewall (18/18 + scan test) +
+    debug UAF guard + pointer ABI, SDK size baseline (release-size
+    profile: 2.50 MiB/arch scripting-off, budget <=2.75, make
+    size-report, docs/SIZE.md), view-model facade + C ABI (set
+    number/bool/string/enum by slash name path, bind-as-separate-call;
+    item-22 caveat docs to remove once that fix lands), and the fuzz
+    harness (fuzz/ crate, 3 targets, make fuzz-smoke CI gate).
+    FUZZ RESULT: ZERO PANICS in ~19 min of runtime-drive fuzzing —
+    item 20 #9's panic-freedom is now demonstrated. ONE finding class:
+    infinite-loop HANGS on malformed-but-accepted parent/reference
+    cycles (components.rs layout-parent walk; rive-graph draw-rules
+    walk), 39-byte reproducers + proposed fix in fuzz/regressions/open/.
+    C++ hangs IDENTICALLY (verified) — but DECISION (coordinator,
+    2026-07-09): apply the cycle-guard hardening anyway. Rationale: an
+    embedded SDK hang is an ANR/watchdog kill, as bad as a panic; the
+    guard is unreachable on valid files (goldens unaffected); mirror
+    C++'s OWN cycle-guard idioms (DependencySorter cycle detection,
+    validateObjects cycle<100 cap) so this is C++-shaped defense, and
+    document it as a deliberate terminate-where-C++-hangs divergence.
+    QUEUE (after lane-audit-fixes releases the runtime crate — same
+    files): cycle-guard pass in rive-graph + rive-runtime, move
+    reproducers to the guarded regressions dir, revert fuzz-smoke
+    runtime targets to timed mutation; then the semantic-trap fixes
+    (item 20 queue) + clippy gates round. Audit-fixes lane has bug #1
+    (collapse) committed as 2fecd6e; bugs #2-#5 in progress in the main
+    checkout under commit-per-bug discipline.
+
 ## Known Divergences
 
 - There are no active `status = "not-yet"` entries.

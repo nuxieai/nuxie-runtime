@@ -69,11 +69,12 @@ the only memory the next session has. Update it every commit.
    ABI facade exists at `crates/rive-capi` with import/free and artboard
    metadata functions. `make perf-compare`, `make perf-corpus`, and
    `make perf-hot-loop` build release C++/Rust runners by default, and
-   `perf-hot-loop` consumes runner benchmark phase sums rather than wall-clock
-   process or stream-serialization time. Both runners have null-renderer
-   benchmark backends, so M7 perf checks exclude golden recording output. Both
-   runners also support `--benchmark-repeat N` for long single-sample profiling
-   runs. A release `ai_assitant.riv` profile found fixed schema-name property
+   `perf-hot-loop` scores runner-emitted whole-repeat `total_ms` rather than
+   wall-clock process time, stream-serialization time, or per-frame phase timer
+   overhead. Both runners have null-renderer benchmark backends, so M7 perf
+   checks exclude golden recording output. Both runners also support
+   `--benchmark-repeat N` for long single-sample profiling runs. A release
+   `ai_assitant.riv` profile found fixed schema-name property
    lookup in the paint/path hot paths; caching fixed paint keys previously
    reduced Rust direct `ai_assitant` 100-segment repeat time from about
    1019 ms to about 255 ms. Follow-up path-geometry key caching,
@@ -352,11 +353,12 @@ the only memory the next session has. Update it every commit.
    edge to model for this family. The status review keeps the scout and perf
    methodology discoveries in force: broad converter-property writes remain
    rejected after the `db_health_tracker` RangeMapper scout, shallow cached
-   command/path wrappers remain rejected by fenced perf, and M7 decisions still
-   use release/null-renderer hot-loop phase sums. Remaining conservative
-   families are `NumberToList`, operation-view-model / system operation,
-   `RangeMapper`, `Interpolator`, and unsupported converters. Full
-   `make golden-compare` remains exact=263 / exact-segments=584 / diverges=0,
+   command/path wrappers remain rejected by fenced perf, and M7 decisions now
+   use release/null-renderer hot-loop whole-repeat `total_ms` scoring.
+   Remaining conservative families are `NumberToList`, operation-view-model /
+   system operation, `RangeMapper`, `Interpolator`, and unsupported converters.
+   Full `make golden-compare` remains exact=263 / exact-segments=584 /
+   diverges=0,
    `cargo test --workspace`, `cargo fmt --all -- --check`, and
    `git diff --check` pass, and fenced hot-loop reports aggregate
    Rust/C++=2.310 then 2.181. Strict <=2.0 remains open.
@@ -1179,9 +1181,10 @@ the only memory the next session has. Update it every commit.
 
 11. PERF METHODOLOGY FENCE (measurement gate before optimization). Earlier
    debug-vs-debug and recording-serializer perf numbers are void. The release
-   C++/Rust runner builds, null-renderer benchmark mode, hot-loop phase sums,
-   and perf JSON artifact path have landed; keep using them for all M7
-   decisions. Required order for any new optimization slice:
+   C++/Rust runner builds, null-renderer benchmark mode, whole-repeat
+   `total_ms` scoring, and perf JSON artifact path have landed; keep using
+   them for all M7 decisions. Per-frame phase timings remain diagnostics only.
+   Required order for any new optimization slice:
    (a) Release-vs-release perf builds: `cargo build --release` for the
        Rust runner and a release C++ runner + release reference libraries;
        correctness ratchet stays on debug. Re-baseline all ratios and
@@ -1712,6 +1715,13 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Corrected stale perf-fence wording after the whole-repeat
+  `total_ms` harness change. The live M7 gate already scores
+  release/null-renderer runner-emitted `total_ms`; lingering references to
+  hot-loop phase-sum scoring in the Next queue, methodology fence, and older
+  decision summary now point at `total_ms` with phase timings explicitly
+  advisory. This keeps the scout/perf fences queryable before the next runtime
+  slice and avoids optimizing against the pre-`total_ms` gate.
 - 2026-07-08: [M7] Store render-paint configuration cache in dense global
   slots. The M7 scout keeps draw-replay dispatch as the implementation target
   when the low-load perf gate is unavailable. `RuntimeRenderPaintCache` already
@@ -4023,10 +4033,10 @@ the only memory the next session has. Update it every commit.
 - 2026-07-08: [M7] Clarified the adopted perf fence at the top of this status
   file so `/goal` sessions can choose M7 work without rereading buried scout
   notes. The fence is bare `make perf-hot-loop` with release/null-renderer
-  phase sums, min aggregation, deliberate image-bearing corpus,
-  `PERF_ITERATIONS=10`, and `PERF_BENCHMARK_REPEAT=100`; acceptance remains
-  three independent aggregate-min runs <=2.0 with load and C++ min-sum sanity
-  checks. The older 2.98/3.95 scout standings are now labeled historical,
+  whole-repeat `total_ms` scoring, min aggregation, deliberate image-bearing
+  corpus, `PERF_ITERATIONS=10`, and `PERF_BENCHMARK_REPEAT=100`; acceptance
+  remains three independent aggregate-min runs <=2.0 with load and C++ min-sum
+  sanity checks. The older 2.98/3.95 scout standings are now labeled historical,
   and the current priority is explicit: profile/port image draw retention
   before smaller draw-replay/fixed-overhead work.
 - 2026-07-08: [M7] Rejected a shallow non-mesh image draw-state cache scout.

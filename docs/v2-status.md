@@ -38,7 +38,13 @@ the only memory the next session has. Update it every commit.
   `make perf-hot-loop PERF_MAX_RATIO=999` reports aggregate min Rust/C++=3.219,
   but the C++ min-sum was 1.037 ms, outside the 0.70-0.95 ms sanity band.
   Movement from the previous 3.225 directional sample is below the 0.08 noise
-  floor. Strict <=2.0 remains open.
+  floor. A user-requested high-load tracking run after the `total_ms` change
+  reports aggregate min Rust/C++=3.529 with C++ min-sum=1.194 ms, also outside
+  the sanity band; treat it as directional, but it shows the current visible
+  outliers are `spotify_kids_demo@0`=6.168, `advance_blend_mode` samples around
+  5.3, `animation_reset_cases` samples around 3.1-3.4,
+  `animated_clipping@0`=2.397, and `ai_assitant@0`=2.257. Strict <=2.0 remains
+  open.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, or shared shape path-command buffer scout; they preserved correctness
@@ -1715,6 +1721,16 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Ran a user-requested high-load directional hot-loop sample.
+  `make perf-hot-loop PERF_MAX_RATIO=999` used the current release/null-renderer
+  whole-repeat `total_ms` gate settings and reported aggregate min Rust/C++=
+  3.529 over 11 file/sample entries. The run is not acceptance-grade because
+  the machine was above the load fence and the C++ min-sum was 1.194 ms, outside
+  the 0.70-0.95 ms sanity band. It is still useful for ordering: the biggest
+  current visible outlier is `spotify_kids_demo@0` at 6.168, followed by
+  tiny-file fixed overhead in `advance_blend_mode` and `animation_reset_cases`;
+  `ai_assitant@0` is 2.257. Next runtime slice should continue from those
+  measured buckets, not from unmeasured cache guesses.
 - 2026-07-08: [M7] Corrected stale perf-fence wording after the whole-repeat
   `total_ms` harness change. The live M7 gate already scores
   release/null-renderer runner-emitted `total_ms`; lingering references to

@@ -419,6 +419,15 @@ the only memory the next session has. Update it every commit.
   min-sum=0.940 ms and load 4.08/3.94/3.73. Full `make golden-compare`
   remains exact=263 / exact-segments=584 / diverges=0, and
   `cargo test --workspace` passes. M7 is complete.
+  A later user-requested open-fence tracking run deliberately ignored the load
+  fence with `make perf-hot-loop PERF_MAX_RATIO=999 PERF_ITERATIONS=10
+  PERF_BENCHMARK_REPEAT=100 PERF_AGGREGATE=min` and reported aggregate min
+  Rust/C++=1.982, Rust min-sum=1.972 ms, C++ min-sum=0.995 ms, with load
+  6.94/15.11/17.71 before and 5.27/14.06/17.25 after. Treat this as
+  tracking-only rather than fresh acceptance evidence because the longer load
+  averages and C++ min-sum are outside the formal sanity fence; it still
+  confirms current perf is near the M7 boundary instead of regressing back to
+  the earlier 2.8-3.2 open-fence band.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, shared shape path-command buffer scout, component-local shape-paint

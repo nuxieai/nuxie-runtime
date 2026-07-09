@@ -463,6 +463,39 @@ the only memory the next session has. Update it every commit.
     records a Bun-style big-bang execution option to choose at
     activation.
 
+20. SCOUT REPORT — semantic-trap audit (M8 hardening; ~35 top-risk sites
+    hand-triaged vs C++ @7c778d13). HEADLINE: zero CONFIRMED reachable
+    panics from importable files or hostile C-ABI values — the port is
+    unusually defensive (no partial_cmp().unwrap() anywhere, sorts use
+    total_cmp, binary reader fully .get()-based, all suspect len()-N and
+    modulo sites behind faithful C++ guard ports; full cleared-list in
+    the scout transcript). M8 FIX QUEUE, ranked:
+    (1) animation.rs:801 — guard duration==0.0 in PingPong
+        global_to_local_seconds ((inf as i32) saturates in Rust vs C++
+        UB; only constructible true divergence found).
+    (2) rive-binary lib.rs:6610 — add pinning test + comment for the
+        intentional u32->i32 manifest-key reinterpret.
+    (3) lib.rs:6956 symbolTypeValue as u8 — try_from + diagnostic or
+        document the <=255 domain.
+    (4) draw.rs:3017 — guard child_count==0 (NaN layout bounds).
+    (5) text.rs:3455-3471 prime sizing — checked_mul/u64 (debug-panic /
+        release-wrap divergence, unlikely but cheap).
+    (6) ADOPT CI lint gate: clippy indexing_slicing / unwrap_used /
+        arithmetic_side_effects denied in runtime crates' src/ — codebase
+        is ~99% compliant already; this locks the discipline in.
+    (7) Hardened CI profile with overflow-checks=true exercised by tests/
+        fuzz (production stays panic=abort+wrap; divergence noted).
+    (8) draw.rs:2595 — debug_assert_eq! locking the parallel-length
+        invariant (safe today, fragile to edits).
+    (9) PRIORITY: negative-input fuzz target — read_runtime_file + one
+        advance + one draw on parser-accepted-but-degenerate objects
+        (zero-vertex paths, empty keyframe lists, orphaned IDs). Proves
+        runtime panic-freedom instead of inferring it; the 'importer
+        accepts, runtime assumes' class is the one goldens cannot see.
+    (10) Document the float->int saturating-cast policy (safer than C++
+        UB, deliberate divergence on NaN/inf) and add NaN/inf fixtures
+        to the corpus so it surfaces deliberately.
+
 ## Known Divergences
 
 - There are no active `status = "not-yet"` entries.

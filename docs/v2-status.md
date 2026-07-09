@@ -496,6 +496,43 @@ the only memory the next session has. Update it every commit.
         UB, deliberate divergence on NaN/inf) and add NaN/inf fixtures
         to the corpus so it surfaces deliberately.
 
+21. ADVERSARIAL AUDIT (skip-gates sub-report) — one LIKELY-BUG, three
+    gates verified SOUND with proofs (details in scout transcript).
+    *** PRIORITY M8 FIX — commit 1beee8e 'Use local collapse checks in
+    draw traversal' is a likely correctness regression: ***
+    The draw path now trusts each component's LOCAL collapsed flag
+    (draw.rs:1665-1674, used at :1551-1554 and :1643), but Rust collapse
+    propagation is NOT full-subtree on two paths, unlike C++
+    ContainerComponent::collapse (container_component.cpp:9-19):
+    (a) apply_initial_solo_collapses (components.rs:617-643) flags only
+        DIRECT children — Solo -> Group(inactive) -> Shape leaves the
+        Shape un-flagged, so statically-inactive solo branches DRAW on a
+        fresh instance (C++ hides via Solo::onAddedClean full recursion,
+        solo.cpp:8-27).
+    (b) collapse_layout_component_child (artboard.rs:1761-1770) recurses
+        only into Artboard|LayoutComponent children — display:none ->
+        Node -> Shape still draws.
+    The commit's own justification comment ('descendants receive
+    propagated collapse dirt during update') is factually wrong for
+    these paths; the pre-1beee8e ancestor walk (introduced by 86b2111
+    for exactly this) masked the shallow propagation. Golden pass is
+    weak evidence: corpus solos are SM-driven (which uses the full-tree
+    propagate_solo_collapse path) or shallow.
+    FIX DIRECTION: make both propagation sources recurse full subtrees
+    (mirror ContainerComponent::collapse), keeping the fast local draw
+    check — then it is genuinely C++-shaped. ALSO fix the adjacent
+    nested-solo clobber: collapse_component_tree_with_ancestor
+    (artboard.rs:2187-2212) blindly un-collapses descendants, clobbering
+    a nested Solo's re-collapsed inactive children (C++ Solo::collapse
+    skips blind child propagation, solo.cpp:29-40). Add regression
+    fixtures: deep solo branch on fresh instance (no SM), and
+    display:none -> Node -> Shape.
+    VERIFIED SOUND (with proofs): b03a909 nested-event Option skip
+    (skipped work provably discarded; C++ collects only under a host
+    SM), 2a927bc n-slicer empty fast-miss (static import-time data +
+    equivalent short-circuit), 7d5c963 no-op prune compaction (identity-
+    write proof incl. the lazy multi-contour subtlety).
+
 ## Known Divergences
 
 - There are no active `status = "not-yet"` entries.

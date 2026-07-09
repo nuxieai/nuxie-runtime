@@ -507,11 +507,15 @@ the only memory the next session has. Update it every commit.
         first renderer binding slice is landed: luaur now installs `Color`,
         `Mat2D`, `Path`, `Paint`, and scoped `Renderer` userdata for
         draw-path calls, and `ScriptInstance::call_draw` can carry a
-        render-api factory/renderer into Luau. Remaining: wire scripted
-        instances into `ArtboardInstance`/the Rust golden runner, hydrate
-        script inputs for `script_artboard_test.riv`, then continue binding
-        ports corpus-file-by-corpus-file in census order and regenerate
-        scripted corpus statuses against the scripted C++ reference streams.
+        render-api factory/renderer into Luau. `ArtboardInstance` can now own
+        script instances by global id, `ScriptedDrawable` is a real draw
+        command kind, and the draw path executes the C++ save/opacity/
+        transform/script/restore envelope when a script instance is attached.
+        Remaining: instantiate those script instances from `ScriptAsset`
+        payloads in the Rust golden runner, hydrate script inputs for
+        `script_artboard_test.riv`, then continue binding ports
+        corpus-file-by-corpus-file in census order and regenerate scripted
+        corpus statuses against the scripted C++ reference streams.
     (b) C ABI: pointer events, view-model contexts, cache-holding draw
         reusing render handles, default-SM selection alignment decision.
     (c) Hardening: two audit scouts are running NOW (cross-language
@@ -3614,6 +3618,24 @@ the only memory the next session has. Update it every commit.
 - Completed-milestone entries (M0 through M5) are archived verbatim in
   `docs/v2-log-archive.md`; when a milestone completes, move its entries
   there and keep only the active milestone's recent working window here.
+
+- 2026-07-09: [M8] Landed the runtime scripted-draw envelope. `ArtboardInstance`
+  now stores VM-owned script instances by scripted-object global id,
+  `RuntimeDrawCommandObjectKind` recognizes `ScriptedDrawable`, draw commands
+  retain render opacity, and the draw dispatcher ports the C++
+  `ScriptedDrawable::draw` save/opacity/transform/call/restore shell when an
+  instance is attached. A focused runtime test covers the envelope. Verification:
+  `cargo test -p rive-runtime
+  scripted_drawable_calls_attached_instance_with_cpp_draw_envelope --quiet`,
+  `cargo fmt --all -- --check`, `cargo test --workspace`, and
+  `make golden-compare` pass; golden compare remains exact=263 /
+  exact-segments=584 / diverges=0, parked gated=6 / harness=26. The focused
+  scripted diff for `script_artboard_test.riv` still shows the next gap: C++
+  emits the inner scripted `drawPath` rectangle, while Rust emits only the
+  outer save/transform/restore because no script instance is hydrated yet.
+  Next scripting step: instantiate scripts from `ScriptAsset` payloads in the
+  Rust golden runner and hydrate `script_artboard_test.riv` inputs into the
+  attached instances.
 
 - 2026-07-09: [M8] Re-ran the hot-loop benchmark at the user's request while
   deliberately ignoring the load fence, because the current optimization work

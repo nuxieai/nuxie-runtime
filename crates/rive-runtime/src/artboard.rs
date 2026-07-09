@@ -48,6 +48,7 @@ use crate::properties::{
     solid_color_value_property_key, solo_active_component_id_property_key,
     transform_property_for_key,
 };
+use crate::scripting::{RuntimeScriptInstanceHandle, ScriptInstance};
 use crate::state_machine::{
     RuntimeStateMachine, StateMachineInputKind, StateMachineInstance, StateMachineReportedEvent,
     build_state_machines,
@@ -75,6 +76,7 @@ pub struct ArtboardInstance {
     pub(crate) update_order: Vec<usize>,
     pub(crate) linear_animations: Vec<RuntimeLinearAnimation>,
     pub(crate) state_machines: Arc<Vec<RuntimeStateMachine>>,
+    pub(crate) script_instances_by_global: BTreeMap<u32, RuntimeScriptInstanceHandle>,
     pub(crate) nested_artboards: BTreeMap<usize, RuntimeNestedArtboardInstance>,
     pub(crate) nested_artboard_locals: Vec<usize>,
     newly_uncollapsed_nested_artboards: BTreeSet<usize>,
@@ -320,6 +322,7 @@ impl ArtboardInstance {
             update_order,
             linear_animations,
             state_machines: Arc::new(state_machines),
+            script_instances_by_global: BTreeMap::new(),
             nested_artboards,
             nested_artboard_locals,
             newly_uncollapsed_nested_artboards: BTreeSet::new(),
@@ -369,6 +372,27 @@ impl ArtboardInstance {
             .get(local_id)
             .and_then(|slot| slot.component_index)
             .and_then(|index| self.components.get(index))
+    }
+
+    /// Attach a VM-owned script instance to a scripted object global id.
+    ///
+    /// Ported toward C++ `src/scripted/scripted_drawable.cpp`: the runtime draw
+    /// path owns the `ScriptedDrawable` envelope, while the backend VM owns the
+    /// instance table and `draw(self, renderer)` method.
+    pub fn set_script_instance_for_global(
+        &mut self,
+        global_id: u32,
+        instance: Box<dyn ScriptInstance>,
+    ) {
+        self.script_instances_by_global
+            .insert(global_id, RuntimeScriptInstanceHandle::new(instance));
+    }
+
+    pub(crate) fn script_instance_for_global(
+        &self,
+        global_id: u32,
+    ) -> Option<RuntimeScriptInstanceHandle> {
+        self.script_instances_by_global.get(&global_id).cloned()
     }
 
     pub fn slot(&self, local_id: usize) -> Option<&InstanceSlot> {
@@ -2848,6 +2872,7 @@ mod tests {
             update_order,
             linear_animations: Vec::new(),
             state_machines: Arc::new(Vec::new()),
+            script_instances_by_global: BTreeMap::new(),
             nested_artboards: BTreeMap::new(),
             nested_artboard_locals: Vec::new(),
             newly_uncollapsed_nested_artboards: BTreeSet::new(),

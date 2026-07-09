@@ -1702,6 +1702,10 @@ impl ArtboardInstance {
                 .and_then(|local_id| {
                     self.runtime_retained_draw_world_transform(local_id, layout_bounds)
                 }),
+            render_opacity: local_id
+                .and_then(|local_id| self.component(local_id))
+                .map(|component| component.transform.render_opacity)
+                .unwrap_or(1.0),
             referenced_artboard_global: drawable.referenced_artboard_global,
             resolved_image_asset_global: self
                 .resolved_image_asset_global(local_id, drawable.resolved_image_asset_global),
@@ -3948,6 +3952,7 @@ pub enum RuntimeDrawCommandObjectKind {
     NestedArtboard,
     NestedArtboardLeaf,
     NestedArtboardLayout,
+    ScriptedDrawable,
     Text,
     Other,
 }
@@ -3962,6 +3967,7 @@ impl RuntimeDrawCommandObjectKind {
             "NestedArtboard" => Self::NestedArtboard,
             "NestedArtboardLeaf" => Self::NestedArtboardLeaf,
             "NestedArtboardLayout" => Self::NestedArtboardLayout,
+            "ScriptedDrawable" => Self::ScriptedDrawable,
             "Text" => Self::Text,
             _ => Self::Other,
         }
@@ -3983,6 +3989,7 @@ pub struct RuntimeDrawCommand {
     pub global_id: Option<u32>,
     pub type_name: &'static str,
     pub world_transform: Option<Mat2D>,
+    pub render_opacity: f32,
     pub referenced_artboard_global: Option<u32>,
     pub resolved_image_asset_global: Option<u32>,
     pub clipping_shape_local: Option<usize>,
@@ -8005,6 +8012,10 @@ fn runtime_draw_command(
         );
     }
 
+    if command.object_kind == RuntimeDrawCommandObjectKind::ScriptedDrawable {
+        return runtime_draw_scripted_drawable(instance, command, factory, renderer);
+    }
+
     let shape_world = command.world_transform.unwrap_or_else(|| {
         command
             .local_id
@@ -8230,6 +8241,43 @@ fn runtime_draw_command(
         renderer.restore();
     }
 
+    Ok(())
+}
+
+fn runtime_draw_scripted_drawable(
+    instance: &ArtboardInstance,
+    command: &RuntimeDrawCommand,
+    factory: &mut dyn RenderFactory,
+    renderer: &mut dyn Renderer,
+) -> Result<()> {
+    let Some(global_id) = command.global_id else {
+        return Ok(());
+    };
+    let Some(script_instance) = instance.script_instance_for_global(global_id) else {
+        return Ok(());
+    };
+
+    // Ported from C++ `src/scripted/scripted_drawable.cpp`.
+    let needs_opacity_save = command.render_opacity != 1.0;
+    if command.needs_save_operation || needs_opacity_save {
+        renderer.save();
+    }
+    if needs_opacity_save {
+        renderer.modulate_opacity(command.render_opacity);
+    }
+    renderer.transform(runtime_render_mat(
+        command.world_transform.unwrap_or(Mat2D::IDENTITY),
+    ));
+
+    let mut host = crate::NoopScriptHost;
+    script_instance
+        .borrow_mut()
+        .call_draw(factory, renderer, &mut host)
+        .map_err(|error| anyhow::anyhow!("scripted drawable {global_id} draw failed: {error}"))?;
+
+    if command.needs_save_operation || needs_opacity_save {
+        renderer.restore();
+    }
     Ok(())
 }
 
@@ -13805,7 +13853,10 @@ fn path_needs_clockwise_reversal(path: &PathGeometryNode, transform: Mat2D) -> b
 }
 
 fn sorted_drawable_uses_render_opacity(type_name: &str) -> bool {
-    matches!(type_name, "Shape" | "TextInputDrawable")
+    matches!(
+        type_name,
+        "Shape" | "ScriptedDrawable" | "TextInputDrawable"
+    )
 }
 
 fn is_text_input_drawable_type(type_name: &str) -> bool {
@@ -13829,9 +13880,12 @@ fn runtime_draw_command_is_nested_artboard(command: &RuntimeDrawCommand) -> bool
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{ScriptError, ScriptHost, ScriptInstance, ScriptMethod, ScriptValue};
+    use rive_binary::read_runtime_file;
+    use rive_graph::GraphFile;
     use rive_render_api::ColorInt;
     use std::any::Any;
-    use std::cell::Cell;
+    use std::cell::{Cell, RefCell};
     use std::rc::Rc;
 
     #[derive(Default)]
@@ -13847,6 +13901,100 @@ mod tests {
     struct CountingFactory {
         stats: Rc<CountingStats>,
         next_path_id: usize,
+    }
+
+    struct RecordingRenderer {
+        ops: Rc<RefCell<Vec<String>>>,
+    }
+
+    impl Renderer for RecordingRenderer {
+        fn save(&mut self) {
+            self.ops.borrow_mut().push("save".to_owned());
+        }
+
+        fn restore(&mut self) {
+            self.ops.borrow_mut().push("restore".to_owned());
+        }
+
+        fn transform(&mut self, transform: RenderMat2D) {
+            self.ops
+                .borrow_mut()
+                .push(format!("transform:{:?}", transform.0));
+        }
+
+        fn draw_path(&mut self, _path: &dyn RenderPath, _paint: &dyn RenderPaint) {
+            self.ops.borrow_mut().push("draw_path".to_owned());
+        }
+
+        fn clip_path(&mut self, _path: &dyn RenderPath) {
+            self.ops.borrow_mut().push("clip_path".to_owned());
+        }
+
+        fn draw_image(
+            &mut self,
+            _image: Option<&dyn RenderImage>,
+            _sampler: RenderImageSampler,
+            _blend_mode: RenderBlendMode,
+            _opacity: f32,
+        ) {
+            self.ops.borrow_mut().push("draw_image".to_owned());
+        }
+
+        fn draw_image_mesh(
+            &mut self,
+            _image: Option<&dyn RenderImage>,
+            _sampler: RenderImageSampler,
+            _vertices: Option<&dyn RenderBuffer>,
+            _uv_coords: Option<&dyn RenderBuffer>,
+            _indices: Option<&dyn RenderBuffer>,
+            _vertex_count: u32,
+            _index_count: u32,
+            _blend_mode: RenderBlendMode,
+            _opacity: f32,
+        ) {
+            self.ops.borrow_mut().push("draw_image_mesh".to_owned());
+        }
+
+        fn modulate_opacity(&mut self, opacity: f32) {
+            self.ops.borrow_mut().push(format!("opacity:{opacity}"));
+        }
+    }
+
+    struct FakeScriptInstance {
+        ops: Rc<RefCell<Vec<String>>>,
+    }
+
+    impl ScriptInstance for FakeScriptInstance {
+        fn has_method(&self, _method: ScriptMethod) -> Result<bool, ScriptError> {
+            Ok(true)
+        }
+
+        fn call_method(
+            &mut self,
+            _method: ScriptMethod,
+            _args: &[ScriptValue],
+            _host: &mut dyn ScriptHost,
+        ) -> Result<ScriptValue, ScriptError> {
+            Ok(ScriptValue::Nil)
+        }
+
+        fn call_draw(
+            &mut self,
+            _factory: &mut dyn RenderFactory,
+            _renderer: &mut dyn Renderer,
+            _host: &mut dyn ScriptHost,
+        ) -> Result<(), ScriptError> {
+            self.ops.borrow_mut().push("script_draw".to_owned());
+            Ok(())
+        }
+
+        fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
+            Ok(ScriptValue::Nil)
+        }
+
+        fn set_input(&mut self, _name: &str, _value: ScriptValue) -> Result<(), ScriptError> {
+            Ok(())
+        }
     }
 
     struct CountingRenderPath {
@@ -14039,6 +14187,59 @@ mod tests {
         fn decode_image(&mut self, _data: &[u8]) -> Box<dyn RenderImage> {
             Box::new(TestRenderImage)
         }
+    }
+
+    #[test]
+    fn scripted_drawable_calls_attached_instance_with_cpp_draw_envelope() {
+        let bytes = include_bytes!("../../../fixtures/graph/dependency_test.riv");
+        let file = read_runtime_file(bytes).expect("fixture imports");
+        let graph = GraphFile::from_runtime_file(&file).expect("fixture graphs");
+        let artboard = graph.artboards.first().expect("fixture has artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, artboard).expect("instance builds");
+        let ops = Rc::new(RefCell::new(Vec::new()));
+        instance.set_script_instance_for_global(
+            900,
+            Box::new(FakeScriptInstance {
+                ops: Rc::clone(&ops),
+            }),
+        );
+
+        let command = RuntimeDrawCommand {
+            kind: RuntimeDrawCommandKind::Draw,
+            object_kind: RuntimeDrawCommandObjectKind::ScriptedDrawable,
+            local_id: None,
+            global_id: Some(900),
+            type_name: "ScriptedDrawable",
+            world_transform: Some(Mat2D([1.0, 0.0, 0.0, 1.0, 10.0, 20.0])),
+            render_opacity: 0.5,
+            referenced_artboard_global: None,
+            resolved_image_asset_global: None,
+            clipping_shape_local: None,
+            needs_save_operation: true,
+            shape_paints: Vec::new(),
+        };
+        let stats = Rc::new(CountingStats::default());
+        let mut factory = CountingFactory {
+            stats,
+            next_path_id: 0,
+        };
+        let mut renderer = RecordingRenderer {
+            ops: Rc::clone(&ops),
+        };
+
+        runtime_draw_scripted_drawable(&instance, &command, &mut factory, &mut renderer)
+            .expect("scripted draw succeeds");
+
+        assert_eq!(
+            ops.borrow().as_slice(),
+            [
+                "save",
+                "opacity:0.5",
+                "transform:[1.0, 0.0, 0.0, 1.0, 10.0, 20.0]",
+                "script_draw",
+                "restore",
+            ]
+        );
     }
 
     #[test]

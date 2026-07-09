@@ -1,3 +1,5 @@
+use std::cell::{RefCell, RefMut};
+use std::rc::Rc;
 use std::{error::Error, fmt};
 
 use rive_render_api::{Factory as RenderFactory, Renderer};
@@ -140,6 +142,31 @@ pub trait ScriptInstance {
     fn get_input(&self, name: &str) -> Result<ScriptValue, ScriptError>;
 
     fn set_input(&mut self, name: &str, value: ScriptValue) -> Result<(), ScriptError>;
+}
+
+#[derive(Clone)]
+pub(crate) struct RuntimeScriptInstanceHandle {
+    inner: Rc<RefCell<Box<dyn ScriptInstance>>>,
+}
+
+impl RuntimeScriptInstanceHandle {
+    pub(crate) fn new(instance: Box<dyn ScriptInstance>) -> Self {
+        Self {
+            inner: Rc::new(RefCell::new(instance)),
+        }
+    }
+
+    pub(crate) fn borrow_mut(&self) -> RefMut<'_, Box<dyn ScriptInstance>> {
+        self.inner.borrow_mut()
+    }
+}
+
+impl fmt::Debug for RuntimeScriptInstanceHandle {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RuntimeScriptInstanceHandle")
+            .field("shared", &true)
+            .finish()
+    }
 }
 
 /// Runtime-owned VM seam implemented by concrete scripting backends.

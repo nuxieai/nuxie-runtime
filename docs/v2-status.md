@@ -352,8 +352,14 @@ the only memory the next session has. Update it every commit.
   to preserve descendant value propagation, a current-code open-fence
   `make perf-hot-loop PERF_MAX_RATIO=999` run reports Rust/C++=1.927 with
   Rust min-sum=1.896 ms, C++ min-sum=0.983 ms, and starting load
-  6.49/4.85/4.57. These are useful tracking snapshots, but not M7 acceptance
-  evidence because the C++ min-sum is outside the sanity band. Full
+  6.49/4.85/4.57. A same-code user-requested bare tracking run reports
+  Rust/C++=1.984 with Rust min-sum=1.905 ms, C++ min-sum=0.960 ms, and
+  post-run load 2.71/3.32/3.84. Follow-up low-load goal-loop attempts report
+  Rust/C++=2.064 with Rust min-sum=2.119 ms, C++ min-sum=1.027 ms, pre-run
+  load 4.71/4.04/4.02, then Rust/C++=2.123 with Rust min-sum=2.154 ms,
+  C++ min-sum=1.014 ms, pre-run load 4.23/3.97/4.00. These are useful
+  tracking snapshots, but not M7 acceptance evidence because the C++ min-sum
+  is outside the sanity band. Full
   `make golden-compare` remains exact=263 /
   exact-segments=584 / diverges=0, and `cargo test --workspace`,
   `cargo fmt --all -- --check`, and `git diff --check` pass. M7 remains open.
@@ -364,10 +370,10 @@ the only memory the next session has. Update it every commit.
   persisting data-bind source-list take/recycle scout; they preserved
   correctness but worsened or failed to move direct/fenced release timings.
   Next priority is three clean low-load/sanity-band `make perf-hot-loop`
-  invocations because the latest tracking runs are now under the ratio fence
-  but outside the C++ sanity band. If C++ remains above the sanity band, wait
-  and retry rather than adding another optimization. If a sanity-band run fails
-  the ratio, re-profile remaining `advance_blend_mode` /
+  invocations because the latest tracking runs hover around the ratio fence
+  but remain outside the C++ sanity band. If C++ remains above the sanity band,
+  wait and retry rather than adding another optimization. If a sanity-band run
+  fails the ratio, re-profile remaining `advance_blend_mode` /
   `animation_reset_cases` data-bind/color-animation hot sites and read the
   matching C++ code before adding another runtime fast path.
 
@@ -2040,6 +2046,21 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-09: [M7] Perf tracking reruns after the nested context-source slice
+  keep the current action on the measurement fence, not on a new optimization.
+  Fresh `make golden-compare` reports exact=263 / exact-segments=584 /
+  diverges=0; `cargo test --workspace`, `cargo fmt --all -- --check`, and
+  `git diff --check` pass. A user-requested bare `make perf-hot-loop` tracking
+  run reported aggregate Rust/C++=1.984 with Rust min-sum=1.905 ms, C++
+  min-sum=0.960 ms, and post-run load 2.71/3.32/3.84. Two follow-up low-load
+  goal-loop attempts failed the ratio at Rust/C++=2.064 and 2.123, with Rust
+  min-sums 2.119/2.154 ms and C++ min-sums 1.027/1.014 ms. Because all three
+  C++ min-sums are still above the 0.70-0.95 ms sanity band, these are
+  tracking data rather than M7 acceptance or decision-grade optimization
+  triggers.
+  Next remains: get clean low-load/sanity-band perf runs; if a sanity-band
+  run fails the ratio, profile the remaining `advance_blend_mode` /
+  `animation_reset_cases` hot sites before adding code.
 - 2026-07-09: [M7] Skip empty nested context-source passes for leaf nested
   artboards. Formal post-state-machine acceptance attempts reported
   Rust/C++=1.988 with C++ min-sum=0.980 ms (tracking-only high C++), then

@@ -33,6 +33,11 @@ extern "C" {
  *    file is freed. Copy the bytes out if you need them longer.
  * 4. Handles are not thread-safe: never use a handle (or its parent
  *    hierarchy) from two threads at once.
+ * 5. RiveViewModelInstance is the exception to the hierarchy: it owns a
+ *    private copy of the view model's values and borrows nothing, so it has
+ *    no free-ordering constraint relative to the file or artboard instance.
+ *    It is only useful while bound to the artboard instance it was created
+ *    from, which must be alive at bind time.
  *
  * PANIC SAFETY: no function ever unwinds across this ABI. When an internal
  * error is caught, functions returning RiveStatus report
@@ -53,6 +58,7 @@ typedef enum RiveStatus
 typedef struct RiveFile RiveFile;
 typedef struct RiveArtboardInstance RiveArtboardInstance;
 typedef struct RiveStateMachineInstance RiveStateMachineInstance;
+typedef struct RiveViewModelInstance RiveViewModelInstance;
 
 typedef struct RiveStringView
 {
@@ -391,6 +397,59 @@ RiveStatus rive_state_machine_instance_pointer_up(
     float x,
     float y,
     bool* out_hit);
+
+/* View-model instances. A view-model context drives an artboard's data binds.
+ * It owns its values and borrows nothing (see the ownership contract, point 5),
+ * so free it with rive_view_model_instance_free whenever you are done with it.
+ *
+ * Typical use: create a context for the artboard, set properties, bind it with
+ * rive_artboard_instance_bind_view_model, then advance and draw the artboard.
+ * Because the binding copies the values in, re-bind after every mutation for it
+ * to take effect on the next advance. */
+
+/* Default selection: the artboard's view model with generated default values.
+ * RIVE_STATUS_NOT_FOUND when the artboard declares no view model. */
+RiveStatus rive_view_model_instance_new_default(
+    const RiveArtboardInstance* instance,
+    RiveViewModelInstance** out_view_model);
+
+/* Instance selection: the artboard's view model populated from the source
+ * instance at `instance_index`. RIVE_STATUS_NOT_FOUND when the artboard
+ * declares no view model or the index is out of range. */
+RiveStatus rive_view_model_instance_new_instance(
+    const RiveArtboardInstance* instance,
+    size_t instance_index,
+    RiveViewModelInstance** out_view_model);
+void rive_view_model_instance_free(RiveViewModelInstance* view_model);
+
+/* Properties are addressed by NUL-terminated UTF-8 name path, using '/' to
+ * descend into nested view models (for example "child/width"). Each setter
+ * returns RIVE_STATUS_NOT_FOUND when no settable property of the matching kind
+ * exists at that path.
+ *
+ * Number mutations that follow an initial bind do not yet re-propagate through
+ * a re-bind on this runtime (a known runtime issue, tracked separately); set
+ * number properties before the first bind to be safe. */
+RiveStatus rive_view_model_instance_set_number(
+    RiveViewModelInstance* view_model,
+    const char* name_path,
+    float value);
+RiveStatus rive_view_model_instance_set_bool(
+    RiveViewModelInstance* view_model,
+    const char* name_path,
+    bool value);
+RiveStatus rive_view_model_instance_set_string(
+    RiveViewModelInstance* view_model,
+    const char* name_path,
+    const char* value);
+
+/* Bind `view_model` to `instance`'s own data binds and nested-artboard
+ * contexts (mirrors artboard->bindViewModelInstance). `view_model` must have
+ * been created from `instance`. The values are copied in at bind time, so
+ * re-bind after mutating the context for the change to reach the next advance. */
+RiveStatus rive_artboard_instance_bind_view_model(
+    RiveArtboardInstance* instance,
+    const RiveViewModelInstance* view_model);
 
 #ifdef __cplusplus
 }

@@ -7,8 +7,8 @@ use anyhow::{Context, Result};
 use rive_binary::{RuntimeFile, read_runtime_file};
 use rive_graph::{ArtboardGraph, GraphFile};
 use rive_runtime::{
-    ArtboardInstance as RuntimeArtboardInstance, RuntimeRenderPathCache,
-    preallocate_render_paint_cache_for_artboard_tree,
+    ArtboardInstance as RuntimeArtboardInstance, RuntimeOwnedViewModelInstance,
+    RuntimeRenderPathCache, preallocate_render_paint_cache_for_artboard_tree,
 };
 
 pub use rive_render_api::{
@@ -188,6 +188,69 @@ impl<'a> ArtboardInstance<'a> {
         self.state_machine_instance(index)
     }
 
+    /// Index of the view model backing this artboard's data binds (the source
+    /// `viewModelId`), when it declares one. Artboards with no view model carry
+    /// the `0xFFFFFFFF` (-1) sentinel, reported here as `None`.
+    pub fn view_model_index(&self) -> Option<usize> {
+        let artboard = self.file.runtime.artboard(self.artboard_index)?;
+        let view_model_id = artboard.uint_property("viewModelId")?;
+        if view_model_id == u32::MAX as u64 {
+            return None;
+        }
+        usize::try_from(view_model_id).ok()
+    }
+
+    /// Instantiate this artboard's view model with generated defaults, mirroring
+    /// `file->createDefaultViewModelInstance(artboard)` in the C++ runtime.
+    /// Returns `None` when the artboard has no view model. Bind the returned
+    /// context with [`ArtboardInstance::bind_view_model`] before advancing.
+    pub fn instantiate_view_model(&self) -> Option<ViewModelInstance> {
+        let view_model_index = self.view_model_index()?;
+        let raw = RuntimeOwnedViewModelInstance::new(&self.file.runtime, view_model_index)?;
+        Some(ViewModelInstance { raw })
+    }
+
+    /// Instantiate this artboard's view model from the source instance at
+    /// `instance_index` (the order the instances appear in the file). Returns
+    /// `None` when the artboard has no view model or the index is out of range.
+    pub fn instantiate_view_model_instance(
+        &self,
+        instance_index: usize,
+    ) -> Option<ViewModelInstance> {
+        let view_model_index = self.view_model_index()?;
+        let raw = RuntimeOwnedViewModelInstance::from_instance(
+            &self.file.runtime,
+            view_model_index,
+            instance_index,
+        )?;
+        Some(ViewModelInstance { raw })
+    }
+
+    /// Bind `view_model` to this artboard's own data binds and its nested
+    /// artboard contexts, mirroring `artboard->bindViewModelInstance(...)` in
+    /// the C++ runtime.
+    ///
+    /// The context is copied into the data-bind graph, so this must be called
+    /// again after mutating `view_model` for the change to reach the next
+    /// [`ArtboardInstance::advance`]. Returns whether the binding changed
+    /// anything. State-machine-driven binds must additionally be bound through
+    /// [`StateMachineInstance::bind_owned_view_model_context`] using
+    /// [`ViewModelInstance::raw`].
+    ///
+    /// Caveat: re-binding after a *number* mutation does not yet re-propagate on
+    /// this runtime (the number setter misses the mutation bump; a known runtime
+    /// issue tracked separately), so set number properties before the first bind
+    /// to be safe. String and boolean mutations re-propagate correctly.
+    pub fn bind_view_model(&mut self, view_model: &ViewModelInstance) -> bool {
+        let mut changed = self
+            .raw
+            .bind_default_view_model_artboard_list_context(&self.file.runtime);
+        changed |= self
+            .raw
+            .bind_owned_view_model_artboard_context(&self.file.runtime, view_model.raw());
+        changed
+    }
+
     /// Advance the scene while driving `state_machine`, mirroring the golden
     /// runner's advance order (state machine, nested artboards, data binds,
     /// update pass). Returns whether anything changed.
@@ -244,5 +307,61 @@ impl<'a> ArtboardInstance<'a> {
                 &mut path_cache,
             )
             .context("failed to draw Rive artboard")
+    }
+}
+
+/// Owned view-model context for driving an artboard's data binds.
+///
+/// Instantiate one from an [`ArtboardInstance`], set properties by name path,
+/// bind it with [`ArtboardInstance::bind_view_model`], then advance and draw.
+/// The context owns its own copy of the view model's values, so it does not
+/// borrow the originating [`File`] and can outlive nothing in particular; it is
+/// only meaningful when bound back to the artboard it came from.
+///
+/// Property paths address nested view models with `/` separators (for example
+/// `"child/width"`); a single segment addresses a property on the root view
+/// model. Every setter returns whether a matching, settable property existed
+/// and its value changed.
+#[derive(Debug, Clone)]
+pub struct ViewModelInstance {
+    raw: RuntimeOwnedViewModelInstance,
+}
+
+impl ViewModelInstance {
+    /// Low-level owned context for advanced integrations (for example binding
+    /// through [`StateMachineInstance::bind_owned_view_model_context`]).
+    pub fn raw(&self) -> &RuntimeOwnedViewModelInstance {
+        &self.raw
+    }
+
+    /// Low-level mutable owned context for advanced integrations.
+    pub fn raw_mut(&mut self) -> &mut RuntimeOwnedViewModelInstance {
+        &mut self.raw
+    }
+
+    /// Set a number property by name path. Returns whether the property existed
+    /// and changed.
+    pub fn set_number(&mut self, name_path: &str, value: f32) -> bool {
+        self.raw.set_number_by_property_name_path(name_path, value)
+    }
+
+    /// Set a boolean property by name path. Returns whether the property existed
+    /// and changed.
+    pub fn set_bool(&mut self, name_path: &str, value: bool) -> bool {
+        self.raw.set_boolean_by_property_name_path(name_path, value)
+    }
+
+    /// Set a string property by name path. The value is stored as its UTF-8
+    /// bytes. Returns whether the property existed and changed.
+    pub fn set_string(&mut self, name_path: &str, value: &str) -> bool {
+        self.raw
+            .set_string_by_property_name_path(name_path, value.as_bytes())
+    }
+
+    /// Set an enum property by its numeric value at the given name path. Returns
+    /// whether the property existed and changed. (Enum-by-value-name is not
+    /// exposed here because the owned context resolves enums by index.)
+    pub fn set_enum(&mut self, name_path: &str, value: u64) -> bool {
+        self.raw.set_enum_by_property_name_path(name_path, value)
     }
 }

@@ -3,7 +3,7 @@ mod render_callbacks;
 pub use render_callbacks::{RiveImageSampler, RiveRawPathView, RiveRenderCallbacks};
 
 use render_callbacks::{CallbackFactory, CallbackRenderer};
-use rive::{ArtboardInstance, File, StateMachineInstance};
+use rive::{ArtboardInstance, File, StateMachineInstance, ViewModelInstance};
 use std::ffi::{CStr, c_char};
 use std::panic::{self, AssertUnwindSafe};
 use std::ptr;
@@ -126,6 +126,18 @@ pub struct RiveArtboardInstance {
 /// [`RiveArtboardInstance`] it was created from.
 pub struct RiveStateMachineInstance {
     instance: StateMachineInstance,
+}
+
+/// Owned view-model context for driving an artboard's data binds.
+///
+/// Unlike [`RiveArtboardInstance`], this handle owns a private copy of the
+/// view model's values and does **not** borrow the [`RiveFile`] it came from,
+/// so it participates in no liveness ordering: it may be freed before or after
+/// its originating file and artboard instance. It is only meaningful when bound
+/// back (via `rive_artboard_instance_bind_view_model`) to the artboard instance
+/// it was created from, which must still be alive at bind time.
+pub struct RiveViewModelInstance {
+    instance: ViewModelInstance,
 }
 
 #[repr(C)]
@@ -702,6 +714,196 @@ fn state_machine_pointer_event(
         *out_hit = hit;
     }
     RiveStatus::Ok
+}
+
+/// Instantiate the artboard's view model with generated defaults (mirrors
+/// `createDefaultViewModelInstance`). Returns `RIVE_STATUS_NOT_FOUND` when the
+/// artboard declares no view model. Free with `rive_view_model_instance_free`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rive_view_model_instance_new_default(
+    instance: *const RiveArtboardInstance,
+    out_view_model: *mut *mut RiveViewModelInstance,
+) -> RiveStatus {
+    ffi_guard(RiveStatus::RuntimeError, || {
+        view_model_instance_new(out_view_model, || {
+            let instance = unsafe { instance.as_ref() }?;
+            instance.instance.instantiate_view_model()
+        })
+    })
+}
+
+/// Instantiate the artboard's view model from the source instance at
+/// `instance_index` (the order the instances appear in the file). Returns
+/// `RIVE_STATUS_NOT_FOUND` when the artboard declares no view model or the
+/// index is out of range. Free with `rive_view_model_instance_free`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rive_view_model_instance_new_instance(
+    instance: *const RiveArtboardInstance,
+    instance_index: usize,
+    out_view_model: *mut *mut RiveViewModelInstance,
+) -> RiveStatus {
+    ffi_guard(RiveStatus::RuntimeError, || {
+        view_model_instance_new(out_view_model, || {
+            let instance = unsafe { instance.as_ref() }?;
+            instance
+                .instance
+                .instantiate_view_model_instance(instance_index)
+        })
+    })
+}
+
+fn view_model_instance_new(
+    out_view_model: *mut *mut RiveViewModelInstance,
+    build: impl FnOnce() -> Option<ViewModelInstance>,
+) -> RiveStatus {
+    if out_view_model.is_null() {
+        return RiveStatus::NullArgument;
+    }
+    unsafe {
+        *out_view_model = ptr::null_mut();
+    }
+    let Some(view_model) = build() else {
+        return RiveStatus::NotFound;
+    };
+    unsafe {
+        *out_view_model = Box::into_raw(Box::new(RiveViewModelInstance {
+            instance: view_model,
+        }));
+    }
+    RiveStatus::Ok
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rive_view_model_instance_free(view_model: *mut RiveViewModelInstance) {
+    ffi_guard((), || {
+        if view_model.is_null() {
+            return;
+        }
+        unsafe {
+            drop(Box::from_raw(view_model));
+        }
+    })
+}
+
+/// Set a number property by NUL-terminated UTF-8 name path (`/`-separated for
+/// nested view models). Returns `RIVE_STATUS_NOT_FOUND` when no settable number
+/// property matches the path.
+///
+/// Note: for the mutation to reach the artboard, call
+/// `rive_artboard_instance_bind_view_model` after setting and before advancing.
+/// Re-binding after a *number* mutation does not yet re-propagate on this
+/// runtime (a known runtime issue, tracked separately); set number properties
+/// before the first bind to be safe.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rive_view_model_instance_set_number(
+    view_model: *mut RiveViewModelInstance,
+    name_path: *const c_char,
+    value: f32,
+) -> RiveStatus {
+    ffi_guard(RiveStatus::RuntimeError, || {
+        view_model_set(view_model, name_path, |view_model, name| {
+            let changed = view_model.instance.set_number(name, value);
+            changed
+                || view_model
+                    .instance
+                    .raw()
+                    .number_source_handle_by_property_name_path(name)
+                    .is_some()
+        })
+    })
+}
+
+/// Set a boolean property by NUL-terminated UTF-8 name path (`/`-separated for
+/// nested view models). Returns `RIVE_STATUS_NOT_FOUND` when no settable
+/// boolean property matches the path.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rive_view_model_instance_set_bool(
+    view_model: *mut RiveViewModelInstance,
+    name_path: *const c_char,
+    value: bool,
+) -> RiveStatus {
+    ffi_guard(RiveStatus::RuntimeError, || {
+        view_model_set(view_model, name_path, |view_model, name| {
+            let changed = view_model.instance.set_bool(name, value);
+            changed
+                || view_model
+                    .instance
+                    .raw()
+                    .boolean_source_handle_by_property_name_path(name)
+                    .is_some()
+        })
+    })
+}
+
+/// Set a string property by NUL-terminated UTF-8 name path (`/`-separated for
+/// nested view models). `value` is a NUL-terminated UTF-8 string. Returns
+/// `RIVE_STATUS_NOT_FOUND` when no settable string property matches the path.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rive_view_model_instance_set_string(
+    view_model: *mut RiveViewModelInstance,
+    name_path: *const c_char,
+    value: *const c_char,
+) -> RiveStatus {
+    ffi_guard(RiveStatus::RuntimeError, || {
+        if value.is_null() {
+            return RiveStatus::NullArgument;
+        }
+        let Ok(value) = (unsafe { CStr::from_ptr(value) }).to_str() else {
+            return RiveStatus::InvalidArgument;
+        };
+        view_model_set(view_model, name_path, |view_model, name| {
+            let changed = view_model.instance.set_string(name, value);
+            changed
+                || view_model
+                    .instance
+                    .raw()
+                    .string_source_handle_by_property_name_path(name)
+                    .is_some()
+        })
+    })
+}
+
+fn view_model_set(
+    view_model: *mut RiveViewModelInstance,
+    name_path: *const c_char,
+    apply: impl FnOnce(&mut RiveViewModelInstance, &str) -> bool,
+) -> RiveStatus {
+    let Some(view_model) = (unsafe { view_model.as_mut() }) else {
+        return RiveStatus::NullArgument;
+    };
+    if name_path.is_null() {
+        return RiveStatus::NullArgument;
+    }
+    let Ok(name) = (unsafe { CStr::from_ptr(name_path) }).to_str() else {
+        return RiveStatus::InvalidArgument;
+    };
+    if apply(view_model, name) {
+        RiveStatus::Ok
+    } else {
+        RiveStatus::NotFound
+    }
+}
+
+/// Bind `view_model` to `instance`'s own data binds and nested-artboard
+/// contexts (mirrors `artboard->bindViewModelInstance(...)`). The context is
+/// copied in, so call this again after mutating `view_model` to propagate the
+/// change on the next advance. `view_model` must have been created from
+/// `instance`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rive_artboard_instance_bind_view_model(
+    instance: *mut RiveArtboardInstance,
+    view_model: *const RiveViewModelInstance,
+) -> RiveStatus {
+    ffi_guard(RiveStatus::RuntimeError, || {
+        let Some(instance) = (unsafe { instance.as_mut() }) else {
+            return RiveStatus::NullArgument;
+        };
+        let Some(view_model) = (unsafe { view_model.as_ref() }) else {
+            return RiveStatus::NullArgument;
+        };
+        instance.instance.bind_view_model(&view_model.instance);
+        RiveStatus::Ok
+    })
 }
 
 #[cfg(test)]

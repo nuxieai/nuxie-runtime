@@ -1,4 +1,4 @@
-.PHONY: schema check test inspect graph cpp-probe golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare perf-compare perf-corpus perf-hot-loop perf-json capi-smoke cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare
+.PHONY: schema check test inspect graph cpp-probe golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare perf-compare perf-corpus perf-hot-loop perf-json capi-smoke size-report cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 DEFS_DIR ?= $(RIVE_RUNTIME_DIR)/dev/defs
@@ -91,6 +91,14 @@ capi-smoke:
 	mkdir -p target/capi-smoke
 	$(CC) -std=c11 -Wall -Wextra -Werror -Icrates/rive-capi/include -o target/capi-smoke/capi_smoke crates/rive-capi/smoke/capi_smoke.c -Ltarget/debug -lrive_capi
 	DYLD_LIBRARY_PATH=target/debug LD_LIBRARY_PATH=target/debug target/capi-smoke/capi_smoke "$(CAPI_SMOKE_FIXTURE)"
+
+# SDK binary-size report: builds the `release-size` cdylib (never the perf
+# `release` profile) and prints the tracked sizes. Pass SIZE_BASELINE=1 to
+# also build the unmodified `release` cdylib and show the delta. See
+# docs/SIZE.md.
+SIZE_BASELINE ?=
+size-report:
+	tools/size-report.sh $(if $(SIZE_BASELINE),--baseline,)
 
 cpp-binary-compare: cpp-probe
 	RIVE_CPP_PROBE="$(CPP_PROBE)" RIVE_CPP_CORPUS=1 cargo test -p rive-binary --test cpp_import -- --nocapture

@@ -32,20 +32,23 @@ the only memory the next session has. Update it every commit.
   mesh render-buffer slots, retained image layout local transforms, and
   retained draw raw paths, dense retained clip/background path slots, plus
   dense render-paint configuration slots, no-nested clean paint-preparation
-  skip, and whole-repeat hot-loop total timing, full `make golden-compare` and
-  `cargo test --workspace` remain green. The latest release/null-renderer
+  skip, whole-repeat hot-loop total timing, and retained shape-paint path
+  command slots, full `make golden-compare` and `cargo test --workspace`
+  remain green. The latest release/null-renderer
   sample before the `total_ms` harness change is still directional only:
   `make perf-hot-loop PERF_MAX_RATIO=999` reports aggregate min Rust/C++=3.219,
   but the C++ min-sum was 1.037 ms, outside the 0.70-0.95 ms sanity band.
   Movement from the previous 3.225 directional sample is below the 0.08 noise
-  floor. A user-requested high-load tracking run after the `total_ms` change
-  reports aggregate min Rust/C++=3.394 with C++ min-sum=1.205 ms, also outside
-  the sanity band; treat it as directional, but it shows the current visible
-  outliers are `advance_blend_mode` samples around 5.4-5.7,
-  `spotify_kids_demo@0`=5.451, `animation_reset_cases` samples around 3.0-3.7,
-  `ai_assitant@0`=2.546, and `animated_clipping@0`=2.271. A focused
-  `spotify_kids_demo@0` JSON run reports total=6.315, advance=2.746, and
-  draw=8.222, so the spotify signal is draw-heavy. Strict <=2.0 remains open.
+  floor. Retaining shape-paint path commands moved the focused
+  `spotify_kids_demo@0` JSON run from total=6.315 / draw=8.222 to total=4.038
+  / draw=6.729, with Rust min total dropping from 1.884 ms to 1.301 ms.
+  Two post-slice user-requested high-load tracking runs report aggregate min
+  Rust/C++=3.474 then 3.173, but C++ min-sums were 1.203/1.232 ms, outside
+  the sanity band; treat them as directional. The latest visible outliers are
+  `advance_blend_mode` samples at 5.575/6.535, `spotify_kids_demo@0`=3.904,
+  `animation_reset_cases` samples around 3.4-3.8, `ai_assitant@0`=2.519,
+  `animated_clipping@0`=2.424, and `align_target@0`=2.170. Strict <=2.0
+  remains open.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, or shared shape path-command buffer scout; they preserved correctness
@@ -1722,6 +1725,23 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-08: [M7] Retained shape-paint path commands behind path/layout dirt.
+  C++ `PathComposer` owns retained local/world/localClockwise
+  `ShapePaintPath`s, and `ShapePaintPath::renderPath` only rewinds/rebuilds
+  when path dirt marks the raw path dirty. A spotify profile showed Rust was
+  rebuilding transformed shape-paint command vectors inside prepared-frame
+  replay even when only the broader prepared epoch moved. Rust now keeps dense
+  shape-paint path command slots keyed by graph, paint local, shape local,
+  `path_epoch`, `layout_epoch`, and path kind; the existing prepared command
+  frame can rebuild paint state while reusing the C++-equivalent path facts.
+  Focused `spotify_kids_demo@0` JSON improves from total=6.315 / draw=8.222 to
+  total=4.038 / draw=6.729, with Rust min total 1.884 ms -> 1.301 ms. Full
+  open-fence `make perf-hot-loop PERF_MAX_RATIO=999 PERF_ITERATIONS=10
+  PERF_BENCHMARK_REPEAT=100 PERF_AGGREGATE=min` runs report aggregate
+  Rust/C++=3.474 then 3.173; both remain directional only because C++ min-sums
+  were 1.203/1.232 ms, outside the M7 sanity band. `cargo check -p
+  rive-runtime`, `cargo test --workspace`, and `make golden-compare` pass with
+  exact=263 / exact-segments=584 / diverges=0. M7 remains open.
 - 2026-07-08: [M7] Ran a user-requested high-load directional hot-loop sample.
   `make perf-hot-loop PERF_MAX_RATIO=999` used the current release/null-renderer
   whole-repeat `total_ms` gate settings and reported aggregate min Rust/C++=

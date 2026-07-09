@@ -3173,6 +3173,44 @@ impl ArtboardInstance {
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
         path_cache: &mut RuntimeRenderPathCache,
     ) -> Vec<RuntimePathCommand> {
+        let Some(path_kind) = paint.path_kind.and_then(runtime_shape_paint_path_kind) else {
+            return Vec::new();
+        };
+        let key = RuntimeShapePaintPathCommandsCacheKey {
+            shape_local,
+            path_epoch: self.path_epoch(),
+            layout_epoch: self.layout_epoch(),
+            path_kind,
+        };
+        if let Some(commands) =
+            path_cache
+                .shape_paint_paths
+                .get(graph.global_id, paint.local_id, key)
+        {
+            return commands.as_ref().clone();
+        }
+
+        let commands = Arc::new(self.runtime_shape_paint_path_commands_uncached(
+            shape_local,
+            paint,
+            graph,
+            layout_bounds,
+            path_cache,
+        ));
+        path_cache
+            .shape_paint_paths
+            .insert(graph.global_id, paint.local_id, key, commands.clone());
+        commands.as_ref().clone()
+    }
+
+    fn runtime_shape_paint_path_commands_uncached(
+        &self,
+        shape_local: usize,
+        paint: &ShapePaintNode,
+        graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+        path_cache: &mut RuntimeRenderPathCache,
+    ) -> Vec<RuntimePathCommand> {
         let Some(path_kind) = paint.path_kind else {
             return Vec::new();
         };
@@ -5448,6 +5486,7 @@ pub struct RuntimeRenderPathCache {
     layout_clip_paths: RuntimeRetainedRenderPathSlots,
     draw_paths: RuntimeDrawPathSlots,
     path_geometry_commands: RuntimePathGeometryCommandSlots,
+    shape_paint_paths: RuntimeShapePaintPathCommandSlots,
     world_transforms: RuntimeWorldTransformSlots,
     image_layout_transforms: RuntimeImageLayoutTransformSlots,
     text_shape_paints: BTreeMap<RuntimeTextShapePaintCacheSlot, RuntimeCachedTextShapePaints>,
@@ -5569,6 +5608,64 @@ struct RuntimeCachedPathGeometryCommands {
     path: Arc<PathGeometryNode>,
     commands: Arc<Vec<RuntimePathCommand>>,
     has_weighted_context: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RuntimeShapePaintPathCommandsCacheKey {
+    shape_local: usize,
+    path_epoch: u64,
+    layout_epoch: u64,
+    path_kind: RuntimeShapePaintPathKind,
+}
+
+#[derive(Default)]
+struct RuntimeShapePaintPathCommandSlots {
+    graph_global_id: Option<u32>,
+    by_paint_local: Vec<Option<RuntimeCachedShapePaintPathCommands>>,
+}
+
+impl RuntimeShapePaintPathCommandSlots {
+    fn get(
+        &mut self,
+        graph_global_id: u32,
+        paint_local: usize,
+        key: RuntimeShapePaintPathCommandsCacheKey,
+    ) -> Option<Arc<Vec<RuntimePathCommand>>> {
+        if self.graph_global_id != Some(graph_global_id) {
+            self.graph_global_id = Some(graph_global_id);
+            self.by_paint_local.clear();
+            return None;
+        }
+        self.by_paint_local
+            .get(paint_local)
+            .and_then(|cached| cached.as_ref())
+            .filter(|cached| cached.key == key)
+            .map(|cached| cached.commands.clone())
+    }
+
+    fn insert(
+        &mut self,
+        graph_global_id: u32,
+        paint_local: usize,
+        key: RuntimeShapePaintPathCommandsCacheKey,
+        commands: Arc<Vec<RuntimePathCommand>>,
+    ) {
+        if self.graph_global_id != Some(graph_global_id) {
+            self.graph_global_id = Some(graph_global_id);
+            self.by_paint_local.clear();
+        }
+        if self.by_paint_local.len() <= paint_local {
+            self.by_paint_local.resize_with(paint_local + 1, || None);
+        }
+        self.by_paint_local[paint_local] =
+            Some(RuntimeCachedShapePaintPathCommands { key, commands });
+    }
+}
+
+#[derive(Clone)]
+struct RuntimeCachedShapePaintPathCommands {
+    key: RuntimeShapePaintPathCommandsCacheKey,
+    commands: Arc<Vec<RuntimePathCommand>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

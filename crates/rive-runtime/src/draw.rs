@@ -1562,9 +1562,9 @@ impl ArtboardInstance {
                     DrawableOrderKind::LayoutProxy => drawable.layout_local,
                     _ => drawable.local_id,
                 };
-                if component_local.is_some_and(|local_id| {
-                    self.runtime_component_is_effectively_collapsed(local_id)
-                }) {
+                if component_local
+                    .is_some_and(|local_id| self.runtime_component_is_collapsed_for_draw(local_id))
+                {
                     return false;
                 }
 
@@ -1654,7 +1654,7 @@ impl ArtboardInstance {
     }
 
     fn runtime_path_counts_for_clip(&self, path: &PathComposerPathNode) -> bool {
-        !path.is_hidden && !self.runtime_component_is_effectively_collapsed(path.local_id)
+        !path.is_hidden && !self.runtime_component_is_collapsed_for_draw(path.local_id)
     }
 
     fn runtime_component_is_effectively_collapsed(&self, local_id: usize) -> bool {
@@ -1665,17 +1665,26 @@ impl ArtboardInstance {
                 return false;
             }
             remaining -= 1;
+            if self.runtime_component_is_collapsed_for_draw(component_local) {
+                return true;
+            }
             let Some(component) = self.component(component_local) else {
                 return false;
             };
-            if component.is_collapsed()
-                || self.runtime_layout_component_is_display_none(component_local)
-            {
-                return true;
-            }
             current = component.parent_local;
         }
         false
+    }
+
+    fn runtime_component_is_collapsed_for_draw(&self, local_id: usize) -> bool {
+        let Some(component) = self.component(local_id) else {
+            return false;
+        };
+        // Mirrors C++ `Component::isCollapsed` plus
+        // `LayoutComponent::isCollapsed`: descendants receive propagated
+        // collapse dirt during update, while a layout component's own
+        // display:none is checked locally.
+        component.is_collapsed() || self.runtime_layout_component_is_display_none(local_id)
     }
 
     fn runtime_draw_command_for_node(
@@ -2393,7 +2402,7 @@ impl ArtboardInstance {
                 continue;
             };
             if child.type_name == "LayoutComponent"
-                && !self.runtime_component_is_effectively_collapsed(*child_local)
+                && !self.runtime_component_is_collapsed_for_draw(*child_local)
                 && !self.runtime_layout_component_is_absolute(*child_local)
                 && !layout_children.contains(child_local)
             {
@@ -2786,7 +2795,7 @@ impl ArtboardInstance {
             else {
                 continue;
             };
-            if self.runtime_component_is_effectively_collapsed(*child_local) {
+            if self.runtime_component_is_collapsed_for_draw(*child_local) {
                 continue;
             }
             match child.type_name {
@@ -3002,7 +3011,7 @@ impl ArtboardInstance {
         if component.type_name != "LayoutComponent" || component.parent_local != Some(0) {
             return false;
         }
-        if self.runtime_component_is_effectively_collapsed(layout_local)
+        if self.runtime_component_is_collapsed_for_draw(layout_local)
             || self.runtime_layout_component_is_absolute(layout_local)
         {
             return false;
@@ -3278,7 +3287,7 @@ impl ArtboardInstance {
             else {
                 continue;
             };
-            if self.runtime_component_is_effectively_collapsed(*child_local) {
+            if self.runtime_component_is_collapsed_for_draw(*child_local) {
                 continue;
             }
             match child.type_name {

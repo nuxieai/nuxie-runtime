@@ -170,7 +170,23 @@ the only memory the next session has. Update it every commit.
   min Rust/C++=2.718, Rust min-sum=2.635 ms, C++ min-sum=0.969 ms, and load
   4.33/3.78/4.66; this is still tracking-only, with aggregate movement
   against 2.660 below the 0.08 noise floor and `spotify_kids_demo@0`
-  directionally better at 3.894. M7 remains open.
+  directionally better at 3.894. A follow-up user-requested open-fence
+  tracking run deliberately ignored the load fence and reported aggregate min
+  Rust/C++=2.731, Rust min-sum=2.666 ms, C++ min-sum=0.976 ms, with
+  `spotify_kids_demo@0`=3.811. A C++ collapse-propagation slice then kept
+  gradient paint preparation on the ancestor-aware collapse predicate but
+  routed draw/path/layout traversal through a local C++-shaped predicate:
+  `Component::isCollapsed` plus `LayoutComponent::isCollapsed` display:none,
+  relying on the existing update pass to propagate collapse dirt to
+  descendants. Focused `spotify_kids_demo@0` 2M tracking moved
+  total=16008.97/draw=10370.35 ms to total=12555.24/draw=7039.85 ms, and the
+  sample no longer shows `runtime_component_is_effectively_collapsed` in the
+  draw hot stack. The same-session open-fence hot-loop reports aggregate min
+  Rust/C++=2.454, Rust min-sum=2.418 ms, C++ min-sum=0.986 ms, and
+  `spotify_kids_demo@0`=3.063; this is still tracking-only because the C++
+  min-sum is outside the 0.70-0.95 ms sanity band. Full
+  `make golden-compare`, `cargo test --workspace`, and
+  `cargo fmt --all -- --check` pass. M7 remains open.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, shared shape path-command buffer scout, component-local shape-paint
@@ -179,9 +195,10 @@ the only memory the next session has. Update it every commit.
   release timings. Next priority is a clean low-load/sanity-band release
   sample when available; under the user's open-fence tracking request, the
   next measured implementation target is now the remaining
-  `spotify_kids_demo@0` path assembly/world-transform/path-geometry/paint
-  configuration stack after profiling the exact hot site and reading the
-  corresponding C++ retained-path or generated-access dirt gate first.
+  `spotify_kids_demo@0` append/prune path assembly, world-transform,
+  path-geometry command frame, and paint configuration stack after profiling
+  the exact hot site and reading the corresponding C++ retained-path or
+  generated-access dirt gate first.
 
 ## Milestones
 

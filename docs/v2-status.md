@@ -3650,12 +3650,15 @@ the only memory the next session has. Update it every commit.
 - 2026-07-09: [M8] Re-ran the hot-loop benchmark at the user's request while
   deliberately ignoring the load fence, so ongoing optimization work stays
   measurement-backed. `make perf-hot-loop PERF_MAX_RATIO=999` reports
-  aggregate min Rust/C++=2.047, Rust min-sum=2.596 ms, C++ min-sum=1.268 ms,
-  and post-run load 20.68/17.96/21.47. This is tracking-only evidence because
-  load and C++ min-sum are outside the formal sanity fence. The next perf
-  target would be the remaining `advance_blend_mode` and
-  `animation_reset_cases` hot-loop gaps, but the active M8 queue still starts
-  with the scripted C++ golden-runner reference path.
+  aggregate min Rust/C++=1.961, Rust min-sum=1.943 ms, C++ min-sum=0.991 ms,
+  and post-run load 2.96/6.84/12.38. This is tracking-only evidence because
+  the command deliberately bypassed the acceptance ratio gate, it is only one
+  run, and the C++ min-sum is just outside the formal 0.70-0.95 ms sanity
+  band. The remaining >2x hot-loop gaps are `advance_blend_mode` at
+  3.998/3.286 and `animation_reset_cases` at 2.350-2.606; `ai_assitant`,
+  `align_target`, `animated_clipping`, and `spotify_kids_demo` are currently
+  under 2x in this tracking run. The active M8 queue still starts with the
+  scripted C++ golden-runner reference path.
 
 - 2026-07-09: [M7] Recorded a user-requested open-fence hot-loop tracking run
   after M7 closeout so future perf work has a current directional baseline.

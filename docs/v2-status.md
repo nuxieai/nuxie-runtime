@@ -105,7 +105,13 @@ the only memory the next session has. Update it every commit.
   visible ratios are `spotify_kids_demo@0`=4.387,
   `advance_blend_mode`=4.138/3.928, `animation_reset_cases`=2.831-3.123,
   `ai_assitant@0`=2.265, `animated_clipping@0`=1.897, and
-  `align_target@0`=1.667.
+  `align_target@0`=1.667. A follow-up user-requested run deliberately ignored
+  the load fence with the same open-fence command and reports aggregate min
+  Rust/C++=2.792 with load 11.51/16.31/19.75 and C++ min-sum=1.060 ms; visible
+  ratios are `spotify_kids_demo@0`=4.147, `advance_blend_mode`=3.975/4.061,
+  `animation_reset_cases`=2.726-3.109, `ai_assitant@0`=2.224,
+  `animated_clipping@0`=1.952, and `align_target@0`=1.554. This is the current
+  open-fence tracking baseline, not M7 acceptance evidence.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, or shared shape path-command buffer scout; they preserved correctness
@@ -1787,6 +1793,18 @@ the only memory the next session has. Update it every commit.
 
 ## Decisions
 
+- 2026-07-09: [M7] Re-ran the open-fence hot-loop before another optimization
+  slice. User explicitly asked to ignore the load fence so the port work stays
+  measurement-backed. `make perf-hot-loop PERF_MAX_RATIO=999
+  PERF_ITERATIONS=10 PERF_BENCHMARK_REPEAT=100 PERF_AGGREGATE=min` reports
+  aggregate Rust/C++=2.792, Rust min-sum=2.959 ms, C++ min-sum=1.060 ms, and
+  load 11.51/16.31/19.75. This improves the previous open-fence 2.883
+  tracking snapshot but remains directional-only because both load and the C++
+  sanity band are outside the M7 acceptance fence. Top remaining ratios are
+  `spotify_kids_demo@0`, `advance_blend_mode`, `animation_reset_cases`, and
+  `ai_assitant@0`, so the next implementation target remains nested
+  data-bind/state-machine/property-binding overhead after reading the C++ dirt
+  gates.
 - 2026-07-09: [M7] Read runtime object draw fallbacks by numeric property key
   instead of by name. The focused `advance_blend_mode` sample showed
   `property_by_name_in_hierarchy` on the draw path even though C++

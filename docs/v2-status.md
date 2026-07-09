@@ -439,6 +439,15 @@ the only memory the next session has. Update it every commit.
   `advance_blend_mode@0.25`=3.551, `animation_reset_cases` samples
   2.507-2.710, `ai_assitant@0`=1.878, `spotify_kids_demo@0`=1.790,
   `animated_clipping@0`=1.646, and `align_target@0`=1.520.
+  A later user-requested M8 open-fence tracking run deliberately ignored load
+  with `make perf-hot-loop PERF_MAX_RATIO=999` while scripted golden-runner
+  work was in progress. It reports aggregate min Rust/C++=2.047, Rust
+  min-sum=2.596 ms, C++ min-sum=1.268 ms, and post-run load
+  20.68/17.96/21.47. Treat this as tracking-only because load and C++
+  min-sum are both outside the formal sanity fence; visible ratios are
+  `advance_blend_mode`=3.543/3.533, `animation_reset_cases`=2.549-2.818,
+  `spotify_kids_demo@0`=1.943, `animated_clipping@0`=1.868,
+  `ai_assitant@0`=1.847, and `align_target@0`=1.641.
   Do not repeat the rejected shallow non-mesh image draw-state cache scout,
   image mesh-index precompute scout, shallow command-vector/path wrapper
   caches, shared shape path-command buffer scout, component-local shape-paint
@@ -3570,6 +3579,16 @@ the only memory the next session has. Update it every commit.
   parked gated=6 / harness=26. Next scripting step: C++ golden runner WITH
   scripting, full sandbox parity, then binding ports against real scripted
   reference streams.
+
+- 2026-07-09: [M8] Re-ran the hot-loop benchmark at the user's request while
+  deliberately ignoring the load fence, so ongoing optimization work stays
+  measurement-backed. `make perf-hot-loop PERF_MAX_RATIO=999` reports
+  aggregate min Rust/C++=2.047, Rust min-sum=2.596 ms, C++ min-sum=1.268 ms,
+  and post-run load 20.68/17.96/21.47. This is tracking-only evidence because
+  load and C++ min-sum are outside the formal sanity fence. The next perf
+  target would be the remaining `advance_blend_mode` and
+  `animation_reset_cases` hot-loop gaps, but the active M8 queue still starts
+  with the scripted C++ golden-runner reference path.
 
 - 2026-07-09: [M7] Recorded a user-requested open-fence hot-loop tracking run
   after M7 closeout so future perf work has a current directional baseline.
